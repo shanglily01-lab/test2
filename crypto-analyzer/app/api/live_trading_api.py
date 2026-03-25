@@ -1152,3 +1152,60 @@ async def sync_from_binance(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/history")
+async def get_position_history(
+    days: int = Query(30, ge=1, le=365),
+    api_key_id: int = Depends(resolve_api_key_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """获取近N天已平仓的历史订单（来自 live_futures_positions）"""
+    from datetime import datetime
+    service = get_api_key_service()
+    if not service:
+        raise HTTPException(status_code=500, detail="API密钥服务未初始化")
+
+    if api_key_id > 0:
+        key_info = service.get_api_key_by_id(current_user['user_id'], api_key_id)
+    else:
+        key_info = service.get_api_key(current_user['user_id'], exchange='binance')
+
+    if not key_info:
+        raise HTTPException(status_code=400, detail="未找到API密钥，请先添加币安账号")
+
+    account_id = key_info['id']
+    db_config = get_db_config()
+
+    try:
+        conn = pymysql.connect(
+            **db_config, charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor, autocommit=True
+        )
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT symbol, position_side, quantity, entry_price, close_price,
+                   realized_pnl, leverage, source, notes,
+                   open_time, close_time, close_reason, status
+            FROM live_futures_positions
+            WHERE account_id = %s
+              AND status IN ('CLOSED', 'LIQUIDATED')
+              AND open_time >= DATE_SUB(NOW(), INTERVAL %s DAY)
+            ORDER BY close_time DESC
+            LIMIT 200
+        """, (account_id, days))
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        logger.error(f"查询历史订单失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    for row in rows:
+        for k, v in row.items():
+            if isinstance(v, Decimal):
+                row[k] = float(v)
+            elif isinstance(v, datetime):
+                row[k] = v.isoformat()
+
+    return {"success": True, "data": rows, "count": len(rows)}

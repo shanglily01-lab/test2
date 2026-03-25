@@ -270,6 +270,18 @@
         @media (max-width: 768px) {
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
+        /* 持仓/挂单/历史 Tab */
+        .pos-tab-bar { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
+        .pos-tab-btn { padding:6px 18px; border-radius:6px; border:1px solid var(--border-default);
+                       background:transparent; color:var(--text-secondary); cursor:pointer;
+                       font-size:14px; transition:all 0.2s; }
+        .pos-tab-btn.active { background:var(--accent-gold,#FFD700); color:#000; font-weight:600;
+                              border-color:var(--accent-gold,#FFD700); }
+        .pos-tab-btn:hover:not(.active) { border-color:var(--accent-gold,#FFD700); color:var(--text-primary); }
+        .pos-tab-badge { background:rgba(255,255,255,0.25); border-radius:10px;
+                         padding:1px 7px; font-size:11px; margin-left:4px; }
+        .pos-tab-panel { display:none; }
+        .pos-tab-panel.active { display:block; }
     </style>
 </head>
 <body>
@@ -512,7 +524,20 @@
 
             <!-- Positions Section -->
             <div class="positions-section">
+
+                <!-- Tab 导航 -->
+                <div class="pos-tab-bar">
+                    <button class="pos-tab-btn active" data-panel="panelPositions">
+                        持仓 <span id="tabPosBadge" class="pos-tab-badge">0</span>
+                    </button>
+                    <button class="pos-tab-btn" data-panel="panelOrders">
+                        挂单 <span id="tabOrdBadge" class="pos-tab-badge">0</span>
+                    </button>
+                    <button class="pos-tab-btn" data-panel="panelHistory">历史订单</button>
+                </div>
+
                 <!-- Open Positions -->
+                <div id="panelPositions" class="pos-tab-panel active">
                 <div class="card" style="margin-bottom: 0;">
                     <div class="card-header">
                         <h2 class="card-title">
@@ -552,8 +577,10 @@
                         </div>
                     </div>
                 </div>
+                </div>
 
                 <!-- Open Orders -->
+                <div id="panelOrders" class="pos-tab-panel">
                 <div class="card" style="margin-bottom: 0;">
                     <div class="card-header">
                         <h2 class="card-title">
@@ -591,6 +618,53 @@
                         </div>
                     </div>
                 </div>
+                </div>
+
+                <!-- History Orders -->
+                <div id="panelHistory" class="pos-tab-panel">
+                <div class="card" style="margin-bottom: 0;">
+                    <div class="card-header">
+                        <h2 class="card-title">
+                            <i class="bi bi-clock-history"></i>
+                            历史订单（近30天）
+                        </h2>
+                        <button class="btn btn-sm btn-secondary" onclick="loadHistory(true)">
+                            <i class="bi bi-arrow-clockwise"></i> 刷新
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="historyLoading" class="loading-overlay" style="min-height:150px;display:none;">
+                            <div class="spinner"></div>
+                        </div>
+                        <div id="historyTable" style="display:none;">
+                            <div class="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>交易对</th>
+                                            <th>方向</th>
+                                            <th>数量</th>
+                                            <th>开仓价</th>
+                                            <th>平仓价</th>
+                                            <th>盈亏(U)</th>
+                                            <th>杠杆</th>
+                                            <th>来源</th>
+                                            <th>平仓时间</th>
+                                            <th>原因</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="historyBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div id="historyEmpty" class="empty-state" style="display:none;">
+                            <div class="empty-state-icon">📭</div>
+                            <div class="empty-state-text">近30天无历史订单</div>
+                        </div>
+                    </div>
+                </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -1085,6 +1159,7 @@
                     document.getElementById('positionsTable').style.display = 'block';
                     document.getElementById('positionsEmpty').style.display = 'none';
                     document.getElementById('positionsCountBadge').textContent = data.data.length + ' 个持仓';
+                    document.getElementById('tabPosBadge').textContent = data.data.length;
                     document.getElementById('positionCount').textContent = data.data.length;
 
                     const tbody = document.getElementById('positionsBody');
@@ -1140,6 +1215,7 @@
                 if (data.success && data.data && data.data.length > 0) {
                     document.getElementById('ordersTable').style.display = 'block';
                     document.getElementById('ordersEmpty').style.display = 'none';
+                    document.getElementById('tabOrdBadge').textContent = data.data.length;
 
                     const tbody = document.getElementById('ordersBody');
                     tbody.innerHTML = data.data.map(order => {
@@ -1562,6 +1638,67 @@
                     resolve(false);
                 };
             });
+        }
+
+        // ── 持仓/挂单/历史 Tab 切换 ──────────────────────────────
+        (function() {
+            document.querySelectorAll('.pos-tab-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('.pos-tab-btn').forEach(function(b) { b.classList.remove('active'); });
+                    document.querySelectorAll('.pos-tab-panel').forEach(function(p) { p.classList.remove('active'); });
+                    btn.classList.add('active');
+                    var panelId = btn.getAttribute('data-panel');
+                    var panel = document.getElementById(panelId);
+                    if (panel) panel.classList.add('active');
+                    if (panelId === 'panelHistory' && !_historyLoaded) loadHistory();
+                });
+            });
+        })();
+
+        var _historyLoaded = false;
+
+        async function loadHistory(force) {
+            if (!force && _historyLoaded) return;
+            _historyLoaded = false;
+            document.getElementById('historyLoading').style.display = 'flex';
+            document.getElementById('historyTable').style.display = 'none';
+            document.getElementById('historyEmpty').style.display = 'none';
+            try {
+                var resp = await authFetch(withApiKey(API_BASE + '/history'));
+                var data = await resp.json();
+                document.getElementById('historyLoading').style.display = 'none';
+                if (data.success && data.data && data.data.length > 0) {
+                    document.getElementById('historyTable').style.display = 'block';
+                    var tbody = document.getElementById('historyBody');
+                    tbody.innerHTML = data.data.map(function(h) {
+                        var pnl = h.realized_pnl || 0;
+                        var pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                        var pnlStr = (pnl >= 0 ? '+' : '') + formatNumber(pnl);
+                        var closeTime = h.close_time ? h.close_time.replace('T', ' ').slice(0, 16) : '-';
+                        var src = h.source || 'manual';
+                        return '<tr>' +
+                            '<td><strong>' + h.symbol + '</strong></td>' +
+                            '<td><span class="badge ' + (h.position_side === 'LONG' ? 'badge-success' : 'badge-danger') + '">' + (h.position_side === 'LONG' ? '做多' : '做空') + '</span></td>' +
+                            '<td class="font-mono">' + formatNumber(h.quantity, 4) + '</td>' +
+                            '<td class="font-mono">' + formatPrice(h.entry_price) + '</td>' +
+                            '<td class="font-mono">' + (h.close_price ? formatPrice(h.close_price) : '-') + '</td>' +
+                            '<td class="font-mono ' + pnlClass + '">' + pnlStr + '</td>' +
+                            '<td>' + (h.leverage || '-') + 'x</td>' +
+                            '<td><span class="badge badge-secondary" style="font-size:11px;">' + src + '</span></td>' +
+                            '<td style="font-size:12px;">' + closeTime + '</td>' +
+                            '<td style="font-size:12px;">' + (h.close_reason || '-') + '</td>' +
+                        '</tr>';
+                    }).join('');
+                    _historyLoaded = true;
+                } else {
+                    document.getElementById('historyEmpty').style.display = 'block';
+                    _historyLoaded = true;
+                }
+            } catch(e) {
+                console.error('加载历史订单失败:', e);
+                document.getElementById('historyLoading').style.display = 'none';
+                document.getElementById('historyEmpty').style.display = 'block';
+            }
         }
     </script>
 </body>
