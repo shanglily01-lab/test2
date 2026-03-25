@@ -350,9 +350,50 @@ class MarketPredictor:
                 "mark_price=%s, realized_pnl=%s, notes='预测器6H到期平仓' WHERE id=%s",
                 (exit_price, round(pnl, 4), row['id'])
             )
+            # 同步更新关联实盘记录 + 调用交易引擎平仓
+            self._sync_close_live(row['id'], row['symbol'], row['position_side'], exit_price)
             logger.info(f"[预测下单] 平仓 {row['symbol']} {row['position_side']} pnl={pnl:+.2f}U")
             closed += 1
         return closed
+
+    def _sync_close_live(self, paper_id: int, symbol: str, side: str, exit_price: float):
+        """模拟单平仓时同步平掉对应实盘"""
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'"
+            )
+            r = cur.fetchone()
+            live_enabled = r and str(r.get('setting_value', '0')).lower() in ('1', 'true', 'yes')
+            if not live_enabled:
+                cur.close(); conn.close()
+                return
+            # 更新DB记录
+            cur.execute("""
+                UPDATE live_futures_positions
+                SET status='CLOSED', close_time=NOW(),
+                    notes=CONCAT(IFNULL(notes,''), '|predictor_expire_close')
+                WHERE paper_position_id=%s AND status='OPEN'
+            """, (paper_id,))
+            conn.commit()
+            cur.close(); conn.close()
+            # 调用交易引擎真实平仓
+            from app.services.api_key_service import APIKeyService
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
+            svc = APIKeyService(self.db_config)
+            for ak in svc.get_all_active_api_keys('binance'):
+                try:
+                    engine = BinanceFuturesEngine(self.db_config, api_key=ak['api_key'], api_secret=ak['api_secret'])
+                    res = engine.close_position_by_symbol(symbol=symbol, position_side=side, reason='predictor_6h_expire')
+                    if res.get('success'):
+                        logger.info(f"[预测下单] 实盘平仓 {ak['account_name']} {symbol} {side} OK")
+                    else:
+                        logger.warning(f"[预测下单] 实盘平仓 {ak['account_name']} {symbol}: {res.get('error','')}")
+                except Exception as e:
+                    logger.error(f"[预测下单] 实盘平仓异常 {ak.get('account_name','')} {symbol}: {e}")
+        except Exception as e:
+            logger.error(f"[预测下单] _sync_close_live 异常: {e}")
 
     def _open_real_paper_trades(self, cursor, results: List[Dict], now: datetime,
                                  max_positions: int = 5) -> int:
