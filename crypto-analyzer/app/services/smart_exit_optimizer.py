@@ -831,14 +831,27 @@ class SmartExitOptimizer:
             )
 
             if close_result['success']:
+                # 计算已实现盈亏
+                try:
+                    ep = float(position.get('entry_price', 0))
+                    qty = float(position.get('position_size', 0))
+                    cp = float(current_price)
+                    if position['direction'] == 'LONG':
+                        realized_pnl = (cp - ep) * qty
+                    else:
+                        realized_pnl = (ep - cp) * qty
+                except Exception:
+                    realized_pnl = 0.0
+
                 # 更新数据库状态
                 await self._update_position_closed(
                     position_id,
                     float(current_price),
-                    reason
+                    reason,
+                    realized_pnl
                 )
 
-                logger.info(f"✅ 平仓成功: 持仓{position_id}")
+                logger.info(f"[INFO] 平仓成功: 持仓{position_id} pnl={realized_pnl:+.4f}")
 
                 # 停止监控
                 await self.stop_monitoring_position(position_id)
@@ -852,7 +865,8 @@ class SmartExitOptimizer:
         self,
         position_id: int,
         close_price: float,
-        close_reason: str
+        close_reason: str,
+        realized_pnl: float = 0.0
     ):
         """
         更新持仓为已平仓状态
@@ -861,6 +875,7 @@ class SmartExitOptimizer:
             position_id: 持仓ID
             close_price: 平仓价格
             close_reason: 平仓原因
+            realized_pnl: 已实现盈亏
         """
         try:
             conn = self._get_pool_connection()
@@ -872,17 +887,22 @@ class SmartExitOptimizer:
                 SET
                     status = 'closed',
                     close_time = %s,
+                    mark_price = %s,
+                    realized_pnl = %s,
                     notes = CONCAT(IFNULL(notes, ''), '|close_reason:', %s)
                 WHERE id = %s
-            """, (now, close_reason, position_id))
+            """, (now, close_price, round(realized_pnl, 4), close_reason, position_id))
 
             # 同步更新关联的实盘记录（paper_position_id 关联）
             cursor.execute("""
                 UPDATE live_futures_positions
                 SET status='CLOSED', close_time=%s,
+                    close_price=%s,
+                    realized_pnl=%s,
+                    close_reason=%s,
                     notes=CONCAT(IFNULL(notes,''), '|paper_closed:', %s)
                 WHERE paper_position_id=%s AND status='OPEN'
-            """, (now, close_reason, position_id))
+            """, (now, close_price, round(realized_pnl, 4), close_reason, close_reason, position_id))
 
             conn.commit()
 

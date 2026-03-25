@@ -847,6 +847,11 @@
         function onAccountChange() {
             const val = document.getElementById('accountSelect').value;
             localStorage.setItem('active_api_key_id', val || '0');
+            // 切换账号后重置历史缓存
+            _historyLoaded = false;
+            document.getElementById('historyBody').innerHTML = '';
+            document.getElementById('historyTable').style.display = 'none';
+            document.getElementById('historyEmpty').style.display = 'none';
             // 切换后刷新所有数据
             Promise.all([testConnection(), loadAccountBalance(), loadPositions(), loadOrders()]);
         }
