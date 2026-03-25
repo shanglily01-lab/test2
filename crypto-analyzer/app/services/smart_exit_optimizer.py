@@ -14,6 +14,7 @@ import aiohttp
 from app.services.price_sampler import PriceSampler
 from app.services.signal_analysis_service import SignalAnalysisService
 from app.analyzers.kline_strength_scorer import KlineStrengthScorer
+from app.services.api_key_service import get_api_key_service
 
 
 class SmartExitOptimizer:
@@ -843,6 +844,14 @@ class SmartExitOptimizer:
                 except Exception:
                     realized_pnl = 0.0
 
+                # 同步平掉关联的实盘仓位（调交易所真实下单）
+                await self._close_live_positions_on_exchange(
+                    paper_position_id=position_id,
+                    symbol=position['symbol'],
+                    direction=position['direction'],
+                    reason=reason
+                )
+
                 # 更新数据库状态
                 await self._update_position_closed(
                     position_id,
@@ -860,6 +869,67 @@ class SmartExitOptimizer:
 
         except Exception as e:
             logger.error(f"执行平仓异常: {e}")
+
+    async def _close_live_positions_on_exchange(
+        self,
+        paper_position_id: int,
+        symbol: str,
+        direction: str,
+        reason: str
+    ):
+        """
+        查找与模拟单关联的实盘仓位，调用 BinanceFuturesEngine 真实平仓
+        """
+        try:
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
+            import pymysql
+            import pymysql.cursors
+
+            conn = pymysql.connect(
+                **self.db_config, charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor, autocommit=True
+            )
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT lp.id, lp.account_id FROM live_futures_positions lp "
+                "WHERE lp.paper_position_id=%s AND lp.status='OPEN'",
+                (paper_position_id,)
+            )
+            live_rows = cur.fetchall()
+
+            if not live_rows:
+                cur.close(); conn.close()
+                return
+
+            # 用 api_key_service 获取全部激活密钥（已解密），按 account_id 匹配
+            api_service = get_api_key_service()
+            if not api_service:
+                logger.warning("[实盘平仓] api_key_service 未初始化，跳过实盘平仓")
+                cur.close(); conn.close()
+                return
+
+            all_keys = {ak['id']: ak for ak in api_service.get_all_active_api_keys()}
+
+            for row in live_rows:
+                account_id = row['account_id']
+                key_info = all_keys.get(account_id)
+                if not key_info:
+                    logger.warning(f"[实盘平仓] account_id={account_id} 无有效API密钥，跳过")
+                    continue
+                try:
+                    engine = BinanceFuturesEngine(self.db_config, key_info['api_key'], key_info['api_secret'])
+                    result = engine.close_position_by_symbol(symbol, direction, reason=reason)
+                    if result.get('success'):
+                        logger.info(f"[实盘平仓] {key_info.get('account_name',account_id)} {symbol} {direction} 平仓成功")
+                    else:
+                        logger.error(f"[实盘平仓] {key_info.get('account_name',account_id)} {symbol} {direction} 平仓失败: {result.get('error')}")
+                except Exception as e:
+                    logger.error(f"[实盘平仓] account_id={account_id} 平仓异常: {e}")
+
+            cur.close(); conn.close()
+
+        except Exception as e:
+            logger.error(f"[实盘平仓] _close_live_positions_on_exchange 异常: {e}")
 
     async def _update_position_closed(
         self,
