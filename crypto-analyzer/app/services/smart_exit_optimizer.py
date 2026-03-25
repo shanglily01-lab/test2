@@ -876,7 +876,8 @@ class SmartExitOptimizer:
             )
             cur = conn.cursor()
             cur.execute(
-                "SELECT lp.id, lp.account_id FROM live_futures_positions lp "
+                "SELECT lp.id, lp.account_id, lp.quantity, lp.entry_price "
+                "FROM live_futures_positions lp "
                 "WHERE lp.paper_position_id=%s AND lp.status='OPEN'",
                 (paper_position_id,)
             )
@@ -895,7 +896,9 @@ class SmartExitOptimizer:
                 return
 
             if live_rows:
-                # 有 paper_position_id 关联（15M突破/BTC动量/预测器等策略）
+                # 有 paper_position_id 关联（15M突破/BTC动量/预测器/主策略等）
+                # 直接用 live_futures_positions 里的 quantity/entry_price 下单，
+                # 不再调 get_open_positions()，避免 API 查询失败误判"持仓不存在"
                 all_keys = {ak['id']: ak for ak in all_keys_list}
                 for row in live_rows:
                     account_id = row['account_id']
@@ -904,10 +907,17 @@ class SmartExitOptimizer:
                         logger.warning(f"[实盘平仓] account_id={account_id} 无有效API密钥，跳过")
                         continue
                     try:
+                        from decimal import Decimal as _Dec
                         engine = BinanceFuturesEngine(self.db_config, key_info['api_key'], key_info['api_secret'])
-                        result = engine.close_position_by_symbol(symbol, direction, reason=reason)
+                        result = engine.close_position_direct(
+                            symbol=symbol,
+                            position_side=direction,
+                            quantity=_Dec(str(row['quantity'])),
+                            entry_price=_Dec(str(row['entry_price'])),
+                            reason=reason
+                        )
                         if result.get('success'):
-                            logger.info(f"[实盘平仓] {key_info.get('account_name',account_id)} {symbol} {direction} 平仓成功")
+                            logger.info(f"[实盘平仓] {key_info.get('account_name',account_id)} {symbol} {direction} 直接平仓成功")
                         else:
                             logger.error(f"[实盘平仓] {key_info.get('account_name',account_id)} {symbol} {direction} 平仓失败: {result.get('error')}")
                     except Exception as e:

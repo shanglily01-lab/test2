@@ -1168,6 +1168,61 @@ class BinanceFuturesEngine:
             traceback.print_exc()
             return {'success': False, 'error': str(e)}
 
+    def close_position_direct(
+        self,
+        symbol: str,
+        position_side: str,
+        quantity: Decimal,
+        entry_price: Decimal,
+        reason: str = 'paper_sync'
+    ) -> Dict:
+        """
+        直接用已知数量平仓，不调用 get_open_positions()。
+        适用于已有 live_futures_positions 记录、quantity/entry_price 已知的场景，
+        避免因 API 查询失败而误判"持仓不存在"。
+        """
+        try:
+            self._cancel_position_orders({'symbol': symbol})
+
+            binance_symbol = self._convert_symbol(symbol)
+            side = 'SELL' if position_side == 'LONG' else 'BUY'
+            close_qty = self._round_quantity(quantity, symbol)
+
+            params = {
+                'symbol': binance_symbol,
+                'side': side,
+                'positionSide': position_side,
+                'type': 'MARKET',
+                'quantity': str(close_qty)
+            }
+            logger.info(f"[实盘直接平仓] {symbol} {position_side} qty={close_qty} reason={reason}")
+            result = self._request('POST', '/fapi/v1/order', params)
+
+            if isinstance(result, dict) and result.get('success') == False:
+                return result
+
+            executed_qty = Decimal(str(result.get('executedQty', '0'))) or close_qty
+            avg_price = Decimal(str(result.get('avgPrice', '0')))
+            if avg_price == 0:
+                cp = self.get_current_price(symbol)
+                avg_price = Decimal(str(cp)) if cp else entry_price
+
+            if position_side == 'LONG':
+                pnl = (avg_price - entry_price) * executed_qty
+            else:
+                pnl = (entry_price - avg_price) * executed_qty
+
+            return {
+                'success': True,
+                'order_id': str(result.get('orderId', '')),
+                'close_price': float(avg_price),
+                'executed_qty': float(executed_qty),
+                'realized_pnl': float(pnl)
+            }
+        except Exception as e:
+            logger.error(f"[实盘直接平仓] {symbol} {position_side} 失败: {e}")
+            return {'success': False, 'error': str(e)}
+
     def close_position_by_symbol(
         self,
         symbol: str,

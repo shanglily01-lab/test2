@@ -2985,24 +2985,46 @@ class SmartTraderService:
                 try:
                     from app.services.api_key_service import APIKeyService
                     from app.trading.binance_futures_engine import BinanceFuturesEngine
+                    from decimal import Decimal as _Dec
                     svc = APIKeyService(self.db_config)
                     active_keys = svc.get_all_active_api_keys('binance')
                     for ak in active_keys:
                         try:
                             _engine = BinanceFuturesEngine(self.db_config, api_key=ak['api_key'], api_secret=ak['api_secret'])
-                            _res = _engine.close_position_by_symbol(
-                                symbol=symbol,
-                                position_side=side,
-                                close_quantity=None,
-                                reason=f'paper_sync_{reason}'
-                            )
-                            not_found = '未找到' in str(_res.get('error', ''))
-                            if _res.get('success') or not_found:
-                                if _res.get('success'):
-                                    logger.info(f"[同步实盘平仓] ✅ {symbol} {side} 账号[{ak['account_name']}] 平仓成功")
-                                else:
-                                    logger.warning(f"[同步实盘平仓] {symbol} {side} 账号[{ak['account_name']}] 交易所无此仓位，仅清理DB记录")
-                                # 无论成功还是找不到，都更新 live_futures_positions
+                            # 优先从 live_futures_positions 取 quantity，直接下单，
+                            # 避免 get_open_positions() 失败时误判"持仓不存在"
+                            try:
+                                _lq_c = self._get_connection()
+                                _lq_cur = _lq_c.cursor()
+                                _lq_cur.execute(
+                                    "SELECT quantity, entry_price FROM live_futures_positions "
+                                    "WHERE account_id=%s AND symbol=%s AND position_side=%s AND status='OPEN' "
+                                    "ORDER BY id DESC LIMIT 1",
+                                    (ak['id'], symbol, side)
+                                )
+                                _lq_row = _lq_cur.fetchone()
+                                _lq_cur.close(); _lq_c.close()
+                            except Exception:
+                                _lq_row = None
+
+                            if _lq_row and _lq_row.get('quantity'):
+                                _res = _engine.close_position_direct(
+                                    symbol=symbol,
+                                    position_side=side,
+                                    quantity=_Dec(str(_lq_row['quantity'])),
+                                    entry_price=_Dec(str(_lq_row['entry_price'])),
+                                    reason=f'paper_sync_{reason}'
+                                )
+                            else:
+                                # fallback：无 live 记录时仍用 close_position_by_symbol
+                                _res = _engine.close_position_by_symbol(
+                                    symbol=symbol, position_side=side,
+                                    close_quantity=None, reason=f'paper_sync_{reason}'
+                                )
+
+                            if _res.get('success'):
+                                logger.info(f"[同步实盘平仓] {symbol} {side} 账号[{ak['account_name']}] 平仓成功")
+                                # 成功才更新 live_futures_positions
                                 try:
                                     _lc = self._get_connection()
                                     _lcur = _lc.cursor()
@@ -3020,23 +3042,8 @@ class SmartTraderService:
                                     _lcur.close(); _lc.close()
                                 except Exception as _dbe:
                                     logger.error(f"[同步实盘平仓] 更新live_futures_positions失败: {_dbe}")
-                                try:
-                                    self.telegram_notifier.notify_close_position(
-                                        symbol=symbol, direction=side,
-                                        quantity=quantity,
-                                        entry_price=entry_price,
-                                        exit_price=current_price,
-                                        pnl=realized_pnl,
-                                        pnl_pct=pnl_pct,
-                                        reason=reason,
-                                        strategy_name=f'实盘同步[{ak["account_name"]}]',
-                                        is_paper=False
-                                    )
-                                except Exception: pass
-                            else:
-                                logger.error(f"[同步实盘平仓] ❌ {symbol} {side} 账号[{ak['account_name']}] 失败: {_res.get('error','')}")
                         except Exception as _ex:
-                            logger.error(f"[同步实盘平仓] ❌ 账号[{ak.get('account_name','')}] 异常: {_ex}")
+                            logger.error(f"[同步实盘平仓] 账号[{ak.get('account_name','')}] 异常: {_ex}")
                 except Exception as sync_ex:
                     logger.error(f"[同步实盘平仓] 整体异常: {sync_ex}")
             # ========== 同步实盘平仓结束 ==========
