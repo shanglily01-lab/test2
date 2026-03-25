@@ -268,10 +268,23 @@ class Breakout15MTrader:
     # 主入口
     # ──────────────────────────────────────────
 
+    def _get_banned_symbols(self, cursor) -> set:
+        """获取 rating_level=3 永久禁止的交易对"""
+        try:
+            cursor.execute(
+                "SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3"
+            )
+            return {r['symbol'] for r in cursor.fetchall()}
+        except Exception as e:
+            logger.warning(f"[15M突破] 获取黑名单3级失败: {e}")
+            return set()
+
     def run(self, symbols: List[str]) -> int:
         """扫描所有交易对，开满足条件的仓位，返回本轮开仓数"""
         conn = self._get_conn()
         cur = conn.cursor()
+
+        banned = self._get_banned_symbols(cur)
 
         # 检查当前持仓数
         cur.execute(
@@ -292,6 +305,9 @@ class Breakout15MTrader:
         for symbol in symbols:
             if opened >= slots:
                 break
+            if symbol in banned:
+                logger.debug(f"[15M突破] {symbol} Level3禁止，跳过")
+                continue
             try:
                 direction = self._check_signal(cur, symbol)
                 if not direction:

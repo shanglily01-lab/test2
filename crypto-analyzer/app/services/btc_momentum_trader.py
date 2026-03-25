@@ -120,15 +120,17 @@ class BTCMomentumTrader:
     # ──────────────────────────────────────────
 
     def _get_top30(self) -> List[str]:
-        """从 top_performing_symbols 获取TOP30列表"""
+        """从 top_performing_symbols 获取TOP30列表（排除Level3禁止交易对）"""
         try:
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute("SELECT symbol FROM top_performing_symbols ORDER BY rank_score DESC LIMIT 30")
             rows = cur.fetchall()
+            cur.execute("SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3")
+            banned = {r['symbol'] for r in cur.fetchall()}
             cur.close(); conn.close()
             if rows:
-                return [r['symbol'] for r in rows]
+                return [r['symbol'] for r in rows if r['symbol'] not in banned]
         except Exception as e:
             logger.warning(f"[BTC动量] 获取TOP30失败: {e}")
         return []

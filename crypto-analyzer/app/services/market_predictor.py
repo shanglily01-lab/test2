@@ -571,6 +571,17 @@ class MarketPredictor:
         conn = self._get_conn()
         cursor = conn.cursor()
 
+        # 加载 Level3 永久禁止交易对
+        try:
+            cursor.execute("SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3")
+            banned = {r['symbol'] for r in cursor.fetchall()}
+            symbols = [s for s in symbols if s not in banned]
+            if banned:
+                logger.debug(f"[预测] Level3黑名单过滤，排除{len(banned)}个交易对")
+        except Exception as e:
+            logger.warning(f"[预测] 获取Level3黑名单失败: {e}")
+            banned = set()
+
         # ① 先平掉到期的真实模拟单（source=PREDICTOR，持仓超5.5小时）
         try:
             pc = self._close_expired_paper_trades(cursor, now)
