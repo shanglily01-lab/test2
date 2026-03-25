@@ -1199,7 +1199,10 @@ class BinanceFuturesEngine:
             result = self._request('POST', '/fapi/v1/order', params)
 
             if isinstance(result, dict) and result.get('success') == False:
-                return result
+                err = result.get('error', '')
+                # 数量超过实际持仓（交易所已部分平仓）→ fallback 查实际数量再平
+                logger.warning(f"[实盘直接平仓] 下单失败: {err}，尝试 fallback 查实际持仓数量")
+                return self.close_position_by_symbol(symbol, position_side, reason=reason)
 
             executed_qty = Decimal(str(result.get('executedQty', '0'))) or close_qty
             avg_price = Decimal(str(result.get('avgPrice', '0')))
@@ -1220,8 +1223,12 @@ class BinanceFuturesEngine:
                 'realized_pnl': float(pnl)
             }
         except Exception as e:
-            logger.error(f"[实盘直接平仓] {symbol} {position_side} 失败: {e}")
-            return {'success': False, 'error': str(e)}
+            logger.error(f"[实盘直接平仓] {symbol} {position_side} 失败: {e}，尝试 fallback")
+            try:
+                return self.close_position_by_symbol(symbol, position_side, reason=reason)
+            except Exception as e2:
+                logger.error(f"[实盘直接平仓] fallback 也失败: {e2}")
+                return {'success': False, 'error': str(e2)}
 
     def close_position_by_symbol(
         self,
