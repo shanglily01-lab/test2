@@ -170,7 +170,7 @@ def update_top_performing_symbols(account_id: int = 2, top_n: int = 30):
 
 
 if __name__ == '__main__':
-    """直接执行时更新U本位Top 30"""
-    logger.info("🚀 开始更新盈利Top 30交易对...")
-    update_top_performing_symbols(account_id=2, top_n=30)
-    logger.info("🎉 更新完成！")
+    """直接执行时更新U本位Top 50"""
+    logger.info("开始更新盈利Top 50交易对...")
+    update_top_performing_symbols(account_id=2, top_n=50)
+    logger.info("更新完成！")

@@ -3,7 +3,7 @@
 """
 BTC动量跟随策略
 - 监测BTC实时价格，15~60分钟内涨跌幅 >= 1.5% 触发
-- 开仓：TOP30全部交易对，方向与BTC一致
+- 开仓：TOP50全部交易对，方向与BTC一致
 - 模拟盘：400U x5；实盘：账号配置(100U) x5
 - 止损2%，止盈6%，触发后4小时冷却
 - 同向持仓保留，反向持仓先平后开
@@ -119,12 +119,12 @@ class BTCMomentumTrader:
     # 数据查询
     # ──────────────────────────────────────────
 
-    def _get_top30(self) -> List[str]:
-        """从 top_performing_symbols 获取TOP30列表（排除Level3禁止交易对）"""
+    def _get_top50(self) -> List[str]:
+        """从 top_performing_symbols 获取TOP50列表（排除Level3禁止交易对）"""
         try:
             conn = self._get_conn()
             cur = conn.cursor()
-            cur.execute("SELECT symbol FROM top_performing_symbols ORDER BY rank_score DESC LIMIT 30")
+            cur.execute("SELECT symbol FROM top_performing_symbols ORDER BY rank_score DESC LIMIT 50")
             rows = cur.fetchall()
             cur.execute("SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3")
             banned = {r['symbol'] for r in cur.fetchall()}
@@ -132,7 +132,7 @@ class BTCMomentumTrader:
             if rows:
                 return [r['symbol'] for r in rows if r['symbol'] not in banned]
         except Exception as e:
-            logger.warning(f"[BTC动量] 获取TOP30失败: {e}")
+            logger.warning(f"[BTC动量] 获取TOP50失败: {e}")
         return []
 
     def _get_symbol_price(self, symbol: str) -> Optional[float]:
@@ -321,19 +321,19 @@ class BTCMomentumTrader:
     # ──────────────────────────────────────────
 
     def execute(self, direction: str, window: int, pct: float):
-        """触发后执行全部TOP30交易"""
+        """触发后执行全部TOP50交易"""
         trigger_info = f"BTC {window}分内{pct:+.2f}%"
         logger.info(f"🚀 [BTC动量] 触发！{trigger_info} → 开{direction}")
 
-        top30 = self._get_top30()
-        if not top30:
-            logger.warning("[BTC动量] TOP30为空，跳过")
+        top50 = self._get_top50()
+        if not top50:
+            logger.warning("[BTC动量] TOP50为空，跳过")
             return
 
         existing = self._get_open_positions()
         opened = 0
 
-        for symbol in top30:
+        for symbol in top50:
             if symbol in existing:
                 pos = existing[symbol]
                 if pos['position_side'] == direction:
@@ -367,7 +367,7 @@ class BTCMomentumTrader:
                     pass
 
         self._last_trigger_time = datetime.utcnow()
-        logger.info(f"[BTC动量] 完成，共开仓 {opened}/{len(top30)} 个交易对，4小时内不再触发")
+        logger.info(f"[BTC动量] 完成，共开仓 {opened}/{len(top50)} 个交易对，4小时内不再触发")
 
     def check_and_execute(self):
         """

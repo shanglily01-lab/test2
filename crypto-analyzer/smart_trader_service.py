@@ -3969,9 +3969,9 @@ async def async_main():
                     None,
                     update_top_performing_symbols,
                     2,  # account_id=2 (U本位)
-                    30  # top_n=30
+                    50  # top_n=50
                 )
-                logger.info("✅ Top 30更新完成")
+                logger.info("Top 50更新完成")
 
             except Exception as e:
                 logger.error(f"❌ Top 30更新失败: {e}")

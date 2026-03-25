@@ -168,10 +168,26 @@ class Breakout15MTrader:
         except Exception:
             return False
 
+    def _is_in_top50(self, symbol: str) -> bool:
+        """检查交易对是否在 TOP50 盈利列表中"""
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) as cnt FROM top_performing_symbols WHERE symbol=%s", (symbol,))
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            return (row['cnt'] if row else 0) > 0
+        except Exception as e:
+            logger.warning(f"[15M突破] 检查TOP50失败: {e}")
+            return False
+
     def _sync_live(self, symbol: str, direction: str, entry_price: float,
                    paper_pos_id: int, reason: str):
         """同步到实盘账号（调用交易引擎真实下单）"""
         if not self._is_live_enabled():
+            return
+        if not self._is_in_top50(symbol):
+            logger.debug(f"[15M突破] {symbol} 不在TOP50，跳过实盘同步")
             return
         try:
             from app.services.api_key_service import APIKeyService
