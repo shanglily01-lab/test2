@@ -27,7 +27,7 @@ MYSQL_CONFIG = {
 }
 
 
-def update_top_performing_symbols(account_id: int = 2, top_n: int = 30):
+def update_top_performing_symbols(account_id: int = 2, top_n: int = 50):
     """
     更新盈利Top N交易对
 
