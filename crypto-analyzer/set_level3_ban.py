@@ -9,7 +9,7 @@ import re
 import pymysql
 import pymysql.cursors
 
-SYMBOLS_TO_BAN = ["AIN/USDT", "FET/USDT", "ARIA/USDT", "FHE/USDT"]
+SYMBOLS_TO_BAN = ["AIN/USDT", "FET/USDT", "ARIA/USDT", "FHE/USDT", "ALLO/USDT"]
 REASON = "手动加入黑名单3级，永久禁止交易"
 
 
