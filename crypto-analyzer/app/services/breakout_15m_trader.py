@@ -284,6 +284,19 @@ class Breakout15MTrader:
         conn = self._get_conn()
         cur = conn.cursor()
 
+        # 检查系统开关
+        try:
+            cur.execute(
+                "SELECT setting_value FROM system_settings WHERE setting_key='breakout_15m_enabled'"
+            )
+            row = cur.fetchone()
+            if row and str(row['setting_value']) in ('0', 'false', 'False'):
+                logger.info("[15M突破] breakout_15m_enabled=0，本轮跳过")
+                cur.close(); conn.close()
+                return 0
+        except Exception as e:
+            logger.warning(f"[15M突破] 读取breakout_15m_enabled失败，默认继续: {e}")
+
         banned = self._get_banned_symbols(cur)
 
         # 检查当前持仓数

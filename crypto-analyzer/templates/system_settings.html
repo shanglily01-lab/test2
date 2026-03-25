@@ -337,13 +337,45 @@
                     <div class="col-md-4">
                         <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
                             <div class="mb-3">
-                                <strong style="color: #4ecca3;">🚀 实盘合约服务</strong>
+                                <strong style="color: #4ecca3;">实盘合约服务</strong>
                                 <div class="small text-muted mt-1">自动交易主服务</div>
                             </div>
                             <div class="d-flex align-items-center justify-content-between mt-auto">
                                 <span id="liveTradingStatus" class="small">Loading...</span>
                                 <label class="toggle-switch">
                                     <input type="checkbox" id="liveTradingToggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-4">
+                        <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
+                            <div class="mb-3">
+                                <strong style="color: #e2b96a;">市场预测器</strong>
+                                <div class="small text-muted mt-1">每6小时运行，confidence&ge;70开单</div>
+                            </div>
+                            <div class="d-flex align-items-center justify-content-between mt-auto">
+                                <span id="predictorStatus" class="small">Loading...</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="predictorToggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
+                            <div class="mb-3">
+                                <strong style="color: #e2b96a;">15M突破策略</strong>
+                                <div class="small text-muted mt-1">每15分钟扫描，价格突破+RSI+量能</div>
+                            </div>
+                            <div class="d-flex align-items-center justify-content-between mt-auto">
+                                <span id="breakout15mStatus" class="small">Loading...</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="breakout15mToggle">
                                     <span class="toggle-slider"></span>
                                 </label>
                             </div>
@@ -634,6 +666,18 @@ Loading...
                     document.getElementById('liveTradingToggle').checked = liveEnabled;
                     document.getElementById('liveTradingStatus').textContent = liveEnabled ? '✅ 运行中' : '⏸️ 已暂停';
                     document.getElementById('liveTradingStatus').style.color = liveEnabled ? '#4ecca3' : '#ffc107';
+
+                    // 更新市场预测器
+                    const predictorEnabled = data.predictor_enabled;
+                    document.getElementById('predictorToggle').checked = predictorEnabled;
+                    document.getElementById('predictorStatus').textContent = predictorEnabled ? '✅ 运行中' : '⏸️ 已暂停';
+                    document.getElementById('predictorStatus').style.color = predictorEnabled ? '#4ecca3' : '#ffc107';
+
+                    // 更新15M突破策略
+                    const breakout15mEnabled = data.breakout_15m_enabled;
+                    document.getElementById('breakout15mToggle').checked = breakout15mEnabled;
+                    document.getElementById('breakout15mStatus').textContent = breakout15mEnabled ? '✅ 运行中' : '⏸️ 已暂停';
+                    document.getElementById('breakout15mStatus').style.color = breakout15mEnabled ? '#4ecca3' : '#ffc107';
                 }
             } catch (error) {
                 console.error('加载交易服务状态失败:', error);
@@ -655,7 +699,9 @@ Loading...
                     body: JSON.stringify({
                         usdt_futures_enabled: usdtEnabled,
                         coin_futures_enabled: coinEnabled,
-                        live_trading_enabled: liveEnabled
+                        live_trading_enabled: liveEnabled,
+                        predictor_enabled: document.getElementById('predictorToggle').checked,
+                        breakout_15m_enabled: document.getElementById('breakout15mToggle').checked
                     })
                 });
 

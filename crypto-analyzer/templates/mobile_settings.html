@@ -189,6 +189,26 @@
                 <label class="toggle"><input type="checkbox" id="liveToggle"><span class="slider"></span></label>
             </div>
         </div>
+        <div class="row">
+            <div>
+                <div class="row-label">🔮 市场预测器</div>
+                <div class="row-sub">每6H预测+开单</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span id="predictorStatus" class="pill">…</span>
+                <label class="toggle"><input type="checkbox" id="predictorToggle"><span class="slider"></span></label>
+            </div>
+        </div>
+        <div class="row">
+            <div>
+                <div class="row-label">📈 15M突破策略</div>
+                <div class="row-sub">震荡市突破入场</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span id="breakout15mStatus" class="pill">…</span>
+                <label class="toggle"><input type="checkbox" id="breakout15mToggle"><span class="slider"></span></label>
+            </div>
+        </div>
         <div style="padding:12px 16px;">
             <button class="save-btn" onclick="saveServices()">💾 保存服务设置</button>
         </div>
@@ -532,9 +552,13 @@ async function loadAll() {
             document.getElementById('usdtToggle').checked = d.usdt_futures_enabled;
             document.getElementById('coinToggle').checked = d.coin_futures_enabled;
             document.getElementById('liveToggle').checked = d.live_trading_enabled;
+            document.getElementById('predictorToggle').checked = d.predictor_enabled;
+            document.getElementById('breakout15mToggle').checked = d.breakout_15m_enabled;
             setPill('usdtStatus', d.usdt_futures_enabled);
             setPill('coinStatus', d.coin_futures_enabled);
             setPill('liveStatus', d.live_trading_enabled);
+            setPill('predictorStatus', d.predictor_enabled);
+            setPill('breakout15mStatus', d.breakout_15m_enabled);
         }
         if (holdR.success) {
             document.getElementById('holdHours').value = String(holdR.data.hours);
@@ -549,6 +573,8 @@ async function saveServices() {
         usdt_futures_enabled: document.getElementById('usdtToggle').checked,
         coin_futures_enabled: document.getElementById('coinToggle').checked,
         live_trading_enabled: document.getElementById('liveToggle').checked,
+        predictor_enabled: document.getElementById('predictorToggle').checked,
+        breakout_15m_enabled: document.getElementById('breakout15mToggle').checked,
     };
     const r = await fetch(`${SYS}/trading-services`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
     if (r.success) { toast('✅ 服务设置已保存'); loadAll(); } else toast('❌ 保存失败', 'err');

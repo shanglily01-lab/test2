@@ -563,6 +563,21 @@ class MarketPredictor:
     # ──────────────────────────────────────────
 
     def run_all(self, symbols: List[str]) -> int:
+        # 检查系统开关
+        try:
+            _chk_conn = self._get_conn()
+            _chk_cur = _chk_conn.cursor()
+            _chk_cur.execute(
+                "SELECT setting_value FROM system_settings WHERE setting_key='predictor_enabled'"
+            )
+            _row = _chk_cur.fetchone()
+            _chk_cur.close(); _chk_conn.close()
+            if _row and str(_row['setting_value']) in ('0', 'false', 'False'):
+                logger.info("[预测] predictor_enabled=0，本轮跳过")
+                return 0
+        except Exception as e:
+            logger.warning(f"[预测] 读取predictor_enabled失败，默认继续: {e}")
+
         now = datetime.utcnow()
         valid_until = now + timedelta(hours=6)
         saved = 0
