@@ -55,6 +55,7 @@ class TradingServicesUpdate(BaseModel):
     live_trading_enabled: Optional[bool] = None
     predictor_enabled: Optional[bool] = None
     breakout_15m_enabled: Optional[bool] = None
+    btc_momentum_enabled: Optional[bool] = None
 
 
 @router.get("/settings")
@@ -441,7 +442,8 @@ async def get_trading_services():
             SELECT setting_key, setting_value
             FROM system_settings
             WHERE setting_key IN ('u_futures_trading_enabled', 'coin_futures_trading_enabled',
-                                  'live_trading_enabled', 'predictor_enabled', 'breakout_15m_enabled')
+                                  'live_trading_enabled', 'predictor_enabled', 'breakout_15m_enabled',
+                                  'btc_momentum_enabled')
         """)
 
         settings = cursor.fetchall()
@@ -455,6 +457,7 @@ async def get_trading_services():
             'live_trading_enabled': 'live_trading_enabled',
             'predictor_enabled': 'predictor_enabled',
             'breakout_15m_enabled': 'breakout_15m_enabled',
+            'btc_momentum_enabled': 'btc_momentum_enabled',
         }
 
         result = {
@@ -463,6 +466,7 @@ async def get_trading_services():
             'live_trading_enabled': True,
             'predictor_enabled': True,
             'breakout_15m_enabled': True,
+            'btc_momentum_enabled': True,
         }
 
         for setting in settings:
@@ -562,6 +566,19 @@ async def update_trading_services(data: TradingServicesUpdate):
             """, (value,))
             status = '启动' if data.breakout_15m_enabled else '暂停'
             updates.append(f"15M突破策略: {status}")
+
+        if data.btc_momentum_enabled is not None:
+            value = '1' if data.btc_momentum_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('btc_momentum_enabled', %s, 'BTC动量跟随开关 (1=启用, 0=禁用)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            status = '启动' if data.btc_momentum_enabled else '暂停'
+            updates.append(f"BTC动量跟随: {status}")
 
         conn.commit()
         cursor.close()

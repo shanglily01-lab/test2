@@ -382,6 +382,23 @@
                         </div>
                     </div>
                 </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
+                            <div class="mb-3">
+                                <strong style="color: #e2b96a;">BTC动量跟随</strong>
+                                <div class="small text-muted mt-1">BTC涨跌>=1.5%触发，TOP50全开，4H平仓</div>
+                            </div>
+                            <div class="d-flex align-items-center justify-content-between mt-auto">
+                                <span id="btcMomentumStatus" class="small">Loading...</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="btcMomentumToggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <div class="mb-3">
                     <div class="alert alert-warning" style="background: #3d2a00; border-color: #ffc107; color: #eee;">
@@ -678,6 +695,12 @@ Loading...
                     document.getElementById('breakout15mToggle').checked = breakout15mEnabled;
                     document.getElementById('breakout15mStatus').textContent = breakout15mEnabled ? '✅ 运行中' : '⏸️ 已暂停';
                     document.getElementById('breakout15mStatus').style.color = breakout15mEnabled ? '#4ecca3' : '#ffc107';
+
+                    // 更新BTC动量跟随
+                    const btcMomentumEnabled = data.btc_momentum_enabled;
+                    document.getElementById('btcMomentumToggle').checked = btcMomentumEnabled;
+                    document.getElementById('btcMomentumStatus').textContent = btcMomentumEnabled ? '✅ 运行中' : '⏸️ 已暂停';
+                    document.getElementById('btcMomentumStatus').style.color = btcMomentumEnabled ? '#4ecca3' : '#ffc107';
                 }
             } catch (error) {
                 console.error('加载交易服务状态失败:', error);
@@ -701,7 +724,8 @@ Loading...
                         coin_futures_enabled: coinEnabled,
                         live_trading_enabled: liveEnabled,
                         predictor_enabled: document.getElementById('predictorToggle').checked,
-                        breakout_15m_enabled: document.getElementById('breakout15mToggle').checked
+                        breakout_15m_enabled: document.getElementById('breakout15mToggle').checked,
+                        btc_momentum_enabled: document.getElementById('btcMomentumToggle').checked
                     })
                 });
 

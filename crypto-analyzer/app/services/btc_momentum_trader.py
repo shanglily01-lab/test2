@@ -370,6 +370,20 @@ class BTCMomentumTrader:
         self._last_trigger_time = datetime.utcnow()
         logger.info(f"[BTC动量] 完成，共开仓 {opened}/{len(top50)} 个交易对，4小时内不再触发")
 
+    def _is_momentum_enabled(self) -> bool:
+        """从 system_settings 读取 btc_momentum_enabled 开关，默认启用"""
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='btc_momentum_enabled'")
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if row is None:
+                return True  # 未配置时默认启用
+            return str(row['setting_value']).strip() in ('1', 'true', 'True')
+        except Exception:
+            return True  # 查询失败时默认启用
+
     def check_and_execute(self):
         """
         主循环每分钟调用一次：
@@ -377,6 +391,9 @@ class BTCMomentumTrader:
         2. 检测是否触发
         3. 触发则执行
         """
+        if not self._is_momentum_enabled():
+            return
+
         btc_price = self._get_btc_current_price()
         if btc_price:
             self.record_btc_price(btc_price)
