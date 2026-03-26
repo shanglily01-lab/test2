@@ -744,29 +744,35 @@ class SmartDecisionBrain:
             _trading_mode = getattr(self, 'trading_mode', 'signal_confirmation')
 
             if _trading_mode == 'trend_following':
-                # 趋势跟随：Big4强度20~50是早期趋势窗口，超过50趋势已确认=晚了
-                # Big4强度 < 20：无方向，不开
-                # Big4强度 20~50：趋势刚起，顺势开仓
-                # Big4强度 > 50：趋势已确认，不开新仓（信号确认模式的地盘）
-                _b4_in_early_trend = 20 <= _b4_strength <= 50
-                if not _b4_in_early_trend:
+                # 趋势跟随：用 Big4 净方向（bearish_count vs bullish_count）+ 强度窗口 20~50
+                # 强度 < 20：无趋势，不开
+                # 强度 20~50：早期趋势，顺净方向开仓
+                # 强度 > 50：趋势已确认，太晚，不开新仓
+                _b4_bullish_cnt = big4_result.get('bullish_count', 0) if big4_result else 0
+                _b4_bearish_cnt = big4_result.get('bearish_count', 0) if big4_result else 0
+                _b4_net = _b4_bullish_cnt - _b4_bearish_cnt  # >0 净多，<0 净空
+
+                if not (20 <= _b4_strength <= 50):
                     long_threshold = 999
                     short_threshold_adj = 999
                     logger.debug(f"[TREND] {symbol} Big4强度={_b4_strength:.1f} 不在早期趋势窗口(20~50)，不开仓")
-                elif _b4_signal in ('BEARISH', 'STRONG_BEARISH'):
-                    long_threshold = 999   # 逆势做多封死
-                    short_threshold_adj = 20   # 顺势做空
-                    logger.debug(f"[TREND] {symbol} Big4早期熊市({_b4_strength:.1f}) 只做空")
-                elif _b4_signal in ('BULLISH', 'STRONG_BULLISH'):
-                    long_threshold = 20    # 顺势做多
-                    short_threshold_adj = 999  # 逆势做空封死
-                    logger.debug(f"[TREND] {symbol} Big4早期牛市({_b4_strength:.1f}) 只做多")
+                elif _b4_net < 0:
+                    # 净空：bearish_count > bullish_count
+                    long_threshold = 999
+                    short_threshold_adj = 20
+                    logger.debug(f"[TREND] {symbol} Big4净空(bearish={_b4_bearish_cnt} bullish={_b4_bullish_cnt} 强度={_b4_strength:.1f}) 只做空")
+                elif _b4_net > 0:
+                    # 净多：bullish_count > bearish_count
+                    long_threshold = 20
+                    short_threshold_adj = 999
+                    logger.debug(f"[TREND] {symbol} Big4净多(bullish={_b4_bullish_cnt} bearish={_b4_bearish_cnt} 强度={_b4_strength:.1f}) 只做多")
                 else:
+                    # 多空平衡，无净方向
                     long_threshold = 999
                     short_threshold_adj = 999
-                    logger.debug(f"[TREND] {symbol} Big4中性，不开仓")
+                    logger.debug(f"[TREND] {symbol} Big4多空平衡，不开仓")
 
-                # 币种信号分数也要在20~50之间（有信号但未过度确认）
+                # 币种分数也要在20~50之间（有信号但未过度确认）
                 _long_score_ok  = 20 <= long_score  <= 50
                 _short_score_ok = 20 <= short_score <= 50
                 long_qualified  = _long_score_ok  and long_score  >= long_threshold
