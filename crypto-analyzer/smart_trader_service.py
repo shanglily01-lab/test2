@@ -2995,7 +2995,7 @@ class SmartTraderService:
                             # 避免 get_open_positions() 失败时误判"持仓不存在"
                             try:
                                 _lq_c = self._get_connection()
-                                _lq_cur = _lq_c.cursor()
+                                _lq_cur = _lq_c.cursor(pymysql.cursors.DictCursor)
                                 _lq_cur.execute(
                                     "SELECT quantity, entry_price FROM live_futures_positions "
                                     "WHERE account_id=%s AND symbol=%s AND position_side=%s AND status='OPEN' "
