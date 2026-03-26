@@ -219,6 +219,22 @@
                 <label class="toggle"><input type="checkbox" id="btcMomentumToggle"><span class="slider"></span></label>
             </div>
         </div>
+        <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px;">
+            <div>
+                <div class="row-label">交易模式</div>
+                <div class="row-sub">趋势跟随：Big4强度20~50早期入场 | 信号确认：分数>=55确认后入场</div>
+            </div>
+            <div style="display:flex;gap:16px;padding-left:4px;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:14px;">
+                    <input type="radio" name="tradingMode" id="modeSignal" value="signal_confirmation">
+                    信号确认
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:14px;">
+                    <input type="radio" name="tradingMode" id="modeTrend" value="trend_following">
+                    趋势跟随
+                </label>
+            </div>
+        </div>
         <div style="padding:12px 16px;">
             <button class="save-btn" onclick="saveServices()">💾 保存服务设置</button>
         </div>
@@ -571,6 +587,8 @@ async function loadAll() {
             setPill('predictorStatus', d.predictor_enabled);
             setPill('breakout15mStatus', d.breakout_15m_enabled);
             setPill('btcMomentumStatus', d.btc_momentum_enabled);
+            const mode = d.trading_mode || 'signal_confirmation';
+            document.querySelector(`input[name="tradingMode"][value="${mode}"]`).checked = true;
         }
         if (holdR.success) {
             document.getElementById('holdHours').value = String(holdR.data.hours);
@@ -588,6 +606,7 @@ async function saveServices() {
         predictor_enabled: document.getElementById('predictorToggle').checked,
         breakout_15m_enabled: document.getElementById('breakout15mToggle').checked,
         btc_momentum_enabled: document.getElementById('btcMomentumToggle').checked,
+        trading_mode: document.querySelector('input[name="tradingMode"]:checked')?.value || 'signal_confirmation',
     };
     const r = await fetch(`${SYS}/trading-services`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
     if (r.success) { toast('✅ 服务设置已保存'); loadAll(); } else toast('❌ 保存失败', 'err');
