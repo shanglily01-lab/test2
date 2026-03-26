@@ -383,7 +383,22 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-8">
+                    <div class="col-md-4">
+                        <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
+                            <div class="mb-3">
+                                <strong style="color: #4ecca3;">U本位破位策略</strong>
+                                <div class="small text-muted mt-1">BreakoutSystem+移动止盈，独立权重，account_id=2</div>
+                            </div>
+                            <div class="d-flex align-items-center justify-content-between mt-auto">
+                                <span id="uCoinStyleStatus" class="small">Loading...</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="uCoinStyleToggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
                         <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
                             <div class="mb-3">
                                 <strong style="color: #e2b96a;">交易模式</strong>
@@ -511,7 +526,7 @@ Loading...
                 const servicesResult = await servicesResponse.json();
 
                 // 合并所有配置（排除已放入嵌套结构的重复字段）
-                const duplicateKeys = ['allow_long', 'allow_short', 'u_futures_trading_enabled', 'coin_futures_trading_enabled', 'live_trading_enabled'];
+                const duplicateKeys = ['allow_long', 'allow_short', 'u_futures_trading_enabled', 'coin_futures_trading_enabled', 'live_trading_enabled', 'u_coin_style_enabled'];
                 const filteredSettings = Object.fromEntries(
                     Object.entries(systemSettings).filter(([k]) => !duplicateKeys.includes(k))
                 );
@@ -699,6 +714,12 @@ Loading...
                     document.getElementById('btcMomentumStatus').textContent = btcMomentumEnabled ? '✅ 运行中' : '⏸️ 已暂停';
                     document.getElementById('btcMomentumStatus').style.color = btcMomentumEnabled ? '#4ecca3' : '#ffc107';
 
+                    // 更新U本位破位策略
+                    const uCoinStyleEnabled = data.u_coin_style_enabled || false;
+                    document.getElementById('uCoinStyleToggle').checked = uCoinStyleEnabled;
+                    document.getElementById('uCoinStyleStatus').textContent = uCoinStyleEnabled ? '✅ 运行中' : '⏸️ 已暂停';
+                    document.getElementById('uCoinStyleStatus').style.color = uCoinStyleEnabled ? '#4ecca3' : '#ffc107';
+
                     // 更新交易模式
                     const mode = data.trading_mode || 'signal_confirmation';
                     document.querySelector(`input[name="tradingMode"][value="${mode}"]`).checked = true;
@@ -726,6 +747,7 @@ Loading...
                         live_trading_enabled: liveEnabled,
                         predictor_enabled: document.getElementById('predictorToggle').checked,
                         btc_momentum_enabled: document.getElementById('btcMomentumToggle').checked,
+                        u_coin_style_enabled: document.getElementById('uCoinStyleToggle').checked,
                         trading_mode: document.querySelector('input[name="tradingMode"]:checked')?.value || 'signal_confirmation'
                     })
                 });

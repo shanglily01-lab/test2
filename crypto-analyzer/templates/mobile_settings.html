@@ -209,6 +209,16 @@
                 <label class="toggle"><input type="checkbox" id="btcMomentumToggle"><span class="slider"></span></label>
             </div>
         </div>
+        <div class="row">
+            <div>
+                <div class="row-label">U本位破位策略</div>
+                <div class="row-sub">BreakoutSystem+移动止盈，独立权重</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+                <span id="uCoinStyleStatus" class="pill">…</span>
+                <label class="toggle"><input type="checkbox" id="uCoinStyleToggle"><span class="slider"></span></label>
+            </div>
+        </div>
         <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px;">
             <div>
                 <div class="row-label">交易模式</div>
@@ -570,11 +580,13 @@ async function loadAll() {
             document.getElementById('liveToggle').checked = d.live_trading_enabled;
             document.getElementById('predictorToggle').checked = d.predictor_enabled;
             document.getElementById('btcMomentumToggle').checked = d.btc_momentum_enabled;
+            document.getElementById('uCoinStyleToggle').checked = d.u_coin_style_enabled || false;
             setPill('usdtStatus', d.usdt_futures_enabled);
             setPill('coinStatus', d.coin_futures_enabled);
             setPill('liveStatus', d.live_trading_enabled);
             setPill('predictorStatus', d.predictor_enabled);
             setPill('btcMomentumStatus', d.btc_momentum_enabled);
+            setPill('uCoinStyleStatus', d.u_coin_style_enabled || false);
             const mode = d.trading_mode || 'signal_confirmation';
             document.querySelector(`input[name="tradingMode"][value="${mode}"]`).checked = true;
         }
@@ -593,6 +605,7 @@ async function saveServices() {
         live_trading_enabled: document.getElementById('liveToggle').checked,
         predictor_enabled: document.getElementById('predictorToggle').checked,
         btc_momentum_enabled: document.getElementById('btcMomentumToggle').checked,
+        u_coin_style_enabled: document.getElementById('uCoinStyleToggle').checked,
         trading_mode: document.querySelector('input[name="tradingMode"]:checked')?.value || 'signal_confirmation',
     };
     const r = await fetch(`${SYS}/trading-services`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());

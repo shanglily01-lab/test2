@@ -273,7 +273,7 @@ class CoinFuturesDecisionBrain:
                 cursor.execute("""
                     SELECT signal_component, weight_long, weight_short
                     FROM signal_scoring_weights
-                    WHERE is_active = TRUE
+                    WHERE is_active = TRUE AND strategy_type = 'default'
                 """)
                 weight_rows = cursor.fetchall()
                 for row in weight_rows:

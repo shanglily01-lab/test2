@@ -224,7 +224,7 @@ class ScoringWeightOptimizer:
             cursor.execute("""
                 SELECT signal_component, weight_long, weight_short, base_weight
                 FROM signal_scoring_weights
-                WHERE is_active = TRUE
+                WHERE is_active = TRUE AND strategy_type = 'default'
             """)
             current_weights = {row['signal_component']: row for row in cursor.fetchall()}
 
@@ -270,7 +270,7 @@ class ScoringWeightOptimizer:
                                         performance_score = %s,
                                         last_adjusted = NOW(),
                                         adjustment_count = adjustment_count + 1
-                                    WHERE signal_component = %s
+                                    WHERE signal_component = %s AND strategy_type = 'default'
                                 """, (new_weight, perf['performance_score'], component_name))
 
                 # 调整SHORT权重
@@ -303,7 +303,7 @@ class ScoringWeightOptimizer:
                                         performance_score = %s,
                                         last_adjusted = NOW(),
                                         adjustment_count = adjustment_count + 1
-                                    WHERE signal_component = %s
+                                    WHERE signal_component = %s AND strategy_type = 'default'
                                 """, (new_weight, perf['performance_score'], component_name))
 
             # 4. 更新signal_component_performance表 (记录统计)

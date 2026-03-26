@@ -55,6 +55,7 @@ class TradingServicesUpdate(BaseModel):
     live_trading_enabled: Optional[bool] = None
     predictor_enabled: Optional[bool] = None
     btc_momentum_enabled: Optional[bool] = None
+    u_coin_style_enabled: Optional[bool] = None
     trading_mode: Optional[str] = None  # 'signal_confirmation' or 'trend_following'
 
 
@@ -443,7 +444,7 @@ async def get_trading_services():
             FROM system_settings
             WHERE setting_key IN ('u_futures_trading_enabled', 'coin_futures_trading_enabled',
                                   'live_trading_enabled', 'predictor_enabled',
-                                  'btc_momentum_enabled', 'trading_mode')
+                                  'btc_momentum_enabled', 'u_coin_style_enabled', 'trading_mode')
         """)
 
         settings = cursor.fetchall()
@@ -456,6 +457,7 @@ async def get_trading_services():
             'live_trading_enabled': 'live_trading_enabled',
             'predictor_enabled': 'predictor_enabled',
             'btc_momentum_enabled': 'btc_momentum_enabled',
+            'u_coin_style_enabled': 'u_coin_style_enabled',
             'trading_mode': 'trading_mode',
         }
 
@@ -465,6 +467,7 @@ async def get_trading_services():
             'live_trading_enabled': True,
             'predictor_enabled': True,
             'btc_momentum_enabled': True,
+            'u_coin_style_enabled': False,
             'trading_mode': 'signal_confirmation',
         }
 
@@ -568,6 +571,19 @@ async def update_trading_services(data: TradingServicesUpdate):
             """, (value,))
             status = '启动' if data.btc_momentum_enabled else '暂停'
             updates.append(f"BTC动量跟随: {status}")
+
+        if data.u_coin_style_enabled is not None:
+            value = '1' if data.u_coin_style_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('u_coin_style_enabled', %s, 'U本位破位策略开关 (1=启用, 0=禁用)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            status = '启动' if data.u_coin_style_enabled else '暂停'
+            updates.append(f"U本位破位策略: {status}")
 
         if data.trading_mode is not None:
             if data.trading_mode not in ('signal_confirmation', 'trend_following'):
