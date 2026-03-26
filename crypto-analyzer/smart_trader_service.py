@@ -749,8 +749,8 @@ class SmartDecisionBrain:
                 elif _b4_strength >= 55:
                     _crowding_penalty = 8
 
-            big4_bullish = (_b4_signal in ('BULLISH', 'STRONG_BULLISH') and _b4_strength >= 65)
-            big4_bearish = (_b4_signal in ('BEARISH', 'STRONG_BEARISH') and _b4_strength >= 65)
+            big4_bullish = (_b4_signal in ('BULLISH', 'STRONG_BULLISH') and _b4_strength >= 50)
+            big4_bearish = (_b4_signal in ('BEARISH', 'STRONG_BEARISH') and _b4_strength >= 50)
 
             # 🔥 动态阈值：三段式设计（牛市/中性/熊市）
             # Big4过滤器关闭时：使用"软调整"模式，仍读取Big4状态，但不硬封（不触发100分死门槛）
@@ -3694,9 +3694,9 @@ class SmartTraderService:
                             if big4_signal == 'NEUTRAL':
                                 logger.warning(f"🚫 [BIG4-NEUTRAL-BLOCK] {symbol} Big4中性市场(强度{big4_strength:.1f}), 禁止开仓")
                                 continue
-                            # 🚫 Big4信号强度不足(< 65)时视为中性，禁止开仓
-                            if big4_signal in ('BEARISH', 'STRONG_BEARISH', 'BULLISH', 'STRONG_BULLISH') and big4_strength < 65:
-                                logger.warning(f"🚫 [BIG4-WEAK-BLOCK] {symbol} Big4信号强度不足({big4_strength:.1f}<65), 禁止开仓")
+                            # 🚫 Big4信号强度不足(< 50)时视为中性，禁止开仓
+                            if big4_signal in ('BEARISH', 'STRONG_BEARISH', 'BULLISH', 'STRONG_BULLISH') and big4_strength < 50:
+                                logger.warning(f"🚫 [BIG4-WEAK-BLOCK] {symbol} Big4信号强度不足({big4_strength:.1f}<50), 禁止开仓")
                                 continue
                         else:
                             logger.warning(f"[BIG4-ERROR] {symbol} Big4数据不可用, 跳过开仓")
