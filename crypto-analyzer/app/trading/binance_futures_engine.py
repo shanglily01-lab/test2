@@ -557,6 +557,26 @@ class BinanceFuturesEngine:
         position_side = position_side.upper()
 
         try:
+            # 0. 每账号最多 5 个实盘持仓
+            MAX_LIVE_POSITIONS = 5
+            try:
+                _chk_cur = self._get_cursor()
+                _chk_cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM live_futures_positions "
+                    "WHERE account_id=%s AND status='OPEN'",
+                    (account_id,)
+                )
+                _chk_row = _chk_cur.fetchone()
+                _open_cnt = _chk_row['cnt'] if isinstance(_chk_row, dict) else _chk_row[0]
+                if _open_cnt >= MAX_LIVE_POSITIONS:
+                    logger.warning(
+                        f"[实盘] {symbol} {position_side} 开仓被拒: "
+                        f"账号 {account_id} 已有 {_open_cnt} 个持仓，上限 {MAX_LIVE_POSITIONS}"
+                    )
+                    return {'success': False, 'error': f'实盘持仓已达上限 {MAX_LIVE_POSITIONS}，拒绝开仓'}
+            except Exception as _chk_e:
+                logger.warning(f"[实盘] 检查持仓数量失败: {_chk_e}，继续开仓")
+
             # 1. 设置杠杆
             leverage_result = self.set_leverage(symbol, leverage)
             if not leverage_result.get('success', True):
