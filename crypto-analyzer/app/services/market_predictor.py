@@ -18,6 +18,20 @@ class MarketPredictor:
     def _get_conn(self):
         return pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor)
 
+    def _get_max_hold_hours(self) -> int:
+        """从 system_settings 读取最大持仓时间（小时），默认4小时"""
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='max_hold_hours'")
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if row:
+                return max(1, int(row['setting_value']))
+            return 4
+        except Exception:
+            return 4
+
     # ──────────────────────────────────────────
     # 指标计算（参考 market_regime_detector.py）
     # ──────────────────────────────────────────
@@ -462,7 +476,7 @@ class MarketPredictor:
             qty = round(notional / entry_price, 6)
 
             try:
-                planned_close = now + timedelta(hours=4)
+                planned_close = now + timedelta(hours=self._get_max_hold_hours())
                 cursor.execute("""
                     INSERT INTO futures_positions
                         (account_id, symbol, position_side, leverage, quantity, notional_value,

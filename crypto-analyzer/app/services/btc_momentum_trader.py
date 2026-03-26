@@ -241,7 +241,7 @@ class BTCMomentumTrader:
 
             conn = self._get_conn()
             cur = conn.cursor()
-            planned_close_time = datetime.utcnow() + timedelta(hours=4)
+            planned_close_time = datetime.utcnow() + timedelta(hours=self._get_max_hold_hours())
             cur.execute("""
                 INSERT INTO futures_positions
                     (account_id, symbol, position_side, leverage, quantity, notional_value,
@@ -385,6 +385,20 @@ class BTCMomentumTrader:
 
         self._last_trigger_time = datetime.utcnow()
         logger.info(f"[BTC动量] 完成，共开仓 {opened}/{len(top50)} 个交易对，4小时内不再触发")
+
+    def _get_max_hold_hours(self) -> int:
+        """从 system_settings 读取最大持仓时间（小时），默认4小时"""
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='max_hold_hours'")
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if row:
+                return max(1, int(row['setting_value']))
+            return 4
+        except Exception:
+            return 4
 
     def _is_momentum_enabled(self) -> bool:
         """从 system_settings 读取 btc_momentum_enabled 开关，默认启用"""
