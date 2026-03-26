@@ -181,6 +181,23 @@ class Breakout15MTrader:
             logger.warning(f"[15M突破] 检查TOP50失败: {e}")
             return False
 
+    def _get_big4_signal(self):
+        """返回 (signal, strength)，失败返回 (None, 0)"""
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT overall_signal, signal_strength FROM big4_trend_history "
+                "ORDER BY created_at DESC LIMIT 1"
+            )
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if row:
+                return row['overall_signal'], float(row['signal_strength'] or 0)
+        except Exception as e:
+            logger.warning(f"[15M突破] 读取Big4失败: {e}")
+        return None, 0
+
     def _sync_live(self, symbol: str, direction: str, entry_price: float,
                    paper_pos_id: int, reason: str):
         """同步到实盘账号（调用交易引擎真实下单）"""
@@ -189,6 +206,17 @@ class Breakout15MTrader:
         if not self._is_in_top50(symbol):
             logger.debug(f"[15M突破] {symbol} 不在TOP50，跳过实盘同步")
             return
+
+        # Big4 方向过滤：熊市禁止做多，牛市禁止做空
+        b4_signal, b4_strength = self._get_big4_signal()
+        if b4_signal:
+            if direction == 'LONG' and b4_signal in ('BEARISH', 'STRONG_BEARISH') and b4_strength >= 50:
+                logger.warning(f"[15M突破-BIG4-BLOCK] {symbol} Big4={b4_signal}({b4_strength:.1f}) 熊市禁止实盘做多")
+                return
+            if direction == 'SHORT' and b4_signal in ('BULLISH', 'STRONG_BULLISH') and b4_strength >= 50:
+                logger.warning(f"[15M突破-BIG4-BLOCK] {symbol} Big4={b4_signal}({b4_strength:.1f}) 牛市禁止实盘做空")
+                return
+
         try:
             from app.services.api_key_service import APIKeyService
             from app.trading.binance_futures_engine import BinanceFuturesEngine
@@ -344,6 +372,15 @@ class Breakout15MTrader:
                 if self._has_cooldown(cur, symbol, direction):
                     logger.debug(f"[15M突破] {symbol} {direction} 冷却中，跳过")
                     continue
+                # Big4 方向过滤
+                b4_sig, b4_str = self._get_big4_signal()
+                if b4_sig:
+                    if direction == 'LONG' and b4_sig in ('BEARISH', 'STRONG_BEARISH') and b4_str >= 50:
+                        logger.debug(f"[15M突破] {symbol} Big4熊市({b4_sig})，跳过做多")
+                        continue
+                    if direction == 'SHORT' and b4_sig in ('BULLISH', 'STRONG_BULLISH') and b4_str >= 50:
+                        logger.debug(f"[15M突破] {symbol} Big4牛市({b4_sig})，跳过做空")
+                        continue
                 entry_price = self._get_current_price(symbol)
                 if not entry_price:
                     logger.warning(f"[15M突破] {symbol} 取不到价格，跳过")
