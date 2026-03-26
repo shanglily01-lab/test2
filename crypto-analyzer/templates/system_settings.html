@@ -366,21 +366,6 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
-                            <div class="mb-3">
-                                <strong style="color: #e2b96a;">15M突破策略</strong>
-                                <div class="small text-muted mt-1">每15分钟扫描，价格突破+RSI+量能</div>
-                            </div>
-                            <div class="d-flex align-items-center justify-content-between mt-auto">
-                                <span id="breakout15mStatus" class="small">Loading...</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="breakout15mToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
                 </div>
                 <div class="row g-3 mb-3">
                     <div class="col-md-4">
@@ -708,12 +693,6 @@ Loading...
                     document.getElementById('predictorStatus').textContent = predictorEnabled ? '✅ 运行中' : '⏸️ 已暂停';
                     document.getElementById('predictorStatus').style.color = predictorEnabled ? '#4ecca3' : '#ffc107';
 
-                    // 更新15M突破策略
-                    const breakout15mEnabled = data.breakout_15m_enabled;
-                    document.getElementById('breakout15mToggle').checked = breakout15mEnabled;
-                    document.getElementById('breakout15mStatus').textContent = breakout15mEnabled ? '✅ 运行中' : '⏸️ 已暂停';
-                    document.getElementById('breakout15mStatus').style.color = breakout15mEnabled ? '#4ecca3' : '#ffc107';
-
                     // 更新BTC动量跟随
                     const btcMomentumEnabled = data.btc_momentum_enabled;
                     document.getElementById('btcMomentumToggle').checked = btcMomentumEnabled;
@@ -746,7 +725,6 @@ Loading...
                         coin_futures_enabled: coinEnabled,
                         live_trading_enabled: liveEnabled,
                         predictor_enabled: document.getElementById('predictorToggle').checked,
-                        breakout_15m_enabled: document.getElementById('breakout15mToggle').checked,
                         btc_momentum_enabled: document.getElementById('btcMomentumToggle').checked,
                         trading_mode: document.querySelector('input[name="tradingMode"]:checked')?.value || 'signal_confirmation'
                     })

@@ -54,7 +54,6 @@ class TradingServicesUpdate(BaseModel):
     coin_futures_enabled: Optional[bool] = None
     live_trading_enabled: Optional[bool] = None
     predictor_enabled: Optional[bool] = None
-    breakout_15m_enabled: Optional[bool] = None
     btc_momentum_enabled: Optional[bool] = None
     trading_mode: Optional[str] = None  # 'signal_confirmation' or 'trend_following'
 
@@ -443,7 +442,7 @@ async def get_trading_services():
             SELECT setting_key, setting_value
             FROM system_settings
             WHERE setting_key IN ('u_futures_trading_enabled', 'coin_futures_trading_enabled',
-                                  'live_trading_enabled', 'predictor_enabled', 'breakout_15m_enabled',
+                                  'live_trading_enabled', 'predictor_enabled',
                                   'btc_momentum_enabled', 'trading_mode')
         """)
 
@@ -456,7 +455,6 @@ async def get_trading_services():
             'coin_futures_trading_enabled': 'coin_futures_enabled',
             'live_trading_enabled': 'live_trading_enabled',
             'predictor_enabled': 'predictor_enabled',
-            'breakout_15m_enabled': 'breakout_15m_enabled',
             'btc_momentum_enabled': 'btc_momentum_enabled',
             'trading_mode': 'trading_mode',
         }
@@ -466,7 +464,6 @@ async def get_trading_services():
             'coin_futures_enabled': True,
             'live_trading_enabled': True,
             'predictor_enabled': True,
-            'breakout_15m_enabled': True,
             'btc_momentum_enabled': True,
             'trading_mode': 'signal_confirmation',
         }
@@ -558,19 +555,6 @@ async def update_trading_services(data: TradingServicesUpdate):
             """, (value,))
             status = '启动' if data.predictor_enabled else '暂停'
             updates.append(f"市场预测器: {status}")
-
-        if data.breakout_15m_enabled is not None:
-            value = '1' if data.breakout_15m_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('breakout_15m_enabled', %s, '15M突破策略开关 (1=启用, 0=禁用)', 'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            status = '启动' if data.breakout_15m_enabled else '暂停'
-            updates.append(f"15M突破策略: {status}")
 
         if data.btc_momentum_enabled is not None:
             value = '1' if data.btc_momentum_enabled else '0'

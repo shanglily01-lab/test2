@@ -549,19 +549,6 @@ async def lifespan(app: FastAPI):
                 logger.error(f"❌ 市场预测分析失败: {e}")
         schedule.every(6).hours.do(run_market_prediction)
 
-        # 15M突破策略（每15分钟，仅模拟盘）
-        _breakout_symbols = config.get('symbols', [])
-        def run_15m_breakout():
-            try:
-                from app.services.breakout_15m_trader import Breakout15MTrader
-                from app.services.binance_ws_price import get_ws_price_service
-                trader = Breakout15MTrader(db_config, ws_price_service=get_ws_price_service())
-                opened = trader.run(_breakout_symbols)
-                if opened:
-                    logger.info(f"[15M突破] 本轮开仓 {opened} 单")
-            except Exception as e:
-                logger.error(f"[15M突破] 策略失败: {e}")
-        schedule.every(15).minutes.do(run_15m_breakout)
 
         # ── 独立子进程周期任务（与 FastAPI 主进程完全隔离）──────────────────────────
         # 每个存储过程调用都在独立 OS 子进程中运行；

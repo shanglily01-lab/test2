@@ -201,16 +201,6 @@
         </div>
         <div class="row">
             <div>
-                <div class="row-label">📈 15M突破策略</div>
-                <div class="row-sub">震荡市突破入场</div>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px;">
-                <span id="breakout15mStatus" class="pill">…</span>
-                <label class="toggle"><input type="checkbox" id="breakout15mToggle"><span class="slider"></span></label>
-            </div>
-        </div>
-        <div class="row">
-            <div>
                 <div class="row-label">⚡ BTC动量跟随</div>
                 <div class="row-sub">BTC涨跌>=1.5%触发，4H平仓</div>
             </div>
@@ -579,13 +569,11 @@ async function loadAll() {
             document.getElementById('coinToggle').checked = d.coin_futures_enabled;
             document.getElementById('liveToggle').checked = d.live_trading_enabled;
             document.getElementById('predictorToggle').checked = d.predictor_enabled;
-            document.getElementById('breakout15mToggle').checked = d.breakout_15m_enabled;
             document.getElementById('btcMomentumToggle').checked = d.btc_momentum_enabled;
             setPill('usdtStatus', d.usdt_futures_enabled);
             setPill('coinStatus', d.coin_futures_enabled);
             setPill('liveStatus', d.live_trading_enabled);
             setPill('predictorStatus', d.predictor_enabled);
-            setPill('breakout15mStatus', d.breakout_15m_enabled);
             setPill('btcMomentumStatus', d.btc_momentum_enabled);
             const mode = d.trading_mode || 'signal_confirmation';
             document.querySelector(`input[name="tradingMode"][value="${mode}"]`).checked = true;
@@ -604,7 +592,6 @@ async function saveServices() {
         coin_futures_enabled: document.getElementById('coinToggle').checked,
         live_trading_enabled: document.getElementById('liveToggle').checked,
         predictor_enabled: document.getElementById('predictorToggle').checked,
-        breakout_15m_enabled: document.getElementById('breakout15mToggle').checked,
         btc_momentum_enabled: document.getElementById('btcMomentumToggle').checked,
         trading_mode: document.querySelector('input[name="tradingMode"]:checked')?.value || 'signal_confirmation',
     };
