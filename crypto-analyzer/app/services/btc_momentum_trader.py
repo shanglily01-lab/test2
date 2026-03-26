@@ -274,8 +274,24 @@ class BTCMomentumTrader:
             logger.error(f"[BTC动量] 获取实盘账号失败: {e}")
             return
 
+        MAX_LIVE_POSITIONS = 5
+
         for ak in active_keys:
             try:
+                # 检查该账号实盘持仓数量上限
+                conn = self._get_conn()
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM live_futures_positions "
+                    "WHERE account_id=%s AND status='OPEN'",
+                    (ak['id'],)
+                )
+                live_cnt = (cur.fetchone() or {}).get('cnt', 0)
+                cur.close(); conn.close()
+                if live_cnt >= MAX_LIVE_POSITIONS:
+                    logger.info(f"[BTC动量] {ak['account_name']} 实盘已有 {live_cnt} 单，跳过 {symbol}")
+                    continue
+
                 margin = float(ak.get('max_position_value') or 100)
                 lev = int(ak.get('max_leverage') or 5)
                 notional = margin * lev
