@@ -382,7 +382,7 @@ class KlinePullbackEntryExecutor:
                 direction_key = 'allow_long' if direction == 'LONG' else 'allow_short'
                 cur_chk.execute(
                     "SELECT setting_key, setting_value FROM system_settings "
-                    "WHERE setting_key IN ('u_futures_trading_enabled', 'big4_filter_enabled', %s)",
+                    "WHERE setting_key IN ('u_futures_trading_enabled', %s)",
                     (direction_key,)
                 )
                 rows = {r[0]: r[1] for r in cur_chk.fetchall()}
@@ -397,36 +397,6 @@ class KlinePullbackEntryExecutor:
             except Exception as chk_err:
                 logger.warning(f"[TRADING-DISABLED] 检查交易开关失败: {chk_err}，默认禁止开单")
                 return {'success': False, 'reason': f'检查交易开关异常: {chk_err}'}
-
-            # Big4 方向过滤：熊市禁止做多，牛市禁止做空
-            big4_filter_on = rows.get('big4_filter_enabled', '1') in ('1', 'true', 'True', 'yes')
-            if big4_filter_on:
-                try:
-                    conn_b4 = pymysql.connect(**self.db_config, autocommit=True)
-                    cur_b4 = conn_b4.cursor()
-                    cur_b4.execute(
-                        "SELECT overall_signal, signal_strength FROM big4_trend_history "
-                        "ORDER BY created_at DESC LIMIT 1"
-                    )
-                    b4_row = cur_b4.fetchone()
-                    conn_b4.close()
-                    if b4_row:
-                        b4_signal = b4_row[0] if isinstance(b4_row, tuple) else b4_row.get('overall_signal', '')
-                        b4_strength = float(b4_row[1] if isinstance(b4_row, tuple) else b4_row.get('signal_strength', 0))
-                        b4_bearish = b4_signal in ('BEARISH', 'STRONG_BEARISH') and b4_strength >= 50
-                        b4_bullish = b4_signal in ('BULLISH', 'STRONG_BULLISH') and b4_strength >= 50
-                        if direction == 'LONG' and b4_bearish:
-                            logger.warning(
-                                f"[15M-BIG4-BLOCK] {symbol} Big4={b4_signal}({b4_strength:.1f}) 熊市禁止15M做多，放弃开仓"
-                            )
-                            return {'success': False, 'reason': f'Big4熊市({b4_signal})禁止做多'}
-                        if direction == 'SHORT' and b4_bullish:
-                            logger.warning(
-                                f"[15M-BIG4-BLOCK] {symbol} Big4={b4_signal}({b4_strength:.1f}) 牛市禁止15M做空，放弃开仓"
-                            )
-                            return {'success': False, 'reason': f'Big4牛市({b4_signal})禁止做空'}
-                except Exception as b4_err:
-                    logger.warning(f"[15M-BIG4] 读取Big4状态失败: {b4_err}，跳过Big4过滤")
 
             # 获取当前价格
             current_price = await self._get_current_price(symbol)
