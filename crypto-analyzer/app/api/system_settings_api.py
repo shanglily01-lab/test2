@@ -56,6 +56,7 @@ class TradingServicesUpdate(BaseModel):
     predictor_enabled: Optional[bool] = None
     breakout_15m_enabled: Optional[bool] = None
     btc_momentum_enabled: Optional[bool] = None
+    trading_mode: Optional[str] = None  # 'signal_confirmation' or 'trend_following'
 
 
 @router.get("/settings")
@@ -443,14 +444,13 @@ async def get_trading_services():
             FROM system_settings
             WHERE setting_key IN ('u_futures_trading_enabled', 'coin_futures_trading_enabled',
                                   'live_trading_enabled', 'predictor_enabled', 'breakout_15m_enabled',
-                                  'btc_momentum_enabled')
+                                  'btc_momentum_enabled', 'trading_mode')
         """)
 
         settings = cursor.fetchall()
         cursor.close()
         conn.close()
 
-        # 转换为字典格式（键名映射为前端使用的格式）
         key_mapping = {
             'u_futures_trading_enabled': 'usdt_futures_enabled',
             'coin_futures_trading_enabled': 'coin_futures_enabled',
@@ -458,6 +458,7 @@ async def get_trading_services():
             'predictor_enabled': 'predictor_enabled',
             'breakout_15m_enabled': 'breakout_15m_enabled',
             'btc_momentum_enabled': 'btc_momentum_enabled',
+            'trading_mode': 'trading_mode',
         }
 
         result = {
@@ -467,12 +468,16 @@ async def get_trading_services():
             'predictor_enabled': True,
             'breakout_15m_enabled': True,
             'btc_momentum_enabled': True,
+            'trading_mode': 'signal_confirmation',
         }
 
         for setting in settings:
             db_key = setting['setting_key']
             frontend_key = key_mapping.get(db_key, db_key)
-            result[frontend_key] = int(float(setting['setting_value'])) == 1
+            if db_key == 'trading_mode':
+                result[frontend_key] = setting['setting_value']
+            else:
+                result[frontend_key] = int(float(setting['setting_value'])) == 1
 
         return {
             'success': True,
@@ -579,6 +584,20 @@ async def update_trading_services(data: TradingServicesUpdate):
             """, (value,))
             status = '启动' if data.btc_momentum_enabled else '暂停'
             updates.append(f"BTC动量跟随: {status}")
+
+        if data.trading_mode is not None:
+            if data.trading_mode not in ('signal_confirmation', 'trend_following'):
+                raise HTTPException(status_code=400, detail="trading_mode 只能是 signal_confirmation 或 trend_following")
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('trading_mode', %s, '交易模式: signal_confirmation/trend_following', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (data.trading_mode,))
+            mode_name = '趋势跟随' if data.trading_mode == 'trend_following' else '信号确认'
+            updates.append(f"交易模式: {mode_name}")
 
         conn.commit()
         cursor.close()

@@ -63,7 +63,8 @@ class SmartDecisionBrain:
         # 从config.yaml加载配置
         self._load_config()
 
-        self.threshold = 60  # 开仓阈值 (强信号过滤,理论最大232分,60分≈26%强度)
+        self.threshold = 55  # 开仓阈值 (信号确认模式基础阈值)
+        self.trading_mode = 'signal_confirmation'  # 交易模式: signal_confirmation / trend_following
         self.max_threshold = 150  # 🔥 评分上限：拒绝150+分信号(数据显示高分=追涨杀跌=亏损)
 
         # 初始化信号黑名单检查器（动态加载，5分钟缓存）
@@ -733,79 +734,102 @@ class SmartDecisionBrain:
 
             # V1评分计算完成，稍后与V2一起打印
 
-            # 🔥 动态阈值：三段式设计（牛市/中性/熊市）
-            # Big4 BULLISH(≥50)  → LONG=60,  SHORT=60   (顺势做多)
-            # Big4 NEUTRAL       → LONG=65,  SHORT=60   (中性适度保守，V2协同过滤已提供质量保障)
-            # Big4 BEARISH(≥50)  → LONG=100, SHORT=60   (熊市严控做多)
+            # 读取 Big4 状态（两种模式都需要）
             _b4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
             _b4_strength = big4_result.get('signal_strength', 0) if big4_result else 0
-
-            # 🧠 群体极化防御：Big4强度越高，同向开仓门槛越高（防止羊群效应追涨杀跌）
-            # 例外：STRONG_BULLISH/STRONG_BEARISH时四大币一致，属于真实趋势而非羊群效应，不惩罚
-            _crowding_penalty = 0
-            if _b4_signal not in ('STRONG_BULLISH', 'STRONG_BEARISH'):
-                if _b4_strength >= 70:
-                    _crowding_penalty = 15
-                elif _b4_strength >= 55:
-                    _crowding_penalty = 8
-
             big4_bullish = (_b4_signal in ('BULLISH', 'STRONG_BULLISH') and _b4_strength >= 50)
             big4_bearish = (_b4_signal in ('BEARISH', 'STRONG_BEARISH') and _b4_strength >= 50)
 
-            # 🔥 动态阈值：三段式设计（牛市/中性/熊市）
-            # Big4过滤器关闭时：使用"软调整"模式，仍读取Big4状态，但不硬封（不触发100分死门槛）
-            # Big4过滤器开启时：完整三段式保护，熊市LONG=100严控
-            if not getattr(self, 'big4_filter_enabled', True):
-                # 软调整：保护极端逆势，但不完全封死，继续采集信号数据
-                if big4_bearish:
-                    long_threshold = 75                    # 熊市：提高LONG门槛（软限制，非硬封）
-                    short_threshold_adj = self.threshold   # SHORT正常放行
+            # ========== 交易模式：趋势跟随 vs 信号确认 ==========
+            _trading_mode = getattr(self, 'trading_mode', 'signal_confirmation')
+
+            if _trading_mode == 'trend_following':
+                # 趋势跟随：Big4 方向为主信号，分数 20~50，强度 50~70
+                # Big4强度>70（趋势成熟太晚）或<50（趋势不明）→ 全部封死
+                if _b4_strength < 50 or _b4_strength > 70:
+                    long_threshold = 999
+                    short_threshold_adj = 999
+                    logger.debug(f"[TREND] {symbol} Big4强度={_b4_strength:.1f} 不在50~70区间，本轮不开仓")
                 elif big4_bullish:
-                    long_threshold = self.threshold        # 牛市：LONG正常
-                    short_threshold_adj = 75               # 牛市中追空提高门槛（防止高分SHORT被反弹扫损）
+                    long_threshold = 20    # 顺势做多，低门槛
+                    short_threshold_adj = 999  # 逆势做空封死
+                    logger.debug(f"[TREND] {symbol} Big4牛市({_b4_strength:.1f}) 只做多，LONG门槛=20")
+                elif big4_bearish:
+                    long_threshold = 999   # 逆势做多封死
+                    short_threshold_adj = 20   # 顺势做空，低门槛
+                    logger.debug(f"[TREND] {symbol} Big4熊市({_b4_strength:.1f}) 只做空，SHORT门槛=20")
                 else:
-                    # 中性：使用 neutral_bias 细分（偏多/平衡/偏空）
+                    long_threshold = 999
+                    short_threshold_adj = 999
+                    logger.debug(f"[TREND] {symbol} Big4中性，不开仓")
+
+                # 趋势跟随：分数上限50，超过50说明信号太强=进去太晚
+                _long_score_ok  = 20 <= long_score  <= 50
+                _short_score_ok = 20 <= short_score <= 50
+                long_qualified  = _long_score_ok  and long_score  >= long_threshold
+                short_qualified = _short_score_ok and short_score >= short_threshold_adj
+
+            else:
+                # ========== 信号确认模式（原逻辑，基础阈值改为55）==========
+                # 🧠 群体极化防御：Big4强度越高，同向开仓门槛越高
+                _crowding_penalty = 0
+                if _b4_signal not in ('STRONG_BULLISH', 'STRONG_BEARISH'):
+                    if _b4_strength >= 70:
+                        _crowding_penalty = 15
+                    elif _b4_strength >= 55:
+                        _crowding_penalty = 8
+
+                if not getattr(self, 'big4_filter_enabled', True):
+                    if big4_bearish:
+                        long_threshold = 75
+                        short_threshold_adj = self.threshold
+                    elif big4_bullish:
+                        long_threshold = self.threshold
+                        short_threshold_adj = 75
+                    else:
+                        _nb = big4_result.get('neutral_bias', 'FLAT') if big4_result else 'FLAT'
+                        if _nb == 'UP':
+                            long_threshold = self.threshold
+                            short_threshold_adj = self.threshold + 8
+                        elif _nb == 'DOWN':
+                            long_threshold = self.threshold + 8
+                            short_threshold_adj = self.threshold
+                        else:
+                            long_threshold = self.threshold
+                            short_threshold_adj = self.threshold
+                elif big4_bullish:
+                    long_threshold = 55 + _crowding_penalty
+                    short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
+                elif big4_bearish:
+                    long_threshold = 100
+                    short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
+                else:
                     _nb = big4_result.get('neutral_bias', 'FLAT') if big4_result else 'FLAT'
                     if _nb == 'UP':
-                        long_threshold = self.threshold        # 60：偏多，LONG正常
-                        short_threshold_adj = self.threshold + 8  # 68：偏多，SHORT提高
+                        long_threshold = 55
+                        short_threshold_adj = 63
                     elif _nb == 'DOWN':
-                        long_threshold = self.threshold + 8   # 68：偏空，LONG提高
-                        short_threshold_adj = self.threshold  # 60：偏空，SHORT正常
+                        long_threshold = 63
+                        short_threshold_adj = 55
                     else:
-                        long_threshold = self.threshold        # FLAT：双向正常
-                        short_threshold_adj = self.threshold
-            elif big4_bullish:
-                long_threshold = 60 + _crowding_penalty   # 牛市：基础60 + 群体惩罚(STRONG_BULLISH时=0)
-                short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
-            elif big4_bearish:
-                long_threshold = 100                       # 熊市：严控做多
-                short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
-            else:
-                # 中性行情：neutral_bias 细分
-                _nb = big4_result.get('neutral_bias', 'FLAT') if big4_result else 'FLAT'
-                if _nb == 'UP':
-                    long_threshold = 60                    # 偏多：放宽LONG
-                    short_threshold_adj = 68               # 偏多：收紧SHORT
-                elif _nb == 'DOWN':
-                    long_threshold = 70                    # 偏空：收紧LONG
-                    short_threshold_adj = 60               # 偏空：放宽SHORT
-                else:
-                    long_threshold = 65                    # FLAT（原来逻辑）
-                    short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
+                        long_threshold = 60
+                        short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
 
-            if _crowding_penalty > 0:
-                logger.debug(
-                    f"🧠 [CROWDING] Big4强度{_b4_strength:.0f}≥{'70' if _crowding_penalty==15 else '55'}，"
-                    f"群体效应惩罚+{_crowding_penalty}分 | LONG阈值={long_threshold} SHORT阈值={short_threshold_adj}"
-                )
+                if _crowding_penalty > 0:
+                    logger.debug(
+                        f"[CROWDING] Big4强度{_b4_strength:.0f}，"
+                        f"群体效应惩罚+{_crowding_penalty}分 | LONG={long_threshold} SHORT={short_threshold_adj}"
+                    )
 
-            # 📈 ADX震荡市过滤：ADX<20 时阈值+10，减少震荡行情中的低质量信号
-            _adx_val = getattr(self, 'market_adx', 25.0)
-            if _adx_val < 20:
-                long_threshold += 10
-                short_threshold_adj += 10
-                logger.debug(f"[ADX-FILTER] {symbol} ADX={_adx_val:.1f}<20 震荡市，阈值+10 → LONG={long_threshold} SHORT={short_threshold_adj}")
+                # ADX震荡市过滤
+                _adx_val = getattr(self, 'market_adx', 25.0)
+                if _adx_val < 20:
+                    long_threshold += 10
+                    short_threshold_adj += 10
+                    logger.debug(f"[ADX-FILTER] {symbol} ADX={_adx_val:.1f}<20 震荡市，阈值+10")
+
+                long_qualified  = long_score  >= long_threshold
+                short_qualified = short_score >= short_threshold_adj
 
             # 选择得分更高的方向 (只要达到阈值就可以)
             long_qualified = long_score >= long_threshold
@@ -3532,7 +3556,7 @@ class SmartTraderService:
                         logger.warning(f"⚠️ [BIG4-REGIME] 市场状态检测失败: {e}")
                     last_regime_check = now
 
-                # 0.6. 定期重新加载Big4配置 (每5分钟检查数据库)
+                # 0.6. 定期重新加载Big4配置 + trading_mode (每5分钟检查数据库)
                 if (now - last_config_reload).total_seconds() >= 300:
                     try:
                         from app.services.system_settings_loader import get_big4_filter_enabled
@@ -3541,10 +3565,24 @@ class SmartTraderService:
 
                         if old_big4_enabled != new_big4_enabled:
                             self.big4_filter_config = {'enabled': new_big4_enabled}
-                            self.brain.big4_filter_enabled = new_big4_enabled  # 同步到brain
-                            logger.info(f"🔄 [BIG4-CONFIG-UPDATE] Big4过滤器配置已更新: {'启用✅' if new_big4_enabled else '禁用❌'}")
+                            self.brain.big4_filter_enabled = new_big4_enabled
+                            logger.info(f"[BIG4-CONFIG-UPDATE] Big4过滤器配置已更新: {'启用' if new_big4_enabled else '禁用'}")
                     except Exception as e:
-                        logger.warning(f"⚠️ [CONFIG-RELOAD] 重新加载Big4配置失败: {e}")
+                        logger.warning(f"[CONFIG-RELOAD] 重新加载Big4配置失败: {e}")
+
+                    try:
+                        _tm_conn = self._get_connection()
+                        _tm_cur = _tm_conn.cursor()
+                        _tm_cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='trading_mode'")
+                        _tm_row = _tm_cur.fetchone()
+                        _tm_cur.close(); _tm_conn.close()
+                        new_mode = (_tm_row.get('setting_value') if _tm_row else None) or 'signal_confirmation'
+                        if new_mode != self.trading_mode:
+                            logger.info(f"[TRADING-MODE] 交易模式切换: {self.trading_mode} -> {new_mode}")
+                            self.trading_mode = new_mode
+                    except Exception as e:
+                        logger.warning(f"[CONFIG-RELOAD] 重新加载trading_mode失败: {e}")
+
                     last_config_reload = now
 
                 # 0.6. 实盘持仓对账（每5分钟，检测交易所已平但DB未更新的仓位）
