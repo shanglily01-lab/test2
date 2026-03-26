@@ -426,7 +426,7 @@ class KlinePullbackEntryExecutor:
             _mh_hours = max(3, min(8, int(_mh_val or self.max_hold_minutes // 60)))
             max_hold_minutes = _mh_hours * 60
             timeout_at = datetime.utcnow() + timedelta(minutes=max_hold_minutes)
-            planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
+            planned_close_time = datetime.now() + timedelta(hours=4)
 
             # 准备数据
             entry_score = signal.get('trade_params', {}).get('entry_score', 0)

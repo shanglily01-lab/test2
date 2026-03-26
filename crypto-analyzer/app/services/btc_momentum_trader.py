@@ -241,17 +241,18 @@ class BTCMomentumTrader:
 
             conn = self._get_conn()
             cur = conn.cursor()
+            planned_close_time = datetime.utcnow() + timedelta(hours=4)
             cur.execute("""
                 INSERT INTO futures_positions
                     (account_id, symbol, position_side, leverage, quantity, notional_value,
                      margin, entry_price, mark_price, stop_loss_price, take_profit_price,
                      stop_loss_pct, take_profit_pct, status, source, entry_reason, open_time,
-                     unrealized_pnl, unrealized_pnl_pct)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'open','BTC_MOMENTUM',%s,NOW(),0,0)
+                     planned_close_time, unrealized_pnl, unrealized_pnl_pct)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'open','BTC_MOMENTUM',%s,NOW(),%s,0,0)
             """, (self.PAPER_ACCOUNT_ID, symbol, direction, self.LEVERAGE, qty,
                   round(notional, 2), margin, entry_price, entry_price,
                   sl, tp, self.STOP_LOSS_PCT * 100, self.TAKE_PROFIT_PCT * 100,
-                  trigger_info))
+                  trigger_info, planned_close_time))
             cur.close(); conn.close()
             logger.info(f"[BTC动量] 开仓 {symbol} {direction} @ {entry_price:.6g}  SL={sl:.6g}  TP={tp:.6g}")
             return True

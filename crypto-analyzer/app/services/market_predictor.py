@@ -462,7 +462,7 @@ class MarketPredictor:
             qty = round(notional / entry_price, 6)
 
             try:
-                planned_close = now + timedelta(hours=6)
+                planned_close = now + timedelta(hours=4)
                 cursor.execute("""
                     INSERT INTO futures_positions
                         (account_id, symbol, position_side, leverage, quantity, notional_value,
