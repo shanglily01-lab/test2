@@ -3056,7 +3056,9 @@ class SmartTraderService:
 
     def reconcile_live_positions(self):
         """
-        对账：查币安实际持仓，把 DB 里 OPEN 但交易所已平掉的记录标为 CLOSED。
+        双向对账：
+        1. DB OPEN 但交易所已平 -> 标为 CLOSED
+        2. 交易所有持仓但 DB 没有 -> 调用 sync_positions_from_binance 补录
         每5分钟调用一次。
         """
         try:
@@ -3070,8 +3072,9 @@ class SmartTraderService:
             for ak in active_keys:
                 try:
                     engine = BinanceFuturesEngine(self.db_config, ak['api_key'], ak['api_secret'])
+
+                    # --- 方向1：DB OPEN 但交易所已无持仓 → 标 CLOSED ---
                     exchange_positions = engine.get_open_positions()
-                    # 交易所实际持仓集合：(symbol, position_side)
                     exchange_set = {(p['symbol'], p['position_side']) for p in exchange_positions}
 
                     conn = self._get_connection()
@@ -3088,14 +3091,12 @@ class SmartTraderService:
                     for row in db_opens:
                         key = (row['symbol'], row['position_side'])
                         if key not in exchange_set:
-                            # 交易所已无此仓位，标为 CLOSED
                             cur.execute(
                                 "UPDATE live_futures_positions SET status='CLOSED', close_time=NOW(), "
                                 "notes=CONCAT(IFNULL(notes,''), '|reconcile_closed') "
                                 "WHERE id=%s",
                                 (row['id'],)
                             )
-                            # 同步关闭对应的模拟单
                             if row['paper_position_id']:
                                 cur.execute(
                                     "UPDATE futures_positions SET status='closed', close_time=NOW(), "
@@ -3110,6 +3111,17 @@ class SmartTraderService:
 
                     if closed_count > 0:
                         logger.info(f"[对账] 账号[{ak['account_name']}] 关闭 {closed_count} 个交易所已平仓的DB记录")
+
+                    # --- 方向2：交易所有持仓但 DB 无记录 → 补录 ---
+                    db_open_set = {(row['symbol'], row['position_side']) for row in db_opens}
+                    missing = [(p['symbol'], p['position_side']) for p in exchange_positions
+                               if (p['symbol'], p['position_side']) not in db_open_set]
+                    if missing:
+                        sync_result = engine.sync_positions_from_binance(account_id=ak['id'])
+                        new_count = sync_result.get('new', 0)
+                        if new_count > 0:
+                            logger.info(f"[对账] 账号[{ak['account_name']}] 补录 {new_count} 个交易所持仓到DB")
+
                 except Exception as e:
                     logger.error(f"[对账] 账号[{ak.get('account_name','')}] 对账失败: {e}")
         except Exception as e:
