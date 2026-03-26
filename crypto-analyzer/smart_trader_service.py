@@ -3054,6 +3054,67 @@ class SmartTraderService:
             logger.error(f"[ERROR] 关闭{symbol} {side}持仓失败: {e}")
             return False
 
+    def reconcile_live_positions(self):
+        """
+        对账：查币安实际持仓，把 DB 里 OPEN 但交易所已平掉的记录标为 CLOSED。
+        每5分钟调用一次。
+        """
+        try:
+            from app.services.api_key_service import APIKeyService
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
+            svc = APIKeyService(self.db_config)
+            active_keys = svc.get_all_active_api_keys('binance')
+            if not active_keys:
+                return
+
+            for ak in active_keys:
+                try:
+                    engine = BinanceFuturesEngine(self.db_config, ak['api_key'], ak['api_secret'])
+                    exchange_positions = engine.get_open_positions()
+                    # 交易所实际持仓集合：(symbol, position_side)
+                    exchange_set = {(p['symbol'], p['position_side']) for p in exchange_positions}
+
+                    conn = self._get_connection()
+                    cur = conn.cursor(pymysql.cursors.DictCursor)
+                    cur.execute(
+                        "SELECT id, symbol, position_side, paper_position_id "
+                        "FROM live_futures_positions "
+                        "WHERE account_id=%s AND status='OPEN'",
+                        (ak['id'],)
+                    )
+                    db_opens = cur.fetchall()
+
+                    closed_count = 0
+                    for row in db_opens:
+                        key = (row['symbol'], row['position_side'])
+                        if key not in exchange_set:
+                            # 交易所已无此仓位，标为 CLOSED
+                            cur.execute(
+                                "UPDATE live_futures_positions SET status='CLOSED', close_time=NOW(), "
+                                "notes=CONCAT(IFNULL(notes,''), '|reconcile_closed') "
+                                "WHERE id=%s",
+                                (row['id'],)
+                            )
+                            # 同步关闭对应的模拟单
+                            if row['paper_position_id']:
+                                cur.execute(
+                                    "UPDATE futures_positions SET status='closed', close_time=NOW(), "
+                                    "notes=CONCAT(IFNULL(notes,''), '|reconcile_closed') "
+                                    "WHERE id=%s AND status='open'",
+                                    (row['paper_position_id'],)
+                                )
+                            closed_count += 1
+
+                    conn.commit()
+                    cur.close(); conn.close()
+
+                    if closed_count > 0:
+                        logger.info(f"[对账] 账号[{ak['account_name']}] 关闭 {closed_count} 个交易所已平仓的DB记录")
+                except Exception as e:
+                    logger.error(f"[对账] 账号[{ak.get('account_name','')}] 对账失败: {e}")
+        except Exception as e:
+            logger.error(f"[对账] 整体异常: {e}")
+
     async def close_position(self, symbol: str, direction: str, position_size: float, reason: str = "smart_exit"):
         """
         异步平仓方法（供SmartExitOptimizer调用）
@@ -3437,6 +3498,7 @@ class SmartTraderService:
         last_blacklist_reload = datetime.now()
         last_config_reload = datetime.now()
         last_regime_check = datetime.now()  # 市场状态机检测（每小时一次）
+        last_reconcile = datetime.now()     # 实盘持仓对账（每5分钟）
 
         while self.running:
             try:
@@ -3472,6 +3534,14 @@ class SmartTraderService:
                     except Exception as e:
                         logger.warning(f"⚠️ [CONFIG-RELOAD] 重新加载Big4配置失败: {e}")
                     last_config_reload = now
+
+                # 0.6. 实盘持仓对账（每5分钟，检测交易所已平但DB未更新的仓位）
+                if (now - last_reconcile).total_seconds() >= 300:
+                    try:
+                        self.reconcile_live_positions()
+                    except Exception as _re:
+                        logger.warning(f"[对账] 异常: {_re}")
+                    last_reconcile = now
 
                 # 0.65. BTC动量跟随策略检测（每轮都跑，内部自带冷却控制）
                 try:
