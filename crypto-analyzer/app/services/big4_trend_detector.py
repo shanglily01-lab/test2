@@ -967,39 +967,64 @@ class Big4TrendDetector:
 
     def _analyze_symbol_v2(self, conn, symbol: str) -> Dict:
         """
-        V2单币分析：MA8/MA20偏差 + 4H动量
-        最大分值: MA±40 + 动量±30 = ±70
-        BULLISH/BEARISH 门槛: ±50
-        保留 1h_analysis/15m_analysis 字段以兼容 _save_to_database
+        V3单币分析：16根15M K线阴阳线计数 + 区间价格涨跌幅
+        BEARISH: 阴线数>=10 且 区间跌幅>0.5%
+        BULLISH: 阳线数>=10 且 区间涨幅>0.5%
+        NEUTRAL: 其余
         """
         cursor = conn.cursor(pymysql.cursors.DictCursor)
-        ma    = self._calc_ma_trend(cursor, symbol)
-        mom4h = self._calc_momentum_4h(cursor, symbol)
+        cursor.execute("""
+            SELECT open_price, close_price
+            FROM kline_data
+            WHERE symbol = %s AND timeframe = '15m' AND exchange = 'binance_futures'
+            ORDER BY open_time DESC
+            LIMIT 16
+        """, (symbol,))
+        klines = cursor.fetchall()
         cursor.close()
 
-        raw_score = ma['score'] + mom4h['score']
+        if not klines or len(klines) < 16:
+            return {
+                'signal': 'NEUTRAL', 'strength': 0, 'raw_score': 0,
+                'reason': '15M数据不足',
+                '1h_analysis': {'dominant': 'NEUTRAL'},
+                '15m_analysis': {'dominant': 'NEUTRAL'},
+            }
 
-        if raw_score >= 50:
-            signal = 'BULLISH'
-        elif raw_score <= -50:
-            signal = 'BEARISH'
+        # klines 按 open_time DESC，索引0最新，索引15最旧
+        first_open  = float(klines[15]['open_price'])   # 最旧K线开盘
+        last_close  = float(klines[0]['close_price'])   # 最新K线收盘
+        price_change_pct = (last_close - first_open) / first_open * 100
+
+        bearish_count = sum(1 for k in klines if float(k['close_price']) < float(k['open_price']))
+        bullish_count = 16 - bearish_count
+
+        if bearish_count >= 10 and price_change_pct <= -0.5:
+            signal    = 'BEARISH'
+            dominant  = 'BEAR'
+            raw_score = -bearish_count
+            strength  = min(int(bearish_count / 16 * 100), 100)
+            reason    = f"15M空头({bearish_count}/16阴线,区间{price_change_pct:.2f}%)"
+        elif bullish_count >= 10 and price_change_pct >= 0.5:
+            signal    = 'BULLISH'
+            dominant  = 'BULL'
+            raw_score = bullish_count
+            strength  = min(int(bullish_count / 16 * 100), 100)
+            reason    = f"15M多头({bullish_count}/16阳线,区间{price_change_pct:+.2f}%)"
         else:
-            signal = 'NEUTRAL'
-
-        strength = min(abs(raw_score), 100)
-        reason   = f"{ma['reason']} | {mom4h['reason']}"
-
-        ma_dominant = 'BULL' if ma['score'] > 0 else ('BEAR' if ma['score'] < 0 else 'NEUTRAL')
+            signal    = 'NEUTRAL'
+            dominant  = 'NEUTRAL'
+            raw_score = 0
+            strength  = 0
+            reason    = f"15M中性({bearish_count}阴/{bullish_count}阳,区间{price_change_pct:+.2f}%)"
 
         return {
             'signal': signal,
             'strength': strength,
             'raw_score': raw_score,
             'reason': reason,
-            '1h_analysis': {'dominant': ma_dominant},
-            '15m_analysis': {'dominant': 'NEUTRAL'},
-            'ma': ma,
-            'momentum_4h': mom4h,
+            '1h_analysis': {'dominant': dominant},
+            '15m_analysis': {'dominant': dominant},
         }
 
     # ─────────────────────────────────────────────────────────────────
