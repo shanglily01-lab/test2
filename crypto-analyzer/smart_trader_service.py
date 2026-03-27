@@ -740,109 +740,100 @@ class SmartDecisionBrain:
             big4_bullish = (_b4_signal in ('BULLISH', 'STRONG_BULLISH') and _b4_strength >= 50)
             big4_bearish = (_b4_signal in ('BEARISH', 'STRONG_BEARISH') and _b4_strength >= 50)
 
-            # ========== 交易模式：趋势跟随 vs 信号确认 ==========
+            # ========== 趋势跟随判断（trend_following 模式时生效）==========
+            # 覆盖分数段：Big4强度20~50 且 净方向明确 且 币种分数20~50
             _trading_mode = getattr(self, 'trading_mode', 'signal_confirmation')
-
+            trend_long_ok = False
+            trend_short_ok = False
             if _trading_mode == 'trend_following':
-                # 趋势跟随：用 Big4 净方向（bearish_count vs bullish_count）+ 强度窗口 20~50
-                # 强度 < 20：无趋势，不开
-                # 强度 20~50：早期趋势，顺净方向开仓
-                # 强度 > 50：趋势已确认，太晚，不开新仓
                 _b4_bullish_cnt = big4_result.get('bullish_count', 0) if big4_result else 0
                 _b4_bearish_cnt = big4_result.get('bearish_count', 0) if big4_result else 0
                 _b4_net = _b4_bullish_cnt - _b4_bearish_cnt  # >0 净多，<0 净空
-
-                if not (20 <= _b4_strength <= 50):
-                    long_threshold = 999
-                    short_threshold_adj = 999
-                    logger.debug(f"[TREND] {symbol} Big4强度={_b4_strength:.1f} 不在早期趋势窗口(20~50)，不开仓")
-                elif _b4_net < 0:
-                    # 净空：bearish_count > bullish_count
-                    long_threshold = 999
-                    short_threshold_adj = 20
-                    logger.debug(f"[TREND] {symbol} Big4净空(bearish={_b4_bearish_cnt} bullish={_b4_bullish_cnt} 强度={_b4_strength:.1f}) 只做空")
-                elif _b4_net > 0:
-                    # 净多：bullish_count > bearish_count
-                    long_threshold = 20
-                    short_threshold_adj = 999
-                    logger.debug(f"[TREND] {symbol} Big4净多(bullish={_b4_bullish_cnt} bearish={_b4_bearish_cnt} 强度={_b4_strength:.1f}) 只做多")
-                else:
-                    # 多空平衡，无净方向
-                    long_threshold = 999
-                    short_threshold_adj = 999
-                    logger.debug(f"[TREND] {symbol} Big4多空平衡，不开仓")
-
-                # 币种分数也要在20~50之间（有信号但未过度确认）
-                _long_score_ok  = 20 <= long_score  <= 50
-                _short_score_ok = 20 <= short_score <= 50
-                long_qualified  = _long_score_ok  and long_score  >= long_threshold
-                short_qualified = _short_score_ok and short_score >= short_threshold_adj
-
-            else:
-                # ========== 信号确认模式（原逻辑，基础阈值改为55）==========
-                # 🧠 群体极化防御：Big4强度越高，同向开仓门槛越高
-                _crowding_penalty = 0
-                if _b4_signal not in ('STRONG_BULLISH', 'STRONG_BEARISH'):
-                    if _b4_strength >= 70:
-                        _crowding_penalty = 15
-                    elif _b4_strength >= 55:
-                        _crowding_penalty = 8
-
-                if not getattr(self, 'big4_filter_enabled', True):
-                    if big4_bearish:
-                        long_threshold = 75
-                        short_threshold_adj = self.threshold
-                    elif big4_bullish:
-                        long_threshold = self.threshold
-                        short_threshold_adj = 75
+                if 20 <= _b4_strength <= 50:
+                    if _b4_net > 0 and 20 <= long_score <= 50:
+                        trend_long_ok = True
+                        logger.debug(
+                            f"[TREND] {symbol} Big4净多(bull={_b4_bullish_cnt} bear={_b4_bearish_cnt} "
+                            f"强度={_b4_strength:.1f}) long_score={long_score} 趋势跟随LONG触发"
+                        )
+                    elif _b4_net < 0 and 20 <= short_score <= 50:
+                        trend_short_ok = True
+                        logger.debug(
+                            f"[TREND] {symbol} Big4净空(bull={_b4_bullish_cnt} bear={_b4_bearish_cnt} "
+                            f"强度={_b4_strength:.1f}) short_score={short_score} 趋势跟随SHORT触发"
+                        )
                     else:
-                        _nb = big4_result.get('neutral_bias', 'FLAT') if big4_result else 'FLAT'
-                        if _nb == 'UP':
-                            long_threshold = self.threshold
-                            short_threshold_adj = self.threshold + 8
-                        elif _nb == 'DOWN':
-                            long_threshold = self.threshold + 8
-                            short_threshold_adj = self.threshold
-                        else:
-                            long_threshold = self.threshold
-                            short_threshold_adj = self.threshold
+                        logger.debug(
+                            f"[TREND] {symbol} Big4净方向={_b4_net} 强度={_b4_strength:.1f} "
+                            f"long={long_score} short={short_score}，趋势跟随不触发"
+                        )
+                else:
+                    logger.debug(f"[TREND] {symbol} Big4强度={_b4_strength:.1f} 不在早期趋势窗口(20~50)，趋势跟随不触发")
+
+            # ========== 信号确认判断（始终运行）==========
+            # 覆盖分数段：信号分 >= 阈值（60+），Big4 只影响阈值高低
+            _crowding_penalty = 0
+            if _b4_signal not in ('STRONG_BULLISH', 'STRONG_BEARISH'):
+                if _b4_strength >= 70:
+                    _crowding_penalty = 15
+                elif _b4_strength >= 55:
+                    _crowding_penalty = 8
+
+            if not getattr(self, 'big4_filter_enabled', True):
+                if big4_bearish:
+                    long_threshold = 75
+                    short_threshold_adj = self.threshold
                 elif big4_bullish:
-                    long_threshold = 55 + _crowding_penalty
-                    short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
-                elif big4_bearish:
-                    long_threshold = 100
-                    short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
+                    long_threshold = self.threshold
+                    short_threshold_adj = 75
                 else:
                     _nb = big4_result.get('neutral_bias', 'FLAT') if big4_result else 'FLAT'
                     if _nb == 'UP':
-                        long_threshold = 55
-                        short_threshold_adj = 63
+                        long_threshold = self.threshold
+                        short_threshold_adj = self.threshold + 8
                     elif _nb == 'DOWN':
-                        long_threshold = 63
-                        short_threshold_adj = 55
+                        long_threshold = self.threshold + 8
+                        short_threshold_adj = self.threshold
                     else:
-                        long_threshold = 60
-                        short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
+                        long_threshold = self.threshold
+                        short_threshold_adj = self.threshold
+            elif big4_bullish:
+                long_threshold = 55 + _crowding_penalty
+                short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
+            elif big4_bearish:
+                long_threshold = 100
+                short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
+            else:
+                _nb = big4_result.get('neutral_bias', 'FLAT') if big4_result else 'FLAT'
+                if _nb == 'UP':
+                    long_threshold = 55
+                    short_threshold_adj = 63
+                elif _nb == 'DOWN':
+                    long_threshold = 63
+                    short_threshold_adj = 55
+                else:
+                    long_threshold = 60
+                    short_threshold_adj = self.threshold + (_crowding_penalty if big4_bearish else 0)
 
-                if _crowding_penalty > 0:
-                    logger.debug(
-                        f"[CROWDING] Big4强度{_b4_strength:.0f}，"
-                        f"群体效应惩罚+{_crowding_penalty}分 | LONG={long_threshold} SHORT={short_threshold_adj}"
-                    )
+            if _crowding_penalty > 0:
+                logger.debug(
+                    f"[CROWDING] Big4强度{_b4_strength:.0f}，"
+                    f"群体效应惩罚+{_crowding_penalty}分 | LONG={long_threshold} SHORT={short_threshold_adj}"
+                )
 
-                # ADX震荡市过滤
-                _adx_val = getattr(self, 'market_adx', 25.0)
-                if _adx_val < 20:
-                    long_threshold += 10
-                    short_threshold_adj += 10
-                    logger.debug(f"[ADX-FILTER] {symbol} ADX={_adx_val:.1f}<20 震荡市，阈值+10")
+            # ADX震荡市过滤
+            _adx_val = getattr(self, 'market_adx', 25.0)
+            if _adx_val < 20:
+                long_threshold += 10
+                short_threshold_adj += 10
+                logger.debug(f"[ADX-FILTER] {symbol} ADX={_adx_val:.1f}<20 震荡市，阈值+10")
 
-                long_qualified  = long_score  >= long_threshold
-                short_qualified = short_score >= short_threshold_adj
+            confirm_long_ok  = long_score  >= long_threshold
+            confirm_short_ok = short_score >= short_threshold_adj
 
-            # 选择得分更高的方向 (只要达到阈值就可以)
-            long_qualified = long_score >= long_threshold
-            short_qualified = short_score >= short_threshold_adj
+            # 两种策略取并集：趋势跟随 OR 信号确认，任一满足即可开仓
+            long_qualified  = trend_long_ok  or confirm_long_ok
+            short_qualified = trend_short_ok or confirm_short_ok
             if long_qualified or short_qualified:
                 # 优先选择两个方向都满足各自阈值时评分更高的方向
                 # 若只有一个方向满足，选该方向；两个都满足，选分更高的
