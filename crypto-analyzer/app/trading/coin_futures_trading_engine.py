@@ -283,24 +283,27 @@ class CoinFuturesTradingEngine:
                 except Exception as e:
                     logger.debug(f"Binance币本位合约API获取失败: {e}")
                 
-                # 如果Binance失败，尝试从Binance现货API获取
-                try:
-                    response = session.get(
-                        'https://api.binance.com/api/v3/ticker/price',
-                        params={'symbol': symbol_clean},
-                        timeout=2
-                    )
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data and 'price' in data:
-                            price = Decimal(str(data['price']))
-                            logger.debug(f"从Binance现货API获取实时价格: {symbol} = {price}")
-                            return price
-                except Exception as e:
-                    logger.debug(f"Binance现货API获取失败: {e}")
-                
-                # 如果实时API都失败，回退到数据库缓存
-                logger.warning(f"实时API获取失败，回退到数据库缓存: {symbol}")
+                # 注意：币本位(/USD)品种不能回退到现货API，现货价≠币本位合约价
+                # 直接回退到数据库K线缓存
+                if symbol.endswith('/USD'):
+                    logger.warning(f"币本位dapi获取失败，回退到K线缓存: {symbol}")
+                else:
+                    # U本位/其他：可以用现货API作参考价格
+                    try:
+                        response = session.get(
+                            'https://api.binance.com/api/v3/ticker/price',
+                            params={'symbol': symbol_clean},
+                            timeout=2
+                        )
+                        if response.status_code == 200:
+                            data = response.json()
+                            if data and 'price' in data:
+                                price = Decimal(str(data['price']))
+                                logger.debug(f"从Binance现货API获取实时价格: {symbol} = {price}")
+                                return price
+                    except Exception as e:
+                        logger.debug(f"Binance现货API获取失败: {e}")
+                    logger.warning(f"实时API获取失败，回退到数据库缓存: {symbol}")
             except Exception as e:
                 logger.warning(f"获取实时价格异常，回退到数据库缓存: {symbol}, {e}")
         
@@ -318,33 +321,31 @@ class CoinFuturesTradingEngine:
         )
         
         try:
+            import time as _time
             cursor = connection.cursor()
-            # 尝试从1分钟K线获取最新价格
-            cursor.execute(
-                """SELECT close_price FROM kline_data
-                WHERE symbol = %s AND timeframe = '1m'
-                ORDER BY timestamp DESC LIMIT 1""",
-                (symbol,)
-            )
-            result = cursor.fetchone()
-            if result and result['close_price']:
-                price = Decimal(str(result['close_price']))
-                cursor.close()
-                return price
+            # 从5分钟K线获取最新价格（1m K线已于2026-01-22停采，禁止使用）
+            # 对于币本位合约（/USD），先查 symbol 本身，若无则查对应的 USDT 现货K线作参考
+            for tf, sym_q in [('5m', symbol), ('15m', symbol), ('1h', symbol)]:
+                cursor.execute(
+                    """SELECT close_price, open_time FROM kline_data
+                    WHERE symbol = %s AND timeframe = %s
+                    ORDER BY open_time DESC LIMIT 1""",
+                    (sym_q, tf)
+                )
+                result = cursor.fetchone()
+                if result and result['close_price']:
+                    # 新鲜度检查：不超过30分钟
+                    age_minutes = (_time.time() * 1000 - result['open_time']) / 1000 / 60
+                    if age_minutes <= 30:
+                        price = Decimal(str(result['close_price']))
+                        logger.debug(f"[PRICE] {symbol} 使用{tf} K线缓存: {price} (数据年龄{age_minutes:.1f}min)")
+                        cursor.close()
+                        return price
+                    else:
+                        logger.warning(f"[PRICE] {symbol} {tf} K线过期 {age_minutes:.0f}min，继续尝试更长周期")
 
-            # 回退到价格表
-            cursor.execute(
-                """SELECT price FROM price_data
-                WHERE symbol = %s
-                ORDER BY timestamp DESC LIMIT 1""",
-                (symbol,)
-            )
-            result = cursor.fetchone()
             cursor.close()
-            if result and result['price']:
-                return Decimal(str(result['price']))
-
-            raise ValueError(f"无法获取{symbol}的价格")
+            raise ValueError(f"无法获取{symbol}的有效价格（K线数据均已超过30分钟）")
         except Exception as e:
             logger.error(f"获取价格失败: {e}")
             raise
