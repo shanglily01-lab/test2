@@ -260,6 +260,106 @@ async def change_password(
     }
 
 
+@router.get("/admin/users", summary="管理员获取用户列表")
+async def admin_list_users(current_user: dict = Depends(get_current_user)):
+    """列出所有用户（仅admin可调用）"""
+    if current_user.get('role') != 'admin':
+        raise HTTPException(status_code=403, detail="权限不足，需要管理员身份")
+    import pymysql, os
+    from datetime import datetime
+    try:
+        conn = pymysql.connect(
+            host=os.getenv('DB_HOST', 'localhost'),
+            port=int(os.getenv('DB_PORT', 3306)),
+            user=os.getenv('DB_USER', 'root'),
+            password=os.getenv('DB_PASSWORD', ''),
+            database=os.getenv('DB_NAME', 'binance-data'),
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, username, email, role, status, last_login, created_at "
+                "FROM users ORDER BY created_at DESC"
+            )
+            rows = cur.fetchall()
+        conn.close()
+    except Exception as e:
+        logger.error(f"admin_list_users error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    for r in rows:
+        for k in ('last_login', 'created_at'):
+            if isinstance(r.get(k), datetime):
+                r[k] = r[k].isoformat()
+    return {'success': True, 'users': rows}
+
+
+class AdminCreateUserRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50)
+    email: str = Field(..., description="邮箱")
+    password: str = Field(..., min_length=6)
+    role: str = Field('user', description="角色: user / admin")
+
+
+@router.post("/admin/users", summary="管理员创建用户")
+async def admin_create_user(
+    request: AdminCreateUserRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """创建新用户（仅admin可调用）"""
+    if current_user.get('role') != 'admin':
+        raise HTTPException(status_code=403, detail="权限不足，需要管理员身份")
+    if request.role not in ('user', 'admin'):
+        raise HTTPException(status_code=400, detail="role 只能为 user 或 admin")
+    auth_service = get_auth_service()
+    result = auth_service.register_user(
+        username=request.username,
+        email=request.email,
+        password=request.password,
+        role=request.role
+    )
+    if not result['success']:
+        raise HTTPException(status_code=400, detail=result['error'])
+    return {'success': True, 'user_id': result['user_id'], 'message': f"用户 {request.username} 创建成功"}
+
+
+@router.patch("/admin/users/{user_id}/status", summary="管理员修改用户状态")
+async def admin_toggle_user_status(
+    user_id: int,
+    current_user: dict = Depends(get_current_user)
+):
+    """切换用户状态 active <-> disabled（仅admin可调用，不能禁用自己）"""
+    if current_user.get('role') != 'admin':
+        raise HTTPException(status_code=403, detail="权限不足，需要管理员身份")
+    if user_id == current_user['user_id']:
+        raise HTTPException(status_code=400, detail="不能禁用自己的账号")
+    import pymysql, os
+    try:
+        conn = pymysql.connect(
+            host=os.getenv('DB_HOST', 'localhost'),
+            port=int(os.getenv('DB_PORT', 3306)),
+            user=os.getenv('DB_USER', 'root'),
+            password=os.getenv('DB_PASSWORD', ''),
+            database=os.getenv('DB_NAME', 'binance-data'),
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        with conn.cursor() as cur:
+            cur.execute("SELECT status FROM users WHERE id=%s", (user_id,))
+            row = cur.fetchone()
+            if not row:
+                conn.close()
+                raise HTTPException(status_code=404, detail="用户不存在")
+            new_status = 'disabled' if row['status'] == 'active' else 'active'
+            cur.execute("UPDATE users SET status=%s WHERE id=%s", (new_status, user_id))
+            conn.commit()
+        conn.close()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"admin_toggle_user_status error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    return {'success': True, 'new_status': new_status}
+
+
 @router.get("/verify", summary="验证令牌")
 async def verify_token(current_user: dict = Depends(get_current_user)):
     """

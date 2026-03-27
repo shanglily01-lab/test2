@@ -270,6 +270,17 @@
         @media (max-width: 768px) {
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
+        /* 用户管理弹窗 */
+        .user-mgmt-table { width:100%; border-collapse:collapse; font-size:13px; }
+        .user-mgmt-table th { padding:8px 12px; background:var(--bg-tertiary); color:var(--text-secondary); font-size:11px; text-transform:uppercase; letter-spacing:.5px; text-align:left; border-bottom:2px solid var(--border-default); }
+        .user-mgmt-table td { padding:10px 12px; border-bottom:1px solid var(--border-default); vertical-align:middle; }
+        .user-mgmt-table tr:last-child td { border-bottom:none; }
+        .user-mgmt-table tr:hover td { background:var(--bg-hover); }
+        .badge-role-admin { background:rgba(255,215,0,.15); color:var(--live-gold); border:1px solid rgba(255,215,0,.3); padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; }
+        .badge-role-user  { background:var(--bg-tertiary); color:var(--text-secondary); border:1px solid var(--border-default); padding:2px 8px; border-radius:10px; font-size:11px; }
+        .badge-status-active   { background:var(--success-green-bg); color:var(--success-green); padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+        .badge-status-disabled { background:var(--danger-red-bg); color:var(--danger-red); padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+
         /* 持仓/挂单/历史 Tab */
         .pos-tab-bar { display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap; }
         .pos-tab-btn { padding:6px 18px; border-radius:6px; border:1px solid var(--border-default);
@@ -318,6 +329,9 @@
                     </select>
                     <button class="btn btn-sm btn-secondary" onclick="openAddAccountModal()" title="添加币安账号">
                         <i class="bi bi-plus-circle"></i> 添加账号
+                    </button>
+                    <button class="btn btn-sm btn-secondary" id="userMgmtBtn" onclick="openUserMgmtModal()" title="用户管理" style="display:none;">
+                        <i class="bi bi-people"></i> 用户管理
                     </button>
                     <button class="btn btn-sm btn-ghost" onclick="logout()" title="退出登录">
                         <i class="bi bi-box-arrow-right"></i>
@@ -669,6 +683,72 @@
         </div>
     </div>
 
+    <!-- 用户管理弹窗 -->
+    <div id="userMgmtModal" class="account-modal-overlay" style="display:none;" onclick="if(event.target===this)closeUserMgmtModal()">
+        <div class="account-modal" style="width:680px;">
+            <div class="account-modal-title" style="justify-content:space-between;">
+                <span><i class="bi bi-people"></i> 用户管理</span>
+                <button onclick="closeUserMgmtModal()" style="background:none;border:none;color:var(--text-secondary);font-size:20px;cursor:pointer;line-height:1;">&times;</button>
+            </div>
+            <div class="tab-buttons">
+                <button class="tab-btn active" id="tabUsersBtn" onclick="showUserTab('list')"><i class="bi bi-list-ul"></i> 用户列表</button>
+                <button class="tab-btn" id="tabCreateBtn" onclick="showUserTab('create')"><i class="bi bi-person-plus"></i> 新建用户</button>
+            </div>
+
+            <!-- 用户列表 -->
+            <div id="tabUserList">
+                <div id="userListLoading" style="text-align:center;padding:20px;color:var(--text-secondary);">加载中…</div>
+                <div id="userListContent" style="display:none;">
+                    <div style="overflow-x:auto;">
+                        <table class="user-mgmt-table">
+                            <thead>
+                                <tr>
+                                    <th>用户名</th>
+                                    <th>邮箱</th>
+                                    <th>角色</th>
+                                    <th>状态</th>
+                                    <th>最后登录</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="userTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 新建用户 -->
+            <div id="tabCreateUser" style="display:none;">
+                <div class="form-group">
+                    <label class="form-label">用户名 <span style="color:var(--danger-red)">*</span></label>
+                    <input type="text" class="form-control" id="newUserName" placeholder="3~50个字符" maxlength="50">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">邮箱 <span style="color:var(--danger-red)">*</span></label>
+                    <input type="email" class="form-control" id="newUserEmail" placeholder="user@example.com">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">密码 <span style="color:var(--danger-red)">*</span></label>
+                    <input type="password" class="form-control" id="newUserPassword" placeholder="至少6个字符" autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">角色</label>
+                    <select class="form-control" id="newUserRole">
+                        <option value="user">普通用户（user）</option>
+                        <option value="admin">管理员（admin）</option>
+                    </select>
+                </div>
+                <div id="createUserMsg" style="margin-bottom:12px;display:none;padding:10px 14px;border-radius:8px;font-size:13px;"></div>
+                <div style="display:flex;gap:10px;justify-content:flex-end;">
+                    <button class="btn btn-secondary" onclick="closeUserMgmtModal()">取消</button>
+                    <button class="btn btn-primary" onclick="submitCreateUser()" id="createUserBtn">
+                        <i class="bi bi-check2-circle"></i> 创建用户
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 添加账号弹窗 -->
     <div id="addAccountModal" class="account-modal-overlay" style="display:none;" onclick="if(event.target===this)closeAddAccountModal()">
         <div class="account-modal">
@@ -865,6 +945,15 @@
                 // 显示用户名
                 document.getElementById('userNameDisplay').textContent = data.username || '用户';
 
+                // admin 显示用户管理按钮
+                try {
+                    const meResp = await authFetch('/api/auth/me');
+                    const meData = await meResp.json();
+                    if (meData.success && meData.user && meData.user.role === 'admin') {
+                        document.getElementById('userMgmtBtn').style.display = '';
+                    }
+                } catch(e) {}
+
                 // 填充账号下拉框
                 const sel = document.getElementById('accountSelect');
                 const savedId = getApiKeyId();
@@ -903,6 +992,124 @@
                 `;
                 warn.after(hint);
             }
+        }
+
+        // ==================== 用户管理弹窗（仅admin可见）====================
+
+        function openUserMgmtModal() {
+            document.getElementById('userMgmtModal').style.display = 'flex';
+            showUserTab('list');
+            loadUsers();
+        }
+
+        function closeUserMgmtModal() {
+            document.getElementById('userMgmtModal').style.display = 'none';
+            document.getElementById('newUserName').value = '';
+            document.getElementById('newUserEmail').value = '';
+            document.getElementById('newUserPassword').value = '';
+            document.getElementById('newUserRole').value = 'user';
+            const msg = document.getElementById('createUserMsg');
+            msg.style.display = 'none';
+        }
+
+        function showUserTab(tab) {
+            document.getElementById('tabUserList').style.display   = tab === 'list'   ? 'block' : 'none';
+            document.getElementById('tabCreateUser').style.display = tab === 'create' ? 'block' : 'none';
+            document.getElementById('tabUsersBtn').className  = 'tab-btn' + (tab === 'list'   ? ' active' : '');
+            document.getElementById('tabCreateBtn').className = 'tab-btn' + (tab === 'create' ? ' active' : '');
+        }
+
+        async function loadUsers() {
+            document.getElementById('userListLoading').style.display = 'block';
+            document.getElementById('userListContent').style.display = 'none';
+            try {
+                const resp = await authFetch('/api/auth/admin/users');
+                const data = await resp.json();
+                document.getElementById('userListLoading').style.display = 'none';
+                if (!data.success) { showToast('加载用户失败', 'error'); return; }
+                const fmtTime = s => s ? s.replace('T', ' ').slice(0, 16) : '—';
+                document.getElementById('userTableBody').innerHTML = (data.users || []).map(u => `
+                    <tr>
+                        <td><strong>${u.username}</strong></td>
+                        <td style="color:var(--text-secondary);font-size:12px;">${u.email}</td>
+                        <td><span class="badge-role-${u.role}">${u.role}</span></td>
+                        <td><span class="badge-status-${u.status}">${u.status === 'active' ? '正常' : '禁用'}</span></td>
+                        <td style="font-size:12px;color:var(--text-secondary);">${fmtTime(u.last_login)}</td>
+                        <td>
+                            <button class="btn btn-sm btn-${u.status === 'active' ? 'danger' : 'success'}"
+                                    style="font-size:12px;padding:4px 12px;"
+                                    onclick="toggleUserStatus(${u.id}, '${u.username}', '${u.status}')">
+                                ${u.status === 'active' ? '禁用' : '启用'}
+                            </button>
+                        </td>
+                    </tr>`).join('');
+                document.getElementById('userListContent').style.display = 'block';
+            } catch(e) {
+                document.getElementById('userListLoading').style.display = 'none';
+                showToast('加载用户列表失败', 'error');
+            }
+        }
+
+        async function toggleUserStatus(userId, username, currentStatus) {
+            const action = currentStatus === 'active' ? '禁用' : '启用';
+            const confirmed = await showConfirmDialog(`${action}用户`, `确认要${action}用户 "${username}" 吗？`);
+            if (!confirmed) return;
+            try {
+                const resp = await authFetch(`/api/auth/admin/users/${userId}/status`, { method: 'PATCH' });
+                const data = await resp.json();
+                if (data.success) {
+                    showToast(`用户 ${username} 已${action}`, 'success');
+                    loadUsers();
+                } else {
+                    showToast(data.detail || `${action}失败`, 'error');
+                }
+            } catch(e) {
+                showToast('操作失败', 'error');
+            }
+        }
+
+        async function submitCreateUser() {
+            const username = document.getElementById('newUserName').value.trim();
+            const email    = document.getElementById('newUserEmail').value.trim();
+            const password = document.getElementById('newUserPassword').value;
+            const role     = document.getElementById('newUserRole').value;
+            const msgEl    = document.getElementById('createUserMsg');
+            if (!username || !email || !password) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = 'rgba(239,68,68,.12)';
+                msgEl.style.color = 'var(--danger-red)';
+                msgEl.textContent = '请填写全部必填项';
+                return;
+            }
+            const btn = document.getElementById('createUserBtn');
+            btn.disabled = true;
+            try {
+                const resp = await authFetch('/api/auth/admin/users', {
+                    method: 'POST',
+                    body: JSON.stringify({ username, email, password, role })
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    msgEl.style.display = 'block';
+                    msgEl.style.background = 'rgba(16,185,129,.12)';
+                    msgEl.style.color = 'var(--success-green)';
+                    msgEl.textContent = data.message || '用户创建成功';
+                    document.getElementById('newUserName').value = '';
+                    document.getElementById('newUserEmail').value = '';
+                    document.getElementById('newUserPassword').value = '';
+                } else {
+                    msgEl.style.display = 'block';
+                    msgEl.style.background = 'rgba(239,68,68,.12)';
+                    msgEl.style.color = 'var(--danger-red)';
+                    msgEl.textContent = data.detail || '创建失败';
+                }
+            } catch(e) {
+                msgEl.style.display = 'block';
+                msgEl.style.background = 'rgba(239,68,68,.12)';
+                msgEl.style.color = 'var(--danger-red)';
+                msgEl.textContent = '请求失败';
+            }
+            btn.disabled = false;
         }
 
         // ==================== 添加账号弹窗 ====================
