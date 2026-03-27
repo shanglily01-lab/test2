@@ -140,6 +140,28 @@
         .warn-banner { background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3);
                         border-radius:8px; padding:10px 14px; font-size:12px; color:var(--red);
                         margin:0 16px 12px; }
+
+        /* History */
+        .history-load-bar { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+        .days-btn { padding:5px 12px; border-radius:16px; font-size:12px; font-weight:600;
+                    border:1px solid var(--border); background:var(--item); color:var(--muted); cursor:pointer; }
+        .days-btn.active { background:var(--gold-dim); border-color:var(--gold-border); color:var(--gold); }
+        .load-hist-btn { margin-left:auto; padding:7px 16px; border-radius:8px; font-size:13px;
+                         font-weight:600; border:none; background:var(--item); color:var(--text);
+                         border:1px solid var(--border); cursor:pointer; }
+        .load-hist-btn:active { background:var(--border); }
+        .hist-card { background:var(--card); border:1px solid var(--border); border-radius:10px;
+                     margin-bottom:8px; overflow:hidden; }
+        .hist-head { display:flex; align-items:center; justify-content:space-between;
+                     padding:10px 14px; border-bottom:1px solid var(--border); }
+        .hist-symbol { font-size:14px; font-weight:700; }
+        .hist-body { padding:10px 14px; display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+        .hist-field-label { font-size:10px; color:var(--muted); margin-bottom:2px; }
+        .hist-field-value { font-size:12px; font-weight:600; font-family:monospace; }
+        .hist-summary { display:flex; align-items:center; gap:8px; }
+        .hist-pnl { font-size:15px; font-weight:700; font-family:monospace; }
+        .hist-source { font-size:10px; color:var(--muted); background:var(--item);
+                       padding:2px 7px; border-radius:10px; }
     </style>
 </head>
 <body>
@@ -212,6 +234,20 @@
         <button onclick="cancelAllOrders()" style="background:none;border:none;color:var(--red);font-size:12px;cursor:pointer;">全部撤单</button>
     </div>
     <div id="ordersList"></div>
+</div>
+
+<!-- Trading history -->
+<div class="section" style="margin-top:16px;margin-bottom:16px;">
+    <div class="section-header">
+        <div class="section-title">交易记录</div>
+    </div>
+    <div class="history-load-bar">
+        <button class="days-btn active" onclick="setDays(7,this)">7天</button>
+        <button class="days-btn" onclick="setDays(30,this)">30天</button>
+        <button class="days-btn" onclick="setDays(90,this)">90天</button>
+        <button class="load-hist-btn" onclick="loadHistory()">加载记录</button>
+    </div>
+    <div id="historyList"><div class="empty" style="padding:16px;"><div style="font-size:24px;opacity:.4">📜</div>点击"加载记录"查看已平仓历史</div></div>
 </div>
 
 <!-- Confirm dialog -->
@@ -463,6 +499,63 @@ async function cancelAllOrders() {
         } catch(e) { toast('❌ 请求失败','err'); }
     };
     document.getElementById('overlay').style.display='block';
+}
+
+let histDays = 7;
+
+function setDays(n, el) {
+    histDays = n;
+    document.querySelectorAll('.days-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+}
+
+async function loadHistory() {
+    const el = document.getElementById('historyList');
+    el.innerHTML = '<div class="empty" style="padding:20px;">加载中…</div>';
+    try {
+        const r = await authFetch(`${API}/history?days=${histDays}`).then(r => r.json());
+        if (!r.success) {
+            el.innerHTML = '<div class="empty" style="padding:16px;color:var(--red);">加载失败</div>';
+            return;
+        }
+        const rows = r.data || [];
+        if (!rows.length) {
+            el.innerHTML = '<div class="empty" style="padding:16px;"><div style="font-size:24px;opacity:.4">📭</div>' + histDays + '天内无已平仓记录</div>';
+            return;
+        }
+        const sideLabel = s => s === 'LONG' ? '做多' : '做空';
+        const fmtTime = s => s ? s.replace('T',' ').slice(0,16) : '—';
+        const sourceMap = { SMART_TRADER:'主策略', BTC_MOMENTUM:'BTC动量', PREDICTOR:'预测器',
+                            U_COIN_STYLE:'破位策略', KLINE_PULLBACK:'K线回调' };
+        el.innerHTML = rows.map(h => {
+            const pnl = parseFloat(h.realized_pnl) || 0;
+            const pnlCls = pnl >= 0 ? 'pnl-pos' : 'pnl-neg';
+            const isLong = (h.position_side || '').toUpperCase() === 'LONG';
+            const sym = (h.symbol || '').replace('USDT','').replace('/','');
+            const src = sourceMap[h.source] || h.source || '—';
+            const ep = parseFloat(h.entry_price) || 0;
+            const cp = parseFloat(h.close_price) || 0;
+            const reason = h.close_reason || h.notes || '—';
+            return `<div class="hist-card">
+              <div class="hist-head">
+                <div class="hist-symbol">${sym}</div>
+                <div class="hist-summary">
+                  <span class="pos-badge ${isLong?'long':'short'}">${sideLabel(h.position_side)}</span>
+                  <span class="hist-pnl ${pnlCls}">${pnl>=0?'+':''}${pnl.toFixed(2)}U</span>
+                </div>
+              </div>
+              <div class="hist-body">
+                <div><div class="hist-field-label">开仓价</div><div class="hist-field-value">${fmt(ep,4)}</div></div>
+                <div><div class="hist-field-label">平仓价</div><div class="hist-field-value">${fmt(cp,4)}</div></div>
+                <div><div class="hist-field-label">平仓时间</div><div class="hist-field-value" style="font-size:11px;">${fmtTime(h.close_time)}</div></div>
+                <div><div class="hist-field-label">来源 / 原因</div><div class="hist-field-value" style="font-size:11px;">${src} / ${reason}</div></div>
+              </div>
+            </div>`;
+        }).join('');
+        toast(`已加载 ${rows.length} 条记录`);
+    } catch(e) {
+        el.innerHTML = '<div class="empty" style="padding:16px;color:var(--red);">请求失败</div>';
+    }
 }
 
 async function loadAll() {
