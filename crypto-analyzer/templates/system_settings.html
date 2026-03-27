@@ -402,16 +402,19 @@
                         <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
                             <div class="mb-3">
                                 <strong style="color: #e2b96a;">交易模式</strong>
-                                <div class="small text-muted mt-1">信号确认：分数≥55，Big4辅助过滤 | 趋势跟随：Big4强度20~50，分数20~50，顺净方向早进</div>
+                                <div class="small text-muted mt-1">
+                                    信号确认：信号分≥60，Big4调整阈值，随时可开仓<br>
+                                    趋势跟随+信号确认：在信号确认基础上额外叠加趋势跟随——Big4强度20~50且净方向明确时，分数20~50也可开仓（捕捉早期趋势）
+                                </div>
                             </div>
                             <div class="d-flex align-items-center gap-3 mt-auto">
                                 <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
                                     <input type="radio" name="tradingMode" id="modeSignal" value="signal_confirmation">
-                                    <span>信号确认（分数≥55）</span>
+                                    <span>仅信号确认</span>
                                 </label>
                                 <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
                                     <input type="radio" name="tradingMode" id="modeTrend" value="trend_following">
-                                    <span>趋势跟随（Big4强度50~70，分数20~50）</span>
+                                    <span>趋势跟随 + 信号确认（Big4强度20~50，分数20~50）</span>
                                 </label>
                             </div>
                         </div>

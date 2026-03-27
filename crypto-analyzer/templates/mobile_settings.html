@@ -222,16 +222,16 @@
         <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px;">
             <div>
                 <div class="row-label">交易模式</div>
-                <div class="row-sub">趋势跟随：Big4强度20~50早期入场 | 信号确认：分数>=55确认后入场</div>
+                <div class="row-sub">仅信号确认：分数>=60开仓 | 趋势跟随+信号确认：两种并联，Big4强度20~50时分数20~50也可早进</div>
             </div>
             <div style="display:flex;gap:16px;padding-left:4px;">
                 <label style="display:flex;align-items:center;gap:6px;font-size:14px;">
                     <input type="radio" name="tradingMode" id="modeSignal" value="signal_confirmation">
-                    信号确认
+                    仅信号确认
                 </label>
                 <label style="display:flex;align-items:center;gap:6px;font-size:14px;">
                     <input type="radio" name="tradingMode" id="modeTrend" value="trend_following">
-                    趋势跟随
+                    趋势+信号确认
                 </label>
             </div>
         </div>
