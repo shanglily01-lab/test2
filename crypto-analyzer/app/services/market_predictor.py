@@ -116,18 +116,23 @@ class MarketPredictor:
     # 单币分析
     # ──────────────────────────────────────────
 
-    def analyze(self, symbol: str) -> Optional[Dict]:
+    def analyze(self, symbol: str, cursor=None) -> Optional[Dict]:
+        """分析单币走势。cursor 由外部传入时复用连接，否则自行开连接。"""
+        _own_conn = None
         try:
-            conn = self._get_conn()
-            cursor = conn.cursor()
+            if cursor is None:
+                _own_conn = self._get_conn()
+                cursor = _own_conn.cursor()
 
             # 1H 数据（72根）
             k1h = self._fetch_klines(cursor, symbol, '1h', 72)
             # 15M 数据（96根 = 24H）
             k15m = self._fetch_klines(cursor, symbol, '15m', 96)
 
-            cursor.close()
-            conn.close()
+            if _own_conn:
+                cursor.close()
+                _own_conn.close()
+                cursor = None
 
             if len(k1h) < 30 or len(k15m) < 20:
                 logger.debug(f"[预测] {symbol} K线数据不足，跳过")
@@ -650,9 +655,9 @@ class MarketPredictor:
         except Exception as e:
             logger.error(f"[回测] 结算虚拟单失败: {e}")
 
-        # ② 运行预测
+        # ② 运行预测（复用同一连接，避免每币新开连接耗尽 MySQL 连接数）
         for symbol in symbols:
-            result = self.analyze(symbol)
+            result = self.analyze(symbol, cursor=cursor)
             if not result:
                 continue
             all_results.append(result)
