@@ -1651,8 +1651,8 @@ class CoinFuturesTradingEngine:
                     if symbol in price_cache:
                         current_price = price_cache[symbol]
                     else:
-                        # 回退到数据库价格
-                        current_price = self.get_current_price(symbol, use_realtime=False)
+                        # 回退到实时API价格（批量请求失败时，逐个尝试dapi）
+                        current_price = self.get_current_price(symbol, use_realtime=True)
 
                     # 如果无法获取价格，使用数据库中的mark_price
                     if current_price is None:

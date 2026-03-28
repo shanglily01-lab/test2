@@ -1616,38 +1616,32 @@ class CoinFuturesTraderService:
                 else:
                     logger.debug(f"[PRICE] {symbol} WebSocket价格无效,回退到K线")
 
-            # 回退到5分钟K线
+            # 回退到K线价格（5m/15m/1h级联，带新鲜度校验）
+            # 币本位K线存储为 binance_coin_futures，U本位为 binance_futures
             conn = self._get_connection()
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT close_price, open_time
-                FROM kline_data
-                WHERE symbol = %s AND timeframe = '5m' AND exchange = 'binance_futures'
-                ORDER BY open_time DESC LIMIT 1
-            """, (symbol,))
-            result = cursor.fetchone()
-            cursor.close()
-
-            if not result:
-                logger.warning(f"[PRICE] {symbol} K线数据不存在")
-                return None
-
-            close_price, open_time = result
-
-            # 检查数据新鲜度: 5m K线数据不能超过15分钟前
             import time
             current_timestamp_ms = int(time.time() * 1000)
-            data_age_minutes = (current_timestamp_ms - open_time) / 1000 / 60
-
-            if data_age_minutes > 15:
-                logger.warning(
-                    f"[DATA_STALE] {symbol} K线数据过时! "
-                    f"最新K线时间: {data_age_minutes:.1f}分钟前, 拒绝使用"
-                )
-                return None
-
-            logger.debug(f"[PRICE] {symbol} 使用K线价格: {close_price} (数据年龄: {data_age_minutes:.1f}分钟)")
-            return float(close_price)
+            for timeframe, max_age_minutes in [('5m', 15), ('15m', 45), ('1h', 90)]:
+                cursor.execute("""
+                    SELECT close_price, open_time
+                    FROM kline_data
+                    WHERE symbol = %s AND timeframe = %s
+                      AND exchange IN ('binance_futures', 'binance_coin_futures')
+                    ORDER BY open_time DESC LIMIT 1
+                """, (symbol, timeframe))
+                result = cursor.fetchone()
+                if result:
+                    close_price, open_time = result
+                    data_age_minutes = (current_timestamp_ms - open_time) / 1000 / 60
+                    if data_age_minutes <= max_age_minutes:
+                        cursor.close()
+                        logger.debug(f"[PRICE] {symbol} 使用{timeframe}K线价格: {close_price} (数据年龄: {data_age_minutes:.1f}分钟)")
+                        return float(close_price)
+                    logger.debug(f"[PRICE] {symbol} {timeframe}K线过时({data_age_minutes:.1f}分钟), 尝试更长周期")
+            cursor.close()
+            logger.warning(f"[PRICE] {symbol} K线数据不存在或全部过时")
+            return None
         except Exception as e:
             logger.error(f"[ERROR] 获取{symbol}价格失败: {e}")
             return None
