@@ -414,12 +414,11 @@ class MarketPredictor:
         except Exception as e:
             logger.error(f"[预测下单] _sync_close_live 异常: {e}")
 
-    def _open_real_paper_trades(self, cursor, results: List[Dict], now: datetime,
-                                 max_positions: int = 5) -> int:
+    def _open_real_paper_trades(self, cursor, results: List[Dict], now: datetime) -> int:
         """
         取 confidence>=70 的预测，按置信度排序，开真实模拟单到 futures_positions
-        - 最多同时持有 max_positions 个预测单
-        - 模拟盘 400U x5，止损2%，止盈6%
+        - 不限制持仓数量，所有合格信号均开单
+        - 模拟盘 100U x5，止损2%，止盈6%
         - source='PREDICTOR' 标识来源
         """
         MARGIN = 100
@@ -427,18 +426,6 @@ class MarketPredictor:
         SL_PCT = 0.02
         TP_PCT = 0.06
         ACCOUNT_ID = 2
-
-        # 当前已有多少预测单在OPEN
-        cursor.execute(
-            "SELECT COUNT(*) AS cnt FROM futures_positions "
-            "WHERE account_id=%s AND status='open' AND source='PREDICTOR'",
-            (ACCOUNT_ID,)
-        )
-        current_open = (cursor.fetchone() or {}).get('cnt', 0)
-        slots = max_positions - current_open
-        if slots <= 0:
-            logger.info(f"[预测下单] 已有{current_open}个持仓，达上限({max_positions})，跳过")
-            return 0
 
         # 已开过的交易对（避免重复开同向仓）
         cursor.execute(
@@ -456,8 +443,6 @@ class MarketPredictor:
 
         opened = 0
         for r in candidates:
-            if opened >= slots:
-                break
             symbol = r['symbol']
             direction = 'LONG' if r['direction'] == 'BULLISH' else 'SHORT'
 
@@ -692,7 +677,7 @@ class MarketPredictor:
         except Exception as e:
             logger.error(f"[回测] 开虚拟单失败: {e}")
 
-        # ④ 开真实模拟单（confidence>=70，最多5个，带止损2%/止盈6%）
+        # ④ 开真实模拟单（confidence>=70，不限数量，带止损2%/止盈6%）
         try:
             real_opened = self._open_real_paper_trades(cursor, all_results, now)
             if real_opened:
