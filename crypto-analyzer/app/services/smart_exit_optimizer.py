@@ -43,7 +43,7 @@ class SmartExitOptimizer:
         # 每个监控任务每秒需要1个连接，预留20个连接支持20个并发持仓监控
         self.db_pool = pooling.MySQLConnectionPool(
             pool_name="exit_optimizer_pool",
-            pool_size=20,
+            pool_size=5,
             **db_config
         )
 
@@ -244,6 +244,8 @@ class SmartExitOptimizer:
         Returns:
             持仓字典
         """
+        conn = None
+        cursor = None
         try:
             conn = self._get_pool_connection()
             cursor = conn.cursor(dictionary=True)
@@ -261,16 +263,18 @@ class SmartExitOptimizer:
                 WHERE id = %s
             """, (position_id,))
 
-            position = cursor.fetchone()
-
-            cursor.close()
-            conn.close()
-
-            return position
+            return cursor.fetchone()
 
         except Exception as e:
             logger.error(f"获取持仓信息失败: {e}")
             return None
+        finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            if conn:
+                try: conn.close()
+                except Exception: pass
 
     async def _get_realtime_price(self, symbol: str) -> Decimal:
         """
@@ -959,6 +963,8 @@ class SmartExitOptimizer:
             close_reason: 平仓原因
             realized_pnl: 已实现盈亏
         """
+        conn = None
+        cursor = None
         try:
             conn = self._get_pool_connection()
             cursor = conn.cursor()
@@ -988,11 +994,15 @@ class SmartExitOptimizer:
 
             conn.commit()
 
-            cursor.close()
-            conn.close()
-
         except Exception as e:
             logger.error(f"更新持仓状态失败: {e}")
+        finally:
+            if cursor:
+                try: cursor.close()
+                except Exception: pass
+            if conn:
+                try: conn.close()
+                except Exception: pass
 
     # ==================== K线强度监控方法 (新增) ====================
 
