@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""检查当前Big4评分（MA8/MA20 + 4H动量版本）"""
+"""检查当前Big4评分（15M K线阴阳线计数版本）"""
 import sys
 import os
 from dotenv import load_dotenv
@@ -34,24 +34,15 @@ print(f'净加权分: {nws}  neutral_bias: {nb}')
 print(f'建议: {result["recommendation"]}')
 print()
 print('数据来源: 数据库 (binance_futures合约数据)')
-print('评分规则: MA8/MA20偏差(最大±40) + 4H动量(最大±30)，总分>=50触发信号')
+print('评分规则: 最近16根15M K线，阴线>=10且区间跌幅>0.5%->BEARISH，阳线>=10且区间涨幅>0.5%->BULLISH')
+print('触发条件: bearish_weight>0.60->BEARISH，bullish_weight>0.60->BULLISH (BTC50%+ETH30%+BNB10%+SOL10%)')
 print()
 
 for symbol in ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']:
     detail = result['details'][symbol]
     print(f'{symbol}:')
     print(f'  信号: {detail["signal"]} (强度: {detail["strength"]:.0f}, raw_score: {detail.get("raw_score", "?")})')
-
-    ma = detail.get('ma', {})
-    if ma:
-        print(f'  MA趋势: MA8={ma.get("ma8", 0):.2f} MA20={ma.get("ma20", 0):.2f} '
-              f'偏差={ma.get("deviation", 0):+.2f}%  => {ma.get("score", 0):+d}分 ({ma.get("level", "?")})')
-
-    mom = detail.get('momentum_4h', {})
-    if mom:
-        print(f'  4H动量: 变化={mom.get("change", 0):+.2f}%  => {mom.get("score", 0):+d}分 ({mom.get("level", "?")})')
-
-    reason = detail.get('reason', '').replace('✅', '[OK]').replace('⚠️', '[WARN]')
+    reason = detail.get('reason', '')
     print(f'  原因: {reason}')
     print()
 

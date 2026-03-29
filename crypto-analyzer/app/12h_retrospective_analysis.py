@@ -405,7 +405,8 @@ class RetrospectiveAnalyzer:
             for i, analysis in enumerate(loss_analysis[:10], 1):  # 只显示前10笔
                 trade = analysis['trade']
                 print(f"{i}. {trade['symbol']} {trade['side']} | 亏损{trade['pnl']:.2f}U ({trade['pnl_pct']:.2f}%)")
-                print(f"   开仓: {trade['open_time']} | 信号: {trade['signal'][:50]}")
+                signal_str = (trade['signal'] or '')[:50]
+                print(f"   开仓: {trade['open_time']} | 信号: {signal_str}")
 
                 if analysis['issues']:
                     print(f"   问题诊断:")

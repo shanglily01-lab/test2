@@ -320,6 +320,15 @@ def parse_entry_reason(entry_reason: str, entry_signal_type: str) -> tuple:
             elif 'REVERSE' in reason or '反转' in reason:
                 return 'sustained_trend_REVERSE', '反转持续趋势'
             return 'sustained_trend', '持续趋势'
+        if '预测器' in reason or 'confidence=' in reason:
+            import re
+            m = re.search(r'confidence=(\d+)', reason)
+            conf = m.group(1) if m else ''
+            return 'predictor', f'预测神器({conf}分)' if conf else '预测神器'
+        if reason.startswith('BTC ') and ('分钟' in reason or '%' in reason):
+            return 'btc_momentum', f'BTC动量跟随({reason})'
+        if '15M突破' in reason or '15M_BREAKOUT' in reason:
+            return '15m_breakout', f'15M破位({reason})'
         if '手动' in reason or 'manual' in reason.lower():
             return 'manual', '手动开仓'
         if '限价' in reason or 'limit' in reason.lower():
