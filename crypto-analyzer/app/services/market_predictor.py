@@ -466,20 +466,22 @@ class MarketPredictor:
             qty = round(notional / entry_price, 6)
 
             try:
-                planned_close = now + timedelta(hours=self._get_max_hold_hours())
+                max_hold_hours = self._get_max_hold_hours()
+                planned_close = now + timedelta(hours=max_hold_hours)
+                max_hold_minutes = max_hold_hours * 60
                 cursor.execute("""
                     INSERT INTO futures_positions
                         (account_id, symbol, position_side, leverage, quantity, notional_value,
                          margin, entry_price, mark_price, stop_loss_price, take_profit_price,
                          stop_loss_pct, take_profit_pct, status, source, entry_reason,
-                         open_time, planned_close_time, unrealized_pnl, unrealized_pnl_pct)
-                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'open','PREDICTOR',%s,NOW(),%s,0,0)
+                         open_time, planned_close_time, max_hold_minutes, unrealized_pnl, unrealized_pnl_pct)
+                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'open','PREDICTOR',%s,NOW(),%s,%s,0,0)
                 """, (
                     ACCOUNT_ID, symbol, direction, LEVERAGE, qty, round(notional, 2),
                     MARGIN, entry_price, entry_price, sl, tp,
                     SL_PCT * 100, TP_PCT * 100,
                     f"预测器 confidence={r['confidence']} {r['direction']}",
-                    planned_close
+                    planned_close, max_hold_minutes
                 ))
                 logger.info(f"[预测下单] {symbol} {direction} @ {entry_price:.6g}  "
                             f"SL={sl:.6g}  TP={tp:.6g}  confidence={r['confidence']}")

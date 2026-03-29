@@ -548,7 +548,7 @@ async def lifespan(app: FastAPI):
                 logger.info(f"✅ 市场预测分析完成，共{count}个交易对")
             except Exception as e:
                 logger.error(f"❌ 市场预测分析失败: {e}")
-        schedule.every(6).hours.do(run_market_prediction)
+        schedule.every(4).hours.do(run_market_prediction)
 
 
         # ── 独立子进程周期任务（与 FastAPI 主进程完全隔离）──────────────────────────
