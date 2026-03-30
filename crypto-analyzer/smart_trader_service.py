@@ -735,48 +735,49 @@ class SmartDecisionBrain:
 
             # V1评分计算完成，稍后与V2一起打印
 
-            # 读取 Big4 状态（供后续 scan_all 级过滤使用）
+            # 读取 Big4 整体信号
+            # STRONG_BULLISH/STRONG_BEARISH: 单币>=11阳/阴+0.5% 且强权重>60%
+            # BULLISH/BEARISH            : 单币>=9阳/阴+0.5%  且总权重>60%
+            # NEUTRAL                    : 不满足上述条件
             _b4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
-            # net_weighted_score: -70~+70，正=多头，负=空头
-            _net_ws = big4_result.get('net_weighted_score', 0) if big4_result else 0
 
-            # ========== 开仓资格判断：由 net_weighted_score 单一驱动 ==========
-            # +20~+50 : 弱多头趋势跟随，只开 LONG，信号分 20~50
-            # -20~-50 : 弱空头趋势跟随，只开 SHORT，信号分 20~50
-            # >+50    : 强多头信号确认，只开 LONG，信号分 >= self.threshold
-            # <-50    : 强空头信号确认，只开 SHORT，信号分 >= self.threshold
-            # -20~+20 : 市场平，不开仓
+            # ========== 开仓资格判断：由 Big4 overall_signal 驱动 ==========
+            # STRONG_BULLISH : 信号确认多头，long_score >= threshold
+            # BULLISH        : 趋势跟随多头，long_score >= 20
+            # STRONG_BEARISH : 信号确认空头，short_score >= threshold
+            # BEARISH        : 趋势跟随空头，short_score >= 20
+            # NEUTRAL        : 不开仓
             trend_long_ok    = False
             trend_short_ok   = False
             confirm_long_ok  = False
             confirm_short_ok = False
 
-            if 20 <= _net_ws <= 50:
-                if self.trend_following_enabled and 20 <= long_score <= 50:
-                    trend_long_ok = True
-                    logger.debug(f"[TF-LONG] {symbol} net_ws={_net_ws:.1f} long_score={long_score} 趋势跟随LONG")
-                elif not self.trend_following_enabled:
-                    logger.debug(f"[TF-SKIP] {symbol} net_ws={_net_ws:.1f} 趋势跟随已禁用")
-            elif -50 <= _net_ws <= -20:
-                if self.trend_following_enabled and 20 <= short_score <= 50:
-                    trend_short_ok = True
-                    logger.debug(f"[TF-SHORT] {symbol} net_ws={_net_ws:.1f} short_score={short_score} 趋势跟随SHORT")
-                elif not self.trend_following_enabled:
-                    logger.debug(f"[TF-SKIP] {symbol} net_ws={_net_ws:.1f} 趋势跟随已禁用")
-            elif _net_ws > 50:
+            if _b4_signal == 'STRONG_BULLISH':
                 if self.signal_confirmation_enabled:
                     confirm_long_ok = (long_score >= self.threshold)
-                    logger.debug(f"[SC-LONG] {symbol} net_ws={_net_ws:.1f} long_score={long_score} 信号确认LONG threshold={self.threshold}")
+                    logger.debug(f"[SC-LONG] {symbol} Big4=STRONG_BULLISH long_score={long_score} threshold={self.threshold}")
                 else:
-                    logger.debug(f"[SC-SKIP] {symbol} net_ws={_net_ws:.1f} 信号确认已禁用")
-            elif _net_ws < -50:
+                    logger.debug(f"[SC-SKIP] {symbol} Big4=STRONG_BULLISH 信号确认已禁用")
+            elif _b4_signal == 'BULLISH':
+                if self.trend_following_enabled:
+                    trend_long_ok = (long_score >= 20)
+                    logger.debug(f"[TF-LONG] {symbol} Big4=BULLISH long_score={long_score} 趋势跟随LONG")
+                else:
+                    logger.debug(f"[TF-SKIP] {symbol} Big4=BULLISH 趋势跟随已禁用")
+            elif _b4_signal == 'STRONG_BEARISH':
                 if self.signal_confirmation_enabled:
                     confirm_short_ok = (short_score >= self.threshold)
-                    logger.debug(f"[SC-SHORT] {symbol} net_ws={_net_ws:.1f} short_score={short_score} 信号确认SHORT threshold={self.threshold}")
+                    logger.debug(f"[SC-SHORT] {symbol} Big4=STRONG_BEARISH short_score={short_score} threshold={self.threshold}")
                 else:
-                    logger.debug(f"[SC-SKIP] {symbol} net_ws={_net_ws:.1f} 信号确认已禁用")
+                    logger.debug(f"[SC-SKIP] {symbol} Big4=STRONG_BEARISH 信号确认已禁用")
+            elif _b4_signal == 'BEARISH':
+                if self.trend_following_enabled:
+                    trend_short_ok = (short_score >= 20)
+                    logger.debug(f"[TF-SHORT] {symbol} Big4=BEARISH short_score={short_score} 趋势跟随SHORT")
+                else:
+                    logger.debug(f"[TF-SKIP] {symbol} Big4=BEARISH 趋势跟随已禁用")
             else:
-                logger.debug(f"[FLAT] {symbol} net_ws={_net_ws:.1f} 市场平坦(-20~+20)，不开仓")
+                logger.debug(f"[NEUTRAL] {symbol} Big4=NEUTRAL，不开仓")
 
             # 两种策略取并集：趋势跟随 OR 信号确认，任一满足即可开仓
             long_qualified  = trend_long_ok  or confirm_long_ok

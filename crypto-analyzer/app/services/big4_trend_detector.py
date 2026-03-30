@@ -95,27 +95,38 @@ class Big4TrendDetector:
 
         bullish_count = 0
         bearish_count = 0
-        bullish_weight = 0  # 看涨权重总和
-        bearish_weight = 0  # 看跌权重总和
+        bullish_weight = 0        # BULLISH + STRONG_BULLISH 权重之和
+        bearish_weight = 0        # BEARISH + STRONG_BEARISH 权重之和
+        strong_bullish_weight = 0 # 仅 STRONG_BULLISH 权重之和
+        strong_bearish_weight = 0 # 仅 STRONG_BEARISH 权重之和
         total_strength = 0
-        net_weighted_score = 0  # V2: 用于 neutral_bias 计算
+        net_weighted_score = 0  # 用于 neutral_bias 计算
 
         for symbol in BIG4_SYMBOLS:
             analysis = self._analyze_symbol_v2(conn, symbol)
             results[symbol] = analysis
 
             weight = COIN_WEIGHTS.get(symbol, 0.25)  # 默认25%
+            sig = analysis['signal']
 
-            if analysis['signal'] == 'BULLISH':
+            if sig == 'STRONG_BULLISH':
                 bullish_count += 1
                 bullish_weight += weight
-            elif analysis['signal'] == 'BEARISH':
+                strong_bullish_weight += weight
+            elif sig == 'BULLISH':
+                bullish_count += 1
+                bullish_weight += weight
+            elif sig == 'STRONG_BEARISH':
+                bearish_count += 1
+                bearish_weight += weight
+                strong_bearish_weight += weight
+            elif sig == 'BEARISH':
                 bearish_count += 1
                 bearish_weight += weight
 
             # 无论信号是什么，都按权重累加强度
             total_strength += analysis['strength'] * weight
-            # V2: 累加原始分（用于 neutral_bias）
+            # 累加原始分（用于 neutral_bias）
             net_weighted_score += analysis.get('raw_score', 0) * weight
 
         # 🔥 紧急干预检测 (在分析完Big4后执行)
@@ -125,48 +136,32 @@ class Big4TrendDetector:
         # 只看权重，不再要求BTC配合其他币种
         # 权重阈值: >45%
 
-        btc_signal = results.get('BTC/USDT', {}).get('signal', 'NEUTRAL')
-        eth_signal = results.get('ETH/USDT', {}).get('signal', 'NEUTRAL')
-        bnb_signal = results.get('BNB/USDT', {}).get('signal', 'NEUTRAL')
-        sol_signal = results.get('SOL/USDT', {}).get('signal', 'NEUTRAL')
-
         # 统计支持的币种（用于显示）
         bullish_coins = []
         bearish_coins = []
-        if btc_signal == 'BULLISH':
-            bullish_coins.append('BTC')
-        elif btc_signal == 'BEARISH':
-            bearish_coins.append('BTC')
-        if eth_signal == 'BULLISH':
-            bullish_coins.append('ETH')
-        elif eth_signal == 'BEARISH':
-            bearish_coins.append('ETH')
-        if bnb_signal == 'BULLISH':
-            bullish_coins.append('BNB')
-        elif bnb_signal == 'BEARISH':
-            bearish_coins.append('BNB')
-        if sol_signal == 'BULLISH':
-            bullish_coins.append('SOL')
-        elif sol_signal == 'BEARISH':
-            bearish_coins.append('SOL')
+        for sym, short in [('BTC/USDT','BTC'),('ETH/USDT','ETH'),('BNB/USDT','BNB'),('SOL/USDT','SOL')]:
+            sig = results.get(sym, {}).get('signal', 'NEUTRAL')
+            if sig in ('BULLISH', 'STRONG_BULLISH'):
+                bullish_coins.append(short + ('*' if sig == 'STRONG_BULLISH' else ''))
+            elif sig in ('BEARISH', 'STRONG_BEARISH'):
+                bearish_coins.append(short + ('*' if sig == 'STRONG_BEARISH' else ''))
 
-        # 已按权重累加，不需要再除以数量（权重总和=1.0）
         avg_strength = total_strength
 
-        # 🔥 趋势判断：要求多币种共振，避免BTC独涨/独跌误判方向
-        # STRONG: 权重>70%（BTC+ETH同向，即80%）+ 强度>70
-        # BULLISH/BEARISH: 权重>60%（BTC+任一其他，或ETH+BNB+SOL同向）
-        # 旧阈值45%允许BTC单独触发（50%>45%），现已修正
-        if bullish_weight > 0.70 and avg_strength > 70:
+        # 趋势判断：
+        # STRONG_BULLISH: 强多权重>0.60（BTC*+任一强币，或ETH*+BNB*+SOL*）
+        # BULLISH: 总多权重>0.60
+        # STRONG_BEARISH / BEARISH: 同理
+        if strong_bullish_weight > 0.60:
             overall_signal = 'STRONG_BULLISH'
-            recommendation = f"{'+'.join(bullish_coins)}看涨(强度{avg_strength:.0f}>70，权重{bullish_weight*100:.0f}%)，🚫禁止做空"
+            recommendation = f"{'+'.join(bullish_coins)}强多头(强权重{strong_bullish_weight*100:.0f}%)，禁止做空"
             emergency_intervention['block_short'] = True
-            emergency_intervention['details'] = f"Big4强多头趋势(强度{avg_strength:.0f}>70)"
-        elif bearish_weight > 0.70 and avg_strength > 70:
+            emergency_intervention['details'] = f"Big4强多头(strong_bullish_weight={strong_bullish_weight*100:.0f}%)"
+        elif strong_bearish_weight > 0.60:
             overall_signal = 'STRONG_BEARISH'
-            recommendation = f"{'+'.join(bearish_coins)}看跌(强度{avg_strength:.0f}>70，权重{bearish_weight*100:.0f}%)，🚫禁止做多"
+            recommendation = f"{'+'.join(bearish_coins)}强空头(强权重{strong_bearish_weight*100:.0f}%)，禁止做多"
             emergency_intervention['block_long'] = True
-            emergency_intervention['details'] = f"Big4强空头趋势(强度{avg_strength:.0f}>70)"
+            emergency_intervention['details'] = f"Big4强空头(strong_bearish_weight={strong_bearish_weight*100:.0f}%)"
         elif bullish_weight > 0.60:
             overall_signal = 'BULLISH'
             recommendation = f"{'+'.join(bullish_coins)}看涨(权重{bullish_weight*100:.0f}%，强度{avg_strength:.0f})，建议优先考虑多单机会"
@@ -191,11 +186,13 @@ class Big4TrendDetector:
             'signal_strength': avg_strength,
             'bullish_count': bullish_count,
             'bearish_count': bearish_count,
-            'bullish_weight': bullish_weight,  # 新增：看涨权重
-            'bearish_weight': bearish_weight,  # 新增：看跌权重
+            'bullish_weight': bullish_weight,
+            'bearish_weight': bearish_weight,
+            'strong_bullish_weight': strong_bullish_weight,
+            'strong_bearish_weight': strong_bearish_weight,
             'details': results,
             'recommendation': recommendation,
-            'emergency_intervention': emergency_intervention,  # 🔥 新增
+            'emergency_intervention': emergency_intervention,
             'timestamp': datetime.now()
         }
 
@@ -999,13 +996,25 @@ class Big4TrendDetector:
         bearish_count = sum(1 for k in klines if float(k['close_price']) < float(k['open_price']))
         bullish_count = 16 - bearish_count
 
-        if bearish_count >= 10 and price_change_pct <= -0.5:
+        if bearish_count >= 11 and price_change_pct <= -0.5:
+            signal    = 'STRONG_BEARISH'
+            dominant  = 'BEAR'
+            raw_score = -bearish_count
+            strength  = min(int(bearish_count / 16 * 100), 100)
+            reason    = f"15M强空头({bearish_count}/16阴线,区间{price_change_pct:.2f}%)"
+        elif bearish_count >= 9 and price_change_pct <= -0.3:
             signal    = 'BEARISH'
             dominant  = 'BEAR'
             raw_score = -bearish_count
             strength  = min(int(bearish_count / 16 * 100), 100)
             reason    = f"15M空头({bearish_count}/16阴线,区间{price_change_pct:.2f}%)"
-        elif bullish_count >= 10 and price_change_pct >= 0.5:
+        elif bullish_count >= 11 and price_change_pct >= 0.5:
+            signal    = 'STRONG_BULLISH'
+            dominant  = 'BULL'
+            raw_score = bullish_count
+            strength  = min(int(bullish_count / 16 * 100), 100)
+            reason    = f"15M强多头({bullish_count}/16阳线,区间{price_change_pct:+.2f}%)"
+        elif bullish_count >= 9 and price_change_pct >= 0.3:
             signal    = 'BULLISH'
             dominant  = 'BULL'
             raw_score = bullish_count
