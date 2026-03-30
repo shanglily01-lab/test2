@@ -114,9 +114,13 @@ class DailyReviewReport:
         up_count   = sum(1 for c in all_coins if c['change_pct'] > 0)
         down_count = sum(1 for c in all_coins if c['change_pct'] < 0)
 
+        # 只取真正下跌的币种（change_pct < 0），最多8个，按跌幅绝对值降序
+        losers = [c for c in all_coins if c['change_pct'] < 0]
+        top_losers = losers[-8:][::-1] if len(losers) >= 8 else losers[::-1]
+
         return {
             'top_gainers': all_coins[:8],
-            'top_losers':  all_coins[-8:][::-1],  # 倒序，最大跌幅在前
+            'top_losers':  top_losers,
             'up_count':    up_count,
             'down_count':  down_count,
             'total':       len(all_coins),
@@ -174,7 +178,19 @@ class DailyReviewReport:
         long_wins  = sum(1 for t in longs  if pnl(t) >= 0)
         short_wins = sum(1 for t in shorts if pnl(t) >= 0)
 
-        hold_hours = [float(t['holding_hours'] or 0) for t in closed if t['holding_hours']]
+        def _hold_h(t):
+            h = float(t.get('holding_hours') or 0)
+            if h > 0:
+                return h
+            ot = t.get('open_time')
+            ct = t.get('close_time')
+            if ot and ct:
+                delta = (ct - ot).total_seconds() if hasattr(ct - ot, 'total_seconds') else 0
+                return delta / 3600.0
+            return 0.0
+
+        hold_hours = [_hold_h(t) for t in closed]
+        hold_hours = [h for h in hold_hours if h > 0]
         avg_hold_h = sum(hold_hours) / len(hold_hours) if hold_hours else 0
 
         # 最大盈/亏单
@@ -273,7 +289,8 @@ class DailyReviewReport:
             cur = conn.cursor()
             cur.execute("""
                 SELECT position_side, realized_pnl, entry_score,
-                       signal_components, holding_hours, notes
+                       signal_components, holding_hours, notes,
+                       open_time, close_time
                 FROM futures_positions
                 WHERE close_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
                   AND status = 'closed'
@@ -303,7 +320,20 @@ class DailyReviewReport:
         long_win_rate  = sum(1 for r in longs  if pnl(r) >= 0) / len(longs)  * 100 if longs  else 0
         short_win_rate = sum(1 for r in shorts if pnl(r) >= 0) / len(shorts) * 100 if shorts else 0
 
-        hold_h = [float(r['holding_hours'] or 0) for r in rows if r['holding_hours']]
+        def _hold_hours(r):
+            h = float(r.get('holding_hours') or 0)
+            if h > 0:
+                return h
+            # fallback: 用 open_time/close_time 计算
+            ot = r.get('open_time')
+            ct = r.get('close_time')
+            if ot and ct:
+                delta = (ct - ot).total_seconds() if hasattr(ct - ot, 'total_seconds') else 0
+                return delta / 3600.0
+            return 0.0
+
+        hold_h = [_hold_hours(r) for r in rows]
+        hold_h = [h for h in hold_h if h > 0]
         avg_hold_h = sum(hold_h) / len(hold_h) if hold_h else 0
 
         # 止损单识别：从 notes 字段推断

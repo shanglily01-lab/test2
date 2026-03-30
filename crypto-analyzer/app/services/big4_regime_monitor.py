@@ -143,8 +143,14 @@ class Big4RegimeMonitor:
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE system_settings SET allow_long = %s, allow_short = %s WHERE id = 1",
-                (allow_long, allow_short)
+                "INSERT INTO system_settings (setting_key, setting_value) VALUES ('allow_long', %s)"
+                " ON DUPLICATE KEY UPDATE setting_value = %s",
+                (str(allow_long), str(allow_long))
+            )
+            cursor.execute(
+                "INSERT INTO system_settings (setting_key, setting_value) VALUES ('allow_short', %s)"
+                " ON DUPLICATE KEY UPDATE setting_value = %s",
+                (str(allow_short), str(allow_short))
             )
             conn.commit()
             cursor.close()

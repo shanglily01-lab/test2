@@ -3576,7 +3576,7 @@ class SmartTraderService:
                         _tm_cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='trading_mode'")
                         _tm_row = _tm_cur.fetchone()
                         _tm_cur.close(); _tm_conn.close()
-                        new_mode = (_tm_row.get('setting_value') if _tm_row else None) or 'signal_confirmation'
+                        new_mode = (_tm_row[0] if _tm_row else None) or 'signal_confirmation'
                         if new_mode != self.trading_mode:
                             logger.info(f"[TRADING-MODE] 交易模式切换: {self.trading_mode} -> {new_mode}")
                             self.trading_mode = new_mode
