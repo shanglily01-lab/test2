@@ -900,9 +900,7 @@ class SmartExitOptimizer:
                 return
 
             if live_rows:
-                # 有 paper_position_id 关联（15M突破/BTC动量/预测器/主策略等）
-                # 直接用 live_futures_positions 里的 quantity/entry_price 下单，
-                # 不再调 get_open_positions()，避免 API 查询失败误判"持仓不存在"
+                # 有 paper_position_id 关联，按关联记录逐个平仓
                 all_keys = {ak['id']: ak for ak in all_keys_list}
                 for row in live_rows:
                     account_id = row['account_id']
@@ -921,13 +919,30 @@ class SmartExitOptimizer:
                             reason=reason
                         )
                         if result.get('success'):
-                            logger.info(f"[实盘平仓] {key_info.get('account_name',account_id)} {symbol} {direction} 直接平仓成功")
+                            logger.info(f"[实盘平仓] {key_info.get('account_name',account_id)} {symbol} {direction} 平仓成功")
+                            # 交易所平仓成功，立即更新该条记录
+                            try:
+                                _uc = pymysql.connect(**self.db_config, autocommit=True)
+                                _ucur = _uc.cursor()
+                                close_p = result.get('close_price', 0)
+                                live_pnl = result.get('realized_pnl', 0)
+                                _ucur.execute("""
+                                    UPDATE live_futures_positions
+                                    SET status='CLOSED', close_time=NOW(),
+                                        close_price=%s, close_reason=%s,
+                                        realized_pnl=%s,
+                                        notes=CONCAT(IFNULL(notes,''), '|exit_sync:', %s)
+                                    WHERE id=%s AND status='OPEN'
+                                """, (close_p, reason, live_pnl, reason, row['id']))
+                                _ucur.close(); _uc.close()
+                            except Exception as _dbe:
+                                logger.error(f"[实盘平仓] 更新live_futures_positions失败 id={row['id']}: {_dbe}")
                         else:
                             logger.error(f"[实盘平仓] {key_info.get('account_name',account_id)} {symbol} {direction} 平仓失败: {result.get('error')}")
                     except Exception as e:
                         logger.error(f"[实盘平仓] account_id={account_id} 平仓异常: {e}")
             else:
-                # fallback：主策略无 paper_position_id，对所有账号按 symbol+direction 平仓
+                # fallback：无 paper_position_id 关联，对所有账号按 symbol+direction 平仓
                 logger.info(f"[实盘平仓] 无 paper_position_id 关联，fallback 对所有账号平 {symbol} {direction}")
                 for key_info in all_keys_list:
                     try:
@@ -935,6 +950,24 @@ class SmartExitOptimizer:
                         result = engine.close_position_by_symbol(symbol, direction, reason=reason)
                         if result.get('success'):
                             logger.info(f"[实盘平仓] {key_info.get('account_name','')} {symbol} {direction} 平仓成功")
+                            # 按 account_id+symbol+side 更新
+                            try:
+                                _uc = pymysql.connect(**self.db_config, autocommit=True)
+                                _ucur = _uc.cursor()
+                                close_p = result.get('close_price', 0)
+                                live_pnl = result.get('realized_pnl', 0)
+                                _ucur.execute("""
+                                    UPDATE live_futures_positions
+                                    SET status='CLOSED', close_time=NOW(),
+                                        close_price=%s, close_reason=%s,
+                                        realized_pnl=%s,
+                                        notes=CONCAT(IFNULL(notes,''), '|exit_sync_fallback:', %s)
+                                    WHERE account_id=%s AND symbol=%s
+                                      AND position_side=%s AND status='OPEN'
+                                """, (close_p, reason, live_pnl, reason, key_info['id'], symbol, direction))
+                                _ucur.close(); _uc.close()
+                            except Exception as _dbe:
+                                logger.error(f"[实盘平仓] fallback更新live_futures_positions失败: {_dbe}")
                         else:
                             err = result.get('error', '')
                             if '未找到' in err:
@@ -980,17 +1013,8 @@ class SmartExitOptimizer:
                     notes = CONCAT(IFNULL(notes, ''), '|close_reason:', %s)
                 WHERE id = %s
             """, (now, close_price, round(realized_pnl, 4), close_reason, position_id))
-
-            # 同步更新关联的实盘记录（paper_position_id 关联）
-            cursor.execute("""
-                UPDATE live_futures_positions
-                SET status='CLOSED', close_time=%s,
-                    close_price=%s,
-                    realized_pnl=%s,
-                    close_reason=%s,
-                    notes=CONCAT(IFNULL(notes,''), '|paper_closed:', %s)
-                WHERE paper_position_id=%s AND status='OPEN'
-            """, (now, close_price, round(realized_pnl, 4), close_reason, close_reason, position_id))
+            # live_futures_positions 由 _close_live_positions_on_exchange 在交易所平仓成功后逐条更新
+            # 不在此处无条件更新，避免交易所未平仓时 DB 被错误标为 CLOSED
 
             conn.commit()
 

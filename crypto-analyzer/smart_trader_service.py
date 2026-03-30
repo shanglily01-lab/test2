@@ -2826,8 +2826,8 @@ class SmartTraderService:
             logger.warning(f"检查Top 50列表失败: {e}, 默认允许开仓")
             return True
 
-    def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal"):
-        """关闭指定交易对和方向的持仓"""
+    def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal", sync_live: bool = True):
+        """关闭指定交易对和方向的持仓。sync_live=False时只更新模拟单DB，不同步实盘。"""
         try:
             current_price = self.get_current_price(symbol)
             if not current_price:
@@ -2942,7 +2942,10 @@ class SmartTraderService:
             cursor.close()
             conn.close()
 
-            # ========== 同步实盘平仓 ==========
+            # ========== 同步实盘平仓（仅逆向信号触发，SmartExitOptimizer不走此路径）==========
+            if not sync_live:
+                return True
+
             try:
                 _c = self._get_connection()
                 _cur = _c.cursor()
@@ -3005,11 +3008,12 @@ class SmartTraderService:
                                     _lcur.execute("""
                                         UPDATE live_futures_positions
                                         SET status='CLOSED', close_time=NOW(),
+                                            close_price=%s, close_reason=%s,
                                             realized_pnl=%s, mark_price=%s,
-                                            notes=CONCAT(IFNULL(notes,''), '|paper_sync_close:', %s)
+                                            notes=CONCAT(IFNULL(notes,''), '|reverse_sync_close:', %s)
                                         WHERE account_id=%s AND symbol=%s
                                           AND position_side=%s AND status='OPEN'
-                                    """, (live_pnl, close_p, reason, ak['id'], symbol, side))
+                                    """, (close_p, reason, live_pnl, close_p, reason, ak['id'], symbol, side))
                                     _lc.commit()
                                     _lcur.close(); _lc.close()
                                 except Exception as _dbe:
@@ -3102,25 +3106,15 @@ class SmartTraderService:
     async def close_position(self, symbol: str, direction: str, position_size: float, reason: str = "smart_exit"):
         """
         异步平仓方法（供SmartExitOptimizer调用）
-
-        Args:
-            symbol: 交易对
-            direction: 方向 (LONG/SHORT)
-            position_size: 持仓数量
-            reason: 平仓原因
-
-        Returns:
-            dict: {'success': bool, 'error': str}
+        只更新模拟单DB，不触发实盘同步。
+        实盘同步由SmartExitOptimizer._close_live_positions_on_exchange()负责。
         """
         try:
-            # 调用同步方法执行平仓
-            success = self.close_position_by_side(symbol, direction, reason)
-
+            success = self.close_position_by_side(symbol, direction, reason, sync_live=False)
             if success:
                 return {'success': True}
             else:
                 return {'success': False, 'error': 'close_position_by_side returned False'}
-
         except Exception as e:
             logger.error(f"异步平仓失败: {symbol} {direction} | {e}")
             return {'success': False, 'error': str(e)}
