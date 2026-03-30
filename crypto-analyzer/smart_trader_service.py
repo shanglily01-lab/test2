@@ -3802,12 +3802,16 @@ class SmartTraderService:
                         logger.error(f"[BIG4-ERROR] Big4检测失败: {e}")
                         big4_result = None
 
-                    # Big4状态记录（阈值已在 scan_all() 中处理，此处不再重复封锁）
+                    # Big4强度门槛检查（阈值已在 scan_all() 中处理，此处只拦截极弱信号）
                     if self.big4_filter_config.get('enabled', True):
                         if big4_result:
                             big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
                             big4_strength = big4_result.get('signal_strength', 0)
                             logger.info(f"[BIG4] {symbol} Big4: {big4_signal}({big4_strength:.1f})")
+                            # 强度 < 20 时市场方向完全不明确，禁止开仓
+                            if big4_strength < 20:
+                                logger.warning(f"[BIG4-WEAK] {symbol} Big4强度过低({big4_strength:.1f}<20), 禁止开仓")
+                                continue
                         else:
                             logger.warning(f"[BIG4-ERROR] {symbol} Big4数据不可用, 跳过开仓")
                             continue
