@@ -3503,7 +3503,7 @@ class SmartTraderService:
                         logger.warning(f"⚠️ [BIG4-REGIME] 市场状态检测失败: {e}")
                     last_regime_check = now
 
-                # 0.6. 定期重新加载Big4配置 + trading_mode (每5分钟检查数据库)
+                # 0.6. 定期重新加载Big4配置 + 交易模式开关 (每5分钟检查数据库)
                 if (now - last_config_reload).total_seconds() >= 300:
                     try:
                         from app.services.system_settings_loader import get_big4_filter_enabled

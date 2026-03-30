@@ -245,28 +245,6 @@ async def update_big4_filter(data: Big4FilterUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.put("/top30-filter")
-async def update_top30_filter(data: Big4FilterUpdate):
-    """开关 Top 30 交易对过滤器（实盘时启用）"""
-    try:
-        conn = pymysql.connect(**get_db_config())
-        cursor = conn.cursor()
-        setting_value = 'true' if data.enabled else 'false'
-        cursor.execute("""
-            INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-            VALUES ('top30_filter_enabled', %s, 'Top30交易对过滤', 'web_ui', CURRENT_TIMESTAMP)
-            ON DUPLICATE KEY UPDATE setting_value=%s, updated_by='web_ui', updated_at=CURRENT_TIMESTAMP
-        """, (setting_value, setting_value))
-        conn.commit()
-        cursor.close()
-        conn.close()
-        status_text = '已启用' if data.enabled else '已禁用'
-        logger.info(f"✅ Top30过滤器{status_text}")
-        return {'success': True, 'message': f'Top30过滤器{status_text}'}
-    except Exception as e:
-        logger.error(f"更新Top30过滤器失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/trading-direction")
 async def get_trading_direction():
