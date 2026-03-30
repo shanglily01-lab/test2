@@ -418,14 +418,24 @@ class MarketPredictor:
         """
         取 confidence>=70 的预测，按置信度排序，开真实模拟单到 futures_positions
         - 不限制持仓数量，所有合格信号均开单
-        - 模拟盘 100U x5，止损2%，止盈6%
+        - 模拟盘 400U x5（1级黑名单 100U），止损2%，止盈6%
         - source='PREDICTOR' 标识来源
         """
-        MARGIN = 100
+        DEFAULT_MARGIN = 400
+        RESTRICTED_MARGIN = 100  # rating_level=1 限制交易对
         LEVERAGE = 5
         SL_PCT = 0.02
         TP_PCT = 0.06
         ACCOUNT_ID = 2
+
+        # 查询 1级黑名单（限制）交易对
+        try:
+            cursor.execute(
+                "SELECT symbol FROM trading_symbol_rating WHERE rating_level=1"
+            )
+            restricted_symbols = {r['symbol'] for r in cursor.fetchall()}
+        except Exception:
+            restricted_symbols = set()
 
         # 已开过的交易对（避免重复开同向仓）
         cursor.execute(
@@ -449,6 +459,9 @@ class MarketPredictor:
             # 已有同向仓：跳过
             if existing.get(symbol) == direction:
                 continue
+
+            # 根据评级确定保证金：1级限制用 100U，其余用 400U
+            MARGIN = RESTRICTED_MARGIN if symbol in restricted_symbols else DEFAULT_MARGIN
 
             # 获取当前价格
             entry_price = self._get_current_price(cursor, symbol)
@@ -484,7 +497,7 @@ class MarketPredictor:
                     planned_close, max_hold_minutes
                 ))
                 logger.info(f"[预测下单] {symbol} {direction} @ {entry_price:.6g}  "
-                            f"SL={sl:.6g}  TP={tp:.6g}  confidence={r['confidence']}")
+                            f"SL={sl:.6g}  TP={tp:.6g}  margin={MARGIN}U  confidence={r['confidence']}")
                 # 获取刚插入的 paper_position_id，用于实盘同步
                 paper_id = cursor.lastrowid
                 opened += 1

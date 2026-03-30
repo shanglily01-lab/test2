@@ -9,6 +9,7 @@ import time
 import sys
 import os
 import asyncio
+import requests
 from datetime import datetime, time as dt_time, timezone, timedelta
 from decimal import Decimal
 from loguru import logger
@@ -1605,45 +1606,22 @@ class CoinFuturesTraderService:
             }
 
     def get_current_price(self, symbol: str):
-        """获取当前价格 - 优先WebSocket实时价,回退到5m K线"""
+        """获取当前价格 - 直接调用 Binance DAPI REST 接口获取实时标记价格"""
         try:
-            # 优先从WebSocket获取实时价格(与SmartExitOptimizer检查止盈时用同一价格源,避免止盈缩水)
-            if self.ws_service:
-                ws_price = self.ws_service.get_price(symbol)
-                if ws_price and ws_price > 0:
-                    logger.debug(f"[PRICE] {symbol} 使用WebSocket实时价: {ws_price}")
-                    return ws_price
-                else:
-                    logger.debug(f"[PRICE] {symbol} WebSocket价格无效,回退到K线")
-
-            # 回退到K线价格（5m/15m/1h级联，带新鲜度校验）
-            # 币本位K线存储为 binance_coin_futures，U本位为 binance_futures
-            conn = self._get_connection()
-            cursor = conn.cursor()
-            import time
-            current_timestamp_ms = int(time.time() * 1000)
-            for timeframe, max_age_minutes in [('5m', 15), ('15m', 45), ('1h', 90)]:
-                cursor.execute("""
-                    SELECT close_price, open_time
-                    FROM kline_data
-                    WHERE symbol = %s AND timeframe = %s
-                      AND exchange IN ('binance_futures', 'binance_coin_futures')
-                    ORDER BY open_time DESC LIMIT 1
-                """, (symbol, timeframe))
-                result = cursor.fetchone()
-                if result:
-                    close_price, open_time = result
-                    data_age_minutes = (current_timestamp_ms - open_time) / 1000 / 60
-                    if data_age_minutes <= max_age_minutes:
-                        cursor.close()
-                        logger.debug(f"[PRICE] {symbol} 使用{timeframe}K线价格: {close_price} (数据年龄: {data_age_minutes:.1f}分钟)")
-                        return float(close_price)
-                    logger.debug(f"[PRICE] {symbol} {timeframe}K线过时({data_age_minutes:.1f}分钟), 尝试更长周期")
-            cursor.close()
-            logger.warning(f"[PRICE] {symbol} K线数据不存在或全部过时")
+            # BTC/USD -> BTCUSD_PERP
+            api_symbol = symbol.replace('/', '') + '_PERP'
+            url = 'https://dapi.binance.com/dapi/v1/premiumIndex'
+            resp = requests.get(url, params={'symbol': api_symbol}, timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                mark_price = float(data.get('markPrice', 0))
+                if mark_price > 0:
+                    logger.debug(f"[PRICE] {symbol} DAPI实时标记价: {mark_price}")
+                    return mark_price
+            logger.warning(f"[PRICE] {symbol} DAPI返回异常: status={resp.status_code}")
             return None
         except Exception as e:
-            logger.error(f"[ERROR] 获取{symbol}价格失败: {e}")
+            logger.error(f"[ERROR] 获取{symbol}实时价格失败: {e}")
             return None
 
     def get_open_positions_count(self):
@@ -1878,7 +1856,7 @@ class CoinFuturesTraderService:
             return False
 
         # 新增验证: 防追高/追跌过滤
-        current_price = self.ws_service.get_price(symbol)
+        current_price = self.get_current_price(symbol)
         if current_price:
             pass_filter, filter_reason = self.brain.check_anti_fomo_filter(symbol, current_price, side)
             if not pass_filter:
@@ -1890,19 +1868,12 @@ class CoinFuturesTraderService:
         # ========== 第二步：一次性开仓逻辑（不再使用分批建仓）==========
         try:
 
-            # 优先从 WebSocket 获取实时价格
-            current_price = self.ws_service.get_price(symbol)
-
-            # 如果 WebSocket 价格不可用，回退到数据库价格
-            if not current_price or current_price <= 0:
-                logger.warning(f"[WS_FALLBACK] {symbol} WebSocket价格不可用，回退到数据库价格")
-                current_price = self.get_current_price(symbol)
-                if not current_price:
-                    logger.error(f"{symbol} 无法获取价格")
-                    return False
-                price_source = "DB"
-            else:
-                price_source = "WS"
+            # 直接从 Binance DAPI 获取实时标记价格
+            current_price = self.get_current_price(symbol)
+            if not current_price:
+                logger.error(f"{symbol} 无法获取价格")
+                return False
+            price_source = "DAPI"
 
             # 检查是否为反转开仓(使用原仓位保证金)
             is_reversal = 'reversal_from' in opp
