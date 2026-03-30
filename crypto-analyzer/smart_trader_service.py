@@ -831,6 +831,12 @@ class SmartDecisionBrain:
             confirm_long_ok  = long_score  >= long_threshold
             confirm_short_ok = short_score >= short_threshold_adj
 
+            # 强度20~50时只走趋势跟随（20~50分），信号确认（55+）不参与
+            # 强度>50时只走信号确认，趋势跟随不触发（_b4_strength>50超出窗口）
+            if _trading_mode == 'trend_following' and 20 <= _b4_strength <= 50:
+                confirm_long_ok  = False
+                confirm_short_ok = False
+
             # 两种策略取并集：趋势跟随 OR 信号确认，任一满足即可开仓
             long_qualified  = trend_long_ok  or confirm_long_ok
             short_qualified = trend_short_ok or confirm_short_ok
