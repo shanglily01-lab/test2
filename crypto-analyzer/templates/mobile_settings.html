@@ -221,17 +221,17 @@
         </div>
         <div class="row" style="flex-direction:column;align-items:flex-start;gap:10px;">
             <div>
-                <div class="row-label">交易模式</div>
-                <div class="row-sub">仅信号确认：分数>=60开仓 | 趋势跟随+信号确认：两种并联，Big4强度20~50时分数20~50也可早进</div>
+                <div class="row-label">交易模式（可多选）</div>
+                <div class="row-sub">信号确认：net_ws&gt;50 时分数≥60开仓 | 趋势跟随：net_ws 20~50 时分数20~50可早进</div>
             </div>
-            <div style="display:flex;gap:16px;padding-left:4px;">
-                <label style="display:flex;align-items:center;gap:6px;font-size:14px;">
-                    <input type="radio" name="tradingMode" id="modeSignal" value="signal_confirmation">
-                    仅信号确认
+            <div style="display:flex;flex-direction:column;gap:8px;padding-left:4px;">
+                <label style="display:flex;align-items:center;gap:8px;font-size:14px;">
+                    <input type="checkbox" id="modeSignal">
+                    <span>信号确认（net_ws&gt;50，分数≥60）</span>
                 </label>
-                <label style="display:flex;align-items:center;gap:6px;font-size:14px;">
-                    <input type="radio" name="tradingMode" id="modeTrend" value="trend_following">
-                    趋势+信号确认
+                <label style="display:flex;align-items:center;gap:8px;font-size:14px;">
+                    <input type="checkbox" id="modeTrend">
+                    <span>趋势跟随（net_ws 20~50，分数 20~50）</span>
                 </label>
             </div>
         </div>
@@ -587,8 +587,8 @@ async function loadAll() {
             setPill('predictorStatus', d.predictor_enabled);
             setPill('btcMomentumStatus', d.btc_momentum_enabled);
             setPill('uCoinStyleStatus', d.u_coin_style_enabled || false);
-            const mode = d.trading_mode || 'signal_confirmation';
-            document.querySelector(`input[name="tradingMode"][value="${mode}"]`).checked = true;
+            document.getElementById('modeSignal').checked = d.signal_confirmation_enabled !== false;
+            document.getElementById('modeTrend').checked = d.trend_following_enabled !== false;
         }
         if (holdR.success) {
             document.getElementById('holdHours').value = String(holdR.data.hours);
@@ -606,7 +606,8 @@ async function saveServices() {
         predictor_enabled: document.getElementById('predictorToggle').checked,
         btc_momentum_enabled: document.getElementById('btcMomentumToggle').checked,
         u_coin_style_enabled: document.getElementById('uCoinStyleToggle').checked,
-        trading_mode: document.querySelector('input[name="tradingMode"]:checked')?.value || 'signal_confirmation',
+        signal_confirmation_enabled: document.getElementById('modeSignal').checked,
+        trend_following_enabled: document.getElementById('modeTrend').checked,
     };
     const r = await fetch(`${SYS}/trading-services`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
     if (r.success) { toast('✅ 服务设置已保存'); loadAll(); } else toast('❌ 保存失败', 'err');

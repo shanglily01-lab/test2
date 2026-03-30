@@ -56,7 +56,8 @@ class TradingServicesUpdate(BaseModel):
     predictor_enabled: Optional[bool] = None
     btc_momentum_enabled: Optional[bool] = None
     u_coin_style_enabled: Optional[bool] = None
-    trading_mode: Optional[str] = None  # 'signal_confirmation' or 'trend_following'
+    signal_confirmation_enabled: Optional[bool] = None
+    trend_following_enabled: Optional[bool] = None
 
 
 @router.get("/settings")
@@ -444,7 +445,8 @@ async def get_trading_services():
             FROM system_settings
             WHERE setting_key IN ('u_futures_trading_enabled', 'coin_futures_trading_enabled',
                                   'live_trading_enabled', 'predictor_enabled',
-                                  'btc_momentum_enabled', 'u_coin_style_enabled', 'trading_mode')
+                                  'btc_momentum_enabled', 'u_coin_style_enabled',
+                                  'signal_confirmation_enabled', 'trend_following_enabled')
         """)
 
         settings = cursor.fetchall()
@@ -458,7 +460,8 @@ async def get_trading_services():
             'predictor_enabled': 'predictor_enabled',
             'btc_momentum_enabled': 'btc_momentum_enabled',
             'u_coin_style_enabled': 'u_coin_style_enabled',
-            'trading_mode': 'trading_mode',
+            'signal_confirmation_enabled': 'signal_confirmation_enabled',
+            'trend_following_enabled': 'trend_following_enabled',
         }
 
         result = {
@@ -468,16 +471,14 @@ async def get_trading_services():
             'predictor_enabled': True,
             'btc_momentum_enabled': True,
             'u_coin_style_enabled': False,
-            'trading_mode': 'signal_confirmation',
+            'signal_confirmation_enabled': True,
+            'trend_following_enabled': True,
         }
 
         for setting in settings:
             db_key = setting['setting_key']
             frontend_key = key_mapping.get(db_key, db_key)
-            if db_key == 'trading_mode':
-                result[frontend_key] = setting['setting_value']
-            else:
-                result[frontend_key] = int(float(setting['setting_value'])) == 1
+            result[frontend_key] = int(float(setting['setting_value'])) == 1
 
         return {
             'success': True,
@@ -585,19 +586,29 @@ async def update_trading_services(data: TradingServicesUpdate):
             status = '启动' if data.u_coin_style_enabled else '暂停'
             updates.append(f"U本位破位策略: {status}")
 
-        if data.trading_mode is not None:
-            if data.trading_mode not in ('signal_confirmation', 'trend_following'):
-                raise HTTPException(status_code=400, detail="trading_mode 只能是 signal_confirmation 或 trend_following")
+        if data.signal_confirmation_enabled is not None:
+            value = '1' if data.signal_confirmation_enabled else '0'
             cursor.execute("""
                 INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('trading_mode', %s, '交易模式: signal_confirmation/trend_following', 'web_ui', NOW())
+                VALUES ('signal_confirmation_enabled', %s, '信号确认模式开关 (1=启用, 0=禁用)', 'web_ui', NOW())
                 ON DUPLICATE KEY UPDATE
                     setting_value = VALUES(setting_value),
                     updated_by = 'web_ui',
                     updated_at = NOW()
-            """, (data.trading_mode,))
-            mode_name = '趋势跟随' if data.trading_mode == 'trend_following' else '信号确认'
-            updates.append(f"交易模式: {mode_name}")
+            """, (value,))
+            updates.append(f"信号确认: {'启用' if data.signal_confirmation_enabled else '禁用'}")
+
+        if data.trend_following_enabled is not None:
+            value = '1' if data.trend_following_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('trend_following_enabled', %s, '趋势跟随模式开关 (1=启用, 0=禁用)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"趋势跟随: {'启用' if data.trend_following_enabled else '禁用'}")
 
         conn.commit()
         cursor.close()

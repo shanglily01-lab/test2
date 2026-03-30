@@ -64,7 +64,8 @@ class SmartDecisionBrain:
         self._load_config()
 
         self.threshold = 55  # 开仓阈值 (信号确认模式基础阈值)
-        self.trading_mode = 'trend_following'  # 交易模式: signal_confirmation / trend_following
+        self.signal_confirmation_enabled = True   # 信号确认模式: net_ws>50 时, 分数>=threshold 开仓
+        self.trend_following_enabled = True        # 趋势跟随模式: net_ws 20~50 时, 分数 20~50 开仓
         self.max_threshold = 150  # 🔥 评分上限：拒绝150+分信号(数据显示高分=追涨杀跌=亏损)
 
         # 初始化信号黑名单检查器（动态加载，5分钟缓存）
@@ -751,19 +752,29 @@ class SmartDecisionBrain:
             confirm_short_ok = False
 
             if 20 <= _net_ws <= 50:
-                if 20 <= long_score <= 50:
+                if self.trend_following_enabled and 20 <= long_score <= 50:
                     trend_long_ok = True
                     logger.debug(f"[TF-LONG] {symbol} net_ws={_net_ws:.1f} long_score={long_score} 趋势跟随LONG")
+                elif not self.trend_following_enabled:
+                    logger.debug(f"[TF-SKIP] {symbol} net_ws={_net_ws:.1f} 趋势跟随已禁用")
             elif -50 <= _net_ws <= -20:
-                if 20 <= short_score <= 50:
+                if self.trend_following_enabled and 20 <= short_score <= 50:
                     trend_short_ok = True
                     logger.debug(f"[TF-SHORT] {symbol} net_ws={_net_ws:.1f} short_score={short_score} 趋势跟随SHORT")
+                elif not self.trend_following_enabled:
+                    logger.debug(f"[TF-SKIP] {symbol} net_ws={_net_ws:.1f} 趋势跟随已禁用")
             elif _net_ws > 50:
-                confirm_long_ok = (long_score >= self.threshold)
-                logger.debug(f"[SC-LONG] {symbol} net_ws={_net_ws:.1f} long_score={long_score} 信号确认LONG threshold={self.threshold}")
+                if self.signal_confirmation_enabled:
+                    confirm_long_ok = (long_score >= self.threshold)
+                    logger.debug(f"[SC-LONG] {symbol} net_ws={_net_ws:.1f} long_score={long_score} 信号确认LONG threshold={self.threshold}")
+                else:
+                    logger.debug(f"[SC-SKIP] {symbol} net_ws={_net_ws:.1f} 信号确认已禁用")
             elif _net_ws < -50:
-                confirm_short_ok = (short_score >= self.threshold)
-                logger.debug(f"[SC-SHORT] {symbol} net_ws={_net_ws:.1f} short_score={short_score} 信号确认SHORT threshold={self.threshold}")
+                if self.signal_confirmation_enabled:
+                    confirm_short_ok = (short_score >= self.threshold)
+                    logger.debug(f"[SC-SHORT] {symbol} net_ws={_net_ws:.1f} short_score={short_score} 信号确认SHORT threshold={self.threshold}")
+                else:
+                    logger.debug(f"[SC-SKIP] {symbol} net_ws={_net_ws:.1f} 信号确认已禁用")
             else:
                 logger.debug(f"[FLAT] {symbol} net_ws={_net_ws:.1f} 市场平坦(-20~+20)，不开仓")
 
@@ -3509,15 +3520,20 @@ class SmartTraderService:
                     try:
                         _tm_conn = self._get_connection()
                         _tm_cur = _tm_conn.cursor()
-                        _tm_cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='trading_mode'")
-                        _tm_row = _tm_cur.fetchone()
+                        _tm_cur.execute("""
+                            SELECT setting_key, setting_value FROM system_settings
+                            WHERE setting_key IN ('signal_confirmation_enabled', 'trend_following_enabled')
+                        """)
+                        _tm_rows = {r[0]: r[1] for r in _tm_cur.fetchall()}
                         _tm_cur.close(); _tm_conn.close()
-                        new_mode = (_tm_row[0] if _tm_row else None) or 'trend_following'
-                        if new_mode != self.trading_mode:
-                            logger.info(f"[TRADING-MODE] 交易模式切换: {self.trading_mode} -> {new_mode}")
-                            self.trading_mode = new_mode
+                        new_sc = int(float(_tm_rows.get('signal_confirmation_enabled', '1'))) == 1
+                        new_tf = int(float(_tm_rows.get('trend_following_enabled', '1'))) == 1
+                        if new_sc != self.signal_confirmation_enabled or new_tf != self.trend_following_enabled:
+                            logger.info(f"[TRADING-MODE] 模式更新: 信号确认={'ON' if new_sc else 'OFF'} 趋势跟随={'ON' if new_tf else 'OFF'}")
+                            self.signal_confirmation_enabled = new_sc
+                            self.trend_following_enabled = new_tf
                     except Exception as e:
-                        logger.warning(f"[CONFIG-RELOAD] 重新加载trading_mode失败: {e}")
+                        logger.warning(f"[CONFIG-RELOAD] 重新加载交易模式配置失败: {e}")
 
                     last_config_reload = now
 

@@ -403,18 +403,19 @@
                             <div class="mb-3">
                                 <strong style="color: #e2b96a;">交易模式</strong>
                                 <div class="small text-muted mt-1">
-                                    信号确认：信号分≥60，Big4调整阈值，随时可开仓<br>
-                                    趋势跟随+信号确认：在信号确认基础上额外叠加趋势跟随——Big4强度20~50且净方向明确时，分数20~50也可开仓（捕捉早期趋势）
+                                    信号确认：net_ws&gt;50 时，信号分≥60（Big4动态调整阈值）开仓<br>
+                                    趋势跟随：net_ws 20~50 时，信号分 20~50 也可开仓（捕捉早期趋势）<br>
+                                    两者独立，可同时启用
                                 </div>
                             </div>
-                            <div class="d-flex align-items-center gap-3 mt-auto">
+                            <div class="d-flex align-items-center gap-3 mt-auto flex-wrap">
                                 <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
-                                    <input type="radio" name="tradingMode" id="modeSignal" value="signal_confirmation">
-                                    <span>仅信号确认</span>
+                                    <input type="checkbox" id="modeSignal">
+                                    <span>信号确认（net_ws&gt;50，分数≥60）</span>
                                 </label>
                                 <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
-                                    <input type="radio" name="tradingMode" id="modeTrend" value="trend_following">
-                                    <span>趋势跟随 + 信号确认（Big4强度20~50，分数20~50）</span>
+                                    <input type="checkbox" id="modeTrend">
+                                    <span>趋势跟随（net_ws 20~50，分数 20~50）</span>
                                 </label>
                             </div>
                         </div>
@@ -723,9 +724,9 @@ Loading...
                     document.getElementById('uCoinStyleStatus').textContent = uCoinStyleEnabled ? '✅ 运行中' : '⏸️ 已暂停';
                     document.getElementById('uCoinStyleStatus').style.color = uCoinStyleEnabled ? '#4ecca3' : '#ffc107';
 
-                    // 更新交易模式
-                    const mode = data.trading_mode || 'signal_confirmation';
-                    document.querySelector(`input[name="tradingMode"][value="${mode}"]`).checked = true;
+                    // 更新交易模式（复选框）
+                    document.getElementById('modeSignal').checked = data.signal_confirmation_enabled !== false;
+                    document.getElementById('modeTrend').checked = data.trend_following_enabled !== false;
                 }
             } catch (error) {
                 console.error('加载交易服务状态失败:', error);
@@ -751,7 +752,8 @@ Loading...
                         predictor_enabled: document.getElementById('predictorToggle').checked,
                         btc_momentum_enabled: document.getElementById('btcMomentumToggle').checked,
                         u_coin_style_enabled: document.getElementById('uCoinStyleToggle').checked,
-                        trading_mode: document.querySelector('input[name="tradingMode"]:checked')?.value || 'signal_confirmation'
+                        signal_confirmation_enabled: document.getElementById('modeSignal').checked,
+                        trend_following_enabled: document.getElementById('modeTrend').checked
                     })
                 });
 
