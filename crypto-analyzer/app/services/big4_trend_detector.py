@@ -996,13 +996,17 @@ class Big4TrendDetector:
         bearish_count = sum(1 for k in klines if float(k['close_price']) < float(k['open_price']))
         bullish_count = 16 - bearish_count
 
+        # BTC 是市场领头羊，阳线数量比价格涨幅更能反映趋势，放宽 BULLISH/BEARISH 阈值
+        bullish_threshold = 0.2 if symbol == 'BTC/USDT' else 0.3
+        bearish_threshold = -0.2 if symbol == 'BTC/USDT' else -0.3
+
         if bearish_count >= 11 and price_change_pct <= -0.5:
             signal    = 'STRONG_BEARISH'
             dominant  = 'BEAR'
             raw_score = -bearish_count
             strength  = min(int(bearish_count / 16 * 100), 100)
             reason    = f"15M强空头({bearish_count}/16阴线,区间{price_change_pct:.2f}%)"
-        elif bearish_count >= 9 and price_change_pct <= -0.3:
+        elif bearish_count >= 9 and price_change_pct <= bearish_threshold:
             signal    = 'BEARISH'
             dominant  = 'BEAR'
             raw_score = -bearish_count
@@ -1014,7 +1018,7 @@ class Big4TrendDetector:
             raw_score = bullish_count
             strength  = min(int(bullish_count / 16 * 100), 100)
             reason    = f"15M强多头({bullish_count}/16阳线,区间{price_change_pct:+.2f}%)"
-        elif bullish_count >= 9 and price_change_pct >= 0.3:
+        elif bullish_count >= 9 and price_change_pct >= bullish_threshold:
             signal    = 'BULLISH'
             dominant  = 'BULL'
             raw_score = bullish_count
