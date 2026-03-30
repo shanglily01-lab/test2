@@ -24,7 +24,7 @@ except ImportError:
                     _k, _v = _line.split('=', 1)
                     os.environ.setdefault(_k.strip(), _v.strip())
 
-SYMBOLS_TO_BAN = ["AIN/USDT", "FET/USDT", "ARIA/USDT", "FHE/USDT", "ALLO/USDT", "1000CHEEMS/USDT"]
+SYMBOLS_TO_BAN = []
 REASON = "手动加入黑名单3级，永久禁止交易"
 
 

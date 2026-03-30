@@ -79,34 +79,64 @@ class DailyReviewReport:
     # ──────────────────────────────────────────────────────────────────────────
     def analyze_market_movers(self, traded_symbols: set) -> dict:
         """
-        从 price_stats_24h 取全部币种最新涨跌幅，
+        从 kline_data 1h K线计算全市场24h涨跌幅，
         返回 TOP8 涨幅 / TOP8 跌幅 及市场格局统计。
+        price_stats_24h 数据过时且覆盖不全，不再使用。
         """
+        import time as _time
+        now_ms     = int(_time.time() * 1000)
+        ts_2h_ago  = now_ms - 2  * 3600 * 1000   # 取最新1h收盘
+        ts_22h_ago = now_ms - 22 * 3600 * 1000   # 24h前窗口上限
+        ts_26h_ago = now_ms - 26 * 3600 * 1000   # 24h前窗口下限
+
         conn = self._conn()
         try:
             cur = conn.cursor()
+            # 最新1h K线（每个symbol取最大open_time）
             cur.execute("""
-                SELECT symbol, current_price, change_24h, volume_24h
-                FROM price_stats_24h
-                WHERE current_price IS NOT NULL AND change_24h IS NOT NULL
-                ORDER BY change_24h DESC
-            """)
-            rows = cur.fetchall()
+                SELECT k.symbol, k.close_price as current_price, k.volume as volume_1h
+                FROM kline_data k
+                INNER JOIN (
+                    SELECT symbol, MAX(open_time) as max_ot
+                    FROM kline_data
+                    WHERE timeframe='1h' AND open_time >= %s
+                    GROUP BY symbol
+                ) lat ON k.symbol=lat.symbol AND k.open_time=lat.max_ot AND k.timeframe='1h'
+            """, (ts_2h_ago,))
+            new_rows = {r['symbol']: r for r in cur.fetchall()}
+
+            # 约24h前的1h K线（22h~26h前窗口内取最近的）
+            cur.execute("""
+                SELECT k.symbol, k.close_price as price_24h_ago
+                FROM kline_data k
+                INNER JOIN (
+                    SELECT symbol, MAX(open_time) as max_ot
+                    FROM kline_data
+                    WHERE timeframe='1h' AND open_time >= %s AND open_time <= %s
+                    GROUP BY symbol
+                ) old ON k.symbol=old.symbol AND k.open_time=old.max_ot AND k.timeframe='1h'
+            """, (ts_26h_ago, ts_22h_ago))
+            old_rows = {r['symbol']: r for r in cur.fetchall()}
         finally:
             conn.close()
 
-        if not rows:
+        if not new_rows:
             return {'top_gainers': [], 'top_losers': [], 'up_count': 0, 'down_count': 0, 'total': 0}
 
         all_coins = []
-        for r in rows:
-            chg = float(r['change_24h'] or 0)
-            sym = r['symbol']
+        for sym, nr in new_rows.items():
+            or_ = old_rows.get(sym)
+            if not or_:
+                continue  # 没有24h前数据，跳过
+            cur_price  = float(nr['current_price'] or 0)
+            old_price  = float(or_['price_24h_ago'] or 0)
+            if old_price <= 0:
+                continue
+            chg = (cur_price - old_price) / old_price * 100
             all_coins.append({
                 'symbol':        sym,
-                'current_price': float(r['current_price'] or 0),
-                'change_pct':    chg,
-                'volume_24h':    float(r['volume_24h'] or 0),
+                'current_price': cur_price,
+                'change_pct':    round(chg, 2),
                 'has_trade':     sym in traded_symbols,
             })
 
@@ -114,9 +144,9 @@ class DailyReviewReport:
         up_count   = sum(1 for c in all_coins if c['change_pct'] > 0)
         down_count = sum(1 for c in all_coins if c['change_pct'] < 0)
 
-        # 只取真正下跌的币种（change_pct < 0），最多8个，按跌幅绝对值降序
+        # 只取真正下跌的币种，按跌幅绝对值降序，最多8个
         losers = [c for c in all_coins if c['change_pct'] < 0]
-        top_losers = losers[-8:][::-1] if len(losers) >= 8 else losers[::-1]
+        top_losers = list(reversed(losers[-8:])) if len(losers) >= 8 else list(reversed(losers))
 
         return {
             'top_gainers': all_coins[:8],
