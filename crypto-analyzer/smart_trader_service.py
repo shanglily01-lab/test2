@@ -64,7 +64,7 @@ class SmartDecisionBrain:
         self._load_config()
 
         self.threshold = 55  # 开仓阈值 (信号确认模式基础阈值)
-        self.trading_mode = 'signal_confirmation'  # 交易模式: signal_confirmation / trend_following
+        self.trading_mode = 'trend_following'  # 交易模式: signal_confirmation / trend_following
         self.max_threshold = 150  # 🔥 评分上限：拒绝150+分信号(数据显示高分=追涨杀跌=亏损)
 
         # 初始化信号黑名单检查器（动态加载，5分钟缓存）
@@ -3576,7 +3576,7 @@ class SmartTraderService:
                         _tm_cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='trading_mode'")
                         _tm_row = _tm_cur.fetchone()
                         _tm_cur.close(); _tm_conn.close()
-                        new_mode = (_tm_row[0] if _tm_row else None) or 'signal_confirmation'
+                        new_mode = (_tm_row[0] if _tm_row else None) or 'trend_following'
                         if new_mode != self.trading_mode:
                             logger.info(f"[TRADING-MODE] 交易模式切换: {self.trading_mode} -> {new_mode}")
                             self.trading_mode = new_mode
