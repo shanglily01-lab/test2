@@ -3802,27 +3802,17 @@ class SmartTraderService:
                         logger.error(f"[BIG4-ERROR] Big4检测失败: {e}")
                         big4_result = None
 
-                    # 🔥 只做趋势单 - Big4中性检查（可配置禁用）
+                    # Big4状态记录（阈值已在 scan_all() 中处理，此处不再重复封锁）
                     if self.big4_filter_config.get('enabled', True):
                         if big4_result:
                             big4_signal = big4_result.get('overall_signal', 'NEUTRAL')
                             big4_strength = big4_result.get('signal_strength', 0)
-                            logger.info(f"📊 [TRADING-MODE] 固定趋势模式 | Big4: {big4_signal}({big4_strength:.1f})")
-
-                            # 🚫 Big4中性时完全禁止开仓
-                            # Big4中性意味着市场方向不明确，风险太高，完全禁止开仓
-                            if big4_signal == 'NEUTRAL':
-                                logger.warning(f"🚫 [BIG4-NEUTRAL-BLOCK] {symbol} Big4中性市场(强度{big4_strength:.1f}), 禁止开仓")
-                                continue
-                            # 🚫 Big4信号强度不足(< 50)时视为中性，禁止开仓
-                            if big4_signal in ('BEARISH', 'STRONG_BEARISH', 'BULLISH', 'STRONG_BULLISH') and big4_strength < 50:
-                                logger.warning(f"🚫 [BIG4-WEAK-BLOCK] {symbol} Big4信号强度不足({big4_strength:.1f}<50), 禁止开仓")
-                                continue
+                            logger.info(f"[BIG4] {symbol} Big4: {big4_signal}({big4_strength:.1f})")
                         else:
                             logger.warning(f"[BIG4-ERROR] {symbol} Big4数据不可用, 跳过开仓")
                             continue
                     else:
-                        logger.debug(f"[BIG4-DISABLED] {symbol} Big4过滤已禁用，跳过中性检查")
+                        logger.debug(f"[BIG4-DISABLED] {symbol} Big4过滤已禁用")
 
                     # ========== 只接受趋势信号 ==========
                     signal_type = opp.get('signal_type', '')
@@ -3852,11 +3842,6 @@ class SmartTraderService:
                                 symbol_signal = big4_result.get('overall_signal', 'NEUTRAL')
                                 signal_strength = big4_result.get('signal_strength', 0)
                                 logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
-
-                            # 🚫 Big4中性已在上面被阻止，这里不应该到达
-                            if symbol_signal == 'NEUTRAL':
-                                logger.error(f"[LOGIC-ERROR] {symbol} NEUTRAL信号不应到达此处,已在前面被阻止")
-                                continue
 
                             # ========== 破位否决检查 ==========
                             # Big4强度>=12时，完全禁止逆向开仓
