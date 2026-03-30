@@ -3818,15 +3818,15 @@ class SmartTraderService:
                             if big4_strength < 20:
                                 logger.warning(f"[BIG4-WEAK] {symbol} Big4强度过低({big4_strength:.1f}<20), 禁止开仓")
                                 continue
-                            # NEUTRAL 时按净方向过滤：净多只允许 LONG，净空只允许 SHORT
-                            if big4_signal == 'NEUTRAL':
+                            # 趋势跟随区间(强度20~50)：按净方向封死反向单
+                            if 20 <= big4_strength <= 50:
                                 b4_bull_w = big4_result.get('bullish_weight', 0)
                                 b4_bear_w = big4_result.get('bearish_weight', 0)
                                 if b4_bull_w > b4_bear_w and new_side == 'SHORT':
-                                    logger.warning(f"[BIG4-DIR] {symbol} Big4净多({b4_bull_w*100:.0f}%>{b4_bear_w*100:.0f}%), 禁止开空")
+                                    logger.warning(f"[TF-DIR] {symbol} 趋势跟随净多({b4_bull_w*100:.0f}%>{b4_bear_w*100:.0f}%), 封死空单")
                                     continue
                                 if b4_bear_w > b4_bull_w and new_side == 'LONG':
-                                    logger.warning(f"[BIG4-DIR] {symbol} Big4净空({b4_bear_w*100:.0f}%>{b4_bull_w*100:.0f}%), 禁止开多")
+                                    logger.warning(f"[TF-DIR] {symbol} 趋势跟随净空({b4_bear_w*100:.0f}%>{b4_bull_w*100:.0f}%), 封死多单")
                                     continue
                         else:
                             logger.warning(f"[BIG4-ERROR] {symbol} Big4数据不可用, 跳过开仓")
