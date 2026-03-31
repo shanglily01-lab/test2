@@ -1727,6 +1727,21 @@ class SmartTraderService:
 
         return True, "时间框架一致"
 
+    def _get_sl_tp_from_settings(self):
+        """从 system_settings 读取止损/止盈比例，失败时返回默认值 2%/5%"""
+        try:
+            conn = self._get_connection()
+            cur = conn.cursor(pymysql.cursors.DictCursor)
+            cur.execute("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('stop_loss_pct','take_profit_pct')")
+            rows = {r['setting_key']: r['setting_value'] for r in cur.fetchall()}
+            cur.close()
+            sl = float(rows.get('stop_loss_pct', 0.02))
+            tp = float(rows.get('take_profit_pct', 0.05))
+            return sl, tp
+        except Exception as e:
+            logger.warning(f"[SL/TP] 读取system_settings失败，使用默认值: {e}")
+            return 0.02, 0.05
+
     def calculate_volatility_adjusted_stop_loss(self, signal_components: dict, base_stop_loss_pct: float) -> float:
         """
         根据波动率调整止损百分比
@@ -2153,38 +2168,15 @@ class SmartTraderService:
                 logger.info(f"[RANGE_TP_SL] {symbol} 使用布林带策略止盈止损: TP=${take_profit:.4f}({take_profit_pct*100:.2f}%), SL=${stop_loss:.4f}({stop_loss_pct*100:.2f}%)")
 
             else:
-                # 趋势模式: 使用原有逻辑
-                # 使用自适应参数计算止损
-                base_stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
-
-                # 缺陷5修复: 波动率自适应止损
-                stop_loss_pct = self.calculate_volatility_adjusted_stop_loss(signal_components, base_stop_loss_pct)
-
-                # 问题4优化: 使用波动率配置计算动态止盈
-                volatility_profile = self.opt_config.get_symbol_volatility_profile(symbol)
-                if volatility_profile:
-                    # 根据方向使用对应的止盈配置
-                    if side == 'LONG' and volatility_profile.get('long_fixed_tp_pct'):
-                        take_profit_pct = float(volatility_profile['long_fixed_tp_pct'])
-                        logger.debug(f"[TP_DYNAMIC] {symbol} LONG 使用15M阳线动态止盈: {take_profit_pct*100:.3f}%")
-                    elif side == 'SHORT' and volatility_profile.get('short_fixed_tp_pct'):
-                        take_profit_pct = float(volatility_profile['short_fixed_tp_pct'])
-                        logger.debug(f"[TP_DYNAMIC] {symbol} SHORT 使用15M阴线动态止盈: {take_profit_pct*100:.3f}%")
-                    else:
-                        # 回退到自适应参数
-                        take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
-                        logger.debug(f"[TP_FALLBACK] {symbol} {side} 波动率配置不全,使用自适应参数: {take_profit_pct*100:.2f}%")
-                else:
-                    # 回退到自适应参数
-                    take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
-                    logger.debug(f"[TP_FALLBACK] {symbol} 无波动率配置,使用自适应参数: {take_profit_pct*100:.2f}%")
+                # 从 system_settings 读取止损止盈比例
+                stop_loss_pct, take_profit_pct = self._get_sl_tp_from_settings()
 
                 if side == 'LONG':
-                    stop_loss = current_price * (1 - stop_loss_pct)    # 止损
-                    take_profit = current_price * (1 + take_profit_pct) # 止盈
+                    stop_loss = current_price * (1 - stop_loss_pct)
+                    take_profit = current_price * (1 + take_profit_pct)
                 else:  # SHORT
-                    stop_loss = current_price * (1 + stop_loss_pct)    # 止损
-                    take_profit = current_price * (1 - take_profit_pct) # 止盈
+                    stop_loss = current_price * (1 + stop_loss_pct)
+                    take_profit = current_price * (1 - take_profit_pct)
 
             logger.info(f"[OPEN] {symbol} {side} | 价格: ${current_price:.4f} ({price_source}) | 数量: {quantity:.2f}")
 
