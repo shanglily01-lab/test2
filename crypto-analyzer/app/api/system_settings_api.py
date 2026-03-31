@@ -183,7 +183,7 @@ async def update_batch_entry_strategy(data: BatchEntryStrategyUpdate):
         conn.close()
 
         strategy_name = 'V2 K线回调策略' if data.strategy == 'kline_pullback' else 'V1 价格分位数策略'
-        logger.info(f"✅ 分批建仓策略已更新为: {strategy_name} ({data.strategy})")
+        logger.info(f"[OK] 分批建仓策略已更新为: {strategy_name} ({data.strategy})")
 
         return {
             'success': True,
@@ -231,7 +231,7 @@ async def update_big4_filter(data: Big4FilterUpdate):
         conn.close()
 
         status_text = '已启用' if data.enabled else '已禁用'
-        logger.info(f"✅ Big4过滤器{status_text}")
+        logger.info(f"[OK] Big4过滤器{status_text}")
 
         return {
             'success': True,
@@ -342,7 +342,7 @@ async def update_trading_direction(data: TradingDirectionUpdate):
         conn.close()
 
         update_msg = ', '.join(updates)
-        logger.info(f"✅ 交易方向已更新: {update_msg}")
+        logger.info(f"[OK] 交易方向已更新: {update_msg}")
 
         return {
             'success': True,
@@ -391,7 +391,7 @@ async def update_setting(key: str, data: SystemSetting):
         cursor.close()
         conn.close()
 
-        logger.info(f"✅ 配置项 {key} 已更新为: {data.setting_value}")
+        logger.info(f"[OK] 配置项 {key} 已更新为: {data.setting_value}")
 
         return {
             'success': True,
@@ -503,7 +503,7 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_by = 'web_ui',
                     updated_at = NOW()
             """, (value,))
-            status = '✅ 启动' if data.usdt_futures_enabled else '⏸️ 暂停'
+            status = '启动' if data.usdt_futures_enabled else '暂停'
             updates.append(f"U本位合约: {status}")
 
         if data.coin_futures_enabled is not None:
@@ -516,7 +516,7 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_by = 'web_ui',
                     updated_at = NOW()
             """, (value,))
-            status = '✅ 启动' if data.coin_futures_enabled else '⏸️ 暂停'
+            status = '启动' if data.coin_futures_enabled else '暂停'
             updates.append(f"币本位合约: {status}")
 
         if data.live_trading_enabled is not None:
@@ -598,7 +598,7 @@ async def update_trading_services(data: TradingServicesUpdate):
         if data.stop_loss_pct is not None:
             cursor.execute("""
                 INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('stop_loss_pct', %s, '止损比例（小数，如0.02表示2%）', 'web_ui', NOW())
+                VALUES ('stop_loss_pct', %s, '止损比例（小数，如0.02表示2%%）', 'web_ui', NOW())
                 ON DUPLICATE KEY UPDATE
                     setting_value = VALUES(setting_value),
                     updated_by = 'web_ui',
@@ -609,7 +609,7 @@ async def update_trading_services(data: TradingServicesUpdate):
         if data.take_profit_pct is not None:
             cursor.execute("""
                 INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('take_profit_pct', %s, '止盈比例（小数，如0.05表示5%）', 'web_ui', NOW())
+                VALUES ('take_profit_pct', %s, '止盈比例（小数，如0.05表示5%%）', 'web_ui', NOW())
                 ON DUPLICATE KEY UPDATE
                     setting_value = VALUES(setting_value),
                     updated_by = 'web_ui',
@@ -622,7 +622,7 @@ async def update_trading_services(data: TradingServicesUpdate):
         conn.close()
 
         update_msg = ', '.join(updates)
-        logger.info(f"✅ 交易服务状态已更新: {update_msg}")
+        logger.info(f"[OK] 交易服务状态已更新: {update_msg}")
 
         return {
             'success': True,
@@ -676,7 +676,7 @@ async def update_max_hold_hours(data: MaxHoldHoursUpdate):
         """, (str(hours), str(hours)))
         cursor.close()
         conn.close()
-        logger.info(f"✅ max_hold_hours 已更新为: {hours}小时")
+        logger.info(f"[OK] max_hold_hours 已更新为: {hours}小时")
         return {
             'success': True,
             'message': f'最大持仓时间已更新为 {hours} 小时',
@@ -779,7 +779,7 @@ async def set_admin_password(request: Request):
         conn.commit()
         cursor.close()
         conn.close()
-        logger.info("✅ 管理员密码已更新")
+        logger.info("[OK] 管理员密码已更新")
         return {'success': True, 'message': '密码已更新'}
     except Exception as e:
         logger.error(f"设置管理员密码失败: {e}")
