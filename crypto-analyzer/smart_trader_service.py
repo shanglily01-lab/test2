@@ -1161,7 +1161,7 @@ class SmartTraderService:
         self.account_id = 2
         self.position_size_usdt = 400  # 默认仓位
         self.blacklist_position_size_usdt = 100  # 黑名单交易对使用小仓位
-        self.max_positions = 999  # 不限制持仓数量
+        self.max_positions = 50
         self.leverage = 5
         self.scan_interval = 300
 
