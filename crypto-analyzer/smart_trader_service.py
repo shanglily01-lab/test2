@@ -1605,7 +1605,7 @@ class SmartTraderService:
             cursor = conn.cursor()
             cursor.execute("""
                 SELECT COUNT(*) FROM futures_positions
-                WHERE status = 'open' AND account_id = %s
+                WHERE status = 'OPEN' AND account_id = %s
             """, (self.account_id,))
             result = cursor.fetchone()
             cursor.close()
