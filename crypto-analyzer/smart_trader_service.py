@@ -1212,6 +1212,14 @@ class SmartTraderService:
             self.batch_entry_strategy = get_batch_entry_strategy()
             logger.info(f"📊 建仓策略: {self.batch_entry_strategy} ({'V2回调' if self.batch_entry_strategy == 'kline_pullback' else 'V1采样'})")
 
+        # 初始化 api_key_service 全局单例（供 SmartExitOptimizer._close_live_positions_on_exchange 使用）
+        try:
+            from app.services.api_key_service import init_api_key_service
+            init_api_key_service(self.db_config)
+            logger.info("api_key_service 全局单例已初始化")
+        except Exception as _aks_e:
+            logger.error(f"api_key_service 初始化失败: {_aks_e}")
+
         # 初始化智能平仓优化器
         if self.smart_exit_config.get('enabled'):
             self.smart_exit_optimizer = SmartExitOptimizer(
