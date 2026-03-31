@@ -832,6 +832,19 @@ class UCoinStyleTraderService:
 
     # ── 开仓 ──────────────────────────────────────────────
 
+    def _get_sl_tp_from_settings(self):
+        """从 system_settings 读取止损/止盈比例，失败时返回默认值 2%/5%"""
+        try:
+            conn = self._get_connection()
+            cur = conn.cursor(pymysql.cursors.DictCursor)
+            cur.execute("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('stop_loss_pct','take_profit_pct')")
+            rows = {r['setting_key']: r['setting_value'] for r in cur.fetchall()}
+            cur.close()
+            return float(rows.get('stop_loss_pct', 0.02)), float(rows.get('take_profit_pct', 0.05))
+        except Exception as e:
+            logger.warning(f"[SL/TP] 读取system_settings失败，使用默认值: {e}")
+            return 0.02, 0.05
+
     def open_position(self, opp: dict) -> bool:
         symbol = opp['symbol']
         side   = opp['side']
@@ -878,14 +891,8 @@ class UCoinStyleTraderService:
         except Exception:
             pass
 
-        # 自适应参数
-        ap = self.brain.adaptive_long if side == 'LONG' else self.brain.adaptive_short
-        sl_pct = ap.get('stop_loss_pct', 0.03)
-        tp_pct = ap.get('take_profit_pct', 0.02)
-
-        # 波动率自适应止损
-        if 'volatility_high' in signal_components:
-            sl_pct = sl_pct * 1.5
+        # 从 system_settings 读取止损止盈
+        sl_pct, tp_pct = self._get_sl_tp_from_settings()
 
         quantity      = margin * self.LEVERAGE / entry_price
         notional      = quantity * entry_price
