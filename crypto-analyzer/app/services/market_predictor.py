@@ -424,9 +424,20 @@ class MarketPredictor:
         DEFAULT_MARGIN = 400
         RESTRICTED_MARGIN = 100  # rating_level=1 限制交易对
         LEVERAGE = 5
-        SL_PCT = 0.02
-        TP_PCT = 0.06
         ACCOUNT_ID = 2
+        # 从 system_settings 读取止损止盈，默认 2%/5%
+        try:
+            _sc = self._get_conn()
+            _scur = _sc.cursor()
+            _scur.execute("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('stop_loss_pct','take_profit_pct')")
+            _rows = {r['setting_key']: r['setting_value'] for r in _scur.fetchall()}
+            _scur.close(); _sc.close()
+            SL_PCT = float(_rows.get('stop_loss_pct', 0.02))
+            TP_PCT = float(_rows.get('take_profit_pct', 0.05))
+        except Exception as _e:
+            logger.warning(f"[预测器] 读取SL/TP配置失败，使用默认值: {_e}")
+            SL_PCT = 0.02
+            TP_PCT = 0.05
 
         # 查询 1级黑名单（限制）交易对
         try:

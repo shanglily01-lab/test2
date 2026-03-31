@@ -23,8 +23,8 @@ class BTCMomentumTrader:
     WINDOWS_MIN = [15, 30, 45, 60]  # 检测窗口（分钟）
     PAPER_MARGIN = 400         # 模拟盘每单保证金(U)
     LEVERAGE = 5
-    STOP_LOSS_PCT = 0.02       # 2%
-    TAKE_PROFIT_PCT = 0.06     # 6%
+    STOP_LOSS_PCT = 0.02       # 默认2%，运行时从system_settings读取
+    TAKE_PROFIT_PCT = 0.05     # 默认5%，运行时从system_settings读取
     PAPER_ACCOUNT_ID = 2
 
     def __init__(self, db_config: dict, ws_price_service=None):
@@ -39,6 +39,20 @@ class BTCMomentumTrader:
             **self.db_config, charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor, autocommit=True
         )
+
+    def _get_sl_tp_from_settings(self):
+        """从 system_settings 读取止损止盈比例，默认 2%/5%"""
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('stop_loss_pct','take_profit_pct')")
+            rows = {r['setting_key']: r['setting_value'] for r in cur.fetchall()}
+            cur.close(); conn.close()
+            return float(rows.get('stop_loss_pct', 0.02)), float(rows.get('take_profit_pct', 0.05))
+        except Exception as e:
+            from loguru import logger
+            logger.warning(f"[BTC动量] 读取SL/TP配置失败，使用默认值: {e}")
+            return 0.02, 0.05
 
     # ──────────────────────────────────────────
     # 价格跟踪
@@ -229,15 +243,16 @@ class BTCMomentumTrader:
                               entry_price: float, trigger_info: str) -> bool:
         """开模拟盘仓位"""
         try:
+            sl_pct, tp_pct = self._get_sl_tp_from_settings()
             margin = self.PAPER_MARGIN
             notional = margin * self.LEVERAGE
             qty = round(notional / entry_price, 6)
             if direction == 'LONG':
-                sl = round(entry_price * (1 - self.STOP_LOSS_PCT), 8)
-                tp = round(entry_price * (1 + self.TAKE_PROFIT_PCT), 8)
+                sl = round(entry_price * (1 - sl_pct), 8)
+                tp = round(entry_price * (1 + tp_pct), 8)
             else:
-                sl = round(entry_price * (1 + self.STOP_LOSS_PCT), 8)
-                tp = round(entry_price * (1 - self.TAKE_PROFIT_PCT), 8)
+                sl = round(entry_price * (1 + sl_pct), 8)
+                tp = round(entry_price * (1 - tp_pct), 8)
 
             conn = self._get_conn()
             cur = conn.cursor()
@@ -251,7 +266,7 @@ class BTCMomentumTrader:
                 VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'open','BTC_MOMENTUM',%s,NOW(),%s,0,0)
             """, (self.PAPER_ACCOUNT_ID, symbol, direction, self.LEVERAGE, qty,
                   round(notional, 2), margin, entry_price, entry_price,
-                  sl, tp, self.STOP_LOSS_PCT * 100, self.TAKE_PROFIT_PCT * 100,
+                  sl, tp, sl_pct * 100, tp_pct * 100,
                   trigger_info, planned_close_time))
             cur.close(); conn.close()
             logger.info(f"[BTC动量] 开仓 {symbol} {direction} @ {entry_price:.6g}  SL={sl:.6g}  TP={tp:.6g}")
@@ -275,6 +290,7 @@ class BTCMomentumTrader:
             return
 
         MAX_LIVE_POSITIONS = 5
+        sl_pct, tp_pct = self._get_sl_tp_from_settings()
 
         for ak in active_keys:
             try:
@@ -308,8 +324,8 @@ class BTCMomentumTrader:
                     position_side=direction,
                     quantity=qty,
                     leverage=lev,
-                    stop_loss_pct=Decimal(str(self.STOP_LOSS_PCT * 100)),
-                    take_profit_pct=Decimal(str(self.TAKE_PROFIT_PCT * 100)),
+                    stop_loss_pct=Decimal(str(sl_pct * 100)),
+                    take_profit_pct=Decimal(str(tp_pct * 100)),
                     source='BTC_MOMENTUM',
                     paper_position_id=paper_pos_id
                 )
@@ -319,8 +335,8 @@ class BTCMomentumTrader:
                         from app.services.trade_notifier import get_trade_notifier
                         notifier = get_trade_notifier()
                         if notifier:
-                            sl = round(entry_price * (1 - self.STOP_LOSS_PCT), 4) if direction == 'LONG' else round(entry_price * (1 + self.STOP_LOSS_PCT), 4)
-                            tp = round(entry_price * (1 + self.TAKE_PROFIT_PCT), 4) if direction == 'LONG' else round(entry_price * (1 - self.TAKE_PROFIT_PCT), 4)
+                            sl = round(entry_price * (1 - sl_pct), 4) if direction == 'LONG' else round(entry_price * (1 + sl_pct), 4)
+                            tp = round(entry_price * (1 + tp_pct), 4) if direction == 'LONG' else round(entry_price * (1 - tp_pct), 4)
                             notifier.notify_open_position(
                                 symbol=symbol, direction=direction,
                                 quantity=float(qty), entry_price=entry_price,

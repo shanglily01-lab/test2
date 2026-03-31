@@ -102,9 +102,7 @@ class KlinePullbackEntryExecutor:
         Returns:
             (止损价格, 止盈价格, 止损百分比, 止盈百分比)
         """
-        # 固定止损2%，止盈5%
-        SL_PCT = 0.02
-        TP_PCT = 0.05
+        SL_PCT, TP_PCT = self._get_sl_tp_from_settings()
 
         if direction == 'LONG':
             stop_loss_price = current_price * (1 - SL_PCT)
@@ -114,6 +112,21 @@ class KlinePullbackEntryExecutor:
             take_profit_price = current_price * (1 - TP_PCT)
 
         return stop_loss_price, take_profit_price, SL_PCT, TP_PCT
+
+    def _get_sl_tp_from_settings(self):
+        """从 system_settings 读取止损止盈比例，默认 2%/5%"""
+        try:
+            conn = pymysql.connect(**self.db_config, autocommit=True)
+            cur = conn.cursor()
+            cur.execute("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('stop_loss_pct','take_profit_pct')")
+            rows = {r[0]: r[1] for r in cur.fetchall()}
+            cur.close(); conn.close()
+            sl = float(rows.get('stop_loss_pct', 0.02))
+            tp = float(rows.get('take_profit_pct', 0.05))
+            return sl, tp
+        except Exception as e:
+            logger.warning(f"[SL/TP] 读取system_settings失败，使用默认值: {e}")
+            return 0.02, 0.05
 
     def _calculate_volatility_adjusted_stop_loss(self, signal_components: dict, base_stop_loss_pct: float) -> float:
         """波动率自适应止损"""
