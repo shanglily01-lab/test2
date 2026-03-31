@@ -58,6 +58,8 @@ class TradingServicesUpdate(BaseModel):
     u_coin_style_enabled: Optional[bool] = None
     signal_confirmation_enabled: Optional[bool] = None
     trend_following_enabled: Optional[bool] = None
+    stop_loss_pct: Optional[float] = None
+    take_profit_pct: Optional[float] = None
 
 
 @router.get("/settings")
@@ -424,14 +426,15 @@ async def get_trading_services():
             WHERE setting_key IN ('u_futures_trading_enabled', 'coin_futures_trading_enabled',
                                   'live_trading_enabled', 'predictor_enabled',
                                   'btc_momentum_enabled', 'u_coin_style_enabled',
-                                  'signal_confirmation_enabled', 'trend_following_enabled')
+                                  'signal_confirmation_enabled', 'trend_following_enabled',
+                                  'stop_loss_pct', 'take_profit_pct')
         """)
 
         settings = cursor.fetchall()
         cursor.close()
         conn.close()
 
-        key_mapping = {
+        bool_keys = {
             'u_futures_trading_enabled': 'usdt_futures_enabled',
             'coin_futures_trading_enabled': 'coin_futures_enabled',
             'live_trading_enabled': 'live_trading_enabled',
@@ -451,12 +454,16 @@ async def get_trading_services():
             'u_coin_style_enabled': False,
             'signal_confirmation_enabled': True,
             'trend_following_enabled': True,
+            'stop_loss_pct': 0.02,
+            'take_profit_pct': 0.05,
         }
 
         for setting in settings:
             db_key = setting['setting_key']
-            frontend_key = key_mapping.get(db_key, db_key)
-            result[frontend_key] = int(float(setting['setting_value'])) == 1
+            if db_key in bool_keys:
+                result[bool_keys[db_key]] = int(float(setting['setting_value'])) == 1
+            elif db_key in ('stop_loss_pct', 'take_profit_pct'):
+                result[db_key] = float(setting['setting_value'])
 
         return {
             'success': True,
@@ -587,6 +594,28 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (value,))
             updates.append(f"趋势跟随: {'启用' if data.trend_following_enabled else '禁用'}")
+
+        if data.stop_loss_pct is not None:
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('stop_loss_pct', %s, '止损比例（小数，如0.02表示2%）', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (str(data.stop_loss_pct),))
+            updates.append(f"止损: {data.stop_loss_pct*100:.1f}%")
+
+        if data.take_profit_pct is not None:
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('take_profit_pct', %s, '止盈比例（小数，如0.05表示5%）', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (str(data.take_profit_pct),))
+            updates.append(f"止盈: {data.take_profit_pct*100:.1f}%")
 
         conn.commit()
         cursor.close()

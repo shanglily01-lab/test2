@@ -422,6 +422,24 @@
                     </div>
                 </div>
 
+                <!-- 止损止盈设置 -->
+                <div class="settings-card mb-3">
+                    <div class="setting-item">
+                        <div class="setting-header">止损 / 止盈比例</div>
+                        <div class="setting-description">所有策略（主策略、BTC动量、预测器）共用此配置</div>
+                        <div class="d-flex align-items-center gap-4 mt-2 flex-wrap">
+                            <label class="d-flex align-items-center gap-2">
+                                <span>止损 %</span>
+                                <input type="number" id="stopLossPct" min="0.5" max="10" step="0.1" style="width:80px;" class="form-control form-control-sm">
+                            </label>
+                            <label class="d-flex align-items-center gap-2">
+                                <span>止盈 %</span>
+                                <input type="number" id="takeProfitPct" min="0.5" max="50" step="0.1" style="width:80px;" class="form-control form-control-sm">
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="mb-3">
                     <div class="alert alert-warning" style="background: #3d2a00; border-color: #ffc107; color: #eee;">
                         <strong>⚠️ 注意:</strong> 停止交易服务只会阻止新的开仓，不会影响已有持仓的管理和平仓
@@ -727,6 +745,12 @@ Loading...
                     // 更新交易模式（复选框）
                     document.getElementById('modeSignal').checked = data.signal_confirmation_enabled !== false;
                     document.getElementById('modeTrend').checked = data.trend_following_enabled !== false;
+
+                    // 止损止盈
+                    const slRow = data.stop_loss_pct;
+                    const tpRow = data.take_profit_pct;
+                    document.getElementById('stopLossPct').value = slRow !== undefined ? (parseFloat(slRow) * 100).toFixed(1) : '2.0';
+                    document.getElementById('takeProfitPct').value = tpRow !== undefined ? (parseFloat(tpRow) * 100).toFixed(1) : '5.0';
                 }
             } catch (error) {
                 console.error('加载交易服务状态失败:', error);
@@ -753,7 +777,9 @@ Loading...
                         btc_momentum_enabled: document.getElementById('btcMomentumToggle').checked,
                         u_coin_style_enabled: document.getElementById('uCoinStyleToggle').checked,
                         signal_confirmation_enabled: document.getElementById('modeSignal').checked,
-                        trend_following_enabled: document.getElementById('modeTrend').checked
+                        trend_following_enabled: document.getElementById('modeTrend').checked,
+                        stop_loss_pct: parseFloat(document.getElementById('stopLossPct').value) / 100,
+                        take_profit_pct: parseFloat(document.getElementById('takeProfitPct').value) / 100
                     })
                 });
 

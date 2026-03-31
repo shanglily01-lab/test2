@@ -235,8 +235,24 @@
                 </label>
             </div>
         </div>
+        <!-- 止损止盈 -->
+        <div class="row" style="flex-direction:column;align-items:flex-start;gap:8px;padding-top:4px;">
+            <div class="row-label">止损 / 止盈比例（所有策略通用）</div>
+            <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:14px;">
+                    止损 %
+                    <input type="number" id="stopLossPct" min="0.5" max="10" step="0.1"
+                        style="width:70px;padding:4px 6px;border-radius:6px;border:1px solid #444;background:#1e1e1e;color:#eee;">
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:14px;">
+                    止盈 %
+                    <input type="number" id="takeProfitPct" min="0.5" max="50" step="0.1"
+                        style="width:70px;padding:4px 6px;border-radius:6px;border:1px solid #444;background:#1e1e1e;color:#eee;">
+                </label>
+            </div>
+        </div>
         <div style="padding:12px 16px;">
-            <button class="save-btn" onclick="saveServices()">💾 保存服务设置</button>
+            <button class="save-btn" onclick="saveServices()">保存服务设置</button>
         </div>
     </div>
     <div class="warn-banner">⚠️ 停止服务只阻止新开仓，已有持仓继续管理</div>
@@ -577,6 +593,8 @@ async function loadAll() {
             setPill('uCoinStyleStatus', d.u_coin_style_enabled || false);
             document.getElementById('modeSignal').checked = d.signal_confirmation_enabled !== false;
             document.getElementById('modeTrend').checked = d.trend_following_enabled !== false;
+            document.getElementById('stopLossPct').value = d.stop_loss_pct !== undefined ? (parseFloat(d.stop_loss_pct) * 100).toFixed(1) : '2.0';
+            document.getElementById('takeProfitPct').value = d.take_profit_pct !== undefined ? (parseFloat(d.take_profit_pct) * 100).toFixed(1) : '5.0';
         }
         if (holdR.success) {
             document.getElementById('holdHours').value = String(holdR.data.hours);
@@ -596,6 +614,8 @@ async function saveServices() {
         u_coin_style_enabled: document.getElementById('uCoinStyleToggle').checked,
         signal_confirmation_enabled: document.getElementById('modeSignal').checked,
         trend_following_enabled: document.getElementById('modeTrend').checked,
+        stop_loss_pct: parseFloat(document.getElementById('stopLossPct').value) / 100,
+        take_profit_pct: parseFloat(document.getElementById('takeProfitPct').value) / 100,
     };
     const r = await fetch(`${SYS}/trading-services`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
     if (r.success) { toast('✅ 服务设置已保存'); loadAll(); } else toast('❌ 保存失败', 'err');
