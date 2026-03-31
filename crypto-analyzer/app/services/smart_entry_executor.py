@@ -75,27 +75,8 @@ class SmartEntryExecutor:
         if not self.brain or not self.opt_config:
             return None, None, None, None
 
-        # 获取自适应参数
-        if direction == 'LONG':
-            adaptive_params = self.brain.adaptive_long
-        else:
-            adaptive_params = self.brain.adaptive_short
-
-        # 计算止损
-        base_stop_loss_pct = adaptive_params.get('stop_loss_pct', 0.03)
-        stop_loss_pct = self._calculate_volatility_adjusted_stop_loss(signal_components, base_stop_loss_pct)
-
-        # 计算止盈
-        volatility_profile = self.opt_config.get_symbol_volatility_profile(symbol)
-        if volatility_profile:
-            if direction == 'LONG' and volatility_profile.get('long_fixed_tp_pct'):
-                take_profit_pct = float(volatility_profile['long_fixed_tp_pct'])
-            elif direction == 'SHORT' and volatility_profile.get('short_fixed_tp_pct'):
-                take_profit_pct = float(volatility_profile['short_fixed_tp_pct'])
-            else:
-                take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
-        else:
-            take_profit_pct = adaptive_params.get('take_profit_pct', 0.02)
+        # 从 system_settings 读取止损止盈
+        stop_loss_pct, take_profit_pct = self._get_sl_tp_from_settings()
 
         # 计算具体价格
         if direction == 'LONG':
@@ -106,6 +87,20 @@ class SmartEntryExecutor:
             take_profit_price = current_price * (1 - take_profit_pct)
 
         return stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct
+
+    def _get_sl_tp_from_settings(self):
+        """从 system_settings 读取止损/止盈比例，失败时返回默认值 2%/5%"""
+        try:
+            conn = pymysql.connect(**self.db_config, charset='utf8mb4',
+                                   cursorclass=pymysql.cursors.DictCursor, autocommit=True)
+            cur = conn.cursor()
+            cur.execute("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('stop_loss_pct','take_profit_pct')")
+            rows = {r['setting_key']: r['setting_value'] for r in cur.fetchall()}
+            cur.close(); conn.close()
+            return float(rows.get('stop_loss_pct', 0.02)), float(rows.get('take_profit_pct', 0.05))
+        except Exception as e:
+            logger.warning(f"[SL/TP] 读取system_settings失败，使用默认值: {e}")
+            return 0.02, 0.05
 
     def _calculate_volatility_adjusted_stop_loss(self, signal_components: dict, base_stop_loss_pct: float) -> float:
         """波动率自适应止损"""
