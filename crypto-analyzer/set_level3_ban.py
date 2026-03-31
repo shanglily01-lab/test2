@@ -25,11 +25,7 @@ except ImportError:
                     os.environ.setdefault(_k.strip(), _v.strip())
 
 SYMBOLS_TO_BAN = [
-    'CRCL/USDT',
-    'MSTR/USDT',
-    'NOM/USDT',
-    'XAN/USDT',
-    'XVS/USDT',
+    'PIXEL/USDT',
 ]
 REASON = "手动加入黑名单3级，永久禁止交易"
 
