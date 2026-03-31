@@ -826,40 +826,31 @@ class BinanceFuturesEngine:
 
     def _place_stop_loss(self, symbol: str, position_side: str, quantity: Decimal,
                          stop_price: Decimal) -> Dict:
-        """
-        设置止损单
-
-        注意：从 2025-12-09 起，币安要求使用 Algo Order API (/fapi/v1/algoOrder)
-        来设置条件订单（STOP_MARKET, TAKE_PROFIT_MARKET 等）
-        """
+        """设置止损单 (STOP_MARKET)"""
         binance_symbol = self._convert_symbol(symbol)
-
-        # 止损方向与开仓相反
         side = 'SELL' if position_side == 'LONG' else 'BUY'
         stop_price = self._round_price(stop_price, symbol)
         quantity = self._round_quantity(quantity, symbol)
 
-        # 使用 Algo Order API 的 STOP_MARKET 类型
         params = {
             'symbol': binance_symbol,
             'side': side,
             'positionSide': position_side,
-            'algoType': 'CONDITIONAL',  # 条件单类型，必填参数
-            'type': 'STOP_MARKET',  # 订单类型
-            'triggerPrice': str(stop_price),  # 触发价格
+            'type': 'STOP_MARKET',
+            'stopPrice': str(stop_price),
             'quantity': str(quantity),
-            'workingType': 'MARK_PRICE'
+            'workingType': 'MARK_PRICE',
+            'timeInForce': 'GTE_GTC',
         }
 
-        result = self._request('POST', '/fapi/v1/algoOrder', params)
+        result = self._request('POST', '/fapi/v1/order', params)
 
         if isinstance(result, dict) and result.get('success') == False:
             return result
 
-        # Algo Order API 返回 algoId 而非 orderId
         return {
             'success': True,
-            'order_id': str(result.get('algoId', result.get('orderId', ''))),
+            'order_id': str(result.get('orderId', '')),
             'stop_price': float(stop_price)
         }
 
@@ -970,40 +961,31 @@ class BinanceFuturesEngine:
 
     def _place_take_profit(self, symbol: str, position_side: str, quantity: Decimal,
                            take_profit_price: Decimal) -> Dict:
-        """
-        设置止盈单
-
-        注意：从 2025-12-09 起，币安要求使用 Algo Order API (/fapi/v1/algoOrder)
-        来设置条件订单（STOP_MARKET, TAKE_PROFIT_MARKET 等）
-        """
+        """设置止盈单 (TAKE_PROFIT_MARKET)"""
         binance_symbol = self._convert_symbol(symbol)
-
-        # 止盈方向与开仓相反
         side = 'SELL' if position_side == 'LONG' else 'BUY'
         take_profit_price = self._round_price(take_profit_price, symbol)
         quantity = self._round_quantity(quantity, symbol)
 
-        # 使用 Algo Order API 的 TAKE_PROFIT_MARKET 类型
         params = {
             'symbol': binance_symbol,
             'side': side,
             'positionSide': position_side,
-            'algoType': 'CONDITIONAL',  # 条件单类型，必填参数
-            'type': 'TAKE_PROFIT_MARKET',  # 订单类型
-            'triggerPrice': str(take_profit_price),  # 触发价格
+            'type': 'TAKE_PROFIT_MARKET',
+            'stopPrice': str(take_profit_price),
             'quantity': str(quantity),
-            'workingType': 'MARK_PRICE'
+            'workingType': 'MARK_PRICE',
+            'timeInForce': 'GTE_GTC',
         }
 
-        result = self._request('POST', '/fapi/v1/algoOrder', params)
+        result = self._request('POST', '/fapi/v1/order', params)
 
         if isinstance(result, dict) and result.get('success') == False:
             return result
 
-        # Algo Order API 返回 algoId 而非 orderId
         return {
             'success': True,
-            'order_id': str(result.get('algoId', result.get('orderId', ''))),
+            'order_id': str(result.get('orderId', '')),
             'take_profit_price': float(take_profit_price)
         }
 
