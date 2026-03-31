@@ -3064,14 +3064,39 @@ class SmartTraderService:
                     db_opens = cur.fetchall()
 
                     closed_count = 0
+                    # 建一个 symbol→exchange_price 映射，用于对账时回填 close_price
+                    exchange_price_map = {p['symbol']: float(p.get('mark_price') or p.get('entry_price') or 0)
+                                          for p in exchange_positions}
+
                     for row in db_opens:
                         key = (row['symbol'], row['position_side'])
                         if key not in exchange_set:
+                            # 尝试从 WS 价格或 K 线取最新价
+                            close_p = None
+                            try:
+                                close_p = self.get_current_price(row['symbol'])
+                            except Exception:
+                                pass
+                            if not close_p:
+                                close_p = exchange_price_map.get(row['symbol'])
+                            # 计算已实现 PnL
+                            live_pnl = 0.0
+                            try:
+                                if close_p and row.get('entry_price') and row.get('quantity'):
+                                    ep = float(row['entry_price'])
+                                    qty = float(row['quantity'])
+                                    if row['position_side'] == 'LONG':
+                                        live_pnl = (float(close_p) - ep) * qty
+                                    else:
+                                        live_pnl = (ep - float(close_p)) * qty
+                            except Exception:
+                                pass
                             cur.execute(
                                 "UPDATE live_futures_positions SET status='CLOSED', close_time=NOW(), "
+                                "close_price=%s, realized_pnl=%s, close_reason='reconcile_closed', "
                                 "notes=CONCAT(IFNULL(notes,''), '|reconcile_closed') "
                                 "WHERE id=%s",
-                                (row['id'],)
+                                (close_p, live_pnl, row['id'])
                             )
                             if row['paper_position_id']:
                                 cur.execute(
