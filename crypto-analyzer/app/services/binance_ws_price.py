@@ -38,6 +38,7 @@ class BinanceWSPriceService:
         """
         self.market_type = market_type
         self.prices: Dict[str, float] = {}  # symbol -> price
+        self.price_update_times: Dict[str, datetime] = {}  # symbol -> last update time
         self.max_prices: Dict[str, float] = {}  # symbol -> max_price (用于做多)
         self.min_prices: Dict[str, float] = {}  # symbol -> min_price (用于做空)
         self.subscribed_symbols: Set[str] = set()
@@ -109,9 +110,17 @@ class BinanceWSPriceService:
             except Exception as e:
                 logger.error(f"健康状态回调执行失败: {e}")
 
-    def get_price(self, symbol: str) -> Optional[float]:
-        """获取当前价格"""
-        return self.prices.get(symbol)
+    def get_price(self, symbol: str, max_age_seconds: int = 120) -> Optional[float]:
+        """获取当前价格，超过 max_age_seconds 秒未更新则返回 None"""
+        price = self.prices.get(symbol)
+        if price is None:
+            return None
+        last_update = self.price_update_times.get(symbol)
+        if last_update is None:
+            return None
+        if (datetime.utcnow() - last_update).total_seconds() > max_age_seconds:
+            return None
+        return price
 
     def get_max_price(self, symbol: str) -> Optional[float]:
         """获取订阅以来的最高价（用于做多的移动止盈）"""
@@ -222,6 +231,7 @@ class BinanceWSPriceService:
         """价格更新时触发"""
         old_price = self.prices.get(symbol, 0)
         self.prices[symbol] = price
+        self.price_update_times[symbol] = datetime.utcnow()
 
         # 更新最后收到数据的时间
         was_healthy = self.is_healthy()
