@@ -123,22 +123,29 @@ class SmartEntryExecutor:
             if price and price > 0:
                 return float(price)
 
-        # 回退到数据库
+        # 回退到数据库（kline_data 5m，限30分钟内有效）
         try:
-            conn = pymysql.connect(**self.db_config)
+            conn = pymysql.connect(**self.db_config, charset='utf8mb4')
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT close FROM futures_klines
-                WHERE symbol = %s AND interval = '5m' AND exchange = 'binance_futures'
+                SELECT close_price, open_time FROM kline_data
+                WHERE symbol = %s AND timeframe = '5m'
                 ORDER BY open_time DESC
                 LIMIT 1
             """, (symbol,))
             result = cursor.fetchone()
             conn.close()
             if result:
-                return float(result[0])
+                close_price, open_time = result
+                # 数据必须在30分钟内，否则视为过期
+                import time
+                age_ms = int(time.time() * 1000) - int(open_time)
+                if age_ms <= 30 * 60 * 1000:
+                    return float(close_price)
+                else:
+                    logger.warning(f"[PRICE] {symbol} kline_data 数据过期({age_ms//60000}分钟前)，跳过")
         except Exception as e:
-            logger.error(f"❌ 从数据库获取价格失败: {e}")
+            logger.error(f"[PRICE] 从数据库获取价格失败: {e}")
 
         return None
 
