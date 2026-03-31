@@ -1169,6 +1169,7 @@ class SmartTraderService:
         self.connection = None
         self.running = True
         self.event_loop = None  # 事件循环引用，在async_main中设置
+        self._pending_entry_count = 0  # 正在后台采样中（尚未写入DB）的任务数
 
         # WebSocket 价格服务
         self.ws_service: BinanceWSPriceService = get_ws_price_service()
@@ -1609,7 +1610,9 @@ class SmartTraderService:
             """, (self.account_id,))
             result = cursor.fetchone()
             cursor.close()
-            return result[0] if result else 0
+            db_count = result[0] if result else 0
+            # 加上后台采样中尚未写入DB的任务数，防止超限
+            return db_count + self._pending_entry_count
         except:
             return 0
 
@@ -1969,21 +1972,22 @@ class SmartTraderService:
                 }
 
                 # 在事件循环中创建异步任务（后台执行）
-                future = asyncio.run_coroutine_threadsafe(
-                    self.pullback_executor.execute_entry(signal),
+                self._pending_entry_count += 1
+
+                async def _run_pullback_and_release(sig):
+                    try:
+                        result = await self.pullback_executor.execute_entry(sig)
+                        if not result.get('success'):
+                            logger.warning(f"[V2-PULLBACK] {sig['symbol']} 回调建仓失败: {result.get('error', 'Unknown')}")
+                    except Exception as e:
+                        logger.error(f"[V2-PULLBACK] {sig['symbol']} 回调建仓任务异常: {e}")
+                    finally:
+                        self._pending_entry_count = max(0, self._pending_entry_count - 1)
+
+                asyncio.run_coroutine_threadsafe(
+                    _run_pullback_and_release(signal),
                     self.event_loop
                 )
-                # 添加回调处理任务结果（避免静默失败）
-                def handle_entry_result(f):
-                    try:
-                        result = f.result()
-                        if not result.get('success'):
-                            logger.warning(f"❌ {symbol} 回调建仓失败: {result.get('error', 'Unknown')}")
-                    except Exception as e:
-                        logger.error(f"❌ {symbol} 回调建仓任务异常: {e}")
-                        import traceback
-                        logger.error(traceback.format_exc())
-                future.add_done_callback(handle_entry_result)
 
                 kline_desc = "阴线" if side == "LONG" else "阳线"
                 logger.info(f"🚀 [V2-PULLBACK] {symbol} {side} K线回调建仓任务已启动 (等待15M{kline_desc}，一次性开仓)")
@@ -2014,12 +2018,20 @@ class SmartTraderService:
                 }
 
                 # 在事件循环中创建异步任务（后台执行）
+                self._pending_entry_count += 1
+
+                async def _run_entry_and_release(sig):
+                    try:
+                        await self.smart_entry_executor.execute_entry(sig)
+                    finally:
+                        self._pending_entry_count = max(0, self._pending_entry_count - 1)
+
                 asyncio.run_coroutine_threadsafe(
-                    self.smart_entry_executor.execute_entry(signal),
+                    _run_entry_and_release(signal),
                     self.event_loop
                 )
 
-                logger.info(f"🚀 [V1-PRICE-SAMPLING] {symbol} {side} 价格采样建仓任务已启动 (15分钟采样，一次性开仓)")
+                logger.info(f"[V1-PRICE-SAMPLING] {symbol} {side} 价格采样建仓任务已启动 (15分钟采样，一次性开仓，pending={self._pending_entry_count})")
                 logger.info(f"   📝 信号评分: {opp.get('score', 0)} | 信号组合: {signal['trade_params']['signal_combination_key']}")
                 return True
 
