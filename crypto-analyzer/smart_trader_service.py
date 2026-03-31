@@ -3548,10 +3548,10 @@ class SmartTraderService:
                         _tm_cur.close(); _tm_conn.close()
                         new_sc = int(float(_tm_rows.get('signal_confirmation_enabled', '1'))) == 1
                         new_tf = int(float(_tm_rows.get('trend_following_enabled', '1'))) == 1
-                        if new_sc != self.signal_confirmation_enabled or new_tf != self.trend_following_enabled:
+                        if new_sc != self.brain.signal_confirmation_enabled or new_tf != self.brain.trend_following_enabled:
                             logger.info(f"[TRADING-MODE] 模式更新: 信号确认={'ON' if new_sc else 'OFF'} 趋势跟随={'ON' if new_tf else 'OFF'}")
-                            self.signal_confirmation_enabled = new_sc
-                            self.trend_following_enabled = new_tf
+                            self.brain.signal_confirmation_enabled = new_sc
+                            self.brain.trend_following_enabled = new_tf
                     except Exception as e:
                         logger.warning(f"[CONFIG-RELOAD] 重新加载交易模式配置失败: {e}")
 
