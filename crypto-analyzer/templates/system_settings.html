@@ -1,478 +1,420 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>系统配置 - 加密货币交易系统</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Neural Obsidian - 系统配置中心</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary-fixed-dim": "#33e5ba",
+                        "on-surface": "#ebeef5",
+                        "secondary-fixed": "#bbd2ff",
+                        "primary": "#49f4c8",
+                        "tertiary-fixed-dim": "#ff7987",
+                        "error-dim": "#d7383b",
+                        "surface-bright": "#262d35",
+                        "inverse-primary": "#006c55",
+                        "surface-container-low": "#0f1419",
+                        "tertiary-container": "#fa4966",
+                        "on-secondary-fixed-variant": "#00509c",
+                        "on-primary-container": "#004132",
+                        "secondary-dim": "#5b9eff",
+                        "on-tertiary": "#490011",
+                        "on-tertiary-fixed-variant": "#780022",
+                        "tertiary": "#ff6e80",
+                        "on-secondary": "#002045",
+                        "tertiary-dim": "#ff6e80",
+                        "on-secondary-container": "#f6f7ff",
+                        "secondary": "#5b9eff",
+                        "on-tertiary-fixed": "#39000b",
+                        "surface-container": "#151a20",
+                        "on-tertiary-container": "#100001",
+                        "on-surface-variant": "#a8abb2",
+                        "background": "#0a0f14",
+                        "on-secondary-fixed": "#003469",
+                        "primary-fixed": "#49f4c8",
+                        "on-primary-fixed": "#004334",
+                        "primary-container": "#00d4aa",
+                        "surface-variant": "#20262e",
+                        "outline-variant": "#44484e",
+                        "surface": "#0a0f14",
+                        "on-primary": "#005745",
+                        "inverse-on-surface": "#51555c",
+                        "primary-dim": "#33e5ba",
+                        "on-primary-fixed-variant": "#00624d",
+                        "surface-tint": "#49f4c8",
+                        "surface-container-lowest": "#000000",
+                        "error-container": "#9f0519",
+                        "inverse-surface": "#f8f9ff",
+                        "surface-container-highest": "#20262e",
+                        "secondary-container": "#005eb5",
+                        "on-error-container": "#ffa8a3",
+                        "secondary-fixed-dim": "#a4c5ff",
+                        "surface-dim": "#0a0f14",
+                        "on-error": "#490006",
+                        "on-background": "#ebeef5",
+                        "tertiary-fixed": "#ff909a",
+                        "outline": "#72767c",
+                        "surface-container-high": "#1a2027",
+                        "error": "#ff716c"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"],
+                        "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
         body {
-            background-color: #1a1a2e;
-            color: #eee;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0a0f14;
+            color: #ebeef5;
+            font-family: 'Manrope', sans-serif;
         }
-
-        .settings-card {
-            background: #16213e;
-            border-radius: 10px;
-            padding: 30px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        .monospace-data {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
         }
-
-        .setting-item {
-            background: #0f3460;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 15px;
+        /* Custom range slider styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
         }
-
-        .setting-header {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            color: #4ecca3;
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            background: #20262e;
+            border-radius: 2px;
         }
-
-        .setting-description {
-            font-size: 14px;
-            color: #aaa;
-            margin-bottom: 15px;
-        }
-
-        .btn-primary {
-            background-color: #4ecca3;
-            border-color: #4ecca3;
-            color: #000;
-            font-weight: 600;
-        }
-
-        .btn-primary:hover {
-            background-color: #3dbb8f;
-            border-color: #3dbb8f;
-        }
-
-        .alert {
-            border-radius: 8px;
-        }
-
-        .strategy-option {
-            background: #1a1a2e;
-            border: 2px solid #4ecca3;
-            border-radius: 8px;
-            padding: 15px;
-            cursor: pointer;
-            margin-bottom: 10px;
-            transition: all 0.3s;
-        }
-
-        .strategy-option:hover {
-            background: #0f3460;
-        }
-
-        .strategy-option.active {
-            background: #4ecca3;
-            color: #000;
-        }
-
-        .strategy-option input[type="radio"] {
-            margin-right: 10px;
-        }
-
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 60px;
-            height: 34px;
-        }
-
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #ccc;
-            transition: .4s;
-            border-radius: 34px;
-        }
-
-        .toggle-slider:before {
-            position: absolute;
-            content: "";
-            height: 26px;
-            width: 26px;
-            left: 4px;
-            bottom: 4px;
-            background-color: white;
-            transition: .4s;
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
             border-radius: 50%;
-        }
-
-        input:checked + .toggle-slider {
-            background-color: #4ecca3;
-        }
-
-        input:checked + .toggle-slider:before {
-            transform: translateX(26px);
-        }
-
-        .navbar {
-            background-color: #16213e !important;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-        }
-
-        .navbar-brand {
-            color: #4ecca3 !important;
-            font-weight: 700;
-        }
-
-        .nav-link {
-            color: #eee !important;
-        }
-
-        .nav-link:hover {
-            color: #4ecca3 !important;
+            background: #49f4c8;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 10px rgba(73, 244, 200, 0.4);
         }
     </style>
 </head>
-<body>
-    <!-- 导航栏 -->
-    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/">📊 加密货币交易系统</a>
-            <div class="collapse navbar-collapse">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/dashboard">仪表盘</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link active" href="/system-settings">系统配置</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
-    <div class="container">
-        <h1 class="mb-4">⚙️ 系统配置</h1>
-
-        <!-- 提示信息 -->
-        <div id="alertContainer"></div>
-
-        <!-- 分批建仓策略配置 -->
-        <div class="settings-card">
-            <div class="setting-item">
-                <div class="setting-header">📈 分批建仓策略</div>
-                <div class="setting-description">
-                    选择分批建仓使用的策略类型（需要重启服务才能生效）
-                </div>
-
-                <div class="mb-3">
-                    <div class="strategy-option" id="strategyV2">
-                        <input type="radio" name="strategy" value="kline_pullback" id="strategyKline">
-                        <label for="strategyKline" style="cursor: pointer;">
-                            <strong>V2: K线回调策略</strong> (推荐)
-                            <div class="small text-muted mt-1">
-                                等待15M/5M反向K线回调确认后分3批建仓，60分钟窗口
-                            </div>
-                        </label>
-                    </div>
-
-                    <div class="strategy-option" id="strategyV1">
-                        <input type="radio" name="strategy" value="price_percentile" id="strategyPrice">
-                        <label for="strategyPrice" style="cursor: pointer;">
-                            <strong>V1: 价格分位数策略</strong>
-                            <div class="small text-muted mt-1">
-                                基于滚动窗口价格百分位动态入场，30分钟窗口
-                            </div>
-                        </label>
-                    </div>
-                </div>
-
-                <button class="btn btn-primary" onclick="updateStrategy()">
-                    💾 保存策略设置
+<body class="flex min-h-screen overflow-hidden">
+<!-- SideNavBar -->
+<aside class="h-screen w-64 fixed left-0 top-0 bg-[#0f1419] dark:bg-[#0f1419] flex flex-col py-8 px-4 gap-y-2 border-r border-white/5 z-40">
+<div class="mb-8 px-2">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-container" style="font-variation-settings: 'FILL' 1;">psychology</span>
+</div>
+<div>
+<h2 class="text-lg font-black text-[#49f4c8] font-headline tracking-tighter">Super Brain</h2>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-widest font-medium">Synthetic Intelligence</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/dashboard">
+<span class="material-symbols-outlined">grid_view</span>
+<span class="font-headline font-medium text-sm">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/futures">
+<span class="material-symbols-outlined">show_chart</span>
+<span class="font-headline font-medium text-sm">Futures</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/live-trading">
+<span class="material-symbols-outlined">bolt</span>
+<span class="font-headline font-medium text-sm">Live Trading</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/review">
+<span class="material-symbols-outlined">history_edu</span>
+<span class="font-headline font-medium text-sm">Review</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/signals">
+<span class="material-symbols-outlined">sensors</span>
+<span class="font-headline font-medium text-sm">Signals</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-[#49f4c8] border-r-2 border-[#49f4c8] bg-gradient-to-l from-[#49f4c8]/5 to-transparent transition-all duration-200 rounded-l-lg group" href="/settings">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="font-headline font-medium text-sm">Settings</span>
+</a>
+</nav>
+<div class="mt-auto pt-6 space-y-1">
+<button class="w-full mb-4 py-3 rounded-xl bg-gradient-to-r from-primary to-primary-container text-on-primary font-bold text-sm flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(73,244,200,0.15)] hover:opacity-90 transition-all">
+<span class="material-symbols-outlined text-[18px]">verified_user</span>
+                Upgrade to Pro
+            </button>
+<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] hover:text-[#49f4c8] transition-all duration-200 rounded-lg" href="#">
+<span class="material-symbols-outlined">contact_support</span>
+<span class="font-headline font-medium text-sm">Support</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] hover:text-[#49f4c8] transition-all duration-200 rounded-lg" href="#">
+<span class="material-symbols-outlined">logout</span>
+<span class="font-headline font-medium text-sm">Log Out</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-64 flex-1 h-screen overflow-y-auto bg-surface relative">
+<!-- Top Navigation Area -->
+<header class="w-full h-16 sticky top-0 z-50 flex justify-between items-center px-8 bg-[#0a0f14] border-b border-white/5 shadow-[0_0_20px_rgba(73,244,200,0.05)]">
+<div class="flex items-center gap-4">
+<h1 class="text-xl font-bold text-primary font-headline tracking-tighter">Neural Obsidian</h1>
+<div class="h-4 w-[1px] bg-outline-variant/30"></div>
+<div class="text-on-surface-variant font-mono text-xs uppercase tracking-widest">Core Configuration v4.2.0</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors">notifications</span>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors">account_balance_wallet</span>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors">help_outline</span>
+</div>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-primary/20">
+<img alt="User Profile" class="w-full h-auto" data-alt="Abstract geometric avatar with teal and obsidian color palette representing an AI profile" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBcjfU3UTILW0abCdCX0cSKTfm25kbkNdI3sdbLUZTzg-BiDGAQ5F_zNYZeNYIMziql4lXZ6yRtltgZcNSI8tS7u_gE-ddhjtuHdqXLWEbQwRd3bz9zHxh6uq4ShamYb52SXorucddiIQ4gHpAYr1TAD2IMyf2Uk1qseVZNLuSXfvxTcWW2tpIYDwdQq1FJRHYvxwVVbKd6bKYC-MmnkS7rMHHOflfOTCKQMAfdAjgJ3hAk84jOUfjuR9n411URp40xh3gcxkA_MozL"/>
+</div>
+</div>
+</header>
+<!-- Configuration Content -->
+<div class="p-10 max-w-7xl mx-auto">
+<div class="mb-12">
+<h2 class="text-4xl font-headline font-bold text-primary tracking-tight mb-2">系统配置中心</h2>
+<p class="text-on-surface-variant text-sm font-body">高级交易执行策略与神经网络控制模块参数设置</p>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+<!-- Left Column: 交易控制 -->
+<div class="space-y-8">
+<!-- 总开关 -->
+<section class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10">
+<div class="flex items-center gap-2 mb-6">
+<div class="w-1.5 h-6 bg-primary rounded-full"></div>
+<h3 class="font-headline font-bold text-lg text-on-surface tracking-tight">总开关</h3>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<!-- Toggle Item -->
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl border border-outline-variant/5">
+<span class="text-sm font-body font-medium text-on-surface-variant">实盘交易</span>
+<div class="w-12 h-6 bg-primary-container/30 rounded-full relative cursor-pointer">
+<div class="absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)]"></div>
+</div>
+</div>
+<!-- Toggle Item -->
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl border border-outline-variant/5">
+<span class="text-sm font-body font-medium text-on-surface-variant">U本位模拟交易</span>
+<div class="w-12 h-6 bg-primary-container/30 rounded-full relative cursor-pointer">
+<div class="absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)]"></div>
+</div>
+</div>
+<!-- Toggle Item -->
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl border border-outline-variant/5">
+<span class="text-sm font-body font-medium text-on-surface-variant">做多方向</span>
+<div class="w-12 h-6 bg-primary-container/30 rounded-full relative cursor-pointer">
+<div class="absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)]"></div>
+</div>
+</div>
+<!-- Toggle Item -->
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl border border-outline-variant/5">
+<span class="text-sm font-body font-medium text-on-surface-variant">做空方向</span>
+<div class="w-12 h-6 bg-primary-container/30 rounded-full relative cursor-pointer">
+<div class="absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)]"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- 策略开关 -->
+<section class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10">
+<div class="flex items-center gap-2 mb-6">
+<div class="w-1.5 h-6 bg-primary rounded-full"></div>
+<h3 class="font-headline font-bold text-lg text-on-surface tracking-tight">策略开关</h3>
+</div>
+<div class="space-y-3">
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-xl">trending_up</span>
+<span class="text-sm font-body font-medium text-on-surface">BTC动量跟随</span>
+</div>
+<div class="w-10 h-5 bg-primary/20 rounded-full relative">
+<div class="absolute right-0.5 top-0.5 w-4 h-4 bg-primary rounded-full"></div>
+</div>
+</div>
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-xl">analytics</span>
+<span class="text-sm font-body font-medium text-on-surface">市场预测器</span>
+</div>
+<div class="w-10 h-5 bg-primary/20 rounded-full relative">
+<div class="absolute right-0.5 top-0.5 w-4 h-4 bg-primary rounded-full"></div>
+</div>
+</div>
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-xl">currency_bitcoin</span>
+<span class="text-sm font-body font-medium text-on-surface">币本位交易</span>
+</div>
+<div class="w-10 h-5 bg-primary/20 rounded-full relative">
+<div class="absolute right-0.5 top-0.5 w-4 h-4 bg-primary rounded-full"></div>
+</div>
+</div>
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-xl">broken_image</span>
+<span class="text-sm font-body font-medium text-on-surface">U本位破位策略</span>
+</div>
+<div class="w-10 h-5 bg-primary/20 rounded-full relative">
+<div class="absolute right-0.5 top-0.5 w-4 h-4 bg-primary rounded-full"></div>
+</div>
+</div>
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-xl">filter_alt</span>
+<span class="text-sm font-body font-medium text-on-surface">Big4趋势过滤</span>
+</div>
+<div class="w-10 h-5 bg-primary/20 rounded-full relative">
+<div class="absolute right-0.5 top-0.5 w-4 h-4 bg-primary rounded-full"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- 持仓限制 -->
+<section class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10">
+<div class="flex items-center gap-2 mb-6">
+<div class="w-1.5 h-6 bg-primary rounded-full"></div>
+<h3 class="font-headline font-bold text-lg text-on-surface tracking-tight">持仓限制</h3>
+</div>
+<div class="grid grid-cols-2 gap-6">
+<div class="space-y-2">
+<label class="text-xs font-label uppercase tracking-widest text-on-surface-variant">最大持仓时长</label>
+<div class="relative">
+<select class="w-full bg-surface-container-highest border-none rounded-xl py-3 px-4 text-on-surface font-mono appearance-none focus:ring-1 focus:ring-primary/50">
+<option>4H</option>
+<option selected="">6H</option>
+<option>12H</option>
+<option>24H</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-3 text-on-surface-variant pointer-events-none">expand_more</span>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-xs font-label uppercase tracking-widest text-on-surface-variant">最大持仓数量</label>
+<input class="w-full bg-surface-container-highest border-none rounded-xl py-3 px-4 text-on-surface font-mono focus:ring-1 focus:ring-primary/50" type="number" value="12"/>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column: 策略参数 -->
+<div class="space-y-8">
+<!-- 信号评分阈值 -->
+<section class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10">
+<div class="flex items-center gap-2 mb-8">
+<div class="w-1.5 h-6 bg-primary rounded-full"></div>
+<h3 class="font-headline font-bold text-lg text-on-surface tracking-tight">信号评分阈值</h3>
+</div>
+<div class="space-y-10">
+<div class="space-y-4">
+<div class="flex justify-between items-center">
+<span class="text-sm font-body text-on-surface font-medium uppercase tracking-wider">LONG开仓阈值</span>
+<span class="font-mono text-primary bg-primary/10 px-3 py-1 rounded-full text-xs font-bold">60.00</span>
+</div>
+<input class="w-full" max="100" min="0" type="range" value="60"/>
+<div class="flex justify-between text-[10px] text-on-surface-variant font-mono">
+<span>CONSERVATIVE (0)</span>
+<span>AGGRESSIVE (100)</span>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex justify-between items-center">
+<span class="text-sm font-body text-on-surface font-medium uppercase tracking-wider">SHORT开仓阈值</span>
+<span class="font-mono text-primary bg-primary/10 px-3 py-1 rounded-full text-xs font-bold">60.00</span>
+</div>
+<input class="w-full" max="100" min="0" type="range" value="60"/>
+<div class="flex justify-between text-[10px] text-on-surface-variant font-mono">
+<span>CONSERVATIVE (0)</span>
+<span>AGGRESSIVE (100)</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 风控参数 -->
+<section class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10">
+<div class="flex items-center gap-2 mb-6">
+<div class="w-1.5 h-6 bg-primary rounded-full"></div>
+<h3 class="font-headline font-bold text-lg text-on-surface tracking-tight">风控参数</h3>
+</div>
+<div class="space-y-6">
+<div class="grid grid-cols-2 gap-4">
+<div class="space-y-2">
+<label class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant">止损比例</label>
+<div class="relative">
+<input class="w-full bg-surface-container-highest border-none rounded-xl py-4 px-4 text-on-surface font-mono text-lg focus:ring-1 focus:ring-primary/50" type="text" value="2%"/>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant">止盈比例</label>
+<div class="relative">
+<input class="w-full bg-surface-container-highest border-none rounded-xl py-4 px-4 text-on-surface font-mono text-lg focus:ring-1 focus:ring-primary/50" type="text" value="6%"/>
+</div>
+</div>
+</div>
+<div class="space-y-2">
+<label class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant">单笔保证金</label>
+<div class="relative">
+<input class="w-full bg-surface-container-highest border-none rounded-xl py-4 px-4 text-on-surface font-mono text-lg focus:ring-1 focus:ring-primary/50 text-right pr-12" type="text" value="1000 USDT"/>
+<span class="material-symbols-outlined absolute left-4 top-4 text-on-surface-variant">account_balance_wallet</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 系统状态 -->
+<section class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10">
+<div class="flex items-center gap-2 mb-6">
+<div class="w-1.5 h-6 bg-primary rounded-full"></div>
+<h3 class="font-headline font-bold text-lg text-on-surface tracking-tight">系统状态</h3>
+</div>
+<div class="flex flex-wrap gap-3">
+<div class="bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 flex items-center gap-3">
+<div class="w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_8px_rgba(73,244,200,0.8)]"></div>
+<span class="font-mono text-xs text-primary font-bold tracking-tighter">[采集服务 RUNNING]</span>
+</div>
+<div class="bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 flex items-center gap-3">
+<div class="w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_8px_rgba(73,244,200,0.8)]"></div>
+<span class="font-mono text-xs text-primary font-bold tracking-tighter">[交易服务 RUNNING]</span>
+</div>
+<div class="bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 flex items-center gap-3">
+<div class="w-2 h-2 bg-primary rounded-full animate-pulse shadow-[0_0_8px_rgba(73,244,200,0.8)]"></div>
+<span class="font-mono text-xs text-primary font-bold tracking-tighter">[预测服务 RUNNING]</span>
+</div>
+</div>
+</section>
+</div>
+</div>
+<!-- Footer Action -->
+<div class="mt-16 pb-20">
+<button class="w-full py-5 rounded-2xl bg-gradient-to-r from-primary to-primary-container text-on-primary font-headline font-black text-xl tracking-widest uppercase shadow-[0_20px_40px_rgba(73,244,200,0.15)] hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-4">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1;">save</span>
+                    保存配置
                 </button>
-            </div>
-        </div>
-
-        <!-- Big4过滤器配置 -->
-        <div class="settings-card">
-            <div class="setting-item">
-                <div class="setting-header">🔍 Big4市场趋势过滤器</div>
-                <div class="setting-description">
-                    启用后，系统会根据BTC/ETH/BNB/SOL的整体趋势过滤交易信号（需要重启服务才能生效）
-                </div>
-
-                <div class="d-flex align-items-center mb-3">
-                    <label class="toggle-switch me-3">
-                        <input type="checkbox" id="big4Toggle">
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <span id="big4Status">Loading...</span>
-                </div>
-
-                <button class="btn btn-primary" onclick="updateBig4()">
-                    💾 保存过滤器设置
-                </button>
-            </div>
-        </div>
-
-        <!-- 最大持仓时间 -->
-        <div class="settings-card">
-            <div class="setting-item">
-                <div class="setting-header">⏱️ 最大持仓时间</div>
-                <div class="setting-description">
-                    每笔交易的最大持仓时长，到期后由智能平仓处理（实时生效，下次开仓时读取，无需重启）
-                </div>
-                <div class="d-flex align-items-center gap-3 mb-3">
-                    <select id="maxHoldHoursSelect" class="form-select" style="width:160px; background:#0f3460; color:#eee; border-color:#4ecca3;">
-                        <option value="3">3 小时</option>
-                        <option value="4">4 小时</option>
-                        <option value="5">5 小时</option>
-                        <option value="6">6 小时</option>
-                        <option value="7">7 小时</option>
-                        <option value="8">8 小时</option>
-                    </select>
-                    <span id="maxHoldHoursStatus" class="small text-muted">Loading...</span>
-                </div>
-                <button class="btn btn-primary" onclick="updateMaxHoldHours()">💾 保存持仓时间</button>
-            </div>
-        </div>
-
-        <!-- 交易方向控制 -->
-        <div class="settings-card">
-            <div class="setting-item">
-                <div class="setting-header">🎯 交易方向控制</div>
-                <div class="setting-description">
-                    控制系统是否允许做多或做空（实时生效，最长延迟5分钟）
-                </div>
-
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <div class="d-flex align-items-center justify-content-between p-3" style="background: #0f3460; border-radius: 8px;">
-                            <div>
-                                <strong style="color: #4ecca3;">📈 允许做多 (LONG)</strong>
-                                <div class="small text-muted mt-1">启用后可以执行做多交易</div>
-                            </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="allowLongToggle">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="d-flex align-items-center justify-content-between p-3" style="background: #0f3460; border-radius: 8px;">
-                            <div>
-                                <strong style="color: #4ecca3;">📉 允许做空 (SHORT)</strong>
-                                <div class="small text-muted mt-1">启用后可以执行做空交易</div>
-                            </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox" id="allowShortToggle">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <div class="alert alert-info" style="background: #0f3460; border-color: #4ecca3; color: #eee;">
-                        <strong>当前状态:</strong>
-                        <span id="directionStatus">Loading...</span>
-                    </div>
-                </div>
-
-                <button class="btn btn-primary" onclick="updateTradingDirection()">
-                    💾 保存交易方向设置
-                </button>
-            </div>
-        </div>
-
-        <!-- 交易服务控制 -->
-        <div class="settings-card">
-            <div class="setting-item">
-                <div class="setting-header">🎮 交易服务控制</div>
-                <div class="setting-description">
-                    控制各个交易服务的启动和暂停状态（实时生效）
-                </div>
-
-                <div class="row mb-3">
-                    <div class="col-md-4">
-                        <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
-                            <div class="mb-3">
-                                <strong style="color: #4ecca3;">💵 U本位合约交易</strong>
-                                <div class="small text-muted mt-1">USDT保证金合约交易</div>
-                            </div>
-                            <div class="d-flex align-items-center justify-content-between mt-auto">
-                                <span id="usdtFuturesStatus" class="small">Loading...</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="usdtFuturesToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
-                            <div class="mb-3">
-                                <strong style="color: #4ecca3;">🪙 币本位合约交易</strong>
-                                <div class="small text-muted mt-1">币本位保证金合约交易</div>
-                            </div>
-                            <div class="d-flex align-items-center justify-content-between mt-auto">
-                                <span id="coinFuturesStatus" class="small">Loading...</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="coinFuturesToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
-                            <div class="mb-3">
-                                <strong style="color: #4ecca3;">实盘合约服务</strong>
-                                <div class="small text-muted mt-1">自动交易主服务</div>
-                            </div>
-                            <div class="d-flex align-items-center justify-content-between mt-auto">
-                                <span id="liveTradingStatus" class="small">Loading...</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="liveTradingToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="row g-3 mt-1">
-                    <div class="col-md-4">
-                        <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
-                            <div class="mb-3">
-                                <strong style="color: #e2b96a;">市场预测器</strong>
-                                <div class="small text-muted mt-1">每6小时运行，confidence&ge;70开单</div>
-                            </div>
-                            <div class="d-flex align-items-center justify-content-between mt-auto">
-                                <span id="predictorStatus" class="small">Loading...</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="predictorToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="row g-3 mb-3">
-                    <div class="col-md-4">
-                        <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
-                            <div class="mb-3">
-                                <strong style="color: #e2b96a;">BTC动量跟随</strong>
-                                <div class="small text-muted mt-1">BTC涨跌>=1.5%触发，TOP50全开，4H平仓</div>
-                            </div>
-                            <div class="d-flex align-items-center justify-content-between mt-auto">
-                                <span id="btcMomentumStatus" class="small">Loading...</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="btcMomentumToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
-                            <div class="mb-3">
-                                <strong style="color: #4ecca3;">U本位破位策略</strong>
-                                <div class="small text-muted mt-1">BreakoutSystem+移动止盈，独立权重，account_id=2</div>
-                            </div>
-                            <div class="d-flex align-items-center justify-content-between mt-auto">
-                                <span id="uCoinStyleStatus" class="small">Loading...</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="uCoinStyleToggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="d-flex flex-column p-3" style="background: #0f3460; border-radius: 8px; height: 100%;">
-                            <div class="mb-3">
-                                <strong style="color: #e2b96a;">交易模式</strong>
-                                <div class="small text-muted mt-1">
-                                    信号确认：net_ws&gt;50 时，信号分≥60（Big4动态调整阈值）开仓<br>
-                                    趋势跟随：net_ws 20~50 时，信号分 20~50 也可开仓（捕捉早期趋势）<br>
-                                    两者独立，可同时启用
-                                </div>
-                            </div>
-                            <div class="d-flex align-items-center gap-3 mt-auto flex-wrap">
-                                <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
-                                    <input type="checkbox" id="modeSignal">
-                                    <span>信号确认（net_ws&gt;50，分数≥60）</span>
-                                </label>
-                                <label class="d-flex align-items-center gap-2" style="cursor:pointer;">
-                                    <input type="checkbox" id="modeTrend">
-                                    <span>趋势跟随（net_ws 20~50，分数 20~50）</span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 止损止盈设置 -->
-                <div class="settings-card mb-3">
-                    <div class="setting-item">
-                        <div class="setting-header">止损 / 止盈比例</div>
-                        <div class="setting-description">所有策略（主策略、BTC动量、预测器）共用此配置</div>
-                        <div class="d-flex align-items-center gap-4 mt-2 flex-wrap">
-                            <label class="d-flex align-items-center gap-2">
-                                <span>止损 %</span>
-                                <input type="number" id="stopLossPct" min="0.5" max="10" step="0.1" style="width:80px;" class="form-control form-control-sm">
-                            </label>
-                            <label class="d-flex align-items-center gap-2">
-                                <span>止盈 %</span>
-                                <input type="number" id="takeProfitPct" min="0.5" max="50" step="0.1" style="width:80px;" class="form-control form-control-sm">
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <div class="alert alert-warning" style="background: #3d2a00; border-color: #ffc107; color: #eee;">
-                        <strong>⚠️ 注意:</strong> 停止交易服务只会阻止新的开仓，不会影响已有持仓的管理和平仓
-                    </div>
-                </div>
-
-                <button class="btn btn-primary" onclick="updateTradingServices()">
-                    💾 保存交易服务设置
-                </button>
-            </div>
-        </div>
-
-        <!-- 当前配置状态 -->
-        <div class="settings-card">
-            <div class="setting-item">
-                <div class="setting-header">📋 当前配置状态</div>
-                <div class="setting-description">
-                    显示当前数据库中保存的配置
-                </div>
-
-                <pre id="currentSettings" style="background: #0f3460; padding: 15px; border-radius: 8px; color: #4ecca3;">
-Loading...
-                </pre>
-
-                <button class="btn btn-secondary" onclick="loadSettings()">
-                    🔄 刷新状态
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
+<p class="text-center mt-6 text-on-surface-variant/40 font-mono text-[10px] uppercase tracking-tighter">
+                    Changes will be propagated to all live execution nodes immediately upon confirmation.
+                </p>
+</div>
+</div>
+<!-- Decorative background elements -->
+<div class="fixed top-0 right-0 w-1/2 h-full pointer-events-none -z-10 opacity-20">
+<div class="absolute top-1/4 right-0 w-96 h-96 bg-primary/20 rounded-full blur-[120px]"></div>
+<div class="absolute bottom-1/4 right-1/4 w-64 h-64 bg-secondary/10 rounded-full blur-[100px]"></div>
+</div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
         const API_BASE = '/api/system';
 
         // 显示提示信息
@@ -846,5 +788,4 @@ Loading...
         loadSettings();
         loadMaxHoldHours();
     </script>
-</body>
-</html>
+</body></html>

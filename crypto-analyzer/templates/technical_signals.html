@@ -1,246 +1,520 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>技术信号 - AlphaFlow</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/mobile.css" rel="stylesheet">
-    <style>
-        /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
-        :root {
-            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
-            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
-            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
-            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
-            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
-            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
-            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
-            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
-            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
-            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
-            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
-            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
-            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
-            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Neural Obsidian | Signals Terminal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-bright": "#262d35",
+                        "on-tertiary-container": "#100001",
+                        "secondary-container": "#005eb5",
+                        "on-surface": "#ebeef5",
+                        "background": "#0a0f14",
+                        "primary": "#49f4c8",
+                        "surface-container-highest": "#20262e",
+                        "tertiary-fixed-dim": "#ff7987",
+                        "tertiary": "#ff6e80",
+                        "surface-variant": "#20262e",
+                        "on-primary-fixed": "#004334",
+                        "on-surface-variant": "#a8abb2",
+                        "tertiary-container": "#fa4966",
+                        "on-primary": "#005745",
+                        "primary-fixed": "#49f4c8",
+                        "tertiary-dim": "#ff6e80",
+                        "outline-variant": "#44484e",
+                        "on-tertiary": "#490011",
+                        "surface-dim": "#0a0f14",
+                        "inverse-surface": "#f8f9ff",
+                        "primary-dim": "#33e5ba",
+                        "on-secondary-fixed-variant": "#00509c",
+                        "secondary": "#5b9eff",
+                        "secondary-fixed-dim": "#a4c5ff",
+                        "on-tertiary-fixed": "#39000b",
+                        "error-dim": "#d7383b",
+                        "on-primary-container": "#004132",
+                        "error": "#ff716c",
+                        "secondary-fixed": "#bbd2ff",
+                        "secondary-dim": "#5b9eff",
+                        "surface-container-low": "#0f1419",
+                        "primary-fixed-dim": "#33e5ba",
+                        "on-tertiary-fixed-variant": "#780022",
+                        "primary-container": "#00d4aa",
+                        "outline": "#72767c",
+                        "on-error": "#490006",
+                        "on-error-container": "#ffa8a3",
+                        "inverse-on-surface": "#51555c",
+                        "on-primary-fixed-variant": "#00624d",
+                        "tertiary-fixed": "#ff909a",
+                        "on-secondary": "#002045",
+                        "surface-container-lowest": "#000000",
+                        "surface": "#0a0f14",
+                        "surface-container": "#151a20",
+                        "on-background": "#ebeef5",
+                        "inverse-primary": "#006c55",
+                        "surface-tint": "#49f4c8",
+                        "on-secondary-container": "#f6f7ff",
+                        "surface-container-high": "#1a2027",
+                        "error-container": "#9f0519",
+                        "on-secondary-fixed": "#003469"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"],
+                        "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "monospace"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
-        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
-        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-sm); display: flex; align-items: center; gap: var(--spacing-md); }
-        .header-subtitle { color: var(--text-secondary); font-size: 13px; }
-        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
-        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
-        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
-        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
-        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
-        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
-        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
-        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
-        .card-body { padding: 0; }
-        .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
-        table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
-        thead { background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); }
-        th { padding: var(--spacing-md) var(--spacing-lg); text-align: left; font-weight: 600; color: #E6EDF3; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { padding: var(--spacing-lg); border-bottom: 1px solid var(--border-default); color: #E6EDF3; font-size: 13px; }
-        tbody tr:hover { background: var(--bg-hover); }
-        .badge { display: inline-flex; align-items: center; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
-        .badge-success { background: var(--success-green-bg); color: var(--success-green); }
-        .badge-danger { background: var(--danger-red-bg); color: var(--danger-red); }
-        .badge-info { background: var(--primary-blue-light); color: var(--primary-blue); }
-        .badge-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }
-        .badge-warning { background: var(--warning-yellow-bg); color: var(--warning-yellow); }
-        .loading { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-md); margin-top: var(--spacing-md); }
-        .stat-card { background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg); }
-        .stat-label { font-size: 12px; color: var(--text-secondary); margin-bottom: var(--spacing-xs); text-transform: uppercase; }
-        .stat-value { font-size: 20px; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono); }
-        .trend-up { color: var(--success-green); }
-        .trend-down { color: var(--danger-red); }
-        .trend-neutral { color: var(--text-secondary); }
-        .kline-stats { margin-top: var(--spacing-sm); }
-        .kline-bar { display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-xs); }
-        .kline-bar-label { min-width: 80px; font-size: 12px; color: var(--text-secondary); }
-        .kline-bar-visual { flex: 1; height: 20px; background: var(--bg-tertiary); border-radius: var(--radius-sm); overflow: hidden; position: relative; }
-        .kline-bar-fill { height: 100%; transition: width 0.3s ease; }
-        .kline-bar-fill.bullish { background: linear-gradient(90deg, #6B7280, #9CA3AF); }
-        .kline-bar-fill.bearish { background: linear-gradient(90deg, var(--danger-red), #FB7185); }
-        .kline-bar-value { min-width: 60px; text-align: right; font-size: 12px; font-weight: 600; font-family: var(--font-mono); }
-        .header-actions { display: flex; gap: var(--spacing-md); align-items: center; }
-        .user-menu { display: flex; align-items: center; gap: var(--spacing-md); }
-        .notification-btn, .user-btn { position: relative; background: var(--bg-tertiary); border: 1px solid var(--border-default); color: var(--text-primary); width: 40px; height: 40px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all var(--transition-base); font-size: 18px; }
-        .notification-btn:hover, .user-btn:hover { background: var(--bg-hover); border-color: var(--primary-blue); color: var(--primary-blue); }
-        .notification-badge { position: absolute; top: -4px; right: -4px; background: var(--danger-red); color: white; font-size: 10px; font-weight: 700; width: 18px; height: 18px; border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; border: 2px solid var(--bg-primary); }
-        .user-dropdown { position: relative; }
-        .dropdown-menu { position: absolute; top: calc(100% + 8px); right: 0; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); min-width: 200px; box-shadow: var(--shadow-lg); z-index: 1000; display: none; overflow: hidden; }
-        .dropdown-menu.active { display: block; }
-        .dropdown-item { padding: var(--spacing-md) var(--spacing-lg); color: var(--text-primary); text-decoration: none; display: flex; align-items: center; gap: var(--spacing-sm); transition: all var(--transition-fast); border-bottom: 1px solid var(--border-default); }
-        .dropdown-item:last-child { border-bottom: none; }
-        .dropdown-item:hover { background: var(--bg-hover); color: var(--primary-blue); }
-        .dropdown-header { padding: var(--spacing-md) var(--spacing-lg); background: var(--bg-tertiary); border-bottom: 1px solid var(--border-default); font-weight: 600; color: var(--text-primary); }
+    </script>
+<style>
+        body { background-color: #0a0f14; font-family: 'Manrope', sans-serif; color: #ebeef5; margin: 0; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .score-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0a0f14; }
+        ::-webkit-scrollbar-thumb { background: #20262e; border-radius: 10px; }
+        .ambient-glow-teal { filter: drop-shadow(0 0 12px rgba(73, 244, 200, 0.15)); }
     </style>
 </head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <!-- Top bar with logo and user menu -->
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-xl);">
-                <div style="display: flex; align-items: center; gap: var(--spacing-md);">
-                    <img src="/static/images/logo/alphaflow-logo-icon.svg" alt="AlphaFlow" style="height: 40px; width: auto;">
-                    <div>
-                        <h1 class="header-title" style="margin: 0;">
-                            技术信号分析
-                        </h1>
-                        <p class="header-subtitle">实时监控K线数据，捕捉市场趋势</p>
-                    </div>
-                </div>
-                <div class="header-actions">
-                    <div class="user-menu">
-                        <!-- 提醒按钮 -->
-                        <div class="user-dropdown">
-                            <button class="notification-btn" onclick="toggleNotifications()" title="通知">
-                                <i class="bi bi-bell"></i>
-                                <span class="notification-badge" id="notificationCount" style="display: none;">0</span>
-                            </button>
-                            <div class="dropdown-menu" id="notificationMenu">
-                                <div class="dropdown-header">
-                                    <i class="bi bi-bell"></i> 通知中心
-                                </div>
-                                <div id="notificationList" style="max-height: 400px; overflow-y: auto;">
-                                    <div class="dropdown-item" style="color: var(--text-secondary); justify-content: center; padding: var(--spacing-xl);">
-                                        <i class="bi bi-inbox"></i> 暂无通知
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 用户菜单 -->
-                        <div class="user-dropdown">
-                            <button class="user-btn" onclick="toggleUserMenu()" title="用户">
-                                <i class="bi bi-person-circle"></i>
-                            </button>
-                            <div class="dropdown-menu" id="userMenu">
-                                <!-- 未登录状态 -->
-                                <div id="guestMenu">
-                                    <div class="dropdown-header">
-                                        <i class="bi bi-person"></i> 游客
-                                    </div>
-                                    <a href="/login" class="dropdown-item">
-                                        <i class="bi bi-box-arrow-in-right"></i> 登录
-                                    </a>
-                                    <a href="/register" class="dropdown-item">
-                                        <i class="bi bi-person-plus"></i> 注册
-                                    </a>
-                                </div>
-                                <!-- 已登录状态 -->
-                                <div id="userMenuContent" style="display: none;">
-                                    <div class="dropdown-header">
-                                        <i class="bi bi-person-circle"></i> <span id="userName"></span>
-                                    </div>
-                                    <a href="/profile" class="dropdown-item">
-                                        <i class="bi bi-person"></i> 个人资料
-                                    </a>
-                                    <a href="/settings" class="dropdown-item">
-                                        <i class="bi bi-gear"></i> 设置
-                                    </a>
-                                    <a href="#" onclick="logout()" class="dropdown-item">
-                                        <i class="bi bi-box-arrow-right"></i> 退出登录
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </header>
-
-        <nav class="nav-container">
-            <div class="nav-links">
-                <a href="/" class="nav-link">
-                    <i class="bi bi-house"></i> 首页
-                </a>
-                <a href="/dashboard" class="nav-link">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-                <a href="/technical-signals" class="nav-link active">
-                    <i class="bi bi-graph-up-arrow"></i> 技术信号
-                </a>
-                <a href="/paper_trading" class="nav-link">
-                    <i class="bi bi-journals"></i> 现货交易
-                </a>
-                <a href="/futures_trading" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> U本位合约
-                </a>
-                <a href="/coin_futures_trading" class="nav-link">
-                    <i class="bi bi-currency-bitcoin"></i> 币本位合约
-                </a>
-                <a href="/live_trading" class="nav-link">
-                    <i class="bi bi-currency-exchange"></i> 实盘合约
-                </a>
-                <a href="#" class="nav-link" style="opacity: 0.5; cursor: not-allowed;" onclick="event.preventDefault();">
-                    <i class="bi bi-cart-check"></i> 实盘现货
-                </a>
-                <a href="/futures_review" class="nav-link">
-                    <i class="bi bi-journal-check"></i> 复盘(24H)
-                </a>
-                <a href="/etf_data" class="nav-link">
-                    <i class="bi bi-pie-chart"></i> ETF 数据
-                </a>
-                <a href="/corporate_treasury" class="nav-link">
-                    <i class="bi bi-building"></i> 企业金库
-                </a>
-                <a href="/blockchain_gas" class="nav-link">
-                    <i class="bi bi-lightning-charge"></i> Gas统计
-                </a>
-                <a href="/data_management" class="nav-link">
-                    <i class="bi bi-database"></i> 数据管理
-                </a>
-            </div>
-        </nav>
-
-        <!-- 技术信号面板 -->
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="bi bi-bar-chart-line"></i>
-                    技术信号
-                </h2>
-                <div style="color: var(--text-secondary); font-size: 12px;">
-                    更新时间: <span id="updateTime">--</span>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>交易对</th>
-                                <th>24H统计</th>
-                                <th>4H统计</th>
-                                <th>1H统计</th>
-                                <th>综合趋势</th>
-                            </tr>
-                        </thead>
-                        <tbody id="technicalSignalsTableBody">
-                            <tr>
-                                <td colspan="5" class="loading">
-                                    <i class="bi bi-hourglass-split"></i> 加载中...
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <script>
+<body class="flex min-h-screen overflow-hidden">
+<!-- SideNavBar Component -->
+<aside class="h-screen w-[240px] fixed left-0 top-0 border-r-0 bg-[#0f1419] flex flex-col py-6 z-50">
+<div class="px-6 mb-8">
+<div class="flex items-center gap-3 mb-1">
+<div class="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary-container text-xl" style="font-variation-settings: 'FILL' 1;">psychology</span>
+</div>
+<h1 class="text-xl font-bold tracking-tighter text-[#49f4c8] font-['Space_Grotesk']">Neural Obsidian</h1>
+</div>
+<p class="text-[10px] uppercase tracking-[0.2em] text-on-surface-variant font-medium pl-11">Super Brain v4.2</p>
+</div>
+<nav class="flex-1 space-y-1 px-3">
+<!-- Intelligence -->
+<a class="group flex items-center px-3 py-2 text-sm font-['Space_Grotesk'] tracking-tight rounded-lg text-[#a8abb2] hover:bg-[#151a20] hover:text-[#49f4c8] transition-colors duration-150 active:scale-95" href="/dashboard">
+<span class="material-symbols-outlined mr-3 text-lg">psychology</span>
+<span>Intelligence</span>
+</a>
+<!-- Market Pulse -->
+<a class="group flex items-center px-3 py-2 text-sm font-['Space_Grotesk'] tracking-tight rounded-lg text-[#a8abb2] hover:bg-[#151a20] hover:text-[#49f4c8] transition-colors duration-150 active:scale-95" href="/market-regime">
+<span class="material-symbols-outlined mr-3 text-lg">timeline</span>
+<span>Market Pulse</span>
+</a>
+<!-- Neural Signals (ACTIVE) -->
+<a class="group flex items-center px-3 py-2 text-sm font-['Space_Grotesk'] tracking-tight text-[#49f4c8] border-r-2 border-[#49f4c8] bg-[#151a20] transition-colors duration-150" href="/signals">
+<span class="material-symbols-outlined mr-3 text-lg" style="font-variation-settings: 'FILL' 1;">analytics</span>
+<span>Neural Signals</span>
+</a>
+<!-- Liquidity Ops -->
+<a class="group flex items-center px-3 py-2 text-sm font-['Space_Grotesk'] tracking-tight rounded-lg text-[#a8abb2] hover:bg-[#151a20] hover:text-[#49f4c8] transition-colors duration-150 active:scale-95" href="#">
+<span class="material-symbols-outlined mr-3 text-lg">database</span>
+<span>Liquidity Ops</span>
+</a>
+<!-- Archive -->
+<a class="group flex items-center px-3 py-2 text-sm font-['Space_Grotesk'] tracking-tight rounded-lg text-[#a8abb2] hover:bg-[#151a20] hover:text-[#49f4c8] transition-colors duration-150 active:scale-95" href="#">
+<span class="material-symbols-outlined mr-3 text-lg">inventory_2</span>
+<span>Archive</span>
+</a>
+<!-- Settings -->
+<a class="group flex items-center px-3 py-2 text-sm font-['Space_Grotesk'] tracking-tight rounded-lg text-[#a8abb2] hover:bg-[#151a20] hover:text-[#49f4c8] transition-colors duration-150 active:scale-95" href="/settings">
+<span class="material-symbols-outlined mr-3 text-lg">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+<div class="px-3 mt-auto space-y-4">
+<button class="w-full py-3 rounded-xl bg-gradient-to-r from-primary to-primary-container text-on-primary text-xs font-bold uppercase tracking-widest shadow-[0_4px_20px_rgba(73,244,200,0.15)] hover:brightness-110 transition-all active:scale-95">
+                New Analysis
+            </button>
+<div class="space-y-1">
+<a class="flex items-center px-3 py-2 text-xs text-[#a8abb2] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined mr-3 text-base">help_center</span>
+<span>Support</span>
+</a>
+<a class="flex items-center px-3 py-2 text-xs text-[#a8abb2] hover:text-white transition-colors" href="#">
+<span class="material-symbols-outlined mr-3 text-base text-primary">sensors</span>
+<span>Network Status</span>
+</a>
+</div>
+</div>
+</aside>
+<!-- TopNavBar Component -->
+<header class="fixed top-0 right-0 left-[240px] h-16 bg-[#0a0f14]/80 backdrop-blur-xl flex items-center justify-between px-8 w-auto z-40 shadow-[0_4px_20px_rgba(73,244,200,0.05)]">
+<div class="flex items-center gap-8">
+<div class="text-lg font-black text-[#49f4c8] font-['Space_Grotesk']">Signals Terminal</div>
+<div class="h-6 w-[1px] bg-outline-variant/20"></div>
+<div class="flex gap-6">
+<a class="text-xs font-medium uppercase tracking-widest text-[#49f4c8] border-b border-[#49f4c8] py-1" href="#">Live Ticker</a>
+<a class="text-xs font-medium uppercase tracking-widest text-[#a8abb2] hover:text-white transition-opacity py-1" href="#">Order Book</a>
+<a class="text-xs font-medium uppercase tracking-widest text-[#a8abb2] hover:text-white transition-opacity py-1" href="#">Depth</a>
+<a class="text-xs font-medium uppercase tracking-widest text-[#a8abb2] hover:text-white transition-opacity py-1" href="#">History</a>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4 text-[#a8abb2]">
+<button class="material-symbols-outlined cursor-pointer hover:text-white active:opacity-70 transition-opacity">refresh</button>
+<button class="material-symbols-outlined cursor-pointer hover:text-white active:opacity-70 transition-opacity">notifications</button>
+<button class="material-symbols-outlined cursor-pointer hover:text-white active:opacity-70 transition-opacity">account_tree</button>
+</div>
+<button class="bg-surface-container-highest px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest text-primary border border-primary/20 hover:bg-primary/10 transition-colors">
+                Connect Wallet
+            </button>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest overflow-hidden border border-outline-variant/30">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="close up profile picture of a tech professional in a dark studio setting with teal backlighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDBpwHaE-OVxRlDSJmMFBIP5IghUAdOOZ_Bxn5NbimAHvqSQOpiQOMLHQduHLfelIhnPR29LIRcOLozAOWaow8ai8SkrRpVcBYtzhMXssS7_MNjGHNgewEMOl2i9zbyUGOtLdkZK23HCXFgiYPReUcJtFSR16zThz-igB0Z_MQmE2I6NMjDWCFoVPCiOVh8RrB4cgTMGLvcVBXyqbfD2Rpt4wOhlK7D7tigebpD68m-wYhcjTKD1gh6B71JJyHWBQPMZU_6nRU0AuaN"/>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="ml-[240px] mt-16 p-8 w-full h-[calc(100vh-64px)] overflow-y-auto bg-background">
+<!-- Header Info -->
+<div class="mb-8 flex justify-between items-end">
+<div>
+<h2 class="text-3xl font-bold font-['Space_Grotesk'] text-on-surface mb-1">技术信号分析</h2>
+<p class="text-on-surface-variant text-sm">Real-time neural processing of 48 technical indicators across top pairs.</p>
+</div>
+<div class="flex items-center gap-4 bg-surface-container-low p-2 rounded-xl border border-outline-variant/10">
+<div class="px-3 py-1 text-[10px] font-mono font-bold text-primary uppercase tracking-tighter">API: Active</div>
+<div class="px-3 py-1 text-[10px] font-mono font-bold text-on-surface-variant uppercase tracking-tighter">Latency: 14ms</div>
+</div>
+</div>
+<!-- Filter Row -->
+<div class="grid grid-cols-12 gap-6 mb-8">
+<div class="col-span-4 relative group">
+<span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg group-focus-within:text-primary transition-colors">search</span>
+<input class="w-full bg-surface-container-highest border-none rounded-xl pl-12 pr-4 py-3 text-sm text-on-surface placeholder-on-surface-variant focus:ring-1 focus:ring-primary/50 transition-all" placeholder="Search symbol..." type="text"/>
+</div>
+<div class="col-span-3">
+<select class="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-sm text-on-surface focus:ring-1 focus:ring-primary/50 appearance-none">
+<option>Direction: All</option>
+<option>Direction: LONG</option>
+<option>Direction: SHORT</option>
+</select>
+</div>
+<div class="col-span-5 flex items-center gap-4 bg-surface-container-highest px-6 py-3 rounded-xl">
+<label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant whitespace-nowrap">Min Score: <span class="text-primary score-mono">60</span></label>
+<input class="w-full accent-primary h-1 bg-surface-container-low rounded-full cursor-pointer" max="100" min="0" type="range" value="60"/>
+</div>
+</div>
+<div class="grid grid-cols-12 gap-8">
+<!-- Left Side: Signal List Table -->
+<div class="col-span-12 lg:col-span-8 space-y-6">
+<div class="bg-surface-container-low rounded-2xl overflow-hidden border border-outline-variant/5">
+<div class="px-6 py-5 border-b border-outline-variant/10 flex justify-between items-center">
+<h3 class="text-base font-bold font-['Space_Grotesk'] text-on-surface">信号评分列表</h3>
+<div class="flex gap-2">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+<span class="text-[10px] text-on-surface-variant uppercase font-bold tracking-widest">Live Updates</span>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold border-b border-outline-variant/5">
+<th class="px-6 py-4">交易对</th>
+<th class="px-6 py-4">信号方向</th>
+<th class="px-6 py-4">综合评分</th>
+<th class="px-4 py-4">RSI</th>
+<th class="px-4 py-4">MACD</th>
+<th class="px-4 py-4">布林带</th>
+<th class="px-4 py-4 text-right">成交量</th>
+<th class="px-4 py-4">K线形态</th>
+<th class="px-6 py-4 text-right">操作时间</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/5">
+<!-- BTC/USDT -->
+<tr class="hover:bg-surface-container/50 transition-colors cursor-pointer group">
+<td class="px-6 py-5">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-[#f7931a] flex items-center justify-center text-[10px] font-bold text-white">B</div>
+<span class="text-sm font-bold score-mono">BTC/USDT</span>
+</div>
+</td>
+<td class="px-6 py-5">
+<span class="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold tracking-widest uppercase">LONG</span>
+</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-3">
+<span class="text-sm font-bold text-primary score-mono">92</span>
+<div class="w-16 h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary ambient-glow-teal" style="width: 92%"></div>
+</div>
+</div>
+</td>
+<td class="px-4 py-5 text-xs text-on-surface-variant score-mono">68</td>
+<td class="px-4 py-5 text-xs text-primary font-medium">Bullish</td>
+<td class="px-4 py-5 text-xs text-on-surface-variant">Over Mid</td>
+<td class="px-4 py-5 text-xs text-right text-on-surface-variant score-mono">1.2M</td>
+<td class="px-4 py-5 text-xs text-on-surface">Hammer</td>
+<td class="px-6 py-5 text-xs text-right text-on-surface-variant score-mono">14:30:12</td>
+</tr>
+<!-- ETH/USDT -->
+<tr class="hover:bg-surface-container/50 transition-colors cursor-pointer group">
+<td class="px-6 py-5">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-[#627eea] flex items-center justify-center text-[10px] font-bold text-white">E</div>
+<span class="text-sm font-bold score-mono">ETH/USDT</span>
+</div>
+</td>
+<td class="px-6 py-5">
+<span class="px-2 py-1 rounded bg-error/10 text-error text-[10px] font-bold tracking-widest uppercase">SHORT</span>
+</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-3">
+<span class="text-sm font-bold text-tertiary score-mono">45</span>
+<div class="w-16 h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary" style="width: 45%"></div>
+</div>
+</div>
+</td>
+<td class="px-4 py-5 text-xs text-on-surface-variant score-mono">32</td>
+<td class="px-4 py-5 text-xs text-error font-medium">Bearish</td>
+<td class="px-4 py-5 text-xs text-on-surface-variant">Under Mid</td>
+<td class="px-4 py-5 text-xs text-right text-on-surface-variant score-mono">850K</td>
+<td class="px-4 py-5 text-xs text-on-surface">Evening Star</td>
+<td class="px-6 py-5 text-xs text-right text-on-surface-variant score-mono">14:28:45</td>
+</tr>
+<!-- SOL/USDT -->
+<tr class="hover:bg-surface-container/50 transition-colors cursor-pointer group">
+<td class="px-6 py-5">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-gradient-to-tr from-[#9945FF] to-[#14F195] flex items-center justify-center text-[10px] font-bold text-white">S</div>
+<span class="text-sm font-bold score-mono">SOL/USDT</span>
+</div>
+</td>
+<td class="px-6 py-5">
+<span class="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold tracking-widest uppercase">LONG</span>
+</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-3">
+<span class="text-sm font-bold text-primary score-mono">85</span>
+<div class="w-16 h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 85%"></div>
+</div>
+</div>
+</td>
+<td class="px-4 py-5 text-xs text-on-surface-variant score-mono">72</td>
+<td class="px-4 py-5 text-xs text-primary font-medium">Bullish</td>
+<td class="px-4 py-5 text-xs text-on-surface-variant">Upper</td>
+<td class="px-4 py-5 text-xs text-right text-on-surface-variant score-mono">420K</td>
+<td class="px-4 py-5 text-xs text-on-surface">Morning Star</td>
+<td class="px-6 py-5 text-xs text-right text-on-surface-variant score-mono">14:25:00</td>
+</tr>
+<!-- BNB/USDT -->
+<tr class="hover:bg-surface-container/50 transition-colors cursor-pointer group">
+<td class="px-6 py-5">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-[#f3ba2f] flex items-center justify-center text-[10px] font-bold text-white">B</div>
+<span class="text-sm font-bold score-mono">BNB/USDT</span>
+</div>
+</td>
+<td class="px-6 py-5">
+<span class="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold tracking-widest uppercase">LONG</span>
+</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-3">
+<span class="text-sm font-bold text-secondary score-mono">78</span>
+<div class="w-16 h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-secondary" style="width: 78%"></div>
+</div>
+</div>
+</td>
+<td class="px-4 py-5 text-xs text-on-surface-variant score-mono">55</td>
+<td class="px-4 py-5 text-xs text-on-surface-variant font-medium">Neutral</td>
+<td class="px-4 py-5 text-xs text-on-surface-variant">Mid</td>
+<td class="px-4 py-5 text-xs text-right text-on-surface-variant score-mono">150K</td>
+<td class="px-4 py-5 text-xs text-on-surface">Doji</td>
+<td class="px-6 py-5 text-xs text-right text-on-surface-variant score-mono">14:20:10</td>
+</tr>
+<!-- XRP/USDT -->
+<tr class="hover:bg-surface-container/50 transition-colors cursor-pointer group">
+<td class="px-6 py-5">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-[#23292f] border border-outline-variant flex items-center justify-center text-[10px] font-bold text-white">X</div>
+<span class="text-sm font-bold score-mono">XRP/USDT</span>
+</div>
+</td>
+<td class="px-6 py-5">
+<span class="px-2 py-1 rounded bg-error/10 text-error text-[10px] font-bold tracking-widest uppercase">SHORT</span>
+</td>
+<td class="px-6 py-5">
+<div class="flex items-center gap-3">
+<span class="text-sm font-bold text-error score-mono">22</span>
+<div class="w-16 h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-error" style="width: 22%"></div>
+</div>
+</div>
+</td>
+<td class="px-4 py-5 text-xs text-on-surface-variant score-mono">25</td>
+<td class="px-4 py-5 text-xs text-error font-medium">Bearish</td>
+<td class="px-4 py-5 text-xs text-on-surface-variant">Lower</td>
+<td class="px-4 py-5 text-xs text-right text-on-surface-variant score-mono">310K</td>
+<td class="px-4 py-5 text-xs text-on-surface">Marubozu</td>
+<td class="px-6 py-5 text-xs text-right text-on-surface-variant score-mono">14:15:30</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Subtle Bottom Graphic (Placeholder) -->
+<div class="h-32 rounded-2xl bg-surface-container-low flex items-center justify-center border border-outline-variant/5">
+<div class="text-center">
+<div class="flex justify-center gap-1 mb-2">
+<div class="w-1 h-8 bg-primary/20 rounded-full"></div>
+<div class="w-1 h-12 bg-primary/40 rounded-full"></div>
+<div class="w-1 h-16 bg-primary/60 rounded-full"></div>
+<div class="w-1 h-10 bg-primary/30 rounded-full"></div>
+<div class="w-1 h-14 bg-primary/50 rounded-full"></div>
+</div>
+<p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Global Volatility Index: Neural Stable</p>
+</div>
+</div>
+</div>
+<!-- Right Side: Statistics & Best Signals -->
+<div class="col-span-12 lg:col-span-4 space-y-8">
+<!-- Score Distribution -->
+<div class="bg-surface-container p-6 rounded-2xl border border-outline-variant/5">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-sm font-bold font-['Space_Grotesk'] text-on-surface uppercase tracking-wider">K线评分分布</h3>
+<span class="material-symbols-outlined text-on-surface-variant">bar_chart</span>
+</div>
+<div class="space-y-4">
+<!-- Teal -->
+<div class="space-y-1">
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-tight text-on-surface-variant">
+<span>80-100分 (Extreme Bullish)</span>
+<span class="score-mono text-primary">12%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary" style="width: 12%"></div>
+</div>
+</div>
+<!-- Blue -->
+<div class="space-y-1">
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-tight text-on-surface-variant">
+<span>60-80分 (Bullish)</span>
+<span class="score-mono text-secondary">35%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-secondary" style="width: 35%"></div>
+</div>
+</div>
+<!-- Amber -->
+<div class="space-y-1">
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-tight text-on-surface-variant">
+<span>40-60分 (Neutral)</span>
+<span class="score-mono text-[#ffb400]">28%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-[#ffb400]" style="width: 28%"></div>
+</div>
+</div>
+<!-- Red -->
+<div class="space-y-1">
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-tight text-on-surface-variant">
+<span>20-40分 (Bearish)</span>
+<span class="score-mono text-tertiary">15%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-tertiary" style="width: 15%"></div>
+</div>
+</div>
+<!-- Dark Red -->
+<div class="space-y-1">
+<div class="flex justify-between text-[10px] font-bold uppercase tracking-tight text-on-surface-variant">
+<span>0-20分 (Extreme Bearish)</span>
+<span class="score-mono text-on-tertiary-fixed-variant">10%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-on-tertiary-fixed-variant" style="width: 10%"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Top 5 Signals -->
+<div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/5">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-sm font-bold font-['Space_Grotesk'] text-on-surface uppercase tracking-wider">最佳信号 (Top 5)</h3>
+<span class="text-[10px] font-mono text-on-surface-variant">H1 TIME FRAME</span>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container border-l-2 border-primary">
+<div class="flex items-center gap-3">
+<span class="text-sm font-bold score-mono">BTC</span>
+<span class="text-[10px] font-bold text-primary">LONG</span>
+</div>
+<div class="text-right">
+<div class="text-sm font-bold text-primary score-mono">92.4</div>
+<div class="text-[8px] text-on-surface-variant">CONFIDENCE: HIGH</div>
+</div>
+</div>
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container border-l-2 border-primary">
+<div class="flex items-center gap-3">
+<span class="text-sm font-bold score-mono">SOL</span>
+<span class="text-[10px] font-bold text-primary">LONG</span>
+</div>
+<div class="text-right">
+<div class="text-sm font-bold text-primary score-mono">85.1</div>
+<div class="text-[8px] text-on-surface-variant">CONFIDENCE: MED</div>
+</div>
+</div>
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container border-l-2 border-secondary">
+<div class="flex items-center gap-3">
+<span class="text-sm font-bold score-mono">DOT</span>
+<span class="text-[10px] font-bold text-secondary">LONG</span>
+</div>
+<div class="text-right">
+<div class="text-sm font-bold text-secondary score-mono">74.8</div>
+<div class="text-[8px] text-on-surface-variant">CONFIDENCE: MED</div>
+</div>
+</div>
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container border-l-2 border-secondary">
+<div class="flex items-center gap-3">
+<span class="text-sm font-bold score-mono">AVAX</span>
+<span class="text-[10px] font-bold text-secondary">LONG</span>
+</div>
+<div class="text-right">
+<div class="text-sm font-bold text-secondary score-mono">68.2</div>
+<div class="text-[8px] text-on-surface-variant">CONFIDENCE: LOW</div>
+</div>
+</div>
+<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container border-l-2 border-secondary">
+<div class="flex items-center gap-3">
+<span class="text-sm font-bold score-mono">MATIC</span>
+<span class="text-[10px] font-bold text-secondary">LONG</span>
+</div>
+<div class="text-right">
+<div class="text-sm font-bold text-secondary score-mono">62.0</div>
+<div class="text-[8px] text-on-surface-variant">CONFIDENCE: LOW</div>
+</div>
+</div>
+</div>
+<button class="w-full mt-6 py-2 border border-outline-variant/20 rounded-lg text-[10px] font-bold text-on-surface-variant hover:text-white hover:bg-surface-container-highest transition-all">
+                        VIEW ALL ASSETS
+                    </button>
+</div>
+<!-- Editorial Note Card -->
+<div class="relative overflow-hidden rounded-2xl h-48 bg-surface-container-highest">
+<img class="absolute inset-0 w-full h-full object-cover opacity-20 grayscale" data-alt="abstract digital data stream with glowing teal particles moving through a dark void representing high-speed neural network connectivity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDnX_CaAR1g8sx_Hzyck4dSdZ4YXHqwzPHejBvEd3YjZfNVxRBEJK-4QQtqN87gvG4Ga3TwZQojCun_mvjkAxVZKHKAk4WSml8h7V7JS2cZtvRAcLc5FbCzkvZle1jmTr-2eslPqte0AD5J3TsCZD1WqBTQJQ86scMCc5PtE7kYZcR1_Q1NHhKdbsyZjpHzfdmF5QZtWYMcOciveMULV9Dlanncbu3SysLaIWh6dfA4osILW3JE23wUPyz8u9TtalTYvayJOu7DEn0l"/>
+<div class="absolute inset-0 bg-gradient-to-t from-surface-container-highest to-transparent"></div>
+<div class="relative p-6 h-full flex flex-col justify-end">
+<h4 class="text-xs font-bold text-primary uppercase tracking-widest mb-1">Neural Advice</h4>
+<p class="text-xs text-on-surface-variant leading-relaxed">System detects BTC consolidation. RSI divergence noted on 4H chart. Recommended action: Scalp Long on retest of 64k support.</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<script>
         // 加载技术信号数据
         async function loadTechnicalSignals() {
             try {
@@ -489,5 +763,4 @@
             console.log('退出登录');
         }
     </script>
-</body>
-</html>
+</body></html>

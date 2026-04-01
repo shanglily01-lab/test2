@@ -1,570 +1,430 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>行情识别与策略自适应</title>
-    <link href="/static/css/mobile.css" rel="stylesheet">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #0d1117;
-            color: #c9d1d9;
-            padding: 20px;
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-tertiary": "#490011",
+                        "secondary-fixed": "#bbd2ff",
+                        "inverse-surface": "#f8f9ff",
+                        "on-tertiary-fixed": "#39000b",
+                        "inverse-primary": "#006c55",
+                        "secondary-container": "#005eb5",
+                        "surface-dim": "#0a0f14",
+                        "error-container": "#9f0519",
+                        "error": "#ff716c",
+                        "surface-container": "#151a20",
+                        "inverse-on-surface": "#51555c",
+                        "outline-variant": "#44484e",
+                        "tertiary-container": "#fa4966",
+                        "on-secondary-fixed-variant": "#00509c",
+                        "on-background": "#ebeef5",
+                        "primary": "#49f4c8",
+                        "surface-bright": "#262d35",
+                        "outline": "#72767c",
+                        "primary-dim": "#33e5ba",
+                        "tertiary": "#ff6e80",
+                        "on-tertiary-container": "#100001",
+                        "background": "#0a0f14",
+                        "surface-container-highest": "#20262e",
+                        "surface-variant": "#20262e",
+                        "on-surface-variant": "#a8abb2",
+                        "on-primary": "#005745",
+                        "tertiary-fixed": "#ff909a",
+                        "secondary-fixed-dim": "#a4c5ff",
+                        "on-primary-fixed-variant": "#00624d",
+                        "on-surface": "#ebeef5",
+                        "surface-container-low": "#0f1419",
+                        "on-secondary-fixed": "#003469",
+                        "tertiary-dim": "#ff6e80",
+                        "primary-container": "#00d4aa",
+                        "tertiary-fixed-dim": "#ff7987",
+                        "on-secondary": "#002045",
+                        "surface-tint": "#49f4c8",
+                        "error-dim": "#d7383b",
+                        "surface": "#0a0f14",
+                        "on-error-container": "#ffa8a3",
+                        "primary-fixed": "#49f4c8",
+                        "secondary": "#5b9eff",
+                        "on-tertiary-fixed-variant": "#780022",
+                        "on-primary-fixed": "#004334",
+                        "on-primary-container": "#004132",
+                        "surface-container-lowest": "#000000",
+                        "surface-container-high": "#1a2027",
+                        "on-error": "#490006",
+                        "on-secondary-container": "#f6f7ff",
+                        "secondary-dim": "#5b9eff",
+                        "primary-fixed-dim": "#33e5ba"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"],
+                        "mono": ["JetBrains Mono"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
         }
-        .container { max-width: 1400px; margin: 0 auto; }
-        h1 { color: #58a6ff; margin-bottom: 20px; }
-        h2 { color: #8b949e; margin: 20px 0 10px; font-size: 18px; }
-
-        .card {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-
-        .regime-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-
-        .regime-card {
-            background: #21262d;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            padding: 15px;
-            text-align: center;
-        }
-
-        .regime-card.strong_uptrend { border-left: 4px solid #3fb950; }
-        .regime-card.weak_uptrend { border-left: 4px solid #7ee787; }
-        .regime-card.ranging { border-left: 4px solid #8b949e; }
-        .regime-card.weak_downtrend { border-left: 4px solid #f0883e; }
-        .regime-card.strong_downtrend { border-left: 4px solid #f85149; }
-
-        .regime-icon { font-size: 32px; margin-bottom: 10px; }
-        .regime-name { font-size: 16px; font-weight: bold; margin-bottom: 5px; }
-        .regime-count { font-size: 24px; color: #58a6ff; }
-        .regime-desc { font-size: 12px; color: #8b949e; margin-top: 5px; }
-
-        .symbol-list {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-            margin-top: 10px;
-            justify-content: center;
-        }
-
-        .symbol-tag {
-            background: #30363d;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 10px;
-        }
-
-        th, td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #30363d;
-        }
-
-        th {
-            background: #21262d;
-            color: #8b949e;
-            font-weight: 500;
-        }
-
-        tr:hover { background: #21262d; }
-
-        .btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-right: 10px;
-        }
-
-        .btn-primary { background: #238636; color: white; }
-        .btn-primary:hover { background: #2ea043; }
-        .btn-secondary { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
-        .btn-secondary:hover { background: #30363d; }
-        .btn-danger { background: #f85149; color: white; }
-        .btn-danger:hover { background: #da3633; }
-
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #8b949e;
-        }
-
-        .form-group input, .form-group select, .form-group textarea {
-            width: 100%;
-            padding: 10px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            color: #c9d1d9;
-        }
-
-        .form-group input:focus, .form-group select:focus {
-            outline: none;
-            border-color: #58a6ff;
-        }
-
-        .form-row {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
-        }
-
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 50px;
-            height: 26px;
-        }
-
-        .toggle-switch input { display: none; }
-
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #30363d;
-            transition: .3s;
-            border-radius: 26px;
-        }
-
-        .toggle-slider:before {
-            position: absolute;
-            content: "";
-            height: 20px;
-            width: 20px;
-            left: 3px;
-            bottom: 3px;
-            background-color: white;
-            transition: .3s;
-            border-radius: 50%;
-        }
-
-        input:checked + .toggle-slider { background-color: #238636; }
-        input:checked + .toggle-slider:before { transform: translateX(24px); }
-
-        .status-badge {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-        }
-
-        .status-enabled { background: #238636; color: white; }
-        .status-disabled { background: #f85149; color: white; }
-
-        .score-bar {
-            width: 100%;
-            height: 8px;
-            background: #30363d;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-
-        .score-fill {
-            height: 100%;
-            transition: width 0.3s;
-        }
-
-        .score-positive { background: linear-gradient(90deg, #238636, #3fb950); }
-        .score-negative { background: linear-gradient(90deg, #f85149, #da3633); }
-        .score-neutral { background: #8b949e; }
-
-        .tabs {
-            display: flex;
-            border-bottom: 1px solid #30363d;
-            margin-bottom: 20px;
-        }
-
-        .tab {
-            padding: 10px 20px;
-            cursor: pointer;
-            border-bottom: 2px solid transparent;
-            color: #8b949e;
-        }
-
-        .tab:hover { color: #c9d1d9; }
-        .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
-
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-
-        .refresh-btn {
-            float: right;
-            margin-top: -45px;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #8b949e;
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7);
-            z-index: 1000;
-        }
-
-        .modal-content {
-            background: #161b22;
-            max-width: 600px;
-            margin: 50px auto;
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid #30363d;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .modal-close {
-            background: none;
-            border: none;
-            color: #8b949e;
-            font-size: 24px;
-            cursor: pointer;
-        }
-
-        .back-link {
-            color: #58a6ff;
-            text-decoration: none;
-            margin-bottom: 20px;
-            display: inline-block;
-        }
-
-        .back-link:hover { text-decoration: underline; }
-
-        /* Toast 通知样式 */
-        .toast {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 12px 20px;
-            border-radius: 8px;
-            color: white;
-            font-size: 14px;
-            z-index: 2000;
-            animation: slideIn 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            max-width: 400px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        }
-
-        .toast.success {
-            background: linear-gradient(135deg, #238636, #2ea043);
-            border: 1px solid #3fb950;
-        }
-
-        .toast.error {
-            background: linear-gradient(135deg, #da3633, #f85149);
-            border: 1px solid #f85149;
-        }
-
-        .toast.info {
-            background: linear-gradient(135deg, #1f6feb, #388bfd);
-            border: 1px solid #58a6ff;
-        }
-
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        /* 确认对话框样式 */
-        .confirm-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1500;
-            animation: fadeIn 0.2s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-
-        .confirm-dialog {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 12px;
-            padding: 24px;
-            max-width: 420px;
-            width: 90%;
-            animation: scaleIn 0.2s ease;
-        }
-
-        @keyframes scaleIn {
-            from { transform: scale(0.9); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
-        }
-
-        .confirm-dialog h3 {
-            color: #c9d1d9;
-            margin-bottom: 16px;
-            font-size: 18px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .confirm-dialog h3.success { color: #3fb950; }
-        .confirm-dialog h3.error { color: #f85149; }
-        .confirm-dialog h3.warning { color: #d29922; }
-
-        .confirm-dialog .content {
-            color: #8b949e;
-            margin-bottom: 20px;
-            line-height: 1.6;
-        }
-
-        .confirm-dialog .buttons {
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-        }
-
-        .confirm-dialog .btn {
-            min-width: 80px;
-        }
+    </script>
+<style>
+        body { background-color: #0a0f14; color: #ebeef5; font-family: 'Manrope', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .glass-card { background: rgba(21, 26, 32, 0.8); backdrop-filter: blur(12px); }
+        .data-mono { font-family: 'JetBrains Mono', monospace; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #0a0f14; }
+        ::-webkit-scrollbar-thumb { background: #44484e; border-radius: 10px; }
     </style>
 </head>
-<body>
-    <div class="container">
-        <a href="/futures_trading" class="back-link">&larr; 返回U本位合约</a>
-                <a href="/coin_futures_trading" class="nav-link">
-                    <i class="bi bi-currency-bitcoin"></i> 币本位合约
-                </a>
-        <h1>行情识别与策略自适应</h1>
-
-        <div class="tabs">
-            <div class="tab active" onclick="showTab('overview')">行情总览</div>
-            <div class="tab" onclick="showTab('params')">策略参数配置</div>
-            <div class="tab" onclick="showTab('history')">行情切换历史</div>
-        </div>
-
-        <!-- 行情总览 -->
-        <div id="overview" class="tab-content active">
-            <div class="card">
-                <h2>当前行情分布
-                    <button class="btn btn-secondary refresh-btn" onclick="loadSummary()">刷新</button>
-                </h2>
-                <div id="regime-summary" class="regime-grid">
-                    <div class="loading">加载中...</div>
-                </div>
-            </div>
-
-            <div class="card">
-                <h2>检测单个交易对</h2>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>交易对</label>
-                        <select id="detect-symbol">
-                            <option value="">加载中...</option>
-                        </select>
+<body class="bg-surface text-on-surface selection:bg-primary selection:text-on-primary">
+<!-- SideNavBar -->
+<aside class="h-screen w-64 fixed left-0 top-0 bg-[#0a0f14] shadow-[0_0_24px_rgba(73,244,200,0.05)] flex flex-col py-8 z-50">
+<div class="px-6 mb-12">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center border border-primary/20">
+<span class="material-symbols-outlined text-primary" data-icon="neurology">neurology</span>
+</div>
+<div>
+<h1 class="text-2xl font-bold tracking-tighter text-[#49f4c8] font-headline">NEURAL</h1>
+<p class="text-[10px] tracking-[0.2em] text-on-surface-variant font-headline -mt-1 opacity-70">OBSIDIAN</p>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-2 px-3">
+<a class="flex items-center gap-4 px-4 py-3 rounded-lg text-[#49f4c8] bg-[#151a20] border-r-2 border-[#49f4c8] transition-all duration-300 font-headline" href="/market-regime">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="text-sm font-medium">行情识别</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-300 font-headline" href="#">
+<span class="material-symbols-outlined" data-icon="insights">insights</span>
+<span class="text-sm font-medium">策略中心</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-300 font-headline" href="#">
+<span class="material-symbols-outlined" data-icon="notifications_active">notifications_active</span>
+<span class="text-sm font-medium">信号预警</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-300 font-headline" href="/dashboard">
+<span class="material-symbols-outlined" data-icon="account_balance_wallet">account_balance_wallet</span>
+<span class="text-sm font-medium">资产管理</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-300 font-headline" href="/settings">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="text-sm font-medium">系统设置</span>
+</a>
+</nav>
+<div class="px-4 mt-auto">
+<button class="w-full py-3 bg-gradient-to-r from-primary to-primary-container text-on-primary rounded-lg font-headline font-bold text-xs tracking-wider transition-all hover:shadow-[0_0_16px_rgba(73,244,200,0.3)] active:scale-95">
+                CONNECT WALLET
+            </button>
+</div>
+</aside>
+<!-- TopNavBar -->
+<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-[#0a0f14]/80 backdrop-blur-xl border-b border-[#44484e]/20 z-40 flex items-center justify-between px-8">
+<div class="flex items-center gap-4">
+<h2 class="text-lg font-headline font-medium text-on-surface">市场状态识别</h2>
+<div class="h-4 w-px bg-outline-variant/30"></div>
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-sm" data-icon="update">update</span>
+<span class="text-xs data-mono">LAST UPDATE: 2024-05-24 14:32:05</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors" data-icon="account_tree">account_tree</span>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors" data-icon="notifications">notifications</span>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors" data-icon="settings_input_component">settings_input_component</span>
+</div>
+<div class="h-8 w-8 rounded-full overflow-hidden border border-outline-variant/50">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="portrait of a focused professional technologist in a dimly lit modern environment with subtle teal reflection on face" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAVcLY03SkqqyE1VkgYGzTrSGhuOlyTquNoaJrSuS6yuRbDIvcjH_FWUvP3fTqce2BGjP9E-WbY4vc59Aq655lTYjPeNn7_2WWRM23a1VPJbNZPEZK3Yuar6vzeBRRtK1lqqnjXFvX4EF-MwUEf3O7vxj_5Tr3BPQ834EBrgzbQKmF3edpZ35o8MhdlJA4etQuBFPnAlWk242rVadPys2pHFsT_4E-cDJrUxazOHIoaRwYvSwd2Mf7RG-w2rIo2ryCgwT3S5QEubLWP"/>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="ml-64 pt-16 min-h-screen p-8 space-y-8">
+<!-- Hero Section: Regime Cards -->
+<section>
+<h3 class="text-xs font-headline font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-6">当前市场范式 (Market Regime)</h3>
+<div class="grid grid-cols-5 gap-4">
+<!-- Card 1: Strong Bull -->
+<div class="group p-5 rounded-xl bg-surface-container-low border border-primary/10 hover:border-primary/40 transition-all duration-300">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-primary" data-icon="trending_up">trending_up</span>
+<span class="text-[10px] font-mono text-primary/60">BULLISH++</span>
+</div>
+<p class="text-sm font-headline font-medium text-on-surface mb-1">强势上涨</p>
+<div class="w-full h-1 bg-surface-container rounded-full overflow-hidden">
+<div class="w-0 group-hover:w-full h-full bg-primary transition-all duration-700"></div>
+</div>
+</div>
+<!-- Card 2: Mild Bull -->
+<div class="p-5 rounded-xl bg-surface-container-low border border-primary/5 hover:border-primary/20 transition-all duration-300">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-primary/60" data-icon="keyboard_double_arrow_up">keyboard_double_arrow_up</span>
+<span class="text-[10px] font-mono text-on-surface-variant">MILD BULL</span>
+</div>
+<p class="text-sm font-headline font-medium text-on-surface mb-1">温和上涨</p>
+<div class="w-full h-1 bg-surface-container rounded-full"></div>
+</div>
+<!-- Card 3: Sideways (ACTIVE) -->
+<div class="p-5 rounded-xl bg-surface-container border-2 border-primary shadow-[0_0_20px_rgba(73,244,200,0.15)] relative overflow-hidden transition-all duration-300">
+<div class="absolute top-0 right-0 p-2">
+<span class="flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+</div>
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-primary" data-icon="trending_flat" style="font-variation-settings: 'FILL' 1;">trending_flat</span>
+<span class="text-[10px] font-mono text-primary">ACTIVE</span>
+</div>
+<p class="text-lg font-headline font-bold text-on-surface mb-1">震荡盘整</p>
+<p class="text-[10px] font-mono text-on-surface-variant">RANGE: $62,400 - $64,800</p>
+</div>
+<!-- Card 4: Mild Bear -->
+<div class="p-5 rounded-xl bg-surface-container-low border border-error/5 hover:border-error/20 transition-all duration-300">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-error/60" data-icon="keyboard_double_arrow_down">keyboard_double_arrow_down</span>
+<span class="text-[10px] font-mono text-on-surface-variant">MILD BEAR</span>
+</div>
+<p class="text-sm font-headline font-medium text-on-surface mb-1">温和下跌</p>
+<div class="w-full h-1 bg-surface-container rounded-full"></div>
+</div>
+<!-- Card 5: Strong Bear -->
+<div class="p-5 rounded-xl bg-surface-container-low border border-error/10 hover:border-error/40 transition-all duration-300">
+<div class="flex justify-between items-start mb-4">
+<span class="material-symbols-outlined text-error" data-icon="trending_down">trending_down</span>
+<span class="text-[10px] font-mono text-error/60">BEARISH--</span>
+</div>
+<p class="text-sm font-headline font-medium text-on-surface mb-1">强势下跌</p>
+<div class="w-full h-1 bg-surface-container rounded-full"></div>
+</div>
+</div>
+</section>
+<!-- Indicators and Table Grid -->
+<div class="grid grid-cols-12 gap-8">
+<!-- Left Column: Market Indicators -->
+<div class="col-span-12 lg:col-span-5 space-y-6">
+<div class="p-6 rounded-2xl bg-surface-container-low border border-outline-variant/10">
+<h4 class="text-sm font-headline font-bold text-on-surface mb-8">市场指标识别</h4>
+<div class="space-y-8">
+<!-- Big4 Composite Gauge -->
+<div class="flex flex-col items-center py-4">
+<div class="relative w-48 h-24 overflow-hidden">
+<div class="absolute top-0 left-0 w-48 h-48 rounded-full border-[12px] border-surface-container"></div>
+<div class="absolute top-0 left-0 w-48 h-48 rounded-full border-[12px] border-primary/20 border-t-transparent border-r-transparent -rotate-45"></div>
+<div class="absolute top-0 left-0 w-48 h-48 rounded-full border-[12px] border-primary border-t-transparent border-r-transparent rotate-[20deg] shadow-[0_0_15px_rgba(73,244,200,0.2)]"></div>
+<div class="absolute bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center">
+<span class="text-2xl font-headline font-bold text-on-surface">中性</span>
+<span class="text-[10px] font-mono text-on-surface-variant">COMPOSITE</span>
+</div>
+</div>
+</div>
+<!-- Progress Bars -->
+<div class="space-y-4">
+<div>
+<div class="flex justify-between text-[11px] mb-2">
+<span class="font-mono text-on-surface">BTC TREND PROGRESS</span>
+<span class="font-mono text-on-surface-variant">FLAT | 48.2%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-outline w-[48%] rounded-full opacity-50"></div>
+</div>
+</div>
+<div>
+<div class="flex justify-between text-[11px] mb-2">
+<span class="font-mono text-on-surface">ETH TREND PROGRESS</span>
+<span class="font-mono text-on-surface-variant">FLAT | 51.5%</span>
+</div>
+<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-outline w-[51%] rounded-full opacity-50"></div>
+</div>
+</div>
+</div>
+<!-- Signal Strength -->
+<div class="pt-6 border-t border-outline-variant/10 flex items-center justify-between">
+<div>
+<p class="text-[10px] font-mono text-on-surface-variant uppercase tracking-widest">综合信号强度</p>
+<p class="text-3xl font-headline font-bold text-primary">42%</p>
+</div>
+<div class="w-16 h-16 flex items-center justify-center rounded-full bg-primary/10 border border-primary/20">
+<span class="material-symbols-outlined text-primary text-3xl" data-icon="hub">hub</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Big4 Detail Table -->
+<div class="col-span-12 lg:col-span-7">
+<div class="p-6 rounded-2xl bg-surface-container-low border border-outline-variant/10 h-full">
+<div class="flex items-center justify-between mb-6">
+<h4 class="text-sm font-headline font-bold text-on-surface uppercase tracking-wider">Big4 明细数据</h4>
+<span class="text-[10px] font-mono px-2 py-1 rounded bg-surface-bright text-on-surface-variant">WEIGHTED SCAN</span>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead>
+<tr class="text-[10px] font-mono text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/20">
+<th class="pb-4 font-medium">币种</th>
+<th class="pb-4 font-medium">权重</th>
+<th class="pb-4 font-medium text-center">15M 信号</th>
+<th class="pb-4 font-medium text-center">1H 信号</th>
+<th class="pb-4 font-medium text-right">综合评分</th>
+</tr>
+</thead>
+<tbody class="text-sm divide-y divide-outline-variant/5">
+<tr class="group hover:bg-surface-container transition-colors">
+<td class="py-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+<span class="text-[10px] font-bold text-primary">B</span>
+</div>
+<span class="font-headline font-medium">BTC</span>
+</div>
+</td>
+<td class="py-4 font-mono text-xs">50%</td>
+<td class="py-4 text-center">
+<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-error/10 text-error">BEAR</span>
+</td>
+<td class="py-4 text-center">
+<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>
+</td>
+<td class="py-4 text-right font-mono text-primary">48.2</td>
+</tr>
+<tr class="group hover:bg-surface-container transition-colors">
+<td class="py-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-secondary/10 flex items-center justify-center border border-secondary/20">
+<span class="text-[10px] font-bold text-secondary">E</span>
+</div>
+<span class="font-headline font-medium">ETH</span>
+</div>
+</td>
+<td class="py-4 font-mono text-xs">30%</td>
+<td class="py-4 text-center">
+<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>
+</td>
+<td class="py-4 text-center">
+<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-surface-bright text-on-surface-variant">FLAT</span>
+</td>
+<td class="py-4 text-right font-mono text-primary">51.5</td>
+</tr>
+<tr class="group hover:bg-surface-container transition-colors">
+<td class="py-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-yellow-500/10 flex items-center justify-center border border-yellow-500/20">
+<span class="text-[10px] font-bold text-yellow-500">B</span>
+</div>
+<span class="font-headline font-medium">BNB</span>
+</div>
+</td>
+<td class="py-4 font-mono text-xs">10%</td>
+<td class="py-4 text-center">
+<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-surface-bright text-on-surface-variant">FLAT</span>
+</td>
+<td class="py-4 text-center">
+<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-error/10 text-error">BEAR</span>
+</td>
+<td class="py-4 text-right font-mono text-on-surface-variant">32.8</td>
+</tr>
+<tr class="group hover:bg-surface-container transition-colors">
+<td class="py-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
+<span class="text-[10px] font-bold text-purple-500">S</span>
+</div>
+<span class="font-headline font-medium">SOL</span>
+</div>
+</td>
+<td class="py-4 font-mono text-xs">10%</td>
+<td class="py-4 text-center">
+<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>
+</td>
+<td class="py-4 text-center">
+<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>
+</td>
+<td class="py-4 text-right font-mono text-primary">76.4</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+<!-- Timeline Section -->
+<section class="p-6 rounded-2xl bg-surface-container-low border border-outline-variant/10">
+<div class="flex items-center justify-between mb-8">
+<h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-wider">历史状态记录 (24H Timeline)</h3>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-1.5 text-[10px] text-on-surface-variant font-mono">
+<span class="w-2 h-2 rounded-full bg-primary"></span> Bullish
                     </div>
-                    <div class="form-group">
-                        <label>时间周期</label>
-                        <select id="detect-timeframe">
-                            <option value="5m">5分钟</option>
-                            <option value="15m" selected>15分钟</option>
-                            <option value="1h">1小时</option>
-                            <option value="4h">4小时</option>
-                            <option value="1d">1天</option>
-                        </select>
+<div class="flex items-center gap-1.5 text-[10px] text-on-surface-variant font-mono">
+<span class="w-2 h-2 rounded-full bg-outline"></span> Sideways
                     </div>
-                </div>
-                <button class="btn btn-primary" onclick="detectRegime()">检测行情</button>
-                <div id="detect-result" style="margin-top: 15px;"></div>
-            </div>
-        </div>
-
-        <!-- 策略参数配置 -->
-        <div id="params" class="tab-content">
-            <div class="card">
-                <h2>选择策略</h2>
-                <select id="strategy-select" onchange="loadStrategyParams()">
-                    <option value="">-- 请选择策略 --</option>
-                </select>
-            </div>
-
-            <div id="params-config" style="display: none;">
-                <div class="card">
-                    <h2>行情参数配置
-                        <button class="btn btn-primary refresh-btn" onclick="openAddParamModal()">添加配置</button>
-                    </h2>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>行情类型</th>
-                                <th>状态</th>
-                                <th>参数配置</th>
-                                <th>说明</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="params-table">
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- 行情切换历史 -->
-        <div id="history" class="tab-content">
-            <div class="card">
-                <h2>筛选条件
-                    <button class="btn btn-secondary refresh-btn" onclick="loadAllHistory()">刷新</button>
-                </h2>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>交易对（留空显示全部）</label>
-                        <input type="text" id="history-symbol" placeholder="留空显示全部" value="">
+<div class="flex items-center gap-1.5 text-[10px] text-on-surface-variant font-mono">
+<span class="w-2 h-2 rounded-full bg-error"></span> Bearish
                     </div>
-                    <div class="form-group">
-                        <label>时间周期</label>
-                        <select id="history-timeframe">
-                            <option value="15m" selected>15分钟</option>
-                            <option value="1h">1小时</option>
-                        </select>
-                    </div>
-                </div>
-                <button class="btn btn-primary" onclick="loadAllHistory()">筛选</button>
-            </div>
-
-            <div class="card">
-                <h2>切换记录（最近50条）</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>时间</th>
-                            <th>交易对</th>
-                            <th>原行情</th>
-                            <th>新行情</th>
-                            <th>得分变化</th>
-                        </tr>
-                    </thead>
-                    <tbody id="history-table">
-                        <tr><td colspan="5" class="loading">加载中...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- 添加/编辑参数模态框 -->
-    <div id="param-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 id="modal-title">添加行情参数</h2>
-                <button class="modal-close" onclick="closeModal()">&times;</button>
-            </div>
-            <form id="param-form">
-                <div class="form-group">
-                    <label>行情类型</label>
-                    <select id="param-regime-type" required>
-                        <option value="strong_uptrend">强趋势上涨</option>
-                        <option value="weak_uptrend">弱趋势上涨</option>
-                        <option value="ranging">震荡行情</option>
-                        <option value="weak_downtrend">弱趋势下跌</option>
-                        <option value="strong_downtrend">强趋势下跌</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>启用交易</label>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="param-enabled" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-                <div class="form-group">
-                    <label>启用持续趋势信号 (sustainedTrend)</label>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="param-sustained-trend">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>趋势最小强度 (%)</label>
-                        <input type="number" id="param-min-strength" step="0.1" value="0.3">
-                    </div>
-                    <div class="form-group">
-                        <label>趋势最大强度 (%)</label>
-                        <input type="number" id="param-max-strength" step="0.1" value="2.0">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>允许交易方向</label>
-                    <select id="param-allow-direction">
-                        <option value="both">双向（跟随策略配置）</option>
-                        <option value="long_only">仅做多</option>
-                        <option value="short_only">仅做空</option>
-                        <option value="none">禁止交易</option>
-                    </select>
-                    <p style="font-size: 11px; color: #6e7681; margin-top: 5px;">
-                        此设置会覆盖策略的交易方向配置。选择"禁止交易"相当于在该行情下暂停策略。
-                    </p>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>止损 (%)</label>
-                        <input type="number" id="param-stop-loss" step="0.1" value="3.0">
-                    </div>
-                    <div class="form-group">
-                        <label>止盈 (%)</label>
-                        <input type="number" id="param-take-profit" step="0.1" value="6.0">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>说明</label>
-                    <textarea id="param-description" rows="2" placeholder="参数配置说明"></textarea>
-                </div>
-                <button type="submit" class="btn btn-primary">保存</button>
-                <button type="button" class="btn btn-secondary" onclick="closeModal()">取消</button>
-            </form>
-        </div>
-    </div>
-
-    <script>
+</div>
+</div>
+<div class="relative py-10">
+<!-- Main Timeline Bar -->
+<div class="absolute left-0 right-0 h-1 bg-surface-container rounded-full top-1/2 -translate-y-1/2"></div>
+<!-- Timeline Markers -->
+<div class="relative flex justify-between px-4">
+<!-- Point 1 -->
+<div class="flex flex-col items-center group">
+<div class="text-[9px] font-mono text-on-surface-variant mb-4 -translate-y-2 opacity-0 group-hover:opacity-100 transition-all">06:00</div>
+<div class="w-4 h-4 rounded-full bg-surface border-2 border-primary z-10"></div>
+<div class="mt-4 flex flex-col items-center">
+<span class="text-[10px] font-mono text-primary">Bullish</span>
+</div>
+</div>
+<!-- Point 2 -->
+<div class="flex flex-col items-center group">
+<div class="text-[9px] font-mono text-on-surface-variant mb-4 -translate-y-2 opacity-0 group-hover:opacity-100 transition-all">10:30</div>
+<div class="w-3 h-3 rounded-full bg-surface border-2 border-primary/40 z-10"></div>
+<div class="mt-4 flex flex-col items-center">
+<span class="text-[10px] font-mono text-on-surface-variant">Mild Bull</span>
+</div>
+</div>
+<!-- Point 3 (Active) -->
+<div class="flex flex-col items-center group">
+<div class="text-[9px] font-mono text-on-surface-variant mb-4">14:00</div>
+<div class="w-5 h-5 rounded-full bg-primary border-4 border-surface shadow-[0_0_12px_rgba(73,244,200,0.5)] z-10 scale-125"></div>
+<div class="mt-4 flex flex-col items-center">
+<span class="text-[11px] font-headline font-bold text-on-surface">Sideways</span>
+<span class="text-[9px] font-mono text-primary">CURRENT</span>
+</div>
+</div>
+<!-- Point 4 (Projection) -->
+<div class="flex flex-col items-center group opacity-40">
+<div class="text-[9px] font-mono text-on-surface-variant mb-4">18:00</div>
+<div class="w-3 h-3 rounded-full bg-surface border-2 border-outline-variant z-10 border-dashed"></div>
+<div class="mt-4 flex flex-col items-center">
+<span class="text-[10px] font-mono text-on-surface-variant">Predict: Flat</span>
+</div>
+</div>
+<!-- Point 5 -->
+<div class="flex flex-col items-center group opacity-20">
+<div class="text-[9px] font-mono text-on-surface-variant mb-4">22:00</div>
+<div class="w-3 h-3 rounded-full bg-surface border-2 border-outline-variant z-10 border-dashed"></div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Floating Action Button (FAB) - Suppressed for this detailed view as per logic -->
+<script>
         let currentStrategyId = null;
 
         // Toast 通知
@@ -1079,5 +939,4 @@
             loadAllHistory();  // 自动加载切换历史
         };
     </script>
-</body>
-</html>
+</body></html>

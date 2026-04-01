@@ -1,846 +1,473 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>U本位合约交易 - AlphaFlow</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/mobile.css" rel="stylesheet">
-    <style>
-        /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
-        :root {
-            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
-            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
-            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
-            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
-            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
-            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
-            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
-            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
-            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
-            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
-            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
-            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
-            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
-            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
-        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
-        .header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-lg); }
-        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-sm); display: flex; align-items: center; gap: var(--spacing-md); }
-        .header-subtitle { color: var(--text-secondary); font-size: 13px; }
-        .header-actions { display: flex; gap: var(--spacing-md); align-items: center; flex-wrap: wrap; }
-        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
-        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
-        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
-        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
-        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
-        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
-        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
-        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
-        .card-body { padding: 0; }
-        .trades-card .card-body { padding: var(--spacing-md); }
-        .stats-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--spacing-md); }
-        .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-lg); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; }
-        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
-        .stat-card:hover::before { opacity: 1; }
-        .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm); font-weight: 600; }
-        .stat-value { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-xs); font-family: var(--font-mono); }
-        .stat-change { font-size: 13px; color: var(--text-secondary); }
-        .stat-change.positive { color: var(--success-green); }
-        .stat-change.negative { color: var(--danger-red); }
-        .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
-        table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
-        thead { background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); }
-        th { padding: var(--spacing-md) var(--spacing-lg); text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { padding: var(--spacing-lg); border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-size: 13px; }
-        tr:last-child td { border-bottom: none; }
-        tbody tr { transition: background-color var(--transition-fast); }
-        tbody tr:hover { background: var(--bg-hover); }
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .btn-primary:hover:not(:disabled) { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
-        .btn-success { background: var(--success-green); color: white; }
-        .btn-success:hover:not(:disabled) { background: #059669; transform: translateY(-1px); box-shadow: var(--shadow-md); }
-        .btn-danger { background: var(--danger-red); color: white; }
-        .btn-danger:hover:not(:disabled) { background: #DC2626; transform: translateY(-1px); box-shadow: var(--shadow-md); }
-        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-default); }
-        .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-muted); }
-        .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
-        .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
-        .btn-sm { padding: var(--spacing-sm) var(--spacing-md); font-size: 12px; }
-        /* 交易模式选择器样式 */
-        .mode-selector { display: flex; align-items: center; gap: var(--spacing-sm); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-sm) var(--spacing-md); }
-        .mode-selector label { font-size: 12px; color: var(--text-secondary); font-weight: 500; white-space: nowrap; }
-        .mode-selector select { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); padding: var(--spacing-sm) var(--spacing-md); font-size: 13px; cursor: pointer; transition: all var(--transition-base); }
-        .mode-selector select:hover { border-color: var(--primary-blue); }
-        .mode-selector select:focus { outline: none; border-color: var(--primary-blue); box-shadow: 0 0 0 3px rgba(43, 111, 237, 0.1); }
-        .mode-indicator { display: inline-flex; align-items: center; gap: var(--spacing-xs); padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; }
-        .mode-indicator.trend { background: rgba(43, 111, 237, 0.15); color: var(--primary-blue); border: 1px solid rgba(43, 111, 237, 0.3); }
-        .mode-indicator.range { background: rgba(245, 158, 11, 0.15); color: var(--warning-yellow); border: 1px solid rgba(245, 158, 11, 0.3); }
-        .mode-indicator.auto { background: rgba(16, 185, 129, 0.15); color: var(--success-green); border: 1px solid rgba(16, 185, 129, 0.3); }
-        .badge { display: inline-flex; align-items: center; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
-        .badge-success { background: var(--success-green-bg); color: var(--success-green); }
-        .badge-danger { background: var(--danger-red-bg); color: var(--danger-red); }
-        .badge-info { background: var(--primary-blue-light); color: var(--primary-blue); }
-        .badge-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }
-        .pnl-positive { color: var(--success-green); }
-        .pnl-negative { color: var(--danger-red); }
-        .status-indicator { display: inline-flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) var(--spacing-md); background: var(--bg-tertiary); border-radius: var(--radius-full); font-size: 12px; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        .status-dot.online { background: var(--success-green); }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .empty-state-icon { font-size: 48px; margin-bottom: var(--spacing-lg); opacity: 0.5; }
-        .empty-state-text { font-size: 15px; margin-bottom: var(--spacing-sm); }
-        .loading-overlay { display: flex; justify-content: center; align-items: center; min-height: 200px; }
-        .spinner { width: 40px; height: 40px; border: 4px solid var(--bg-tertiary); border-top-color: var(--primary-blue); border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .text-primary { color: var(--text-primary); }
-        .text-secondary { color: var(--text-secondary); }
-        .text-success { color: var(--success-green); }
-        .text-danger { color: var(--danger-red); }
-        .d-flex { display: flex; }
-        .align-center { align-items: center; }
-        .justify-between { justify-content: space-between; }
-        .gap-sm { gap: var(--spacing-sm); }
-        .gap-md { gap: var(--spacing-md); }
-        .mb-sm { margin-bottom: var(--spacing-sm); }
-        .font-mono { font-family: var(--font-mono); }
-        .text-sm { font-size: 13px; }
-        .text-xs { font-size: 11px; }
-        .text-lg { font-size: 16px; }
-        .position-card { 
-            background: var(--bg-card); 
-            border: 1px solid var(--border-default); 
-            border-left-width: 4px; 
-            border-radius: var(--radius-md); 
-            padding: 16px; 
-            transition: all var(--transition-base);
-        }
-        .position-card:hover { 
-            border-color: var(--border-muted); 
-            box-shadow: var(--shadow-md); 
-            background: var(--bg-hover);
-        }
-        .position-card.long { border-left-color: var(--success-green); }
-        .position-card.short { border-left-color: var(--danger-red); }
-        .last-update { font-size: 12px; color: var(--text-secondary); }
-        .form-group { margin-bottom: var(--spacing-lg); }
-        .form-label { display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: var(--spacing-sm); }
-        .form-control { width: 100%; padding: var(--spacing-md); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; font-family: var(--font-family); transition: all var(--transition-base); }
-        .form-control:focus { outline: none; border-color: var(--primary-blue); background: var(--bg-card); box-shadow: 0 0 0 3px rgba(43, 111, 237, 0.1); }
-        .form-control:disabled, .form-control[readonly] { opacity: 0.6; cursor: not-allowed; background: var(--bg-secondary); }
-        select.form-control { cursor: pointer; }
-        input[type="number"].form-control { font-family: var(--font-mono); }
-        .toast { 
-            position: fixed; 
-            bottom: 24px; 
-            right: 24px; 
-            background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); 
-            border: 1px solid var(--border-default); 
-            border-radius: var(--radius-lg); 
-            padding: var(--spacing-lg); 
-            box-shadow: var(--shadow-xl); 
-            z-index: 10000; 
-            min-width: 320px; 
-            max-width: 520px; 
-            animation: slideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); 
-            word-wrap: break-word;
-            backdrop-filter: blur(10px);
-            transition: all var(--transition-base);
-        }
-        .toast:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-xl), 0 0 20px rgba(43, 111, 237, 0.2);
-        }
-        @keyframes slideInRight { 
-            from { 
-                transform: translateX(120%); 
-                opacity: 0; 
-            } 
-            to { 
-                transform: translateX(0); 
-                opacity: 1; 
-            } 
-        }
-        @keyframes pulse {
-            0%, 100% {
-                transform: scale(1);
-                opacity: 1;
-            }
-            50% {
-                transform: scale(1.1);
-                opacity: 0.9;
-            }
-        }
-        .toast.success { 
-            border-left: 4px solid var(--success-green);
-            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, var(--bg-card) 100%);
-        }
-        .toast.error { 
-            border-left: 4px solid var(--danger-red);
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, var(--bg-card) 100%);
-        }
-        .toast.info { 
-            border-left: 4px solid var(--info-blue);
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, var(--bg-card) 100%);
-        }
-        /* 自定义确认对话框 */
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(4px);
-            z-index: 10001;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            animation: fadeIn 0.2s ease-out;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-        }
-        .modal-dialog {
-            background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%);
-            border: 1px solid var(--border-default);
-            border-radius: var(--radius-xl);
-            padding: 0;
-            min-width: 400px;
-            max-width: 500px;
-            box-shadow: var(--shadow-xl), 0 0 40px rgba(0, 0, 0, 0.4);
-            animation: slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            overflow: hidden;
-        }
-        @keyframes slideUp {
-            from {
-                transform: translateY(20px) scale(0.95);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0) scale(1);
-                opacity: 1;
-            }
-        }
-        .modal-header {
-            padding: var(--spacing-xl);
-            border-bottom: 1px solid var(--border-default);
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, transparent 100%);
-        }
-        .modal-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-md);
-        }
-        .modal-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
-            background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
-            border: 2px solid rgba(239, 68, 68, 0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-        }
-        .modal-body {
-            padding: var(--spacing-xl);
-            color: var(--text-secondary);
-            line-height: 1.6;
-            font-size: 14px;
-        }
-        .modal-footer {
-            padding: var(--spacing-lg) var(--spacing-xl);
-            border-top: 1px solid var(--border-default);
-            display: flex;
-            gap: var(--spacing-md);
-            justify-content: flex-end;
-            background: var(--bg-secondary);
-        }
-        .trading-layout { display: grid; grid-template-columns: 400px 1fr; gap: var(--spacing-xl); align-items: start; }
-        .trading-panel-wrapper { display: flex; flex-direction: column; height: 100%; }
-        .positions-trades-wrapper { display: flex; flex-direction: column; gap: var(--spacing-xl); height: 100%; }
-        .positions-card { flex: 3; display: flex; flex-direction: column; min-height: 1000px; overflow: hidden; }
-        .trades-card { flex: 2; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-        .positions-card .card-body, .trades-card .card-body { flex: 1; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; }
-        .positions-card .card-body::-webkit-scrollbar, .trades-card .card-body::-webkit-scrollbar { width: 6px; }
-        .positions-card .card-body::-webkit-scrollbar-track, .trades-card .card-body::-webkit-scrollbar-track { background: var(--bg-tertiary); border-radius: 3px; }
-        .positions-card .card-body::-webkit-scrollbar-thumb, .trades-card .card-body::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
-        .positions-card .card-body::-webkit-scrollbar-thumb:hover, .trades-card .card-body::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
-        @media (max-width: 1400px) {
-            .stats-grid { grid-template-columns: repeat(3, 1fr); }
-            .trading-layout { grid-template-columns: 350px 1fr; }
-        }
-        @media (max-width: 1200px) {
-            .trading-layout { grid-template-columns: 1fr; align-items: start; }
-            .trading-panel-wrapper, .positions-trades-wrapper { height: auto; }
-            .positions-card { min-height: 1000px; }
-            .trades-card { min-height: 800px; }
-        }
-        @media (max-width: 768px) {
-            .container { padding: var(--spacing-md); }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: var(--spacing-sm); }
-            .stat-value { font-size: 20px; }
-            .stat-label { font-size: 11px; }
-            .stat-card { padding: var(--spacing-md); }
-            .nav-links { flex-direction: column; }
-            th, td { padding: var(--spacing-sm); font-size: 11px; }
-            .trading-layout { grid-template-columns: 1fr; gap: var(--spacing-lg); }
-        }
 
-        /* Tab pagination styles */
-        #positionsTab, {
-            display: flex;
-            flex-direction: column;
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Neural Obsidian - Futures Trading Monitor</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-tint": "#49f4c8",
+                        "background": "#0a0f14",
+                        "surface-container-high": "#1a2027",
+                        "on-background": "#ebeef5",
+                        "on-error": "#490006",
+                        "tertiary-dim": "#ff6e80",
+                        "surface-dim": "#0a0f14",
+                        "inverse-surface": "#f8f9ff",
+                        "primary-fixed-dim": "#33e5ba",
+                        "outline": "#72767c",
+                        "on-tertiary-container": "#100001",
+                        "secondary-fixed": "#bbd2ff",
+                        "surface-container-highest": "#20262e",
+                        "surface-container-lowest": "#000000",
+                        "surface-container-low": "#0f1419",
+                        "on-secondary-fixed": "#003469",
+                        "on-secondary": "#002045",
+                        "surface-variant": "#20262e",
+                        "inverse-primary": "#006c55",
+                        "primary-container": "#00d4aa",
+                        "on-primary": "#005745",
+                        "on-error-container": "#ffa8a3",
+                        "primary": "#49f4c8",
+                        "secondary-fixed-dim": "#a4c5ff",
+                        "secondary-container": "#005eb5",
+                        "on-surface-variant": "#a8abb2",
+                        "surface": "#0a0f14",
+                        "on-primary-fixed": "#004334",
+                        "on-primary-container": "#004132",
+                        "on-tertiary-fixed": "#39000b",
+                        "on-tertiary": "#490011",
+                        "surface-bright": "#262d35",
+                        "tertiary-container": "#fa4966",
+                        "tertiary": "#ff6e80",
+                        "primary-dim": "#33e5ba",
+                        "error-container": "#9f0519",
+                        "error": "#ff716c",
+                        "primary-fixed": "#49f4c8",
+                        "on-surface": "#ebeef5",
+                        "tertiary-fixed-dim": "#ff7987",
+                        "secondary-dim": "#5b9eff",
+                        "on-tertiary-fixed-variant": "#780022",
+                        "outline-variant": "#44484e",
+                        "error-dim": "#d7383b",
+                        "surface-container": "#151a20",
+                        "on-secondary-fixed-variant": "#00509c",
+                        "on-secondary-container": "#f6f7ff",
+                        "tertiary-fixed": "#ff909a",
+                        "on-primary-fixed-variant": "#00624d",
+                        "inverse-on-surface": "#51555c",
+                        "secondary": "#5b9eff"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"],
+                        "mono": ["JetBrains Mono"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
         }
-        #positionsTable {
-            display: flex !important;
-            flex-direction: column;
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
         }
-        .tab-content-container {
-            overflow-y: auto;
-            overflow-x: auto;
-            border-radius: var(--radius-md);
-            border: 1px solid var(--border-default);
-            max-height: 900px;
+        body {
+            font-family: 'Manrope', sans-serif;
+            background-color: #0a0f14;
+            color: #ebeef5;
         }
-        .tab-content-container::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        .tab-content-container::-webkit-scrollbar-track {
-            background: var(--bg-tertiary);
-            border-radius: 4px;
-        }
-        .tab-content-container::-webkit-scrollbar-thumb {
-            background: var(--border-default);
-            border-radius: 4px;
-        }
-        .tab-content-container::-webkit-scrollbar-thumb:hover {
-            background: var(--text-tertiary);
-        }
-        .tab-pagination {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: var(--spacing-lg) 0;
-            border-top: 1px solid var(--border-default);
-            margin-top: var(--spacing-lg);
-            flex-shrink: 0;
-        }
-        .tab-pagination-info {
-            color: var(--text-secondary);
-            font-size: 13px;
-        }
-        .tab-pagination-controls {
-            display: flex;
-            gap: var(--spacing-sm);
-            align-items: center;
-        }
-        .tab-pagination-select {
-            padding: var(--spacing-sm) var(--spacing-md);
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-default);
-            color: var(--text-primary);
-            border-radius: var(--radius-md);
-            font-size: 13px;
-            cursor: pointer;
-        }
-        .tab-pagination-select:focus {
-            outline: none;
-            border-color: var(--primary-blue);
-        }
-        .tab-pagination-btn {
-            padding: var(--spacing-sm) var(--spacing-md);
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-default);
-            color: var(--text-primary);
-            border-radius: var(--radius-md);
-            cursor: pointer;
-            font-size: 13px;
-            transition: all var(--transition-fast);
-        }
-        .tab-pagination-btn:hover:not(:disabled) {
-            background: var(--bg-hover);
-            border-color: var(--primary-blue);
-        }
-        .tab-pagination-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-
-        /* 评级管理样式 */
-        .rating-symbol-badge {
-            padding: var(--spacing-sm) var(--spacing-md);
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-default);
-            border-radius: var(--radius-md);
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--text-primary);
-            transition: all var(--transition-fast);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: var(--spacing-sm);
-        }
-        .rating-symbol-badge:hover {
-            background: var(--bg-hover);
-            border-color: var(--primary-blue);
-            transform: translateY(-1px);
-            box-shadow: var(--shadow-sm);
-        }
-        .rating-symbol-badge .symbol-name {
-            font-family: var(--font-mono);
-            font-weight: 600;
-        }
-        .rating-symbol-badge .rating-icon {
-            font-size: 10px;
-            opacity: 0.6;
-        }
-        .rating-update-result {
-            padding: var(--spacing-md);
-            background: var(--bg-secondary);
-            border-radius: var(--radius-md);
-            border-left: 3px solid var(--primary-blue);
-            margin-top: var(--spacing-md);
-        }
-        .rating-update-result.success {
-            border-color: var(--success-green);
-        }
-        .rating-update-result.error {
-            border-color: var(--error-red);
-        }
+        .monospace { font-family: 'JetBrains Mono', monospace; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #20262e; border-radius: 10px; }
     </style>
 </head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <div>
-                    <div style="display: flex; align-items: center; gap: var(--spacing-md);">
-                        <img src="/static/images/logo/alphaflow-logo-icon.svg" alt="AlphaFlow" style="height: 36px; width: auto;">
-                        <div style="flex: 1;">
-                            <h1 class="header-title" style="margin: 0;">
-                                <i class="bi bi-graph-up-arrow"></i>
-                                U本位合约交易
-                            </h1>
-                            <p class="header-subtitle">
-                                <span class="status-indicator">
-                                    <span class="status-dot online"></span>
-                                    系统运行中
-                                </span>
-                                <span style="margin-left: 16px;">最后更新: <span id="lastUpdate" class="last-update">--</span></span>
-                                <span style="margin-left: 16px; color: var(--text-tertiary);">
-                                    <i class="bi bi-clock-history"></i> 时间显示: UTC+8 (北京时间)
-                                </span>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-                <div class="header-actions">
-                    <button class="btn btn-secondary" onclick="refreshData()">
-                        <i class="bi bi-arrow-clockwise"></i> 刷新
-                    </button>
-                </div>
-            </div>
-        </header>
-
-        <!-- Navigation -->
-        <nav class="nav-container slide-up">
-            <div class="nav-links">
-                <a href="/" class="nav-link">
-                    <i class="bi bi-house"></i> 首页
-                </a>
-                <a href="/dashboard" class="nav-link">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-                <a href="/technical-signals" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> 技术信号
-                </a>
-                <a href="/paper_trading" class="nav-link">
-                    <i class="bi bi-journals"></i> 现货交易
-                </a>
-                <a href="/futures_trading" class="nav-link active">
-                    <i class="bi bi-graph-up-arrow"></i> U本位合约
-                </a>
-                <a href="/coin_futures_trading" class="nav-link">
-                    <i class="bi bi-currency-bitcoin"></i> 币本位合约
-                </a>
-                <a href="/live_trading" class="nav-link">
-                    <i class="bi bi-currency-exchange"></i> 实盘合约
-                </a>
-                <a href="#" class="nav-link" style="opacity: 0.5; cursor: not-allowed;" onclick="event.preventDefault(); showToast('实盘现货功能开发中...', 'info')">
-                    <i class="bi bi-cart-check"></i> 实盘现货
-                </a>
-                <a href="/futures_review" class="nav-link">
-                    <i class="bi bi-journal-check"></i> 复盘(24H)
-                </a>
-                <a href="/etf_data" class="nav-link">
-                    <i class="bi bi-pie-chart"></i> ETF 数据
-                </a>
-                <a href="/corporate_treasury" class="nav-link">
-                    <i class="bi bi-building"></i> 企业金库
-                </a>
-                <a href="/blockchain_gas" class="nav-link">
-                    <i class="bi bi-lightning-charge"></i> Gas统计
-                </a>
-                <a href="/data_management" class="nav-link">
-                    <i class="bi bi-database"></i> 数据管理
-                </a>
-            </div>
-        </nav>
-
-        <!-- Account Overview -->
-        <div class="card slide-up">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="bi bi-wallet2"></i>
-                    <span id="account-title">账户总览</span>
-                </h2>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <div class="last-update" id="account-update">-</div>
-                </div>
-            </div>
-            <div class="card-body">
-                <div id="accountLoading" class="loading-overlay">
-                    <div class="spinner"></div>
-                </div>
-                <div id="accountStats" class="stats-grid" style="display: none;">
-                    <!-- 动态加载 -->
-                </div>
-            </div>
-        </div>
-
-        <!-- Trading Panel and Positions Side by Side -->
-        <div class="trading-layout">
-            <!-- Trading Panel -->
-            <div class="card slide-up trading-panel-wrapper" style="margin-bottom: 0;">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-currency-exchange"></i>
-                        交易面板
-                    </h2>
-                </div>
-                <div class="card-body">
-                    <form id="trade-form">
-                        <div class="form-group">
-                            <label class="form-label">交易对</label>
-                            <select class="form-control" id="symbol" required>
-                                <option value="">加载中...</option>
-                            </select>
-                        </div>
-                    <div class="form-group">
-                        <div class="d-flex justify-between align-center" style="margin-bottom: var(--spacing-sm);">
-                            <label class="form-label" style="margin-bottom: 0;">
-                                当前价格: <span id="current-price-display" class="font-mono" style="color: var(--primary-blue); font-weight: 600; margin-left: 8px; display: inline-block; transition: all 0.3s ease;">--</span>
-                                <span id="price-change-indicator" style="margin-left: 8px; font-size: 12px; font-weight: 600; opacity: 0; transition: opacity 0.3s ease;"></span>
-                            </label>
-                            <button type="button" class="btn btn-sm btn-ghost" onclick="refreshPrice()" style="padding: 4px 8px; min-width: auto;">
-                                <i class="bi bi-arrow-clockwise"></i>
+<body class="flex min-h-screen overflow-hidden">
+<!-- Sidebar -->
+<aside class="h-screen w-[240px] fixed left-0 top-0 bg-[#0a0f14] dark:bg-[#0a0f14] flex flex-col py-8 px-4 border-r-0 shadow-[4px_0_24px_rgba(73,244,200,0.05)] z-50">
+<div class="mb-10 px-2">
+<h1 class="text-xl font-bold tracking-tighter text-[#49f4c8] font-['Space_Grotesk']">NEURAL OBSIDIAN</h1>
+<p class="text-[10px] text-on-surface-variant tracking-[0.2em] font-medium mt-1">SUPER BRAIN V4.2</p>
+</div>
+<nav class="flex-1 space-y-2">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] transition-all duration-200 hover:bg-[#151a20]" href="/dashboard">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#49f4c8] font-bold border-r-2 border-[#49f4c8] bg-gradient-to-r from-[#49f4c8]/10 to-transparent transition-all duration-200" href="/futures">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">show_chart</span>
+<span class="text-sm font-medium">Futures</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] transition-all duration-200 hover:bg-[#151a20]" href="/live-trading">
+<span class="material-symbols-outlined">precision_manufacturing</span>
+<span class="text-sm font-medium">Live Trading</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] transition-all duration-200 hover:bg-[#151a20]" href="/review">
+<span class="material-symbols-outlined">history_edu</span>
+<span class="text-sm font-medium">Review</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] transition-all duration-200 hover:bg-[#151a20]" href="/signals">
+<span class="material-symbols-outlined">sensors</span>
+<span class="text-sm font-medium">Signals</span>
+</a>
+</nav>
+<div class="pt-8 mt-8 border-t border-outline-variant/10">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] transition-all duration-200 hover:bg-[#151a20]" href="/settings">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Canvas -->
+<main class="ml-[240px] flex-1 min-h-screen flex flex-col bg-background">
+<!-- Top Navbar -->
+<header class="fixed top-0 right-0 left-[240px] h-16 bg-[#0a0f14]/80 backdrop-blur-xl flex items-center justify-between px-8 z-40">
+<div class="flex items-center gap-6">
+<h2 class="font-headline font-bold text-lg tracking-tight">Futures Trading Monitor</h2>
+<div class="flex bg-surface-container rounded-lg p-1">
+<button class="px-4 py-1 text-xs font-bold text-primary bg-primary/10 rounded-md">模拟盘</button>
+<button class="px-4 py-1 text-xs font-bold text-on-surface-variant hover:text-on-surface transition-colors">实盘</button>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 px-3 py-1 bg-surface-container rounded-full">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+<span class="text-[10px] uppercase tracking-widest text-on-surface-variant">System Optimal</span>
+</div>
+<div class="flex gap-2">
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined">sensors</span></button>
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined">schedule</span></button>
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-1.5 h-1.5 bg-tertiary rounded-full"></span>
+</button>
+</div>
+</div>
+</header>
+<!-- Content Area -->
+<div class="mt-16 p-8 space-y-8 flex-1 overflow-y-auto">
+<!-- Header section -->
+<div class="flex justify-between items-end">
+<div>
+<h3 class="font-headline text-3xl font-bold tracking-tighter">U本位合约</h3>
+<p class="text-on-surface-variant text-sm mt-1">实时多维度持仓监控与执行终端</p>
+</div>
+<button class="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary to-primary-container text-on-primary rounded-xl font-bold text-sm shadow-[0_0_20px_rgba(73,244,200,0.15)] active:scale-[0.98] transition-all">
+<span class="material-symbols-outlined text-lg">add</span>
+                    新建交易策略
+                </button>
+</div>
+<!-- Stats Row -->
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+<div class="bg-surface-container p-5 rounded-xl border-l-2 border-primary/30">
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">持仓数</p>
+<p class="text-2xl font-headline font-bold monospace">12</p>
+</div>
+<div class="bg-surface-container p-5 rounded-xl">
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">总保证金</p>
+<div class="flex items-baseline gap-1">
+<p class="text-2xl font-headline font-bold monospace">45.2</p>
+<span class="text-xs text-on-surface-variant font-medium">k</span>
+</div>
+</div>
+<div class="bg-surface-container p-5 rounded-xl border-l-2 border-primary">
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">总浮盈</p>
+<p class="text-2xl font-headline font-bold text-primary monospace">+2.4k</p>
+</div>
+<div class="bg-surface-container p-5 rounded-xl">
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">24H 盈亏</p>
+<p class="text-2xl font-headline font-bold text-primary monospace">+12.42%</p>
+</div>
+<div class="bg-surface-container p-5 rounded-xl">
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">胜率</p>
+<p class="text-2xl font-headline font-bold monospace">68%</p>
+</div>
+<div class="bg-surface-container p-5 rounded-xl">
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">总交易数</p>
+<p class="text-2xl font-headline font-bold monospace">47</p>
+</div>
+</div>
+<!-- Middle Section -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+<!-- Current Positions Table (60%) -->
+<div class="lg:col-span-7 bg-surface-container-low rounded-2xl overflow-hidden shadow-2xl">
+<div class="p-6 flex justify-between items-center bg-surface-container">
+<h4 class="font-headline font-bold flex items-center gap-2">
+<span class="w-1 h-4 bg-primary rounded-full"></span>
+                            当前持仓
+                        </h4>
+<button class="text-xs text-primary font-bold hover:underline">查看全部</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant bg-surface-container-low">
+<th class="px-6 py-4 font-semibold">交易对</th>
+<th class="px-6 py-4 font-semibold text-center">方向</th>
+<th class="px-6 py-4 font-semibold">开仓/当前价</th>
+<th class="px-6 py-4 font-semibold">浮盈 (PNL)</th>
+<th class="px-6 py-4 font-semibold">操作</th>
+</tr>
+</thead>
+<tbody class="text-sm">
+<!-- Row Long -->
+<tr class="bg-primary/5 hover:bg-primary/10 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-bright flex items-center justify-center">
+<img alt="BTC" class="w-5 h-5 rounded-full" data-alt="minimalist bitcoin crypto logo with orange background and white symbol" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAxyESR86Uq26OrCCVe_wWtjh23YHPfVXE5_9FV3hJ72ZqGsNc-sEqoPmQD1fF0jYOO_Fdes88Nl1RZOxw3SzrAHQPeaPteI6kD85RRKODhotMx5UQoxAco9nbEucT-ZdiXhp4CxKPjpS0PEL-cbQaXvK2Z6AOX5BhBNY1f9CcrVnndyATji1xoWUDzCyF7_cEncFqPLvFzEdsGjC8sx-Ke4SgZ3s2gd7SCJQW6YrNureWAp-FZy-coMsKQ2bFDjrKLvjTkns_dpCya"/>
+</div>
+<div>
+<p class="font-bold font-headline">BTCUSDT</p>
+<p class="text-[10px] text-on-surface-variant monospace">125x Leverage</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-center">
+<span class="px-2 py-1 bg-primary/20 text-primary rounded-md text-[10px] font-bold uppercase tracking-wider">Long</span>
+</td>
+<td class="px-6 py-4 monospace">
+<div class="text-xs">68,432.12</div>
+<div class="text-primary font-medium">69,821.50</div>
+</td>
+<td class="px-6 py-4">
+<div class="text-primary font-bold monospace">+1,389.38</div>
+<div class="text-[10px] text-primary/70 monospace">+2.03%</div>
+</td>
+<td class="px-6 py-4">
+<button class="px-4 py-1.5 bg-error/10 hover:bg-error/20 text-error rounded-lg text-xs font-bold transition-all">平仓</button>
+</td>
+</tr>
+<!-- Row Short -->
+<tr class="bg-error/5 hover:bg-error/10 transition-colors">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-bright flex items-center justify-center">
+<img alt="ETH" class="w-5 h-5 rounded-full" data-alt="minimalist ethereum crypto logo with blue background and white symbol" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBw9qZb57b1mulTac8NM1_tWvQldvYWVE2vqRwRINFwO5pSL7Jr1tu-XT1EguyFR3hqKau1sFZ7uZ5xIcLJkXCNYMZJrduqBKUywaxe0TRe5SzpBlUdPZKp-6OkGShoZxNd4h2JCVJ87ojSPu8F8voEM0gf4u8Masf05KHOhYLSkIAfEX_RVr4Hjvn6PbXRJAzizqfrnCVc8heU5Wm05q6rFgcoOZd1DfZ0IEK8AnvJQhf6bE8AvOrk8usyEzX411IAliG9TpU2onYI"/>
+</div>
+<div>
+<p class="font-bold font-headline">ETHUSDT</p>
+<p class="text-[10px] text-on-surface-variant monospace">50x Leverage</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 text-center">
+<span class="px-2 py-1 bg-error/20 text-error rounded-md text-[10px] font-bold uppercase tracking-wider">Short</span>
+</td>
+<td class="px-6 py-4 monospace">
+<div class="text-xs">3,842.10</div>
+<div class="text-error font-medium">3,901.45</div>
+</td>
+<td class="px-6 py-4">
+<div class="text-error font-bold monospace">-59.35</div>
+<div class="text-[10px] text-error/70 monospace">-1.54%</div>
+</td>
+<td class="px-6 py-4">
+<button class="px-4 py-1.5 bg-error/10 hover:bg-error/20 text-error rounded-lg text-xs font-bold transition-all">平仓</button>
+</td>
+</tr>
+<!-- Row Long -->
+<tr class="bg-primary/5 hover:bg-primary/10 transition-colors">
+<td class="px-6 py-4 border-t border-outline-variant/5">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-bright flex items-center justify-center">
+<img alt="SOL" class="w-5 h-5 rounded-full" data-alt="minimalist solana crypto logo with green and purple gradient background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCgQGxLvYRRB3ODtit6kFrXr7Gm-xKGo94R6xZV91DujIISGnKwGmzaHZkFULiDi-YOIBvnoeJGDuAWmfwCwLBi0sYFWZ3XVfpVMMqaagw4K5h7MIItt8b-45DbiODnjRe9524jfk_EWXG7z_ttUFLJGoyjehDGxqicIkhmxcyvG77H5oWxHKEiapeJWGLKM_GyHVNmGLaDPQlKBjw9TvfAkukhOXn6gi-q-w8gB_Y7ExJA38nN0Z0QUZFKKvLFkPcRq5xhnQUyKwIj"/>
+</div>
+<div>
+<p class="font-bold font-headline">SOLUSDT</p>
+<p class="text-[10px] text-on-surface-variant monospace">20x Leverage</p>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 border-t border-outline-variant/5 text-center">
+<span class="px-2 py-1 bg-primary/20 text-primary rounded-md text-[10px] font-bold uppercase tracking-wider">Long</span>
+</td>
+<td class="px-6 py-4 border-t border-outline-variant/5 monospace">
+<div class="text-xs">142.50</div>
+<div class="text-primary font-medium">158.20</div>
+</td>
+<td class="px-6 py-4 border-t border-outline-variant/5">
+<div class="text-primary font-bold monospace">+15.70</div>
+<div class="text-[10px] text-primary/70 monospace">+11.02%</div>
+</td>
+<td class="px-6 py-4 border-t border-outline-variant/5">
+<button class="px-4 py-1.5 bg-error/10 hover:bg-error/20 text-error rounded-lg text-xs font-bold transition-all">平仓</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Right Section (40%) -->
+<div class="lg:col-span-5 space-y-6">
+<!-- Quick Actions Panel -->
+<div class="bg-surface-container p-6 rounded-2xl shadow-xl">
+<h4 class="font-headline font-bold flex items-center gap-2 mb-6">
+<span class="w-1 h-4 bg-secondary rounded-full"></span>
+                            快速操作
+                        </h4>
+<div class="space-y-4">
+<div class="flex items-center justify-between p-3 bg-surface-container-highest rounded-xl">
+<span class="text-sm font-medium">策略总开关</span>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-bright peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="flex items-center justify-between p-3 bg-surface-container-highest rounded-xl">
+<span class="text-sm font-medium">仅做多</span>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-bright peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container-highest rounded-xl">
+<span class="text-sm font-medium">仅做空</span>
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-bright peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+</div>
+</div>
+<div class="mt-8">
+<button class="w-full py-3 bg-error-container text-on-error-container rounded-xl font-bold uppercase tracking-widest text-sm hover:brightness-110 transition-all active:scale-[0.98]">
+                                一键清空所有持仓
                             </button>
-                        </div>
-                        <input type="number" class="form-control" id="current-price" step="0.00000001" placeholder="输入限价价格（可选）">
-                        <small class="text-secondary text-xs" style="display: block; margin-top: 4px;">
-                            上方显示实时合约价格，下方可输入限价单价格<br>
-                            <span style="color: var(--warning-yellow);">⚠ 限价单超时后，若价格偏离超过1%将自动取消</span>
-                        </small>
-                    </div>
-                        <div class="form-group">
-                            <label class="form-label">方向</label>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md);">
-                                <button type="button" class="btn btn-success" id="long-btn" onclick="selectPositionSide('LONG')" style="width: 100%;">
-                                    <i class="bi bi-arrow-up-circle"></i> 做多
-                                </button>
-                                <button type="button" class="btn btn-secondary" id="short-btn" onclick="selectPositionSide('SHORT')" style="width: 100%;">
-                                    <i class="bi bi-arrow-down-circle"></i> 做空
-                                </button>
-                            </div>
-                            <input type="hidden" id="position-side" value="LONG">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">杠杆倍数</label>
-                            <select class="form-control" id="leverage" required>
-                                <option value="1">1x</option>
-                                <option value="2">2x</option>
-                                <option value="3">3x</option>
-                                <option value="5">5x</option>
-                                <option value="10" selected>10x</option>
-                                <option value="20">20x</option>
-                                <option value="50">50x</option>
-                                <option value="100">100x</option>
-                                <option value="125">125x</option>
-                            </select>
-                            <small class="text-secondary text-xs" style="display: block; margin-top: 4px;">
-                                杠杆越高，风险越大，请谨慎选择
-                            </small>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">数量</label>
-                            <input type="number" class="form-control" id="quantity" step="0.00000001" required placeholder="请输入数量">
-                            <small class="text-secondary text-xs" style="display: block; margin-top: 4px;">
-                                预计保证金: <span id="estimated-margin" class="font-mono">0.00</span> USDT
-                            </small>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">止损价（可选）</label>
-                            <input type="number" class="form-control" id="stop-loss-price" step="0.00000001" placeholder="设置止损价格">
-                            <small class="text-secondary text-xs" style="display: block; margin-top: 4px;">
-                                当价格达到止损价时将自动平仓
-                            </small>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">止盈价（可选）</label>
-                            <input type="number" class="form-control" id="take-profit-price" step="0.00000001" placeholder="设置止盈价格">
-                            <small class="text-secondary text-xs" style="display: block; margin-top: 4px;">
-                                当价格达到止盈价时将自动平仓
-                            </small>
-                        </div>
-                        <div style="margin-top: var(--spacing-xl);">
-                            <button type="button" class="btn btn-primary" style="width: 100%;" onclick="openPosition()">
-                                <i class="bi bi-play-circle"></i> 开仓
-                            </button>
-                        </div>
-                    </form>
-                    <div id="trade-result" style="margin-top: 16px;"></div>
-                </div>
-            </div>
-
-            <!-- Right Column: Positions and Recent Trades -->
-            <div class="positions-trades-wrapper">
-                <!-- Open Positions -->
-                <div class="card slide-up positions-card" style="margin-bottom: 0;">
-                    <div class="card-header">
-                        <div style="display: flex; gap: var(--spacing-md); align-items: center; flex: 1; flex-wrap: wrap;">
-                            <h2 class="card-title">
-                                <i class="bi bi-briefcase"></i>
-                                <span id="positions-title">持仓中</span>
-                            </h2>
-                        </div>
-                        <div class="d-flex align-center gap-md">
-                            <button class="btn btn-danger btn-sm" id="closeAllPositionsBtn" onclick="closeAllPositions()" style="display: none; font-size: 12px; padding: 6px 12px;">
-                                <i class="bi bi-x-circle"></i> 一键平仓
-                            </button>
-                            <span class="badge badge-info" id="positionCount" style="display: none;">0 个持仓</span>
-                            <div class="last-update" id="positions-update">-</div>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <!-- 持仓中标签页 -->
-                        <div id="positionsTab">
-                            <div id="positionsLoading" class="loading-overlay" style="min-height: 200px;">
-                                <div class="spinner"></div>
-                            </div>
-                            <div id="positionsTable" style="display: none;">
-                                <div class="tab-content-container" id="positionsBodyContainer">
-                                    <div id="positionsBody" style="display: flex; flex-direction: column; gap: 12px;">
-                                        <!-- 动态加载持仓卡片 -->
-                                    </div>
-                                </div>
-                                <div class="tab-pagination" id="positionsPagination" style="display: none;">
-                                    <div class="tab-pagination-info">
-                                        显示 <span id="positionsPageStart">0</span> - <span id="positionsPageEnd">0</span> / 共 <span id="positionsTotalRows">0</span> 条
-                                    </div>
-                                    <div class="tab-pagination-controls">
-                                        <label style="color: var(--text-secondary); font-size: 13px; margin-right: var(--spacing-sm);">每页显示:</label>
-                                        <select id="positionsRowsPerPage" class="tab-pagination-select" onchange="changePositionsRowsPerPage()">
-                                            <option value="10" selected>10</option>
-                                            <option value="20">20</option>
-                                            <option value="50">50</option>
-                                        </select>
-                                        <button class="tab-pagination-btn" id="positionsPrevBtn" onclick="changePositionsPage(-1)">
-                                            <i class="bi bi-chevron-left"></i> 上一页
-                                        </button>
-                                        <span style="color: var(--text-secondary); font-size: 13px; padding: 0 var(--spacing-md);">
-                                            第 <span id="positionsCurrentPage">1</span> / <span id="positionsTotalPages">1</span> 页
-                                        </span>
-                                        <button class="tab-pagination-btn" id="positionsNextBtn" onclick="changePositionsPage(1)">
-                                            下一页 <i class="bi bi-chevron-right"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                            <div id="positionsEmpty" class="empty-state" style="display: none;">
-                                <div class="empty-state-icon">📭</div>
-                                <div class="empty-state-text">暂无持仓</div>
-                                <p class="text-sm text-secondary" style="margin-top: 8px;">系统会每30分钟自动检查投资建议并开仓</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Recent Trades -->
-                <div class="card slide-up trades-card" style="margin-bottom: 0;">
-                    <div class="card-header">
-                        <h2 class="card-title">
-                            <i class="bi bi-clock-history"></i>
-                            <span id="trades-title">最近交易记录</span>
-                        </h2>
-                        <div class="last-update" id="trades-update">-</div>
-                    </div>
-                    <div class="card-body" style="padding: var(--spacing-md); display: flex; flex-direction: column; flex: 1; min-height: 0;">
-                        <div id="tradesLoading" class="loading-overlay" style="min-height: 400px; flex: 1;">
-                            <div class="spinner"></div>
-                        </div>
-                        <div id="tradesTable" style="display: none; flex-direction: column; min-height: 0;">
-                            <div class="table-container" style="flex: 1; overflow-y: auto; min-height: 0;">
-                                <table>
-                                    <thead style="position: sticky; top: 0; background: var(--bg-card); z-index: 10;">
-                                        <tr>
-                                            <th>交易对</th>
-                                            <th>方向</th>
-                                            <th>杠杆</th>
-                                            <th>价格</th>
-                                            <th>数量</th>
-                                            <th>保证金</th>
-                                            <th>已实现盈亏</th>
-                                            <th>ROI</th>
-                                            <th>平仓原因</th>
-                                            <th>止盈止损</th>
-                                            <th>手续费</th>
-                                            <th>开仓时间</th>
-                                            <th>平仓时间</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tradesBody">
-                                        <!-- 动态加载 -->
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div id="tradesPagination" style="display: flex; justify-content: space-between; align-items: center; padding: 12px; border-top: 1px solid var(--border-default); margin-top: 8px; flex-shrink: 0;">
-                                <div class="text-sm text-secondary">
-                                    <span id="tradesPageInfo">第 1 页，共 1 页</span>
-                                </div>
-                                <div style="display: flex; gap: 8px;">
-                                    <button id="tradesPrevBtn" class="btn btn-secondary" onclick="loadTradesPage(currentTradesPage - 1)" disabled style="padding: 4px 12px; font-size: 12px;">上一页</button>
-                                    <button id="tradesNextBtn" class="btn btn-secondary" onclick="loadTradesPage(currentTradesPage + 1)" disabled style="padding: 4px 12px; font-size: 12px;">下一页</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div id="tradesEmpty" class="empty-state" style="display: none; flex: 1; align-items: center; justify-content: center;">
-                            <div>
-                                <div class="empty-state-icon">📜</div>
-                                <div class="empty-state-text">暂无交易记录</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <!-- positions-trades-wrapper 结束 -->
-        </div>
-        <!-- trading-layout 结束 -->
-
-        <!-- Rating Management Panel (在trading-layout外部) -->
-        <div class="card slide-up" style="margin-top: var(--spacing-xl);">
-                <div class="card-header">
-                    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-                        <h2 class="card-title">
-                            <i class="bi bi-trophy"></i>
-                            交易对评级管理
-                        </h2>
-                        <button class="btn btn-primary btn-sm" onclick="triggerRatingUpdate()" id="updateRatingBtn">
-                            <i class="bi bi-arrow-clockwise"></i> 更新评级
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <!-- 配置信息 -->
-                    <div style="background: var(--bg-secondary); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg);">
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--spacing-lg);">
-                            <div>
-                                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">升级条件(降级到更好等级)</div>
-                                <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);" id="upgradeConfig">加载中...</div>
-                            </div>
-                            <div>
-                                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">观察天数</div>
-                                <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);" id="observationDays">-</div>
-                            </div>
-                            <div>
-                                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">总评级数量</div>
-                                <div style="font-size: 14px; font-weight: 600; color: var(--text-primary);" id="totalRatings">-</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 评级分组显示 -->
-                    <div id="ratingsContainer">
-                        <div id="ratingsLoading" class="loading-overlay" style="min-height: 200px;">
-                            <div class="spinner"></div>
-                        </div>
-
-                        <!-- Level 0: 白名单 -->
-                        <div id="level0Container" style="display: none; margin-bottom: var(--spacing-lg);">
-                            <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
-                                <div style="width: 4px; height: 20px; background: var(--success-green); border-radius: 2px;"></div>
-                                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
-                                    Level 0 - 白名单
-                                    <span id="level0Count" class="badge badge-success" style="margin-left: 8px;">0</span>
-                                </h3>
-                            </div>
-                            <div id="level0List" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--spacing-sm);"></div>
-                        </div>
-
-                        <!-- Level 1: 黑名单一级 -->
-                        <div id="level1Container" style="display: none; margin-bottom: var(--spacing-lg);">
-                            <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
-                                <div style="width: 4px; height: 20px; background: var(--warning-yellow); border-radius: 2px;"></div>
-                                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
-                                    Level 1 - 黑名单一级 (仓位x0.25)
-                                    <span id="level1Count" class="badge badge-warning" style="margin-left: 8px;">0</span>
-                                </h3>
-                            </div>
-                            <div id="level1List" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--spacing-sm);"></div>
-                        </div>
-
-                        <!-- Level 2: 黑名单二级 -->
-                        <div id="level2Container" style="display: none; margin-bottom: var(--spacing-lg);">
-                            <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
-                                <div style="width: 4px; height: 20px; background: var(--error-red); border-radius: 2px;"></div>
-                                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
-                                    Level 2 - 黑名单二级 (仓位x0.125)
-                                    <span id="level2Count" class="badge badge-danger" style="margin-left: 8px;">0</span>
-                                </h3>
-                            </div>
-                            <div id="level2List" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--spacing-sm);"></div>
-                        </div>
-
-                        <!-- Level 3: 永久禁止 -->
-                        <div id="level3Container" style="display: none; margin-bottom: var(--spacing-lg);">
-                            <div style="display: flex; align-items: center; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
-                                <div style="width: 4px; height: 20px; background: #6b7280; border-radius: 2px;"></div>
-                                <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0;">
-                                    Level 3 - 永久禁止交易
-                                    <span id="level3Count" class="badge" style="margin-left: 8px; background: #6b7280;">0</span>
-                                </h3>
-                            </div>
-                            <div id="level3List" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--spacing-sm);"></div>
-                        </div>
-
-                        <div id="ratingsEmpty" style="display: none; text-align: center; padding: var(--spacing-xl); color: var(--text-secondary);">
-                            <div class="empty-state-icon">📊</div>
-                            <div class="empty-state-text">暂无评级数据</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-    <script>
+</div>
+</div>
+<!-- Recent Trades -->
+<div class="bg-surface-container p-6 rounded-2xl shadow-xl flex-1">
+<div class="flex justify-between items-center mb-6">
+<h4 class="font-headline font-bold flex items-center gap-2">
+<span class="w-1 h-4 bg-tertiary rounded-full"></span>
+                                最近成交
+                            </h4>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary">refresh</span>
+</div>
+<div class="space-y-4">
+<div class="flex items-center justify-between py-2 border-b border-outline-variant/10">
+<div class="flex items-center gap-3">
+<span class="text-xs font-bold text-primary">BUY</span>
+<span class="text-sm font-headline">BTCUSDT</span>
+</div>
+<div class="text-right">
+<p class="text-sm monospace">69,210.50</p>
+<p class="text-[10px] text-on-surface-variant">2 mins ago</p>
+</div>
+</div>
+<div class="flex items-center justify-between py-2 border-b border-outline-variant/10">
+<div class="flex items-center gap-3">
+<span class="text-xs font-bold text-error">SELL</span>
+<span class="text-sm font-headline">ETHUSDT</span>
+</div>
+<div class="text-right">
+<p class="text-sm monospace">3,892.40</p>
+<p class="text-[10px] text-on-surface-variant">12 mins ago</p>
+</div>
+</div>
+<div class="flex items-center justify-between py-2 border-b border-outline-variant/10">
+<div class="flex items-center gap-3">
+<span class="text-xs font-bold text-primary">BUY</span>
+<span class="text-sm font-headline">LINKUSDT</span>
+</div>
+<div class="text-right">
+<p class="text-sm monospace">18.42</p>
+<p class="text-[10px] text-on-surface-variant">18 mins ago</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Section: History -->
+<div class="bg-surface-container-low rounded-2xl overflow-hidden shadow-2xl mb-12">
+<div class="p-6 flex justify-between items-center bg-surface-container">
+<h4 class="font-headline font-bold flex items-center gap-2">
+<span class="w-1 h-4 bg-outline rounded-full"></span>
+                        历史交易记录
+                    </h4>
+<div class="flex gap-2">
+<button class="p-2 bg-surface-container-highest rounded-lg hover:text-primary"><span class="material-symbols-outlined text-sm">filter_list</span></button>
+<button class="p-2 bg-surface-container-highest rounded-lg hover:text-primary"><span class="material-symbols-outlined text-sm">download</span></button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-outline-variant/10">
+<th class="px-6 py-5 font-semibold">成交时间</th>
+<th class="px-6 py-5 font-semibold">交易对</th>
+<th class="px-6 py-5 font-semibold">类型</th>
+<th class="px-6 py-5 font-semibold">开仓价</th>
+<th class="px-6 py-5 font-semibold">结平价</th>
+<th class="px-6 py-5 font-semibold text-right">实现盈亏 (PnL)</th>
+<th class="px-6 py-5 font-semibold text-right">手续费</th>
+</tr>
+</thead>
+<tbody class="text-xs">
+<tr class="hover:bg-surface-container/50 border-b border-outline-variant/5 transition-colors">
+<td class="px-6 py-4 text-on-surface-variant monospace">2024-05-20 14:22:01</td>
+<td class="px-6 py-4 font-bold font-headline uppercase">BTCUSDT</td>
+<td class="px-6 py-4 text-primary">LONG</td>
+<td class="px-6 py-4 monospace">65,240.00</td>
+<td class="px-6 py-4 monospace">67,100.20</td>
+<td class="px-6 py-4 text-right text-primary font-bold monospace">+820.45</td>
+<td class="px-6 py-4 text-right text-on-surface-variant monospace">12.40</td>
+</tr>
+<tr class="hover:bg-surface-container/50 border-b border-outline-variant/5 transition-colors">
+<td class="px-6 py-4 text-on-surface-variant monospace">2024-05-20 12:45:12</td>
+<td class="px-6 py-4 font-bold font-headline uppercase">SOLUSDT</td>
+<td class="px-6 py-4 text-error">SHORT</td>
+<td class="px-6 py-4 monospace">162.40</td>
+<td class="px-6 py-4 monospace">158.12</td>
+<td class="px-6 py-4 text-right text-primary font-bold monospace">+412.30</td>
+<td class="px-6 py-4 text-right text-on-surface-variant monospace">5.12</td>
+</tr>
+<tr class="hover:bg-surface-container/50 border-b border-outline-variant/5 transition-colors">
+<td class="px-6 py-4 text-on-surface-variant monospace">2024-05-19 23:10:55</td>
+<td class="px-6 py-4 font-bold font-headline uppercase">ARBUSDT</td>
+<td class="px-6 py-4 text-primary">LONG</td>
+<td class="px-6 py-4 monospace">1.12</td>
+<td class="px-6 py-4 monospace">1.05</td>
+<td class="px-6 py-4 text-right text-error font-bold monospace">-124.20</td>
+<td class="px-6 py-4 text-right text-on-surface-variant monospace">2.44</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination -->
+<div class="px-6 py-4 bg-surface-container flex items-center justify-between">
+<span class="text-xs text-on-surface-variant">显示 1-10 条，共 1,248 条记录</span>
+<div class="flex gap-1">
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-highest transition-colors"><span class="material-symbols-outlined text-sm">chevron_left</span></button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-xs">1</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-highest transition-colors text-xs">2</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-highest transition-colors text-xs">3</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-container-highest transition-colors"><span class="material-symbols-outlined text-sm">chevron_right</span></button>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Visual Enhancements: Background Ambient Glow -->
+<div class="fixed top-0 left-0 w-full h-full pointer-events-none z-[-1] overflow-hidden opacity-20">
+<div class="absolute -top-1/4 -right-1/4 w-1/2 h-1/2 bg-primary/20 blur-[120px] rounded-full"></div>
+<div class="absolute -bottom-1/4 -left-1/4 w-1/2 h-1/2 bg-secondary/20 blur-[120px] rounded-full"></div>
+</div>
+<script>
         const API_BASE = '/api/futures';
         let currentSymbol = 'BTC/USDT';
         let currentPrice = 0;
@@ -3823,5 +3450,4 @@
             // setInterval(refreshPrice, 2000);  // 不再单独刷新价格，已合并到 updatePositionsPrices
         });
 </script>
-</body>
-</html>
+</body></html>

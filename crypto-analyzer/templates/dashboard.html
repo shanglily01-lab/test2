@@ -1,865 +1,465 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AlphaFlow - 多维度智能分析系统</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/mobile.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="/static/js/auth.js"></script>
-    <script>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Neural Obsidian | 量化交易平台</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            font-family: 'Manrope', sans-serif;
+            background-color: #0a0f14;
+            color: #ebeef5;
+        }
+        .font-display { font-family: 'Space Grotesk', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Hide scrollbar but keep functionality */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-tertiary": "#490011",
+                        "on-tertiary-fixed-variant": "#780022",
+                        "tertiary": "#ff6e80",
+                        "secondary-dim": "#5b9eff",
+                        "on-primary-container": "#004132",
+                        "surface-container": "#151a20",
+                        "tertiary-dim": "#ff6e80",
+                        "on-secondary": "#002045",
+                        "on-secondary-container": "#f6f7ff",
+                        "secondary": "#5b9eff",
+                        "on-tertiary-fixed": "#39000b",
+                        "surface-bright": "#262d35",
+                        "inverse-primary": "#006c55",
+                        "tertiary-fixed-dim": "#ff7987",
+                        "error-dim": "#d7383b",
+                        "surface-container-low": "#0f1419",
+                        "on-surface": "#ebeef5",
+                        "primary-fixed-dim": "#33e5ba",
+                        "secondary-fixed": "#bbd2ff",
+                        "primary": "#49f4c8",
+                        "on-secondary-fixed-variant": "#00509c",
+                        "tertiary-container": "#fa4966",
+                        "surface-container-highest": "#20262e",
+                        "secondary-container": "#005eb5",
+                        "on-error-container": "#ffa8a3",
+                        "surface-container-lowest": "#000000",
+                        "error-container": "#9f0519",
+                        "inverse-surface": "#f8f9ff",
+                        "outline": "#72767c",
+                        "error": "#ff716c",
+                        "surface-container-high": "#1a2027",
+                        "surface-dim": "#0a0f14",
+                        "on-error": "#490006",
+                        "on-background": "#ebeef5",
+                        "secondary-fixed-dim": "#a4c5ff",
+                        "tertiary-fixed": "#ff909a",
+                        "on-primary-fixed": "#004334",
+                        "primary-fixed": "#49f4c8",
+                        "primary-container": "#00d4aa",
+                        "background": "#0a0f14",
+                        "on-tertiary-container": "#100001",
+                        "on-surface-variant": "#a8abb2",
+                        "on-secondary-fixed": "#003469",
+                        "inverse-on-surface": "#51555c",
+                        "primary-dim": "#33e5ba",
+                        "on-primary-fixed-variant": "#00624d",
+                        "on-primary": "#005745",
+                        "surface-tint": "#49f4c8",
+                        "surface-variant": "#20262e",
+                        "outline-variant": "#44484e",
+                        "surface": "#0a0f14"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-surface text-on-surface antialiased">
+<!-- SideNavBar (Authority: JSON & Design System) -->
+<aside class="fixed left-0 top-0 h-full w-[240px] bg-[#0f1419] flex flex-col py-8 px-4 shadow-[4px_0_24px_rgba(0,212,170,0.05)] z-50">
+<div class="mb-12 px-4">
+<h1 class="text-xl font-bold tracking-tighter text-[#49f4c8] font-display">Neural Obsidian</h1>
+<p class="text-xs text-on-surface-variant font-display tracking-widest mt-1 opacity-70">Super Brain v2.0</p>
+</div>
+<nav class="flex-1 space-y-2">
+<!-- Active: Dashboard -->
+<a class="flex items-center gap-3 py-3 px-4 rounded-lg text-[#49f4c8] bg-[#151a20] border-r-2 border-[#49f4c8] transition-colors duration-200 font-display text-sm tracking-wide group" href="/dashboard">
+<span class="material-symbols-outlined text-[20px]" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 py-3 px-4 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] hover:bg-[#151a20] transition-colors duration-200 font-display text-sm tracking-wide" href="/futures">
+<span class="material-symbols-outlined text-[20px]" data-icon="show_chart">show_chart</span>
+<span>Futures</span>
+</a>
+<a class="flex items-center gap-3 py-3 px-4 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] hover:bg-[#151a20] transition-colors duration-200 font-display text-sm tracking-wide" href="/live-trading">
+<span class="material-symbols-outlined text-[20px]" data-icon="precision_manufacturing">precision_manufacturing</span>
+<span>Live Trading</span>
+</a>
+<a class="flex items-center gap-3 py-3 px-4 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] hover:bg-[#151a20] transition-colors duration-200 font-display text-sm tracking-wide" href="/review">
+<span class="material-symbols-outlined text-[20px]" data-icon="history_edu">history_edu</span>
+<span>Review</span>
+</a>
+<a class="flex items-center gap-3 py-3 px-4 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] hover:bg-[#151a20] transition-colors duration-200 font-display text-sm tracking-wide" href="/signals">
+<span class="material-symbols-outlined text-[20px]" data-icon="sensors">sensors</span>
+<span>Signals</span>
+</a>
+</nav>
+<div class="pt-8 mt-auto px-4 border-t border-outline-variant/10">
+<a class="flex items-center gap-3 py-3 text-[#a8abb2] hover:text-[#49f4c8] transition-colors duration-200 font-display text-sm tracking-wide" href="/settings">
+<span class="material-symbols-outlined text-[20px]" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+<div class="mt-6 flex items-center gap-3 bg-surface-container p-3 rounded-xl">
+<img alt="User avatar" class="w-8 h-8 rounded-full bg-surface-bright" data-alt="High-definition 3D rendered minimalist avatar of a professional trader in a sleek tech suit, dark moody lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDReN-owDD6W_dmTXRczjDC-AeifKgufqU1fnyysBT1YeLAuT3bDwQMCWhzIsUaFrL9Vc8-65fjRo-IOyNG3WlwEiY9zS0p8s5HeQOAUl3EL2bnlr882IsXSSP2RMoMmELbBu8431UMw_wh0Y7gHjKUd0EcdqPJhadWW1zvBR1V4qVEhaEmD0ut3LVICjqDyn7e_yiusdsLU4psKJVAAEfqnsJRwrOvTVQFxHm-4U_JoNl91lgWC9qx1ciiSsxjbN__IhFSbwSC4WYv"/>
+<div class="overflow-hidden">
+<p class="text-xs font-bold truncate">Quant_Analyst</p>
+<p class="text-[10px] text-on-surface-variant truncate">Premium Access</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- TopNavBar (Authority: JSON & Design System) -->
+<header class="fixed top-0 right-0 left-[240px] h-16 bg-[#0a0f14]/80 backdrop-blur-xl flex justify-between items-center px-8 z-40 transition-all font-display font-mono">
+<div class="flex items-center gap-4">
+<span class="text-on-surface-variant text-sm tracking-widest">SYSTEM STATUS: <span class="text-primary font-bold">OPERATIONAL</span></span>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4">
+<button class="text-[#a8abb2] hover:text-[#49f4c8] transition-all">
+<span class="material-symbols-outlined" data-icon="schedule">schedule</span>
+</button>
+<button class="text-[#a8abb2] hover:text-[#49f4c8] transition-all relative">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.6)]"></span>
+</button>
+</div>
+<div class="h-6 w-[1px] bg-outline-variant/20"></div>
+<div class="flex items-center gap-3">
+<div class="text-right">
+<p class="text-xs font-mono">2023-11-24</p>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-tighter">14:32:05 UTC+8</p>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="ml-[240px] pt-24 px-8 pb-12 min-h-screen">
+<!-- Dashboard Header -->
+<div class="mb-10">
+<h2 class="text-3xl font-bold font-display tracking-tight text-on-surface">量化交易平台 - <span class="text-primary">实时监控中心</span></h2>
+<p class="text-on-surface-variant mt-2 max-w-2xl">Neural Obsidian 核心引擎正在处理 240+ 交易对。实时计算 EMA 指标并生成概率权重信号。</p>
+</div>
+<!-- Top Stats Row (4 Cards) -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+<!-- 今日信号数 -->
+<div class="bg-surface-container-low p-6 rounded-xl relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+<p class="text-xs font-display text-on-surface-variant uppercase tracking-widest mb-4">今日信号数</p>
+<div class="flex items-end justify-between">
+<h3 class="text-4xl font-display font-bold text-primary font-mono shadow-[0_0_20px_rgba(73,244,200,0.15)]">42</h3>
+<span class="material-symbols-outlined text-primary/40 text-3xl" data-icon="sensors">sensors</span>
+</div>
+</div>
+<!-- 今日开仓 -->
+<div class="bg-surface-container-low p-6 rounded-xl relative overflow-hidden group">
+<p class="text-xs font-display text-on-surface-variant uppercase tracking-widest mb-4">今日开仓</p>
+<div class="flex items-end justify-between">
+<h3 class="text-4xl font-display font-bold text-primary font-mono">12</h3>
+<span class="material-symbols-outlined text-primary/40 text-3xl" data-icon="rocket_launch">rocket_launch</span>
+</div>
+</div>
+<!-- 今日盈亏 -->
+<div class="bg-surface-container-low p-6 rounded-xl relative overflow-hidden group">
+<p class="text-xs font-display text-on-surface-variant uppercase tracking-widest mb-4">今日盈亏</p>
+<div class="flex items-end justify-between">
+<h3 class="text-4xl font-display font-bold text-primary font-mono">+2,480.15 <span class="text-sm font-normal ml-1">USDT</span></h3>
+<span class="material-symbols-outlined text-primary/40 text-3xl" data-icon="trending_up">trending_up</span>
+</div>
+<div class="mt-4 h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[75%]"></div>
+</div>
+</div>
+<!-- 胜率 -->
+<div class="bg-surface-container-low p-6 rounded-xl relative overflow-hidden group">
+<p class="text-xs font-display text-on-surface-variant uppercase tracking-widest mb-4">胜率</p>
+<div class="flex items-end justify-between">
+<h3 class="text-4xl font-display font-bold text-primary font-mono">68.5<span class="text-sm font-normal ml-1">%</span></h3>
+<span class="material-symbols-outlined text-primary/40 text-3xl" data-icon="target">target</span>
+</div>
+</div>
+</div>
+<!-- Section: EMA信号统计 & Summary -->
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-8 items-start">
+<!-- EMA Table Area -->
+<div class="xl:col-span-2 bg-surface-container-low rounded-2xl p-8">
+<div class="flex justify-between items-center mb-8">
+<h4 class="text-xl font-display font-bold tracking-tight">EMA信号统计</h4>
+<div class="flex gap-2">
+<span class="px-3 py-1 bg-surface-container-highest text-[10px] font-mono text-on-surface-variant rounded-full">REFRESH: 5S</span>
+<span class="px-3 py-1 bg-surface-container-highest text-[10px] font-mono text-on-surface-variant rounded-full">FILTER: HIGH CONFIDENCE</span>
+</div>
+</div>
+<div class="overflow-x-auto no-scrollbar">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="text-on-surface-variant text-[10px] uppercase tracking-[0.2em] font-display">
+<th class="pb-6 font-medium">交易对</th>
+<th class="pb-6 font-medium text-center">1H EMA趋势</th>
+<th class="pb-6 font-medium text-center">4H EMA趋势</th>
+<th class="pb-6 font-medium text-center">1D EMA趋势</th>
+<th class="pb-6 font-medium text-center">综合评分</th>
+<th class="pb-6 font-medium text-right">操作</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant/10">
+<!-- BTC/USDT -->
+<tr class="hover:bg-surface-container transition-colors duration-150">
+<td class="py-5">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-[#f7931a]/10 flex items-center justify-center">
+<span class="text-[#f7931a] font-mono font-bold text-xs">₿</span>
+</div>
+<div>
+<p class="font-mono font-medium text-sm">BTC/USDT</p>
+<p class="text-[10px] text-on-surface-variant">Bitcoin / Tether</p>
+</div>
+</div>
+</td>
+<td class="py-5 text-center">
+<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
+</td>
+<td class="py-5 text-center">
+<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
+</td>
+<td class="py-5 text-center">
+<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-error/10 text-error uppercase">Bearish</span>
+</td>
+<td class="py-5 text-center font-mono text-primary">94.2</td>
+<td class="py-5 text-right">
+<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary text-[10px] font-bold py-1.5 px-4 rounded-md shadow-[0_0_12px_rgba(73,244,200,0.2)] hover:opacity-90 transition-all uppercase">Detail</button>
+</td>
+</tr>
+<!-- ETH/USDT -->
+<tr class="hover:bg-surface-container transition-colors duration-150">
+<td class="py-5">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-[#627eea]/10 flex items-center justify-center">
+<span class="text-[#627eea] font-mono font-bold text-xs">Ξ</span>
+</div>
+<div>
+<p class="font-mono font-medium text-sm">ETH/USDT</p>
+<p class="text-[10px] text-on-surface-variant">Ethereum / Tether</p>
+</div>
+</div>
+</td>
+<td class="py-5 text-center">
+<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
+</td>
+<td class="py-5 text-center">
+<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
+</td>
+<td class="py-5 text-center">
+<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
+</td>
+<td class="py-5 text-center font-mono text-primary">88.5</td>
+<td class="py-5 text-right">
+<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary text-[10px] font-bold py-1.5 px-4 rounded-md shadow-[0_0_12px_rgba(73,244,200,0.2)] hover:opacity-90 transition-all uppercase">Detail</button>
+</td>
+</tr>
+<!-- SOL/USDT -->
+<tr class="hover:bg-surface-container transition-colors duration-150">
+<td class="py-5">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+<span class="text-primary font-mono font-bold text-xs">S</span>
+</div>
+<div>
+<p class="font-mono font-medium text-sm">SOL/USDT</p>
+<p class="text-[10px] text-on-surface-variant">Solana / Tether</p>
+</div>
+</div>
+</td>
+<td class="py-5 text-center">
+<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-error/10 text-error uppercase">Bearish</span>
+</td>
+<td class="py-5 text-center">
+<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-error/10 text-error uppercase">Bearish</span>
+</td>
+<td class="py-5 text-center">
+<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
+</td>
+<td class="py-5 text-center font-mono text-primary">42.1</td>
+<td class="py-5 text-right">
+<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary text-[10px] font-bold py-1.5 px-4 rounded-md shadow-[0_0_12px_rgba(73,244,200,0.2)] hover:opacity-90 transition-all uppercase">Detail</button>
+</td>
+</tr>
+<!-- BNB/USDT -->
+<tr class="hover:bg-surface-container transition-colors duration-150">
+<td class="py-5">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-[#f3ba2f]/10 flex items-center justify-center">
+<span class="text-[#f3ba2f] font-mono font-bold text-xs">B</span>
+</div>
+<div>
+<p class="font-mono font-medium text-sm">BNB/USDT</p>
+<p class="text-[10px] text-on-surface-variant">Binance Coin / Tether</p>
+</div>
+</div>
+</td>
+<td class="py-5 text-center">
+<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
+</td>
+<td class="py-5 text-center">
+<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
+</td>
+<td class="py-5 text-center">
+<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
+</td>
+<td class="py-5 text-center font-mono text-primary">76.0</td>
+<td class="py-5 text-right">
+<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary text-[10px] font-bold py-1.5 px-4 rounded-md shadow-[0_0_12px_rgba(73,244,200,0.2)] hover:opacity-90 transition-all uppercase">Detail</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Signal Summary Card -->
+<div class="space-y-6">
+<!-- Market Sentiment Gauge -->
+<div class="bg-surface-container-low rounded-2xl p-8 flex flex-col items-center justify-center text-center">
+<h4 class="text-xs font-display text-on-surface-variant uppercase tracking-[0.2em] mb-8 w-full text-left">Signal Sentiment</h4>
+<div class="relative w-48 h-48 flex items-center justify-center mb-6">
+<!-- Background Circle -->
+<svg class="w-full h-full transform -rotate-90">
+<circle class="text-surface-container-highest" cx="96" cy="96" fill="transparent" r="88" stroke="currentColor" stroke-width="8"></circle>
+<circle class="text-primary shadow-[0_0_15px_rgba(73,244,200,0.5)]" cx="96" cy="96" fill="transparent" r="88" stroke="currentColor" stroke-dasharray="552.92" stroke-dashoffset="193.52" stroke-width="8"></circle>
+</svg>
+<div class="absolute flex flex-col items-center">
+<span class="text-4xl font-display font-bold font-mono">65%</span>
+<span class="text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">Bullish</span>
+</div>
+</div>
+<div class="grid grid-cols-2 w-full gap-4 pt-4 border-t border-outline-variant/10">
+<div>
+<p class="text-primary font-mono font-bold text-lg">273</p>
+<p class="text-[10px] text-on-surface-variant uppercase">Buy Signals</p>
+</div>
+<div>
+<p class="text-error font-mono font-bold text-lg">147</p>
+<p class="text-[10px] text-on-surface-variant uppercase">Sell Signals</p>
+</div>
+</div>
+</div>
+<!-- Neural Efficiency Graph -->
+<div class="bg-surface-container-low rounded-2xl p-8 h-[240px] relative overflow-hidden flex flex-col">
+<h4 class="text-xs font-display text-on-surface-variant uppercase tracking-[0.2em] mb-4">Brain Efficiency</h4>
+<div class="flex-1 flex items-end gap-1 px-2">
+<div class="flex-1 bg-primary/20 rounded-t-sm" style="height: 40%"></div>
+<div class="flex-1 bg-primary/30 rounded-t-sm" style="height: 60%"></div>
+<div class="flex-1 bg-primary/40 rounded-t-sm" style="height: 45%"></div>
+<div class="flex-1 bg-primary/60 rounded-t-sm" style="height: 70%"></div>
+<div class="flex-1 bg-primary/40 rounded-t-sm" style="height: 55%"></div>
+<div class="flex-1 bg-primary/80 rounded-t-sm shadow-[0_0_15px_rgba(73,244,200,0.4)]" style="height: 90%"></div>
+<div class="flex-1 bg-primary/50 rounded-t-sm" style="height: 65%"></div>
+<div class="flex-1 bg-primary/30 rounded-t-sm" style="height: 40%"></div>
+<div class="flex-1 bg-primary/40 rounded-t-sm" style="height: 50%"></div>
+<div class="flex-1 bg-primary/70 rounded-t-sm" style="height: 85%"></div>
+</div>
+<div class="absolute bottom-4 left-8 right-8 flex justify-between text-[8px] text-on-surface-variant font-mono opacity-50 uppercase tracking-widest">
+<span>L-01</span>
+<span>L-05</span>
+<span>L-10</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Recent Trades Bento Grid Segment -->
+<div class="mt-12">
+<h4 class="text-xl font-display font-bold tracking-tight mb-8">实时成交记录</h4>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Trade Item 1 -->
+<div class="bg-surface-container p-5 rounded-xl flex items-center justify-between group transition-all hover:bg-surface-container-high cursor-pointer">
+<div class="flex items-center gap-4">
+<div class="p-2 rounded-lg bg-primary/10">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="south_east">south_east</span>
+</div>
+<div>
+<p class="font-mono text-sm">BTC/USDT <span class="text-[10px] text-on-surface-variant ml-2">SHORT</span></p>
+<p class="text-[10px] text-on-surface-variant font-mono">2023.11.24 14:28:11</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-mono text-sm text-error">-0.45%</p>
+<p class="text-[10px] text-on-surface-variant font-mono">ENTRY: 37,210.5</p>
+</div>
+</div>
+<!-- Trade Item 2 -->
+<div class="bg-surface-container p-5 rounded-xl flex items-center justify-between group transition-all hover:bg-surface-container-high cursor-pointer">
+<div class="flex items-center gap-4">
+<div class="p-2 rounded-lg bg-primary/10">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="north_east">north_east</span>
+</div>
+<div>
+<p class="font-mono text-sm">ETH/USDT <span class="text-[10px] text-on-surface-variant ml-2">LONG</span></p>
+<p class="text-[10px] text-on-surface-variant font-mono">2023.11.24 14:25:40</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-mono text-sm text-primary">+1.12%</p>
+<p class="text-[10px] text-on-surface-variant font-mono">ENTRY: 2,055.2</p>
+</div>
+</div>
+<!-- Trade Item 3 -->
+<div class="bg-surface-container p-5 rounded-xl flex items-center justify-between group transition-all hover:bg-surface-container-high cursor-pointer">
+<div class="flex items-center gap-4">
+<div class="p-2 rounded-lg bg-primary/10">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="north_east">north_east</span>
+</div>
+<div>
+<p class="font-mono text-sm">SOL/USDT <span class="text-[10px] text-on-surface-variant ml-2">LONG</span></p>
+<p class="text-[10px] text-on-surface-variant font-mono">2023.11.24 14:12:02</p>
+</div>
+</div>
+<div class="text-right">
+<p class="font-mono text-sm text-primary">+3.84%</p>
+<p class="text-[10px] text-on-surface-variant font-mono">ENTRY: 58.22</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Background Decoration -->
+<div class="fixed top-[-10%] right-[-10%] w-[50%] h-[50%] bg-primary/5 blur-[120px] rounded-full -z-10 pointer-events-none"></div>
+<div class="fixed bottom-[-5%] left-[10%] w-[30%] h-[30%] bg-secondary/5 blur-[100px] rounded-full -z-10 pointer-events-none"></div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/static/js/auth.js"></script>
+<script>
         // 页面加载前检查登录状态（可选：启用下面代码强制登录）
         // if (!Auth.isLoggedIn()) {
         //     window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
         // }
     </script>
-    <style>
-        /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
-        :root {
-            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
-            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
-            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
-            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
-            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
-            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
-            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
-            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
-            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
-            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
-            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
-            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
-            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
-            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
-        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
-        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-sm); display: flex; align-items: center; gap: var(--spacing-md); }
-        .header-subtitle { color: var(--text-secondary); font-size: 13px; }
-        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
-        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
-        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
-        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
-        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
-        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
-        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
-        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
-        .card-body { padding: 0; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg); margin-bottom: var(--spacing-xl); }
-        .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; cursor: pointer; }
-        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
-        .stat-card:hover::before { opacity: 1; }
-        .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm); font-weight: 600; }
-        .stat-value { font-size: 28px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-xs); font-family: var(--font-mono); }
-        .stat-change { font-size: 13px; color: var(--text-secondary); }
-        .stat-change.positive { color: var(--success-green); }
-        .stat-change.negative { color: var(--danger-red); }
-        .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
-        table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
-        thead { background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); }
-        th { padding: var(--spacing-md) var(--spacing-lg); text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; }
-        th:hover { background: var(--bg-hover); }
-        td { padding: var(--spacing-lg); border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-size: 13px; }
-        tr:last-child td { border-bottom: none; }
-        tbody tr { transition: background-color var(--transition-fast); }
-        tbody tr:hover { background: var(--bg-hover); }
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .btn-primary:hover:not(:disabled) { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
-        .btn-success { background: var(--success-green); color: white; }
-        .btn-success:hover:not(:disabled) { background: #059669; transform: translateY(-1px); box-shadow: var(--shadow-md); }
-        .btn-danger { background: var(--danger-red); color: white; }
-        .btn-danger:hover:not(:disabled) { background: #DC2626; transform: translateY(-1px); box-shadow: var(--shadow-md); }
-        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-default); }
-        .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-muted); }
-        .btn-outline { background: transparent; color: var(--text-secondary); border: 1px solid var(--border-default); }
-        .btn-outline:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-muted); }
-        .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
-        .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
-        .btn-sm { padding: var(--spacing-sm) var(--spacing-md); font-size: 12px; }
-        
-        /* 美化的详细说明按钮 */
-        .btn-info-beautiful {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            padding: 6px 14px;
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--text-secondary);
-            background: linear-gradient(135deg, rgba(43, 111, 237, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%);
-            border: 1px solid rgba(43, 111, 237, 0.2);
-            border-radius: var(--radius-full);
-            cursor: pointer;
-            transition: all var(--transition-base);
-            position: relative;
-            overflow: hidden;
-        }
-        .btn-info-beautiful::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
-            transition: left 0.5s;
-        }
-        .btn-info-beautiful:hover::before {
-            left: 100%;
-        }
-        .btn-info-beautiful:hover {
-            color: var(--primary-blue);
-            background: linear-gradient(135deg, rgba(43, 111, 237, 0.2) 0%, rgba(124, 58, 237, 0.2) 100%);
-            border-color: rgba(43, 111, 237, 0.4);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(43, 111, 237, 0.2);
-        }
-        .btn-info-beautiful i {
-            font-size: 13px;
-            transition: transform var(--transition-base);
-        }
-        .btn-info-beautiful:hover i {
-            transform: rotate(180deg);
-        }
-        
-        /* EMA统计徽章样式 */
-        .stat-badge {
-            transition: all var(--transition-base);
-            cursor: default;
-        }
-        .stat-badge-buy:hover {
-            background: rgba(16, 185, 129, 0.25) !important;
-            border-color: rgba(16, 185, 129, 0.5) !important;
-            transform: scale(1.05);
-        }
-        .stat-badge-sell:hover {
-            background: rgba(239, 68, 68, 0.25) !important;
-            border-color: rgba(239, 68, 68, 0.5) !important;
-            transform: scale(1.05);
-        }
-        .stat-badge-total:hover {
-            background: var(--bg-hover) !important;
-            border-color: var(--border-muted) !important;
-            transform: scale(1.05);
-        }
-        .badge { display: inline-flex; align-items: center; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
-        .badge-success { background: var(--success-green-bg); color: var(--success-green); }
-        .badge-danger { background: var(--danger-red-bg); color: var(--danger-red); }
-        .badge-info { background: var(--primary-blue-light); color: var(--primary-blue); }
-        .badge-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }
-        .badge-warning { background: var(--warning-yellow-bg); color: var(--warning-yellow); }
-        .price { font-family: var(--font-mono); font-weight: 600; font-size: 16px; }
-        .position-card { background: var(--bg-card); border: 1px solid var(--border-default); border-left-width: 4px; border-radius: var(--radius-md); padding: var(--spacing-lg); margin-bottom: var(--spacing-md); transition: all var(--transition-base); }
-        .position-card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
-        .position-card.long { border-left-color: var(--success-green); }
-        .position-card.short { border-left-color: var(--danger-red); }
-        .pnl-positive { color: var(--success-green); }
-        .pnl-negative { color: var(--danger-red); }
-
-        /* Tooltip styles */
-        .tooltip-trigger {
-            position: relative;
-        }
-
-        .tooltip-trigger::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%) translateY(-8px);
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            white-space: nowrap;
-            max-width: 300px;
-            white-space: normal;
-            width: max-content;
-            z-index: 10000;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 0.2s, transform 0.2s;
-        }
-
-        .tooltip-trigger:hover::after {
-            opacity: 1;
-            transform: translateX(-50%) translateY(-4px);
-        }
-
-        .tooltip-trigger::before {
-            content: '';
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            border: 5px solid transparent;
-            border-top-color: rgba(0, 0, 0, 0.9);
-            opacity: 0;
-            transition: opacity 0.2s;
-            z-index: 10000;
-        }
-
-        .tooltip-trigger:hover::before {
-            opacity: 1;
-        }
-
-        .status-indicator { display: inline-flex; align-items: center; gap: var(--spacing-sm); padding: var(--spacing-sm) var(--spacing-md); background: var(--bg-tertiary); border-radius: var(--radius-full); font-size: 12px; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        .status-dot.online { background: var(--success-green); }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .empty-state-icon { font-size: 48px; margin-bottom: var(--spacing-lg); opacity: 0.5; }
-        .empty-state-text { font-size: 15px; margin-bottom: var(--spacing-sm); }
-        .text-primary { color: var(--text-primary); } .text-secondary { color: var(--text-secondary); }
-        .text-success { color: var(--success-green); } .text-danger { color: var(--danger-red); }
-        .text-warning { color: var(--warning-yellow); }
-        .d-flex { display: flex; } .align-center { align-items: center; } .justify-between { justify-content: space-between; }
-        .gap-sm { gap: var(--spacing-sm); } .gap-md { gap: var(--spacing-md); }
-        .mb-sm { margin-bottom: var(--spacing-sm); } .font-mono { font-family: var(--font-mono); }
-        .text-xs { font-size: 11px; } .text-sm { font-size: 13px; } .text-2xl { font-size: 24px; }
-        .font-bold { font-weight: 700; }
-        .fade-in { animation: fadeIn var(--transition-base) ease-in; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .slide-up { animation: slideUp var(--transition-slow) ease-out; }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .chart-container { position: relative; height: 300px; }
-        .mini-chart { height: 80px; }
-        .alert-badge { position: absolute; top: -8px; right: -8px; background: var(--danger-red); color: white; border-radius: var(--radius-full); width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; animation: bounce 2s infinite; }
-        @keyframes bounce { 0%, 20%, 50%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-10px); } 60% { transform: translateY(-5px); } }
-        .notification { position: fixed; top: 80px; right: 20px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg); box-shadow: var(--shadow-xl); z-index: 1000; min-width: 300px; animation: slideInRight 0.3s ease-out; }
-        @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        .notification.success { border-left: 4px solid var(--success-green); }
-        .notification.warning { border-left: 4px solid var(--warning-yellow); }
-        .notification.error { border-left: 4px solid var(--danger-red); }
-        .spinner { border: 3px solid var(--bg-tertiary); border-top: 3px solid var(--primary-blue); border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .portfolio-item { padding: var(--spacing-md); background: var(--bg-tertiary); border-radius: var(--radius-md); margin-bottom: var(--spacing-sm); }
-        .search-box { width: 100%; padding: var(--spacing-md); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; }
-        .search-box:focus { outline: none; border-color: var(--primary-blue); }
-
-        /* 帮助按钮样式 */
-        .btn-icon {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 32px;
-            height: 32px;
-            padding: 0;
-            background: transparent;
-            color: var(--text-secondary);
-            border: 1px solid var(--border-default);
-            border-radius: var(--radius-md);
-            cursor: pointer;
-            transition: all var(--transition-base);
-            font-size: 16px;
-        }
-        .btn-icon:hover {
-            background: var(--bg-hover);
-            color: var(--primary-blue);
-            border-color: var(--primary-blue);
-        }
-
-        /* 模态框样式 */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.75);
-            backdrop-filter: blur(8px);
-            z-index: 9999;
-            animation: fadeIn var(--transition-base) ease-in;
-            padding: var(--spacing-xl);
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-overlay.active {
-            display: flex;
-        }
-        .modal-container {
-            background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-secondary) 100%);
-            border: 1px solid var(--border-default);
-            border-top: 3px solid var(--primary-blue);
-            border-radius: var(--radius-xl);
-            max-width: 700px;
-            width: 90%;
-            max-height: 85vh;
-            overflow-y: auto;
-            overflow-x: hidden;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(43, 111, 237, 0.1);
-            animation: modalSlideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
-        .modal-container::-webkit-scrollbar {
-            width: 8px;
-        }
-        .modal-container::-webkit-scrollbar-track {
-            background: var(--bg-tertiary);
-            border-radius: var(--radius-full);
-        }
-        .modal-container::-webkit-scrollbar-thumb {
-            background: var(--primary-blue);
-            border-radius: var(--radius-full);
-        }
-        .modal-container::-webkit-scrollbar-thumb:hover {
-            background: var(--primary-blue-hover);
-        }
-        .modal-container::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple));
-            z-index: 1;
-        }
-        @keyframes modalSlideUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px) scale(0.95);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
-        }
-        .modal-header {
-            padding: var(--spacing-xl) var(--spacing-xl) var(--spacing-lg);
-            border-bottom: 1px solid var(--border-default);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: var(--bg-tertiary);
-            position: relative;
-            z-index: 2;
-        }
-        .modal-header::after {
-            content: '';
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, var(--primary-blue), transparent);
-            opacity: 0.3;
-        }
-        .modal-title {
-            font-size: 22px;
-            font-weight: 700;
-            color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-md);
-            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-purple) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        .modal-title i {
-            font-size: 24px;
-            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-purple) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        .modal-close-btn {
-            background: var(--bg-hover);
-            border: 1px solid var(--border-default);
-            color: var(--text-secondary);
-            width: 36px;
-            height: 36px;
-            border-radius: var(--radius-md);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all var(--transition-base);
-            font-size: 18px;
-        }
-        .modal-close-btn:hover {
-            background: var(--danger-red);
-            border-color: var(--danger-red);
-            color: white;
-            transform: rotate(90deg) scale(1.1);
-        }
-        .modal-body {
-            padding: var(--spacing-xl);
-            overflow-y: auto;
-            flex: 1;
-            position: relative;
-        }
-        .modal-body::-webkit-scrollbar {
-            width: 8px;
-        }
-        .modal-body::-webkit-scrollbar-track {
-            background: var(--bg-tertiary);
-            border-radius: var(--radius-full);
-        }
-        .modal-body::-webkit-scrollbar-thumb {
-            background: var(--primary-blue);
-            border-radius: var(--radius-full);
-        }
-        .modal-body::-webkit-scrollbar-thumb:hover {
-            background: var(--primary-blue-hover);
-        }
-        
-        /* 美化explanationModal内容样式 */
-        .explanation-content-wrapper {
-            padding: var(--spacing-xl);
-        }
-        .explanation-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: var(--spacing-xl);
-            padding-bottom: var(--spacing-lg);
-            border-bottom: 2px solid var(--border-default);
-            position: relative;
-        }
-        .explanation-header::after {
-            content: '';
-            position: absolute;
-            bottom: -2px;
-            left: 0;
-            width: 60px;
-            height: 2px;
-            background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple));
-            border-radius: var(--radius-full);
-        }
-        .explanation-title {
-            font-size: 26px;
-            font-weight: 700;
-            margin-bottom: var(--spacing-xs);
-            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-purple) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        .explanation-subtitle {
-            font-size: 14px;
-            color: var(--text-secondary);
-            font-weight: 500;
-        }
-        .explanation-close-btn {
-            background: var(--bg-hover);
-            border: 1px solid var(--border-default);
-            color: var(--text-secondary);
-            width: 40px;
-            height: 40px;
-            border-radius: var(--radius-md);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all var(--transition-base);
-            font-size: 20px;
-            flex-shrink: 0;
-        }
-        .explanation-close-btn:hover {
-            background: var(--danger-red);
-            border-color: var(--danger-red);
-            color: white;
-            transform: rotate(90deg) scale(1.1);
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-        }
-        .explanation-section {
-            background: var(--bg-tertiary);
-            padding: var(--spacing-xl);
-            border-radius: var(--radius-lg);
-            margin-bottom: var(--spacing-xl);
-            border-left: 4px solid var(--primary-blue);
-            position: relative;
-            transition: all var(--transition-base);
-        }
-        .explanation-section:hover {
-            border-left-color: var(--secondary-purple);
-            box-shadow: 0 4px 12px rgba(43, 111, 237, 0.1);
-        }
-        .explanation-section-title {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: var(--spacing-lg);
-            color: var(--primary-blue);
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-sm);
-        }
-        .explanation-info-box {
-            padding: var(--spacing-lg);
-            background: var(--bg-card);
-            border-radius: var(--radius-md);
-            margin-bottom: var(--spacing-md);
-            border-left: 3px solid var(--primary-blue);
-            transition: all var(--transition-base);
-        }
-        .explanation-info-box:hover {
-            border-left-color: var(--secondary-purple);
-            transform: translateX(4px);
-        }
-        .explanation-action-btn {
-            display: flex;
-            gap: var(--spacing-md);
-            margin-top: var(--spacing-xl);
-        }
-        .explanation-action-btn .btn {
-            flex: 1;
-            padding: var(--spacing-md) var(--spacing-xl);
-            font-weight: 600;
-            border-radius: var(--radius-md);
-            transition: all var(--transition-base);
-        }
-        .explanation-action-btn .btn-primary {
-            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--secondary-purple) 100%);
-            border: none;
-            color: white;
-        }
-        .explanation-action-btn .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(43, 111, 237, 0.3);
-        }
-        .modal-section {
-            margin-bottom: var(--spacing-xl);
-        }
-        .modal-section:last-child {
-            margin-bottom: 0;
-        }
-        .modal-section-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--primary-blue);
-            margin-bottom: var(--spacing-md);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .modal-section-content {
-            color: var(--text-secondary);
-            line-height: 1.6;
-            font-size: 14px;
-        }
-        .modal-list {
-            list-style: none;
-            padding: 0;
-        }
-        .modal-list li {
-            padding: var(--spacing-sm) 0;
-            padding-left: var(--spacing-lg);
-            position: relative;
-        }
-        .modal-list li::before {
-            content: '•';
-            position: absolute;
-            left: 0;
-            color: var(--primary-blue);
-            font-weight: bold;
-        }
-
-        @media (max-width: 768px) {
-            .container { padding: var(--spacing-md); }
-            .stats-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--spacing-md); }
-            .stat-value { font-size: 20px; }
-            .nav-links { flex-direction: column; }
-            th, td { padding: var(--spacing-sm); }
-            .chart-container { height: 200px; }
-            .modal-container { width: 95%; max-height: 90vh; }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header fade-in">
-            <div class="d-flex justify-between align-center">
-                <div>
-                    <div style="display: flex; align-items: center; gap: var(--spacing-md);">
-                        <img src="/static/images/logo/alphaflow-logo-icon.svg" alt="AlphaFlow" style="height: 40px; width: auto;">
-                        <h1 class="header-title" style="margin: 0;">
-                            AlphaFlow
-                        </h1>
-                    </div>
-                    <p class="header-subtitle">
-                        <span class="status-indicator">
-                            <span class="status-dot online"></span>
-                            系统运行中
-                        </span>
-                        <span style="margin-left: 16px;">最后更新: <span id="lastUpdate">--</span></span>
-                        <span style="margin-left: 16px;">下次刷新: <span id="nextRefresh">15</span>秒</span>
-                    </p>
-                </div>
-                <div class="d-flex gap-md">
-                    <button class="btn btn-ghost" onclick="toggleAlerts()" style="position: relative;">
-                        <i class="bi bi-bell"></i> 提醒
-                        <span class="alert-badge" id="alertCount" style="display: none;">0</span>
-                    </button>
-                    <button class="btn btn-ghost" onclick="refreshData()">
-                        <i class="bi bi-arrow-clockwise"></i> 刷新
-                    </button>
-                    <button class="btn btn-secondary" onclick="window.location.href='/settings'">
-                        <i class="bi bi-gear"></i> 设置
-                    </button>
-                </div>
-            </div>
-        </header>
-
-        <!-- Navigation -->
-        <nav class="nav-container slide-up">
-            <div class="nav-links">
-                <a href="/" class="nav-link">
-                    <i class="bi bi-house"></i> 首页
-                </a>
-                <a href="/dashboard" class="nav-link active">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-                <a href="/technical-signals" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> 技术信号
-                </a>
-                <a href="/paper_trading" class="nav-link">
-                    <i class="bi bi-journals"></i> 现货交易
-                </a>
-                <a href="/futures_trading" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> U本位合约
-                </a>
-                <a href="/coin_futures_trading" class="nav-link">
-                    <i class="bi bi-currency-bitcoin"></i> 币本位合约
-                </a>
-                <a href="/live_trading" class="nav-link">
-                    <i class="bi bi-currency-exchange"></i> 实盘合约
-                </a>
-                <a href="#" class="nav-link" style="opacity: 0.5; cursor: not-allowed;" onclick="event.preventDefault(); showToast('实盘现货功能开发中...', 'info')">
-                    <i class="bi bi-cart-check"></i> 实盘现货
-                </a>
-                <a href="/futures_review" class="nav-link">
-                    <i class="bi bi-journal-check"></i> 复盘(24H)
-                </a>
-<a href="/etf_data" class="nav-link">
-                    <i class="bi bi-pie-chart"></i> ETF 数据
-                </a>
-                <a href="/corporate_treasury" class="nav-link">
-                    <i class="bi bi-building"></i> 企业金库
-                </a>
-                <a href="/blockchain_gas" class="nav-link">
-                    <i class="bi bi-lightning-charge"></i> Gas统计
-                </a>
-                <a href="/data_management" class="nav-link">
-                    <i class="bi bi-database"></i> 数据管理
-                </a>
-            </div>
-        </nav>
-
-
-        <!-- Main Content Grid -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
-            <!-- Investment Recommendations -->
-            <div class="card slide-up" id="recommendations">
-                <div class="card-header">
-                    <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
-                        <h2 class="card-title" style="margin: 0;">
-                            <i class="bi bi-lightbulb"></i>
-                            <span id="recommendations-title">投资建议</span>
-                        </h2>
-                        <div id="recommendations-stats" style="display: flex; gap: 8px; align-items: center; margin-left: 12px;">
-                            <span class="badge badge-success" id="buy-count-badge" style="font-size: 11px; padding: 4px 8px;">
-                                <i class="bi bi-arrow-up-circle"></i> 买入: <span id="buy-count">0</span>
-                            </span>
-                            <span class="badge badge-danger" id="sell-count-badge" style="font-size: 11px; padding: 4px 8px;">
-                                <i class="bi bi-arrow-down-circle"></i> 卖出: <span id="sell-count">0</span>
-                            </span>
-                        </div>
-                        <button class="btn-info-beautiful" onclick="showInvestmentExplanation()" title="查看投资建议详细说明">
-                            <i class="bi bi-info-circle"></i>
-                            <span>详细说明</span>
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body" style="padding: 0;">
-                    <div id="recommendationsContainer" style="max-height: 600px; overflow-y: scroll; overflow-x: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
-                        <div class="empty-state">
-                            <div class="empty-state-icon">💡</div>
-                            <div class="empty-state-text">加载中...</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Price Table -->
-            <div class="card slide-up" id="prices">
-                <div class="card-header">
-                    <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
-                        <h2 class="card-title" style="margin: 0;">
-                            <i class="bi bi-currency-exchange"></i>
-                            <span id="prices-title">实时价格</span>
-                        </h2>
-                        <button class="btn-info-beautiful" onclick="showPriceExplanation()" title="查看实时价格详细说明">
-                            <i class="bi bi-info-circle"></i>
-                            <span>详细说明</span>
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body" style="padding: 0;">
-                    <div style="max-height: 600px; overflow-y: scroll; overflow-x: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
-                        <table id="priceTable" style="width: 100%; border-collapse: collapse; background: var(--bg-card);">
-                            <thead style="position: sticky; top: 0; background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); z-index: 1;">
-                                <tr>
-                                    <th onclick="sortPrices('symbol')" style="padding: 12px 16px; text-align: left; cursor: pointer;">交易对 <i class="bi bi-arrow-down-up"></i></th>
-                                    <th onclick="sortPrices('price')" style="padding: 12px 16px; text-align: left; cursor: pointer;">价格 (USDT) <i class="bi bi-arrow-down-up"></i></th>
-                                    <th onclick="sortPrices('change_24h')" style="padding: 12px 16px; text-align: left; cursor: pointer;">24h涨跌 <i class="bi bi-arrow-down-up"></i></th>
-                                    <th onclick="sortPrices('quote_volume_24h')" style="padding: 12px 16px; text-align: left; cursor: pointer;">24h交易额 (USDT) <i class="bi bi-arrow-down-up"></i></th>
-                                </tr>
-                            </thead>
-                            <tbody id="priceTableBody">
-                                <tr>
-                                    <td colspan="4" class="empty-state">
-                                        <div class="empty-state-icon">📊</div>
-                                        <div class="empty-state-text">加载中...</div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- News and Futures Section Side by Side -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
-            <!-- News Section -->
-            <div class="card slide-up">
-                <div class="card-header">
-                    <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
-                        <h2 class="card-title" style="margin: 0;">
-                            <i class="bi bi-newspaper"></i>
-                            <span id="news-title">最新新闻</span>
-                        </h2>
-                        <button class="btn-info-beautiful" onclick="showCardInfo('news')" title="查看新闻详细说明">
-                            <i class="bi bi-info-circle"></i>
-                            <span>详细说明</span>
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body" style="padding: 0;">
-                    <div id="newsContainer" style="max-height: 500px; overflow-y: auto; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
-                        <div class="empty-state">
-                            <div class="empty-state-icon">📰</div>
-                            <div class="empty-state-text">加载中...</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Real-time Futures Section -->
-            <div class="card slide-up">
-                <div class="card-header">
-                    <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
-                        <h2 class="card-title" style="margin: 0;">
-                            <i class="bi bi-lightning"></i>
-                            <span id="futures-title">实时合约</span>
-                        </h2>
-                        <button class="btn-info-beautiful" onclick="showCardInfo('futures')" title="查看实时合约详细说明">
-                            <i class="bi bi-info-circle"></i>
-                            <span>详细说明</span>
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body" style="padding: 0;">
-                    <div style="max-height: 500px; overflow-y: auto; border: 1px solid var(--border-default); border-radius: var(--radius-md);">
-                        <table style="width: 100%; border-collapse: collapse; background: var(--bg-card);">
-                            <thead style="position: sticky; top: 0; background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); z-index: 1;">
-                                <tr>
-                                    <th style="padding: 12px 16px; text-align: left;">交易对</th>
-                                    <th style="padding: 12px 16px; text-align: left;">标记价格</th>
-                                    <th style="padding: 12px 16px; text-align: left;">资金费率</th>
-                                    <th style="padding: 12px 16px; text-align: left;">24h涨跌</th>
-                                    <th style="padding: 12px 16px; text-align: left;">多空比</th>
-                                    <th style="padding: 12px 16px; text-align: left;">未平仓量</th>
-                                </tr>
-                            </thead>
-                            <tbody id="futuresBody">
-                                <tr>
-                                    <td colspan="6" class="empty-state">
-                                        <div class="empty-state-text">加载中...</div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Hyperliquid Section -->
-        <div class="card slide-up" id="hyperliquid">
-            <div class="card-header">
-                <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
-                    <h2 class="card-title" style="margin: 0;">
-                        <i class="bi bi-wallet2"></i>
-                        Hyperliquid 聪明钱活动
-                    </h2>
-                    <button class="btn-info-beautiful" onclick="showHyperliquidExplanation()" title="查看Hyperliquid聪明钱活动详细说明">
-                        <i class="bi bi-info-circle"></i>
-                        <span>详细说明</span>
-                    </button>
-                </div>
-            </div>
-            <div class="card-body">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
-                    <div style="text-align: center; padding: 16px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
-                        <div class="text-secondary text-sm mb-sm">24h交易量</div>
-                        <div class="text-2xl font-bold" id="hlVolume24h">--</div>
-                    </div>
-                    <div style="text-align: center; padding: 16px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
-                        <div class="text-secondary text-sm mb-sm">活跃钱包</div>
-                        <div class="text-2xl font-bold" id="hlActiveWallets">--</div>
-                    </div>
-                    <div style="text-align: center; padding: 16px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
-                        <div class="text-secondary text-sm mb-sm">最近交易</div>
-                        <div class="text-2xl font-bold" id="hlRecentTrades">--</div>
-                    </div>
-                    <div style="text-align: center; padding: 16px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
-                        <div class="text-secondary text-sm mb-sm">做多/做空比</div>
-                        <div class="text-2xl font-bold" id="hlLongShortRatio">--</div>
-                    </div>
-                </div>
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>钱包</th>
-                                <th>币种</th>
-                                <th>方向</th>
-                                <th>下单价格</th>
-                                <th>下单数量</th>
-                                <th>合约倍数</th>
-                                <th>持仓金额</th>
-                                <th>盈亏</th>
-                                <th>时间</th>
-                            </tr>
-                        </thead>
-                        <tbody id="hlTradesBody">
-                            <tr>
-                                <td colspan="9" class="empty-state">
-                                    <div class="empty-state-text">加载中...</div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
+<script>
         // 全局变量
         let currentData = null;
         let sortColumn = 'change_24h';
@@ -2471,36 +2071,4 @@
     modal.style.display = 'flex';
 }
     </script>
-
-    <!-- 投资建议详情模态框 -->
-    <div id="recommendationModal" style="display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.7); align-items: center; justify-content: center;">
-        <div id="modalContent" style="background: var(--bg-card); border-radius: var(--radius-lg); max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: var(--shadow-xl); border: 1px solid var(--border-default);">
-        </div>
-    </div>
-
-    <!-- 智能投资说明模态框 -->
-    <div id="explanationModal" class="modal-overlay" onclick="closeExplanationModalByOverlay(event)">
-        <div id="explanationContent" class="modal-container" onclick="event.stopPropagation()">
-        </div>
-    </div>
-
-    <!-- 详细说明模态框 -->
-    <div id="infoModal" class="modal-overlay" onclick="closeModal(event)">
-        <div class="modal-container" onclick="event.stopPropagation()">
-            <div class="modal-header">
-                <h3 class="modal-title" id="modalTitle">
-                    <i class="bi bi-info-circle"></i>
-                    <span id="modalTitleText">详细说明</span>
-                </h3>
-                <button class="btn btn-ghost btn-sm" onclick="closeModal()">
-                    <i class="bi bi-x-lg"></i>
-                </button>
-            </div>
-            <div class="modal-body" id="modalBody">
-                <!-- 内容将通过 JavaScript 动态填充 -->
-            </div>
-        </div>
-    </div>
-
-</body>
-</html>
+</body></html>

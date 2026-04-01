@@ -1,754 +1,425 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>合约复盘(24H) - AlphaFlow</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/mobile.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
-    <style>
-        /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
-        :root {
-            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
-            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
-            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
-            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
-            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
-            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
-            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
-            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
-            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
-            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
-            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
-            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
-            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
-            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Neural Obsidian | 24h Futures Review</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
-        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
-        .header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-lg); }
-        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-sm); display: flex; align-items: center; gap: var(--spacing-md); }
-        .header-subtitle { color: var(--text-secondary); font-size: 13px; }
-        .header-actions { display: flex; gap: var(--spacing-md); align-items: center; flex-wrap: wrap; }
-        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
-        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
-        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
-        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
-        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
-        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
-        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
-        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
-        .card-body { padding: 0; }
-        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--spacing-md); }
-        .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-lg); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; }
-        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
-        .stat-card:hover::before { opacity: 1; }
-        .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm); font-weight: 600; }
-        .stat-value { font-size: 22px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-xs); font-family: var(--font-mono); }
-        .stat-change { font-size: 13px; color: var(--text-secondary); }
-        .stat-change.positive { color: var(--success-green); }
-        .stat-change.negative { color: var(--danger-red); }
-        .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
-        table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
-        thead { background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); }
-        th { padding: var(--spacing-md) var(--spacing-lg); text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { padding: var(--spacing-lg); border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-size: 13px; }
-        tr:last-child td { border-bottom: none; }
-        tbody tr { transition: background-color var(--transition-fast); }
-        tbody tr:hover { background: var(--bg-hover); }
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .btn-primary:hover:not(:disabled) { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
-        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-default); }
-        .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-muted); }
-        .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
-        .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
-        .btn-sm { padding: var(--spacing-sm) var(--spacing-md); font-size: 12px; }
-        .badge { display: inline-flex; align-items: center; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
-        .badge-success { background: var(--success-green-bg); color: var(--success-green); }
-        .badge-danger { background: var(--danger-red-bg); color: var(--danger-red); }
-        .badge-info { background: var(--primary-blue-light); color: var(--primary-blue); }
-        .badge-warning { background: var(--warning-yellow-bg); color: var(--warning-yellow); }
-        .badge-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }
-        .pnl-positive { color: var(--success-green); }
-        .pnl-negative { color: var(--danger-red); }
-        .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .empty-state-icon { font-size: 48px; margin-bottom: var(--spacing-lg); opacity: 0.5; }
-        .empty-state-text { font-size: 15px; margin-bottom: var(--spacing-sm); }
-        .loading-overlay { display: flex; justify-content: center; align-items: center; min-height: 200px; }
-        .spinner { width: 40px; height: 40px; border: 4px solid var(--bg-tertiary); border-top-color: var(--primary-blue); border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .text-primary { color: var(--text-primary); }
-        .text-secondary { color: var(--text-secondary); }
-        .text-success { color: var(--success-green); }
-        .text-danger { color: var(--danger-red); }
-        .d-flex { display: flex; }
-        .align-center { align-items: center; }
-        .justify-between { justify-content: space-between; }
-        .gap-sm { gap: var(--spacing-sm); }
-        .gap-md { gap: var(--spacing-md); }
-        .mb-sm { margin-bottom: var(--spacing-sm); }
-        .font-mono { font-family: var(--font-mono); }
-        .text-sm { font-size: 13px; }
-        .text-xs { font-size: 11px; }
-        .last-update { font-size: 12px; color: var(--text-secondary); }
-
-        /* Filter buttons */
-        .filter-group { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; }
-        .filter-btn { padding: var(--spacing-sm) var(--spacing-lg); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-secondary); cursor: pointer; transition: all var(--transition-base); font-size: 13px; }
-        .filter-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
-        .filter-btn.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-
-        /* Suggestion cards */
-        .suggestion-card { background: var(--bg-tertiary); border-left: 4px solid var(--info-blue); border-radius: var(--radius-md); padding: var(--spacing-lg); margin-bottom: var(--spacing-md); }
-        .suggestion-card.warning { border-left-color: var(--warning-yellow); }
-        .suggestion-card.danger { border-left-color: var(--danger-red); }
-        .suggestion-card.success { border-left-color: var(--success-green); }
-        .suggestion-card.info { border-left-color: var(--info-blue); }
-        .suggestion-category { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-xs); color: var(--text-secondary); }
-        .suggestion-message { font-size: 14px; color: var(--text-primary); line-height: 1.5; }
-
-        /* Analysis grid */
-        .analysis-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-xl); }
-        @media (max-width: 1200px) { .analysis-grid { grid-template-columns: 1fr; } }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .container { padding: var(--spacing-md); }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: var(--spacing-sm); }
-            .stat-value { font-size: 18px; }
-            .stat-label { font-size: 11px; }
-            .stat-card { padding: var(--spacing-md); }
-            .nav-links { flex-direction: column; }
-            th, td { padding: var(--spacing-sm); font-size: 11px; }
-        }
-
-        /* Tab styles */
-        .tabs { display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); padding-bottom: var(--spacing-md); }
-        .tab-btn { padding: var(--spacing-md) var(--spacing-xl); background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 14px; font-weight: 500; transition: all var(--transition-base); border-radius: var(--radius-md) var(--radius-md) 0 0; }
-        .tab-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
-        .tab-btn.active { color: var(--primary-blue); border-bottom: 2px solid var(--primary-blue); margin-bottom: -1px; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-
-        /* Button group */
-        .btn-group { display: inline-flex; border-radius: var(--radius-md); overflow: hidden; }
-        .btn-group .btn { border-radius: 0; margin: 0; }
-        .btn-group .btn:first-child { border-top-left-radius: var(--radius-md); border-bottom-left-radius: var(--radius-md); }
-        .btn-group .btn:last-child { border-top-right-radius: var(--radius-md); border-bottom-right-radius: var(--radius-md); }
-        .btn-outline-primary { background: transparent; color: var(--primary-blue); border-color: var(--primary-blue); }
-        .btn-outline-primary:hover:not(:disabled) { background: var(--primary-blue); color: white; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        body { font-family: 'Manrope', sans-serif; }
+        h1, h2, h3, .headline { font-family: 'Space Grotesk', sans-serif; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: #0a0f14; }
+        ::-webkit-scrollbar-thumb { background: #44484e; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #49f4c8; }
     </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-secondary": "#002045",
+                        "inverse-surface": "#f8f9ff",
+                        "error-dim": "#d7383b",
+                        "on-surface": "#ebeef5",
+                        "surface-container-low": "#0f1419",
+                        "secondary-container": "#005eb5",
+                        "outline": "#72767c",
+                        "on-secondary-fixed-variant": "#00509c",
+                        "surface-container-highest": "#20262e",
+                        "tertiary": "#ff6e80",
+                        "primary-container": "#00d4aa",
+                        "surface-bright": "#262d35",
+                        "tertiary-fixed": "#ff909a",
+                        "surface": "#0a0f14",
+                        "on-tertiary-fixed": "#39000b",
+                        "on-primary-fixed": "#004334",
+                        "on-primary": "#005745",
+                        "error": "#ff716c",
+                        "on-secondary-container": "#f6f7ff",
+                        "surface-variant": "#20262e",
+                        "primary-fixed-dim": "#33e5ba",
+                        "surface-tint": "#49f4c8",
+                        "on-error-container": "#ffa8a3",
+                        "on-surface-variant": "#a8abb2",
+                        "surface-container-lowest": "#000000",
+                        "surface-container-high": "#1a2027",
+                        "on-tertiary": "#490011",
+                        "on-tertiary-container": "#100001",
+                        "surface-container": "#151a20",
+                        "primary-fixed": "#49f4c8",
+                        "tertiary-fixed-dim": "#ff7987",
+                        "tertiary-dim": "#ff6e80",
+                        "inverse-primary": "#006c55",
+                        "secondary-fixed-dim": "#a4c5ff",
+                        "on-background": "#ebeef5",
+                        "secondary-dim": "#5b9eff",
+                        "background": "#0a0f14",
+                        "surface-dim": "#0a0f14",
+                        "secondary-fixed": "#bbd2ff",
+                        "on-tertiary-fixed-variant": "#780022",
+                        "outline-variant": "#44484e",
+                        "on-primary-container": "#004132",
+                        "on-primary-fixed-variant": "#00624d",
+                        "primary-dim": "#33e5ba",
+                        "on-secondary-fixed": "#003469",
+                        "on-error": "#490006",
+                        "primary": "#49f4c8",
+                        "tertiary-container": "#fa4966",
+                        "error-container": "#9f0519",
+                        "inverse-on-surface": "#51555c",
+                        "secondary": "#5b9eff"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Manrope"],
+                        "label": ["Manrope"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
 </head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <div style="flex: 1;">
-                    <h1 class="header-title">
-                        <i class="bi bi-journal-check"></i>
-                        合约复盘(24H)
-                    </h1>
-                    <p class="header-subtitle">
-                        合约交易复盘分析 - 发现问题，优化策略
-                        <span style="margin-left: 12px; color: var(--text-tertiary); font-size: 12px;">
-                            <i class="bi bi-clock-history"></i> 时间显示: UTC+8 (北京时间)
-                        </span>
-                    </p>
-                </div>
-                <div class="header-actions">
-                    <div class="btn-group" role="group" style="margin-right: 12px;">
-                        <button type="button" class="btn btn-sm btn-primary" id="usdtMarginBtn" onclick="switchMarginType('usdt')" style="font-size: 13px; padding: 6px 14px;">
-                            <i class="bi bi-currency-dollar"></i> U本位合约
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" id="coinMarginBtn" onclick="switchMarginType('coin')" style="font-size: 13px; padding: 6px 14px;">
-                            <i class="bi bi-coin"></i> 币本位合约
-                        </button>
-                    </div>
-                    <select id="hours-select" class="btn btn-secondary" style="padding: 8px 16px; cursor: pointer;">
-                        <option value="24">24小时</option>
-                        <option value="48">48小时</option>
-                        <option value="72">72小时</option>
-                        <option value="168">7天</option>
-                    </select>
-                    <button class="btn btn-primary" onclick="refreshAll()">
-                        <i class="bi bi-arrow-clockwise"></i> 刷新
-                    </button>
-                </div>
-            </div>
-        </header>
-
-        <!-- Navigation -->
-        <nav class="nav-container">
-            <div class="nav-links">
-                <a href="/" class="nav-link">
-                    <i class="bi bi-house"></i> 首页
-                </a>
-                <a href="/dashboard" class="nav-link">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-                <a href="/technical-signals" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> 技术信号
-                </a>
-                <a href="/paper_trading" class="nav-link">
-                    <i class="bi bi-journals"></i> 现货交易
-                </a>
-                <a href="/futures_trading" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> U本位合约
-                </a>
-                <a href="/coin_futures_trading" class="nav-link">
-                    <i class="bi bi-currency-bitcoin"></i> 币本位合约
-                </a>
-                <a href="/live_trading" class="nav-link">
-                    <i class="bi bi-currency-exchange"></i> 实盘合约
-                </a>
-                <a href="#" class="nav-link" style="opacity: 0.5; cursor: not-allowed;" onclick="event.preventDefault(); showToast('实盘现货功能开发中...', 'info')">
-                    <i class="bi bi-cart-check"></i> 实盘现货
-                </a>
-                <a href="/futures_review" class="nav-link active">
-                    <i class="bi bi-journal-check"></i> 复盘(24H)
-                </a>
-                <a href="/etf_data" class="nav-link">
-                    <i class="bi bi-pie-chart"></i> ETF 数据
-                </a>
-                <a href="/corporate_treasury" class="nav-link">
-                    <i class="bi bi-building"></i> 企业金库
-                </a>
-                <a href="/blockchain_gas" class="nav-link">
-                    <i class="bi bi-lightning-charge"></i> Gas统计
-                </a>
-                <a href="/data_management" class="nav-link">
-                    <i class="bi bi-database"></i> 数据管理
-                </a>
-            </div>
-        </nav>
-
-        <!-- Summary Cards -->
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="bi bi-bar-chart-line"></i>
-                    <span id="summary-title">24小时交易统计</span>
-                </h2>
-                <div class="last-update" id="summary-update">-</div>
-            </div>
-            <div class="card-body">
-                <div id="summaryLoading" class="loading-overlay">
-                    <div class="spinner"></div>
-                </div>
-                <div id="summaryStats" class="stats-grid" style="display: none;"></div>
-            </div>
-        </div>
-
-        <!-- Tabs Section -->
-        <div class="card">
-            <div class="tabs">
-                <button class="tab-btn active" onclick="switchTab('trades')">
-                    <i class="bi bi-list-check"></i> 交易清单
-                </button>
-                <button class="tab-btn" onclick="switchTab('symbols')">
-                    <i class="bi bi-bar-chart-line"></i> 交易对表现
-                </button>
-                <button class="tab-btn" onclick="switchTab('analysis')">
-                    <i class="bi bi-pie-chart"></i> 原因分析
-                </button>
-                <button class="tab-btn" onclick="switchTab('suggestions')">
-                    <i class="bi bi-lightbulb"></i> 优化建议
-                </button>
-                <button class="tab-btn" onclick="switchTab('signals')">
-                    <i class="bi bi-broadcast"></i> 信号分析
-                </button>
-                <button class="tab-btn" onclick="switchTab('opportunities')">
-                    <i class="bi bi-graph-up"></i> 机会分析
-                </button>
-                <button class="tab-btn" onclick="switchTab('daily-pnl')">
-                    <i class="bi bi-calendar3"></i> 每日盈亏统计
-                </button>
-                <button class="tab-btn" onclick="switchTab('retrospective')">
-                    <i class="bi bi-clock-history"></i> 12H复盘分析
-                </button>
-            </div>
-
-            <!-- Trades Tab -->
-            <div id="trades-tab" class="tab-content active">
-                <div class="d-flex justify-between align-center mb-sm" style="margin-bottom: 16px;">
-                    <div class="filter-group">
-                        <button class="filter-btn active" onclick="filterTrades('all')">全部</button>
-                        <button class="filter-btn" onclick="filterTrades('profit')">盈利</button>
-                        <button class="filter-btn" onclick="filterTrades('loss')">亏损</button>
-                    </div>
-                    <div class="filter-group">
-                        <button class="filter-btn active" onclick="sortTrades('time')">按时间</button>
-                        <button class="filter-btn" onclick="sortTrades('pnl')">按盈亏</button>
-                    </div>
-                </div>
-                <div id="tradesLoading" class="loading-overlay">
-                    <div class="spinner"></div>
-                </div>
-                <div id="tradesContent" style="display: none;">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>时间</th>
-                                    <th>交易对</th>
-                                    <th>方向</th>
-                                    <th>杠杆</th>
-                                    <th>开仓价</th>
-                                    <th>平仓价</th>
-                                    <th>盈亏</th>
-                                    <th>盈亏%</th>
-                                    <th>持仓时长</th>
-                                    <th>开仓原因</th>
-                                    <th>平仓原因</th>
-                                </tr>
-                            </thead>
-                            <tbody id="trades-table-body"></tbody>
-                        </table>
-                    </div>
-                    <div id="trades-pagination"></div>
-                </div>
-            </div>
-
-            <!-- Symbols Performance Tab -->
-            <div id="symbols-tab" class="tab-content">
-                <div id="symbolsContent">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>排名</th>
-                                    <th>交易对</th>
-                                    <th>交易次数</th>
-                                    <th>盈利次数</th>
-                                    <th>亏损次数</th>
-                                    <th>平局次数</th>
-                                    <th>胜率</th>
-                                    <th>总盈亏</th>
-                                    <th>平均盈利</th>
-                                    <th>平均亏损</th>
-                                    <th>最大盈利</th>
-                                    <th>最大亏损</th>
-                                </tr>
-                            </thead>
-                            <tbody id="symbolsTableBody">
-                                <tr>
-                                    <td colspan="12" class="empty-state">
-                                        <div class="empty-state-icon"><i class="bi bi-inbox"></i></div>
-                                        <div class="empty-state-text">暂无数据</div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Analysis Tab -->
-            <div id="analysis-tab" class="tab-content">
-                <div id="analysisLoading" class="loading-overlay">
-                    <div class="spinner"></div>
-                </div>
-                <div id="analysisContent" style="display: none;">
-                    <div class="analysis-grid">
-                        <div>
-                            <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
-                                <i class="bi bi-arrow-up-circle"></i> 开仓原因分析
-                            </h3>
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>开仓原因</th>
-                                            <th>次数</th>
-                                            <th>胜率</th>
-                                            <th>总盈亏</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="entry-analysis-body"></tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div>
-                            <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
-                                <i class="bi bi-arrow-down-circle"></i> 平仓原因分析
-                            </h3>
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>平仓原因</th>
-                                            <th>次数</th>
-                                            <th>平均盈亏</th>
-                                            <th>总盈亏</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="close-analysis-body"></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                    <div style="margin-top: 24px;">
-                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
-                            <i class="bi bi-arrows-expand"></i> 方向分析
-                        </h3>
-                        <div id="direction-analysis" class="stats-grid" style="grid-template-columns: repeat(2, 1fr);"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Suggestions Tab -->
-            <div id="suggestions-tab" class="tab-content">
-                <div id="suggestionsLoading" class="loading-overlay">
-                    <div class="spinner"></div>
-                </div>
-                <div id="suggestionsContent" style="display: none;"></div>
-            </div>
-
-            <!-- K线信号分析 Tab -->
-            <div id="signals-tab" class="tab-content">
-                <div id="signalsLoading" class="loading-overlay">
-                    <div class="spinner"></div>
-                </div>
-                <div id="signalsContent" style="display: none;">
-                    <!-- 总体统计 -->
-                    <div id="kline-summary" style="margin-bottom: 24px;"></div>
-
-                    <!-- Top强力信号 -->
-                    <div style="margin-bottom: 32px;">
-                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
-                            <i class="bi bi-star-fill"></i> Top 15 强力信号（按1H净力量排序）
-                        </h3>
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th style="width: 40px;">#</th>
-                                        <th style="width: 120px;">交易对</th>
-                                        <th style="width: 80px;">趋势</th>
-                                        <th style="width: 100px;">状态</th>
-                                        <th>1H K线强度</th>
-                                        <th>15M K线强度</th>
-                                        <th>5M K线强度</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="kline-opportunities-body">
-                                    <tr>
-                                        <td colspan="7" class="empty-state">
-                                            <div class="empty-state-icon"><i class="bi bi-inbox"></i></div>
-                                            <div class="empty-state-text">暂无信号分析数据</div>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- 错过的机会 -->
-                    <div style="margin-bottom: 32px;">
-                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
-                            <i class="bi bi-exclamation-triangle-fill"></i> 错过的高质量机会（Top 10）
-                        </h3>
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th style="width: 40px;">#</th>
-                                        <th style="width: 120px;">交易对</th>
-                                        <th style="width: 80px;">建议方向</th>
-                                        <th>原因</th>
-                                        <th>1H净力量</th>
-                                        <th>15M净力量</th>
-                                        <th>5M净力量</th>
-                                        <th>可能原因</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="kline-missed-body">
-                                    <tr>
-                                        <td colspan="8" class="empty-state">暂无数据</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- 历史趋势 -->
-                    <div>
-                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
-                            <i class="bi bi-graph-up"></i> 历史趋势（最近7次）
-                        </h3>
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>分析时间</th>
-                                        <th>分析数</th>
-                                        <th>机会数</th>
-                                        <th>开仓数</th>
-                                        <th>错过数</th>
-                                        <th>捕获率</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="kline-history-body">
-                                    <tr>
-                                        <td colspan="6" class="empty-state">暂无历史数据</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Opportunities Analysis Tab -->
-            <div id="opportunities-tab" class="tab-content">
-                <div id="opportunitiesLoading" class="loading-overlay">
-                    <div class="spinner"></div>
-                </div>
-                <div id="opportunitiesContent" style="display: none;">
-                    <!-- 总体统计 -->
-                    <div id="opportunities-summary" style="margin-bottom: 24px;"></div>
-
-                    <!-- 已捕获的信号 -->
-                    <div style="margin-bottom: 32px;">
-                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
-                            <i class="bi bi-check-circle"></i> 已捕获信号（按强度排序）
-                        </h3>
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>交易对</th>
-                                        <th>方向</th>
-                                        <th>质量</th>
-                                        <th>信号强度</th>
-                                        <th>1H净力量</th>
-                                        <th>15M净力量</th>
-                                        <th>5M净力量</th>
-                                        <th>状态</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="timeframe-analysis-body">
-                                    <tr>
-                                        <td colspan="8" class="empty-state">暂无数据</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- Miss Reasons -->
-                    <div style="margin-bottom: 32px;">
-                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
-                            <i class="bi bi-exclamation-triangle"></i> 主要错过原因
-                        </h3>
-                        <div id="miss-reasons-content"></div>
-                    </div>
-
-                    <!-- 错过的高质量机会 -->
-                    <div style="margin-bottom: 32px;">
-                        <h3 style="font-size: 16px; margin-bottom: 16px; color: var(--text-secondary);">
-                            <i class="bi bi-exclamation-triangle"></i> 错过的高质量机会（按强度排序）
-                        </h3>
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>交易对</th>
-                                        <th>方向</th>
-                                        <th>质量</th>
-                                        <th>信号强度</th>
-                                        <th>1H净力量</th>
-                                        <th>15M净力量</th>
-                                        <th>5M净力量</th>
-                                        <th>错过原因</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="best-symbols-body">
-                                    <tr><td colspan="8" class="empty-state">暂无数据</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <!-- 隐藏的表格（保留用于兼容性） -->
-                    <table style="display: none;">
-                        <tbody id="worst-symbols-body"></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Daily PnL Statistics Tab -->
-            <div id="daily-pnl-tab" class="tab-content">
-                <div id="dailyPnlLoading" class="loading-overlay">
-                    <div class="spinner"></div>
-                </div>
-                <div id="dailyPnlContent" style="display: none;">
-                    <!-- 月份选择器 -->
-                    <div class="d-flex justify-between align-center mb-sm" style="margin-bottom: 24px;">
-                        <div class="filter-group">
-                            <select id="monthSelector" onchange="loadDailyPnl()" class="btn btn-secondary">
-                                <!-- 动态生成月份选项 -->
-                            </select>
-                        </div>
-                        <div class="text-secondary text-sm">
-                            <i class="bi bi-info-circle"></i> 统计每日平仓的盈亏情况
-                        </div>
-                    </div>
-
-                    <!-- 月度统计概览 -->
-                    <div class="stats-grid" style="margin-bottom: 24px;">
-                        <div class="stat-card">
-                            <div class="stat-label">本月总盈亏</div>
-                            <div class="stat-value" id="monthTotalPnl">-</div>
-                            <div class="stat-change" id="monthTotalPnlChange">-</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">盈利天数</div>
-                            <div class="stat-value" id="profitDays">-</div>
-                            <div class="stat-change" id="profitDaysRatio">-</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">日均盈亏</div>
-                            <div class="stat-value" id="avgDailyPnl">-</div>
-                            <div class="stat-change" id="avgDailyPnlChange">-</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">最大单日盈亏</div>
-                            <div class="stat-value" id="maxDailyPnl">-</div>
-                            <div class="stat-change" id="maxDailyPnlDate">-</div>
-                        </div>
-                    </div>
-
-                    <!-- 盈亏趋势图 -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="card-title">
-                                <i class="bi bi-graph-up"></i> 每日盈亏趋势
-                            </h3>
-                        </div>
-                        <div class="card-body">
-                            <canvas id="dailyPnlChart" style="max-height: 400px;"></canvas>
-                        </div>
-                    </div>
-
-                    <!-- 每日盈亏明细表 -->
-                    <div class="card" style="margin-top: 24px;">
-                        <div class="card-header">
-                            <h3 class="card-title">
-                                <i class="bi bi-table"></i> 每日盈亏明细
-                            </h3>
-                            <div class="filter-group">
-                                <button class="filter-btn active" onclick="filterDailyPnl('all')">全部</button>
-                                <button class="filter-btn" onclick="filterDailyPnl('profit')">盈利日</button>
-                                <button class="filter-btn" onclick="filterDailyPnl('loss')">亏损日</button>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>日期</th>
-                                            <th>交易笔数</th>
-                                            <th>盈利笔数</th>
-                                            <th>亏损笔数</th>
-                                            <th>胜率</th>
-                                            <th>总盈亏</th>
-                                            <th>盈利金额</th>
-                                            <th>亏损金额</th>
-                                            <th>盈亏比</th>
-                                            <th>ROI</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="daily-pnl-table-body">
-                                        <tr><td colspan="10" class="empty-state">暂无数据</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Retrospective Analysis Tab -->
-            <div id="retrospective-tab" class="tab-content">
-                <div class="card" style="margin-top: 0;">
-                    <div class="card-header">
-                        <h3 class="card-title">
-                            <i class="bi bi-clock-history"></i> 12小时复盘分析
-                        </h3>
-                        <button class="btn btn-primary" onclick="loadRetrospectiveAnalysis()">
-                            <i class="bi bi-arrow-clockwise"></i> 刷新分析
-                        </button>
-                    </div>
-                    <div class="card-body">
-                        <div id="retrospectiveLoading" class="loading-overlay">
-                            <div class="spinner"></div>
-                        </div>
-                        <div id="retrospectiveContent" style="display: none;">
-                            <!-- BTC总体走势 -->
-                            <div class="card" style="margin-bottom: 20px;">
-                                <div class="card-header">
-                                    <h4 class="card-title"><i class="bi bi-graph-up"></i> BTC 12小时总体走势</h4>
-                                    <span id="retroPeriod" style="color:#888;font-size:13px;"></span>
-                                </div>
-                                <div class="card-body">
-                                    <div id="btcSummaryGrid" class="stats-grid" style="grid-template-columns: repeat(5,1fr);"></div>
-                                </div>
-                            </div>
-
-                            <!-- 逐小时走势 + 交易对照表 -->
-                            <div class="card" style="margin-bottom: 20px;">
-                                <div class="card-header">
-                                    <h4 class="card-title"><i class="bi bi-table"></i> 逐小时走势与交易盈亏</h4>
-                                </div>
-                                <div class="card-body" style="padding:0;">
-                                    <div style="overflow-x:auto;">
-                                        <table class="table table-sm" style="margin:0;font-size:13px;">
-                                            <thead>
-                                                <tr style="background:#1a1a2e;">
-                                                    <th>时间(CST)</th>
-                                                    <th>开盘</th>
-                                                    <th>收盘</th>
-                                                    <th>涨跌</th>
-                                                    <th>走势</th>
-                                                    <th>开仓数</th>
-                                                    <th>盈亏</th>
-                                                    <th>胜率</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="hourlyTrendTable"></tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 12小时交易汇总 -->
-                            <div class="card">
-                                <div class="card-header">
-                                    <h4 class="card-title"><i class="bi bi-bar-chart-line"></i> 12小时交易总体表现</h4>
-                                </div>
-                                <div class="card-body">
-                                    <div id="retroPerformanceGrid" class="stats-grid" style="grid-template-columns: repeat(5,1fr);"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
+<body class="bg-surface text-on-surface selection:bg-primary selection:text-on-primary">
+<!-- Sidebar Navigation -->
+<aside class="h-screen w-64 fixed left-0 top-0 z-50 bg-[#0f1419] flex flex-col py-8 px-4 shadow-[4px_0_24px_rgba(73,244,200,0.05)]">
+<div class="mb-10 px-4 flex items-center gap-3">
+<div class="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">psychology</span>
+</div>
+<div>
+<h2 class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-bold text-on-surface">SYNTHETIC BRAIN</h2>
+<p class="text-[10px] text-on-surface-variant tracking-widest uppercase">Verified Node</p>
+</div>
+</div>
+<nav class="flex-1 space-y-2">
+<!-- Dashboard -->
+<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] opacity-60 hover:opacity-100 hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/dashboard">
+<span class="material-symbols-outlined text-lg">grid_view</span>
+<span class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-semibold">Dashboard</span>
+</a>
+<!-- Futures -->
+<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] opacity-60 hover:opacity-100 hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/futures">
+<span class="material-symbols-outlined text-lg">query_stats</span>
+<span class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-semibold">Futures</span>
+</a>
+<!-- Live Trading -->
+<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] opacity-60 hover:opacity-100 hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/live-trading">
+<span class="material-symbols-outlined text-lg">bolt</span>
+<span class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-semibold">Live Trading</span>
+</a>
+<!-- Review (Active) -->
+<a class="flex items-center gap-3 px-4 py-3 text-[#49f4c8] border-r-2 border-[#49f4c8] bg-gradient-to-r from-[#49f4c8]/10 to-transparent transition-all duration-200 rounded-l-lg group" href="/review">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">visibility</span>
+<span class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-semibold">Review</span>
+</a>
+<!-- Signals -->
+<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] opacity-60 hover:opacity-100 hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/signals">
+<span class="material-symbols-outlined text-lg">sensors</span>
+<span class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-semibold">Signals</span>
+</a>
+<!-- Settings -->
+<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] opacity-60 hover:opacity-100 hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/settings">
+<span class="material-symbols-outlined text-lg">settings</span>
+<span class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-semibold">Settings</span>
+</a>
+</nav>
+<div class="mt-auto space-y-4">
+<button class="w-full py-3 bg-gradient-to-r from-primary to-primary-container text-on-primary-container font-headline font-bold text-xs tracking-widest uppercase rounded-lg shadow-[0_0_20px_rgba(73,244,200,0.15)] hover:scale-[0.98] transition-transform">
+                DEPOSIT FUNDS
+            </button>
+<div class="flex items-center gap-3 p-3 bg-surface-container rounded-xl">
+<img class="w-8 h-8 rounded-full border border-outline-variant/20" data-alt="Cyberpunk style user avatar with glowing neon outlines and digital circuitry patterns on skin" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDySDeoXQH-mWSD90rNrVO1_P1-XfSxuEjyP9P9fxlTkgnTgD06xRkKXh50hK55ICK3A_6OU4JEnrPmMPFnMG0dZ1edRzixPXm7bLU3N0HKnyPjBNSng9jLUcdSju4fVt-lxyhZ1vx5cBDekj808mHA4rzdP1_CfIg_1U-UcHUDAdC58T0w4WSb--7TN-5GnC3ZkWrIKvqpKFujlOo9WIvKKD_XELyq0CwapZ0b2aa5EVIKqGyLgez1ucxDnKIls3NbWNjU0sNL23Dg"/>
+<div class="overflow-hidden">
+<p class="text-[10px] text-on-surface font-bold truncate">NEURAL_ADMIN_01</p>
+<p class="text-[8px] text-primary truncate mono">0x71C...49f4</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Wrapper -->
+<main class="ml-64 min-h-screen flex flex-col">
+<!-- Top Navigation Bar -->
+<header class="w-full h-16 bg-[#0a0f14] flex justify-between items-center px-8 sticky top-0 z-40">
+<div class="flex items-center gap-6">
+<h1 class="font-['Space_Grotesk'] text-xl font-bold tracking-tighter text-[#49f4c8]">24小时合约复盘</h1>
+<div class="h-4 w-[1px] bg-outline-variant/30"></div>
+<div class="flex items-center gap-2">
+<span class="text-[10px] font-['Space_Grotesk'] text-on-surface-variant uppercase tracking-widest">Last Update:</span>
+<span class="mono text-xs text-on-surface">2024-05-20 14:30:12</span>
+<button class="ml-2 w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container transition-all">
+<span class="material-symbols-outlined text-sm text-primary">refresh</span>
+</button>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+</button>
+<button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+</div>
+</header>
+<!-- Canvas -->
+<div class="p-8 space-y-8">
+<!-- Summary Row -->
+<div class="grid grid-cols-5 gap-4">
+<div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-primary/30">
+<p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">24H开仓数</p>
+<p class="mono text-3xl font-medium text-on-surface">42</p>
+</div>
+<div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-primary/30">
+<p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">24H盈利单数</p>
+<p class="mono text-3xl font-medium text-primary">28</p>
+</div>
+<div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-error/30">
+<p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">24H亏损单数</p>
+<p class="mono text-3xl font-medium text-error">14</p>
+</div>
+<div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-primary/30">
+<p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">24H总盈亏</p>
+<p class="mono text-3xl font-medium text-primary">+$12,482.50</p>
+</div>
+<div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-secondary/30">
+<p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">胜率</p>
+<p class="mono text-3xl font-medium text-[#FFD700]">66.7<span class="text-sm ml-1">%</span></p>
+</div>
+</div>
+<!-- Analysis Section (2 Columns) -->
+<div class="grid grid-cols-2 gap-8">
+<!-- Signal Quality Analysis -->
+<div class="bg-surface-container-low p-8 rounded-2xl relative overflow-hidden">
+<div class="flex justify-between items-end mb-8">
+<div>
+<h3 class="font-headline text-lg font-bold text-on-surface mb-1">信号质量分析</h3>
+<p class="text-xs text-on-surface-variant">Signal Component Efficiency Tracking</p>
+</div>
+<span class="mono text-primary text-xs bg-primary/10 px-2 py-1 rounded">HEALTHY</span>
+</div>
+<div class="space-y-6">
+<div class="space-y-2">
+<div class="flex justify-between text-[10px] font-headline tracking-wider uppercase text-on-surface-variant">
+<span>Momentum (动量)</span>
+<span class="mono text-primary">84%</span>
+</div>
+<div class="h-2 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 84%;"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-[10px] font-headline tracking-wider uppercase text-on-surface-variant">
+<span>Mean Reversion (均值回归)</span>
+<span class="mono text-secondary">62%</span>
+</div>
+<div class="h-2 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-secondary rounded-full" style="width: 62%;"></div>
+</div>
+</div>
+<div class="space-y-2">
+<div class="flex justify-between text-[10px] font-headline tracking-wider uppercase text-on-surface-variant">
+<span>Breakout (突破)</span>
+<span class="mono text-[#FFD700]">45%</span>
+</div>
+<div class="h-2 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-[#FFD700] rounded-full" style="width: 45%;"></div>
+</div>
+</div>
+</div>
+</div>
+<!-- Symbol Performance -->
+<div class="bg-surface-container-low p-8 rounded-2xl">
+<h3 class="font-headline text-lg font-bold text-on-surface mb-6">交易对表现</h3>
+<div class="space-y-4">
+<!-- Top Performers -->
+<div class="flex items-center justify-between p-3 bg-primary/5 rounded-lg">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="mono text-[10px] font-bold text-primary">BTC</span>
+</div>
+<span class="font-headline text-sm font-medium">BTC/USDT</span>
+</div>
+<span class="mono text-sm text-primary font-bold">+$8,420.00</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-primary/5 rounded-lg">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="mono text-[10px] font-bold text-primary">SOL</span>
+</div>
+<span class="font-headline text-sm font-medium">SOL/USDT</span>
+</div>
+<span class="mono text-sm text-primary font-bold">+$3,120.50</span>
+</div>
+<!-- Bottom Performers -->
+<div class="flex items-center justify-between p-3 bg-error/5 rounded-lg">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="mono text-[10px] font-bold text-error">ETH</span>
+</div>
+<span class="font-headline text-sm font-medium">ETH/USDT</span>
+</div>
+<span class="mono text-sm text-error font-bold">-$1,250.20</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-error/5 rounded-lg">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
+<span class="mono text-[10px] font-bold text-error">ARB</span>
+</div>
+<span class="font-headline text-sm font-medium">ARB/USDT</span>
+</div>
+<span class="mono text-sm text-error font-bold">-$860.00</span>
+</div>
+</div>
+</div>
+</div>
+<!-- AI Strategy Suggestions -->
+<div class="grid grid-cols-3 gap-6">
+<!-- Optimization Card -->
+<div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10 hover:bg-surface-container transition-all">
+<div class="flex items-center justify-between mb-4">
+<div class="p-2 bg-primary/10 rounded-lg">
+<span class="material-symbols-outlined text-primary">auto_fix_high</span>
+</div>
+<span class="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded-full uppercase tracking-tighter">优化</span>
+</div>
+<h4 class="font-headline font-bold text-on-surface mb-2">策略优化</h4>
+<p class="text-xs text-on-surface-variant leading-relaxed">Suggests increasing leverage on BTC trend following. Momentum signals are displaying high fidelity.</p>
+</div>
+<!-- Warning Card -->
+<div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10 hover:bg-surface-container transition-all">
+<div class="flex items-center justify-between mb-4">
+<div class="p-2 bg-[#FFD700]/10 rounded-lg">
+<span class="material-symbols-outlined text-[#FFD700]">warning</span>
+</div>
+<span class="px-2 py-0.5 bg-[#FFD700]/10 text-[#FFD700] text-[10px] font-bold rounded-full uppercase tracking-tighter">注意</span>
+</div>
+<h4 class="font-headline font-bold text-on-surface mb-2">风险注意</h4>
+<p class="text-xs text-on-surface-variant leading-relaxed">Multiple loss signals detected on ETH scalp strategy. High volatility environment reducing hit rate.</p>
+</div>
+<!-- Good Card -->
+<div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10 hover:bg-surface-container transition-all">
+<div class="flex items-center justify-between mb-4">
+<div class="p-2 bg-secondary/10 rounded-lg">
+<span class="material-symbols-outlined text-secondary">check_circle</span>
+</div>
+<span class="px-2 py-0.5 bg-secondary/10 text-secondary text-[10px] font-bold rounded-full uppercase tracking-tighter">良好</span>
+</div>
+<h4 class="font-headline font-bold text-on-surface mb-2">表现良好</h4>
+<p class="text-xs text-on-surface-variant leading-relaxed">SOL breakout strategy maintained 80% win rate. Continue current risk parameters for SOL pairs.</p>
+</div>
+</div>
+<!-- Detailed Trading Records Table -->
+<div class="bg-surface-container-low rounded-2xl overflow-hidden shadow-2xl">
+<div class="px-8 py-6 border-b border-outline-variant/10 flex justify-between items-center">
+<h3 class="font-headline text-lg font-bold text-on-surface">详细交易记录</h3>
+<div class="flex items-center gap-4">
+<span class="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Filters: All History</span>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary">filter_list</span>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="text-[10px] text-on-surface-variant uppercase tracking-widest font-headline">
+<th class="px-8 py-5">交易对</th>
+<th class="px-8 py-5">方向</th>
+<th class="px-8 py-5">开仓价</th>
+<th class="px-8 py-5">平仓价</th>
+<th class="px-8 py-5">盈亏</th>
+<th class="px-8 py-5">持仓时长</th>
+<th class="px-8 py-5">平仓原因</th>
+</tr>
+</thead>
+<tbody class="text-sm border-t border-outline-variant/10">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container transition-colors group">
+<td class="px-8 py-5 font-medium">BTC/USDT</td>
+<td class="px-8 py-5">
+<span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded">LONG</span>
+</td>
+<td class="px-8 py-5 mono text-on-surface-variant">64,250.00</td>
+<td class="px-8 py-5 mono text-on-surface-variant">66,820.50</td>
+<td class="px-8 py-5 mono text-primary font-bold">+$2,570.50</td>
+<td class="px-8 py-5 text-on-surface-variant">04:12:33</td>
+<td class="px-8 py-5">
+<span class="text-[10px] bg-surface-container-highest px-2 py-0.5 rounded text-on-surface">TAKE_PROFIT</span>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container transition-colors group">
+<td class="px-8 py-5 font-medium">ETH/USDT</td>
+<td class="px-8 py-5">
+<span class="px-2 py-1 bg-error/10 text-error text-[10px] font-bold rounded">SHORT</span>
+</td>
+<td class="px-8 py-5 mono text-on-surface-variant">3,120.20</td>
+<td class="px-8 py-5 mono text-on-surface-variant">3,180.50</td>
+<td class="px-8 py-5 mono text-error font-bold">-$60.30</td>
+<td class="px-8 py-5 text-on-surface-variant">00:45:10</td>
+<td class="px-8 py-5">
+<span class="text-[10px] bg-surface-container-highest px-2 py-0.5 rounded text-on-surface">STOP_LOSS</span>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container transition-colors group">
+<td class="px-8 py-5 font-medium">SOL/USDT</td>
+<td class="px-8 py-5">
+<span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded">LONG</span>
+</td>
+<td class="px-8 py-5 mono text-on-surface-variant">142.15</td>
+<td class="px-8 py-5 mono text-on-surface-variant">158.40</td>
+<td class="px-8 py-5 mono text-primary font-bold">+$16.25</td>
+<td class="px-8 py-5 text-on-surface-variant">08:50:12</td>
+<td class="px-8 py-5">
+<span class="text-[10px] bg-surface-container-highest px-2 py-0.5 rounded text-on-surface">MANUAL_CLOSE</span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container transition-colors group">
+<td class="px-8 py-5 font-medium">LINK/USDT</td>
+<td class="px-8 py-5">
+<span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded">LONG</span>
+</td>
+<td class="px-8 py-5 mono text-on-surface-variant">14.22</td>
+<td class="px-8 py-5 mono text-on-surface-variant">14.85</td>
+<td class="px-8 py-5 mono text-primary font-bold">+$0.63</td>
+<td class="px-8 py-5 text-on-surface-variant">02:15:00</td>
+<td class="px-8 py-5">
+<span class="text-[10px] bg-surface-container-highest px-2 py-0.5 rounded text-on-surface">TAKE_PROFIT</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="px-8 py-4 border-t border-outline-variant/10 flex justify-center">
+<button class="text-[10px] font-headline font-bold text-primary tracking-widest uppercase hover:underline">View Full Ledger</button>
+</div>
+</div>
+</div>
+<footer class="mt-auto px-8 py-6 flex justify-between items-center text-[10px] text-on-surface-variant border-t border-outline-variant/10">
+<p>© 2024 NEURAL OBSIDIAN ANALYTICS ENGINE. ALL SYSTEMS NOMINAL.</p>
+<div class="flex gap-4">
+<a class="hover:text-primary" href="#">DATA_POLICY</a>
+<a class="hover:text-primary" href="#">ENCRYPTION_STATUS</a>
+<a class="hover:text-primary" href="#">NODE_LATENCY: 12ms</a>
+</div>
+</footer>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+<script>
         // Global state
         let currentFilter = 'all';
         let currentSort = 'time';
@@ -1931,5 +1602,4 @@
         document.getElementById('hours-select').addEventListener('change', refreshAll);
         refreshAll();
     </script>
-</body>
-</html>
+</body></html>
