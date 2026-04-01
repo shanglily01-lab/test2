@@ -93,84 +93,40 @@
 </head>
 <body class="bg-surface text-on-surface selection:bg-primary selection:text-on-primary">
 <!-- Sidebar Navigation -->
-<aside class="h-screen w-64 fixed left-0 top-0 z-50 bg-[#0f1419] flex flex-col py-8 px-4 shadow-[4px_0_24px_rgba(73,244,200,0.05)]">
-<div class="mb-10 px-4 flex items-center gap-3">
-<div class="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-<span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">psychology</span>
+<aside class="fixed left-0 top-0 h-screen w-[240px] bg-[#0a0f14] border-r border-slate-800 flex flex-col py-6 z-50">
+<div class="px-5 mb-6">
+<a href="/" class="block group">
+<h1 class="text-xl font-black tracking-tighter text-[#49f4c8] group-hover:opacity-80 transition-opacity">NEURAL OBSIDIAN</h1>
+<p class="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">Quant Terminal</p>
+</a>
 </div>
-<div>
-<h2 class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-bold text-on-surface">SYNTHETIC BRAIN</h2>
-<p class="text-[10px] text-on-surface-variant tracking-widest uppercase">Verified Node</p>
-</div>
-</div>
-<nav class="flex-1 space-y-2">
-<!-- Dashboard -->
-<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] opacity-60 hover:opacity-100 hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/dashboard">
-<span class="material-symbols-outlined text-lg">grid_view</span>
-<span class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-semibold">Dashboard</span>
-</a>
-<!-- Futures -->
-<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] opacity-60 hover:opacity-100 hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/futures_trading">
-<span class="material-symbols-outlined text-lg">query_stats</span>
-<span class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-semibold">Futures</span>
-</a>
-<!-- Live Trading -->
-<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] opacity-60 hover:opacity-100 hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/live_trading">
-<span class="material-symbols-outlined text-lg">bolt</span>
-<span class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-semibold">Live Trading</span>
-</a>
-<!-- Review (Active) -->
-<a class="flex items-center gap-3 px-4 py-3 text-[#49f4c8] border-r-2 border-[#49f4c8] bg-gradient-to-r from-[#49f4c8]/10 to-transparent transition-all duration-200 rounded-l-lg group" href="/futures_review">
-<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">visibility</span>
-<span class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-semibold">Review</span>
-</a>
-<!-- Signals -->
-<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] opacity-60 hover:opacity-100 hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/technical-signals">
-<span class="material-symbols-outlined text-lg">sensors</span>
-<span class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-semibold">Signals</span>
-</a>
-<!-- Settings -->
-<a class="flex items-center gap-3 px-4 py-3 text-[#a8abb2] opacity-60 hover:opacity-100 hover:bg-[#151a20] transition-all duration-200 rounded-lg group" href="/system-settings">
-<span class="material-symbols-outlined text-lg">settings</span>
-<span class="font-['Space_Grotesk'] uppercase tracking-[0.05em] text-xs font-semibold">Settings</span>
-</a>
-<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] transition-all duration-200 hover:bg-[#151a20]" href="/spot_trading">
-<span class="material-symbols-outlined">currency_exchange</span>
-<span class="text-sm font-medium">现货交易</span>
-</a>
-<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] transition-all duration-200 hover:bg-[#151a20]" href="/etf_data">
-<span class="material-symbols-outlined">candlestick_chart</span>
-<span class="text-sm font-medium">ETF 数据</span>
-</a>
-<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] transition-all duration-200 hover:bg-[#151a20]" href="/blockchain_gas">
-<span class="material-symbols-outlined">local_gas_station</span>
-<span class="text-sm font-medium">Gas 监控</span>
-</a>
-<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] transition-all duration-200 hover:bg-[#151a20]" href="/data_management">
-<span class="material-symbols-outlined">storage</span>
-<span class="text-sm font-medium">数据管理</span>
-</a>
-<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] transition-all duration-200 hover:bg-[#151a20]" href="/api-keys">
-<span class="material-symbols-outlined">api</span>
-<span class="text-sm font-medium">API Keys</span>
-</a>
-<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-[#a8abb2] hover:text-[#49f4c8] transition-all duration-200 hover:bg-[#151a20]" href="/corporate_treasury">
-<span class="material-symbols-outlined">account_balance</span>
-<span class="text-sm font-medium">企业金库</span>
-</a>
+<nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto">
+<a href="/dashboard" data-path="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
+<a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>U本位合约</span></a>
+<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_bitcoin</span><span>币本位合约</span></a>
+<a href="/live_trading" data-path="/live_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">precision_manufacturing</span><span>Live Trading</span></a>
+<a href="/futures_review" data-path="/futures_review" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>复盘分析</span></a>
+<a href="/technical-signals" data-path="/technical-signals" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">sensors</span><span>信号分析</span></a>
+<a href="/market_regime" data-path="/market_regime" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">pulse_alert</span><span>行情识别</span></a>
+<a href="/spot_trading" data-path="/spot_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_exchange</span><span>现货交易</span></a>
+<a href="/etf_data" data-path="/etf_data" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">candlestick_chart</span><span>ETF 数据</span></a>
+<a href="/blockchain_gas" data-path="/blockchain_gas" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Gas 监控</span></a>
+<a href="/corporate_treasury" data-path="/corporate_treasury" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">account_balance</span><span>企业金库</span></a>
+<a href="/data_management" data-path="/data_management" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">storage</span><span>数据管理</span></a>
+<a href="/api-keys" data-path="/api-keys" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">api</span><span>API Keys</span></a>
+<a href="/system-settings" data-path="/system-settings" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">settings</span><span>Settings</span></a>
 </nav>
-<div class="mt-auto space-y-4">
-<button class="w-full py-3 bg-gradient-to-r from-primary to-primary-container text-on-primary-container font-headline font-bold text-xs tracking-widest uppercase rounded-lg shadow-[0_0_20px_rgba(73,244,200,0.15)] hover:scale-[0.98] transition-transform">
-                DEPOSIT FUNDS
-            </button>
-<div class="flex items-center gap-3 p-3 bg-surface-container rounded-xl">
-<img class="w-8 h-8 rounded-full border border-outline-variant/20" data-alt="Cyberpunk style user avatar with glowing neon outlines and digital circuitry patterns on skin" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDySDeoXQH-mWSD90rNrVO1_P1-XfSxuEjyP9P9fxlTkgnTgD06xRkKXh50hK55ICK3A_6OU4JEnrPmMPFnMG0dZ1edRzixPXm7bLU3N0HKnyPjBNSng9jLUcdSju4fVt-lxyhZ1vx5cBDekj808mHA4rzdP1_CfIg_1U-UcHUDAdC58T0w4WSb--7TN-5GnC3ZkWrIKvqpKFujlOo9WIvKKD_XELyq0CwapZ0b2aa5EVIKqGyLgez1ucxDnKIls3NbWNjU0sNL23Dg"/>
-<div class="overflow-hidden">
-<p class="text-[10px] text-on-surface font-bold truncate">NEURAL_ADMIN_01</p>
-<p class="text-[8px] text-primary truncate mono">0x71C...49f4</p>
-</div>
-</div>
-</div>
+<script>
+(function(){
+  var path = window.location.pathname.replace(/\/$/, '') || '/';
+  document.querySelectorAll('#sidebar-nav .nav-item').forEach(function(a){
+    if(a.getAttribute('data-path') === path){
+      a.classList.remove('text-slate-400');
+      a.classList.add('text-[#49f4c8]','bg-[#151a20]','border-r-2','border-[#49f4c8]','font-semibold');
+    }
+  });
+})();
+</script>
 </aside>
 <!-- Main Content Wrapper -->
 <main class="ml-64 min-h-screen flex flex-col">
