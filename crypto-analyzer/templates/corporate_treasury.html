@@ -1,924 +1,554 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>企业金库监控 - AlphaFlow</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/mobile.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <style>
-        /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
-        :root {
-            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
-            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
-            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
-            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
-            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
-            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
-            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
-            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
-            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
-            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
-            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
-            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
-            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
-            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NEURAL OBSIDIAN - 企业金库 (Corporate Treasury)</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700&amp;family=Geist:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#49f4c8",
+                        surface: "#0f1520",
+                        background: "#070b10",
+                        sidebar: "#0a0f14",
+                        danger: "#ff716c"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk", "sans-serif"],
+                        "body": ["Manrope", "sans-serif"],
+                        "label": ["Geist", "sans-serif"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
-        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
-        .header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-lg); }
-        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-md); }
-        .header-subtitle { color: var(--text-secondary); font-size: 13px; margin-top: var(--spacing-xs); }
-        .header-actions { display: flex; gap: var(--spacing-md); align-items: center; }
-        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
-        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
-        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
-        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
-        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
-        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
-        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
-        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
-        .card-body { padding: 0; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg); margin-bottom: var(--spacing-xl); }
-        .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; cursor: pointer; }
-        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
-        .stat-card:hover::before { opacity: 1; }
-        .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm); font-weight: 600; }
-        .stat-value { font-size: 28px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-xs); font-family: var(--font-mono); }
-        .stat-change { font-size: 13px; color: var(--text-secondary); }
-        .stat-change.positive { color: var(--success-green); }
-        .stat-change.negative { color: var(--danger-red); }
-        .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
-        table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
-        thead { background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); }
-        th { padding: var(--spacing-md) var(--spacing-lg); text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { padding: var(--spacing-lg); border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-size: 13px; }
-        tr:last-child td { border-bottom: none; }
-        tbody tr { transition: background-color var(--transition-fast); }
-        tbody tr:hover { background: var(--bg-hover); }
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .btn-primary:hover:not(:disabled) { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
-        .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
-        .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
-        .positive { color: var(--success-green); }
-        .negative { color: var(--danger-red); }
-        .company-name { display: flex; align-items: center; gap: var(--spacing-md); }
-        .company-logo { width: 40px; height: 40px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--primary-blue), var(--secondary-purple)); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; color: white; }
-        .company-info { display: flex; flex-direction: column; }
-        .company-name-text { font-weight: 600; color: var(--text-primary); }
-        .company-ticker { color: var(--text-secondary); font-size: 12px; }
-        .loading { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .loading::after { content: '...'; animation: dots 1.5s steps(4, end) infinite; }
-        @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60%, 100% { content: '...'; } }
-        .error-message { background: var(--danger-red-bg); color: var(--danger-red); padding: var(--spacing-lg); border-radius: var(--radius-md); margin: var(--spacing-xl) 0; border: 1px solid var(--danger-red); }
-        .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .chart-container { position: relative; height: 400px; margin-top: var(--spacing-lg); }
-        .last-update { color: var(--text-tertiary); font-size: 12px; margin-top: var(--spacing-sm); }
-        .filter-bar { display: flex; gap: var(--spacing-md); margin-bottom: var(--spacing-lg); flex-wrap: wrap; }
-        .search-input { flex: 1; min-width: 250px; padding: var(--spacing-md) var(--spacing-lg); border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-tertiary); color: var(--text-primary); font-size: 14px; }
-        .search-input:focus { outline: none; border-color: var(--primary-blue); }
-        .category-badge { display: inline-flex; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; }
-        .category-holding { background: var(--primary-blue-light); color: var(--primary-blue); }
-        .category-mining { background: var(--success-green-bg); color: var(--success-green); }
-        .category-payment { background: var(--warning-yellow-bg); color: var(--warning-yellow); }
-        .slide-up { animation: slideUp var(--transition-slow) ease-out; }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        @media (max-width: 1024px) {
-            .card-body > div[style*="grid"] {
-                grid-template-columns: 1fr !important;
-            }
+    </script>
+<style>
+        body {
+            background-color: #070b10;
+            color: #e2e8f0;
+            font-family: 'Manrope', sans-serif;
         }
-        @media (max-width: 768px) {
-            .nav-links { flex-direction: column; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #070b10;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <div>
-                    <div style="display: flex; align-items: center; gap: var(--spacing-md);">
-                        <img src="/static/images/logo/alphaflow-logo-icon.svg" alt="AlphaFlow" style="height: 36px; width: auto;">
-                        <div>
-                            <h1 class="header-title" style="margin: 0;">
-                                <i class="bi bi-building"></i>
-                                企业金库监控
-                            </h1>
-                            <p class="header-subtitle">追踪上市公司加密货币持仓 · 实时更新 · 机构投资趋势分析</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="header-actions">
-                    <button class="btn btn-ghost" onclick="loadTreasuryData()">
-                        <i class="bi bi-arrow-clockwise"></i> 刷新
-                    </button>
-                </div>
-            </div>
-        </header>
+<body class="antialiased overflow-x-hidden">
+<!-- SideNavBar (Shared Component) -->
+<aside class="fixed left-0 top-0 h-full w-[240px] border-r border-slate-800 bg-[#0a0f14] font-mono text-sm tracking-tight flex flex-col py-6 z-50">
+<div class="px-6 mb-8">
+<h1 class="text-xl font-black tracking-tighter text-[#49f4c8]">NEURAL OBSIDIAN</h1>
+<p class="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Quant Terminal</p>
+</div>
+<nav class="flex-1 px-3 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/dashboard"><span class="material-symbols-outlined text-lg">dashboard</span><span>Dashboard</span></a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/futures_trading"><span class="material-symbols-outlined text-lg">show_chart</span><span>Futures</span></a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/live_trading"><span class="material-symbols-outlined text-lg">precision_manufacturing</span><span>Live Trading</span></a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/futures_review"><span class="material-symbols-outlined text-lg">history_edu</span><span>Review</span></a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/technical-signals"><span class="material-symbols-outlined text-lg">sensors</span><span>Signals</span></a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/spot_trading"><span class="material-symbols-outlined text-lg">currency_exchange</span><span>现货交易</span></a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/etf_data"><span class="material-symbols-outlined text-lg">candlestick_chart</span><span>ETF 数据</span></a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/blockchain_gas"><span class="material-symbols-outlined text-lg">local_gas_station</span><span>Gas 监控</span></a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/data_management"><span class="material-symbols-outlined text-lg">storage</span><span>数据管理</span></a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/api-keys"><span class="material-symbols-outlined text-lg">api</span><span>API Keys</span></a>
+<a class="flex items-center gap-3 px-3 py-2 text-[#49f4c8] bg-[#49f4c8]/10 border-r-2 border-[#49f4c8] font-bold transition-colors duration-200 rounded-l" href="/corporate_treasury"><span class="material-symbols-outlined text-lg">account_balance</span><span>企业金库</span></a>
+</nav>
+<div class="mt-auto px-3 pt-6 border-t border-slate-800">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/system-settings"><span class="material-symbols-outlined text-lg">settings</span><span>Settings</span></a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-[240px] min-h-screen">
+<!-- TopNavBar (Shared Component) -->
+<header class="flex justify-between items-center h-16 px-6 sticky top-0 z-40 bg-[#0a0f14]/80 backdrop-blur-md border-b border-slate-800">
+<div class="flex items-center gap-4">
+<h2 class="text-lg font-bold text-slate-100 font-mono tracking-tight">企业金库</h2>
+<span class="h-4 w-[1px] bg-slate-700"></span>
+<p class="font-mono text-xs uppercase tracking-widest text-slate-400">Last update: 12:45:03</p>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 px-4 py-2 bg-[#49f4c8]/10 text-[#49f4c8] border border-[#49f4c8]/20 rounded font-mono text-xs hover:bg-[#49f4c8]/20 transition-all active:scale-[0.98]">
+<span class="material-symbols-outlined text-sm">refresh</span>
+                    刷新
+                </button>
+</div>
+</header>
+<!-- Content Body -->
+<div class="p-6 space-y-6">
+<!-- 1. Top Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+<!-- Card 1 -->
+<div class="bg-surface p-5 rounded-xl border-l-4 border-primary shadow-lg border-slate-800/50 flex flex-col justify-between">
+<p class="text-slate-400 text-xs font-label uppercase tracking-wider">持仓公司总数</p>
+<div class="mt-4 flex items-end justify-between">
+<span id="stat-total-companies" class="text-3xl font-mono font-bold text-slate-100">45</span>
+<span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-mono font-bold">+2 WEEKLY</span>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="bg-surface p-5 rounded-xl border-l-4 border-primary shadow-lg border-slate-800/50 flex flex-col justify-between">
+<p class="text-slate-400 text-xs font-label uppercase tracking-wider">BTC总持仓量 (BTC)</p>
+<div class="mt-4 flex items-end justify-between">
+<span id="stat-total-btc" class="text-2xl font-mono font-bold text-slate-100">2,145,890</span>
+<span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-mono font-bold">TOTAL</span>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="bg-surface p-5 rounded-xl border-l-4 border-primary shadow-lg border-slate-800/50 flex flex-col justify-between">
+<p class="text-slate-400 text-xs font-label uppercase tracking-wider">总市值 (亿美元)</p>
+<div class="mt-4 flex items-end justify-between">
+<span id="stat-market-value" class="text-2xl font-mono font-bold text-slate-100">$1,284.5</span>
+<span class="px-2 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-mono font-bold">+4.2%</span>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="bg-surface p-5 rounded-xl border-l-4 border-primary shadow-lg border-slate-800/50 flex flex-col justify-between">
+<p class="text-slate-400 text-xs font-label uppercase tracking-wider">近30天活跃公司数</p>
+<div class="mt-4 flex items-end justify-between">
+<span id="stat-active-companies" class="text-3xl font-mono font-bold text-slate-100">12</span>
+<span class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 text-[10px] font-mono font-bold">ACTIVE</span>
+</div>
+</div>
+</div>
+<!-- 2. Middle Row -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Left: Table (65%) -->
+<div class="lg:col-span-8 bg-surface rounded-xl border border-slate-800/50 overflow-hidden shadow-xl">
+<div class="p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/30">
+<h3 class="text-sm font-mono font-bold text-slate-200">公司持仓排名</h3>
+<div class="flex gap-2">
+<button class="p-1 hover:bg-slate-800 rounded text-slate-500"><span class="material-symbols-outlined text-sm">download</span></button>
+<button class="p-1 hover:bg-slate-800 rounded text-slate-500"><span class="material-symbols-outlined text-sm">more_vert</span></button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left font-mono text-xs">
+<thead>
+<tr class="text-slate-500 border-b border-slate-800 bg-slate-900/20">
+<th class="px-5 py-4 font-medium uppercase tracking-wider">排名</th>
+<th class="px-5 py-4 font-medium uppercase tracking-wider">公司名称</th>
+<th class="px-5 py-4 font-medium uppercase tracking-wider">国家/类型</th>
+<th class="px-5 py-4 font-medium uppercase tracking-wider text-right">BTC持仓</th>
+<th class="px-5 py-4 font-medium uppercase tracking-wider text-right">市值(亿美元)</th>
+<th class="px-5 py-4 font-medium uppercase tracking-wider text-right">占总量%</th>
+<th class="px-5 py-4 font-medium uppercase tracking-wider text-right">最近变动</th>
+</tr>
+</thead>
+<tbody id="company-ranking-tbody" class="divide-y divide-slate-800/50">
+<tr class="hover:bg-slate-800/30 transition-colors">
+<td class="px-5 py-4 text-slate-400">01</td>
+<td class="px-5 py-4 font-bold text-slate-100">MicroStrategy</td>
+<td class="px-5 py-4 text-slate-500">USA / Tech</td>
+<td class="px-5 py-4 text-right text-slate-100">193,000</td>
+<td class="px-5 py-4 text-right text-slate-100">$120.5</td>
+<td class="px-5 py-4 text-right text-slate-400">9.1%</td>
+<td class="px-5 py-4 text-right text-primary font-bold">+3,000</td>
+</tr>
+<tr class="hover:bg-slate-800/30 transition-colors bg-slate-900/10">
+<td class="px-5 py-4 text-slate-400">02</td>
+<td class="px-5 py-4 font-bold text-slate-100">Marathon Digital</td>
+<td class="px-5 py-4 text-slate-500">USA / Mining</td>
+<td class="px-5 py-4 text-right text-slate-100">16,930</td>
+<td class="px-5 py-4 text-right text-slate-100">$10.2</td>
+<td class="px-5 py-4 text-right text-slate-400">0.8%</td>
+<td class="px-5 py-4 text-right text-slate-500">--</td>
+</tr>
+<tr class="hover:bg-slate-800/30 transition-colors">
+<td class="px-5 py-4 text-slate-400">03</td>
+<td class="px-5 py-4 font-bold text-slate-100">Tesla</td>
+<td class="px-5 py-4 text-slate-500">USA / Automotive</td>
+<td class="px-5 py-4 text-right text-slate-100">9,720</td>
+<td class="px-5 py-4 text-right text-slate-100">$6.1</td>
+<td class="px-5 py-4 text-right text-slate-400">0.4%</td>
+<td class="px-5 py-4 text-right text-danger font-bold">-500</td>
+</tr>
+<tr class="hover:bg-slate-800/30 transition-colors bg-slate-900/10">
+<td class="px-5 py-4 text-slate-400">04</td>
+<td class="px-5 py-4 font-bold text-slate-100">Hut 8 Corp</td>
+<td class="px-5 py-4 text-slate-500">CAN / Mining</td>
+<td class="px-5 py-4 text-right text-slate-100">9,110</td>
+<td class="px-5 py-4 text-right text-slate-100">$5.8</td>
+<td class="px-5 py-4 text-right text-slate-400">0.4%</td>
+<td class="px-5 py-4 text-right text-primary font-bold">+120</td>
+</tr>
+<tr class="hover:bg-slate-800/30 transition-colors">
+<td class="px-5 py-4 text-slate-400">05</td>
+<td class="px-5 py-4 font-bold text-slate-100">Riot Platforms</td>
+<td class="px-5 py-4 text-slate-500">USA / Mining</td>
+<td class="px-5 py-4 text-right text-slate-100">8,067</td>
+<td class="px-5 py-4 text-right text-slate-100">$4.9</td>
+<td class="px-5 py-4 text-right text-slate-400">0.3%</td>
+<td class="px-5 py-4 text-right text-slate-500">--</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Right: Donut Chart (35%) -->
+<div class="lg:col-span-4 bg-surface rounded-xl border border-slate-800/50 shadow-xl flex flex-col">
+<div class="p-5 border-b border-slate-800 bg-slate-900/30">
+<h3 class="text-sm font-mono font-bold text-slate-200">持仓分布</h3>
+</div>
+<div class="flex-1 p-6 flex flex-col items-center justify-center">
+<!-- Abstract Visual Representative of Donut Chart -->
+<div class="relative w-48 h-48 mb-8">
+<div class="absolute inset-0 rounded-full border-[18px] border-[#f7931a] opacity-90" style="clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 60%, 50% 50%);"></div>
+<div class="absolute inset-0 rounded-full border-[18px] border-primary/60" style="clip-path: polygon(50% 50%, 100% 60%, 100% 100%, 70% 100%, 50% 50%);"></div>
+<div class="absolute inset-0 rounded-full border-[18px] border-blue-500/60" style="clip-path: polygon(50% 50%, 70% 100%, 0% 100%, 0% 70%, 50% 50%);"></div>
+<div class="absolute inset-0 rounded-full border-[18px] border-slate-700" style="clip-path: polygon(50% 50%, 0% 70%, 0% 0%, 50% 0%, 50% 50%);"></div>
+<div class="absolute inset-[18px] rounded-full bg-surface flex flex-col items-center justify-center">
+<p class="text-[10px] font-mono text-slate-500 uppercase">Concentration</p>
+<p class="text-xl font-mono font-bold text-slate-100">92.4%</p>
+</div>
+</div>
+<div class="w-full space-y-3 font-mono text-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-[#f7931a]"></span>
+<span class="text-slate-300">MicroStrategy</span>
+</div>
+<span class="text-slate-100 font-bold">78.2%</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary/60"></span>
+<span class="text-slate-300">Marathon</span>
+</div>
+<span class="text-slate-100 font-bold">8.4%</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-blue-500/60"></span>
+<span class="text-slate-300">Tesla</span>
+</div>
+<span class="text-slate-100 font-bold">4.1%</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-slate-600"></span>
+<span class="text-slate-300">Others</span>
+</div>
+<span class="text-slate-100 font-bold">9.3%</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- 3. Bottom Row: Activity -->
+<div class="bg-surface rounded-xl border border-slate-800/50 shadow-xl overflow-hidden">
+<div class="p-5 border-b border-slate-800 bg-slate-900/30">
+<h3 class="text-sm font-mono font-bold text-slate-200">近期动态</h3>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left font-mono text-xs">
+<thead>
+<tr class="text-slate-500 border-b border-slate-800 bg-slate-900/20">
+<th class="px-5 py-4 font-medium uppercase tracking-wider">日期</th>
+<th class="px-5 py-4 font-medium uppercase tracking-wider">公司名称</th>
+<th class="px-5 py-4 font-medium uppercase tracking-wider">动作</th>
+<th class="px-5 py-4 font-medium uppercase tracking-wider text-right">BTC数量</th>
+<th class="px-5 py-4 font-medium uppercase tracking-wider text-right">均价</th>
+<th class="px-5 py-4 font-medium uppercase tracking-wider text-right">状态</th>
+</tr>
+</thead>
+<tbody id="activities-tbody" class="divide-y divide-slate-800/50">
+<tr class="hover:bg-slate-800/30 transition-colors">
+<td class="px-5 py-4 text-slate-400">2024-05-18 10:24</td>
+<td class="px-5 py-4 font-bold text-slate-100">MicroStrategy</td>
+<td class="px-5 py-4">
+<span class="px-2 py-1 rounded-sm bg-primary/10 text-primary border border-primary/20">买入 BUY</span>
+</td>
+<td class="px-5 py-4 text-right text-slate-100 font-bold">3,000 BTC</td>
+<td class="px-5 py-4 text-right text-slate-400">$64,231</td>
+<td class="px-5 py-4 text-right">
+<span class="inline-flex items-center gap-1 text-[#49f4c8]">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                        已上链
+                                    </span>
+</td>
+</tr>
+<tr class="hover:bg-slate-800/30 transition-colors bg-slate-900/10">
+<td class="px-5 py-4 text-slate-400">2024-05-16 15:42</td>
+<td class="px-5 py-4 font-bold text-slate-100">Tesla Inc.</td>
+<td class="px-5 py-4">
+<span class="px-2 py-1 rounded-sm bg-danger/10 text-danger border border-danger/20">卖出 SELL</span>
+</td>
+<td class="px-5 py-4 text-right text-slate-100 font-bold">500 BTC</td>
+<td class="px-5 py-4 text-right text-slate-400">$65,100</td>
+<td class="px-5 py-4 text-right">
+<span class="inline-flex items-center gap-1 text-[#49f4c8]">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                        已上链
+                                    </span>
+</td>
+</tr>
+<tr class="hover:bg-slate-800/30 transition-colors">
+<td class="px-5 py-4 text-slate-400">2024-05-15 09:12</td>
+<td class="px-5 py-4 font-bold text-slate-100">Hut 8 Corp</td>
+<td class="px-5 py-4">
+<span class="px-2 py-1 rounded-sm bg-primary/10 text-primary border border-primary/20">买入 BUY</span>
+</td>
+<td class="px-5 py-4 text-right text-slate-100 font-bold">120 BTC</td>
+<td class="px-5 py-4 text-right text-slate-400">$63,880</td>
+<td class="px-5 py-4 text-right">
+<span class="inline-flex items-center gap-1 text-[#49f4c8]">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+                                        已上链
+                                    </span>
+</td>
+</tr>
+<tr class="hover:bg-slate-800/30 transition-colors bg-slate-900/10">
+<td class="px-5 py-4 text-slate-400">2024-05-14 21:05</td>
+<td class="px-5 py-4 font-bold text-slate-100">Metaplanet</td>
+<td class="px-5 py-4">
+<span class="px-2 py-1 rounded-sm bg-primary/10 text-primary border border-primary/20">买入 BUY</span>
+</td>
+<td class="px-5 py-4 text-right text-slate-100 font-bold">250 BTC</td>
+<td class="px-5 py-4 text-right text-slate-400">$62,150</td>
+<td class="px-5 py-4 text-right">
+<span class="inline-flex items-center gap-1 text-slate-500">
+<span class="material-symbols-outlined text-[14px]">sync</span>
+                                        确认中
+                                    </span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-4 bg-slate-900/20 text-center border-t border-slate-800">
+<button class="text-[10px] font-mono text-slate-500 hover:text-primary transition-colors uppercase tracking-widest">查看所有历史记录 View All History</button>
+</div>
+</div>
+</div>
+<!-- Footer Visual Hint -->
+<footer class="p-8 text-center">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-slate-800 bg-slate-900/50">
+<span class="w-1 h-1 rounded-full bg-primary animate-pulse"></span>
+<p class="text-[10px] font-mono text-slate-500 uppercase tracking-widest">System Operational • Node v2.4.12 • Encryption Protocol Activated</p>
+</div>
+</footer>
+</main>
+<script>
+(function () {
+    'use strict';
 
-        <!-- Navigation -->
-        <nav class="nav-container slide-up">
-            <div class="nav-links">
-                <a href="/" class="nav-link">
-                    <i class="bi bi-house"></i> 首页
-                </a>
-                <a href="/dashboard" class="nav-link">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-                <a href="/technical-signals" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> 技术信号
-                </a>
-                <a href="/paper_trading" class="nav-link">
-                    <i class="bi bi-journals"></i> 现货交易
-                </a>
-                <a href="/futures_trading" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> U本位合约
-                </a>
-                <a href="/coin_futures_trading" class="nav-link">
-                    <i class="bi bi-currency-bitcoin"></i> 币本位合约
-                </a>
-                <a href="/live_trading" class="nav-link">
-                    <i class="bi bi-currency-exchange"></i> 实盘合约
-                </a>
-                <a href="#" class="nav-link" style="opacity: 0.5; cursor: not-allowed;" onclick="event.preventDefault(); showToast('实盘现货功能开发中...', 'info')">
-                    <i class="bi bi-cart-check"></i> 实盘现货
-                </a>
-                <a href="/futures_review" class="nav-link">
-                    <i class="bi bi-journal-check"></i> 复盘(24H)
-                </a>
-                <a href="/etf_data" class="nav-link">
-                    <i class="bi bi-pie-chart"></i> ETF 数据
-                </a>
-                <a href="/corporate_treasury" class="nav-link active">
-                    <i class="bi bi-building"></i> 企业金库
-                </a>
-                <a href="/blockchain_gas" class="nav-link">
-                    <i class="bi bi-lightning-charge"></i> Gas统计
-                </a>
-                <a href="/data_management" class="nav-link">
-                    <i class="bi bi-database"></i> 数据管理
-                </a>
-            </div>
-        </nav>
+    var REFRESH_INTERVAL = 60000;
 
-        <!-- Loading State -->
-        <div id="loadingState" class="loading">正在加载企业金库数据</div>
+    function fmtNum(v) {
+        if (v === null || v === undefined || v === '') return '--';
+        var n = parseFloat(v);
+        if (isNaN(n)) return '--';
+        return n.toLocaleString();
+    }
 
-        <!-- Error State -->
-        <div id="errorState" class="error-message" style="display: none;"></div>
+    function fmtUsd(v) {
+        if (v === null || v === undefined || v === '') return '--';
+        var n = parseFloat(v);
+        if (isNaN(n)) return '--';
+        return '$' + (n / 1e8).toFixed(1);
+    }
 
-        <!-- Main Content -->
-        <div id="mainContent" style="display: none;">
-            <!-- Statistics Cards -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">企业总持仓</div>
-                    <div class="stat-value" id="statTotalBTC">-</div>
-                    <div class="stat-change" id="statTotalBTCChange">-</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">总市值</div>
-                    <div class="stat-value" id="statTotalValue">-</div>
-                    <div class="stat-change" id="statTotalValueChange">-</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">参与企业数量</div>
-                    <div class="stat-value" id="statTotalCompanies">-</div>
-                    <div class="stat-change" id="statTotalCompaniesChange">-</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">BTC价格</div>
-                    <div class="stat-value" id="statBTCPrice">-</div>
-                    <div class="stat-change" id="statBTCPriceChange">-</div>
-                </div>
-            </div>
+    function fmtUsdRaw(v) {
+        if (v === null || v === undefined || v === '') return '--';
+        var n = parseFloat(v);
+        if (isNaN(n)) return '--';
+        return '$' + n.toLocaleString(undefined, {maximumFractionDigits: 0});
+    }
 
-            <!-- Companies Table -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-list-ol"></i>
-                        <span id="companies-title">企业持仓排名</span>
-                    </h2>
-                    <div class="last-update" id="companies-update">-</div>
-                </div>
-                <div class="card-body">
-                    <div class="filter-bar">
-                        <input type="text" class="search-input" id="searchInput" placeholder="搜索企业名称或股票代码...">
-                    </div>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>排名</th>
-                                    <th>企业</th>
-                                    <th>股票代码</th>
-                                    <th>类别</th>
-                                    <th>BTC持仓</th>
-                                    <th>当前市值</th>
-                                    <th>最近变化</th>
-                                    <th>占总持仓比例</th>
-                                    <th>最后更新</th>
-                                </tr>
-                            </thead>
-                            <tbody id="companies-tbody">
-                                <tr>
-                                    <td colspan="8" class="empty-state">暂无数据</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+    function fmtPct(v) {
+        if (v === null || v === undefined || v === '') return '--';
+        var n = parseFloat(v);
+        if (isNaN(n)) return '--';
+        return n.toFixed(2) + '%';
+    }
 
-            <!-- Charts Section -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-bar-chart"></i>
-                        持仓占比分析
-                    </h2>
-                </div>
-                <div class="card-body">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-xl);">
-                        <div>
-                            <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-lg); text-align: center; display: flex; align-items: center; justify-content: center; gap: var(--spacing-sm);">
-                                <i class="bi bi-pie-chart"></i> Top 10 公司持仓占比
-                            </h3>
-                            <div class="chart-container" style="margin-top: 0;">
-                                <canvas id="holdingsPieChart"></canvas>
-                            </div>
-                        </div>
-                        <div>
-                            <h3 style="font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-lg); text-align: center; display: flex; align-items: center; justify-content: center; gap: var(--spacing-sm);">
-                                <i class="bi bi-pie-chart"></i> 类别分布占比
-                            </h3>
-                            <div class="chart-container" style="margin-top: 0;">
-                                <canvas id="categoryPieChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    function setText(id, val) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = val;
+    }
 
-            <!-- Holdings Bar Chart -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-graph-up"></i>
-                        Top 10 公司持仓对比
-                    </h2>
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="holdingsBarChart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Changes Chart -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-arrow-up-down"></i>
-                        最近增持/减持动态
-                    </h2>
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="changesChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        let allCompanies = [];
-        let holdingsPieChart = null;
-        let categoryPieChart = null;
-        let holdingsBarChart = null;
-        let changesChart = null;
-
-        // 格式化数字
-        function formatNumber(num, decimals = 0) {
-            if (num === null || num === undefined || isNaN(num)) return '-';
-            return parseFloat(num).toLocaleString('en-US', {
-                minimumFractionDigits: decimals,
-                maximumFractionDigits: decimals
-            });
-        }
-
-        // 格式化大额数字 (B/M)
-        function formatLargeNumber(num) {
-            if (num === null || num === undefined || isNaN(num) || num === 0) return '$0';
-            const absNum = Math.abs(num);
-            if (absNum >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
-            if (absNum >= 1e6) return `$${(num / 1e6).toFixed(0)}M`;
-            if (absNum >= 1e3) return `$${(num / 1e3).toFixed(0)}K`;
-            return `$${num.toFixed(0)}`;
-        }
-
-        // 格式化持仓数量
-        function formatHoldings(num) {
-            if (!num || isNaN(num)) return '-';
-            const absNum = Math.abs(num);
-            if (absNum >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
-            if (absNum >= 1e3) return `${(num / 1e3).toFixed(2)}K`;
-            return formatNumber(num, 0);
-        }
-
-        // 显示加载状态
-        function showLoading() {
-            document.getElementById('loadingState').style.display = 'block';
-            document.getElementById('errorState').style.display = 'none';
-            document.getElementById('mainContent').style.display = 'none';
-        }
-
-        // 显示错误
-        function showError(message) {
-            document.getElementById('loadingState').style.display = 'none';
-            document.getElementById('errorState').style.display = 'block';
-            document.getElementById('errorState').textContent = `错误: ${message}`;
-            document.getElementById('mainContent').style.display = 'none';
-        }
-
-        // 显示内容
-        function showContent() {
-            document.getElementById('loadingState').style.display = 'none';
-            document.getElementById('errorState').style.display = 'none';
-            document.getElementById('mainContent').style.display = 'block';
-        }
-
-        // 获取类别标签
-        function getCategoryBadge(category) {
-            const categoryMap = {
-                'holding': { text: '持有', class: 'category-holding' },
-                'mining': { text: '挖矿', class: 'category-mining' },
-                'payment': { text: '支付', class: 'category-payment' }
-            };
-            const cat = categoryMap[category] || { text: category || '未知', class: 'category-holding' };
-            return `<span class="category-badge ${cat.class}">${cat.text}</span>`;
-        }
-
-        // 加载企业金库数据
-        async function loadTreasuryData() {
-            showLoading();
-            try {
-                // 同时获取summary和companies数据
-                const [summaryResponse, companiesResponse] = await Promise.all([
-                    fetch('/api/corporate-treasury/summary'),
-                    fetch('/api/corporate-treasury/companies?limit=50')
-                ]);
-
-                if (!summaryResponse.ok || !companiesResponse.ok) {
-                    throw new Error(`HTTP error! status: ${summaryResponse.status || companiesResponse.status}`);
-                }
-
-                const summaryData = await summaryResponse.json();
-                const companiesData = await companiesResponse.json();
-
-                if (summaryData.success && companiesData.success) {
-                    // 保存summary数据供后续使用
-                    window.summaryData = summaryData;
-                    updateStats(summaryData.data.summary);
-                    // 使用companies数据，包含增持/减持信息
-                    const companies = companiesData.data || [];
-                    updateCompaniesTable(companies);
-                    initCharts(companies);
-                    showContent();
-                } else {
-                    throw new Error(summaryData.message || companiesData.message || '获取数据失败');
-                }
-            } catch (error) {
-                console.error('加载企业金库数据失败:', error);
-                showError(error.message || '加载企业金库数据失败，请稍后重试');
+    function updateLastRefresh() {
+        var els = document.querySelectorAll('.text-slate-400');
+        for (var i = 0; i < els.length; i++) {
+            if (els[i].textContent && els[i].textContent.indexOf('Last update') !== -1) {
+                var now = new Date();
+                var hh = String(now.getHours()).padStart(2, '0');
+                var mm = String(now.getMinutes()).padStart(2, '0');
+                var ss = String(now.getSeconds()).padStart(2, '0');
+                els[i].textContent = 'Last update: ' + hh + ':' + mm + ':' + ss;
+                break;
             }
         }
+    }
 
-        // 更新统计数据
-        function updateStats(summary) {
-            if (!summary) return;
-
-            // 企业总持仓
-            const totalBTCEl = document.getElementById('statTotalBTC');
-            const totalBTCChangeEl = document.getElementById('statTotalBTCChange');
-            if (totalBTCEl) {
-                totalBTCEl.textContent = formatHoldings(summary.total_btc_holdings || 0) + ' BTC';
-            }
-            if (totalBTCChangeEl) {
-                totalBTCChangeEl.textContent = '累计持仓';
-            }
-
-            // 总市值
-            const totalValueEl = document.getElementById('statTotalValue');
-            const totalValueChangeEl = document.getElementById('statTotalValueChange');
-            if (totalValueEl) {
-                totalValueEl.textContent = formatLargeNumber(summary.total_value_usd || 0);
-            }
-            if (totalValueChangeEl) {
-                totalValueChangeEl.textContent = '美元市值';
-            }
-
-            // 参与企业数量
-            const totalCompaniesEl = document.getElementById('statTotalCompanies');
-            const totalCompaniesChangeEl = document.getElementById('statTotalCompaniesChange');
-            if (totalCompaniesEl) {
-                totalCompaniesEl.textContent = summary.total_companies || 0;
-            }
-            if (totalCompaniesChangeEl) {
-                totalCompaniesChangeEl.textContent = `${summary.active_companies_30d || 0} 家最近30天活跃`;
-            }
-
-            // BTC价格
-            const btcPriceEl = document.getElementById('statBTCPrice');
-            const btcPriceChangeEl = document.getElementById('statBTCPriceChange');
-            if (btcPriceEl) {
-                btcPriceEl.textContent = formatLargeNumber(summary.current_btc_price || 0);
-            }
-            if (btcPriceChangeEl) {
-                btcPriceChangeEl.textContent = '实时价格';
-            }
-        }
-
-        // 更新公司表格
-        function updateCompaniesTable(companies) {
-            const tbody = document.getElementById('companies-tbody');
-            const titleEl = document.getElementById('companies-title');
-            const updateEl = document.getElementById('companies-update');
-            
-            if (!tbody) return;
-
-            allCompanies = companies;
-
-            if (!companies || companies.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无企业数据</td></tr>';
-                return;
-            }
-
-            if (titleEl) {
-                titleEl.textContent = `企业持仓排名 [${companies.length}]`;
-            }
-
-            // 计算总持仓用于计算占比
-            const totalHoldings = companies.reduce((sum, c) => sum + (c.current_btc_holdings || c.btc_holdings || 0), 0);
-            
-            // 获取BTC价格（从summaryData或从后端返回的数据）
-            const btcPrice = window.summaryData?.data?.summary?.current_btc_price || 0;
-
-            tbody.innerHTML = companies.map((company, index) => {
-                // 使用current_btc_holdings或btc_holdings
-                const holdings = parseFloat(company.current_btc_holdings || company.btc_holdings || 0);
-                // 计算市值：优先使用后端返回的value_usd，否则用持仓*BTC价格计算
-                let marketValue = 0;
-                if (company.value_usd && parseFloat(company.value_usd) > 0) {
-                    marketValue = parseFloat(company.value_usd);
-                } else if (holdings > 0 && btcPrice > 0) {
-                    marketValue = holdings * btcPrice;
-                }
-                const holdingsPct = totalHoldings > 0 ? ((holdings / totalHoldings) * 100).toFixed(2) : '0.00';
-                const companyInitial = (company.company_name || '?')[0].toUpperCase();
-                const lastUpdate = company.last_update ? new Date(company.last_update).toLocaleDateString('zh-CN') : '-';
-                
-                // 增持/减持信息
-                const lastChange = company.last_change || 0;
-                const lastAction = company.last_action || 'hold';
-                const previousHoldings = company.previous_holdings || holdings;
-                const changePct = previousHoldings > 0 ? (((holdings - previousHoldings) / previousHoldings) * 100).toFixed(2) : '0.00';
-                
-                let changeDisplay = '-';
-                let changeClass = '';
-                if (lastAction === 'buy' && lastChange > 0) {
-                    changeDisplay = `<span class="positive">+${formatHoldings(lastChange)}</span>`;
-                    changeClass = 'positive';
-                } else if (lastAction === 'sell' && lastChange < 0) {
-                    changeDisplay = `<span class="negative">${formatHoldings(lastChange)}</span>`;
-                    changeClass = 'negative';
-                } else if (lastAction === 'hold' || lastChange === 0) {
-                    changeDisplay = '<span style="color: var(--text-secondary);">持平</span>';
-                } else {
-                    // 如果有变化但action未知，根据数值判断
-                    if (holdings > previousHoldings) {
-                        changeDisplay = `<span class="positive">+${formatHoldings(holdings - previousHoldings)} (+${changePct}%)</span>`;
-                        changeClass = 'positive';
-                    } else if (holdings < previousHoldings) {
-                        changeDisplay = `<span class="negative">${formatHoldings(holdings - previousHoldings)} (${changePct}%)</span>`;
-                        changeClass = 'negative';
+    function loadSummary() {
+        fetch('/api/corporate-treasury/summary')
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                var d = (res.data || res);
+                if (!d) return;
+                setText('stat-total-companies', fmtNum(d.total_companies));
+                setText('stat-total-btc', fmtNum(d.total_btc_holdings));
+                var mv = d.total_market_value_usd;
+                if (mv !== null && mv !== undefined) {
+                    var mvN = parseFloat(mv);
+                    if (!isNaN(mvN)) {
+                        setText('stat-market-value', '$' + (mvN / 1e8).toFixed(1));
                     }
                 }
+                setText('stat-active-companies', fmtNum(d.active_companies_30d));
 
-                return `
-                    <tr>
-                        <td><strong>${index + 1}</strong></td>
-                        <td>
-                            <div class="company-name">
-                                <div class="company-logo">${companyInitial}</div>
-                                <div class="company-info">
-                                    <div class="company-name-text">${company.company_name || '-'}</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td><strong>${company.ticker_symbol || '-'}</strong></td>
-                        <td>${getCategoryBadge(company.category)}</td>
-                        <td>${formatHoldings(holdings)}</td>
-                        <td>${formatLargeNumber(marketValue)}</td>
-                        <td class="${changeClass}">${changeDisplay}</td>
-                        <td>${holdingsPct}%</td>
-                        <td>${lastUpdate}</td>
-                    </tr>
-                `;
-            }).join('');
-
-            if (updateEl && companies.length > 0 && companies[0].last_update) {
-                const date = new Date(companies[0].last_update);
-                updateEl.textContent = `最后更新: ${date.toLocaleDateString('zh-CN')}`;
-            }
-        }
-
-        // 初始化图表
-        function initCharts(companies) {
-            if (!companies || companies.length === 0) return;
-
-            initHoldingsPieChart(companies);
-            initCategoryPieChart(companies);
-            initHoldingsBarChart(companies);
-            initChangesChart(companies);
-        }
-
-        // 初始化持仓占比饼图
-        function initHoldingsPieChart(companies) {
-            if (!companies || companies.length === 0) return;
-
-            const ctx = document.getElementById('holdingsPieChart');
-            if (!ctx) return;
-
-            // 只显示Top 10
-            const top10 = companies.slice(0, 10);
-            const totalHoldings = companies.reduce((sum, c) => sum + (c.current_btc_holdings || c.btc_holdings || 0), 0);
-
-            const labels = top10.map(c => c.company_name || c.ticker_symbol || '未知');
-            const data = top10.map(c => c.current_btc_holdings || c.btc_holdings || 0);
-            const percentages = top10.map(c => totalHoldings > 0 ? ((c.btc_holdings || 0) / totalHoldings * 100).toFixed(1) : '0.0');
-
-            const colors = [
-                '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EF4444',
-                '#F97316', '#06B6D4', '#EC4899', '#84CC16', '#6366F1'
-            ];
-
-            if (holdingsPieChart) {
-                holdingsPieChart.destroy();
-            }
-
-            holdingsPieChart = new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: labels.map((label, i) => `${label} (${percentages[i]}%)`),
-                    datasets: [{
-                        data: data,
-                        backgroundColor: colors.slice(0, labels.length),
-                        borderColor: '#1C2128',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'right',
-                            labels: {
-                                color: '#E6EDF3',
-                                padding: 15,
-                                font: {
-                                    size: 11,
-                                    color: '#E6EDF3'
-                                },
-                                generateLabels: function(chart) {
-                                    const data = chart.data;
-                                    if (data.labels.length && data.datasets.length) {
-                                        return data.labels.map((label, i) => {
-                                            const value = data.datasets[0].data[i];
-                                            return {
-                                                text: `${label} - ${formatHoldings(value)}`,
-                                                fillStyle: data.datasets[0].backgroundColor[i],
-                                                fontColor: '#E6EDF3',
-                                                textColor: '#E6EDF3',
-                                                strokeStyle: data.datasets[0].backgroundColor[i],
-                                                hidden: false,
-                                                index: i
-                                            };
-                                        });
-                                    }
-                                    return [];
-                                }
-                            }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed || 0;
-                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                    const percentage = ((value / total) * 100).toFixed(2);
-                                    return `${label.split(' (')[0]}: ${formatHoldings(value)} (${percentage}%)`;
-                                }
-                            }
-                        }
-                    }
+                if (d.top_companies && d.top_companies.length > 0) {
+                    updateDistributionPanel(d.top_companies);
                 }
+                updateLastRefresh();
+            })
+            .catch(function (e) {
+                console.error('corporate-treasury summary fetch failed: ' + e);
             });
-        }
+    }
 
-        // 初始化类别分布饼图
-        function initCategoryPieChart(companies) {
-            if (!companies || companies.length === 0) return;
-
-            const ctx = document.getElementById('categoryPieChart');
-            if (!ctx) return;
-
-            // 按类别分组
-            const categoryMap = {};
-            companies.forEach(company => {
-                const category = company.category || 'unknown';
-                if (!categoryMap[category]) {
-                    categoryMap[category] = {
-                        category: category,
-                        totalHoldings: 0,
-                        count: 0
-                    };
-                }
-                categoryMap[category].totalHoldings += company.current_btc_holdings || company.btc_holdings || 0;
-                categoryMap[category].count += 1;
-            });
-
-            const categories = Object.values(categoryMap)
-                .filter(c => c.totalHoldings > 0)
-                .sort((a, b) => b.totalHoldings - a.totalHoldings);
-
-            if (categories.length === 0) return;
-
-            const totalHoldings = categories.reduce((sum, c) => sum + c.totalHoldings, 0);
-            const categoryLabels = {
-                'holding': '持有',
-                'mining': '挖矿',
-                'payment': '支付',
-                'unknown': '未知'
-            };
-
-            const labels = categories.map(c => `${categoryLabels[c.category] || c.category} (${c.count}家)`);
-            const data = categories.map(c => c.totalHoldings);
-            const percentages = categories.map(c => ((c.totalHoldings / totalHoldings) * 100).toFixed(1));
-
-            const colors = ['#2B6FED', '#10B981', '#F59E0B', '#8B5CF6'];
-
-            if (categoryPieChart) {
-                categoryPieChart.destroy();
-            }
-
-            categoryPieChart = new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: labels.map((label, i) => `${label.split(' (')[0]} (${percentages[i]}%)`),
-                    datasets: [{
-                        data: data,
-                        backgroundColor: colors.slice(0, labels.length),
-                        borderColor: '#1C2128',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'right',
-                            labels: {
-                                color: '#E6EDF3',
-                                padding: 15,
-                                font: {
-                                    size: 11,
-                                    color: '#E6EDF3'
-                                },
-                                generateLabels: function(chart) {
-                                    const data = chart.data;
-                                    if (data.labels.length && data.datasets.length) {
-                                        return data.labels.map((label, i) => {
-                                            const value = data.datasets[0].data[i];
-                                            return {
-                                                text: `${label} - ${formatHoldings(value)}`,
-                                                fillStyle: data.datasets[0].backgroundColor[i],
-                                                fontColor: '#E6EDF3',
-                                                textColor: '#E6EDF3',
-                                                strokeStyle: data.datasets[0].backgroundColor[i],
-                                                hidden: false,
-                                                index: i
-                                            };
-                                        });
-                                    }
-                                    return [];
-                                }
-                            }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed || 0;
-                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                    const percentage = ((value / total) * 100).toFixed(2);
-                                    return `${label.split(' (')[0]}: ${formatHoldings(value)} (${percentage}%)`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // 初始化增持/减持图表
-        function initChangesChart(companies) {
-            if (!companies || companies.length === 0) return;
-
-            // 筛选有变化的公司
-            const companiesWithChanges = companies
-                .filter(c => {
-                    const change = c.last_change || 0;
-                    const action = c.last_action || 'hold';
-                    return (action === 'buy' && change > 0) || (action === 'sell' && change < 0);
-                })
-                .slice(0, 10) // 只显示Top 10
-                .sort((a, b) => Math.abs(b.last_change || 0) - Math.abs(a.last_change || 0));
-
-            if (companiesWithChanges.length === 0) return;
-
-            const ctx = document.getElementById('changesChart');
-            if (!ctx) return;
-
-            const labels = companiesWithChanges.map(c => c.ticker_symbol || c.company_name || '未知');
-            const buyData = companiesWithChanges.map(c => c.last_action === 'buy' ? (c.last_change || 0) : 0);
-            const sellData = companiesWithChanges.map(c => c.last_action === 'sell' ? Math.abs(c.last_change || 0) : 0);
-
-            if (changesChart) {
-                changesChart.destroy();
-            }
-
-            changesChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: '增持',
-                            data: buyData,
-                            backgroundColor: 'rgba(16, 185, 129, 0.8)',
-                            borderColor: '#10B981',
-                            borderWidth: 2
-                        },
-                        {
-                            label: '减持',
-                            data: sellData,
-                            backgroundColor: 'rgba(239, 68, 68, 0.8)',
-                            borderColor: '#EF4444',
-                            borderWidth: 2
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            labels: { color: '#E6EDF3' }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    if (context.parsed.y === 0) return null;
-                                    return `${context.dataset.label}: ${formatHoldings(context.parsed.y)}`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            ticks: { color: '#8B949E' },
-                            grid: { color: '#30363D' }
-                        },
-                        y: {
-                            ticks: { 
-                                color: '#8B949E',
-                                callback: function(value) {
-                                    return formatHoldings(value);
-                                }
-                            },
-                            grid: { color: '#30363D' }
-                        }
-                    }
-                }
-            });
-        }
-
-        // 初始化持仓柱状图
-        function initHoldingsBarChart(companies) {
-            if (!companies || companies.length === 0) return;
-
-            const ctx = document.getElementById('holdingsBarChart');
-            if (!ctx) return;
-
-            // 只显示Top 10
-            const top10 = companies.slice(0, 10);
-
-            const labels = top10.map(c => c.ticker_symbol || c.company_name || '未知');
-            const data = top10.map(c => c.current_btc_holdings || c.btc_holdings || 0);
-
-            if (holdingsBarChart) {
-                holdingsBarChart.destroy();
-            }
-
-            holdingsBarChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'BTC持仓',
-                        data: data,
-                        backgroundColor: 'rgba(43, 111, 237, 0.8)',
-                        borderColor: '#2B6FED',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return `${context.dataset.label}: ${formatHoldings(context.parsed.y)}`;
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            ticks: { color: '#8B949E' },
-                            grid: { color: '#30363D' }
-                        },
-                        y: {
-                            ticks: { 
-                                color: '#8B949E',
-                                callback: function(value) {
-                                    return formatHoldings(value);
-                                }
-                            },
-                            grid: { color: '#30363D' }
-                        }
-                    }
-                }
-            });
-        }
-
-        // 搜索功能
-        function setupSearch() {
-            const searchInput = document.getElementById('searchInput');
-            if (searchInput) {
-                searchInput.addEventListener('input', function(e) {
-                    const searchTerm = e.target.value.toLowerCase().trim();
-                    const rows = document.querySelectorAll('#companies-tbody tr');
-                    
-                    if (!searchTerm) {
-                        rows.forEach(row => row.style.display = '');
-                        return;
-                    }
-
-                    rows.forEach(row => {
-                        const text = row.textContent.toLowerCase();
-                        row.style.display = text.includes(searchTerm) ? '' : 'none';
-                    });
+    function loadCompanies() {
+        fetch('/api/corporate-treasury/companies?limit=50')
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                var list = res.data || res;
+                if (!Array.isArray(list)) return;
+                var tbody = document.getElementById('company-ranking-tbody');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                list.forEach(function (item, idx) {
+                    var rank = String(idx + 1).padStart(2, '0');
+                    var btcHoldings = fmtNum(item.current_btc_holdings);
+                    var mv = parseFloat(item.market_value_usd);
+                    var mvStr = isNaN(mv) ? '--' : '$' + (mv / 1e8).toFixed(1);
+                    var pct = fmtPct(item.btc_percentage);
+                    var rowBg = idx % 2 === 1 ? ' bg-slate-900/10' : '';
+                    var tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-800/30 transition-colors' + rowBg;
+                    tr.innerHTML =
+                        '<td class="px-5 py-4 text-slate-400">' + rank + '</td>' +
+                        '<td class="px-5 py-4 font-bold text-slate-100">' + (item.company_name || '--') + '</td>' +
+                        '<td class="px-5 py-4 text-slate-500">' + (item.country || '--') + (item.category ? ' / ' + item.category : '') + '</td>' +
+                        '<td class="px-5 py-4 text-right text-slate-100">' + btcHoldings + '</td>' +
+                        '<td class="px-5 py-4 text-right text-slate-100">' + mvStr + '</td>' +
+                        '<td class="px-5 py-4 text-right text-slate-400">' + pct + '</td>' +
+                        '<td class="px-5 py-4 text-right text-slate-500">--</td>';
+                    tbody.appendChild(tr);
                 });
-            }
-        }
+            })
+            .catch(function (e) {
+                console.error('corporate-treasury companies fetch failed: ' + e);
+            });
+    }
 
-        // 页面加载时执行
-        document.addEventListener('DOMContentLoaded', function() {
-            loadTreasuryData();
-            setupSearch();
-            // 每60秒更新一次
-            setInterval(loadTreasuryData, 60000);
+    function loadActivities() {
+        fetch('/api/corporate-treasury/recent-activities')
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                var list = res.data || res;
+                if (!Array.isArray(list)) return;
+                var tbody = document.getElementById('activities-tbody');
+                if (!tbody) return;
+                tbody.innerHTML = '';
+                list.forEach(function (item, idx) {
+                    var isBuy = (item.action_type || '').toUpperCase().indexOf('BUY') !== -1;
+                    var rowBg = idx % 2 === 1 ? ' bg-slate-900/10' : '';
+                    var actionHtml = isBuy
+                        ? '<span class="px-2 py-1 rounded-sm bg-primary/10 text-primary border border-primary/20">买入 BUY</span>'
+                        : '<span class="px-2 py-1 rounded-sm bg-danger/10 text-danger border border-danger/20">卖出 SELL</span>';
+                    var statusLower = (item.status || '').toLowerCase();
+                    var statusHtml;
+                    if (statusLower === 'confirmed' || statusLower === 'completed' || statusLower === 'done') {
+                        statusHtml = '<span class="inline-flex items-center gap-1 text-[#49f4c8]"><span class="material-symbols-outlined text-[14px]">check_circle</span>已上链</span>';
+                    } else {
+                        statusHtml = '<span class="inline-flex items-center gap-1 text-slate-500"><span class="material-symbols-outlined text-[14px]">sync</span>确认中</span>';
+                    }
+                    var avgPrice = item.average_price ? '$' + fmtNum(item.average_price) : '--';
+                    var btcAmt = item.btc_amount ? fmtNum(item.btc_amount) + ' BTC' : '--';
+                    var tr = document.createElement('tr');
+                    tr.className = 'hover:bg-slate-800/30 transition-colors' + rowBg;
+                    tr.innerHTML =
+                        '<td class="px-5 py-4 text-slate-400">' + (item.activity_date || '--') + '</td>' +
+                        '<td class="px-5 py-4 font-bold text-slate-100">' + (item.company_name || '--') + '</td>' +
+                        '<td class="px-5 py-4">' + actionHtml + '</td>' +
+                        '<td class="px-5 py-4 text-right text-slate-100 font-bold">' + btcAmt + '</td>' +
+                        '<td class="px-5 py-4 text-right text-slate-400">' + avgPrice + '</td>' +
+                        '<td class="px-5 py-4 text-right">' + statusHtml + '</td>';
+                    tbody.appendChild(tr);
+                });
+            })
+            .catch(function (e) {
+                console.error('corporate-treasury activities fetch failed: ' + e);
+            });
+    }
+
+    var DONUT_COLORS = ['#f7931a', '#49f4c8', '#3b82f6', '#a78bfa', '#f59e0b'];
+
+    function updateDistributionPanel(topCompanies) {
+        var panel = document.querySelector('.w-full.space-y-3.font-mono.text-xs');
+        if (!panel) return;
+        panel.innerHTML = '';
+        var top5 = topCompanies.slice(0, 5);
+        top5.forEach(function (c, i) {
+            var color = DONUT_COLORS[i] || '#64748b';
+            var pct = c.total_percentage !== null && c.total_percentage !== undefined
+                ? parseFloat(c.total_percentage).toFixed(1) + '%' : '--';
+            var row = document.createElement('div');
+            row.className = 'flex items-center justify-between';
+            row.innerHTML =
+                '<div class="flex items-center gap-2">' +
+                '<span class="w-2 h-2 rounded-full" style="background:' + color + '"></span>' +
+                '<span class="text-slate-300">' + (c.company_name || '--') + '</span>' +
+                '</div>' +
+                '<span class="text-slate-100 font-bold">' + pct + '</span>';
+            panel.appendChild(row);
         });
-    </script>
-</body>
-</html>
+    }
+
+    function refreshAll() {
+        loadSummary();
+        loadCompanies();
+        loadActivities();
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        refreshAll();
+        setInterval(refreshAll, REFRESH_INTERVAL);
+
+        var refreshBtn = document.querySelector('button .material-symbols-outlined');
+        if (refreshBtn && refreshBtn.textContent.trim() === 'refresh') {
+            refreshBtn.closest('button').addEventListener('click', refreshAll);
+        }
+    });
+})();
+</script>
+</body></html>
