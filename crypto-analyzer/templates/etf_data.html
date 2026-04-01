@@ -1,876 +1,635 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ETF数据分析 - AlphaFlow</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/mobile.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <style>
-        /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
-        :root {
-            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
-            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
-            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
-            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
-            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
-            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
-            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
-            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
-            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
-            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
-            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
-            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
-            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
-            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700&amp;family=Geist+Mono:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            bg: "#070b10",
+                            surface: "#0f1520",
+                            sidebar: "#0a0f14",
+                            primary: "#49f4c8",
+                            danger: "#ff716c",
+                            accent: "#3b82f6"
+                        }
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Manrope"],
+                        "label": ["Geist Mono"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
-        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
-        .header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-lg); }
-        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-md); }
-        .header-subtitle { color: var(--text-secondary); font-size: 13px; margin-top: var(--spacing-xs); }
-        .header-actions { display: flex; gap: var(--spacing-md); align-items: center; }
-        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
-        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
-        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
-        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
-        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
-        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
-        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
-        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
-        .card-body { padding: 0; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg); margin-bottom: var(--spacing-xl); }
-        .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; cursor: pointer; }
-        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
-        .stat-card:hover::before { opacity: 1; }
-        .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm); font-weight: 600; }
-        .stat-value { font-size: 28px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-xs); font-family: var(--font-mono); }
-        .stat-change { font-size: 13px; color: var(--text-secondary); }
-        .stat-change.positive { color: var(--success-green); }
-        .stat-change.negative { color: var(--danger-red); }
-        .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
-        table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
-        thead { background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); }
-        th { padding: var(--spacing-md) var(--spacing-lg); text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { padding: var(--spacing-lg); border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-size: 13px; }
-        tr:last-child td { border-bottom: none; }
-        tbody tr { transition: background-color var(--transition-fast); }
-        tbody tr:hover { background: var(--bg-hover); }
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .btn-primary:hover:not(:disabled) { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
-        .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
-        .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
-        .positive { color: var(--success-green); }
-        .negative { color: var(--danger-red); }
-        .etf-name { font-weight: 600; color: var(--text-primary); }
-        .etf-provider { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
-        .loading { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .loading::after { content: '...'; animation: dots 1.5s steps(4, end) infinite; }
-        @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60%, 100% { content: '...'; } }
-        .error-message { background: var(--danger-red-bg); color: var(--danger-red); padding: var(--spacing-lg); border-radius: var(--radius-md); margin: var(--spacing-xl) 0; border: 1px solid var(--danger-red); }
-        .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .chart-container { position: relative; height: 400px; margin-top: var(--spacing-lg); }
-        .pie-charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-xl); }
-        .pie-chart-item { display: flex; flex-direction: column; }
-        .pie-chart-title { font-size: 16px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-lg); text-align: center; display: flex; align-items: center; justify-content: center; gap: var(--spacing-sm); }
-        @media (max-width: 1024px) {
-            .pie-charts-grid {
-                grid-template-columns: 1fr !important;
-            }
+    </script>
+<style>
+        body {
+            background-color: #070b10;
+            color: #e2e8f0;
+            font-family: 'Manrope', sans-serif;
         }
-        .last-update { color: var(--text-tertiary); font-size: 12px; margin-top: var(--spacing-sm); }
-        .slide-up { animation: slideUp var(--transition-slow) ease-out; }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        @media (max-width: 768px) {
-            .nav-links { flex-direction: column; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .mono-data {
+            font-family: 'Geist Mono', monospace;
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <div>
-                    <div style="display: flex; align-items: center; gap: var(--spacing-md);">
-                        <img src="/static/images/logo/alphaflow-logo-icon.svg" alt="AlphaFlow" style="height: 36px; width: auto;">
-                        <div>
-                            <h1 class="header-title" style="margin: 0;">
-                                <i class="bi bi-pie-chart"></i>
-                                ETF数据分析
-                            </h1>
-                            <p class="header-subtitle">实时追踪全球加密货币ETF表现与资金流向</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="header-actions">
-                    <button class="btn btn-ghost" onclick="loadETFData()">
-                        <i class="bi bi-arrow-clockwise"></i> 刷新
-                    </button>
-                </div>
-            </div>
-        </header>
-
-        <!-- Navigation -->
-        <nav class="nav-container slide-up">
-            <div class="nav-links">
-                <a href="/" class="nav-link">
-                    <i class="bi bi-house"></i> 首页
-                </a>
-                <a href="/dashboard" class="nav-link">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-                <a href="/technical-signals" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> 技术信号
-                </a>
-                <a href="/paper_trading" class="nav-link">
-                    <i class="bi bi-journals"></i> 现货交易
-                </a>
-                <a href="/futures_trading" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> U本位合约
-                </a>
-                <a href="/coin_futures_trading" class="nav-link">
-                    <i class="bi bi-currency-bitcoin"></i> 币本位合约
-                </a>
-                <a href="/live_trading" class="nav-link">
-                    <i class="bi bi-currency-exchange"></i> 实盘合约
-                </a>
-                <a href="#" class="nav-link" style="opacity: 0.5; cursor: not-allowed;" onclick="event.preventDefault(); showToast('实盘现货功能开发中...', 'info')">
-                    <i class="bi bi-cart-check"></i> 实盘现货
-                </a>
-                <a href="/futures_review" class="nav-link">
-                    <i class="bi bi-journal-check"></i> 复盘(24H)
-                </a>
-                <a href="/etf_data" class="nav-link active">
-                    <i class="bi bi-pie-chart"></i> ETF 数据
-                </a>
-                <a href="/corporate_treasury" class="nav-link">
-                    <i class="bi bi-building"></i> 企业金库
-                </a>
-                <a href="/blockchain_gas" class="nav-link">
-                    <i class="bi bi-lightning-charge"></i> Gas统计
-                </a>
-                <a href="/data_management" class="nav-link">
-                    <i class="bi bi-database"></i> 数据管理
-                </a>
-            </div>
-        </nav>
-
-        <!-- Loading State -->
-        <div id="loadingState" class="loading">正在加载ETF数据</div>
-
-        <!-- Error State -->
-        <div id="errorState" class="error-message" style="display: none;"></div>
-
-        <!-- Main Content -->
-        <div id="mainContent" style="display: none;">
-            <!-- Statistics Cards -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-label">总市场规模</div>
-                    <div class="stat-value" id="statTotalValue">-</div>
-                    <div class="stat-change" id="statTotalValueChange">-</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">日资金净流入</div>
-                    <div class="stat-value" id="statNetFlow">-</div>
-                    <div class="stat-change" id="statNetFlowChange">-</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-label">活跃ETF数量</div>
-                    <div class="stat-value" id="statTotalETFs">-</div>
-                    <div class="stat-change" id="statTotalETFsChange">-</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">BTC总持仓</div>
-                    <div class="stat-value" id="statTotalBTC">-</div>
-                    <div class="stat-change" id="statTotalBTCChange">-</div>
-            </div>
-            <div class="stat-card">
-                    <div class="stat-label">ETH总持仓</div>
-                    <div class="stat-value" id="statTotalETH">-</div>
-                    <div class="stat-change" id="statTotalETHChange">-</div>
-                </div>
-        </div>
-
-            <!-- BTC ETFs Table -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-currency-bitcoin"></i>
-                        <span id="btc-etf-title">比特币现货ETF</span>
-                    </h2>
-                    <div class="last-update" id="btc-etf-update">-</div>
-                </div>
-                <div class="card-body">
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ETF名称</th>
-                            <th>代码</th>
-                                    <th>管理公司</th>
-                                    <th>BTC持仓</th>
-                            <th>管理规模(AUM)</th>
-                            <th>日资金流</th>
-                        </tr>
-                    </thead>
-                            <tbody id="btc-etf-tbody">
-                                <tr>
-                                    <td colspan="6" class="empty-state">暂无数据</td>
-                        </tr>
-                    </tbody>
-                </table>
-                    </div>
-            </div>
-        </div>
-
-            <!-- ETH ETFs Table -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-currency-ethereum"></i>
-                        <span id="eth-etf-title">以太坊现货ETF</span>
-                    </h2>
-                    <div class="last-update" id="eth-etf-update">-</div>
-                </div>
-                <div class="card-body">
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>ETF名称</th>
-                            <th>代码</th>
-                                    <th>管理公司</th>
-                                    <th>ETH持仓</th>
-                            <th>管理规模(AUM)</th>
-                            <th>日资金流</th>
-                        </tr>
-                    </thead>
-                            <tbody id="eth-etf-tbody">
-                                <tr>
-                                    <td colspan="6" class="empty-state">暂无数据</td>
-                        </tr>
-                    </tbody>
-                </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Flow Chart -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-graph-up"></i>
-                        资金流向趋势
-                    </h2>
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="flowChart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Holdings Pie Charts -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-pie-chart"></i>
-                        ETF 持仓占比分析
-                    </h2>
-                </div>
-                <div class="card-body">
-                    <div class="pie-charts-grid">
-                        <div class="pie-chart-item">
-                            <h3 class="pie-chart-title">
-                                <i class="bi bi-currency-bitcoin"></i> BTC ETF 持仓占比
-                            </h3>
-                            <div class="chart-container" style="margin-top: 0;">
-                                <canvas id="btcPieChart"></canvas>
-                            </div>
-                        </div>
-                        <div class="pie-chart-item">
-                            <h3 class="pie-chart-title">
-                                <i class="bi bi-currency-ethereum"></i> ETH ETF 持仓占比
-                            </h3>
-                            <div class="chart-container" style="margin-top: 0;">
-                                <canvas id="ethPieChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        let flowChart = null;
-        let btcPieChart = null;
-        let ethPieChart = null;
-
-        // 格式化数字
-        function formatNumber(num, decimals = 2) {
-            if (num === null || num === undefined || isNaN(num)) return '-';
-            return parseFloat(num).toLocaleString('en-US', {
-                minimumFractionDigits: decimals,
-                maximumFractionDigits: decimals
-            });
-        }
-
-        // 格式化大额数字 (B/M)
-        function formatLargeNumber(num) {
-            if (!num || isNaN(num)) return '-';
-            const absNum = Math.abs(num);
-            if (absNum >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
-            if (absNum >= 1e6) return `$${(num / 1e6).toFixed(0)}M`;
-            if (absNum >= 1e3) return `$${(num / 1e3).toFixed(0)}K`;
-            return `$${num.toFixed(0)}`;
-        }
-
-        // 格式化持仓数量
-        function formatHoldings(num) {
-            if (!num || isNaN(num)) return '-';
-            const absNum = Math.abs(num);
-            if (absNum >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
-            if (absNum >= 1e3) return `${(num / 1e3).toFixed(2)}K`;
-            return formatNumber(num, 0);
-        }
-
-        // 显示加载状态
-        function showLoading() {
-            document.getElementById('loadingState').style.display = 'block';
-            document.getElementById('errorState').style.display = 'none';
-            document.getElementById('mainContent').style.display = 'none';
-        }
-
-        // 显示错误
-        function showError(message) {
-            document.getElementById('loadingState').style.display = 'none';
-            document.getElementById('errorState').style.display = 'block';
-            document.getElementById('errorState').textContent = `错误: ${message}`;
-            document.getElementById('mainContent').style.display = 'none';
-        }
-
-        // 显示内容
-        function showContent() {
-            document.getElementById('loadingState').style.display = 'none';
-            document.getElementById('errorState').style.display = 'none';
-            document.getElementById('mainContent').style.display = 'block';
-        }
-
-        // 加载ETF数据
-        async function loadETFData() {
-            showLoading();
-            try {
-                const response = await fetch('/api/etf/summary');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                if (data.success) {
-                    updateStats(data.data.summary);
-                    updateBTCETFs(data.data.btc_etfs || []);
-                    updateETHETFs(data.data.eth_etfs || []);
-                    showContent();
-                } else {
-                    throw new Error(data.message || '获取数据失败');
-                }
-            } catch (error) {
-                console.error('加载ETF数据失败:', error);
-                showError(error.message || '加载ETF数据失败，请稍后重试');
-            }
-        }
-
-        // 更新统计数据
-        function updateStats(summary) {
-            if (!summary) return;
-
-            // 总市场规模
-            const totalValueEl = document.getElementById('statTotalValue');
-            if (totalValueEl) {
-                totalValueEl.textContent = formatLargeNumber(summary.total_value_usd || 0);
-            }
-
-            // 日资金净流入
-            const netFlowEl = document.getElementById('statNetFlow');
-            const netFlowChangeEl = document.getElementById('statNetFlowChange');
-            if (netFlowEl) {
-                netFlowEl.textContent = formatLargeNumber(summary.net_flow_24h || 0);
-                netFlowEl.className = 'stat-value ' + (summary.net_flow_24h >= 0 ? 'positive' : 'negative');
-            }
-            if (netFlowChangeEl) {
-                netFlowChangeEl.textContent = summary.net_flow_24h >= 0 ? '资金流入' : '资金流出';
-                netFlowChangeEl.className = 'stat-change ' + (summary.net_flow_24h >= 0 ? 'positive' : 'negative');
-            }
-
-            // 活跃ETF数量
-            const totalETFsEl = document.getElementById('statTotalETFs');
-            const totalETFsChangeEl = document.getElementById('statTotalETFsChange');
-            if (totalETFsEl) {
-                totalETFsEl.textContent = summary.total_etfs || 0;
-            }
-            if (totalETFsChangeEl) {
-                totalETFsChangeEl.textContent = '全球追踪';
-            }
-
-            // BTC总持仓
-            const totalBTCEl = document.getElementById('statTotalBTC');
-            const totalBTCChangeEl = document.getElementById('statTotalBTCChange');
-            if (totalBTCEl) {
-                totalBTCEl.textContent = formatHoldings(summary.total_btc || 0);
-            }
-            if (totalBTCChangeEl) {
-                totalBTCChangeEl.textContent = `BTC价格: $${formatNumber(summary.btc_price || 0)}`;
-            }
-
-            // ETH总持仓
-            const totalETHEl = document.getElementById('statTotalETH');
-            const totalETHChangeEl = document.getElementById('statTotalETHChange');
-            if (totalETHEl) {
-                totalETHEl.textContent = formatHoldings(summary.total_eth || 0);
-            }
-            if (totalETHChangeEl) {
-                totalETHChangeEl.textContent = `ETH价格: $${formatNumber(summary.eth_price || 0)}`;
-            }
-        }
-
-        // 更新BTC ETF表格
-        function updateBTCETFs(etfs) {
-            const tbody = document.getElementById('btc-etf-tbody');
-            const titleEl = document.getElementById('btc-etf-title');
-            const updateEl = document.getElementById('btc-etf-update');
-            
-            if (!tbody) return;
-
-            if (!etfs || etfs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">暂无BTC ETF数据</td></tr>';
-                return;
-            }
-
-            if (titleEl) {
-                titleEl.textContent = `比特币现货ETF [${etfs.length}]`;
-            }
-
-            // 过滤掉负数持仓（可能是数据异常）
-            const validETFs = etfs.filter(etf => (etf.market_value || 0) > 0);
-
-            tbody.innerHTML = validETFs.map(etf => {
-                const holdings = etf.btc_holdings || 0;
-                const marketValue = etf.market_value || 0;
-                const flow24h = etf.flow_24h || 0;
-                const isNegative = holdings < 0 || marketValue < 0;
-
-                return `
-                    <tr>
-                        <td>
-                            <div class="etf-name">${etf.name || '-'}</div>
-                        </td>
-                        <td><strong>${etf.symbol || '-'}</strong></td>
-                        <td><span class="etf-provider">${etf.provider || '-'}</span></td>
-                        <td class="${isNegative ? 'negative' : ''}">${formatHoldings(holdings)}</td>
-                        <td class="${isNegative ? 'negative' : ''}">${formatLargeNumber(marketValue)}</td>
-                        <td class="${flow24h >= 0 ? 'positive' : 'negative'}">
-                            ${flow24h >= 0 ? '+' : ''}${formatLargeNumber(flow24h)}
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-
-            if (updateEl && etfs.length > 0 && etfs[0].updated_at) {
-                const date = new Date(etfs[0].updated_at);
-                updateEl.textContent = `最后更新: ${date.toLocaleDateString('zh-CN')}`;
-            }
-
-            // 更新BTC持仓占比饼图
-            initBTCPieChart(validETFs);
-        }
-
-        // 更新ETH ETF表格
-        function updateETHETFs(etfs) {
-            const tbody = document.getElementById('eth-etf-tbody');
-            const titleEl = document.getElementById('eth-etf-title');
-            const updateEl = document.getElementById('eth-etf-update');
-            
-            if (!tbody) return;
-
-            if (!etfs || etfs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">暂无ETH ETF数据</td></tr>';
-                return;
-            }
-
-            if (titleEl) {
-                titleEl.textContent = `以太坊现货ETF [${etfs.length}]`;
-            }
-
-            // 过滤掉负数持仓（可能是数据异常）
-            const validETFs = etfs.filter(etf => (etf.market_value || 0) > 0);
-
-            tbody.innerHTML = validETFs.map(etf => {
-                const holdings = etf.eth_holdings || 0;
-                const marketValue = etf.market_value || 0;
-                const flow24h = etf.flow_24h || 0;
-                const isNegative = holdings < 0 || marketValue < 0;
-
-                return `
-                    <tr>
-                        <td>
-                            <div class="etf-name">${etf.name || '-'}</div>
-                        </td>
-                        <td><strong>${etf.symbol || '-'}</strong></td>
-                        <td><span class="etf-provider">${etf.provider || '-'}</span></td>
-                        <td class="${isNegative ? 'negative' : ''}">${formatHoldings(holdings)}</td>
-                        <td class="${isNegative ? 'negative' : ''}">${formatLargeNumber(marketValue)}</td>
-                        <td class="${flow24h >= 0 ? 'positive' : 'negative'}">
-                            ${flow24h >= 0 ? '+' : ''}${formatLargeNumber(flow24h)}
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-
-            if (updateEl && etfs.length > 0 && etfs[0].updated_at) {
-                const date = new Date(etfs[0].updated_at);
-                updateEl.textContent = `最后更新: ${date.toLocaleDateString('zh-CN')}`;
-            }
-
-            // 更新ETH持仓占比饼图
-            initETHPieChart(validETFs);
-        }
-
-        // 初始化BTC持仓占比饼图
-        function initBTCPieChart(etfs) {
-            if (!etfs || etfs.length === 0) return;
-
-            const ctx = document.getElementById('btcPieChart');
-            if (!ctx) return;
-
-            // 按管理公司（provider）分组，计算总持仓
-            const providerMap = {};
-            etfs.forEach(etf => {
-                const provider = etf.provider || '未知';
-                if (!providerMap[provider]) {
-                    providerMap[provider] = {
-                        provider: provider,
-                        totalValue: 0,
-                        totalHoldings: 0
-                    };
-                }
-                providerMap[provider].totalValue += Math.abs(etf.market_value || 0);
-                providerMap[provider].totalHoldings += Math.abs(etf.btc_holdings || 0);
-            });
-
-            // 转换为数组并按持仓排序
-            const providers = Object.values(providerMap)
-                .filter(p => p.totalValue > 0)
-                .sort((a, b) => b.totalValue - a.totalValue);
-
-            if (providers.length === 0) return;
-
-            // 计算总市值
-            const totalValue = providers.reduce((sum, p) => sum + p.totalValue, 0);
-
-            // 准备图表数据
-            const labels = providers.map(p => p.provider);
-            const data = providers.map(p => p.totalValue);
-            const percentages = providers.map(p => ((p.totalValue / totalValue) * 100).toFixed(1));
-
-            // 生成颜色
-            const colors = [
-                '#F59E0B', '#10B981', '#3B82F6', '#8B5CF6', '#EF4444',
-                '#F97316', '#06B6D4', '#EC4899', '#84CC16', '#6366F1'
-            ];
-
-            // 销毁旧图表
-            if (btcPieChart) {
-                btcPieChart.destroy();
-            }
-
-            // 创建新图表
-            btcPieChart = new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: labels.map((label, i) => `${label} (${percentages[i]}%)`),
-                    datasets: [{
-                        data: data,
-                        backgroundColor: colors.slice(0, labels.length),
-                        borderColor: '#1C2128',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'right',
-                            labels: {
-                                color: '#E6EDF3',
-                                padding: 15,
-                                font: {
-                                    size: 12,
-                                    color: '#E6EDF3'
-                                },
-                                generateLabels: function(chart) {
-                                    const data = chart.data;
-                                    if (data.labels.length && data.datasets.length) {
-                                        return data.labels.map((label, i) => {
-                                            const value = data.datasets[0].data[i];
-                                            return {
-                                                text: `${label} - ${formatLargeNumber(value)}`,
-                                                fillStyle: data.datasets[0].backgroundColor[i],
-                                                fontColor: '#E6EDF3',
-                                                textColor: '#E6EDF3',
-                                                strokeStyle: data.datasets[0].backgroundColor[i],
-                                                hidden: false,
-                                                index: i
-                                            };
-                                        });
-                                    }
-                                    return [];
-                                }
-                            }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed || 0;
-                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                    const percentage = ((value / total) * 100).toFixed(2);
-                                    return `${label.split(' (')[0]}: ${formatLargeNumber(value)} (${percentage}%)`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // 初始化ETH持仓占比饼图
-        function initETHPieChart(etfs) {
-            if (!etfs || etfs.length === 0) return;
-
-            const ctx = document.getElementById('ethPieChart');
-            if (!ctx) return;
-
-            // 按管理公司（provider）分组，计算总持仓
-            const providerMap = {};
-            etfs.forEach(etf => {
-                const provider = etf.provider || '未知';
-                if (!providerMap[provider]) {
-                    providerMap[provider] = {
-                        provider: provider,
-                        totalValue: 0,
-                        totalHoldings: 0
-                    };
-                }
-                providerMap[provider].totalValue += Math.abs(etf.market_value || 0);
-                providerMap[provider].totalHoldings += Math.abs(etf.eth_holdings || 0);
-            });
-
-            // 转换为数组并按持仓排序
-            const providers = Object.values(providerMap)
-                .filter(p => p.totalValue > 0)
-                .sort((a, b) => b.totalValue - a.totalValue);
-
-            if (providers.length === 0) return;
-
-            // 计算总市值
-            const totalValue = providers.reduce((sum, p) => sum + p.totalValue, 0);
-
-            // 准备图表数据
-            const labels = providers.map(p => p.provider);
-            const data = providers.map(p => p.totalValue);
-            const percentages = providers.map(p => ((p.totalValue / totalValue) * 100).toFixed(1));
-
-            // 生成颜色
-            const colors = [
-                '#627EEA', '#10B981', '#3B82F6', '#8B5CF6', '#EF4444',
-                '#F97316', '#06B6D4', '#EC4899', '#84CC16', '#6366F1'
-            ];
-
-            // 销毁旧图表
-            if (ethPieChart) {
-                ethPieChart.destroy();
-            }
-
-            // 创建新图表
-            ethPieChart = new Chart(ctx, {
-                type: 'pie',
-                data: {
-                    labels: labels.map((label, i) => `${label} (${percentages[i]}%)`),
-                    datasets: [{
-                        data: data,
-                        backgroundColor: colors.slice(0, labels.length),
-                        borderColor: '#1C2128',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'right',
-                            labels: {
-                                color: '#E6EDF3',
-                                padding: 15,
-                                font: {
-                                    size: 12,
-                                    color: '#E6EDF3'
-                                },
-                                generateLabels: function(chart) {
-                                    const data = chart.data;
-                                    if (data.labels.length && data.datasets.length) {
-                                        return data.labels.map((label, i) => {
-                                            const value = data.datasets[0].data[i];
-                                            return {
-                                                text: `${label} - ${formatLargeNumber(value)}`,
-                                                fillStyle: data.datasets[0].backgroundColor[i],
-                                                fontColor: '#E6EDF3',
-                                                textColor: '#E6EDF3',
-                                                strokeStyle: data.datasets[0].backgroundColor[i],
-                                                hidden: false,
-                                                index: i
-                                            };
-                                        });
-                                    }
-                                    return [];
-                                }
-                            }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const label = context.label || '';
-                                    const value = context.parsed || 0;
-                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                    const percentage = ((value / total) * 100).toFixed(2);
-                                    return `${label.split(' (')[0]}: ${formatLargeNumber(value)} (${percentage}%)`;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // 初始化资金流向图表
-        async function initFlowChart() {
-            try {
-                const response = await fetch('/api/etf/flows?days=30');
-                if (!response.ok) return;
-                
-                const data = await response.json();
-                if (!data.success || !data.data || data.data.length === 0) return;
-
-                const ctx = document.getElementById('flowChart');
-                if (!ctx) return;
-
-                // 按日期和资产类型分组
-                const btcFlows = [];
-                const ethFlows = [];
-                const dates = [];
-
-                data.data.forEach(item => {
-                    const date = new Date(item.trade_date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-                    if (!dates.includes(date)) {
-                        dates.push(date);
-                    }
-                });
-
-                dates.forEach(date => {
-                    const btcItem = data.data.find(d => 
-                        new Date(d.trade_date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) === date && 
-                        d.asset_type === 'BTC'
-                    );
-                    const ethItem = data.data.find(d => 
-                        new Date(d.trade_date).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) === date && 
-                        d.asset_type === 'ETH'
-                    );
-                    btcFlows.push(btcItem ? (btcItem.net_inflow / 1e6) : 0);
-                    ethFlows.push(ethItem ? (ethItem.net_inflow / 1e6) : 0);
-                });
-
-                if (flowChart) {
-                    flowChart.destroy();
-                }
-
-                flowChart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: dates,
-                        datasets: [
-                            {
-                                label: 'BTC ETF 净流入 (百万美元)',
-                                data: btcFlows,
-                                borderColor: '#F59E0B',
-                                backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                                tension: 0.4,
-                                fill: true
-                            },
-                            {
-                                label: 'ETH ETF 净流入 (百万美元)',
-                                data: ethFlows,
-                                borderColor: '#627EEA',
-                                backgroundColor: 'rgba(98, 126, 234, 0.1)',
-                                tension: 0.4,
-                                fill: true
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                labels: { color: '#E6EDF3' }
-                            },
-                            tooltip: {
-                                mode: 'index',
-                                intersect: false
-                            }
-                        },
-                        scales: {
-                            x: {
-                                ticks: { color: '#8B949E' },
-                                grid: { color: '#30363D' }
-                            },
-                            y: {
-                                ticks: { color: '#8B949E' },
-                                grid: { color: '#30363D' }
-                            }
-                        },
-                        interaction: {
-                            mode: 'nearest',
-                            axis: 'x',
-                            intersect: false
-                        }
-                    }
-                });
-            } catch (error) {
-                console.error('加载资金流向图表失败:', error);
-            }
-        }
-
-        // 页面加载时执行
-        document.addEventListener('DOMContentLoaded', function() {
-            loadETFData();
-            initFlowChart();
-            // 每60秒更新一次
-            setInterval(() => {
-                loadETFData();
-                initFlowChart();
-            }, 60000);
+<body class="antialiased overflow-x-hidden">
+<!-- SideNavBar (Shared Component) -->
+<aside class="fixed left-0 top-0 h-full w-[240px] border-r border-slate-800 bg-[#0a0f14] font-mono text-sm tracking-tight flex flex-col py-6 z-50">
+<div class="px-6 mb-8">
+<h1 class="text-xl font-black tracking-tighter text-[#49f4c8]">NEURAL OBSIDIAN</h1>
+<p class="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Quant Terminal</p>
+</div>
+<nav class="flex-1 px-3 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/dashboard">
+<span class="material-symbols-outlined text-lg">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/futures_trading">
+<span class="material-symbols-outlined text-lg">show_chart</span>
+<span>Futures</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/live_trading">
+<span class="material-symbols-outlined text-lg">precision_manufacturing</span>
+<span>Live Trading</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/futures_review">
+<span class="material-symbols-outlined text-lg">history_edu</span>
+<span>Review</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/technical-signals">
+<span class="material-symbols-outlined text-lg">sensors</span>
+<span>Signals</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/spot_trading">
+<span class="material-symbols-outlined text-lg">currency_exchange</span>
+<span>现货交易</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-[#49f4c8] bg-[#49f4c8]/10 border-r-2 border-[#49f4c8] font-bold transition-colors duration-200 rounded-l" href="/etf_data">
+<span class="material-symbols-outlined text-lg">candlestick_chart</span>
+<span>ETF 数据</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/blockchain_gas">
+<span class="material-symbols-outlined text-lg">local_gas_station</span>
+<span>Gas 监控</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/data_management">
+<span class="material-symbols-outlined text-lg">storage</span>
+<span>数据管理</span>
+</a>
+</nav>
+<div class="mt-auto px-3 pt-6 border-t border-slate-800">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/system-settings">
+<span class="material-symbols-outlined text-lg">settings</span>
+<span>Settings</span>
+</a>
+</div>
+</aside>
+<!-- TopNavBar (Shared Component Implementation) -->
+<header class="fixed top-0 right-0 w-[calc(100%-240px)] h-16 border-b border-slate-800 bg-[#070b10]/80 backdrop-blur-md z-40 flex justify-between items-center px-8 font-mono uppercase tracking-widest text-xs">
+<div class="flex items-center gap-4">
+<h2 class="text-[#49f4c8] font-bold text-sm tracking-normal">ETF 数据分析</h2>
+<div class="h-4 w-px bg-slate-800"></div>
+<span id="last-update-ts" class="text-slate-500 normal-case tracking-normal">Last Update: --</span>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative group">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-[#49f4c8] cursor-pointer transition-all">notifications</span>
+<span class="absolute -top-1 -right-1 w-2 h-2 bg-brand-primary rounded-full ring-2 ring-brand-bg"></span>
+</div>
+<span class="material-symbols-outlined text-slate-400 hover:text-[#49f4c8] cursor-pointer transition-all">wifi_tethering</span>
+<span class="material-symbols-outlined text-slate-400 hover:text-[#49f4c8] cursor-pointer transition-all">account_circle</span>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-[240px] pt-24 px-8 pb-12 bg-brand-bg min-h-screen">
+<!-- Top Stats Row -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+<div class="bg-brand-surface border border-brand-primary/20 p-5 rounded-xl hover:border-brand-primary/40 transition-colors group">
+<div class="flex justify-between items-start mb-2">
+<p class="text-slate-400 text-xs font-medium">BTC ETF总规模 (AUM)</p>
+<span class="bg-brand-primary/10 text-brand-primary text-[10px] px-1.5 py-0.5 rounded font-bold mono-data">+1.2%</span>
+</div>
+<h3 id="btc-aum" class="text-2xl font-bold mono-data text-white group-hover:text-brand-primary transition-colors">-- <span class="text-sm font-normal text-slate-500">亿美元</span></h3>
+</div>
+<div class="bg-brand-surface border border-slate-800 p-5 rounded-xl hover:border-brand-danger/40 transition-colors group">
+<div class="flex justify-between items-start mb-2">
+<p class="text-slate-400 text-xs font-medium">ETH ETF总规模 (AUM)</p>
+<span class="bg-brand-danger/10 text-brand-danger text-[10px] px-1.5 py-0.5 rounded font-bold mono-data">-0.5%</span>
+</div>
+<h3 id="eth-aum" class="text-2xl font-bold mono-data text-white group-hover:text-brand-danger transition-colors">-- <span class="text-sm font-normal text-slate-500">亿美元</span></h3>
+</div>
+<div class="bg-brand-surface border border-slate-800 p-5 rounded-xl hover:border-brand-primary/40 transition-colors group">
+<div class="flex justify-between items-start mb-2">
+<p class="text-slate-400 text-xs font-medium">今日BTC净流入</p>
+<span class="material-symbols-outlined text-brand-primary text-lg">trending_up</span>
+</div>
+<h3 id="btc-flow" class="text-2xl font-bold mono-data text-brand-primary">-- <span class="text-sm font-normal text-slate-500">亿美元</span></h3>
+</div>
+<div class="bg-brand-surface border border-slate-800 p-5 rounded-xl hover:border-brand-danger/40 transition-colors group">
+<div class="flex justify-between items-start mb-2">
+<p class="text-slate-400 text-xs font-medium">今日ETH净流入</p>
+<span class="material-symbols-outlined text-brand-danger text-lg">trending_down</span>
+</div>
+<h3 id="eth-flow" class="text-2xl font-bold mono-data text-brand-danger">-- <span class="text-sm font-normal text-slate-500">M</span></h3>
+</div>
+</div>
+<!-- Middle Row: Tables -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+<!-- Bitcoin ETF Table -->
+<div class="bg-brand-surface border border-slate-800 rounded-xl overflow-hidden">
+<div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/30">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-6 bg-brand-primary rounded-full"></span>
+<h4 class="font-headline font-bold text-slate-100">比特币现货ETF</h4>
+</div>
+<button class="text-xs text-brand-primary hover:underline font-mono">View All</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="text-[10px] uppercase tracking-widest text-slate-500 bg-slate-900/10">
+<th class="px-4 py-3 font-medium">基金名称 / 代码</th>
+<th class="px-4 py-3 font-medium text-right">规模(AUM)</th>
+<th class="px-4 py-3 font-medium text-right">今日净流入</th>
+<th class="px-4 py-3 font-medium text-right">持仓量(BTC)</th>
+<th class="px-4 py-3 font-medium text-right">占比</th>
+</tr>
+</thead>
+<tbody id="btc-etf-tbody" class="text-xs mono-data">
+<tr class="border-b border-slate-800/50 hover:bg-brand-primary/5 transition-colors group">
+<td class="px-4 py-4">
+<div class="flex items-center gap-2">
+<span class="font-bold text-white">IBIT</span>
+<span class="text-[10px] text-slate-500 bg-slate-800 px-1 rounded">BlackRock</span>
+</div>
+</td>
+<td class="px-4 py-4 text-right text-slate-300">$18.42B</td>
+<td class="px-4 py-4 text-right text-brand-primary">+$102.4M</td>
+<td class="px-4 py-4 text-right text-slate-300">284,512</td>
+<td class="px-4 py-4 text-right text-slate-400">42.5%</td>
+</tr>
+<tr class="border-b border-slate-800/50 hover:bg-brand-primary/5 transition-colors">
+<td class="px-4 py-4">
+<div class="flex items-center gap-2">
+<span class="font-bold text-white">FBTC</span>
+<span class="text-[10px] text-slate-500 bg-slate-800 px-1 rounded">Fidelity</span>
+</div>
+</td>
+<td class="px-4 py-4 text-right text-slate-300">$10.15B</td>
+<td class="px-4 py-4 text-right text-brand-primary">+$54.2M</td>
+<td class="px-4 py-4 text-right text-slate-300">158,220</td>
+<td class="px-4 py-4 text-right text-slate-400">22.1%</td>
+</tr>
+<tr class="border-b border-slate-800/50 hover:bg-brand-primary/5 transition-colors">
+<td class="px-4 py-4">
+<div class="flex items-center gap-2">
+<span class="font-bold text-white">ARKB</span>
+<span class="text-[10px] text-slate-500 bg-slate-800 px-1 rounded">Ark Invest</span>
+</div>
+</td>
+<td class="px-4 py-4 text-right text-slate-300">$3.12B</td>
+<td class="px-4 py-4 text-right text-brand-primary">+$12.8M</td>
+<td class="px-4 py-4 text-right text-slate-300">45,910</td>
+<td class="px-4 py-4 text-right text-slate-400">8.4%</td>
+</tr>
+<tr class="border-b border-slate-800/50 hover:bg-brand-primary/5 transition-colors">
+<td class="px-4 py-4">
+<div class="flex items-center gap-2">
+<span class="font-bold text-white">BITB</span>
+<span class="text-[10px] text-slate-500 bg-slate-800 px-1 rounded">Bitwise</span>
+</div>
+</td>
+<td class="px-4 py-4 text-right text-slate-300">$2.45B</td>
+<td class="px-4 py-4 text-right text-brand-primary">+$4.1M</td>
+<td class="px-4 py-4 text-right text-slate-300">38,124</td>
+<td class="px-4 py-4 text-right text-slate-400">5.8%</td>
+</tr>
+<tr class="hover:bg-brand-danger/5 transition-colors">
+<td class="px-4 py-4">
+<div class="flex items-center gap-2">
+<span class="font-bold text-white">GBTC</span>
+<span class="text-[10px] text-slate-500 bg-slate-800 px-1 rounded">Grayscale</span>
+</div>
+</td>
+<td class="px-4 py-4 text-right text-slate-300">$18.95B</td>
+<td class="px-4 py-4 text-right text-brand-danger">-$120.4M</td>
+<td class="px-4 py-4 text-right text-slate-300">292,350</td>
+<td class="px-4 py-4 text-right text-slate-400">21.2%</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Ethereum ETF Table -->
+<div class="bg-brand-surface border border-slate-800 rounded-xl overflow-hidden">
+<div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/30">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-6 bg-brand-accent rounded-full"></span>
+<h4 class="font-headline font-bold text-slate-100">以太坊现货ETF</h4>
+</div>
+<button class="text-xs text-brand-accent hover:underline font-mono">View All</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="text-[10px] uppercase tracking-widest text-slate-500 bg-slate-900/10">
+<th class="px-4 py-3 font-medium">基金名称 / 代码</th>
+<th class="px-4 py-3 font-medium text-right">规模(AUM)</th>
+<th class="px-4 py-3 font-medium text-right">今日净流入</th>
+<th class="px-4 py-3 font-medium text-right">持仓量(ETH)</th>
+<th class="px-4 py-3 font-medium text-right">占比</th>
+</tr>
+</thead>
+<tbody id="eth-etf-tbody" class="text-xs mono-data">
+<tr class="border-b border-slate-800/50 hover:bg-brand-accent/5 transition-colors">
+<td class="px-4 py-4">
+<div class="flex items-center gap-2">
+<span class="font-bold text-white">ETHE</span>
+<span class="text-[10px] text-slate-500 bg-slate-800 px-1 rounded">Grayscale</span>
+</div>
+</td>
+<td class="px-4 py-4 text-right text-slate-300">$6.42B</td>
+<td class="px-4 py-4 text-right text-brand-danger">-$35.1M</td>
+<td class="px-4 py-4 text-right text-slate-300">1,980,450</td>
+<td class="px-4 py-4 text-right text-slate-400">49.8%</td>
+</tr>
+<tr class="border-b border-slate-800/50 hover:bg-brand-accent/5 transition-colors">
+<td class="px-4 py-4">
+<div class="flex items-center gap-2">
+<span class="font-bold text-white">ETHW</span>
+<span class="text-[10px] text-slate-500 bg-slate-800 px-1 rounded">Bitwise</span>
+</div>
+</td>
+<td class="px-4 py-4 text-right text-slate-300">$1.12B</td>
+<td class="px-4 py-4 text-right text-brand-primary">+$8.4M</td>
+<td class="px-4 py-4 text-right text-slate-300">345,120</td>
+<td class="px-4 py-4 text-right text-slate-400">12.5%</td>
+</tr>
+<tr class="border-b border-slate-800/50 hover:bg-brand-accent/5 transition-colors">
+<td class="px-4 py-4">
+<div class="flex items-center gap-2">
+<span class="font-bold text-white">FETH</span>
+<span class="text-[10px] text-slate-500 bg-slate-800 px-1 rounded">Fidelity</span>
+</div>
+</td>
+<td class="px-4 py-4 text-right text-slate-300">$2.34B</td>
+<td class="px-4 py-4 text-right text-brand-primary">+$15.2M</td>
+<td class="px-4 py-4 text-right text-slate-300">720,150</td>
+<td class="px-4 py-4 text-right text-slate-400">18.1%</td>
+</tr>
+<tr class="border-b border-slate-800/50 hover:bg-brand-accent/5 transition-colors">
+<td class="px-4 py-4">
+<div class="flex items-center gap-2">
+<span class="font-bold text-white">CETH</span>
+<span class="text-[10px] text-slate-500 bg-slate-800 px-1 rounded">Coinshares</span>
+</div>
+</td>
+<td class="px-4 py-4 text-right text-slate-300">$0.85B</td>
+<td class="px-4 py-4 text-right text-slate-danger">-$2.1M</td>
+<td class="px-4 py-4 text-right text-slate-300">261,240</td>
+<td class="px-4 py-4 text-right text-slate-400">6.6%</td>
+</tr>
+<tr class="hover:bg-brand-accent/5 transition-colors">
+<td class="px-4 py-4">
+<div class="flex items-center gap-2">
+<span class="font-bold text-white">QETH</span>
+<span class="text-[10px] text-slate-500 bg-slate-800 px-1 rounded">Invesco</span>
+</div>
+</td>
+<td class="px-4 py-4 text-right text-slate-300">$1.20B</td>
+<td class="px-4 py-4 text-right text-brand-primary">+$2.5M</td>
+<td class="px-4 py-4 text-right text-slate-300">368,900</td>
+<td class="px-4 py-4 text-right text-slate-400">13.0%</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Bottom Row: Flow Chart -->
+<div class="bg-brand-surface border border-slate-800 rounded-xl overflow-hidden p-6">
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+<div>
+<h4 class="font-headline font-bold text-slate-100 text-lg">30日资金流向趋势</h4>
+<p class="text-xs text-slate-500 mt-1">Net Capital Inflow/Outflow across all spot ETFs</p>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 bg-brand-primary rounded-full"></span>
+<span class="text-xs font-mono text-slate-300">BTC Flows</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 bg-brand-accent rounded-full"></span>
+<span class="text-xs font-mono text-slate-300">ETH Flows</span>
+</div>
+</div>
+</div>
+<!-- Flow Trend Chart -->
+<div class="h-[300px] w-full relative">
+<canvas id="etf-flow-chart"></canvas>
+</div>
+<div class="mt-4 flex justify-between px-2 text-[10px] font-mono text-slate-500 uppercase tracking-widest">
+<span>30 Days Ago</span>
+<span>15 Days Ago</span>
+<span class="text-brand-primary">Today</span>
+</div>
+</div>
+</main>
+<!-- Background Decoration -->
+<div class="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">
+<div class="absolute -top-[10%] -right-[10%] w-[50%] h-[50%] bg-brand-primary/5 blur-[120px] rounded-full"></div>
+<div class="absolute -bottom-[10%] -left-[10%] w-[40%] h-[40%] bg-brand-accent/5 blur-[100px] rounded-full"></div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    'use strict';
+
+    // --- Chart instance ---
+    var flowChart = null;
+
+    // --- Helper: format a dollar-denominated number for display ---
+    function fmtUSD(val) {
+        if (val === null || val === undefined || val === '') return '--';
+        var n = parseFloat(val);
+        if (isNaN(n)) return '--';
+        var sign = n >= 0 ? '+' : '';
+        var abs = Math.abs(n);
+        if (abs >= 1e9) return sign + '$' + (n / 1e9).toFixed(2) + 'B';
+        if (abs >= 1e6) return sign + '$' + (n / 1e6).toFixed(1) + 'M';
+        if (abs >= 1e4) return sign + '$' + (n / 1e3).toFixed(1) + 'K';
+        return sign + '$' + n.toFixed(2);
+    }
+
+    // --- Populate one table tbody ---
+    function buildTableRow(etf, hoverClass) {
+        var flow = etf.daily_flow !== undefined ? etf.daily_flow : etf.flow;
+        var flowVal = (flow !== null && flow !== undefined && flow !== '') ? parseFloat(flow) : null;
+        var flowTxt = flowVal !== null ? fmtUSD(flowVal) : '--';
+        var flowColor = flowVal !== null ? (flowVal >= 0 ? 'text-brand-primary' : 'text-brand-danger') : 'text-slate-400';
+
+        var aum = etf.aum !== undefined ? etf.aum : etf.total_aum;
+        var aumTxt = (aum !== null && aum !== undefined && aum !== '') ? fmtUSD(parseFloat(aum)) : '--';
+
+        var holdings = etf.holdings !== undefined ? etf.holdings : (etf.btc_holdings !== undefined ? etf.btc_holdings : etf.eth_holdings);
+        var holdingsTxt = (holdings !== null && holdings !== undefined) ? Number(holdings).toLocaleString() : '--';
+
+        var share = etf.share_pct !== undefined ? etf.share_pct : etf.pct;
+        var shareTxt = (share !== null && share !== undefined && share !== '') ? parseFloat(share).toFixed(1) + '%' : '--';
+
+        var ticker = etf.ticker || etf.symbol || etf.name || '--';
+        var issuer = etf.issuer || etf.provider || '';
+
+        var tr = document.createElement('tr');
+        tr.className = 'border-b border-slate-800/50 ' + hoverClass + ' transition-colors';
+        tr.innerHTML =
+            '<td class="px-4 py-4">' +
+              '<div class="flex items-center gap-2">' +
+                '<span class="font-bold text-white">' + ticker + '</span>' +
+                (issuer ? '<span class="text-[10px] text-slate-500 bg-slate-800 px-1 rounded">' + issuer + '</span>' : '') +
+              '</div>' +
+            '</td>' +
+            '<td class="px-4 py-4 text-right text-slate-300">' + aumTxt + '</td>' +
+            '<td class="px-4 py-4 text-right ' + flowColor + '">' + flowTxt + '</td>' +
+            '<td class="px-4 py-4 text-right text-slate-300">' + holdingsTxt + '</td>' +
+            '<td class="px-4 py-4 text-right text-slate-400">' + shareTxt + '</td>';
+        return tr;
+    }
+
+    function populateTable(tbodyId, etfs, hoverClass) {
+        var tbody = document.getElementById(tbodyId);
+        if (!tbody) return;
+        if (!etfs || !etfs.length) return;
+        tbody.innerHTML = '';
+        etfs.forEach(function (etf) {
+            tbody.appendChild(buildTableRow(etf, hoverClass));
         });
-    </script>
-</body>
-</html>
+    }
+
+    // --- Initialise or update the Chart.js bar chart ---
+    function initChart(labels, btcData, ethData) {
+        var canvas = document.getElementById('etf-flow-chart');
+        if (!canvas) return;
+        var ctx = canvas.getContext('2d');
+
+        if (flowChart) {
+            flowChart.data.labels = labels;
+            flowChart.data.datasets[0].data = btcData;
+            flowChart.data.datasets[1].data = ethData;
+            flowChart.update();
+            return;
+        }
+
+        flowChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'BTC Flows',
+                        data: btcData,
+                        backgroundColor: function (ctx) {
+                            var v = ctx.raw;
+                            return v >= 0 ? 'rgba(73,244,200,0.7)' : 'rgba(255,113,108,0.7)';
+                        },
+                        borderRadius: 3,
+                        order: 1
+                    },
+                    {
+                        label: 'ETH Flows',
+                        data: ethData,
+                        backgroundColor: function (ctx) {
+                            var v = ctx.raw;
+                            return v >= 0 ? 'rgba(59,130,246,0.7)' : 'rgba(255,113,108,0.4)';
+                        },
+                        borderRadius: 3,
+                        order: 2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#0f1520',
+                        borderColor: '#334155',
+                        borderWidth: 1,
+                        titleColor: '#94a3b8',
+                        bodyColor: '#e2e8f0',
+                        callbacks: {
+                            label: function (item) {
+                                return item.dataset.label + ': ' + fmtUSD(item.raw);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#64748b', font: { family: 'Geist Mono', size: 10 }, maxRotation: 0 },
+                        grid: { color: 'rgba(51,65,85,0.3)' }
+                    },
+                    y: {
+                        ticks: {
+                            color: '#64748b',
+                            font: { family: 'Geist Mono', size: 10 },
+                            callback: function (v) { return fmtUSD(v); }
+                        },
+                        grid: { color: 'rgba(51,65,85,0.3)' }
+                    }
+                }
+            }
+        });
+    }
+
+    // --- Update last-update timestamp ---
+    function setTimestamp() {
+        var el = document.getElementById('last-update-ts');
+        if (!el) return;
+        var now = new Date();
+        var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+        el.textContent = 'Last Update: ' +
+            now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate()) + ' ' +
+            pad(now.getHours()) + ':' + pad(now.getMinutes()) + ':' + pad(now.getSeconds());
+    }
+
+    // --- Set a stat card to "--" ---
+    function clearStats() {
+        ['btc-aum', 'eth-aum', 'btc-flow', 'eth-flow'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) {
+                var span = el.querySelector('span');
+                var suffix = span ? span.outerHTML : '';
+                el.innerHTML = '--' + (suffix ? ' ' + suffix : '');
+            }
+        });
+    }
+
+    // --- Populate stat cards from summary response ---
+    function populateStats(summary) {
+        var btcAumEl = document.getElementById('btc-aum');
+        var ethAumEl = document.getElementById('eth-aum');
+        var btcFlowEl = document.getElementById('btc-flow');
+        var ethFlowEl = document.getElementById('eth-flow');
+
+        function setCard(el, rawVal, suffix) {
+            if (!el) return;
+            var span = el.querySelector('span');
+            var sfx = suffix || (span ? span.outerHTML : '');
+            var txt = (rawVal !== null && rawVal !== undefined && rawVal !== '') ? fmtUSD(parseFloat(rawVal)) : '--';
+            el.innerHTML = txt + (sfx ? ' ' + sfx : '');
+        }
+
+        var btcAum = summary.btc_total_aum !== undefined ? summary.btc_total_aum : summary.btc_aum;
+        var ethAum = summary.eth_total_aum !== undefined ? summary.eth_total_aum : summary.eth_aum;
+        var btcFlow = summary.btc_daily_flow !== undefined ? summary.btc_daily_flow : summary.btc_flow;
+        var ethFlow = summary.eth_daily_flow !== undefined ? summary.eth_daily_flow : summary.eth_flow;
+
+        setCard(btcAumEl, btcAum);
+        setCard(ethAumEl, ethAum);
+
+        if (btcFlowEl) {
+            var bfVal = (btcFlow !== null && btcFlow !== undefined && btcFlow !== '') ? parseFloat(btcFlow) : null;
+            var bfTxt = bfVal !== null ? fmtUSD(bfVal) : '--';
+            var span0 = btcFlowEl.querySelector('span');
+            btcFlowEl.innerHTML = bfTxt + (span0 ? ' ' + span0.outerHTML : '');
+            btcFlowEl.className = btcFlowEl.className.replace(/text-brand-(primary|danger)/, '');
+            btcFlowEl.classList.add(bfVal !== null && bfVal >= 0 ? 'text-brand-primary' : 'text-brand-danger');
+        }
+
+        if (ethFlowEl) {
+            var efVal = (ethFlow !== null && ethFlow !== undefined && ethFlow !== '') ? parseFloat(ethFlow) : null;
+            var efTxt = efVal !== null ? fmtUSD(efVal) : '--';
+            var span1 = ethFlowEl.querySelector('span');
+            ethFlowEl.innerHTML = efTxt + (span1 ? ' ' + span1.outerHTML : '');
+            ethFlowEl.className = ethFlowEl.className.replace(/text-brand-(primary|danger)/, '');
+            ethFlowEl.classList.add(efVal !== null && efVal >= 0 ? 'text-brand-primary' : 'text-brand-danger');
+        }
+    }
+
+    // --- Fetch /api/etf/summary ---
+    async function fetchSummary() {
+        try {
+            var resp = await fetch('/api/etf/summary');
+            if (!resp.ok) throw new Error('summary API returned ' + resp.status);
+            var json = await resp.json();
+            var summary = (json && json.data) ? json.data : json;
+
+            populateStats(summary);
+
+            var btcEtfs = summary.btc_etfs || summary.btc || [];
+            var ethEtfs = summary.eth_etfs || summary.eth || [];
+            if (btcEtfs.length) populateTable('btc-etf-tbody', btcEtfs, 'hover:bg-brand-primary/5');
+            if (ethEtfs.length) populateTable('eth-etf-tbody', ethEtfs, 'hover:bg-brand-accent/5');
+        } catch (err) {
+            console.error('ETF summary fetch failed:', err);
+            clearStats();
+        }
+    }
+
+    // --- Fetch /api/etf/flows?days=30 ---
+    async function fetchFlows() {
+        try {
+            var resp = await fetch('/api/etf/flows?days=30');
+            if (!resp.ok) throw new Error('flows API returned ' + resp.status);
+            var json = await resp.json();
+            var data = (json && json.data) ? json.data : json;
+
+            var rows = Array.isArray(data) ? data : (data.rows || data.items || data.flows || []);
+            if (!rows.length) {
+                initChart([], [], []);
+                return;
+            }
+
+            var labels = rows.map(function (r) { return r.date || r.day || r.label || ''; });
+            var btcData = rows.map(function (r) {
+                var v = r.btc_flow !== undefined ? r.btc_flow : (r.btc !== undefined ? r.btc : null);
+                return v !== null ? parseFloat(v) : 0;
+            });
+            var ethData = rows.map(function (r) {
+                var v = r.eth_flow !== undefined ? r.eth_flow : (r.eth !== undefined ? r.eth : null);
+                return v !== null ? parseFloat(v) : 0;
+            });
+
+            initChart(labels, btcData, ethData);
+        } catch (err) {
+            console.error('ETF flows fetch failed:', err);
+            initChart([], [], []);
+        }
+    }
+
+    // --- Main refresh function ---
+    async function refresh() {
+        await Promise.all([fetchSummary(), fetchFlows()]);
+        setTimestamp();
+    }
+
+    // --- Bootstrap ---
+    document.addEventListener('DOMContentLoaded', function () {
+        refresh();
+        setInterval(refresh, 60000);
+    });
+}());
+</script>
+</body></html>

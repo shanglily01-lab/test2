@@ -1,810 +1,907 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>区块链Gas统计 - AlphaFlow</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/mobile.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <style>
-        /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
-        :root {
-            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
-            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
-            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
-            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
-            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
-            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
-            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
-            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
-            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
-            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
-            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
-            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
-            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
-            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
-        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
-        .header-content { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: var(--spacing-lg); }
-        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-md); }
-        .header-subtitle { color: var(--text-secondary); font-size: 13px; margin-top: var(--spacing-xs); }
-        .header-actions { display: flex; gap: var(--spacing-md); align-items: center; }
-        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
-        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
-        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
-        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
-        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
-        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
-        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
-        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
-        .card-body { padding: 0; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg); margin-bottom: var(--spacing-xl); }
-        .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; cursor: pointer; }
-        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
-        .stat-card:hover::before { opacity: 1; }
-        .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm); font-weight: 600; }
-        .stat-value { font-size: 28px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-xs); font-family: var(--font-mono); }
-        .stat-change { font-size: 13px; color: var(--text-secondary); }
-        .stat-change.positive { color: var(--success-green); }
-        .stat-change.negative { color: var(--danger-red); }
-        .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
-        table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
-        thead { background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); }
-        th { padding: var(--spacing-md) var(--spacing-lg); text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { padding: var(--spacing-lg); border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-size: 13px; }
-        tr:last-child td { border-bottom: none; }
-        tbody tr { transition: background-color var(--transition-fast); }
-        tbody tr:hover { background: var(--bg-hover); }
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .btn-primary:hover:not(:disabled) { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
-        .btn-ghost { background: transparent; color: var(--text-secondary); border-color: transparent; }
-        .btn-ghost:hover:not(:disabled) { background: var(--bg-hover); color: var(--text-primary); }
-        .positive { color: var(--success-green); }
-        .negative { color: var(--danger-red); }
-        .chain-logo { width: 40px; height: 40px; border-radius: var(--radius-md); background: linear-gradient(135deg, var(--primary-blue), var(--secondary-purple)); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 16px; color: white; }
-        .loading { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .loading::after { content: '...'; animation: dots 1.5s steps(4, end) infinite; }
-        @keyframes dots { 0%, 20% { content: '.'; } 40% { content: '..'; } 60%, 100% { content: '...'; } }
-        .error-message { background: var(--danger-red-bg); color: var(--danger-red); padding: var(--spacing-lg); border-radius: var(--radius-md); margin: var(--spacing-xl) 0; border: 1px solid var(--danger-red); }
-        .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .chart-container { position: relative; height: 400px; margin-top: var(--spacing-lg); }
-        .last-update { color: var(--text-tertiary); font-size: 12px; }
-        .filter-bar { display: flex; gap: var(--spacing-md); margin-bottom: var(--spacing-lg); flex-wrap: wrap; align-items: center; }
-        .select-input { padding: var(--spacing-md) var(--spacing-lg); border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--bg-tertiary); color: var(--text-primary); font-size: 14px; }
-        .select-input:focus { outline: none; border-color: var(--primary-blue); }
-        .slide-up { animation: slideUp var(--transition-slow) ease-out; }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .badge { display: inline-flex; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; }
-        .badge-primary { background: var(--primary-blue-light); color: var(--primary-blue); }
-        @media (max-width: 1024px) {
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 768px) {
-            .nav-links { flex-direction: column; }
-            .stats-grid { grid-template-columns: 1fr; }
-        }
-        /* Daily table pagination styles */
-        .daily-table-container {
-            max-height: 600px;
-            overflow-y: auto;
-            border-radius: var(--radius-md);
-            border: 1px solid var(--border-default);
-        }
-        .pagination-controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: var(--spacing-lg) 0;
-            border-top: 1px solid var(--border-default);
-            margin-top: var(--spacing-lg);
-        }
-        .pagination-info {
-            color: var(--text-secondary);
-            font-size: 13px;
-        }
-        .pagination-buttons {
-            display: flex;
-            gap: var(--spacing-sm);
-            align-items: center;
-        }
-        .pagination-btn {
-            padding: var(--spacing-sm) var(--spacing-md);
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-default);
-            color: var(--text-primary);
-            border-radius: var(--radius-md);
-            cursor: pointer;
-            font-size: 13px;
-            transition: all var(--transition-fast);
-        }
-        .pagination-btn:hover:not(:disabled) {
-            background: var(--bg-hover);
-            border-color: var(--primary-blue);
-        }
-        .pagination-btn:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-        }
-        .pagination-select {
-            padding: var(--spacing-sm) var(--spacing-md);
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-default);
-            color: var(--text-primary);
-            border-radius: var(--radius-md);
-            font-size: 13px;
-            cursor: pointer;
-        }
-        .pagination-select:focus {
-            outline: none;
-            border-color: var(--primary-blue);
-        }
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700&amp;family=Geist+Mono:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#49f4c8",
+              surface: "#0f1520",
+              background: "#070b10",
+              sidebar: "#0a0f14",
+              gold: "#f5a623",
+              polygon: "#8247e5",
+              arbitrum: "#28a0f0"
+            },
+            fontFamily: {
+              "headline": ["Space Grotesk"],
+              "body": ["Manrope"],
+              "label": ["Geist Mono"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { background-color: #070b10; color: #cbd5e1; }
+        .material-symbols-outlined { font-size: 20px; }
+        .glass-card { background: rgba(15, 21, 32, 0.8); backdrop-filter: blur(8px); }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: #070b10; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
     </style>
 </head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <div>
-                    <div style="display: flex; align-items: center; gap: var(--spacing-md);">
-                        <img src="/static/images/logo/alphaflow-logo-icon.svg" alt="AlphaFlow" style="height: 36px; width: auto;">
-                        <div>
-                            <h1 class="header-title" style="margin: 0;">
-                                <i class="bi bi-lightning-charge"></i>
-                                区块链Gas统计
-                            </h1>
-                            <p class="header-subtitle">追踪六大主链每日Gas消耗量与价值 · 实时更新 · 链上活动分析</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="header-actions">
-                    <button class="btn btn-ghost" onclick="loadGasData()">
-                        <i class="bi bi-arrow-clockwise"></i> 刷新
-                    </button>
-                </div>
-            </div>
-        </header>
+<body class="font-body selection:bg-primary/30">
+<!-- Sidebar Navigation -->
+<aside class="fixed left-0 top-0 h-full w-[240px] border-r border-slate-800 bg-[#0a0f14] font-mono text-sm tracking-tight flex flex-col py-6 z-50">
+<div class="px-6 mb-8">
+<h1 class="text-xl font-black tracking-tighter text-[#49f4c8]">NEURAL OBSIDIAN</h1>
+<p class="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Quant Terminal</p>
+</div>
+<nav class="flex-1 px-3 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/dashboard">
+<span class="material-symbols-outlined text-lg">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/futures_trading">
+<span class="material-symbols-outlined text-lg">show_chart</span>
+<span>Futures</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/live_trading">
+<span class="material-symbols-outlined text-lg">precision_manufacturing</span>
+<span>Live Trading</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/futures_review">
+<span class="material-symbols-outlined text-lg">history_edu</span>
+<span>Review</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/technical-signals">
+<span class="material-symbols-outlined text-lg">sensors</span>
+<span>Signals</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/spot_trading">
+<span class="material-symbols-outlined text-lg">currency_exchange</span>
+<span>现货交易</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/etf_data">
+<span class="material-symbols-outlined text-lg">candlestick_chart</span>
+<span>ETF 数据</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-[#49f4c8] bg-[#49f4c8]/10 border-r-2 border-[#49f4c8] font-bold transition-colors duration-200 rounded-l" href="/blockchain_gas">
+<span class="material-symbols-outlined text-lg">local_gas_station</span>
+<span>Gas 监控</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/data_management">
+<span class="material-symbols-outlined text-lg">storage</span>
+<span>数据管理</span>
+</a>
+</nav>
+<div class="mt-auto px-3 pt-6 border-t border-slate-800">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/system-settings">
+<span class="material-symbols-outlined text-lg">settings</span>
+<span>Settings</span>
+</a>
+</div>
+</aside>
+<!-- Top Navigation -->
+<header class="fixed top-0 right-0 w-[calc(100%-240px)] h-16 border-b border-slate-800/50 bg-[#0f1520]/80 backdrop-blur-md flex justify-between items-center px-8 z-40 shadow-xl shadow-black/20">
+<div class="flex items-center gap-8">
+<h1 class="text-xl font-bold text-white font-headline tracking-tight">Gas 监控</h1>
+<nav class="flex gap-6 font-label text-xs uppercase tracking-widest">
+<button id="btn-7d" class="text-slate-400 hover:text-[#49f4c8] cursor-pointer transition-all">7d</button>
+<button id="btn-30d" class="text-[#49f4c8] border-b border-[#49f4c8] pb-1 cursor-pointer transition-all">30d</button>
+<button id="btn-90d" class="text-slate-400 hover:text-[#49f4c8] cursor-pointer transition-all">90d</button>
+</nav>
+</div>
+<div class="flex items-center gap-6">
+<span id="last-update" class="font-label text-[10px] text-slate-500 uppercase tracking-widest">Last update: --</span>
+<div class="flex gap-4 text-slate-400">
+<span class="material-symbols-outlined hover:text-[#49f4c8] cursor-pointer transition-all">notifications</span>
+<span class="material-symbols-outlined hover:text-[#49f4c8] cursor-pointer transition-all">account_balance_wallet</span>
+</div>
+<div class="w-8 h-8 rounded-full border border-slate-700 bg-slate-800 flex items-center justify-center overflow-hidden">
+<img alt="User Profile" class="w-full h-full object-cover" data-alt="minimalist abstract geometric user avatar with teal and obsidian accents" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5By5cByGxkWDxPrMh_NSHyLtHRonv-2CM87lu0APLUgDmhh9heevHyicKP60PPgT4GquKy704Nwsdq5Pm0q9LAhcEZ4AdekqPOSNhjbpe_Hz8_WeSBHEZvDLqjIOkK_mAbk16-BPTO3RElbIcZ3LKEtIJdcvhNBRFySb05RmsgHFrItZb8P-E4hD7qr9npyg4CDDGiOWyN80enGZaWlZwJJwwlAX4G-0FcAOgz_cHVB5hEyQ0A_GESWSfkWAXCS4ICzSq7GgYTsg"/>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="ml-[240px] pt-24 pb-12 px-8">
+<!-- Stat Cards Row -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+<!-- ETH Card -->
+<div class="bg-surface p-6 rounded-xl border border-slate-800/50 hover:border-primary/30 transition-all group">
+<div class="flex justify-between items-start mb-4">
+<div class="bg-primary/10 p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined">currency_bitcoin</span>
+</div>
+<span id="card-eth-trend" class="text-emerald-400 flex items-center font-label text-xs">
+<span class="material-symbols-outlined text-xs">trending_down</span> 12%
+                    </span>
+</div>
+<div class="text-slate-500 font-label text-xs uppercase tracking-wider mb-1">Ethereum Gas</div>
+<div class="flex items-baseline gap-2">
+<span id="card-eth-gas" class="text-3xl font-black font-label text-white">24</span>
+<span class="text-slate-400 font-label text-sm uppercase">Gwei</span>
+</div>
+</div>
+<!-- BNB Card -->
+<div class="bg-surface p-6 rounded-xl border border-slate-800/50 hover:border-gold/30 transition-all group">
+<div class="flex justify-between items-start mb-4">
+<div class="bg-gold/10 p-2 rounded-lg text-gold">
+<span class="material-symbols-outlined">payments</span>
+</div>
+<span id="card-bnb-trend" class="text-rose-400 flex items-center font-label text-xs">
+<span class="material-symbols-outlined text-xs">trending_up</span> 4%
+                    </span>
+</div>
+<div class="text-slate-500 font-label text-xs uppercase tracking-wider mb-1">BNB Chain Gas</div>
+<div class="flex items-baseline gap-2">
+<span id="card-bnb-gas" class="text-3xl font-black font-label text-white">3.1</span>
+<span class="text-slate-400 font-label text-sm uppercase">Gwei</span>
+</div>
+</div>
+<!-- Polygon Card -->
+<div class="bg-surface p-6 rounded-xl border border-slate-800/50 hover:border-polygon/30 transition-all group">
+<div class="flex justify-between items-start mb-4">
+<div class="bg-polygon/10 p-2 rounded-lg text-polygon">
+<span class="material-symbols-outlined">token</span>
+</div>
+<span id="card-polygon-trend" class="text-emerald-400 flex items-center font-label text-xs">
+<span class="material-symbols-outlined text-xs">trending_down</span> 21%
+                    </span>
+</div>
+<div class="text-slate-500 font-label text-xs uppercase tracking-wider mb-1">Polygon Gas</div>
+<div class="flex items-baseline gap-2">
+<span id="card-polygon-gas" class="text-3xl font-black font-label text-white">82</span>
+<span class="text-slate-400 font-label text-sm uppercase">Gwei</span>
+</div>
+</div>
+<!-- Arbitrum Card -->
+<div class="bg-surface p-6 rounded-xl border border-slate-800/50 hover:border-arbitrum/30 transition-all group">
+<div class="flex justify-between items-start mb-4">
+<div class="bg-arbitrum/10 p-2 rounded-lg text-arbitrum">
+<span class="material-symbols-outlined">layers</span>
+</div>
+<span id="card-arbitrum-trend" class="text-slate-400 flex items-center font-label text-xs">
+<span class="material-symbols-outlined text-xs">trending_flat</span> 0%
+                    </span>
+</div>
+<div class="text-slate-500 font-label text-xs uppercase tracking-wider mb-1">Arbitrum Gas</div>
+<div class="flex items-baseline gap-2">
+<span id="card-arbitrum-gas" class="text-3xl font-black font-label text-white">0.1</span>
+<span class="text-slate-400 font-label text-sm uppercase">Gwei</span>
+</div>
+</div>
+</div>
+<!-- Middle Row: Chart & Table -->
+<div class="grid grid-cols-1 lg:grid-cols-5 gap-8 mb-8">
+<!-- Line Chart Container -->
+<div class="lg:col-span-3 bg-surface border border-slate-800/50 rounded-xl p-6 relative overflow-hidden">
+<div class="flex justify-between items-center mb-8">
+<h2 class="text-white font-headline font-bold">Gas 价格趋势</h2>
+<div class="flex gap-4">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="text-xs font-label text-slate-400">ETH</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-gold"></span>
+<span class="text-xs font-label text-slate-400">BNB</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-polygon"></span>
+<span class="text-xs font-label text-slate-400">Polygon</span>
+</div>
+</div>
+</div>
+<!-- Mock Chart Visualization -->
+<div id="gas-chart-container" class="h-64 flex items-end justify-between gap-1 border-b border-slate-800/50 pb-2">
+<div class="w-full flex items-end gap-[2px] h-full relative">
+<!-- Abstract Wave Representation using SVGs -->
+<svg id="gas-chart-svg" class="absolute bottom-0 left-0 w-full h-full" preserveaspectratio="none" viewbox="0 0 100 100">
+<path d="M0,80 Q25,40 50,70 T100,50 L100,100 L0,100 Z" fill="url(#grad-eth)" stroke="#49f4c8" stroke-width="1"></path>
+<path d="M0,90 Q25,70 50,85 T100,75 L100,100 L0,100 Z" fill="url(#grad-bnb)" stroke="#f5a623" stroke-width="1"></path>
+<path d="M0,60 Q25,85 50,55 T100,65 L100,100 L0,100 Z" fill="url(#grad-polygon)" stroke="#8247e5" stroke-width="1"></path>
+<defs>
+<lineargradient id="grad-eth" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color:#49f4c8;stop-opacity:0.1"></stop>
+<stop offset="100%" style="stop-color:#49f4c8;stop-opacity:0"></stop>
+</lineargradient>
+<lineargradient id="grad-bnb" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color:#f5a623;stop-opacity:0.1"></stop>
+<stop offset="100%" style="stop-color:#f5a623;stop-opacity:0"></stop>
+</lineargradient>
+<lineargradient id="grad-polygon" x1="0%" x2="0%" y1="0%" y2="100%">
+<stop offset="0%" style="stop-color:#8247e5;stop-opacity:0.1"></stop>
+<stop offset="100%" style="stop-color:#8247e5;stop-opacity:0"></stop>
+</lineargradient>
+</defs>
+</svg>
+</div>
+</div>
+<div id="chart-x-labels" class="flex justify-between pt-4 font-label text-[10px] text-slate-500 uppercase">
+<span>00:00</span>
+<span>06:00</span>
+<span>12:00</span>
+<span>18:00</span>
+<span>23:59</span>
+</div>
+</div>
+<!-- Chain Gas Summary Table -->
+<div class="lg:col-span-2 bg-surface border border-slate-800/50 rounded-xl overflow-hidden">
+<div class="p-6 border-b border-slate-800/50">
+<h2 class="text-white font-headline font-bold">链 Gas 汇总</h2>
+</div>
+<table class="w-full text-left font-label text-xs">
+<thead class="bg-slate-900/50 text-slate-500 border-b border-slate-800/50">
+<tr>
+<th class="px-6 py-4 font-medium uppercase tracking-wider">链名称</th>
+<th class="px-4 py-4 font-medium uppercase tracking-wider text-right">当前 Gas</th>
+<th class="px-4 py-4 font-medium uppercase tracking-wider text-right">7D 均值</th>
+<th class="px-6 py-4 font-medium uppercase tracking-wider text-center">状态</th>
+</tr>
+</thead>
+<tbody id="chains-summary-tbody" class="divide-y divide-slate-800/50">
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4 flex items-center gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
+<span class="text-white">Ethereum</span>
+</td>
+<td class="px-4 py-4 text-right font-bold text-white">24.2</td>
+<td class="px-4 py-4 text-right text-slate-400">21.8</td>
+<td class="px-6 py-4 text-center">
+<span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded text-[10px] font-bold">NORMAL</span>
+</td>
+</tr>
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4 flex items-center gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-gold"></span>
+<span class="text-white">BNB Chain</span>
+</td>
+<td class="px-4 py-4 text-right font-bold text-white">3.1</td>
+<td class="px-4 py-4 text-right text-slate-400">3.0</td>
+<td class="px-6 py-4 text-center">
+<span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded text-[10px] font-bold">NORMAL</span>
+</td>
+</tr>
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4 flex items-center gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-polygon"></span>
+<span class="text-white">Polygon</span>
+</td>
+<td class="px-4 py-4 text-right font-bold text-white">82.5</td>
+<td class="px-4 py-4 text-right text-slate-400">145.2</td>
+<td class="px-6 py-4 text-center">
+<span class="px-2 py-1 bg-sky-500/10 text-sky-400 rounded text-[10px] font-bold">LOW</span>
+</td>
+</tr>
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4 flex items-center gap-3">
+<span class="w-1.5 h-1.5 rounded-full bg-arbitrum"></span>
+<span class="text-white">Arbitrum</span>
+</td>
+<td class="px-4 py-4 text-right font-bold text-white">0.1</td>
+<td class="px-4 py-4 text-right text-slate-400">0.4</td>
+<td class="px-6 py-4 text-center">
+<span class="px-2 py-1 bg-rose-500/10 text-rose-400 rounded text-[10px] font-bold">HIGH</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Historical Data Table -->
+<div class="bg-surface border border-slate-800/50 rounded-xl overflow-hidden">
+<div class="p-6 border-b border-slate-800/50 flex justify-between items-center">
+<h2 class="text-white font-headline font-bold">每日 Gas 数据</h2>
+<div class="flex gap-2">
+<button id="daily-prev-btn" class="p-1 border border-slate-800 rounded hover:bg-slate-800 text-slate-400 transition-colors">
+<span class="material-symbols-outlined">chevron_left</span>
+</button>
+<button id="daily-next-btn" class="p-1 border border-slate-800 rounded hover:bg-slate-800 text-slate-400 transition-colors">
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left font-label text-xs">
+<thead class="bg-slate-900/50 text-slate-500 border-b border-slate-800/50">
+<tr>
+<th class="px-6 py-4 font-medium uppercase tracking-wider">日期</th>
+<th class="px-6 py-4 font-medium uppercase tracking-wider text-right">ETH Avg</th>
+<th class="px-6 py-4 font-medium uppercase tracking-wider text-right">BNB Avg</th>
+<th class="px-6 py-4 font-medium uppercase tracking-wider text-right">Polygon Avg</th>
+<th class="px-6 py-4 font-medium uppercase tracking-wider text-right">Arbitrum Avg</th>
+<th class="px-6 py-4 font-medium uppercase tracking-wider text-center">最高峰值</th>
+</tr>
+</thead>
+<tbody id="daily-gas-tbody" class="divide-y divide-slate-800/50">
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4 text-white">2023-11-20</td>
+<td class="px-6 py-4 text-right text-white">22.4</td>
+<td class="px-6 py-4 text-right text-white">3.01</td>
+<td class="px-6 py-4 text-right text-white">104.2</td>
+<td class="px-6 py-4 text-right text-white">0.12</td>
+<td class="px-6 py-4 text-center">
+<span class="text-slate-500">14:00 UTC</span>
+</td>
+</tr>
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4 text-white">2023-11-19</td>
+<td class="px-6 py-4 text-right text-white">31.8</td>
+<td class="px-6 py-4 text-right text-white">3.25</td>
+<td class="px-6 py-4 text-right text-white">158.0</td>
+<td class="px-6 py-4 text-right text-white">0.15</td>
+<td class="px-6 py-4 text-center">
+<span class="text-slate-500">21:30 UTC</span>
+</td>
+</tr>
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4 text-white">2023-11-18</td>
+<td class="px-6 py-4 text-right text-white">18.2</td>
+<td class="px-6 py-4 text-right text-white">2.95</td>
+<td class="px-6 py-4 text-right text-white">92.1</td>
+<td class="px-6 py-4 text-right text-white">0.10</td>
+<td class="px-6 py-4 text-center">
+<span class="text-slate-500">04:15 UTC</span>
+</td>
+</tr>
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4 text-white">2023-11-17</td>
+<td class="px-6 py-4 text-right text-white">25.1</td>
+<td class="px-6 py-4 text-right text-white">3.10</td>
+<td class="px-6 py-4 text-right text-white">122.4</td>
+<td class="px-6 py-4 text-right text-white">0.12</td>
+<td class="px-6 py-4 text-center">
+<span class="text-slate-500">16:45 UTC</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-6 border-t border-slate-800/50 flex justify-between items-center bg-slate-900/30">
+<span id="daily-pagination-info" class="font-label text-xs text-slate-500">Showing 1 to 4 of 30 entries</span>
+<div id="daily-pagination-btns" class="flex gap-2 font-label text-xs">
+<button class="px-3 py-1 bg-primary text-background font-bold rounded">1</button>
+<button class="px-3 py-1 border border-slate-800 text-slate-400 rounded hover:bg-slate-800">2</button>
+<button class="px-3 py-1 border border-slate-800 text-slate-400 rounded hover:bg-slate-800">3</button>
+<span class="text-slate-600 self-center px-1">...</span>
+<button class="px-3 py-1 border border-slate-800 text-slate-400 rounded hover:bg-slate-800">8</button>
+</div>
+</div>
+</div>
+</main>
+<!-- Floating Global Gas Indicator (Subtle Contextual UI) -->
+<div class="fixed bottom-6 right-6 flex items-center gap-4 bg-surface/90 border border-slate-800 p-3 rounded-full shadow-2xl backdrop-blur-xl z-50">
+<div class="flex items-center gap-2 px-3 border-r border-slate-800">
+<span class="material-symbols-outlined text-primary text-sm">speed</span>
+<span id="floating-eth-gas" class="font-label text-xs text-white">ETH: -- Gwei</span>
+</div>
+<div id="refresh-btn" class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary cursor-pointer hover:bg-primary hover:text-background transition-all">
+<span class="material-symbols-outlined">refresh</span>
+</div>
+</div>
+<script>
+(function () {
+  'use strict';
 
-        <!-- Navigation -->
-        <nav class="nav-container slide-up">
-            <div class="nav-links">
-                <a href="/" class="nav-link">
-                    <i class="bi bi-house"></i> 首页
-                </a>
-                <a href="/dashboard" class="nav-link">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-                <a href="/technical-signals" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> 技术信号
-                </a>
-                <a href="/paper_trading" class="nav-link">
-                    <i class="bi bi-journals"></i> 现货交易
-                </a>
-                <a href="/futures_trading" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> U本位合约
-                </a>
-                <a href="/coin_futures_trading" class="nav-link">
-                    <i class="bi bi-currency-bitcoin"></i> 币本位合约
-                </a>
-                <a href="/live_trading" class="nav-link">
-                    <i class="bi bi-currency-exchange"></i> 实盘合约
-                </a>
-                <a href="#" class="nav-link" style="opacity: 0.5; cursor: not-allowed;" onclick="event.preventDefault(); showToast('实盘现货功能开发中...', 'info')">
-                    <i class="bi bi-cart-check"></i> 实盘现货
-                </a>
-                <a href="/futures_review" class="nav-link">
-                    <i class="bi bi-journal-check"></i> 复盘(24H)
-                </a>
-                <a href="/etf_data" class="nav-link">
-                    <i class="bi bi-pie-chart"></i> ETF 数据
-                </a>
-                <a href="/corporate_treasury" class="nav-link">
-                    <i class="bi bi-building"></i> 企业金库
-                </a>
-                <a href="/blockchain_gas" class="nav-link active">
-                    <i class="bi bi-lightning-charge"></i> Gas统计
-                </a>
-                <a href="/data_management" class="nav-link">
-                    <i class="bi bi-database"></i> 数据管理
-                </a>
-            </div>
-        </nav>
+  // -----------------------------------------------------------------------
+  // State
+  // -----------------------------------------------------------------------
+  var currentDays = 30;
+  var dailyAllRows = [];
+  var dailyPage = 1;
+  var ROWS_PER_PAGE = 10;
+  var refreshTimer = null;
 
-        <!-- Loading State -->
-        <div id="loadingState" class="loading">正在加载Gas统计数据</div>
+  // Chain colour dots used in the summary table
+  var CHAIN_DOT_CLASS = {
+    ethereum:  'bg-primary',
+    bnbchain:  'bg-gold',
+    bnb:       'bg-gold',
+    polygon:   'bg-polygon',
+    arbitrum:  'bg-arbitrum',
+  };
 
-        <!-- Error State -->
-        <div id="errorState" class="error-message" style="display: none;"></div>
+  // Stat-card element IDs keyed by a normalised chain name
+  var CARD_GAS_ID = {
+    ethereum: 'card-eth-gas',
+    bnb:      'card-bnb-gas',
+    bnbchain: 'card-bnb-gas',
+    polygon:  'card-polygon-gas',
+    arbitrum: 'card-arbitrum-gas',
+  };
+  var CARD_TREND_ID = {
+    ethereum: 'card-eth-trend',
+    bnb:      'card-bnb-trend',
+    bnbchain: 'card-bnb-trend',
+    polygon:  'card-polygon-trend',
+    arbitrum: 'card-arbitrum-trend',
+  };
 
-        <!-- Main Content -->
-        <div id="mainContent" style="display: none;">
-            <!-- Summary Statistics -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">总Gas价值 (USD)</div>
-                    <div class="stat-value" id="statTotalValue">-</div>
-                    <div class="stat-change" id="statTotalValueChange">最近7天</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">总交易笔数</div>
-                    <div class="stat-value" id="statTotalTransactions">-</div>
-                    <div class="stat-change" id="statTotalTransactionsChange">最近7天</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">平均Gas价值</div>
-                    <div class="stat-value" id="statAvgGasValue">-</div>
-                    <div class="stat-change" id="statAvgGasValueChange">每笔交易</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">监控链数量</div>
-                    <div class="stat-value" id="statChainCount">-</div>
-                    <div class="stat-change" id="statChainCountChange">六大主链</div>
-                </div>
-            </div>
+  // SVG chart line colours per chain
+  var CHAIN_STROKE = {
+    ethereum: '#49f4c8',
+    bnb:      '#f5a623',
+    bnbchain: '#f5a623',
+    polygon:  '#8247e5',
+    arbitrum: '#28a0f0',
+  };
 
-            <!-- Filter Bar -->
-            <div class="card">
-                <div class="filter-bar">
-                    <select id="chainFilter" class="select-input" onchange="loadGasData()">
-                        <option value="">所有链</option>
-                    </select>
-                    <select id="daysFilter" class="select-input" onchange="loadGasData()">
-                        <option value="7">最近7天</option>
-                        <option value="14">最近14天</option>
-                        <option value="30">最近30天</option>
-                        <option value="90">最近90天</option>
-                    </select>
-                </div>
-            </div>
+  // -----------------------------------------------------------------------
+  // Helpers
+  // -----------------------------------------------------------------------
+  function normChain(name) {
+    if (!name) return '';
+    return name.toLowerCase().replace(/[\s_-]/g, '');
+  }
 
-            <!-- Chains Summary Table -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-list-ol"></i>
-                        <span>各链Gas消耗统计</span>
-                    </h2>
-                    <div class="last-update" id="tableUpdate">-</div>
-                </div>
-                <div class="card-body">
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>排名</th>
-                                    <th>链名称</th>
-                                    <th>原生代币</th>
-                                    <th>总Gas消耗</th>
-                                    <th>总交易数</th>
-                                    <th>平均Gas/交易</th>
-                                    <th>平均Gas价格</th>
-                                    <th>总Gas价值 (USD)</th>
-                                    <th>平均Gas价值 (USD)</th>
-                                </tr>
-                            </thead>
-                            <tbody id="chainsTableBody">
-                                <tr>
-                                    <td colspan="9" class="empty-state">加载中...</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
+  function fmtGas(val) {
+    if (val == null || val === '' || isNaN(Number(val))) return '--';
+    var n = Number(val);
+    if (n >= 100) return n.toFixed(0);
+    if (n >= 10)  return n.toFixed(1);
+    return n.toFixed(2);
+  }
 
-            <!-- Daily Gas Chart -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-graph-up"></i>
-                        <span>每日Gas价值趋势</span>
-                    </h2>
-                </div>
-                <div class="card-body">
-                    <div class="chart-container">
-                        <canvas id="gasValueChart"></canvas>
-                    </div>
-                </div>
-            </div>
+  function pct(a, b) {
+    // % change from b to a
+    if (!b || b === 0) return null;
+    return ((a - b) / b) * 100;
+  }
 
-            <!-- Daily Data Table -->
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">
-                        <i class="bi bi-calendar-week"></i>
-                        <span>每日详细数据</span>
-                    </h2>
-                </div>
-                <div class="card-body">
-                    <div class="daily-table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>日期</th>
-                                    <th>链名称</th>
-                                    <th>总Gas消耗</th>
-                                    <th>总交易数</th>
-                                    <th>平均Gas/交易</th>
-                                    <th>平均Gas价格</th>
-                                    <th>原生代币价格 (USD)</th>
-                                    <th>总Gas价值 (USD)</th>
-                                    <th>平均Gas价值 (USD)</th>
-                                </tr>
-                            </thead>
-                            <tbody id="dailyTableBody">
-                                <tr>
-                                    <td colspan="9" class="empty-state">加载中...</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    <div class="pagination-controls">
-                        <div class="pagination-info">
-                            显示 <span id="pageStart">0</span> - <span id="pageEnd">0</span> / 共 <span id="totalRows">0</span> 条
-                        </div>
-                        <div class="pagination-buttons">
-                            <label style="color: var(--text-secondary); font-size: 13px; margin-right: var(--spacing-sm);">每页显示:</label>
-                            <select id="rowsPerPage" class="pagination-select" onchange="changeRowsPerPage()">
-                                <option value="20">20</option>
-                                <option value="50" selected>50</option>
-                                <option value="100">100</option>
-                                <option value="200">200</option>
-                            </select>
-                            <button class="pagination-btn" id="prevPageBtn" onclick="changePage(-1)">
-                                <i class="bi bi-chevron-left"></i> 上一页
-                            </button>
-                            <span style="color: var(--text-secondary); font-size: 13px; padding: 0 var(--spacing-md);">
-                                第 <span id="currentPage">1</span> / <span id="totalPages">1</span> 页
-                            </span>
-                            <button class="pagination-btn" id="nextPageBtn" onclick="changePage(1)">
-                                下一页 <i class="bi bi-chevron-right"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+  function statusBadge(current, avg7d) {
+    if (current == null || avg7d == null || avg7d === 0) {
+      return '<span class="px-2 py-1 bg-slate-500/10 text-slate-400 rounded text-[10px] font-bold">--</span>';
+    }
+    var ratio = current / avg7d;
+    if (ratio > 1.3) {
+      return '<span class="px-2 py-1 bg-rose-500/10 text-rose-400 rounded text-[10px] font-bold">HIGH</span>';
+    }
+    if (ratio < 0.7) {
+      return '<span class="px-2 py-1 bg-sky-500/10 text-sky-400 rounded text-[10px] font-bold">LOW</span>';
+    }
+    return '<span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded text-[10px] font-bold">NORMAL</span>';
+  }
 
-    <script>
-        let gasValueChart = null;
-        let allDailyData = []; // Store all daily data
-        let currentPageNum = 1;
-        let rowsPerPageNum = 50;
+  function trendHTML(changePct) {
+    if (changePct == null) {
+      return '<span class="material-symbols-outlined text-xs">trending_flat</span> --';
+    }
+    var abs = Math.abs(changePct).toFixed(0) + '%';
+    if (changePct > 2) {
+      return '<span class="material-symbols-outlined text-xs">trending_up</span> ' + abs;
+    }
+    if (changePct < -2) {
+      return '<span class="material-symbols-outlined text-xs">trending_down</span> ' + abs;
+    }
+    return '<span class="material-symbols-outlined text-xs">trending_flat</span> ' + abs;
+  }
 
-        // 格式化数字
-        function formatNumber(num, decimals = 2) {
-            if (num === null || num === undefined || isNaN(num)) return '-';
-            return parseFloat(num).toLocaleString('en-US', {
-                minimumFractionDigits: decimals,
-                maximumFractionDigits: decimals
-            });
+  function trendColorClass(changePct) {
+    // For gas: going down is good (emerald), going up is bad (rose)
+    if (changePct == null) return 'text-slate-400';
+    if (changePct > 2)  return 'text-rose-400';
+    if (changePct < -2) return 'text-emerald-400';
+    return 'text-slate-400';
+  }
+
+  function setText(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+
+  function setHTML(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.innerHTML = val;
+  }
+
+  function nowString() {
+    var d = new Date();
+    var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+
+  // -----------------------------------------------------------------------
+  // Fetch wrappers
+  // -----------------------------------------------------------------------
+  async function fetchSummary(days) {
+    var resp = await fetch('/api/blockchain-gas/summary?days=' + days);
+    if (!resp.ok) throw new Error('summary API ' + resp.status);
+    var d = await resp.json();
+    return d.data || d;
+  }
+
+  async function fetchDaily(limit) {
+    var resp = await fetch('/api/blockchain-gas/daily?limit=' + limit);
+    if (!resp.ok) throw new Error('daily API ' + resp.status);
+    var d = await resp.json();
+    return d.data || d;
+  }
+
+  async function fetchChains() {
+    var resp = await fetch('/api/blockchain-gas/chains');
+    if (!resp.ok) throw new Error('chains API ' + resp.status);
+    var d = await resp.json();
+    return d.data || d;
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: stat cards
+  // -----------------------------------------------------------------------
+  function renderStatCards(summary) {
+    // summary is expected to be an array or object keyed by chain name
+    var rows = Array.isArray(summary) ? summary : Object.values(summary);
+    rows.forEach(function (row) {
+      var key = normChain(row.chain || row.chain_name || row.name || '');
+      var gasId   = CARD_GAS_ID[key];
+      var trendId = CARD_TREND_ID[key];
+      if (!gasId) return;
+
+      var current = row.current_gas != null ? row.current_gas : row.avg_gas;
+      setText(gasId, fmtGas(current));
+
+      var changePct = row.change_pct != null
+        ? row.change_pct
+        : pct(current, row.avg_7d || row.avg_24h);
+
+      var trendEl = document.getElementById(trendId);
+      if (trendEl) {
+        trendEl.className = trendColorClass(changePct) + ' flex items-center font-label text-xs';
+        trendEl.innerHTML = trendHTML(changePct);
+      }
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: chains summary table
+  // -----------------------------------------------------------------------
+  function renderChainsSummary(summary) {
+    var tbody = document.getElementById('chains-summary-tbody');
+    if (!tbody) return;
+    var rows = Array.isArray(summary) ? summary : Object.values(summary);
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-8 text-center text-slate-500">No data</td></tr>';
+      return;
+    }
+
+    var html = '';
+    rows.forEach(function (row) {
+      var key     = normChain(row.chain || row.chain_name || row.name || '');
+      var dotCls  = CHAIN_DOT_CLASS[key] || 'bg-slate-400';
+      var label   = row.chain || row.chain_name || row.name || key;
+      var current = row.current_gas != null ? row.current_gas : row.avg_gas;
+      var avg7d   = row.avg_7d != null ? row.avg_7d : row.avg_gas;
+
+      html += '<tr class="hover:bg-slate-800/20 transition-colors">'
+        + '<td class="px-6 py-4 flex items-center gap-3">'
+        +   '<span class="w-1.5 h-1.5 rounded-full ' + dotCls + '"></span>'
+        +   '<span class="text-white">' + label + '</span>'
+        + '</td>'
+        + '<td class="px-4 py-4 text-right font-bold text-white">' + fmtGas(current) + '</td>'
+        + '<td class="px-4 py-4 text-right text-slate-400">' + fmtGas(avg7d) + '</td>'
+        + '<td class="px-6 py-4 text-center">' + statusBadge(current, avg7d) + '</td>'
+        + '</tr>';
+    });
+    tbody.innerHTML = html;
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: daily gas table (paginated)
+  // -----------------------------------------------------------------------
+  function renderDailyPage(page) {
+    dailyPage = page;
+    var tbody    = document.getElementById('daily-gas-tbody');
+    var infoEl   = document.getElementById('daily-pagination-info');
+    var btnsEl   = document.getElementById('daily-pagination-btns');
+    var prevBtn  = document.getElementById('daily-prev-btn');
+    var nextBtn  = document.getElementById('daily-next-btn');
+    if (!tbody) return;
+
+    var total     = dailyAllRows.length;
+    var totalPages = Math.max(1, Math.ceil(total / ROWS_PER_PAGE));
+    dailyPage = Math.min(Math.max(1, dailyPage), totalPages);
+
+    var start = (dailyPage - 1) * ROWS_PER_PAGE;
+    var end   = Math.min(start + ROWS_PER_PAGE, total);
+    var slice = dailyAllRows.slice(start, end);
+
+    if (!slice.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-slate-500">No data</td></tr>';
+      if (infoEl) infoEl.textContent = 'No entries';
+      return;
+    }
+
+    var html = '';
+    slice.forEach(function (row) {
+      var eth  = fmtGas(row.eth  != null ? row.eth  : row.ethereum   != null ? row.ethereum  : row.eth_avg);
+      var bnb  = fmtGas(row.bnb  != null ? row.bnb  : row.bnb_chain  != null ? row.bnb_chain : row.bnb_avg);
+      var poly = fmtGas(row.poly != null ? row.poly : row.polygon     != null ? row.polygon   : row.polygon_avg);
+      var arb  = fmtGas(row.arb  != null ? row.arb  : row.arbitrum   != null ? row.arbitrum  : row.arbitrum_avg);
+      var peak = row.peak_time || row.peak || '--';
+      html += '<tr class="hover:bg-slate-800/20 transition-colors">'
+        + '<td class="px-6 py-4 text-white">' + (row.date || row.day || '--') + '</td>'
+        + '<td class="px-6 py-4 text-right text-white">' + eth  + '</td>'
+        + '<td class="px-6 py-4 text-right text-white">' + bnb  + '</td>'
+        + '<td class="px-6 py-4 text-right text-white">' + poly + '</td>'
+        + '<td class="px-6 py-4 text-right text-white">' + arb  + '</td>'
+        + '<td class="px-6 py-4 text-center"><span class="text-slate-500">' + peak + '</span></td>'
+        + '</tr>';
+    });
+    tbody.innerHTML = html;
+
+    if (infoEl) {
+      infoEl.textContent = 'Showing ' + (start + 1) + ' to ' + end + ' of ' + total + ' entries';
+    }
+
+    // Rebuild pagination buttons
+    if (btnsEl) {
+      var btnHtml = '';
+      for (var p = 1; p <= totalPages; p++) {
+        if (p === dailyPage) {
+          btnHtml += '<button data-page="' + p + '" class="px-3 py-1 bg-primary text-background font-bold rounded">' + p + '</button>';
+        } else {
+          btnHtml += '<button data-page="' + p + '" class="px-3 py-1 border border-slate-800 text-slate-400 rounded hover:bg-slate-800">' + p + '</button>';
         }
-
-        // 格式化大额数字（保留6位小数）
-        function formatLargeNumber(num) {
-            if (num === null || num === undefined || isNaN(num)) return '-';
-            if (num === 0) return '$0.000000';
-            const absNum = Math.abs(num);
-            // 对于Gas价值，始终保留6位小数
-            if (absNum >= 1e9) return `$${(num / 1e9).toFixed(6)}B`;
-            if (absNum >= 1e6) return `$${(num / 1e6).toFixed(6)}M`;
-            if (absNum >= 1e3) return `$${(num / 1e3).toFixed(6)}K`;
-            return `$${num.toFixed(6)}`;
-        }
-        
-        // 格式化Gas价值（专门用于Gas价值显示，保留6位小数）
-        function formatGasValue(num) {
-            if (num === null || num === undefined || isNaN(num)) return '-';
-            if (num === 0) return '$0.000000';
-            return `$${parseFloat(num).toFixed(6)}`;
-        }
-
-        // 格式化Gas数量
-        function formatGas(num) {
-            if (num === null || num === undefined || isNaN(num) || num === 0) return '0';
-            const absNum = Math.abs(num);
-            if (absNum >= 1e18) return `${(num / 1e18).toFixed(4)} ETH`;
-            if (absNum >= 1e15) return `${(num / 1e15).toFixed(2)} P`;
-            if (absNum >= 1e12) return `${(num / 1e12).toFixed(2)} T`;
-            if (absNum >= 1e9) return `${(num / 1e9).toFixed(2)} G`;
-            return formatNumber(num, 0);
-        }
-
-        // 显示加载状态
-        function showLoading() {
-            document.getElementById('loadingState').style.display = 'block';
-            document.getElementById('errorState').style.display = 'none';
-            document.getElementById('mainContent').style.display = 'none';
-        }
-
-        // 显示错误
-        function showError(message) {
-            document.getElementById('loadingState').style.display = 'none';
-            document.getElementById('errorState').style.display = 'block';
-            document.getElementById('errorState').textContent = `错误: ${message}`;
-            document.getElementById('mainContent').style.display = 'none';
-        }
-
-        // 显示内容
-        function showContent() {
-            document.getElementById('loadingState').style.display = 'none';
-            document.getElementById('errorState').style.display = 'none';
-            document.getElementById('mainContent').style.display = 'block';
-        }
-
-        // 获取链显示名称
-        function getChainDisplayName(chainName) {
-            const chainMap = {
-                'ethereum': 'Ethereum',
-                'bsc': 'BSC',
-                'polygon': 'Polygon',
-                'arbitrum': 'Arbitrum',
-                'optimism': 'Optimism',
-                'avalanche': 'Avalanche'
-            };
-            return chainMap[chainName] || chainName;
-        }
-
-        // 获取链原生代币
-        function getChainNativeToken(chainName) {
-            const tokenMap = {
-                'ethereum': 'ETH',
-                'bsc': 'BNB',
-                'polygon': 'MATIC',
-                'arbitrum': 'ETH',
-                'optimism': 'ETH',
-                'avalanche': 'AVAX'
-            };
-            return tokenMap[chainName] || '-';
-        }
-
-        // 加载Gas数据
-        async function loadGasData() {
-            showLoading();
-            try {
-                const days = document.getElementById('daysFilter').value || 7;
-                const chainName = document.getElementById('chainFilter').value || '';
-
-                // 加载汇总数据
-                const summaryResponse = await fetch(`/api/blockchain-gas/summary?days=${days}`);
-                if (!summaryResponse.ok) {
-                    throw new Error(`HTTP error! status: ${summaryResponse.status}`);
-                }
-                const summaryData = await summaryResponse.json();
-
-                // 加载每日数据
-                let dailyUrl = `/api/blockchain-gas/daily?limit=${days * 10}`;
-                if (chainName) {
-                    dailyUrl += `&chain_name=${chainName}`;
-                }
-                const dailyResponse = await fetch(dailyUrl);
-                if (!dailyResponse.ok) {
-                    throw new Error(`HTTP error! status: ${dailyResponse.status}`);
-                }
-                const dailyData = await dailyResponse.json();
-
-                // 加载链列表
-                const chainsResponse = await fetch('/api/blockchain-gas/chains');
-                const chainsData = await chainsResponse.json();
-
-                if (summaryData.success && dailyData.success && chainsData.success) {
-                    updateSummary(summaryData.data);
-                    updateChainsTable(summaryData.data.chains);
-                    updateDailyTable(dailyData.data);
-                    updateChart(dailyData.data);
-                    updateChainFilter(chainsData.data);
-                    showContent();
-                } else {
-                    throw new Error('获取数据失败');
-                }
-            } catch (error) {
-                console.error('加载Gas数据失败:', error);
-                showError(error.message || '加载Gas统计数据失败，请稍后重试');
-            }
-        }
-
-        // 更新汇总统计
-        function updateSummary(data) {
-            const summary = data.summary;
-            document.getElementById('statTotalValue').textContent = formatGasValue(summary.total_gas_value_usd);
-            document.getElementById('statTotalTransactions').textContent = formatNumber(summary.total_transactions, 0);
-            document.getElementById('statAvgGasValue').textContent = formatGasValue(summary.avg_gas_value_usd);
-            document.getElementById('statChainCount').textContent = summary.total_chains || 0;
-        }
-
-        // 更新链汇总表格
-        function updateChainsTable(chains) {
-            const tbody = document.getElementById('chainsTableBody');
-            if (!chains || chains.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无数据</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = chains.map((chain, index) => {
-                const chainInitial = getChainDisplayName(chain.chain_name)[0];
-                return `
-                    <tr>
-                        <td><strong>${index + 1}</strong></td>
-                        <td>
-                            <div style="display: flex; align-items: center; gap: var(--spacing-md);">
-                                <div class="chain-logo">${chainInitial}</div>
-                                <div>
-                                    <div style="font-weight: 600;">${chain.chain_display_name}</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td><span class="badge badge-primary">${getChainNativeToken(chain.chain_name)}</span></td>
-                        <td class="font-mono">${formatGas(chain.total_gas_used)}</td>
-                        <td class="font-mono">${formatNumber(chain.total_transactions, 0)}</td>
-                        <td class="font-mono">${formatGas(chain.avg_gas_per_tx)}</td>
-                        <td class="font-mono">${formatGas(chain.avg_gas_price)}</td>
-                        <td class="font-mono" style="color: var(--success-green);">${formatGasValue(chain.total_gas_value_usd)}</td>
-                        <td class="font-mono">${formatGasValue(chain.avg_gas_value_usd)}</td>
-                    </tr>
-                `;
-            }).join('');
-
-            document.getElementById('tableUpdate').textContent = `更新时间: ${new Date().toLocaleString('zh-CN')}`;
-        }
-
-        // 更新每日数据表格
-        function updateDailyTable(dailyData) {
-            const tbody = document.getElementById('dailyTableBody');
-            if (!dailyData || dailyData.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无数据</td></tr>';
-                updatePaginationInfo(0, 0, 0, 1, 1);
-                return;
-            }
-
-            // 按日期和链排序
-            dailyData.sort((a, b) => {
-                if (a.date !== b.date) {
-                    return new Date(b.date) - new Date(a.date);
-                }
-                return a.chain_name.localeCompare(b.chain_name);
-            });
-
-            // Store all data for pagination
-            allDailyData = dailyData;
-
-            // Reset to first page when data changes
-            currentPageNum = 1;
-
-            // Render current page
-            renderDailyTablePage();
-        }
-
-        // Render current page of daily table
-        function renderDailyTablePage() {
-            const tbody = document.getElementById('dailyTableBody');
-            const totalRows = allDailyData.length;
-            const totalPages = Math.ceil(totalRows / rowsPerPageNum);
-
-            // Calculate start and end indices
-            const startIndex = (currentPageNum - 1) * rowsPerPageNum;
-            const endIndex = Math.min(startIndex + rowsPerPageNum, totalRows);
-
-            // Get current page data
-            const pageData = allDailyData.slice(startIndex, endIndex);
-
-            tbody.innerHTML = pageData.map(item => {
-                return `
-                    <tr>
-                        <td>${item.date}</td>
-                        <td><strong>${item.chain_display_name}</strong></td>
-                        <td class="font-mono">${formatGas(item.total_gas_used)}</td>
-                        <td class="font-mono">${formatNumber(item.total_transactions, 0)}</td>
-                        <td class="font-mono">${formatGas(item.avg_gas_per_tx)}</td>
-                        <td class="font-mono">${formatGas(item.avg_gas_price)}</td>
-                        <td class="font-mono">${item.native_token_price_usd ? formatLargeNumber(item.native_token_price_usd) : '-'}</td>
-                        <td class="font-mono" style="color: var(--success-green);">${formatGasValue(item.total_gas_value_usd)}</td>
-                        <td class="font-mono">${formatGasValue(item.avg_gas_value_usd)}</td>
-                    </tr>
-                `;
-            }).join('');
-
-            // Update pagination info
-            updatePaginationInfo(startIndex + 1, endIndex, totalRows, currentPageNum, totalPages);
-        }
-
-        // Update pagination info and button states
-        function updatePaginationInfo(start, end, total, current, totalPages) {
-            document.getElementById('pageStart').textContent = start;
-            document.getElementById('pageEnd').textContent = end;
-            document.getElementById('totalRows').textContent = total;
-            document.getElementById('currentPage').textContent = current;
-            document.getElementById('totalPages').textContent = totalPages;
-
-            // Update button states
-            document.getElementById('prevPageBtn').disabled = current <= 1;
-            document.getElementById('nextPageBtn').disabled = current >= totalPages;
-        }
-
-        // Change page
-        function changePage(direction) {
-            const totalPages = Math.ceil(allDailyData.length / rowsPerPageNum);
-            const newPage = currentPageNum + direction;
-
-            if (newPage < 1 || newPage > totalPages) {
-                return;
-            }
-
-            currentPageNum = newPage;
-            renderDailyTablePage();
-        }
-
-        // Change rows per page
-        function changeRowsPerPage() {
-            rowsPerPageNum = parseInt(document.getElementById('rowsPerPage').value);
-            currentPageNum = 1; // Reset to first page
-            renderDailyTablePage();
-        }
-
-        // 更新图表
-        function updateChart(dailyData) {
-            if (!dailyData || dailyData.length === 0) return;
-
-            // 按日期分组
-            const dateMap = {};
-            dailyData.forEach(item => {
-                if (!dateMap[item.date]) {
-                    dateMap[item.date] = {};
-                }
-                dateMap[item.date][item.chain_name] = item.total_gas_value_usd;
-            });
-
-            const dates = Object.keys(dateMap).sort();
-            const chains = [...new Set(dailyData.map(d => d.chain_name))];
-
-            const datasets = chains.map(chainName => {
-                const data = dates.map(date => dateMap[date][chainName] || 0);
-                const colors = [
-                    'rgba(43, 111, 237, 0.8)',   // Ethereum - Blue
-                    'rgba(243, 186, 47, 0.8)',   // BSC - Yellow
-                    'rgba(130, 71, 229, 0.8)',   // Polygon - Purple
-                    'rgba(40, 160, 240, 0.8)',   // Arbitrum - Cyan
-                    'rgba(255, 4, 32, 0.8)',     // Optimism - Red
-                    'rgba(232, 65, 66, 0.8)'     // Avalanche - Red-Orange
-                ];
-                return {
-                    label: getChainDisplayName(chainName),
-                    data: data,
-                    borderColor: colors[chains.indexOf(chainName) % colors.length],
-                    backgroundColor: colors[chains.indexOf(chainName) % colors.length].replace('0.8', '0.2'),
-                    tension: 0.4,
-                    fill: true
-                };
-            });
-
-            const ctx = document.getElementById('gasValueChart').getContext('2d');
-            
-            if (gasValueChart) {
-                gasValueChart.destroy();
-            }
-
-            gasValueChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: dates,
-                    datasets: datasets
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'top',
-                            labels: {
-                                color: '#E6EDF3',
-                                font: {
-                                    size: 13,
-                                    weight: '500'
-                                },
-                                padding: 15,
-                                usePointStyle: true
-                            }
-                        },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                            backgroundColor: 'rgba(28, 33, 40, 0.95)',
-                            titleColor: '#E6EDF3',
-                            bodyColor: '#E6EDF3',
-                            borderColor: '#30363D',
-                            borderWidth: 1,
-                            padding: 12,
-                            titleFont: {
-                                size: 13,
-                                weight: '600'
-                            },
-                            bodyFont: {
-                                size: 12
-                            },
-                            callbacks: {
-                                label: function(context) {
-                                    return context.dataset.label + ': ' + formatLargeNumber(context.parsed.y);
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            ticks: {
-                                color: '#E6EDF3',
-                                font: {
-                                    size: 12,
-                                    weight: '500'
-                                },
-                                padding: 8
-                            },
-                            grid: {
-                                color: '#30363D',
-                                drawBorder: false
-                            },
-                            title: {
-                                display: false
-                            }
-                        },
-                        y: {
-                            ticks: {
-                                color: '#E6EDF3',
-                                font: {
-                                    size: 12,
-                                    weight: '500'
-                                },
-                                padding: 8,
-                                callback: function(value) {
-                                    return formatLargeNumber(value);
-                                }
-                            },
-                            grid: {
-                                color: '#30363D',
-                                drawBorder: false
-                            },
-                            title: {
-                                display: false
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // 更新链筛选器
-        function updateChainFilter(chains) {
-            const select = document.getElementById('chainFilter');
-            const currentValue = select.value;
-            
-            // 保留"所有链"选项，添加其他链
-            select.innerHTML = '<option value="">所有链</option>';
-            chains.forEach(chain => {
-                const option = document.createElement('option');
-                option.value = chain.name;
-                option.textContent = chain.display_name;
-                select.appendChild(option);
-            });
-            
-            // 恢复之前的选择
-            if (currentValue) {
-                select.value = currentValue;
-            }
-        }
-
-        // 页面加载时初始化
-        document.addEventListener('DOMContentLoaded', function() {
-            loadGasData();
+      }
+      btnsEl.innerHTML = btnHtml;
+      btnsEl.querySelectorAll('button[data-page]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          renderDailyPage(parseInt(this.getAttribute('data-page'), 10));
         });
-    </script>
-</body>
-</html>
+      });
+    }
 
+    if (prevBtn) {
+      prevBtn.disabled = dailyPage <= 1;
+      prevBtn.onclick  = function () { renderDailyPage(dailyPage - 1); };
+    }
+    if (nextBtn) {
+      nextBtn.disabled = dailyPage >= totalPages;
+      nextBtn.onclick  = function () { renderDailyPage(dailyPage + 1); };
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Render: SVG chart
+  // -----------------------------------------------------------------------
+  function renderChart(dailyRows) {
+    var svg = document.getElementById('gas-chart-svg');
+    var xLabels = document.getElementById('chart-x-labels');
+    if (!svg || !dailyRows.length) return;
+
+    // Build per-chain series from last N rows in chronological order
+    var rows = dailyRows.slice().reverse(); // API may return desc; reverse to asc
+    var n = rows.length;
+
+    // Collect chain keys present in first row
+    var firstRow = rows[0] || {};
+    var chainKeys = [];
+    ['ethereum', 'eth', 'bnb', 'bnbchain', 'bnb_chain', 'polygon', 'poly', 'arbitrum', 'arb'].forEach(function (k) {
+      if (firstRow[k] != null && chainKeys.indexOf(k) === -1) chainKeys.push(k);
+    });
+
+    // Normalise: pick canonical keys
+    var series = {};
+    chainKeys.forEach(function (k) {
+      var canon = normChain(k);
+      if (!series[canon]) series[canon] = [];
+    });
+
+    rows.forEach(function (row) {
+      chainKeys.forEach(function (k) {
+        var canon = normChain(k);
+        if (series[canon]) series[canon].push(Number(row[k]) || 0);
+      });
+    });
+
+    // Find global max for scaling
+    var allVals = [];
+    Object.keys(series).forEach(function (c) { allVals = allVals.concat(series[c]); });
+    var maxVal = Math.max.apply(null, allVals.filter(function (v) { return isFinite(v); })) || 1;
+
+    // Build SVG polyline paths (viewBox 0 0 100 100, y inverted)
+    var pathsHtml = '';
+    var defsHtml  = '';
+
+    Object.keys(series).forEach(function (c) {
+      var vals   = series[c];
+      var stroke = CHAIN_STROKE[c] || '#94a3b8';
+      var gradId = 'grad-' + c;
+      var pts    = vals.map(function (v, i) {
+        var x = n > 1 ? (i / (n - 1)) * 100 : 50;
+        var y = 100 - (v / maxVal) * 85; // leave 15% margin at top
+        return x.toFixed(1) + ',' + y.toFixed(1);
+      }).join(' ');
+
+      // Area fill path (close to bottom)
+      var firstX = n > 1 ? 0 : 50;
+      var lastX  = 100;
+      var firstY = 100 - (vals[0] / maxVal) * 85;
+      var lastY  = 100 - (vals[vals.length - 1] / maxVal) * 85;
+      var fillPts = firstX + ',' + firstY.toFixed(1) + ' ' + pts + ' ' + lastX + ',' + lastY.toFixed(1) + ' ' + lastX + ',100 ' + firstX + ',100';
+
+      defsHtml += '<linearGradient id="' + gradId + '" x1="0%" y1="0%" x2="0%" y2="100%">'
+        + '<stop offset="0%" style="stop-color:' + stroke + ';stop-opacity:0.15"/>'
+        + '<stop offset="100%" style="stop-color:' + stroke + ';stop-opacity:0"/>'
+        + '</linearGradient>';
+
+      pathsHtml += '<polygon points="' + fillPts + '" fill="url(#' + gradId + ')" />';
+      pathsHtml += '<polyline points="' + pts + '" fill="none" stroke="' + stroke + '" stroke-width="1.2" />';
+    });
+
+    svg.innerHTML = '<defs>' + defsHtml + '</defs>' + pathsHtml;
+
+    // Update x-axis labels with actual dates
+    if (xLabels && n >= 5) {
+      var picks = [0, Math.floor(n * 0.25), Math.floor(n * 0.5), Math.floor(n * 0.75), n - 1];
+      var spans = xLabels.querySelectorAll('span');
+      picks.forEach(function (idx, i) {
+        if (spans[i] && rows[idx]) {
+          spans[i].textContent = rows[idx].date || rows[idx].day || '';
+        }
+      });
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Set active range button style
+  // -----------------------------------------------------------------------
+  function setActiveRangeBtn(days) {
+    ['7', '30', '90'].forEach(function (d) {
+      var btn = document.getElementById('btn-' + d + 'd');
+      if (!btn) return;
+      if (parseInt(d, 10) === days) {
+        btn.className = 'text-[#49f4c8] border-b border-[#49f4c8] pb-1 cursor-pointer transition-all';
+      } else {
+        btn.className = 'text-slate-400 hover:text-[#49f4c8] cursor-pointer transition-all';
+      }
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // Show "--" everywhere on error
+  // -----------------------------------------------------------------------
+  function showAllDashes() {
+    ['card-eth-gas', 'card-bnb-gas', 'card-polygon-gas', 'card-arbitrum-gas'].forEach(function (id) {
+      setText(id, '--');
+    });
+    ['card-eth-trend', 'card-bnb-trend', 'card-polygon-trend', 'card-arbitrum-trend'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) {
+        el.className = 'text-slate-400 flex items-center font-label text-xs';
+        el.innerHTML = '<span class="material-symbols-outlined text-xs">trending_flat</span> --';
+      }
+    });
+    var csTbody = document.getElementById('chains-summary-tbody');
+    if (csTbody) csTbody.innerHTML = '<tr><td colspan="4" class="px-6 py-8 text-center text-slate-500">API error -- no data</td></tr>';
+    var dgTbody = document.getElementById('daily-gas-tbody');
+    if (dgTbody) dgTbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-slate-500">API error -- no data</td></tr>';
+    setText('floating-eth-gas', 'ETH: -- Gwei');
+  }
+
+  // -----------------------------------------------------------------------
+  // Main load function
+  // -----------------------------------------------------------------------
+  async function loadAll(days) {
+    days = days || currentDays;
+    currentDays = days;
+    setActiveRangeBtn(days);
+
+    var limit = Math.max(days, 90); // fetch enough for daily table
+
+    try {
+      var results = await Promise.all([
+        fetchSummary(days),
+        fetchDaily(limit),
+        fetchChains(),
+      ]);
+
+      var summary   = results[0];
+      var dailyData = results[1];
+      var chains    = results[2];
+
+      // Normalise summary: may be array or object
+      var summaryRows = Array.isArray(summary) ? summary : Object.values(summary);
+
+      // Stat cards
+      renderStatCards(summaryRows);
+
+      // Floating ETH indicator
+      summaryRows.forEach(function (row) {
+        var key = normChain(row.chain || row.chain_name || row.name || '');
+        if (key === 'ethereum') {
+          var cur = row.current_gas != null ? row.current_gas : row.avg_gas;
+          setText('floating-eth-gas', 'ETH: ' + fmtGas(cur) + ' Gwei');
+        }
+      });
+
+      // Chains summary table
+      renderChainsSummary(summaryRows);
+
+      // Daily data table
+      var dailyRows = Array.isArray(dailyData) ? dailyData : Object.values(dailyData);
+      // Sort descending by date
+      dailyRows.sort(function (a, b) {
+        var da = a.date || a.day || '';
+        var db = b.date || b.day || '';
+        if (da > db) return -1;
+        if (da < db) return 1;
+        return 0;
+      });
+      dailyAllRows = dailyRows;
+      dailyPage = 1;
+      renderDailyPage(1);
+
+      // SVG chart (use last `days` rows)
+      var chartRows = dailyRows.slice(0, days);
+      renderChart(chartRows);
+
+      // Last update
+      setText('last-update', 'Last update: ' + nowString());
+
+    } catch (err) {
+      console.error('blockchain gas API error:', err);
+      showAllDashes();
+      setText('last-update', 'Last update: ERROR');
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Wire up range buttons
+  // -----------------------------------------------------------------------
+  function wireRangeButtons() {
+    [7, 30, 90].forEach(function (d) {
+      var btn = document.getElementById('btn-' + d + 'd');
+      if (btn) {
+        btn.addEventListener('click', function () {
+          loadAll(d);
+        });
+      }
+    });
+  }
+
+  // -----------------------------------------------------------------------
+  // Wire up refresh button (floating)
+  // -----------------------------------------------------------------------
+  function wireRefreshButton() {
+    var btn = document.getElementById('refresh-btn');
+    if (btn) {
+      btn.addEventListener('click', function () {
+        loadAll(currentDays);
+      });
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Auto-refresh every 60 seconds
+  // -----------------------------------------------------------------------
+  function startAutoRefresh() {
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(function () {
+      loadAll(currentDays);
+    }, 60000);
+  }
+
+  // -----------------------------------------------------------------------
+  // Init
+  // -----------------------------------------------------------------------
+  document.addEventListener('DOMContentLoaded', function () {
+    wireRangeButtons();
+    wireRefreshButton();
+    loadAll(30);
+    startAutoRefresh();
+  });
+
+})();
+</script>
+</body></html>

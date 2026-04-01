@@ -1,1354 +1,781 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>数据管理 - AlphaFlow</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="/static/css/mobile.css" rel="stylesheet">
-    <style>
-        /* AlphaFlow - Multi-Dimensional Crypto Intelligence Platform */
-        :root {
-            --primary-blue: #2B6FED; --primary-blue-hover: #1E5DD6; --primary-blue-light: #EBF3FF; --primary-blue-dark: #1A4BA8;
-            --secondary-purple: #7C3AED; --secondary-orange: #F97316;
-            --success-green: #10B981; --success-green-bg: #D1FAE5; --danger-red: #EF4444; --danger-red-bg: #FEE2E2;
-            --warning-yellow: #F59E0B; --warning-yellow-bg: #FEF3C7; --info-blue: #3B82F6;
-            --bg-primary: #0D1117; --bg-secondary: #161B22; --bg-tertiary: #21262D; --bg-card: #1C2128; --bg-hover: #2A3038;
-            --text-primary: #E6EDF3; --text-secondary: #8B949E; --text-tertiary: #6E7681; --text-disabled: #484F58;
-            --border-default: #30363D; --border-muted: #21262D; --border-subtle: #1C2128;
-            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.15); --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
-            --shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.25); --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.3);
-            --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
-            --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 12px; --spacing-lg: 16px; --spacing-xl: 24px; --spacing-2xl: 32px;
-            --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
-            --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
-            --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1); --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
-            --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>数据管理 - NEURAL OBSIDIAN</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=Manrope:wght@200..800&amp;family=Geist:wght@100..900&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            bg: "#070b10",
+                            surface: "#0f1520",
+                            primary: "#49f4c8",
+                            sidebar: "#0a0f14"
+                        }
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Manrope"],
+                        "label": ["Geist"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: var(--font-family); background-color: var(--bg-primary); color: var(--text-primary); line-height: 1.6; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-        .container { max-width: 1600px; margin: 0 auto; padding: var(--spacing-xl); }
-        .header { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); padding: var(--spacing-lg) var(--spacing-xl); margin-bottom: var(--spacing-xl); border-radius: var(--radius-lg); }
-        .header-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-sm); display: flex; align-items: center; gap: var(--spacing-md); }
-        .header-subtitle { color: var(--text-secondary); font-size: 13px; }
-        .nav-container { background: rgba(44, 68, 100, 0.85); border-radius: var(--radius-lg); padding: var(--spacing-lg); margin-bottom: var(--spacing-xl); border: 1px solid var(--border-default); }
-        .nav-links { display: flex; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 16px; }
-        .nav-link { padding: 0.75rem 1.5rem; background: transparent; color: var(--text-secondary); text-decoration: none; border-radius: var(--radius-md); transition: all var(--transition-base); font-weight: 600; font-size: 16px; border: 1px solid transparent; }
-        .nav-link:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-default); }
-        .nav-link.active { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); margin-bottom: var(--spacing-xl); transition: all var(--transition-base); }
-        .card:hover { border-color: var(--border-muted); box-shadow: var(--shadow-md); }
-        .card-header { padding-bottom: var(--spacing-lg); margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
-        .card-title { font-size: 18px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: var(--spacing-sm); }
-        .card-body { padding: 0; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: var(--spacing-lg); margin-bottom: var(--spacing-xl); }
-        .stat-card { background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); text-align: center; transition: all var(--transition-base); position: relative; overflow: hidden; }
-        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); opacity: 0; transition: opacity var(--transition-base); }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--primary-blue); }
-        .stat-card:hover::before { opacity: 1; }
-        .stat-label { font-size: 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--spacing-sm); font-weight: 600; }
-        .stat-value { font-size: 32px; font-weight: 700; color: var(--text-primary); margin-bottom: var(--spacing-xs); font-family: var(--font-mono); }
-        .table-container { overflow-x: auto; border-radius: var(--radius-md); border: 1px solid var(--border-default); }
-        table { width: 100%; border-collapse: collapse; background: var(--bg-card); }
-        thead { background: var(--bg-tertiary); border-bottom: 2px solid var(--border-default); }
-        th { padding: var(--spacing-md) var(--spacing-lg); text-align: left; font-weight: 600; color: var(--text-secondary); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-        td { padding: var(--spacing-lg); border-bottom: 1px solid var(--border-default); color: var(--text-primary); font-size: 13px; }
-        tr:last-child td { border-bottom: none; }
-        tbody tr { transition: background-color var(--transition-fast); }
-        tbody tr:hover { background: var(--bg-hover); }
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--spacing-sm); padding: var(--spacing-md) var(--spacing-xl); font-size: 14px; font-weight: 500; line-height: 1; text-decoration: none; border: 1px solid transparent; border-radius: var(--radius-md); cursor: pointer; transition: all var(--transition-base); white-space: nowrap; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-primary { background: var(--primary-blue); color: white; border-color: var(--primary-blue); }
-        .btn-primary:hover:not(:disabled) { background: var(--primary-blue-hover); border-color: var(--primary-blue-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
-        .btn-danger { background: var(--danger-red); color: white; }
-        .btn-danger:hover:not(:disabled) { background: #DC2626; transform: translateY(-1px); box-shadow: var(--shadow-md); }
-        .btn-secondary { background: var(--bg-tertiary); color: var(--text-primary); border-color: var(--border-default); }
-        .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--border-muted); }
-        .btn-sm { padding: var(--spacing-sm) var(--spacing-md); font-size: 12px; }
-        .badge { display: inline-flex; align-items: center; padding: var(--spacing-xs) var(--spacing-md); border-radius: var(--radius-full); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; }
-        .badge-success { background: var(--success-green-bg); color: var(--success-green); }
-        .badge-danger { background: var(--danger-red-bg); color: var(--danger-red); }
-        .badge-info { background: var(--primary-blue-light); color: var(--primary-blue); }
-        .badge-neutral { background: var(--bg-tertiary); color: var(--text-secondary); }
-        .badge-warning { background: var(--warning-yellow-bg); color: var(--warning-yellow); }
-        .spinner { border: 3px solid var(--bg-tertiary); border-top: 3px solid var(--primary-blue); border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .loading { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .empty-state { text-align: center; padding: var(--spacing-2xl); color: var(--text-secondary); }
-        .empty-state-icon { font-size: 48px; margin-bottom: var(--spacing-lg); opacity: 0.5; }
-        .text-mono { font-family: var(--font-mono); }
-        .text-success { color: var(--success-green); }
-        .text-danger { color: var(--danger-red); }
-        .text-warning { color: var(--warning-yellow); }
-        .text-secondary { color: var(--text-secondary); }
-        .fade-in { animation: fadeIn var(--transition-base) ease-in; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .slide-up { animation: slideUp var(--transition-slow) ease-out; }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); z-index: 9999; animation: fadeIn var(--transition-base) ease-in; }
-        .modal-overlay.active { display: flex; align-items: center; justify-content: center; }
-        .modal-container { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: var(--shadow-xl); animation: slideUp var(--transition-slow) ease-out; }
-        .modal-header { padding: var(--spacing-xl); border-bottom: 1px solid var(--border-default); display: flex; justify-content: space-between; align-items: center; }
-        .modal-title { font-size: 20px; font-weight: 600; color: var(--text-primary); }
-        .modal-body { padding: var(--spacing-xl); }
-        .modal-footer { padding: var(--spacing-xl); border-top: 1px solid var(--border-default); display: flex; justify-content: flex-end; gap: var(--spacing-md); }
-        .input-group { margin-bottom: var(--spacing-lg); }
-        .input-label { display: block; margin-bottom: var(--spacing-sm); color: var(--text-secondary); font-size: 13px; font-weight: 600; }
-        .input-field { width: 100%; padding: var(--spacing-md); background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; }
-        .input-field:focus { outline: none; border-color: var(--primary-blue); }
-        .toast { position: fixed; bottom: 20px; right: 20px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg); box-shadow: var(--shadow-xl); z-index: 10000; min-width: 300px; animation: slideInRight 0.3s ease-out; }
-        .toast.success { border-left: 4px solid var(--success-green); }
-        .toast.error { border-left: 4px solid var(--danger-red); }
-        @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-        .collection-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg); }
-        @media (max-width: 768px) {
-            .container { padding: var(--spacing-md); }
-            .stats-grid { grid-template-columns: 1fr; }
-            .nav-links { flex-direction: column; }
-            th, td { padding: var(--spacing-sm); font-size: 12px; }
-            .collection-form-grid { grid-template-columns: 1fr !important; }
+    </script>
+<style>
+        body {
+            background-color: #070b10;
+            color: #f8fafc;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0a0f14;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 10px;
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header fade-in">
-            <div>
-                <div style="display: flex; align-items: center; gap: var(--spacing-md);">
-                    <img src="/static/images/logo/alphaflow-logo-icon.svg" alt="AlphaFlow" style="height: 36px; width: auto;">
-                    <div>
-                        <h1 class="header-title" style="margin: 0;">
-                            <i class="bi bi-database"></i>
-                            数据管理
-                        </h1>
-                        <p class="header-subtitle">查看和管理系统采集的各种数据</p>
-                    </div>
-                </div>
-            </div>
-        </header>
-
-        <!-- Navigation -->
-        <nav class="nav-container slide-up">
-            <div class="nav-links">
-                <a href="/" class="nav-link">
-                    <i class="bi bi-house"></i> 首页
-                </a>
-                <a href="/dashboard" class="nav-link">
-                    <i class="bi bi-speedometer2"></i> Dashboard
-                </a>
-                <a href="/technical-signals" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> 技术信号
-                </a>
-                <a href="/paper_trading" class="nav-link">
-                    <i class="bi bi-journals"></i> 现货交易
-                </a>
-                <a href="/futures_trading" class="nav-link">
-                    <i class="bi bi-graph-up-arrow"></i> U本位合约
-                </a>
-                <a href="/coin_futures_trading" class="nav-link">
-                    <i class="bi bi-currency-bitcoin"></i> 币本位合约
-                </a>
-                <a href="/live_trading" class="nav-link">
-                    <i class="bi bi-currency-exchange"></i> 实盘合约
-                </a>
-                <a href="#" class="nav-link" style="opacity: 0.5; cursor: not-allowed;" onclick="event.preventDefault(); showToast('实盘现货功能开发中...', 'info')">
-                    <i class="bi bi-cart-check"></i> 实盘现货
-                </a>
-                <a href="/futures_review" class="nav-link">
-                    <i class="bi bi-journal-check"></i> 复盘(24H)
-                </a>
-<a href="/etf_data" class="nav-link">
-                    <i class="bi bi-pie-chart"></i> ETF 数据
-                </a>
-                <a href="/corporate_treasury" class="nav-link">
-                    <i class="bi bi-building"></i> 企业金库
-                </a>
-                <a href="/blockchain_gas" class="nav-link">
-                    <i class="bi bi-lightning-charge"></i> Gas统计
-                </a>
-                <a href="/data_management" class="nav-link active">
-                    <i class="bi bi-database"></i> 数据管理
-                </a>
-            </div>
-        </nav>
-
-        <!-- Data Collection Status -->
-        <div class="card slide-up">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="bi bi-activity"></i>
-                    数据采集情况
-                </h2>
-                <button class="btn btn-secondary btn-sm" onclick="loadCollectionStatus()">
-                    <i class="bi bi-arrow-clockwise"></i> 刷新
-                </button>
-            </div>
-            <div class="card-body">
-                <div class="stats-grid" id="collectionStatus">
-                    <div class="loading">
-                        <div class="spinner"></div>
-                        <div style="margin-top: var(--spacing-md);">加载中...</div>
-                    </div>
-                </div>
-            </div>
+<body class="font-body selection:bg-brand-primary/30">
+<!-- SideNavBar (Authority: JSON) -->
+<aside class="fixed left-0 top-0 h-full w-[240px] border-r border-slate-800 bg-[#0a0f14] font-mono text-sm tracking-tight flex flex-col py-6 z-50">
+<div class="px-6 mb-8">
+<h1 class="text-xl font-black tracking-tighter text-[#49f4c8]">NEURAL OBSIDIAN</h1>
+<p class="text-[10px] text-slate-500 uppercase tracking-widest mt-1">Quant Terminal</p>
+</div>
+<nav class="flex-1 px-3 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/dashboard">
+<span class="material-symbols-outlined text-lg">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/futures_trading">
+<span class="material-symbols-outlined text-lg">show_chart</span>
+<span>Futures</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/live_trading">
+<span class="material-symbols-outlined text-lg">precision_manufacturing</span>
+<span>Live Trading</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/futures_review">
+<span class="material-symbols-outlined text-lg">history_edu</span>
+<span>Review</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/technical-signals">
+<span class="material-symbols-outlined text-lg">sensors</span>
+<span>Signals</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/spot_trading">
+<span class="material-symbols-outlined text-lg">currency_exchange</span>
+<span>现货交易</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/etf_data">
+<span class="material-symbols-outlined text-lg">candlestick_chart</span>
+<span>ETF 数据</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/blockchain_gas">
+<span class="material-symbols-outlined text-lg">local_gas_station</span>
+<span>Gas 监控</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-[#49f4c8] bg-[#49f4c8]/10 border-r-2 border-[#49f4c8] font-bold transition-colors duration-200 rounded-l" href="/data_management">
+<span class="material-symbols-outlined text-lg">storage</span>
+<span>数据管理</span>
+</a>
+</nav>
+<div class="mt-auto px-3 pt-6 border-t border-slate-800">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 transition-colors duration-200 rounded" href="/system-settings">
+<span class="material-symbols-outlined text-lg">settings</span>
+<span>Settings</span>
+</a>
+</div>
+</aside>
+<!-- TopNavBar (Authority: JSON) -->
+<header class="fixed top-0 right-0 left-[240px] border-b border-slate-800 bg-[#070b10]/80 backdrop-blur-md flex justify-between items-center h-16 px-6 z-40 font-mono uppercase tracking-widest text-xs">
+<div class="text-lg font-bold text-slate-100 flex items-center gap-2">
+<span class="material-symbols-outlined text-[#49f4c8]">database</span>
+            数据管理
         </div>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 px-4 py-1.5 rounded-md text-[#49f4c8] hover:bg-[#49f4c8]/20 transition-all active:scale-95">
+<span class="material-symbols-outlined text-sm">refresh</span>
+                刷新
+            </button>
+<div class="h-4 w-px bg-slate-800 mx-2"></div>
+<button class="p-2 text-slate-400 hover:text-[#49f4c8] transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-[#49f4c8] rounded-full border border-brand-bg"></span>
+</button>
+<button class="p-2 text-slate-400 hover:text-[#49f4c8] transition-colors">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-[240px] pt-24 p-8 min-h-screen">
+<!-- Header Bento Section -->
+<div class="grid grid-cols-12 gap-6 mb-8">
+<!-- 采集服务状态 -->
+<div class="col-span-12 lg:col-span-7 bg-brand-surface border border-slate-800 rounded-xl p-6">
+<div class="flex items-center justify-between mb-6">
+<h2 class="font-headline text-lg font-bold tracking-tight text-slate-100 flex items-center gap-2">
+<span class="w-1.5 h-4 bg-brand-primary rounded-full"></span>
+                        采集服务状态
+                    </h2>
+<span id="service-live-status" class="text-[10px] text-slate-500 font-mono tracking-widest">LIVE STATUS: --</span>
+</div>
+<div id="service-status-grid" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+<!-- Status Badge -->
+<div class="bg-brand-bg border border-slate-800 p-3 rounded-lg flex flex-col gap-2 group hover:border-brand-primary/30 transition-colors">
+<div class="flex items-center justify-between">
+<span class="text-xs text-slate-400">K线采集</span>
+<div class="flex items-center gap-1.5">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-brand-primary"></span>
+</span>
+</div>
+</div>
+<div class="text-[10px] font-mono text-brand-primary opacity-70">运行中</div>
+</div>
+<div class="bg-brand-bg border border-slate-800 p-3 rounded-lg flex flex-col gap-2 group hover:border-brand-primary/30 transition-colors">
+<div class="flex items-center justify-between">
+<span class="text-xs text-slate-400">ETF数据</span>
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-brand-primary"></span>
+</span>
+</div>
+<div class="text-[10px] font-mono text-brand-primary opacity-70">运行中</div>
+</div>
+<div class="bg-brand-bg border border-slate-800 p-3 rounded-lg flex flex-col gap-2 group hover:border-brand-primary/30 transition-colors">
+<div class="flex items-center justify-between">
+<span class="text-xs text-slate-400">Gas数据</span>
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-brand-primary"></span>
+</span>
+</div>
+<div class="text-[10px] font-mono text-brand-primary opacity-70">运行中</div>
+</div>
+<div class="bg-brand-bg border border-slate-800 p-3 rounded-lg flex flex-col gap-2 group hover:border-brand-primary/30 transition-colors">
+<div class="flex items-center justify-between">
+<span class="text-xs text-slate-400">价格缓存</span>
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-brand-primary"></span>
+</span>
+</div>
+<div class="text-[10px] font-mono text-brand-primary opacity-70">运行中</div>
+</div>
+<div class="bg-brand-bg border border-slate-800 p-3 rounded-lg flex flex-col gap-2 group hover:border-brand-primary/30 transition-colors">
+<div class="flex items-center justify-between">
+<span class="text-xs text-slate-400">信号评分</span>
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-brand-primary"></span>
+</span>
+</div>
+<div class="text-[10px] font-mono text-brand-primary opacity-70">运行中</div>
+</div>
+</div>
+</div>
+<!-- Stats Summary Cards -->
+<div class="col-span-12 lg:col-span-5 grid grid-cols-2 gap-4">
+<div class="bg-brand-surface border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+<span class="text-[10px] font-mono text-slate-500 uppercase tracking-widest">数据库表总数</span>
+<div>
+<div id="stat-total-tables" class="text-3xl font-headline font-bold text-slate-100">--</div>
+<div class="text-[10px] text-brand-primary mt-1">Database Tables</div>
+</div>
+</div>
+<div class="bg-brand-surface border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+<span class="text-[10px] font-mono text-slate-500 uppercase tracking-widest">总数据量</span>
+<div>
+<div id="stat-total-size" class="text-3xl font-headline font-bold text-slate-100">--</div>
+<div class="text-[10px] text-brand-primary mt-1">Total Storage</div>
+</div>
+</div>
+<div class="col-span-2 bg-brand-surface border border-slate-800 rounded-xl p-5 flex items-center justify-between">
+<div>
+<span class="text-[10px] font-mono text-slate-500 uppercase tracking-widest block mb-1">最大表统计</span>
+<div id="stat-largest-table-name" class="text-lg font-headline font-bold text-slate-100">--</div>
+</div>
+<div class="text-right">
+<div id="stat-largest-table-size" class="text-xl font-mono font-bold text-brand-primary">--</div>
+<div id="stat-largest-table-records" class="text-[10px] text-slate-500">-- Records</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Table Section -->
+<div class="bg-brand-surface border border-slate-800 rounded-xl overflow-hidden flex flex-col">
+<div class="p-6 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+<h2 class="font-headline text-lg font-bold tracking-tight text-slate-100">数据库表统计</h2>
+<div class="flex items-center gap-3">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">search</span>
+<input id="table-search-input" class="bg-brand-bg border border-slate-800 rounded-md py-2 pl-9 pr-4 text-xs font-mono text-slate-300 focus:border-brand-primary focus:ring-0 w-64 transition-all" placeholder="搜索表名..." type="text"/>
+</div>
+<button class="bg-brand-bg border border-slate-800 p-2 rounded-md hover:border-slate-600 text-slate-400">
+<span class="material-symbols-outlined text-sm">filter_list</span>
+</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left font-mono text-xs border-collapse">
+<thead>
+<tr class="bg-brand-bg/50 border-b border-slate-800">
+<th class="px-6 py-4 font-bold text-slate-500 uppercase tracking-tighter">表名</th>
+<th class="px-6 py-4 font-bold text-slate-500 uppercase tracking-tighter text-center">状态</th>
+<th class="px-6 py-4 font-bold text-slate-500 uppercase tracking-tighter text-right">记录数</th>
+<th class="px-6 py-4 font-bold text-slate-500 uppercase tracking-tighter text-right">占用空间</th>
+<th class="px-6 py-4 font-bold text-slate-500 uppercase tracking-tighter">最新数据时间</th>
+<th class="px-6 py-4 font-bold text-slate-500 uppercase tracking-tighter">最旧数据时间</th>
+<th class="px-6 py-4 font-bold text-slate-500 uppercase tracking-tighter text-right">操作</th>
+</tr>
+</thead>
+<tbody id="db-tables-tbody" class="divide-y divide-slate-800/50">
+<!-- Table Row 1 -->
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4 text-slate-200 font-bold">binance_futures_agg_trades</td>
+<td class="px-6 py-4 text-center">
+<span class="px-2 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary text-[10px] border border-brand-primary/20">存在</span>
+</td>
+<td class="px-6 py-4 text-right text-slate-300">1,248,592,104</td>
+<td class="px-6 py-4 text-right text-slate-300">382,410 MB</td>
+<td class="px-6 py-4 text-slate-400">2023-11-24 14:22:01</td>
+<td class="px-6 py-4 text-slate-500 italic">2021-01-01 00:00:00</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-2">
+<button class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] transition-colors">查看样本</button>
+<button class="px-3 py-1 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded text-[10px] transition-colors border border-red-900/50">清理</button>
+</div>
+</td>
+</tr>
+<!-- Table Row 2 -->
+<tr class="bg-brand-bg/10 hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4 text-slate-200 font-bold">signal_score_history_v2</td>
+<td class="px-6 py-4 text-center">
+<span class="px-2 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary text-[10px] border border-brand-primary/20">存在</span>
+</td>
+<td class="px-6 py-4 text-right text-slate-300">84,120,553</td>
+<td class="px-6 py-4 text-right text-slate-300">12,840 MB</td>
+<td class="px-6 py-4 text-slate-400">2023-11-24 14:21:55</td>
+<td class="px-6 py-4 text-slate-500 italic">2022-06-15 09:00:00</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-2">
+<button class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] transition-colors">查看样本</button>
+<button class="px-3 py-1 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded text-[10px] transition-colors border border-red-900/50">清理</button>
+</div>
+</td>
+</tr>
+<!-- Table Row 3 -->
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4 text-slate-200 font-bold">funding_rates_historical</td>
+<td class="px-6 py-4 text-center">
+<span class="px-2 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary text-[10px] border border-brand-primary/20">存在</span>
+</td>
+<td class="px-6 py-4 text-right text-slate-300">15,442,100</td>
+<td class="px-6 py-4 text-right text-slate-300">4,210 MB</td>
+<td class="px-6 py-4 text-slate-400">2023-11-24 12:00:00</td>
+<td class="px-6 py-4 text-slate-500 italic">2019-12-30 16:00:00</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-2">
+<button class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] transition-colors">查看样本</button>
+<button class="px-3 py-1 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded text-[10px] transition-colors border border-red-900/50">清理</button>
+</div>
+</td>
+</tr>
+<!-- Table Row 4 (Not exists case) -->
+<tr class="hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4 text-slate-500 font-bold">experimental_strategy_logs</td>
+<td class="px-6 py-4 text-center">
+<span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-500 text-[10px] border border-slate-700">不存在</span>
+</td>
+<td class="px-6 py-4 text-right text-slate-600">0</td>
+<td class="px-6 py-4 text-right text-slate-600">0 MB</td>
+<td class="px-6 py-4 text-slate-600">—</td>
+<td class="px-6 py-4 text-slate-600">—</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-2">
+<button class="px-3 py-1 bg-slate-800/40 text-slate-600 rounded text-[10px] cursor-not-allowed">查看样本</button>
+<button class="px-3 py-1 bg-slate-800/40 text-slate-600 rounded text-[10px] cursor-not-allowed border border-slate-800">清理</button>
+</div>
+</td>
+</tr>
+<!-- Table Row 5 -->
+<tr class="bg-brand-bg/10 hover:bg-slate-800/20 transition-colors">
+<td class="px-6 py-4 text-slate-200 font-bold">gas_oracle_hourly_archive</td>
+<td class="px-6 py-4 text-center">
+<span class="px-2 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary text-[10px] border border-brand-primary/20">存在</span>
+</td>
+<td class="px-6 py-4 text-right text-slate-300">2,421,900</td>
+<td class="px-6 py-4 text-right text-slate-300">890 MB</td>
+<td class="px-6 py-4 text-slate-400">2023-11-24 14:00:00</td>
+<td class="px-6 py-4 text-slate-500 italic">2023-01-01 00:00:00</td>
+<td class="px-6 py-4 text-right">
+<div class="flex items-center justify-end gap-2">
+<button class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] transition-colors">查看样本</button>
+<button class="px-3 py-1 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded text-[10px] transition-colors border border-red-900/50">清理</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-4 bg-brand-bg/30 border-t border-slate-800 flex items-center justify-between font-mono text-[10px] text-slate-500 uppercase tracking-widest">
+<div id="table-footer-count">Showing 0 tables</div>
+<div class="flex items-center gap-2">
+<button class="px-2 py-1 bg-brand-surface border border-slate-800 rounded disabled:opacity-50" disabled="">PREV</button>
+<div class="px-2 py-1 bg-brand-primary text-brand-bg rounded font-bold">1</div>
+<button class="px-2 py-1 bg-brand-surface border border-slate-800 rounded">2</button>
+<button class="px-2 py-1 bg-brand-surface border border-slate-800 rounded">3</button>
+<button class="px-2 py-1 bg-brand-surface border border-slate-800 rounded">NEXT</button>
+</div>
+</div>
+</div>
+<!-- System Logs / Activity Summary -->
+<div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="bg-brand-surface border border-slate-800 rounded-xl p-6">
+<h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">history</span>
+                    近期清理记录
+                </h3>
+<div class="space-y-3">
+<div class="flex items-center justify-between py-2 border-b border-slate-800/50">
+<span class="text-xs text-slate-200">ohlcv_1m_temp_cache</span>
+<div class="text-right">
+<span class="text-[10px] text-brand-primary font-mono block">COMPLETED</span>
+<span class="text-[10px] text-slate-500 font-mono italic">2 hours ago • Removed 1.2M rows</span>
+</div>
+</div>
+<div class="flex items-center justify-between py-2 border-b border-slate-800/50">
+<span class="text-xs text-slate-200">raw_tick_logs_archive_2022</span>
+<div class="text-right">
+<span class="text-[10px] text-brand-primary font-mono block">COMPLETED</span>
+<span class="text-[10px] text-slate-500 font-mono italic">1 day ago • Compressed 42GB</span>
+</div>
+</div>
+</div>
+</div>
+<div class="bg-brand-surface border border-slate-800 rounded-xl p-6 relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-brand-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+<h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">settings_suggest</span>
+                    系统维护建议
+                </h3>
+<div class="space-y-4">
+<div class="flex gap-4 p-3 bg-brand-bg rounded-lg border border-slate-800">
+<span class="material-symbols-outlined text-yellow-500">warning</span>
+<div>
+<div class="text-xs font-bold text-slate-200">表索引碎片率过高</div>
+<p class="text-[10px] text-slate-500 mt-1">`agg_trades` 表索引碎片率达 34%，建议在非交易繁忙时段执行 OPTIMIZE TABLE 操作。</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- FAB for Quick Actions (Authority: Shell Logic - Should be suppressed on management, but adding for UI completeness if necessary as a "New Task" trigger) -->
+<!-- Suppressed based on "Contextual FAB Suppression" rule for details/transactional screens -->
 
-        <!-- Data Collection -->
-        <div class="card slide-up">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="bi bi-download"></i>
-                    数据采集
-                </h2>
-            </div>
-            <div class="card-body">
-                <form id="dataCollectionForm" onsubmit="startDataCollection(event)">
-                    <!-- 紧凑布局：两列设计（响应式） -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-lg); margin-bottom: var(--spacing-md);" class="collection-form-grid">
-                        <!-- 左列：基本信息 -->
-                        <div>
-                            <div class="input-group" style="margin-bottom: var(--spacing-md);">
-                                <label class="input-label" style="font-size: 13px; margin-bottom: var(--spacing-xs);">
-                                    <i class="bi bi-currency-exchange"></i> 交易对
-                                </label>
-                                <input type="text" id="collectionSymbols" class="input-field" 
-                                       placeholder="BTC/USDT,ETH/USDT" 
-                                       required>
-                            </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-sm);">
-                                <div class="input-group" style="margin-bottom: 0;">
-                                    <label class="input-label" style="font-size: 13px; margin-bottom: var(--spacing-xs);">
-                                        <i class="bi bi-calendar-event"></i> 开始时间
-                                    </label>
-                                    <input type="datetime-local" id="collectionStartTime" class="input-field" required>
-                                </div>
-                                <div class="input-group" style="margin-bottom: 0;">
-                                    <label class="input-label" style="font-size: 13px; margin-bottom: var(--spacing-xs);">
-                                        <i class="bi bi-calendar-check"></i> 结束时间
-                                    </label>
-                                    <input type="datetime-local" id="collectionEndTime" class="input-field" required>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- 右列：选项 -->
-                        <div>
-                            <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: var(--spacing-sm); padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-sm); border-left: 2px solid var(--info-blue);">
-                                <i class="bi bi-info-circle"></i> 默认采集：价格数据 + K线数据（1m, 5m, 15m, 1h, 1d）
-                            </div>
-                            <div style="display: flex; flex-direction: column; gap: var(--spacing-sm);">
-                                <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer; padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); transition: all var(--transition-base);">
-                                    <input type="checkbox" id="collectFutures" style="width: 18px; height: 18px; cursor: pointer; flex-shrink: 0;" onchange="toggleFuturesTimeframes()">
-                                    <div style="flex: 1;">
-                                        <div style="display: flex; align-items: center; gap: var(--spacing-xs);">
-                                            <i class="bi bi-graph-up-arrow" style="color: var(--secondary-purple); font-size: 14px;"></i>
-                                            <span style="color: var(--text-primary); font-size: 13px;">同时采集合约数据</span>
-                                        </div>
-                                        <p style="color: var(--text-secondary); font-size: 11px; margin: var(--spacing-xs) 0 0 0; line-height: 1.4;">
-                                            币安合约K线数据
-                                        </p>
-                                    </div>
-                                </label>
-                                <!-- 合约数据时间周期选择 -->
-                                <div id="futuresTimeframesContainer" style="display: none; padding: var(--spacing-sm); background: var(--bg-tertiary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); margin-left: 26px;">
-                                    <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: var(--spacing-xs);">
-                                        <i class="bi bi-clock"></i> 选择合约K线周期：
-                                    </div>
-                                    <div style="display: flex; flex-wrap: wrap; gap: var(--spacing-xs);">
-                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 8px; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); font-size: 12px;">
-                                            <input type="checkbox" id="futuresTf5m" checked style="width: 14px; height: 14px;">
-                                            <span>5m</span>
-                                        </label>
-                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 8px; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); font-size: 12px;">
-                                            <input type="checkbox" id="futuresTf15m" checked style="width: 14px; height: 14px;">
-                                            <span>15m</span>
-                                        </label>
-                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 8px; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); font-size: 12px;">
-                                            <input type="checkbox" id="futuresTf1h" checked style="width: 14px; height: 14px;">
-                                            <span>1h</span>
-                                        </label>
-                                        <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 4px 8px; background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); font-size: 12px;">
-                                            <input type="checkbox" id="futuresTf1d" checked style="width: 14px; height: 14px;">
-                                            <span>1d</span>
-                                        </label>
-                                    </div>
-                                </div>
-                                <label style="display: flex; align-items: center; gap: var(--spacing-sm); cursor: pointer; padding: var(--spacing-sm); background: var(--bg-secondary); border-radius: var(--radius-sm); border: 1px solid var(--border-default); transition: all var(--transition-base);">
-                                    <input type="checkbox" id="saveToConfig" style="width: 18px; height: 18px; cursor: pointer; flex-shrink: 0;">
-                                    <div style="flex: 1;">
-                                        <div style="display: flex; align-items: center; gap: var(--spacing-xs);">
-                                            <i class="bi bi-file-earmark-text" style="color: var(--success-green); font-size: 14px;"></i>
-                                            <span style="color: var(--text-primary); font-size: 13px;">保存到配置文件</span>
-                                        </div>
-                                        <p style="color: var(--text-secondary); font-size: 11px; margin: var(--spacing-xs) 0 0 0; line-height: 1.4;">
-                                            自动更新 config.yaml
-                                        </p>
-                                    </div>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 操作按钮 -->
-                    <div style="display: flex; gap: var(--spacing-sm); padding-top: var(--spacing-md); border-top: 1px solid var(--border-default);">
-                        <button type="submit" class="btn btn-primary" id="collectionSubmitBtn" style="flex: 1;">
-                            <i class="bi bi-play-circle"></i>
-                            开始采集
-                        </button>
-                        <button type="button" class="btn btn-secondary" onclick="resetCollectionForm()">
-                            <i class="bi bi-arrow-counterclockwise"></i>
-                            重置
-                        </button>
-                    </div>
-
-                    <!-- 进度显示区域（紧凑版） -->
-                    <div id="collectionProgress" style="margin-top: var(--spacing-md); display: none;">
-                        <div style="background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-md);">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm);">
-                                <div style="display: flex; align-items: center; gap: var(--spacing-xs);">
-                                    <i class="bi bi-activity" style="color: var(--primary-blue); font-size: 14px;"></i>
-                                    <span style="font-size: 13px; font-weight: 600; color: var(--text-primary);">采集进度</span>
-                                </div>
-                                <span id="collectionProgressText" style="font-size: 14px; font-weight: 700; color: var(--primary-blue); font-family: var(--font-mono);">0%</span>
-                            </div>
-                            <div style="background: var(--bg-primary); border-radius: var(--radius-full); height: 8px; overflow: hidden; margin-bottom: var(--spacing-sm);">
-                                <div id="collectionProgressBar" style="background: linear-gradient(90deg, var(--primary-blue), var(--secondary-purple)); height: 100%; width: 0%; transition: width 0.3s ease;"></div>
-                            </div>
-                            <div id="collectionStatusText" style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; min-height: 18px;"></div>
-                        </div>
-                    </div>
-
-                    <!-- 结果显示区域 -->
-                    <div id="collectionResult" style="margin-top: var(--spacing-md);"></div>
-                </form>
-            </div>
-        </div>
-
-        <!-- Data Import -->
-        <div class="card slide-up">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="bi bi-upload"></i>
-                    数据导入
-                </h2>
-            </div>
-            <div class="card-body">
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: var(--spacing-xl);">
-                    <!-- ETF数据导入 -->
-                    <div style="border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg);">
-                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: var(--spacing-md); display: flex; align-items: center; gap: var(--spacing-sm);">
-                            <i class="bi bi-pie-chart"></i>
-                            ETF数据导入
-                        </h3>
-                        <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: var(--spacing-md);">
-                            CSV格式: Date,Ticker,NetInflow,BTC_Holdings (或 ETH_Holdings)<br>
-                            <span style="font-size: 11px; color: var(--text-tertiary);">参考 scripts/etf/interactive_input.py 的简化格式</span>
-                        </p>
-                        <div style="margin-bottom: var(--spacing-md);">
-                            <div class="input-group" style="margin-bottom: var(--spacing-sm);">
-                                <label class="input-label">资产类型</label>
-                                <select id="etfAssetType" class="input-field" style="padding: var(--spacing-sm);" onchange="updateETFTemplateButton()">
-                                    <option value="BTC">BTC (比特币)</option>
-                                    <option value="ETH">ETH (以太坊)</option>
-                                </select>
-                            </div>
-                            <button class="btn btn-secondary btn-sm" id="etfTemplateButton" onclick="downloadETFTemplate()" style="width: 100%;">
-                                <i class="bi bi-download"></i>
-                                下载BTC模板文件
-                            </button>
-                        </div>
-                        <form id="etfImportForm" onsubmit="importETFData(event)">
-                            <div class="input-group">
-                                <label class="input-label">选择CSV文件</label>
-                                <input type="file" id="etfFile" accept=".csv" required class="input-field" style="padding: var(--spacing-sm);">
-                            </div>
-                            <button type="submit" class="btn btn-primary" style="width: 100%;">
-                                <i class="bi bi-upload"></i>
-                                导入ETF数据
-                            </button>
-                        </form>
-                        <div id="etfImportResult" style="margin-top: var(--spacing-md);"></div>
-                    </div>
-                    
-                    <!-- 企业金库数据导入 -->
-                    <div style="border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: var(--spacing-lg);">
-                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: var(--spacing-md); display: flex; align-items: center; gap: var(--spacing-sm);">
-                            <i class="bi bi-building"></i>
-                            企业金库数据导入
-                        </h3>
-                        <p style="color: var(--text-secondary); font-size: 12px; margin-bottom: var(--spacing-md);">
-                            支持两种导入格式：<br>
-                            <span style="font-size: 11px; color: var(--text-tertiary);">1. 持仓数据（文本格式，参考 import_template.txt）</span><br>
-                            <span style="font-size: 11px; color: var(--text-tertiary);">2. 融资数据（CSV格式）</span>
-                        </p>
-                        <div style="margin-bottom: var(--spacing-md); display: flex; gap: var(--spacing-sm);">
-                            <button class="btn btn-secondary btn-sm" onclick="downloadTreasuryTemplate()" style="flex: 1;">
-                                <i class="bi bi-download"></i>
-                                持仓模板
-                            </button>
-                            <button class="btn btn-secondary btn-sm" onclick="downloadTreasuryFinancingTemplate()" style="flex: 1;">
-                                <i class="bi bi-download"></i>
-                                融资模板
-                            </button>
-                        </div>
-                        <form id="treasuryImportForm" onsubmit="importTreasuryData(event)">
-                            <div class="input-group">
-                                <label class="input-label">选择文件（.txt 或 .csv）</label>
-                                <input type="file" id="treasuryFile" accept=".txt,.csv" required class="input-field" style="padding: var(--spacing-sm);">
-                            </div>
-                            <div class="input-group">
-                                <label class="input-label">数据日期 (可选)</label>
-                                <input type="date" id="treasuryDate" class="input-field" style="padding: var(--spacing-sm);">
-                            </div>
-                            <button type="submit" class="btn btn-primary" style="width: 100%;">
-                                <i class="bi bi-upload"></i>
-                                导入企业金库数据
-                            </button>
-                        </form>
-                        <div id="treasuryImportResult" style="margin-top: var(--spacing-md);"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Data Statistics Summary -->
-        <div class="card slide-up">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="bi bi-bar-chart"></i>
-                    数据统计概览
-                </h2>
-                <button class="btn btn-secondary btn-sm" onclick="refreshStatistics()">
-                    <i class="bi bi-arrow-clockwise"></i> 刷新
-                </button>
-            </div>
-            <div class="card-body">
-                <div class="stats-grid" id="summaryStats">
-                    <div class="stat-card">
-                        <div class="stat-label">总记录数</div>
-                        <div class="stat-value" id="totalRecords">-</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">总数据表</div>
-                        <div class="stat-value" id="totalTables">-</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-label">总存储大小</div>
-                        <div class="stat-value" id="totalSize">-</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Data Tables -->
-        <div class="card slide-up">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="bi bi-table"></i>
-                    数据表详情
-                </h2>
-                <div style="display: flex; gap: var(--spacing-md);">
-                    <input type="text" id="searchInput" class="input-field" placeholder="搜索表名或描述..." style="width: 300px; padding: var(--spacing-sm) var(--spacing-md);" onkeyup="filterTables()">
-                    <button class="btn btn-secondary btn-sm" onclick="refreshStatistics()">
-                        <i class="bi bi-arrow-clockwise"></i> 刷新
-                    </button>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="table-container">
-                    <table id="dataTable">
-                        <thead>
-                            <tr>
-                                <th>表名</th>
-                                <th>描述</th>
-                                <th>记录数</th>
-                                <th>存储大小</th>
-                                <th>最新数据</th>
-                                <th>最早数据</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tableBody">
-                            <tr>
-                                <td colspan="7" class="loading">
-                                    <div class="spinner"></div>
-                                    <div style="margin-top: var(--spacing-md);">加载中...</div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- Cleanup Modal -->
-        <div class="modal-overlay" id="cleanupModal">
-            <div class="modal-container">
-                <div class="modal-header">
-                    <h3 class="modal-title">
-                        <i class="bi bi-trash"></i>
-                        清理旧数据
-                    </h3>
-                    <button class="btn btn-ghost btn-sm" onclick="closeCleanupModal()">
-                        <i class="bi bi-x-lg"></i>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div class="input-group">
-                        <label class="input-label">表名</label>
-                        <input type="text" id="cleanupTableName" class="input-field" readonly>
-                    </div>
-                    <div class="input-group">
-                        <label class="input-label">保留天数</label>
-                        <input type="number" id="cleanupDays" class="input-field" value="30" min="1" max="365">
-                        <p style="margin-top: var(--spacing-sm); color: var(--text-secondary); font-size: 12px;">
-                            将删除超过指定天数的旧数据，保留最近N天的数据
-                        </p>
-                    </div>
-                    <div style="background: var(--warning-yellow-bg); border: 1px solid var(--warning-yellow); border-radius: var(--radius-md); padding: var(--spacing-md); margin-top: var(--spacing-lg);">
-                        <p style="color: var(--warning-yellow); font-size: 13px; margin: 0;">
-                            <i class="bi bi-exclamation-triangle"></i>
-                            <strong>警告：</strong>此操作不可撤销，请谨慎操作！
-                        </p>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" onclick="closeCleanupModal()">取消</button>
-                    <button class="btn btn-danger" onclick="confirmCleanup()">
-                        <i class="bi bi-trash"></i>
-                        确认清理
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Sample Data Modal -->
-        <div class="modal-overlay" id="sampleModal">
-            <div class="modal-container" style="max-width: 900px;">
-                <div class="modal-header">
-                    <h3 class="modal-title">
-                        <i class="bi bi-eye"></i>
-                        样本数据 - <span id="sampleTableName"></span>
-                    </h3>
-                    <button class="btn btn-ghost btn-sm" onclick="closeSampleModal()">
-                        <i class="bi bi-x-lg"></i>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div class="table-container">
-                        <table id="sampleTable">
-                            <thead id="sampleTableHead"></thead>
-                            <tbody id="sampleTableBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
+<!-- Sample Data Modal -->
+<div id="sample-modal" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm hidden">
+  <div class="bg-brand-surface border border-slate-700 rounded-xl w-[90vw] max-w-4xl max-h-[80vh] flex flex-col shadow-2xl">
+    <div class="flex items-center justify-between p-4 border-b border-slate-800">
+      <h3 id="sample-modal-title" class="font-headline text-sm font-bold text-slate-100">样本数据</h3>
+      <button id="sample-modal-close" class="p-1 text-slate-400 hover:text-slate-100 transition-colors">
+        <span class="material-symbols-outlined text-lg">close</span>
+      </button>
     </div>
+    <div id="sample-modal-body" class="overflow-auto p-4 font-mono text-xs text-slate-300 custom-scrollbar flex-1">
+      <div class="text-slate-500">加载中...</div>
+    </div>
+  </div>
+</div>
 
-    <script>
-        let statisticsData = null;
-        let currentCleanupTable = null;
+<script>
+(function () {
+    'use strict';
 
-        // 页面加载时获取数据
-        document.addEventListener('DOMContentLoaded', function() {
-            loadCollectionStatus();
-            loadStatistics();
-            
-            // 设置默认时间范围（最近7天）
-            const endTime = new Date();
-            const startTime = new Date();
-            startTime.setDate(startTime.getDate() - 7);
-            
-            document.getElementById('collectionStartTime').value = formatDateTimeLocal(startTime);
-            document.getElementById('collectionEndTime').value = formatDateTimeLocal(endTime);
-            
-            // 数据类型已移除，默认采集价格和K线数据
-        });
+    const API_PREFIX = '/api/data-management';
+    let allTableRows = [];
 
-        // 加载数据采集情况
-        async function loadCollectionStatus() {
-            const container = document.getElementById('collectionStatus');
-            container.innerHTML = '<div class="loading"><div class="spinner"></div><div style="margin-top: var(--spacing-md);">加载中...</div></div>';
-            
-            try {
-                const response = await fetch('/api/data-management/collection-status');
-                const result = await response.json();
-                
-                if (result.success && result.data) {
-                    container.innerHTML = result.data.map(item => {
-                        // 企业金库数据和ETF数据是手动导入的，状态显示需要特殊处理
-                        let statusBadge = '';
-                        if (item.type === '企业金库数据' || item.type === 'ETF数据') {
-                            statusBadge = item.status === 'active' 
-                                ? '<span class="badge badge-success">已导入</span>'
-                                : item.status === 'warning'
-                                ? '<span class="badge badge-warning">数据较旧</span>'
-                                : item.status === 'inactive'
-                                ? '<span class="badge badge-neutral">未导入</span>'
-                                : '<span class="badge badge-danger">错误</span>';
-                        } else {
-                            statusBadge = item.status === 'active' 
-                                ? '<span class="badge badge-success">运行中</span>'
-                                : item.status === 'warning'
-                                ? '<span class="badge badge-warning">延迟</span>'
-                                : item.status === 'inactive'
-                                ? '<span class="badge badge-neutral">未运行</span>'
-                                : '<span class="badge badge-danger">错误</span>';
-                        }
-                        
-                        const latestTime = item.latest_time ? formatDateTime(item.latest_time) : '无数据';
-                        const count = formatNumber(item.count || 0);
-                        
-                        let extraInfo = '';
-                        if (item.symbol_count) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">交易对: ${item.symbol_count}</div>`;
-                        if (item.exchange_count) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">交易所: ${item.exchange_count}</div>`;
-                        if (item.etf_count) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">ETF数量: ${item.etf_count}</div>`;
-                        if (item.company_count) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">公司数量: ${item.company_count}</div>`;
-                        // Hyperliquid聪明钱统计
-                        if (item.wallet_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">钱包: ${item.wallet_count}</div>`;
-                        if (item.trader_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">交易者: ${item.trader_count}</div>`;
-                        if (item.monitored_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">监控中: ${item.monitored_count}</div>`;
-                        if (item.coin_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">币种: ${item.coin_count}</div>`;
-                        // 链上聪明钱统计
-                        if (item.address_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">地址: ${item.address_count}</div>`;
-                        if (item.token_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">代币: ${item.token_count}</div>`;
-                        if (item.blockchain_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">链: ${item.blockchain_count}</div>`;
-                        if (item.signal_count !== undefined) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">活跃信号: ${item.signal_count}</div>`;
-                        if (item.latest_signal_time) extraInfo += `<div style="font-size: 11px; color: var(--text-tertiary); margin-top: 4px;">最新信号: ${formatDateTime(item.latest_signal_time)}</div>`;
-                        
-                        return `
-                            <div class="stat-card">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm);">
-                                    <div class="stat-label" style="margin: 0;">
-                                        <i class="bi ${item.icon}"></i> ${item.type}
-                                    </div>
-                                    ${statusBadge}
-                                </div>
-                                <div class="stat-value" style="font-size: 24px;">${count}</div>
-                                <div style="font-size: 12px; color: var(--text-secondary); margin-top: var(--spacing-xs);">
-                                    最新: ${latestTime}
-                                </div>
-                                ${extraInfo}
-                            </div>
-                        `;
-                    }).join('');
-                } else {
-                    container.innerHTML = '<div class="empty-state">加载失败</div>';
-                }
-            } catch (error) {
-                console.error('加载数据采集情况失败:', error);
-                container.innerHTML = '<div class="empty-state">加载失败: ' + error.message + '</div>';
-            }
+    // ---- Utility helpers ----
+
+    function formatSize(mb) {
+        if (mb == null) return '--';
+        if (mb >= 1024) return (mb / 1024).toFixed(2) + ' GB';
+        return mb.toFixed(2) + ' MB';
+    }
+
+    function formatCount(n) {
+        if (n == null) return '--';
+        return Number(n).toLocaleString();
+    }
+
+    function formatTime(t) {
+        if (!t) return '--';
+        return String(t).replace('T', ' ').substring(0, 19);
+    }
+
+    // ---- Service status grid ----
+
+    function renderServiceStatus(services) {
+        const grid = document.getElementById('service-status-grid');
+        if (!grid) return;
+
+        if (!services || services.length === 0) {
+            grid.innerHTML = '<div class="text-xs text-slate-500 col-span-5">无法获取服务状态</div>';
+            document.getElementById('service-live-status').textContent = 'LIVE STATUS: --';
+            return;
         }
 
-        // 加载统计数据
-        async function loadStatistics() {
-            const tableBody = document.getElementById('tableBody');
-            tableBody.innerHTML = '<tr><td colspan="7" class="loading"><div class="spinner"></div><div style="margin-top: var(--spacing-md);">加载中...</div></td></tr>';
-            
-            try {
-                const response = await fetch('/api/data-management/statistics');
-                const result = await response.json();
-                
-                if (result.success) {
-                    statisticsData = result.data;
-                    
-                    // 更新汇总统计
-                    document.getElementById('totalRecords').textContent = formatNumber(result.data.summary.total_records);
-                    document.getElementById('totalTables').textContent = result.data.summary.total_tables;
-                    document.getElementById('totalSize').textContent = result.data.summary.total_size_mb ? `${result.data.summary.total_size_mb.toFixed(2)} MB` : '0 MB';
-                    
-                    // 渲染表格
-                    renderTable(result.data.tables);
-                } else {
-                    tableBody.innerHTML = '<tr><td colspan="7" class="empty-state">加载失败</td></tr>';
-                }
-            } catch (error) {
-                console.error('加载统计数据失败:', error);
-                tableBody.innerHTML = '<tr><td colspan="7" class="empty-state">加载失败: ' + error.message + '</td></tr>';
-            }
-        }
+        const onlineCount = services.filter(s => s.running || s.status === 'running').length;
+        document.getElementById('service-live-status').textContent =
+            'LIVE STATUS: ' + onlineCount + '/' + services.length + ' ONLINE';
 
-        // 渲染表格
-        function renderTable(tables) {
-            const tableBody = document.getElementById('tableBody');
-            
-            if (!tables || tables.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无数据</td></tr>';
-                return;
-            }
-            
-            tableBody.innerHTML = tables.map(table => {
-                const existsBadge = table.exists 
-                    ? '<span class="badge badge-success">存在</span>' 
-                    : '<span class="badge badge-neutral">不存在</span>';
-                
-                const count = table.exists ? formatNumber(table.count) : '-';
-                const size = table.exists && table.size_mb ? `${table.size_mb.toFixed(2)} MB` : '-';
-                const latestTime = table.latest_time ? formatDateTime(table.latest_time) : '-';
-                const oldestTime = table.oldest_time ? formatDateTime(table.oldest_time) : '-';
-                
-                const canCleanup = ['price_data', 'kline_data', 'news_data', 'funding_rate_data', 
-                                   'futures_open_interest', 'futures_long_short_ratio', 
-                                   'smart_money_transactions', 'ema_signals'].includes(table.name);
-                
-                return `
-                    <tr data-table-name="${table.name}" data-label="${table.label}">
-                        <td>
-                            <div style="display: flex; align-items: center; gap: var(--spacing-sm);">
-                                <code class="text-mono">${table.name}</code>
-                                ${existsBadge}
-                            </div>
-                        </td>
-                        <td>
-                            <div>${table.label}</div>
-                            <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px;">
-                                ${table.description || ''}
-                            </div>
-                        </td>
-                        <td class="text-mono">${count}</td>
-                        <td class="text-mono">${size}</td>
-                        <td class="text-secondary" style="font-size: 12px;">${latestTime}</td>
-                        <td class="text-secondary" style="font-size: 12px;">${oldestTime}</td>
-                        <td>
-                            <div style="display: flex; gap: var(--spacing-sm);">
-                                ${table.exists ? `
-                                    <button class="btn btn-secondary btn-sm" onclick="viewSample('${table.name}')" title="查看样本数据">
-                                        <i class="bi bi-eye"></i>
-                                    </button>
-                                ` : ''}
-                                ${canCleanup && table.exists ? `
-                                    <button class="btn btn-danger btn-sm" onclick="openCleanupModal('${table.name}')" title="清理旧数据">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                ` : ''}
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
+        grid.innerHTML = services.map(function (svc) {
+            const running = svc.running || svc.status === 'running';
+            const dotColor = running ? 'bg-brand-primary' : 'bg-slate-600';
+            const pingSpan = running
+                ? '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75"></span>'
+                : '';
+            const labelColor = running ? 'text-brand-primary' : 'text-slate-500';
+            const statusText = running ? '运行中' : '已停止';
+            const name = svc.name || svc.service_name || svc.label || '未知服务';
 
-        // 过滤表格
-        function filterTables() {
-            const searchInput = document.getElementById('searchInput').value.toLowerCase();
-            const rows = document.querySelectorAll('#tableBody tr[data-table-name]');
-            
-            rows.forEach(row => {
-                const tableName = row.getAttribute('data-table-name').toLowerCase();
-                const label = row.getAttribute('data-label').toLowerCase();
-                const matches = tableName.includes(searchInput) || label.includes(searchInput);
-                row.style.display = matches ? '' : 'none';
+            return '<div class="bg-brand-bg border border-slate-800 p-3 rounded-lg flex flex-col gap-2 group hover:border-brand-primary/30 transition-colors">'
+                + '<div class="flex items-center justify-between">'
+                + '<span class="text-xs text-slate-400">' + name + '</span>'
+                + '<span class="relative flex h-2 w-2">'
+                + pingSpan
+                + '<span class="relative inline-flex rounded-full h-2 w-2 ' + dotColor + '"></span>'
+                + '</span>'
+                + '</div>'
+                + '<div class="text-[10px] font-mono ' + labelColor + ' opacity-70">' + statusText + '</div>'
+                + '</div>';
+        }).join('');
+    }
+
+    // ---- Stats summary bar ----
+
+    function renderStats(summary, tables) {
+        const elTables = document.getElementById('stat-total-tables');
+        const elSize = document.getElementById('stat-total-size');
+        const elLargestName = document.getElementById('stat-largest-table-name');
+        const elLargestSize = document.getElementById('stat-largest-table-size');
+        const elLargestRecords = document.getElementById('stat-largest-table-records');
+
+        if (!summary) {
+            [elTables, elSize, elLargestName, elLargestSize, elLargestRecords].forEach(function (el) {
+                if (el) el.textContent = '--';
             });
+            return;
         }
 
-        // 查看样本数据
-        async function viewSample(tableName) {
-            const modal = document.getElementById('sampleModal');
-            const tableNameSpan = document.getElementById('sampleTableName');
-            const tableHead = document.getElementById('sampleTableHead');
-            const tableBody = document.getElementById('sampleTableBody');
-            
-            tableNameSpan.textContent = tableName;
-            tableHead.innerHTML = '<tr><th>加载中...</th></tr>';
-            tableBody.innerHTML = '';
-            modal.classList.add('active');
-            
-            try {
-                const response = await fetch(`/api/data-management/table/${tableName}/sample?limit=10`);
-                const result = await response.json();
-                
-                if (result.success && result.data.length > 0) {
-                    // 获取表头
-                    const headers = Object.keys(result.data[0]);
-                    tableHead.innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
-                    
-                    // 渲染数据
-                    tableBody.innerHTML = result.data.map(row => {
-                        return `<tr>${headers.map(h => {
-                            const value = row[h];
-                            if (value === null || value === undefined) return '<td class="text-secondary">-</td>';
-                            if (typeof value === 'number') return `<td class="text-mono">${formatNumber(value)}</td>`;
-                            if (typeof value === 'string' && value.match(/^\d{4}-\d{2}-\d{2}/)) {
-                                return `<td class="text-secondary" style="font-size: 12px;">${formatDateTime(value)}</td>`;
-                            }
-                            return `<td>${String(value).substring(0, 100)}${String(value).length > 100 ? '...' : ''}</td>`;
-                        }).join('')}</tr>`;
-                    }).join('');
+        if (elTables) elTables.textContent = summary.total_tables != null ? summary.total_tables : '--';
+
+        const totalSizeMb = summary.total_size_mb != null ? summary.total_size_mb : null;
+        if (elSize) {
+            if (totalSizeMb != null) {
+                if (totalSizeMb >= 1024 * 1024) {
+                    elSize.innerHTML = (totalSizeMb / (1024 * 1024)).toFixed(2) + ' <span class="text-sm font-normal text-slate-500">TB</span>';
+                } else if (totalSizeMb >= 1024) {
+                    elSize.innerHTML = (totalSizeMb / 1024).toFixed(2) + ' <span class="text-sm font-normal text-slate-500">GB</span>';
                 } else {
-                    tableHead.innerHTML = '<tr><th>无数据</th></tr>';
-                    tableBody.innerHTML = '<tr><td class="empty-state">该表暂无数据</td></tr>';
+                    elSize.innerHTML = totalSizeMb.toFixed(2) + ' <span class="text-sm font-normal text-slate-500">MB</span>';
                 }
-            } catch (error) {
-                console.error('加载样本数据失败:', error);
-                tableHead.innerHTML = '<tr><th>错误</th></tr>';
-                tableBody.innerHTML = '<tr><td class="text-danger">加载失败: ' + error.message + '</td></tr>';
+            } else {
+                elSize.textContent = '--';
             }
         }
 
-        // 关闭样本数据模态框
-        function closeSampleModal() {
-            document.getElementById('sampleModal').classList.remove('active');
-        }
-
-        // 打开清理模态框
-        function openCleanupModal(tableName) {
-            currentCleanupTable = tableName;
-            document.getElementById('cleanupTableName').value = tableName;
-            document.getElementById('cleanupDays').value = 30;
-            document.getElementById('cleanupModal').classList.add('active');
-        }
-
-        // 关闭清理模态框
-        function closeCleanupModal() {
-            document.getElementById('cleanupModal').classList.remove('active');
-            currentCleanupTable = null;
-        }
-
-        // 确认清理
-        async function confirmCleanup() {
-            if (!currentCleanupTable) return;
-            
-            const days = parseInt(document.getElementById('cleanupDays').value);
-            if (!days || days < 1) {
-                showToast('请输入有效的天数', 'error');
-                return;
-            }
-            
-            const confirmMsg = `确定要清理表 "${currentCleanupTable}" 中超过 ${days} 天的旧数据吗？此操作不可撤销！`;
-            if (!confirm(confirmMsg)) {
-                return;
-            }
-            
-            try {
-                const response = await fetch(
-                    `/api/data-management/table/${currentCleanupTable}/cleanup?days=${days}&confirm=true`,
-                    { method: 'DELETE' }
-                );
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    showToast(
-                        `清理成功！删除了 ${result.deleted_count} 条记录（清理前: ${result.before_count}, 清理后: ${result.after_count}）`,
-                        'success'
-                    );
-                    closeCleanupModal();
-                    // 刷新统计数据
-                    setTimeout(() => loadStatistics(), 1000);
-                } else {
-                    showToast('清理失败: ' + (result.message || '未知错误'), 'error');
-                }
-            } catch (error) {
-                console.error('清理数据失败:', error);
-                showToast('清理失败: ' + error.message, 'error');
-            }
-        }
-
-        // 刷新统计数据
-        function refreshStatistics() {
-            loadStatistics();
-        }
-
-        // 更新ETF模板按钮文本
-        function updateETFTemplateButton() {
-            const assetType = document.getElementById('etfAssetType').value;
-            const button = document.getElementById('etfTemplateButton');
-            if (button) {
-                const assetName = assetType === 'BTC' ? 'BTC (比特币)' : 'ETH (以太坊)';
-                button.innerHTML = `<i class="bi bi-download"></i> 下载${assetName}模板文件`;
-            }
-        }
-
-        // 下载ETF模板
-        function downloadETFTemplate() {
-            const assetType = document.getElementById('etfAssetType').value;
-            window.location.href = `/api/data-management/template/etf?asset_type=${assetType}`;
-        }
-
-        // 下载企业金库持仓模板（文本格式）
-        function downloadTreasuryTemplate() {
-            window.location.href = '/api/data-management/template/corporate-treasury';
-        }
-
-        // 下载企业金库融资模板（CSV格式）
-        function downloadTreasuryFinancingTemplate() {
-            window.location.href = '/api/data-management/template/corporate-treasury-financing';
-        }
-
-        // 导入ETF数据
-        async function importETFData(event) {
-            event.preventDefault();
-            const fileInput = document.getElementById('etfFile');
-            const resultDiv = document.getElementById('etfImportResult');
-            const assetType = document.getElementById('etfAssetType').value;
-            
-            if (!fileInput.files || !fileInput.files[0]) {
-                showToast('请选择文件', 'error');
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            formData.append('asset_type', assetType);
-            
-            resultDiv.innerHTML = '<div class="spinner"></div> <span>导入中...</span>';
-            
-            try {
-                const response = await fetch('/api/data-management/import/etf', {
-                    method: 'POST',
-                    body: formData
+        if (tables && tables.length > 0) {
+            const existingTables = tables.filter(function (t) { return t.exists; });
+            if (existingTables.length > 0) {
+                const largest = existingTables.reduce(function (a, b) {
+                    return (b.size_mb || 0) > (a.size_mb || 0) ? b : a;
                 });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    resultDiv.innerHTML = `
-                        <div style="color: var(--success-green);">
-                            <i class="bi bi-check-circle"></i>
-                            ${result.message}
-                        </div>
-                        ${result.errors && result.errors.length > 0 ? `
-                            <div style="margin-top: var(--spacing-sm); font-size: 12px; color: var(--text-secondary);">
-                                <details>
-                                    <summary style="cursor: pointer;">查看错误详情 (${result.error_count}条)</summary>
-                                    <ul style="margin-top: var(--spacing-sm); padding-left: var(--spacing-lg);">
-                                        ${result.errors.map(e => `<li style="color: var(--danger-red);">${e}</li>`).join('')}
-                                    </ul>
-                                </details>
-                            </div>
-                        ` : ''}
-                    `;
-                    showToast(result.message, 'success');
-                    // 刷新采集情况
-                    setTimeout(() => loadCollectionStatus(), 1000);
-                } else {
-                    let errorHtml = `<div style="color: var(--danger-red);">
-                        <i class="bi bi-x-circle"></i>
-                        ${result.message || '导入失败'}
-                    </div>`;
-                    if (result.errors && result.errors.length > 0) {
-                        errorHtml += `
-                            <div style="margin-top: var(--spacing-sm); font-size: 12px;">
-                                <details style="cursor: pointer;">
-                                    <summary style="color: var(--warning-orange);">查看错误详情 (${result.error_count}条)</summary>
-                                    <ul style="margin-top: var(--spacing-sm); padding-left: var(--spacing-lg); max-height: 200px; overflow-y: auto;">
-                                        ${result.errors.slice(0, 20).map(e => `<li style="color: var(--text-secondary); margin: 4px 0;">${e}</li>`).join('')}
-                                        ${result.errors.length > 20 ? `<li style="color: var(--text-tertiary);">... 还有 ${result.errors.length - 20} 个错误</li>` : ''}
-                                    </ul>
-                                </details>
-                            </div>
-                        `;
-                    }
-                    resultDiv.innerHTML = errorHtml;
-                    showToast(result.message || '导入失败', 'error');
-                }
-            } catch (error) {
-                console.error('导入ETF数据失败:', error);
-                resultDiv.innerHTML = `<div style="color: var(--danger-red);">导入失败: ${error.message}</div>`;
-                showToast('导入失败: ' + error.message, 'error');
+                if (elLargestName) elLargestName.textContent = largest.label || largest.name || '--';
+                if (elLargestSize) elLargestSize.textContent = formatSize(largest.size_mb);
+                if (elLargestRecords) elLargestRecords.textContent = formatCount(largest.count) + ' Records';
             }
+        } else {
+            if (elLargestName) elLargestName.textContent = '--';
+            if (elLargestSize) elLargestSize.textContent = '--';
+            if (elLargestRecords) elLargestRecords.textContent = '-- Records';
+        }
+    }
+
+    // ---- Table rows ----
+
+    function buildTableRow(t, index) {
+        const exists = t.exists;
+        const nameCell = exists
+            ? '<td class="px-6 py-4 text-slate-200 font-bold">' + (t.label || t.name) + '</td>'
+            : '<td class="px-6 py-4 text-slate-500 font-bold">' + (t.label || t.name) + '</td>';
+
+        const statusBadge = exists
+            ? '<span class="px-2 py-0.5 rounded-full bg-brand-primary/10 text-brand-primary text-[10px] border border-brand-primary/20">存在</span>'
+            : '<span class="px-2 py-0.5 rounded-full bg-slate-800 text-slate-500 text-[10px] border border-slate-700">不存在</span>';
+
+        const countCell = exists
+            ? '<td class="px-6 py-4 text-right text-slate-300">' + formatCount(t.count) + '</td>'
+            : '<td class="px-6 py-4 text-right text-slate-600">0</td>';
+
+        const sizeCell = exists
+            ? '<td class="px-6 py-4 text-right text-slate-300">' + formatSize(t.size_mb) + '</td>'
+            : '<td class="px-6 py-4 text-right text-slate-600">0 MB</td>';
+
+        const latestCell = exists
+            ? '<td class="px-6 py-4 text-slate-400">' + formatTime(t.latest_time) + '</td>'
+            : '<td class="px-6 py-4 text-slate-600">--</td>';
+
+        const oldestCell = exists
+            ? '<td class="px-6 py-4 text-slate-500 italic">' + formatTime(t.oldest_time) + '</td>'
+            : '<td class="px-6 py-4 text-slate-600">--</td>';
+
+        const sampleBtn = exists
+            ? '<button class="btn-sample px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] transition-colors" data-name="' + t.name + '" data-label="' + (t.label || t.name) + '">查看样本</button>'
+            : '<button class="px-3 py-1 bg-slate-800/40 text-slate-600 rounded text-[10px] cursor-not-allowed" disabled>查看样本</button>';
+
+        const cleanBtn = exists
+            ? '<button class="btn-clean px-3 py-1 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded text-[10px] transition-colors border border-red-900/50" data-name="' + t.name + '" data-label="' + (t.label || t.name) + '">清理</button>'
+            : '<button class="px-3 py-1 bg-slate-800/40 text-slate-600 rounded text-[10px] cursor-not-allowed border border-slate-800" disabled>清理</button>';
+
+        const rowBg = (index % 2 !== 0) ? ' bg-brand-bg/10' : '';
+        return '<tr class="hover:bg-slate-800/20 transition-colors' + rowBg + '" data-name="' + (t.name || '').toLowerCase() + '" data-label="' + (t.label || '').toLowerCase() + '">'
+            + nameCell
+            + '<td class="px-6 py-4 text-center">' + statusBadge + '</td>'
+            + countCell
+            + sizeCell
+            + latestCell
+            + oldestCell
+            + '<td class="px-6 py-4 text-right"><div class="flex items-center justify-end gap-2">' + sampleBtn + cleanBtn + '</div></td>'
+            + '</tr>';
+    }
+
+    function renderTables(tables) {
+        const tbody = document.getElementById('db-tables-tbody');
+        const footer = document.getElementById('table-footer-count');
+        if (!tbody) return;
+
+        if (!tables || tables.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-slate-500 text-xs">暂无数据</td></tr>';
+            if (footer) footer.textContent = 'Showing 0 tables';
+            return;
         }
 
-        // 导入企业金库数据
-        async function importTreasuryData(event) {
-            event.preventDefault();
-            const fileInput = document.getElementById('treasuryFile');
-            const dateInput = document.getElementById('treasuryDate');
-            const resultDiv = document.getElementById('treasuryImportResult');
-            
-            if (!fileInput.files || !fileInput.files[0]) {
-                showToast('请选择文件', 'error');
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-            formData.append('asset_type', 'BTC');
-            if (dateInput.value) {
-                formData.append('data_date', dateInput.value);
-            }
-            
-            resultDiv.innerHTML = '<div class="spinner"></div> <span>导入中...</span>';
-            
-            try {
-                const response = await fetch('/api/data-management/import/corporate-treasury', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    resultDiv.innerHTML = `
-                        <div style="color: var(--success-green);">
-                            <i class="bi bi-check-circle"></i>
-                            ${result.message}
-                        </div>
-                        ${result.errors && result.errors.length > 0 ? `
-                            <div style="margin-top: var(--spacing-sm); font-size: 12px; color: var(--text-secondary);">
-                                <details>
-                                    <summary style="cursor: pointer;">查看错误详情 (${result.error_count}条)</summary>
-                                    <ul style="margin-top: var(--spacing-sm); padding-left: var(--spacing-lg);">
-                                        ${result.errors.map(e => `<li style="color: var(--danger-red);">${e}</li>`).join('')}
-                                    </ul>
-                                </details>
-                            </div>
-                        ` : ''}
-                    `;
-                    showToast(result.message, 'success');
-                    // 刷新采集情况
-                    setTimeout(() => loadCollectionStatus(), 1000);
-                } else {
-                    resultDiv.innerHTML = `<div style="color: var(--danger-red);">导入失败: ${result.message || '未知错误'}</div>`;
-                    showToast('导入失败', 'error');
-                }
-            } catch (error) {
-                console.error('导入企业金库数据失败:', error);
-                resultDiv.innerHTML = `<div style="color: var(--danger-red);">导入失败: ${error.message}</div>`;
-                showToast('导入失败: ' + error.message, 'error');
-            }
-        }
+        allTableRows = tables;
+        tbody.innerHTML = tables.map(buildTableRow).join('');
+        if (footer) footer.textContent = 'Showing ' + tables.length + ' tables';
 
-        // 格式化数字
-        function formatNumber(num) {
-            if (num === null || num === undefined) return '-';
-            if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
-            if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
-            return num.toLocaleString();
-        }
+        attachTableButtonListeners();
+    }
 
-        // 格式化日期时间（根据时区信息显示）
-        // 规则：
-        // - 包含 +08:00：本地时间（UTC+8），直接显示
-        // - 包含 Z：Binance数据（UTC时间），显示本地时间和UTC时间
-        function formatDateTime(dateStr) {
-            if (!dateStr) return '-';
-            try {
-                // 统一处理：所有时间都按数据库存储的时间显示（本地时间UTC+8）
-                // 如果包含+08:00，直接使用；如果包含Z，转换为本地时间；否则假设是本地时间
-                let date;
-                if (dateStr.includes('+08:00')) {
-                    // 本地时间（UTC+8）
-                    date = new Date(dateStr);
-                } else if (dateStr.includes('Z')) {
-                    // UTC时间，转换为本地时间显示
-                    date = new Date(dateStr);
-                } else if (!dateStr.includes('+') && !dateStr.includes('-', 10)) {
-                    // 没有时区信息，假设是本地时间
-                    date = new Date(dateStr);
-                } else {
-                    // 其他时区格式
-                    date = new Date(dateStr);
-                }
-                
-                if (isNaN(date.getTime())) {
-                    return dateStr;
-                }
-                
-                // 统一显示本地时间（UTC+8），不显示UTC时间
-                return date.toLocaleString('zh-CN', {
-                    year: 'numeric',
-                    month: '2-digit',
-                    day: '2-digit',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                    timeZone: 'Asia/Shanghai'
-                });
-            } catch {
-                return dateStr;
-            }
-        }
+    // ---- Search filter ----
 
-        // 任务轮询间隔ID
-        let collectionPollInterval = null;
+    function applySearch(query) {
+        const tbody = document.getElementById('db-tables-tbody');
+        const footer = document.getElementById('table-footer-count');
+        if (!tbody) return;
 
-        // 切换合约时间周期选择显示
-        function toggleFuturesTimeframes() {
-            const collectFutures = document.getElementById('collectFutures').checked;
-            const container = document.getElementById('futuresTimeframesContainer');
-            container.style.display = collectFutures ? 'block' : 'none';
-        }
+        const q = (query || '').toLowerCase().trim();
+        const rows = tbody.querySelectorAll('tr[data-name]');
+        let visible = 0;
+        rows.forEach(function (row) {
+            const name = row.getAttribute('data-name') || '';
+            const label = row.getAttribute('data-label') || '';
+            const match = !q || name.includes(q) || label.includes(q);
+            row.style.display = match ? '' : 'none';
+            if (match) visible++;
+        });
+        if (footer) footer.textContent = 'Showing ' + visible + ' of ' + allTableRows.length + ' tables';
+    }
 
-        // 获取选中的合约时间周期
-        function getSelectedFuturesTimeframes() {
-            const timeframes = [];
-            if (document.getElementById('futuresTf5m').checked) timeframes.push('5m');
-            if (document.getElementById('futuresTf15m').checked) timeframes.push('15m');
-            if (document.getElementById('futuresTf1h').checked) timeframes.push('1h');
-            if (document.getElementById('futuresTf1d').checked) timeframes.push('1d');
-            return timeframes;
-        }
+    // ---- Sample modal ----
 
-        // 开始数据采集
-        async function startDataCollection(event) {
-            event.preventDefault();
+    function showModal(tableName, tableLabel) {
+        const modal = document.getElementById('sample-modal');
+        const title = document.getElementById('sample-modal-title');
+        const body = document.getElementById('sample-modal-body');
+        if (!modal) return;
 
-            const symbols = document.getElementById('collectionSymbols').value.trim();
-            const startTime = document.getElementById('collectionStartTime').value;
-            const endTime = document.getElementById('collectionEndTime').value;
-            const saveToConfig = document.getElementById('saveToConfig').checked;
-            const collectFutures = document.getElementById('collectFutures').checked;
+        title.textContent = '样本数据 - ' + tableLabel;
+        body.innerHTML = '<div class="text-slate-500">加载中...</div>';
+        modal.classList.remove('hidden');
 
-            // 默认同时采集价格数据和K线数据（所有周期）
-            const timeframes = ['1m', '5m', '15m', '1h', '1d'];
-
-            // 获取合约数据的时间周期
-            const futuresTimeframes = collectFutures ? getSelectedFuturesTimeframes() : [];
-            const resultDiv = document.getElementById('collectionResult');
-            const progressDiv = document.getElementById('collectionProgress');
-            const submitBtn = document.getElementById('collectionSubmitBtn');
-            
-            if (!symbols) {
-                showToast('请输入交易对', 'error');
-                return;
-            }
-            
-            // 验证时间范围
-            const start = new Date(startTime);
-            const end = new Date(endTime);
-            if (start >= end) {
-                showToast('结束时间必须晚于开始时间', 'error');
-                return;
-            }
-            
-            // 停止之前的轮询
-            if (collectionPollInterval) {
-                clearInterval(collectionPollInterval);
-                collectionPollInterval = null;
-            }
-            
-            // 禁用提交按钮
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div> 提交中...';
-            
-            // 显示进度条
-            progressDiv.style.display = 'block';
-            updateCollectionProgress(0, '正在提交任务...');
-            
-            resultDiv.innerHTML = '';
-            
-            try {
-                const symbolList = symbols.split(',').map(s => s.trim()).filter(s => s);
-
-                // 验证合约时间周期
-                if (collectFutures && futuresTimeframes.length === 0) {
-                    showToast('请至少选择一个合约K线周期', 'error');
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<i class="bi bi-play-circle"></i> 开始采集';
-                    progressDiv.style.display = 'none';
+        fetch(API_PREFIX + '/table/' + encodeURIComponent(tableName) + '/sample?limit=10')
+            .then(function (res) { return res.json(); })
+            .then(function (d) {
+                const data = (d && d.data) ? d.data : d;
+                if (!data || !Array.isArray(data) || data.length === 0) {
+                    body.innerHTML = '<div class="text-slate-500">无样本数据</div>';
                     return;
                 }
+                const cols = Object.keys(data[0]);
+                let html = '<table class="w-full text-left border-collapse text-[11px]">'
+                    + '<thead><tr class="border-b border-slate-700">'
+                    + cols.map(function (c) {
+                        return '<th class="px-3 py-2 text-slate-400 font-bold uppercase tracking-tighter whitespace-nowrap">' + c + '</th>';
+                    }).join('')
+                    + '</tr></thead><tbody class="divide-y divide-slate-800">'
+                    + data.map(function (row) {
+                        return '<tr class="hover:bg-slate-800/30">'
+                            + cols.map(function (c) {
+                                const val = row[c];
+                                const display = val == null ? '<span class="text-slate-600">NULL</span>' : String(val);
+                                return '<td class="px-3 py-2 text-slate-300 whitespace-nowrap">' + display + '</td>';
+                            }).join('')
+                            + '</tr>';
+                    }).join('')
+                    + '</tbody></table>';
+                body.innerHTML = html;
+            })
+            .catch(function (err) {
+                console.error('sample fetch failed:', err);
+                body.innerHTML = '<div class="text-red-400">加载失败，请检查网络或后端服务</div>';
+            });
+    }
 
-                const requestData = {
-                    symbols: symbolList,
-                    data_type: 'both',  // 同时采集价格和K线数据
-                    start_time: startTime,
-                    end_time: endTime,
-                    timeframes: timeframes,
-                    collect_futures: collectFutures,  // 是否采集合约数据
-                    futures_timeframes: futuresTimeframes,  // 合约数据的时间周期
-                    save_to_config: saveToConfig
-                };
-                
-                const response = await fetch('/api/data-management/collect', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(requestData)
-                });
-                
-                const result = await response.json();
-                
-                if (result.success && result.task_id) {
-                    // 任务已提交，开始轮询进度
-                    submitBtn.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div> 采集中...';
-                    pollCollectionTask(result.task_id, symbolList, startTime, endTime, collectFutures, futuresTimeframes);
+    function hideModal() {
+        const modal = document.getElementById('sample-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    document.getElementById('sample-modal-close').addEventListener('click', hideModal);
+    document.getElementById('sample-modal').addEventListener('click', function (e) {
+        if (e.target === this) hideModal();
+    });
+
+    // ---- Clean action ----
+
+    function confirmClean(tableName, tableLabel) {
+        if (!confirm('确认要清理表 "' + tableLabel + '" 吗？此操作不可恢复！')) return;
+        fetch(API_PREFIX + '/table/' + encodeURIComponent(tableName), { method: 'DELETE' })
+            .then(function (res) { return res.json(); })
+            .then(function (d) {
+                const ok = d && (d.success === true || d.status === 'ok');
+                if (ok) {
+                    alert('清理成功: ' + tableLabel);
+                    loadData();
                 } else {
-                    throw new Error(result.message || '任务提交失败');
+                    alert('清理失败: ' + (d.message || d.error || '未知错误'));
                 }
-            } catch (error) {
-                console.error('数据采集失败:', error);
-                updateCollectionProgress(0, '任务提交失败');
-                resultDiv.innerHTML = `
-                    <div style="background: var(--danger-red-bg); border: 1px solid var(--danger-red); border-radius: var(--radius-md); padding: var(--spacing-md);">
-                        <div style="display: flex; align-items: center; gap: var(--spacing-sm); color: var(--danger-red);">
-                            <i class="bi bi-exclamation-circle"></i>
-                            <strong>任务提交失败</strong>
-                        </div>
-                        <div style="margin-top: var(--spacing-sm); font-size: 13px; color: var(--text-primary);">
-                            ${error.message}
-                        </div>
-                    </div>
-                `;
-                showToast('任务提交失败: ' + error.message, 'error');
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<i class="bi bi-play-circle"></i> 开始采集';
-            }
-        }
-        
-        // 轮询任务进度
-        async function pollCollectionTask(taskId, symbolList, startTime, endTime, collectFutures, futuresTimeframes = []) {
-            const resultDiv = document.getElementById('collectionResult');
-            const submitBtn = document.getElementById('collectionSubmitBtn');
+            })
+            .catch(function (err) {
+                console.error('clean request failed:', err);
+                alert('请求失败，请检查网络或后端服务');
+            });
+    }
 
-            collectionPollInterval = setInterval(async () => {
-                try {
-                    const response = await fetch(`/api/data-management/collect/task/${taskId}`);
-                    const task = await response.json();
+    // ---- Event delegation for dynamic table buttons ----
 
-                    // 更新进度
-                    updateCollectionProgress(
-                        task.progress || 0,
-                        task.current_step || '处理中...',
-                        task.total_saved || 0,
-                        task.completed_steps || 0,
-                        task.total_steps || 0
-                    );
+    function attachTableButtonListeners() {
+        const tbody = document.getElementById('db-tables-tbody');
+        if (!tbody) return;
 
-                    // 检查任务状态
-                    if (task.status === 'completed') {
-                        clearInterval(collectionPollInterval);
-                        collectionPollInterval = null;
-
-                        const result = task.result || {};
-                        const configMsg = result.config_updated ?
-                            '<div style="margin-top: var(--spacing-xs); color: var(--success-green); font-weight: 500;"><i class="bi bi-file-earmark-check"></i> 配置文件已更新</div>' : '';
-                        const futuresMsg = collectFutures && futuresTimeframes.length > 0 ?
-                            ` + 合约K线数据（${futuresTimeframes.join(', ')}）` : '';
-                        const timeframeMsg = `<div style="margin-top: var(--spacing-xs); color: var(--text-secondary);">采集内容: 价格数据 + K线数据（1m, 5m, 15m, 1h, 1d）${futuresMsg}</div>`;
-                        const errorsMsg = result.errors && result.errors.length > 0 ?
-                            `<div style="margin-top: var(--spacing-xs); color: var(--warning-yellow); font-size: 12px;">警告: ${result.errors.length} 个错误</div>` : '';
-                        
-                        resultDiv.innerHTML = `
-                            <div style="background: var(--success-green-bg); border: 1px solid var(--success-green); border-radius: var(--radius-md); padding: var(--spacing-md);">
-                                <div style="display: flex; align-items: center; gap: var(--spacing-sm); color: var(--success-green);">
-                                    <i class="bi bi-check-circle"></i>
-                                    <strong>采集成功</strong>
-                                </div>
-                                <div style="margin-top: var(--spacing-sm); font-size: 13px; color: var(--text-primary);">
-                                    <div>成功采集 ${result.total_saved || 0} 条数据</div>
-                                    <div style="margin-top: var(--spacing-xs); color: var(--text-secondary);">
-                                        交易对: ${symbolList.join(', ')}<br>
-                                        时间范围: ${formatDateTime(startTimeISO)} - ${formatDateTime(endTimeISO)}
-                                    </div>
-                                    ${timeframeMsg}
-                                    ${configMsg}
-                                    ${errorsMsg}
-                                </div>
-                            </div>
-                        `;
-                        const toastMsg = result.config_updated ? '数据采集成功，配置文件已更新' : '数据采集成功';
-                        showToast(toastMsg, 'success');
-                        submitBtn.disabled = false;
-                        submitBtn.innerHTML = '<i class="bi bi-play-circle"></i> 开始采集';
-                        // 刷新采集情况
-                        setTimeout(() => loadCollectionStatus(), 2000);
-                    } else if (task.status === 'failed') {
-                        clearInterval(collectionPollInterval);
-                        collectionPollInterval = null;
-                        
-                        const result = task.result || {};
-                        updateCollectionProgress(0, '采集失败');
-                        resultDiv.innerHTML = `
-                            <div style="background: var(--danger-red-bg); border: 1px solid var(--danger-red); border-radius: var(--radius-md); padding: var(--spacing-md);">
-                                <div style="display: flex; align-items: center; gap: var(--spacing-sm); color: var(--danger-red);">
-                                    <i class="bi bi-exclamation-circle"></i>
-                                    <strong>采集失败</strong>
-                                </div>
-                                <div style="margin-top: var(--spacing-sm); font-size: 13px; color: var(--text-primary);">
-                                    ${result.error || result.message || '未知错误'}
-                                </div>
-                            </div>
-                        `;
-                        showToast('数据采集失败', 'error');
-                        submitBtn.disabled = false;
-                        submitBtn.innerHTML = '<i class="bi bi-play-circle"></i> 开始采集';
-                    }
-                } catch (error) {
-                    console.error('查询任务状态失败:', error);
-                }
-            }, 1000);  // 每1秒轮询一次
-        }
-        
-        // 更新采集进度
-        function updateCollectionProgress(percent, statusText, totalSaved = 0, completedSteps = 0, totalSteps = 0) {
-            const progressBar = document.getElementById('collectionProgressBar');
-            const progressText = document.getElementById('collectionProgressText');
-            const statusTextEl = document.getElementById('collectionStatusText');
-            
-            progressBar.style.width = percent + '%';
-            progressText.textContent = Math.round(percent) + '%';
-            
-            let statusHtml = statusText || '';
-            if (totalSteps > 0) {
-                statusHtml += ` (${completedSteps}/${totalSteps})`;
-            }
-            if (totalSaved > 0) {
-                statusHtml += ` · 已保存 ${totalSaved} 条`;
-            }
-            
-            if (statusTextEl) {
-                statusTextEl.textContent = statusHtml;
-            }
-        }
-        
-        // 重置采集表单
-        function resetCollectionForm() {
-            document.getElementById('dataCollectionForm').reset();
-            document.getElementById('collectionResult').innerHTML = '';
-            document.getElementById('collectionProgress').style.display = 'none';
-            
-            // 重置默认时间范围
-            const endTime = new Date();
-            const startTime = new Date();
-            startTime.setDate(startTime.getDate() - 7);
-            
-            document.getElementById('collectionStartTime').value = formatDateTimeLocal(startTime);
-            document.getElementById('collectionEndTime').value = formatDateTimeLocal(endTime);
-        }
-        
-        // 格式化日期时间为本地datetime-local格式
-        function formatDateTimeLocal(date) {
-            const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0');
-            const day = String(date.getDate()).padStart(2, '0');
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            return `${year}-${month}-${day}T${hours}:${minutes}`;
-        }
-
-        // 显示提示消息
-        function showToast(message, type = 'success') {
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.innerHTML = `
-                <div style="display: flex; align-items: center; gap: var(--spacing-md);">
-                    <i class="bi bi-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
-                    <div>${message}</div>
-                </div>
-            `;
-            document.body.appendChild(toast);
-            
-            setTimeout(() => {
-                toast.style.animation = 'slideInRight 0.3s ease-out reverse';
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
-        }
-
-        // 点击模态框外部关闭
-        document.getElementById('cleanupModal')?.addEventListener('click', function(e) {
-            if (e.target === this) closeCleanupModal();
+        tbody.querySelectorAll('.btn-sample').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                showModal(btn.getAttribute('data-name'), btn.getAttribute('data-label'));
+            });
         });
-        
-        document.getElementById('sampleModal')?.addEventListener('click', function(e) {
-            if (e.target === this) closeSampleModal();
-        });
-    </script>
-</body>
-</html>
 
+        tbody.querySelectorAll('.btn-clean').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                confirmClean(btn.getAttribute('data-name'), btn.getAttribute('data-label'));
+            });
+        });
+    }
+
+    // ---- Main data loader ----
+
+    async function loadData() {
+        try {
+            const [statusRes, statsRes] = await Promise.all([
+                fetch(API_PREFIX + '/collection-status'),
+                fetch(API_PREFIX + '/statistics')
+            ]);
+
+            let services = null;
+            try {
+                const sd = await statusRes.json();
+                services = (sd && sd.data) ? sd.data : sd;
+                if (!Array.isArray(services)) services = null;
+            } catch (e) {
+                console.error('collection-status parse error:', e);
+            }
+
+            let summary = null;
+            let tables = null;
+            try {
+                const td = await statsRes.json();
+                const payload = (td && td.data) ? td.data : td;
+                summary = payload && payload.summary ? payload.summary : null;
+                tables = payload && Array.isArray(payload.tables) ? payload.tables : null;
+            } catch (e) {
+                console.error('statistics parse error:', e);
+            }
+
+            renderServiceStatus(services || []);
+            renderStats(summary, tables);
+            renderTables(tables || []);
+
+            const searchInput = document.getElementById('table-search-input');
+            if (searchInput && searchInput.value) {
+                applySearch(searchInput.value);
+            }
+        } catch (err) {
+            console.error('loadData failed:', err);
+            renderServiceStatus([]);
+            renderStats(null, null);
+            renderTables([]);
+        }
+    }
+
+    // ---- Search input wiring ----
+
+    document.getElementById('table-search-input').addEventListener('input', function () {
+        applySearch(this.value);
+    });
+
+    // ---- Top bar refresh button ----
+
+    (function () {
+        const buttons = document.querySelectorAll('header button');
+        buttons.forEach(function (btn) {
+            const icon = btn.querySelector('.material-symbols-outlined');
+            if (icon && icon.textContent.trim() === 'refresh') {
+                btn.addEventListener('click', loadData);
+            }
+        });
+    })();
+
+    // ---- Initial load + auto-refresh every 30s ----
+
+    loadData();
+    setInterval(loadData, 30000);
+
+})();
+</script>
+</body></html>
