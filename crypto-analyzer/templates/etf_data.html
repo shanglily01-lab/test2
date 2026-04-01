@@ -381,23 +381,26 @@
     }
 
     // --- Populate one table tbody ---
-    function buildTableRow(etf, hoverClass) {
-        var flow = etf.daily_flow !== undefined ? etf.daily_flow : etf.flow;
-        var flowVal = (flow !== null && flow !== undefined && flow !== '') ? parseFloat(flow) : null;
+    function buildTableRow(etf, hoverClass, holdingsField) {
+        // flow_24h is the exact field name from /api/etf/summary
+        var flowRaw = etf.flow_24h;
+        var flowVal = (flowRaw !== null && flowRaw !== undefined && flowRaw !== '') ? parseFloat(flowRaw) : null;
         var flowTxt = flowVal !== null ? fmtUSD(flowVal) : '--';
         var flowColor = flowVal !== null ? (flowVal >= 0 ? 'text-brand-primary' : 'text-brand-danger') : 'text-slate-400';
 
-        var aum = etf.aum !== undefined ? etf.aum : etf.total_aum;
-        var aumTxt = (aum !== null && aum !== undefined && aum !== '') ? fmtUSD(parseFloat(aum)) : '--';
+        // market_value is the exact field name from /api/etf/summary
+        var aumRaw = etf.market_value;
+        var aumTxt = (aumRaw !== null && aumRaw !== undefined && aumRaw !== '') ? fmtUSD(parseFloat(aumRaw)) : '--';
 
-        var holdings = etf.holdings !== undefined ? etf.holdings : (etf.btc_holdings !== undefined ? etf.btc_holdings : etf.eth_holdings);
+        // holdingsField is either 'btc_holdings' or 'eth_holdings'
+        var holdings = etf[holdingsField];
         var holdingsTxt = (holdings !== null && holdings !== undefined) ? Number(holdings).toLocaleString() : '--';
 
-        var share = etf.share_pct !== undefined ? etf.share_pct : etf.pct;
-        var shareTxt = (share !== null && share !== undefined && share !== '') ? parseFloat(share).toFixed(1) + '%' : '--';
+        // API does not return share_pct; leave as '--'
+        var shareTxt = '--';
 
-        var ticker = etf.ticker || etf.symbol || etf.name || '--';
-        var issuer = etf.issuer || etf.provider || '';
+        var ticker = etf.symbol || '--';
+        var issuer = etf.provider || '';
 
         var tr = document.createElement('tr');
         tr.className = 'border-b border-slate-800/50 ' + hoverClass + ' transition-colors';
@@ -415,13 +418,13 @@
         return tr;
     }
 
-    function populateTable(tbodyId, etfs, hoverClass) {
+    function populateTable(tbodyId, etfs, hoverClass, holdingsField) {
         var tbody = document.getElementById(tbodyId);
         if (!tbody) return;
         if (!etfs || !etfs.length) return;
         tbody.innerHTML = '';
         etfs.forEach(function (etf) {
-            tbody.appendChild(buildTableRow(etf, hoverClass));
+            tbody.appendChild(buildTableRow(etf, hoverClass, holdingsField));
         });
     }
 
@@ -527,44 +530,67 @@
     }
 
     // --- Populate stat cards from summary response ---
-    function populateStats(summary) {
+    // apiData = json.data = { summary: {...}, btc_etfs: [...], eth_etfs: [...] }
+    function populateStats(apiData) {
+        var summary = apiData.summary || {};
+        var btcEtfs = apiData.btc_etfs || [];
+        var ethEtfs = apiData.eth_etfs || [];
+
         var btcAumEl = document.getElementById('btc-aum');
         var ethAumEl = document.getElementById('eth-aum');
         var btcFlowEl = document.getElementById('btc-flow');
         var ethFlowEl = document.getElementById('eth-flow');
 
-        function setCard(el, rawVal, suffix) {
+        function setCard(el, rawVal) {
             if (!el) return;
             var span = el.querySelector('span');
-            var sfx = suffix || (span ? span.outerHTML : '');
-            var txt = (rawVal !== null && rawVal !== undefined && rawVal !== '') ? fmtUSD(parseFloat(rawVal)) : '--';
+            var sfx = span ? span.outerHTML : '';
+            var txt = (rawVal !== null && rawVal !== undefined && !isNaN(parseFloat(rawVal))) ? fmtUSD(parseFloat(rawVal)) : '--';
             el.innerHTML = txt + (sfx ? ' ' + sfx : '');
         }
 
-        var btcAum = summary.btc_total_aum !== undefined ? summary.btc_total_aum : summary.btc_aum;
-        var ethAum = summary.eth_total_aum !== undefined ? summary.eth_total_aum : summary.eth_aum;
-        var btcFlow = summary.btc_daily_flow !== undefined ? summary.btc_daily_flow : summary.btc_flow;
-        var ethFlow = summary.eth_daily_flow !== undefined ? summary.eth_daily_flow : summary.eth_flow;
+        // BTC ETF AUM = total_btc * btc_price
+        var btcPrice = parseFloat(summary.btc_price);
+        var totalBtc = parseFloat(summary.total_btc);
+        var btcAumVal = (!isNaN(btcPrice) && !isNaN(totalBtc)) ? totalBtc * btcPrice : null;
+        setCard(btcAumEl, btcAumVal);
 
-        setCard(btcAumEl, btcAum);
-        setCard(ethAumEl, ethAum);
+        // ETH ETF AUM = total_eth * eth_price
+        var ethPrice = parseFloat(summary.eth_price);
+        var totalEth = parseFloat(summary.total_eth);
+        var ethAumVal = (!isNaN(ethPrice) && !isNaN(totalEth)) ? totalEth * ethPrice : null;
+        setCard(ethAumEl, ethAumVal);
 
+        // BTC net flow = sum of btc_etfs[].flow_24h
+        var btcFlowVal = null;
+        if (btcEtfs.length) {
+            btcFlowVal = btcEtfs.reduce(function (acc, e) {
+                var v = parseFloat(e.flow_24h);
+                return acc + (isNaN(v) ? 0 : v);
+            }, 0);
+        }
         if (btcFlowEl) {
-            var bfVal = (btcFlow !== null && btcFlow !== undefined && btcFlow !== '') ? parseFloat(btcFlow) : null;
-            var bfTxt = bfVal !== null ? fmtUSD(bfVal) : '--';
+            var bfTxt = btcFlowVal !== null ? fmtUSD(btcFlowVal) : '--';
             var span0 = btcFlowEl.querySelector('span');
             btcFlowEl.innerHTML = bfTxt + (span0 ? ' ' + span0.outerHTML : '');
-            btcFlowEl.className = btcFlowEl.className.replace(/text-brand-(primary|danger)/, '');
-            btcFlowEl.classList.add(bfVal !== null && bfVal >= 0 ? 'text-brand-primary' : 'text-brand-danger');
+            btcFlowEl.className = btcFlowEl.className.replace(/text-brand-(primary|danger)/g, '');
+            btcFlowEl.classList.add(btcFlowVal !== null && btcFlowVal >= 0 ? 'text-brand-primary' : 'text-brand-danger');
         }
 
+        // ETH net flow = sum of eth_etfs[].flow_24h
+        var ethFlowVal = null;
+        if (ethEtfs.length) {
+            ethFlowVal = ethEtfs.reduce(function (acc, e) {
+                var v = parseFloat(e.flow_24h);
+                return acc + (isNaN(v) ? 0 : v);
+            }, 0);
+        }
         if (ethFlowEl) {
-            var efVal = (ethFlow !== null && ethFlow !== undefined && ethFlow !== '') ? parseFloat(ethFlow) : null;
-            var efTxt = efVal !== null ? fmtUSD(efVal) : '--';
+            var efTxt = ethFlowVal !== null ? fmtUSD(ethFlowVal) : '--';
             var span1 = ethFlowEl.querySelector('span');
             ethFlowEl.innerHTML = efTxt + (span1 ? ' ' + span1.outerHTML : '');
-            ethFlowEl.className = ethFlowEl.className.replace(/text-brand-(primary|danger)/, '');
-            ethFlowEl.classList.add(efVal !== null && efVal >= 0 ? 'text-brand-primary' : 'text-brand-danger');
+            ethFlowEl.className = ethFlowEl.className.replace(/text-brand-(primary|danger)/g, '');
+            ethFlowEl.classList.add(ethFlowVal !== null && ethFlowVal >= 0 ? 'text-brand-primary' : 'text-brand-danger');
         }
     }
 
@@ -574,47 +600,69 @@
             var resp = await fetch('/api/etf/summary');
             if (!resp.ok) throw new Error('summary API returned ' + resp.status);
             var json = await resp.json();
-            var summary = (json && json.data) ? json.data : json;
+            if (!json || !json.success || !json.data) throw new Error('summary API returned unexpected structure');
+            var apiData = json.data;
 
-            populateStats(summary);
+            populateStats(apiData);
 
-            var btcEtfs = summary.btc_etfs || summary.btc || [];
-            var ethEtfs = summary.eth_etfs || summary.eth || [];
-            if (btcEtfs.length) populateTable('btc-etf-tbody', btcEtfs, 'hover:bg-brand-primary/5');
-            if (ethEtfs.length) populateTable('eth-etf-tbody', ethEtfs, 'hover:bg-brand-accent/5');
+            var btcEtfs = apiData.btc_etfs || [];
+            var ethEtfs = apiData.eth_etfs || [];
+            if (btcEtfs.length) populateTable('btc-etf-tbody', btcEtfs, 'hover:bg-brand-primary/5', 'btc_holdings');
+            if (ethEtfs.length) populateTable('eth-etf-tbody', ethEtfs, 'hover:bg-brand-accent/5', 'eth_holdings');
         } catch (err) {
-            console.error('ETF summary fetch failed:', err);
+            console.error('ETF summary fetch failed:', err.message);
             clearStats();
         }
     }
 
     // --- Fetch /api/etf/flows?days=30 ---
+    // Response: { success: true, data: [ {trade_date, asset_type, net_inflow, ...}, ... ] }
+    // Rows are flat with asset_type = "BTC" or "ETH"; must be grouped by date.
     async function fetchFlows() {
         try {
             var resp = await fetch('/api/etf/flows?days=30');
             if (!resp.ok) throw new Error('flows API returned ' + resp.status);
             var json = await resp.json();
-            var data = (json && json.data) ? json.data : json;
+            if (!json || !json.success || !json.data) throw new Error('flows API returned unexpected structure');
 
-            var rows = Array.isArray(data) ? data : (data.rows || data.items || data.flows || []);
+            var rows = Array.isArray(json.data) ? json.data : [];
             if (!rows.length) {
                 initChart([], [], []);
                 return;
             }
 
-            var labels = rows.map(function (r) { return r.date || r.day || r.label || ''; });
-            var btcData = rows.map(function (r) {
-                var v = r.btc_flow !== undefined ? r.btc_flow : (r.btc !== undefined ? r.btc : null);
-                return v !== null ? parseFloat(v) : 0;
+            // Collect unique dates in insertion order, then build per-date maps
+            var dateOrder = [];
+            var btcMap = {};
+            var ethMap = {};
+            rows.forEach(function (r) {
+                var d = r.trade_date || '';
+                if (!d) return;
+                var v = parseFloat(r.net_inflow);
+                if (isNaN(v)) v = 0;
+                if (r.asset_type === 'BTC') {
+                    if (btcMap[d] === undefined) { btcMap[d] = 0; dateOrder.push(d); }
+                    btcMap[d] += v;
+                } else if (r.asset_type === 'ETH') {
+                    if (ethMap[d] === undefined) { ethMap[d] = 0; if (btcMap[d] === undefined) dateOrder.push(d); }
+                    ethMap[d] += v;
+                }
             });
-            var ethData = rows.map(function (r) {
-                var v = r.eth_flow !== undefined ? r.eth_flow : (r.eth !== undefined ? r.eth : null);
-                return v !== null ? parseFloat(v) : 0;
+
+            // De-duplicate dates while preserving order
+            var seen = {};
+            var labels = [];
+            dateOrder.forEach(function (d) {
+                if (!seen[d]) { seen[d] = true; labels.push(d); }
             });
+            labels.sort();
+
+            var btcData = labels.map(function (d) { return btcMap[d] !== undefined ? btcMap[d] : 0; });
+            var ethData = labels.map(function (d) { return ethMap[d] !== undefined ? ethMap[d] : 0; });
 
             initChart(labels, btcData, ethData);
         } catch (err) {
-            console.error('ETF flows fetch failed:', err);
+            console.error('ETF flows fetch failed:', err.message);
             initChart([], [], []);
         }
     }

@@ -398,111 +398,83 @@
   // State
   // -----------------------------------------------------------------------
   var currentDays = 30;
-  var dailyAllRows = [];
+  var dailyAllRows = [];   // grouped rows: [{date, ethereum, bsc, polygon, arbitrum}, ...]
   var dailyPage = 1;
   var ROWS_PER_PAGE = 10;
   var refreshTimer = null;
 
   // Chain colour dots used in the summary table
   var CHAIN_DOT_CLASS = {
-    ethereum:  'bg-primary',
-    bnbchain:  'bg-gold',
-    bnb:       'bg-gold',
-    polygon:   'bg-polygon',
-    arbitrum:  'bg-arbitrum',
+    ethereum: 'bg-primary',
+    bsc:      'bg-gold',
+    polygon:  'bg-polygon',
+    arbitrum: 'bg-arbitrum',
   };
 
-  // Stat-card element IDs keyed by a normalised chain name
+  // Stat-card element IDs keyed by chain_name from API
   var CARD_GAS_ID = {
     ethereum: 'card-eth-gas',
-    bnb:      'card-bnb-gas',
-    bnbchain: 'card-bnb-gas',
+    bsc:      'card-bnb-gas',
     polygon:  'card-polygon-gas',
     arbitrum: 'card-arbitrum-gas',
   };
   var CARD_TREND_ID = {
     ethereum: 'card-eth-trend',
-    bnb:      'card-bnb-trend',
-    bnbchain: 'card-bnb-trend',
+    bsc:      'card-bnb-trend',
     polygon:  'card-polygon-trend',
     arbitrum: 'card-arbitrum-trend',
   };
 
-  // SVG chart line colours per chain
+  // SVG chart line colours per chain_name
   var CHAIN_STROKE = {
     ethereum: '#49f4c8',
-    bnb:      '#f5a623',
-    bnbchain: '#f5a623',
+    bsc:      '#f5a623',
     polygon:  '#8247e5',
     arbitrum: '#28a0f0',
   };
 
+  // Display order for daily table columns
+  var CHAIN_ORDER = ['ethereum', 'bsc', 'polygon', 'arbitrum'];
+
   // -----------------------------------------------------------------------
   // Helpers
   // -----------------------------------------------------------------------
-  function normChain(name) {
-    if (!name) return '';
-    return name.toLowerCase().replace(/[\s_-]/g, '');
-  }
-
   function fmtGas(val) {
     if (val == null || val === '' || isNaN(Number(val))) return '--';
     var n = Number(val);
-    if (n >= 100) return n.toFixed(0);
-    if (n >= 10)  return n.toFixed(1);
-    return n.toFixed(2);
+    return n.toFixed(1);
   }
 
-  function pct(a, b) {
-    // % change from b to a
-    if (!b || b === 0) return null;
-    return ((a - b) / b) * 100;
+  function fmtUsd(val) {
+    if (val == null || isNaN(Number(val))) return '--';
+    return '$' + Number(val).toFixed(2);
   }
 
-  function statusBadge(current, avg7d) {
-    if (current == null || avg7d == null || avg7d === 0) {
+  function fmtTx(val) {
+    if (val == null || isNaN(Number(val))) return '--';
+    var n = Number(val);
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000)    return (n / 1000).toFixed(1) + 'K';
+    return String(n);
+  }
+
+  function gasStatusBadge(avgGasPrice) {
+    if (avgGasPrice == null || isNaN(Number(avgGasPrice))) {
       return '<span class="px-2 py-1 bg-slate-500/10 text-slate-400 rounded text-[10px] font-bold">--</span>';
     }
-    var ratio = current / avg7d;
-    if (ratio > 1.3) {
+    var g = Number(avgGasPrice);
+    if (g > 50) {
       return '<span class="px-2 py-1 bg-rose-500/10 text-rose-400 rounded text-[10px] font-bold">HIGH</span>';
     }
-    if (ratio < 0.7) {
+    if (g < 5) {
       return '<span class="px-2 py-1 bg-sky-500/10 text-sky-400 rounded text-[10px] font-bold">LOW</span>';
     }
     return '<span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 rounded text-[10px] font-bold">NORMAL</span>';
   }
 
-  function trendHTML(changePct) {
-    if (changePct == null) {
-      return '<span class="material-symbols-outlined text-xs">trending_flat</span> --';
-    }
-    var abs = Math.abs(changePct).toFixed(0) + '%';
-    if (changePct > 2) {
-      return '<span class="material-symbols-outlined text-xs">trending_up</span> ' + abs;
-    }
-    if (changePct < -2) {
-      return '<span class="material-symbols-outlined text-xs">trending_down</span> ' + abs;
-    }
-    return '<span class="material-symbols-outlined text-xs">trending_flat</span> ' + abs;
-  }
-
-  function trendColorClass(changePct) {
-    // For gas: going down is good (emerald), going up is bad (rose)
-    if (changePct == null) return 'text-slate-400';
-    if (changePct > 2)  return 'text-rose-400';
-    if (changePct < -2) return 'text-emerald-400';
-    return 'text-slate-400';
-  }
-
   function setText(id, val) {
     var el = document.getElementById(id);
     if (el) el.textContent = val;
-  }
-
-  function setHTML(id, val) {
-    var el = document.getElementById(id);
-    if (el) el.innerHTML = val;
   }
 
   function nowString() {
@@ -518,96 +490,124 @@
     var resp = await fetch('/api/blockchain-gas/summary?days=' + days);
     if (!resp.ok) throw new Error('summary API ' + resp.status);
     var d = await resp.json();
-    return d.data || d;
+    // API returns {success, data: {chains: [...], summary: {...}}}
+    var payload = d.data || d;
+    return Array.isArray(payload) ? payload : (payload.chains || []);
   }
 
   async function fetchDaily(limit) {
     var resp = await fetch('/api/blockchain-gas/daily?limit=' + limit);
     if (!resp.ok) throw new Error('daily API ' + resp.status);
     var d = await resp.json();
-    return d.data || d;
+    // API returns {success, data: [...]}  -- flat rows, one per chain per date
+    var payload = d.data || d;
+    return Array.isArray(payload) ? payload : [];
   }
 
   async function fetchChains() {
     var resp = await fetch('/api/blockchain-gas/chains');
     if (!resp.ok) throw new Error('chains API ' + resp.status);
     var d = await resp.json();
-    return d.data || d;
+    var payload = d.data || d;
+    return Array.isArray(payload) ? payload : [];
+  }
+
+  // -----------------------------------------------------------------------
+  // Group flat daily rows [{chain_name, date, avg_gas_price, ...}]
+  // into [{date, ethereum: <price>, bsc: <price>, polygon: <price>, arbitrum: <price>}]
+  // sorted descending by date.
+  // -----------------------------------------------------------------------
+  function groupDailyByDate(flatRows) {
+    var byDate = {};
+    flatRows.forEach(function (row) {
+      var dt = row.date || '';
+      var chain = row.chain_name || '';
+      if (!dt || !chain) return;
+      if (!byDate[dt]) byDate[dt] = { date: dt };
+      byDate[dt][chain] = row.avg_gas_price != null ? Number(row.avg_gas_price) : null;
+    });
+    var dates = Object.keys(byDate).sort(function (a, b) {
+      if (a > b) return -1;
+      if (a < b) return 1;
+      return 0;
+    });
+    return dates.map(function (dt) { return byDate[dt]; });
   }
 
   // -----------------------------------------------------------------------
   // Render: stat cards
+  // Uses chains array from summary API: [{chain_name, avg_gas_price, ...}]
   // -----------------------------------------------------------------------
-  function renderStatCards(summary) {
-    // summary is expected to be an array or object keyed by chain name
-    var rows = Array.isArray(summary) ? summary : Object.values(summary);
-    rows.forEach(function (row) {
-      var key = normChain(row.chain || row.chain_name || row.name || '');
-      var gasId   = CARD_GAS_ID[key];
-      var trendId = CARD_TREND_ID[key];
-      if (!gasId) return;
-
-      var current = row.current_gas != null ? row.current_gas : row.avg_gas;
-      setText(gasId, fmtGas(current));
-
-      var changePct = row.change_pct != null
-        ? row.change_pct
-        : pct(current, row.avg_7d || row.avg_24h);
-
-      var trendEl = document.getElementById(trendId);
-      if (trendEl) {
-        trendEl.className = trendColorClass(changePct) + ' flex items-center font-label text-xs';
-        trendEl.innerHTML = trendHTML(changePct);
+  function renderStatCards(chainRows) {
+    // Reset all to "--" first
+    Object.keys(CARD_GAS_ID).forEach(function (k) { setText(CARD_GAS_ID[k], '--'); });
+    Object.keys(CARD_TREND_ID).forEach(function (k) {
+      var el = document.getElementById(CARD_TREND_ID[k]);
+      if (el) {
+        el.className = 'text-slate-400 flex items-center font-label text-xs';
+        el.innerHTML = '<span class="material-symbols-outlined text-xs">trending_flat</span> --';
       }
+    });
+
+    chainRows.forEach(function (row) {
+      var key   = row.chain_name || '';
+      var gasId = CARD_GAS_ID[key];
+      if (!gasId) return;
+      var gas = row.avg_gas_price != null ? Number(row.avg_gas_price) : null;
+      setText(gasId, gas != null ? gas.toFixed(1) : '--');
     });
   }
 
   // -----------------------------------------------------------------------
   // Render: chains summary table
+  // Columns: chain_display_name | avg_gas_price (Gwei) | avg_gas_value_usd ($) |
+  //          total_transactions | status badge
   // -----------------------------------------------------------------------
-  function renderChainsSummary(summary) {
+  function renderChainsSummary(chainRows) {
     var tbody = document.getElementById('chains-summary-tbody');
     if (!tbody) return;
-    var rows = Array.isArray(summary) ? summary : Object.values(summary);
-    if (!rows.length) {
+    if (!chainRows.length) {
       tbody.innerHTML = '<tr><td colspan="4" class="px-6 py-8 text-center text-slate-500">No data</td></tr>';
       return;
     }
 
     var html = '';
-    rows.forEach(function (row) {
-      var key     = normChain(row.chain || row.chain_name || row.name || '');
-      var dotCls  = CHAIN_DOT_CLASS[key] || 'bg-slate-400';
-      var label   = row.chain || row.chain_name || row.name || key;
-      var current = row.current_gas != null ? row.current_gas : row.avg_gas;
-      var avg7d   = row.avg_7d != null ? row.avg_7d : row.avg_gas;
+    chainRows.forEach(function (row) {
+      var key      = row.chain_name || '';
+      var dotCls   = CHAIN_DOT_CLASS[key] || 'bg-slate-400';
+      var label    = row.chain_display_name || key;
+      var gasPrice = row.avg_gas_price != null ? Number(row.avg_gas_price) : null;
+      var gasUsd   = row.avg_gas_value_usd != null ? Number(row.avg_gas_value_usd) : null;
+      var txCount  = row.total_transactions != null ? Number(row.total_transactions) : null;
 
       html += '<tr class="hover:bg-slate-800/20 transition-colors">'
         + '<td class="px-6 py-4 flex items-center gap-3">'
         +   '<span class="w-1.5 h-1.5 rounded-full ' + dotCls + '"></span>'
         +   '<span class="text-white">' + label + '</span>'
         + '</td>'
-        + '<td class="px-4 py-4 text-right font-bold text-white">' + fmtGas(current) + '</td>'
-        + '<td class="px-4 py-4 text-right text-slate-400">' + fmtGas(avg7d) + '</td>'
-        + '<td class="px-6 py-4 text-center">' + statusBadge(current, avg7d) + '</td>'
+        + '<td class="px-4 py-4 text-right font-bold text-white">' + (gasPrice != null ? gasPrice.toFixed(1) : '--') + '</td>'
+        + '<td class="px-4 py-4 text-right text-slate-400">' + (gasUsd != null ? '$' + gasUsd.toFixed(2) : '--') + '</td>'
+        + '<td class="px-6 py-4 text-center">' + gasStatusBadge(gasPrice) + '</td>'
         + '</tr>';
     });
     tbody.innerHTML = html;
   }
 
   // -----------------------------------------------------------------------
-  // Render: daily gas table (paginated)
+  // Render: daily gas table (paginated, grouped by date)
+  // Each grouped row: {date, ethereum, bsc, polygon, arbitrum}
+  // Display last 30 grouped rows (ROWS_PER_PAGE rows per page).
   // -----------------------------------------------------------------------
   function renderDailyPage(page) {
     dailyPage = page;
-    var tbody    = document.getElementById('daily-gas-tbody');
-    var infoEl   = document.getElementById('daily-pagination-info');
-    var btnsEl   = document.getElementById('daily-pagination-btns');
-    var prevBtn  = document.getElementById('daily-prev-btn');
-    var nextBtn  = document.getElementById('daily-next-btn');
+    var tbody   = document.getElementById('daily-gas-tbody');
+    var infoEl  = document.getElementById('daily-pagination-info');
+    var btnsEl  = document.getElementById('daily-pagination-btns');
+    var prevBtn = document.getElementById('daily-prev-btn');
+    var nextBtn = document.getElementById('daily-next-btn');
     if (!tbody) return;
 
-    var total     = dailyAllRows.length;
+    var total      = dailyAllRows.length;
     var totalPages = Math.max(1, Math.ceil(total / ROWS_PER_PAGE));
     dailyPage = Math.min(Math.max(1, dailyPage), totalPages);
 
@@ -623,18 +623,14 @@
 
     var html = '';
     slice.forEach(function (row) {
-      var eth  = fmtGas(row.eth  != null ? row.eth  : row.ethereum   != null ? row.ethereum  : row.eth_avg);
-      var bnb  = fmtGas(row.bnb  != null ? row.bnb  : row.bnb_chain  != null ? row.bnb_chain : row.bnb_avg);
-      var poly = fmtGas(row.poly != null ? row.poly : row.polygon     != null ? row.polygon   : row.polygon_avg);
-      var arb  = fmtGas(row.arb  != null ? row.arb  : row.arbitrum   != null ? row.arbitrum  : row.arbitrum_avg);
-      var peak = row.peak_time || row.peak || '--';
+      // row = {date, ethereum, bsc, polygon, arbitrum}  (avg_gas_price per chain or null)
       html += '<tr class="hover:bg-slate-800/20 transition-colors">'
-        + '<td class="px-6 py-4 text-white">' + (row.date || row.day || '--') + '</td>'
-        + '<td class="px-6 py-4 text-right text-white">' + eth  + '</td>'
-        + '<td class="px-6 py-4 text-right text-white">' + bnb  + '</td>'
-        + '<td class="px-6 py-4 text-right text-white">' + poly + '</td>'
-        + '<td class="px-6 py-4 text-right text-white">' + arb  + '</td>'
-        + '<td class="px-6 py-4 text-center"><span class="text-slate-500">' + peak + '</span></td>'
+        + '<td class="px-6 py-4 text-white">' + (row.date || '--') + '</td>'
+        + '<td class="px-6 py-4 text-right text-white">' + fmtGas(row.ethereum) + '</td>'
+        + '<td class="px-6 py-4 text-right text-white">' + fmtGas(row.bsc)      + '</td>'
+        + '<td class="px-6 py-4 text-right text-white">' + fmtGas(row.polygon)  + '</td>'
+        + '<td class="px-6 py-4 text-right text-white">' + fmtGas(row.arbitrum) + '</td>'
+        + '<td class="px-6 py-4 text-center"><span class="text-slate-500">--</span></td>'
         + '</tr>';
     });
     tbody.innerHTML = html;
@@ -673,47 +669,38 @@
 
   // -----------------------------------------------------------------------
   // Render: SVG chart
+  // groupedRows: [{date, ethereum, bsc, polygon, arbitrum}] sorted descending.
+  // Chart shows chronological order (ascending), one line per chain.
   // -----------------------------------------------------------------------
-  function renderChart(dailyRows) {
-    var svg = document.getElementById('gas-chart-svg');
+  function renderChart(groupedRows) {
+    var svg     = document.getElementById('gas-chart-svg');
     var xLabels = document.getElementById('chart-x-labels');
-    if (!svg || !dailyRows.length) return;
+    if (!svg || !groupedRows.length) return;
 
-    // Build per-chain series from last N rows in chronological order
-    var rows = dailyRows.slice().reverse(); // API may return desc; reverse to asc
-    var n = rows.length;
+    // Reverse to ascending chronological order for the chart
+    var rows = groupedRows.slice().reverse();
+    var n    = rows.length;
 
-    // Collect chain keys present in first row
-    var firstRow = rows[0] || {};
-    var chainKeys = [];
-    ['ethereum', 'eth', 'bnb', 'bnbchain', 'bnb_chain', 'polygon', 'poly', 'arbitrum', 'arb'].forEach(function (k) {
-      if (firstRow[k] != null && chainKeys.indexOf(k) === -1) chainKeys.push(k);
-    });
-
-    // Normalise: pick canonical keys
+    // Build series: {chain_name: [avg_gas_price, ...]}
     var series = {};
-    chainKeys.forEach(function (k) {
-      var canon = normChain(k);
-      if (!series[canon]) series[canon] = [];
-    });
+    CHAIN_ORDER.forEach(function (c) { series[c] = []; });
 
     rows.forEach(function (row) {
-      chainKeys.forEach(function (k) {
-        var canon = normChain(k);
-        if (series[canon]) series[canon].push(Number(row[k]) || 0);
+      CHAIN_ORDER.forEach(function (c) {
+        series[c].push(row[c] != null ? Number(row[c]) : 0);
       });
     });
 
     // Find global max for scaling
     var allVals = [];
-    Object.keys(series).forEach(function (c) { allVals = allVals.concat(series[c]); });
-    var maxVal = Math.max.apply(null, allVals.filter(function (v) { return isFinite(v); })) || 1;
+    CHAIN_ORDER.forEach(function (c) { allVals = allVals.concat(series[c]); });
+    var maxVal = Math.max.apply(null, allVals.filter(function (v) { return isFinite(v) && v > 0; })) || 1;
 
-    // Build SVG polyline paths (viewBox 0 0 100 100, y inverted)
+    // Build SVG polyline paths (viewBox 0 0 100 100, y=0 is top)
     var pathsHtml = '';
     var defsHtml  = '';
 
-    Object.keys(series).forEach(function (c) {
+    CHAIN_ORDER.forEach(function (c) {
       var vals   = series[c];
       var stroke = CHAIN_STROKE[c] || '#94a3b8';
       var gradId = 'grad-' + c;
@@ -723,12 +710,12 @@
         return x.toFixed(1) + ',' + y.toFixed(1);
       }).join(' ');
 
-      // Area fill path (close to bottom)
-      var firstX = n > 1 ? 0 : 50;
-      var lastX  = 100;
-      var firstY = 100 - (vals[0] / maxVal) * 85;
-      var lastY  = 100 - (vals[vals.length - 1] / maxVal) * 85;
-      var fillPts = firstX + ',' + firstY.toFixed(1) + ' ' + pts + ' ' + lastX + ',' + lastY.toFixed(1) + ' ' + lastX + ',100 ' + firstX + ',100';
+      // Area fill polygon (close to bottom)
+      var firstX  = n > 1 ? '0' : '50';
+      var lastX   = '100';
+      var firstY  = (100 - (vals[0] / maxVal) * 85).toFixed(1);
+      var lastY   = (100 - (vals[vals.length - 1] / maxVal) * 85).toFixed(1);
+      var fillPts = firstX + ',' + firstY + ' ' + pts + ' ' + lastX + ',' + lastY + ' ' + lastX + ',100 ' + firstX + ',100';
 
       defsHtml += '<linearGradient id="' + gradId + '" x1="0%" y1="0%" x2="0%" y2="100%">'
         + '<stop offset="0%" style="stop-color:' + stroke + ';stop-opacity:0.15"/>'
@@ -747,7 +734,7 @@
       var spans = xLabels.querySelectorAll('span');
       picks.forEach(function (idx, i) {
         if (spans[i] && rows[idx]) {
-          spans[i].textContent = rows[idx].date || rows[idx].day || '';
+          spans[i].textContent = rows[idx].date || '';
         }
       });
     }
@@ -797,7 +784,8 @@
     currentDays = days;
     setActiveRangeBtn(days);
 
-    var limit = Math.max(days, 90); // fetch enough for daily table
+    // Each chain produces 1 row per day; fetch days * 4 to cover all 4 chains
+    var limit = days * 4;
 
     try {
       var results = await Promise.all([
@@ -806,47 +794,33 @@
         fetchChains(),
       ]);
 
-      var summary   = results[0];
-      var dailyData = results[1];
-      var chains    = results[2];
+      var chainRows  = results[0]; // [{chain_name, chain_display_name, avg_gas_price, ...}]
+      var flatDaily  = results[1]; // [{chain_name, date, avg_gas_price, ...}]
+      // results[2] = chains list (not needed beyond fetch)
 
-      // Normalise summary: may be array or object
-      var summaryRows = Array.isArray(summary) ? summary : Object.values(summary);
-
-      // Stat cards
-      renderStatCards(summaryRows);
+      // Stat cards (use summary chain data)
+      renderStatCards(chainRows);
 
       // Floating ETH indicator
-      summaryRows.forEach(function (row) {
-        var key = normChain(row.chain || row.chain_name || row.name || '');
-        if (key === 'ethereum') {
-          var cur = row.current_gas != null ? row.current_gas : row.avg_gas;
-          setText('floating-eth-gas', 'ETH: ' + fmtGas(cur) + ' Gwei');
+      chainRows.forEach(function (row) {
+        if (row.chain_name === 'ethereum') {
+          var gas = row.avg_gas_price != null ? Number(row.avg_gas_price).toFixed(1) : '--';
+          setText('floating-eth-gas', 'ETH: ' + gas + ' Gwei');
         }
       });
 
       // Chains summary table
-      renderChainsSummary(summaryRows);
+      renderChainsSummary(chainRows);
 
-      // Daily data table
-      var dailyRows = Array.isArray(dailyData) ? dailyData : Object.values(dailyData);
-      // Sort descending by date
-      dailyRows.sort(function (a, b) {
-        var da = a.date || a.day || '';
-        var db = b.date || b.day || '';
-        if (da > db) return -1;
-        if (da < db) return 1;
-        return 0;
-      });
-      dailyAllRows = dailyRows;
+      // Group flat daily rows by date, sort descending, keep last `days` dates
+      var grouped = groupDailyByDate(flatDaily);
+      dailyAllRows = grouped.slice(0, days);
       dailyPage = 1;
       renderDailyPage(1);
 
-      // SVG chart (use last `days` rows)
-      var chartRows = dailyRows.slice(0, days);
-      renderChart(chartRows);
+      // SVG chart: pass grouped rows (already descending; renderChart will reverse)
+      renderChart(dailyAllRows);
 
-      // Last update
       setText('last-update', 'Last update: ' + nowString());
 
     } catch (err) {

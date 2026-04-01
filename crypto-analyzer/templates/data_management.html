@@ -450,19 +450,29 @@
             return;
         }
 
-        const onlineCount = services.filter(s => s.running || s.status === 'running').length;
+        const onlineCount = services.filter(function (s) { return s.status === 'active'; }).length;
         document.getElementById('service-live-status').textContent =
             'LIVE STATUS: ' + onlineCount + '/' + services.length + ' ONLINE';
 
         grid.innerHTML = services.map(function (svc) {
-            const running = svc.running || svc.status === 'running';
-            const dotColor = running ? 'bg-brand-primary' : 'bg-slate-600';
-            const pingSpan = running
-                ? '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75"></span>'
-                : '';
-            const labelColor = running ? 'text-brand-primary' : 'text-slate-500';
-            const statusText = running ? '运行中' : '已停止';
-            const name = svc.name || svc.service_name || svc.label || '未知服务';
+            var dotColor, pingSpan, labelColor, statusText;
+            if (svc.status === 'active') {
+                dotColor = 'bg-brand-primary';
+                pingSpan = '<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75"></span>';
+                labelColor = 'text-brand-primary';
+                statusText = '运行中';
+            } else if (svc.status === 'warning') {
+                dotColor = 'bg-yellow-400';
+                pingSpan = '';
+                labelColor = 'text-yellow-400';
+                statusText = '警告';
+            } else {
+                dotColor = 'bg-slate-600';
+                pingSpan = '';
+                labelColor = 'text-slate-500';
+                statusText = '已停止';
+            }
+            const name = svc.type || '未知服务';
 
             return '<div class="bg-brand-bg border border-slate-800 p-3 rounded-lg flex flex-col gap-2 group hover:border-brand-primary/30 transition-colors">'
                 + '<div class="flex items-center justify-between">'
@@ -495,7 +505,12 @@
 
         if (elTables) elTables.textContent = summary.total_tables != null ? summary.total_tables : '--';
 
-        const totalSizeMb = summary.total_size_mb != null ? summary.total_size_mb : null;
+        var totalSizeMb = null;
+        if (tables && tables.length > 0) {
+            totalSizeMb = tables.reduce(function (acc, t) {
+                return acc + (t.size_mb != null ? Number(t.size_mb) : 0);
+            }, 0);
+        }
         if (elSize) {
             if (totalSizeMb != null) {
                 if (totalSizeMb >= 1024 * 1024) {
@@ -672,7 +687,7 @@
 
     function confirmClean(tableName, tableLabel) {
         if (!confirm('确认要清理表 "' + tableLabel + '" 吗？此操作不可恢复！')) return;
-        fetch(API_PREFIX + '/table/' + encodeURIComponent(tableName), { method: 'DELETE' })
+        fetch(API_PREFIX + '/table/' + encodeURIComponent(tableName) + '/cleanup', { method: 'DELETE' })
             .then(function (res) { return res.json(); })
             .then(function (d) {
                 const ok = d && (d.success === true || d.status === 'ok');
