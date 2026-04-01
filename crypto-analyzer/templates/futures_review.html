@@ -1,97 +1,106 @@
 <!DOCTYPE html>
-
 <html class="dark" lang="en"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Neural Obsidian | 24h Futures Review</title>
+<title>Neural Obsidian | 24H Futures Review</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <style>
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        }
-        .mono { font-family: 'JetBrains Mono', monospace; }
-        body { font-family: 'Manrope', sans-serif; }
-        h1, h2, h3, .headline { font-family: 'Space Grotesk', sans-serif; }
-        
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #0f1520; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #49f4c8; }
-    </style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  body { font-family: 'Manrope', sans-serif; }
+  h1, h2, h3, .headline { font-family: 'Space Grotesk', sans-serif; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #0f1520; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #49f4c8; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+  .tab-btn.active { border-bottom-color: #49f4c8 !important; color: #49f4c8 !important; }
+  .af { background: rgba(73,244,200,0.15); color: #49f4c8; }
+  .pp { color: #49f4c8; }
+  .pn { color: #ff716c; }
+  .sc { border-radius: 0.75rem; padding: 1.25rem; }
+  .sc.danger { background: rgba(255,113,108,0.08); border: 1px solid rgba(255,113,108,0.25); }
+  .sc.warning { background: rgba(255,176,0,0.08); border: 1px solid rgba(255,176,0,0.25); }
+  .sc.success { background: rgba(73,244,200,0.08); border: 1px solid rgba(73,244,200,0.25); }
+  .sc.info { background: rgba(91,158,255,0.08); border: 1px solid rgba(91,158,255,0.25); }
+  .bar-bg { background: rgba(255,255,255,0.06); border-radius: 4px; height: 6px; }
+  .bar-fill { height: 6px; border-radius: 4px; transition: width 0.4s ease; }
+</style>
 <script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "on-secondary": "#002045",
-                        "inverse-surface": "#f8f9ff",
-                        "error-dim": "#d7383b",
-                        "on-surface": "#ebeef5",
-                        "surface-container-low": "#0f1419",
-                        "secondary-container": "#005eb5",
-                        "outline": "#72767c",
-                        "on-secondary-fixed-variant": "#00509c",
-                        "surface-container-highest": "#20262e",
-                        "tertiary": "#ff6e80",
-                        "primary-container": "#00d4aa",
-                        "surface-bright": "#262d35",
-                        "tertiary-fixed": "#ff909a",
-                        "surface": "#0a0f14",
-                        "on-tertiary-fixed": "#39000b",
-                        "on-primary-fixed": "#004334",
-                        "on-primary": "#005745",
-                        "error": "#ff716c",
-                        "on-secondary-container": "#f6f7ff",
-                        "surface-variant": "#20262e",
-                        "primary-fixed-dim": "#33e5ba",
-                        "surface-tint": "#49f4c8",
-                        "on-error-container": "#ffa8a3",
-                        "on-surface-variant": "#a8abb2",
-                        "surface-container-lowest": "#000000",
-                        "surface-container-high": "#1a2027",
-                        "on-tertiary": "#490011",
-                        "on-tertiary-container": "#100001",
-                        "surface-container": "#151a20",
-                        "primary-fixed": "#49f4c8",
-                        "tertiary-fixed-dim": "#ff7987",
-                        "tertiary-dim": "#ff6e80",
-                        "inverse-primary": "#006c55",
-                        "secondary-fixed-dim": "#a4c5ff",
-                        "on-background": "#ebeef5",
-                        "secondary-dim": "#5b9eff",
-                        "background": "#0a0f14",
-                        "surface-dim": "#0a0f14",
-                        "secondary-fixed": "#bbd2ff",
-                        "on-tertiary-fixed-variant": "#780022",
-                        "outline-variant": "#44484e",
-                        "on-primary-container": "#004132",
-                        "on-primary-fixed-variant": "#00624d",
-                        "primary-dim": "#33e5ba",
-                        "on-secondary-fixed": "#003469",
-                        "on-error": "#490006",
-                        "primary": "#49f4c8",
-                        "tertiary-container": "#fa4966",
-                        "error-container": "#9f0519",
-                        "inverse-on-surface": "#51555c",
-                        "secondary": "#5b9eff"
-                    },
-                    fontFamily: {
-                        "headline": ["Space Grotesk"],
-                        "body": ["Manrope"],
-                        "label": ["Manrope"]
-                    },
-                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
-                },
-            },
-        }
-    </script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "on-secondary": "#002045",
+          "inverse-surface": "#f8f9ff",
+          "error-dim": "#d7383b",
+          "on-surface": "#ebeef5",
+          "surface-container-low": "#0f1419",
+          "secondary-container": "#005eb5",
+          "outline": "#72767c",
+          "on-secondary-fixed-variant": "#00509c",
+          "surface-container-highest": "#20262e",
+          "tertiary": "#ff6e80",
+          "primary-container": "#00d4aa",
+          "surface-bright": "#262d35",
+          "tertiary-fixed": "#ff909a",
+          "surface": "#0a0f14",
+          "on-tertiary-fixed": "#39000b",
+          "on-primary-fixed": "#004334",
+          "on-primary": "#005745",
+          "error": "#ff716c",
+          "on-secondary-container": "#f6f7ff",
+          "surface-variant": "#20262e",
+          "primary-fixed-dim": "#33e5ba",
+          "surface-tint": "#49f4c8",
+          "on-error-container": "#ffa8a3",
+          "on-surface-variant": "#a8abb2",
+          "surface-container-lowest": "#000000",
+          "surface-container-high": "#1a2027",
+          "on-tertiary": "#490011",
+          "on-tertiary-container": "#100001",
+          "surface-container": "#151a20",
+          "primary-fixed": "#49f4c8",
+          "tertiary-fixed-dim": "#ff7987",
+          "tertiary-dim": "#ff6e80",
+          "inverse-primary": "#006c55",
+          "secondary-fixed-dim": "#a4c5ff",
+          "on-background": "#ebeef5",
+          "secondary-dim": "#5b9eff",
+          "background": "#0a0f14",
+          "surface-dim": "#0a0f14",
+          "secondary-fixed": "#bbd2ff",
+          "on-tertiary-fixed-variant": "#780022",
+          "outline-variant": "#44484e",
+          "on-primary-container": "#004132",
+          "on-primary-fixed-variant": "#00624d",
+          "primary-dim": "#33e5ba",
+          "on-secondary-fixed": "#003469",
+          "on-error": "#490006",
+          "primary": "#49f4c8",
+          "tertiary-container": "#fa4966",
+          "error-container": "#9f0519",
+          "inverse-on-surface": "#51555c",
+          "secondary": "#5b9eff"
+        },
+        fontFamily: {
+          "headline": ["Space Grotesk"],
+          "body": ["Manrope"],
+          "label": ["Manrope"]
+        },
+        borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+      },
+    },
+  }
+</script>
 </head>
 <body class="bg-surface text-on-surface selection:bg-primary selection:text-on-primary">
+
 <!-- Sidebar Navigation -->
 <aside class="fixed left-0 top-0 h-screen w-[240px] bg-[#0a0f14] border-r border-slate-800 flex flex-col py-6 z-50">
 <div class="px-5 mb-6">
@@ -128,636 +137,1210 @@
 })();
 </script>
 </aside>
+
 <!-- Main Content Wrapper -->
-<main class="ml-64 min-h-screen flex flex-col">
-<!-- Top Navigation Bar -->
-<header class="w-full h-16 bg-[#0a0f14] flex justify-between items-center px-8 sticky top-0 z-40">
-<div class="flex items-center gap-6">
-<h1 class="font-['Space_Grotesk'] text-xl font-bold tracking-tighter text-[#49f4c8]">24小时合约复盘</h1>
-<div class="h-4 w-[1px] bg-outline-variant/30"></div>
-<div class="flex items-center gap-2">
-<span class="text-[10px] font-['Space_Grotesk'] text-on-surface-variant uppercase tracking-widest">Last Update:</span>
-<span class="mono text-xs text-on-surface">2024-05-20 14:30:12</span>
-<button class="ml-2 w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container transition-all">
-<span class="material-symbols-outlined text-sm text-primary">refresh</span>
-</button>
-</div>
-</div>
-<div class="flex items-center gap-4">
-<button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
-<span class="material-symbols-outlined">notifications</span>
-</button>
-<button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
-<span class="material-symbols-outlined">account_balance_wallet</span>
-</button>
-<button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
-<span class="material-symbols-outlined">account_circle</span>
-</button>
-</div>
+<main class="ml-[240px] min-h-screen flex flex-col">
+
+<!-- Top Header Bar -->
+<header class="w-full h-16 bg-[#0a0f14] flex items-center justify-between px-8 sticky top-0 z-40 border-b border-outline-variant/10">
+  <div class="flex items-center gap-4">
+    <h1 class="font-['Space_Grotesk'] text-xl font-bold tracking-tighter text-[#49f4c8]">24H 合约复盘</h1>
+    <div class="h-4 w-[1px] bg-outline-variant/30"></div>
+    <div class="flex items-center gap-1 bg-surface-container rounded-lg p-1">
+      <button id="btn-usdt" onclick="switchMarginType('usdt')" class="px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider transition-all af">U本位</button>
+      <button id="btn-coin" onclick="switchMarginType('coin')" class="px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface transition-all">币本位</button>
+    </div>
+    <select id="hours-select" onchange="onHoursChange(this.value)" class="bg-surface-container text-on-surface text-xs rounded-lg px-3 py-1.5 border border-outline-variant/30 focus:outline-none focus:border-primary/50 font-['Space_Grotesk']">
+      <option value="12">12小时</option>
+      <option value="24" selected>24小时</option>
+      <option value="48">48小时</option>
+      <option value="72">72小时</option>
+      <option value="168">7天</option>
+    </select>
+    <div class="h-4 w-[1px] bg-outline-variant/30"></div>
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] font-['Space_Grotesk'] text-on-surface-variant uppercase tracking-widest">更新:</span>
+      <span id="update-ts" class="mono text-xs text-on-surface">--</span>
+      <button onclick="refreshCurrentTab()" class="ml-1 w-7 h-7 flex items-center justify-center rounded-full hover:bg-surface-container transition-all">
+        <span id="refresh-icon" class="material-symbols-outlined text-sm text-primary">refresh</span>
+      </button>
+    </div>
+  </div>
+  <div class="flex items-center gap-2">
+    <button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
+      <span class="material-symbols-outlined text-[20px]">notifications</span>
+    </button>
+    <button class="p-2 text-on-surface-variant hover:text-primary transition-colors">
+      <span class="material-symbols-outlined text-[20px]">account_circle</span>
+    </button>
+  </div>
 </header>
-<!-- Canvas -->
-<div class="p-8 space-y-8">
-<!-- Summary Row -->
-<div class="grid grid-cols-5 gap-4">
-<div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-primary/30">
-<p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">24H开仓数</p>
-<p class="mono text-3xl font-medium text-on-surface" id="stat-total-open">42</p>
+
+<!-- Tab Bar -->
+<div class="bg-[#0a0f14] border-b border-outline-variant/10 flex items-center px-8 overflow-x-auto">
+  <button id="tab-overview"    onclick="switchTab('overview')"    class="tab-btn active px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">总览</button>
+  <button id="tab-trades"      onclick="switchTab('trades')"      class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">交易记录</button>
+  <button id="tab-analysis"    onclick="switchTab('analysis')"    class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">原因分析</button>
+  <button id="tab-suggestions" onclick="switchTab('suggestions')" class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">智能建议</button>
+  <button id="tab-signals"     onclick="switchTab('signals')"     class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">信号质量</button>
+  <button id="tab-opportunity" onclick="switchTab('opportunity')" class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">机会分析</button>
+  <button id="tab-dailypnl"    onclick="switchTab('dailypnl')"    class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">每日盈亏</button>
+  <button id="tab-retro"       onclick="switchTab('retro')"       class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">历史复盘</button>
 </div>
-<div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-primary/30">
-<p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">24H盈利单数</p>
-<p class="mono text-3xl font-medium text-primary" id="stat-win">28</p>
-</div>
-<div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-error/30">
-<p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">24H亏损单数</p>
-<p class="mono text-3xl font-medium text-error" id="stat-loss">14</p>
-</div>
-<div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-primary/30">
-<p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">24H总盈亏</p>
-<p class="mono text-3xl font-medium text-primary" id="stat-pnl">+$12,482.50</p>
-</div>
-<div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-secondary/30">
-<p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">胜率</p>
-<p class="mono text-3xl font-medium text-[#FFD700]" id="stat-winrate">66.7<span class="text-sm ml-1">%</span></p>
-</div>
-</div>
-<!-- Analysis Section (2 Columns) -->
-<div class="grid grid-cols-2 gap-8">
-<!-- Signal Quality Analysis -->
-<div class="bg-surface-container-low p-8 rounded-2xl relative overflow-hidden">
-<div class="flex justify-between items-end mb-8">
-<div>
-<h3 class="font-headline text-lg font-bold text-on-surface mb-1">信号质量分析</h3>
-<p class="text-xs text-on-surface-variant">Signal Component Efficiency Tracking</p>
-</div>
-<span class="mono text-primary text-xs bg-primary/10 px-2 py-1 rounded" id="signal-health-badge">HEALTHY</span>
-</div>
-<div class="space-y-6" id="signal-analysis-list">
-<div class="space-y-2">
-<div class="flex justify-between text-[10px] font-headline tracking-wider uppercase text-on-surface-variant">
-<span>Momentum (动量)</span>
-<span class="mono text-primary">84%</span>
-</div>
-<div class="h-2 bg-surface-container-highest rounded-full overflow-hidden">
-<div class="h-full bg-primary rounded-full" style="width: 84%;"></div>
-</div>
-</div>
-<div class="space-y-2">
-<div class="flex justify-between text-[10px] font-headline tracking-wider uppercase text-on-surface-variant">
-<span>Mean Reversion (均值回归)</span>
-<span class="mono text-secondary">62%</span>
-</div>
-<div class="h-2 bg-surface-container-highest rounded-full overflow-hidden">
-<div class="h-full bg-secondary rounded-full" style="width: 62%;"></div>
-</div>
-</div>
-<div class="space-y-2">
-<div class="flex justify-between text-[10px] font-headline tracking-wider uppercase text-on-surface-variant">
-<span>Breakout (突破)</span>
-<span class="mono text-[#FFD700]">45%</span>
-</div>
-<div class="h-2 bg-surface-container-highest rounded-full overflow-hidden">
-<div class="h-full bg-[#FFD700] rounded-full" style="width: 45%;"></div>
-</div>
-</div>
-</div>
-</div>
-<!-- Symbol Performance -->
-<div class="bg-surface-container-low p-8 rounded-2xl">
-<h3 class="font-headline text-lg font-bold text-on-surface mb-6">交易对表现</h3>
-<div class="space-y-4" id="best-symbols-list">
-<!-- Top Performers -->
-<div class="flex items-center justify-between p-3 bg-primary/5 rounded-lg">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
-<span class="mono text-[10px] font-bold text-primary">BTC</span>
-</div>
-<span class="font-headline text-sm font-medium">BTC/USDT</span>
-</div>
-<span class="mono text-sm text-primary font-bold">+$8,420.00</span>
-</div>
-<div class="flex items-center justify-between p-3 bg-primary/5 rounded-lg">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
-<span class="mono text-[10px] font-bold text-primary">SOL</span>
-</div>
-<span class="font-headline text-sm font-medium">SOL/USDT</span>
-</div>
-<span class="mono text-sm text-primary font-bold">+$3,120.50</span>
-</div>
-<!-- Bottom Performers -->
-<div class="flex items-center justify-between p-3 bg-error/5 rounded-lg">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
-<span class="mono text-[10px] font-bold text-error">ETH</span>
-</div>
-<span class="font-headline text-sm font-medium">ETH/USDT</span>
-</div>
-<span class="mono text-sm text-error font-bold">-$1,250.20</span>
-</div>
-<div class="flex items-center justify-between p-3 bg-error/5 rounded-lg">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">
-<span class="mono text-[10px] font-bold text-error">ARB</span>
-</div>
-<span class="font-headline text-sm font-medium">ARB/USDT</span>
-</div>
-<span class="mono text-sm text-error font-bold">-$860.00</span>
-</div>
-</div>
-</div>
-</div>
-<!-- AI Strategy Suggestions -->
-<div class="grid grid-cols-3 gap-6">
-<!-- Optimization Card -->
-<div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10 hover:bg-surface-container transition-all">
-<div class="flex items-center justify-between mb-4">
-<div class="p-2 bg-primary/10 rounded-lg">
-<span class="material-symbols-outlined text-primary">auto_fix_high</span>
-</div>
-<span class="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded-full uppercase tracking-tighter">优化</span>
-</div>
-<h4 class="font-headline font-bold text-on-surface mb-2">策略优化</h4>
-<p class="text-xs text-on-surface-variant leading-relaxed">Suggests increasing leverage on BTC trend following. Momentum signals are displaying high fidelity.</p>
-</div>
-<!-- Warning Card -->
-<div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10 hover:bg-surface-container transition-all">
-<div class="flex items-center justify-between mb-4">
-<div class="p-2 bg-[#FFD700]/10 rounded-lg">
-<span class="material-symbols-outlined text-[#FFD700]">warning</span>
-</div>
-<span class="px-2 py-0.5 bg-[#FFD700]/10 text-[#FFD700] text-[10px] font-bold rounded-full uppercase tracking-tighter">注意</span>
-</div>
-<h4 class="font-headline font-bold text-on-surface mb-2">风险注意</h4>
-<p class="text-xs text-on-surface-variant leading-relaxed">Multiple loss signals detected on ETH scalp strategy. High volatility environment reducing hit rate.</p>
-</div>
-<!-- Good Card -->
-<div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/10 hover:bg-surface-container transition-all">
-<div class="flex items-center justify-between mb-4">
-<div class="p-2 bg-secondary/10 rounded-lg">
-<span class="material-symbols-outlined text-secondary">check_circle</span>
-</div>
-<span class="px-2 py-0.5 bg-secondary/10 text-secondary text-[10px] font-bold rounded-full uppercase tracking-tighter">良好</span>
-</div>
-<h4 class="font-headline font-bold text-on-surface mb-2">表现良好</h4>
-<p class="text-xs text-on-surface-variant leading-relaxed">SOL breakout strategy maintained 80% win rate. Continue current risk parameters for SOL pairs.</p>
-</div>
-</div>
-<!-- Detailed Trading Records Table -->
-<div class="bg-surface-container-low rounded-2xl overflow-hidden shadow-2xl">
-<div class="px-8 py-6 border-b border-outline-variant/10 flex justify-between items-center">
-<h3 class="font-headline text-lg font-bold text-on-surface">详细交易记录</h3>
-<div class="flex items-center gap-4">
-<span class="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Filters: All History</span>
-<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary">filter_list</span>
-</div>
-</div>
-<div class="overflow-x-auto overflow-y-auto max-h-[480px]">
-<table class="w-full text-left border-collapse">
-<thead class="sticky top-0 z-10">
-<tr class="text-[10px] text-on-surface-variant uppercase tracking-widest font-headline bg-surface-container-low">
-<th class="px-8 py-5">交易对</th>
-<th class="px-8 py-5">方向</th>
-<th class="px-8 py-5">开仓价</th>
-<th class="px-8 py-5">平仓价</th>
-<th class="px-8 py-5">盈亏</th>
-<th class="px-8 py-5">持仓时长</th>
-<th class="px-8 py-5">平仓原因</th>
-</tr>
-</thead>
-<tbody class="text-sm border-t border-outline-variant/10" id="trades-tbody">
-<!-- Row 1 -->
-<tr class="hover:bg-surface-container transition-colors group">
-<td class="px-8 py-5 font-medium">BTC/USDT</td>
-<td class="px-8 py-5">
-<span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded">LONG</span>
-</td>
-<td class="px-8 py-5 mono text-on-surface-variant">64,250.00</td>
-<td class="px-8 py-5 mono text-on-surface-variant">66,820.50</td>
-<td class="px-8 py-5 mono text-primary font-bold">+$2,570.50</td>
-<td class="px-8 py-5 text-on-surface-variant">04:12:33</td>
-<td class="px-8 py-5">
-<span class="text-[10px] bg-surface-container-highest px-2 py-0.5 rounded text-on-surface">TAKE_PROFIT</span>
-</td>
-</tr>
-<!-- Row 2 -->
-<tr class="hover:bg-surface-container transition-colors group">
-<td class="px-8 py-5 font-medium">ETH/USDT</td>
-<td class="px-8 py-5">
-<span class="px-2 py-1 bg-error/10 text-error text-[10px] font-bold rounded">SHORT</span>
-</td>
-<td class="px-8 py-5 mono text-on-surface-variant">3,120.20</td>
-<td class="px-8 py-5 mono text-on-surface-variant">3,180.50</td>
-<td class="px-8 py-5 mono text-error font-bold">-$60.30</td>
-<td class="px-8 py-5 text-on-surface-variant">00:45:10</td>
-<td class="px-8 py-5">
-<span class="text-[10px] bg-surface-container-highest px-2 py-0.5 rounded text-on-surface">STOP_LOSS</span>
-</td>
-</tr>
-<!-- Row 3 -->
-<tr class="hover:bg-surface-container transition-colors group">
-<td class="px-8 py-5 font-medium">SOL/USDT</td>
-<td class="px-8 py-5">
-<span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded">LONG</span>
-</td>
-<td class="px-8 py-5 mono text-on-surface-variant">142.15</td>
-<td class="px-8 py-5 mono text-on-surface-variant">158.40</td>
-<td class="px-8 py-5 mono text-primary font-bold">+$16.25</td>
-<td class="px-8 py-5 text-on-surface-variant">08:50:12</td>
-<td class="px-8 py-5">
-<span class="text-[10px] bg-surface-container-highest px-2 py-0.5 rounded text-on-surface">MANUAL_CLOSE</span>
-</td>
-</tr>
-<!-- Row 4 -->
-<tr class="hover:bg-surface-container transition-colors group">
-<td class="px-8 py-5 font-medium">LINK/USDT</td>
-<td class="px-8 py-5">
-<span class="px-2 py-1 bg-primary/10 text-primary text-[10px] font-bold rounded">LONG</span>
-</td>
-<td class="px-8 py-5 mono text-on-surface-variant">14.22</td>
-<td class="px-8 py-5 mono text-on-surface-variant">14.85</td>
-<td class="px-8 py-5 mono text-primary font-bold">+$0.63</td>
-<td class="px-8 py-5 text-on-surface-variant">02:15:00</td>
-<td class="px-8 py-5">
-<span class="text-[10px] bg-surface-container-highest px-2 py-0.5 rounded text-on-surface">TAKE_PROFIT</span>
-</td>
-</tr>
-</tbody>
-</table>
-</div>
-<div class="px-8 py-4 border-t border-outline-variant/10 flex justify-center">
-<button class="text-[10px] font-headline font-bold text-primary tracking-widest uppercase hover:underline">View Full Ledger</button>
-</div>
-</div>
-</div>
-<footer class="mt-auto px-8 py-6 flex justify-between items-center text-[10px] text-on-surface-variant border-t border-outline-variant/10">
-<p>© 2024 NEURAL OBSIDIAN ANALYTICS ENGINE. ALL SYSTEMS NOMINAL.</p>
-<div class="flex gap-4">
-<a class="hover:text-primary" href="#">DATA_POLICY</a>
-<a class="hover:text-primary" href="#">ENCRYPTION_STATUS</a>
-<a class="hover:text-primary" href="#">NODE_LATENCY: 12ms</a>
-</div>
+
+<!-- Tab Panels -->
+<div class="flex-1 p-8 space-y-6">
+
+  <!-- ============ OVERVIEW ============ -->
+  <div id="pane-overview" class="tab-pane active space-y-6">
+    <div class="grid grid-cols-5 gap-4">
+      <div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-primary/30">
+        <p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">开仓总数</p>
+        <p class="mono text-3xl font-medium text-on-surface" id="stat-total-open">--</p>
+      </div>
+      <div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-primary/30">
+        <p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">盈利单数</p>
+        <p class="mono text-3xl font-medium text-primary" id="stat-win">--</p>
+      </div>
+      <div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-error/30">
+        <p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">亏损单数</p>
+        <p class="mono text-3xl font-medium text-error" id="stat-loss">--</p>
+      </div>
+      <div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-primary/30">
+        <p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">总盈亏 (U)</p>
+        <p class="mono text-3xl font-medium" id="stat-pnl">--</p>
+      </div>
+      <div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-secondary/30">
+        <p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">胜率</p>
+        <p class="mono text-3xl font-medium text-secondary" id="stat-winrate">--</p>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-6">
+      <div class="bg-surface-container-low rounded-xl p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">信号健康度</h3>
+          <span id="signal-health-badge" class="text-xs px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">--</span>
+        </div>
+        <div id="signal-analysis-list" class="space-y-3">
+          <p class="text-xs text-on-surface-variant">加载中...</p>
+        </div>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-6">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">交易对表现</h3>
+        <div id="best-symbols-list" class="space-y-2">
+          <p class="text-xs text-on-surface-variant">加载中...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ TRADES ============ -->
+  <div id="pane-trades" class="tab-pane space-y-4">
+    <div class="flex items-center gap-6 flex-wrap">
+      <div class="flex items-center gap-1">
+        <span class="text-[10px] uppercase text-on-surface-variant tracking-wider mr-2">方向</span>
+        <button onclick="setTradeDir('all',this)" class="trade-dir-btn af px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider">全部</button>
+        <button onclick="setTradeDir('LONG',this)" class="trade-dir-btn px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface bg-surface-container">LONG</button>
+        <button onclick="setTradeDir('SHORT',this)" class="trade-dir-btn px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface bg-surface-container">SHORT</button>
+      </div>
+      <div class="flex items-center gap-1">
+        <span class="text-[10px] uppercase text-on-surface-variant tracking-wider mr-2">盈亏</span>
+        <button onclick="setTradePnl('all',this)" class="trade-pnl-btn af px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider">全部</button>
+        <button onclick="setTradePnl('win',this)" class="trade-pnl-btn px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface bg-surface-container">盈利</button>
+        <button onclick="setTradePnl('loss',this)" class="trade-pnl-btn px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface bg-surface-container">亏损</button>
+      </div>
+      <span class="text-xs text-on-surface-variant">共 <span id="trades-count" class="text-primary font-bold">0</span> 条</span>
+    </div>
+    <div class="bg-surface-container-low rounded-xl overflow-hidden">
+      <div class="max-h-[560px] overflow-y-auto">
+        <table class="w-full text-xs">
+          <thead class="sticky top-0 bg-surface-container-low z-10">
+            <tr class="border-b border-outline-variant/20">
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">交易对 / 时间</th>
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">方向</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">开仓价</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">平仓价</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">盈亏(U)</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">持仓时长</th>
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">平仓原因</th>
+            </tr>
+          </thead>
+          <tbody id="trades-tbody">
+            <tr><td colspan="7" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ ANALYSIS ============ -->
+  <div id="pane-analysis" class="tab-pane space-y-6">
+    <div id="direction-stats" class="grid grid-cols-2 gap-4">
+      <div class="bg-surface-container-low rounded-xl p-6">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-4 font-['Space_Grotesk'] font-bold">LONG 方向</p>
+        <div class="space-y-2">
+          <div class="flex justify-between text-xs"><span class="text-on-surface-variant">交易次数</span><span id="long-count" class="mono text-on-surface">--</span></div>
+          <div class="flex justify-between text-xs"><span class="text-on-surface-variant">胜率</span><span id="long-wr" class="mono text-primary">--</span></div>
+          <div class="flex justify-between text-xs"><span class="text-on-surface-variant">总盈亏</span><span id="long-pnl" class="mono">--</span></div>
+          <div class="flex justify-between text-xs"><span class="text-on-surface-variant">平均盈亏</span><span id="long-avg" class="mono">--</span></div>
+        </div>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-6">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-4 font-['Space_Grotesk'] font-bold">SHORT 方向</p>
+        <div class="space-y-2">
+          <div class="flex justify-between text-xs"><span class="text-on-surface-variant">交易次数</span><span id="short-count" class="mono text-on-surface">--</span></div>
+          <div class="flex justify-between text-xs"><span class="text-on-surface-variant">胜率</span><span id="short-wr" class="mono text-primary">--</span></div>
+          <div class="flex justify-between text-xs"><span class="text-on-surface-variant">总盈亏</span><span id="short-pnl" class="mono">--</span></div>
+          <div class="flex justify-between text-xs"><span class="text-on-surface-variant">平均盈亏</span><span id="short-avg" class="mono">--</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="bg-surface-container-low rounded-xl overflow-hidden">
+      <div class="px-6 py-4 border-b border-outline-variant/20">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">入场信号分析</h3>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead class="bg-surface-container">
+            <tr class="border-b border-outline-variant/20">
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">信号类型</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">次数</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">胜率</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总盈亏</th>
+            </tr>
+          </thead>
+          <tbody id="entry-analysis-body">
+            <tr><td colspan="4" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="bg-surface-container-low rounded-xl overflow-hidden">
+      <div class="px-6 py-4 border-b border-outline-variant/20">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">平仓方式分析</h3>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead class="bg-surface-container">
+            <tr class="border-b border-outline-variant/20">
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">平仓方式</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">次数</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">平均盈亏</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总盈亏</th>
+            </tr>
+          </thead>
+          <tbody id="close-analysis-body">
+            <tr><td colspan="4" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ SUGGESTIONS ============ -->
+  <div id="pane-suggestions" class="tab-pane space-y-6">
+    <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">AI 智能建议</h3>
+    <div id="suggestions-grid" class="grid grid-cols-3 gap-4">
+      <p class="col-span-3 text-xs text-on-surface-variant text-center py-8">加载中...</p>
+    </div>
+  </div>
+
+  <!-- ============ SIGNALS ============ -->
+  <div id="pane-signals" class="tab-pane space-y-6">
+    <div class="bg-surface-container-low rounded-xl p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">信号组件健康度</h3>
+        <span id="sig-health-badge2" class="text-xs px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">--</span>
+      </div>
+      <div id="sig-analysis-list2" class="space-y-3">
+        <p class="text-xs text-on-surface-variant">加载中...</p>
+      </div>
+    </div>
+    <div id="kline-signal-stats" class="grid grid-cols-4 gap-4">
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">K线回调信号</p>
+        <p class="mono text-2xl font-medium text-on-surface" id="ks-total">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">触发成功</p>
+        <p class="mono text-2xl font-medium text-primary" id="ks-triggered">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">平均得分</p>
+        <p class="mono text-2xl font-medium text-secondary" id="ks-avg-score">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">触发率</p>
+        <p class="mono text-2xl font-medium text-on-surface" id="ks-rate">--</p>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-6">
+      <div class="bg-surface-container-low rounded-xl p-6">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">TOP 信号</h3>
+        <div id="kline-top-signals" class="space-y-2">
+          <p class="text-xs text-on-surface-variant">暂无数据</p>
+        </div>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-6">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">遗漏信号</h3>
+        <div id="kline-missed-signals" class="space-y-2">
+          <p class="text-xs text-on-surface-variant">暂无数据</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OPPORTUNITY ============ -->
+  <div id="pane-opportunity" class="tab-pane space-y-6">
+    <div id="opp-summary-grid" class="grid grid-cols-4 gap-4">
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">总机会数</p>
+        <p class="mono text-2xl font-medium text-on-surface" id="opp-total">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">已捕获</p>
+        <p class="mono text-2xl font-medium text-primary" id="opp-captured">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">捕获率</p>
+        <p class="mono text-2xl font-medium text-secondary" id="opp-rate">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">平均涨幅</p>
+        <p class="mono text-2xl font-medium text-on-surface" id="opp-avg-move">--</p>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-6">
+      <div class="bg-surface-container-low rounded-xl p-6">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">时间框架分布</h3>
+        <div id="opp-timeframes" class="space-y-2">
+          <p class="text-xs text-on-surface-variant">加载中...</p>
+        </div>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-6">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">遗漏原因</h3>
+        <div id="opp-miss-reasons" class="space-y-2">
+          <p class="text-xs text-on-surface-variant">加载中...</p>
+        </div>
+      </div>
+    </div>
+    <div class="bg-surface-container-low rounded-xl overflow-hidden">
+      <div class="px-6 py-4 border-b border-outline-variant/20">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">交易对机会明细</h3>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead class="bg-surface-container sticky top-0">
+            <tr class="border-b border-outline-variant/20">
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">交易对</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总机会</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">已捕获</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">捕获率</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">平均涨幅</th>
+            </tr>
+          </thead>
+          <tbody id="opp-symbols-body">
+            <tr><td colspan="5" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DAILY PNL ============ -->
+  <div id="pane-dailypnl" class="tab-pane space-y-6">
+    <div class="flex items-center gap-4">
+      <span class="text-[10px] uppercase text-on-surface-variant tracking-wider">选择月份</span>
+      <select id="month-selector" onchange="loadDailyPnl()" class="bg-surface-container text-on-surface text-xs rounded-lg px-3 py-1.5 border border-outline-variant/30 focus:outline-none focus:border-primary/50 font-['Space_Grotesk']">
+      </select>
+    </div>
+    <div class="grid grid-cols-4 gap-4">
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">月度盈亏</p>
+        <p class="mono text-2xl font-medium" id="m-total-pnl">--</p>
+        <p class="text-[10px] text-on-surface-variant mt-1">总交易 <span id="m-total-trades" class="text-on-surface">--</span> 笔</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">盈利天数</p>
+        <p class="mono text-2xl font-medium text-primary" id="m-profit-days">--</p>
+        <p class="text-[10px] text-on-surface-variant mt-1">盈利率 <span id="m-profit-ratio" class="text-on-surface">--</span></p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">日均盈亏</p>
+        <p class="mono text-2xl font-medium text-secondary" id="m-avg-pnl">--</p>
+        <p class="text-[10px] text-on-surface-variant mt-1">交易天数 <span id="m-trading-days" class="text-on-surface">--</span></p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">最佳单日</p>
+        <p class="mono text-2xl font-medium text-primary" id="m-max-pnl">--</p>
+        <p class="text-[10px] text-on-surface-variant mt-1"><span id="m-max-date" class="text-on-surface">--</span></p>
+      </div>
+    </div>
+    <div class="bg-surface-container-low rounded-xl p-6">
+      <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">每日盈亏走势</h3>
+      <canvas id="daily-pnl-chart" height="200"></canvas>
+    </div>
+    <div class="bg-surface-container-low rounded-xl overflow-hidden">
+      <div class="px-6 py-4 border-b border-outline-variant/20 flex items-center justify-between">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">每日明细</h3>
+        <div class="flex items-center gap-1">
+          <button onclick="setDpnlFilter('all',this)" class="dpnl-btn af px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider">全部</button>
+          <button onclick="setDpnlFilter('profit',this)" class="dpnl-btn px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface bg-surface-container">盈利</button>
+          <button onclick="setDpnlFilter('loss',this)" class="dpnl-btn px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface bg-surface-container">亏损</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto max-h-[480px] overflow-y-auto">
+        <table class="w-full text-xs">
+          <thead class="bg-surface-container-low sticky top-0 z-10">
+            <tr class="border-b border-outline-variant/20">
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">日期</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">交易数</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">盈利</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">亏损</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">胜率</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总盈亏</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">盈利额</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">亏损额</th>
+            </tr>
+          </thead>
+          <tbody id="daily-pnl-tbody">
+            <tr><td colspan="8" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ RETRO ============ -->
+  <div id="pane-retro" class="tab-pane space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">回顾分析</h3>
+        <p id="retro-period" class="text-xs text-on-surface-variant mt-1">--</p>
+      </div>
+      <button onclick="loadRetro()" class="flex items-center gap-2 px-4 py-2 bg-surface-container hover:bg-surface-container-highest rounded-lg text-xs text-on-surface-variant hover:text-on-surface transition-all border border-outline-variant/20">
+        <span class="material-symbols-outlined text-[16px]">refresh</span>
+        刷新
+      </button>
+    </div>
+    <div id="btc-summary-grid" class="grid grid-cols-5 gap-4">
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">BTC 起始</p>
+        <p class="mono text-xl font-medium text-on-surface" id="btc-open">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">BTC 结束</p>
+        <p class="mono text-xl font-medium text-on-surface" id="btc-close">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">BTC 涨跌</p>
+        <p class="mono text-xl font-medium" id="btc-change">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">BTC 最高</p>
+        <p class="mono text-xl font-medium text-primary" id="btc-high">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">BTC 最低</p>
+        <p class="mono text-xl font-medium text-error" id="btc-low">--</p>
+      </div>
+    </div>
+    <div class="bg-surface-container-low rounded-xl overflow-hidden">
+      <div class="px-6 py-4 border-b border-outline-variant/20">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">逐小时趋势</h3>
+      </div>
+      <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
+        <table class="w-full text-xs">
+          <thead class="bg-surface-container-low sticky top-0 z-10">
+            <tr class="border-b border-outline-variant/20">
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">时间 CST</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">开盘</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">收盘</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">涨跌%</th>
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">方向</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">交易数</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">区间盈亏</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">胜率</th>
+            </tr>
+          </thead>
+          <tbody id="hourly-trend-tbody">
+            <tr><td colspan="8" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div id="retro-perf-grid" class="grid grid-cols-5 gap-4">
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">区间总盈亏</p>
+        <p class="mono text-xl font-medium" id="rp-total-pnl">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">总交易笔</p>
+        <p class="mono text-xl font-medium text-on-surface" id="rp-total-trades">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">区间胜率</p>
+        <p class="mono text-xl font-medium text-secondary" id="rp-winrate">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">盈利小时</p>
+        <p class="mono text-xl font-medium text-primary" id="rp-profit-hours">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">最佳小时段</p>
+        <p class="mono text-xl font-medium text-on-surface" id="rp-best-hour">--</p>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end tab panels -->
+
+<!-- Footer -->
+<footer class="border-t border-outline-variant/10 px-8 py-4 flex items-center justify-between">
+  <span class="text-[10px] text-on-surface-variant uppercase tracking-widest">Neural Obsidian Quant Terminal</span>
+  <span class="text-[10px] text-on-surface-variant mono">v3.0.0</span>
 </footer>
+
 </main>
+
 <script>
-        // ==================================================================
-        // 24H 合约复盘 — 功能 JS
-        // 调用 /api/futures/review/24h?account_id=2
-        // 若不存在则 fallback 到 /api/futures/trades?account_id=2&hours=24
-        // ==================================================================
+// ============================================================
+// STATE
+// ============================================================
+var currentMarginType = 'usdt';
+var currentHours = 24;
+var tradeDir = 'all';
+var tradePnl = 'all';
+var dpnlFilter = 'all';
+var allTrades = [];
+var dpnlData = [];
+var dailyPnlChart = null;
+var tabLoaded = {};
+var currentTab = 'overview';
 
-        const ACCOUNT_ID = 2;
+// ============================================================
+// UTILS
+// ============================================================
+function fmtPnl(v) {
+  if (v === null || v === undefined || v === '') return '--';
+  var n = parseFloat(v);
+  if (isNaN(n)) return '--';
+  return (n >= 0 ? '+' : '') + n.toFixed(2);
+}
 
-        // ---------- 工具函数 ----------
+function pCls(v) {
+  var n = parseFloat(v);
+  if (isNaN(n)) return '';
+  return n >= 0 ? 'pp' : 'pn';
+}
 
-        function fmtPnl(val) {
-            const n = Number(val) || 0;
-            const sign = n >= 0 ? '+' : '';
-            return sign + n.toFixed(2);
+function fmtNum(v, dec) {
+  if (v === null || v === undefined) return '--';
+  var n = parseFloat(v);
+  if (isNaN(n)) return '--';
+  return n.toFixed(dec !== undefined ? dec : 2);
+}
+
+function shortSym(s) {
+  if (!s) return '';
+  return s.replace('/USDT','').replace('/USD','').replace('USDT','').replace('USD','');
+}
+
+function fmtHours(mins) {
+  if (mins === null || mins === undefined) return '--';
+  var m = Math.round(parseFloat(mins));
+  if (isNaN(m)) return '--';
+  if (m < 60) return m + 'm';
+  var h = Math.floor(m / 60);
+  var rm = m % 60;
+  return rm > 0 ? h + 'h' + rm + 'm' : h + 'h';
+}
+
+function fmtTime(ts) {
+  if (!ts) return '--';
+  var d = new Date(ts);
+  if (isNaN(d.getTime())) return ts;
+  var pad = function(n){ return n < 10 ? '0'+n : ''+n; };
+  return (d.getMonth()+1)+'/'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
+}
+
+function fmtCloseReason(r) {
+  var map = {
+    'STOP_LOSS': '止损', 'TAKE_PROFIT': '止盈', 'MANUAL': '手动',
+    'TIMEOUT': '超时', 'TRAILING_STOP': '移动止盈', 'FORCED': '强平',
+    'SIGNAL_REVERSE': '反向信号', 'PREDICTOR': '预测平仓'
+  };
+  return map[r] || r || '--';
+}
+
+function updateTimestamp() {
+  var now = new Date();
+  var pad = function(n){ return n < 10 ? '0'+n : ''+n; };
+  var s = now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+
+          ' '+pad(now.getHours())+':'+pad(now.getMinutes())+':'+pad(now.getSeconds());
+  var el = document.getElementById('update-ts');
+  if (el) el.textContent = s;
+}
+
+function accountId() {
+  return currentMarginType === 'usdt' ? 2 : 3;
+}
+
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+function switchTab(name) {
+  currentTab = name;
+  document.querySelectorAll('.tab-pane').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+  var pane = document.getElementById('pane-' + name);
+  var btn = document.getElementById('tab-' + name);
+  if (pane) pane.classList.add('active');
+  if (btn) btn.classList.add('active');
+  if (!tabLoaded[name]) {
+    loadTabData(name);
+    tabLoaded[name] = true;
+  }
+}
+
+function loadTabData(name) {
+  if (name === 'overview') { loadSummary(); loadSignalAnalysis(); }
+  else if (name === 'trades') { loadTrades(); }
+  else if (name === 'analysis') { loadAnalysis(); }
+  else if (name === 'suggestions') { loadSuggestions(); }
+  else if (name === 'signals') { loadSignals(); }
+  else if (name === 'opportunity') { loadOpportunity(); }
+  else if (name === 'dailypnl') { initMonthSelector(); loadDailyPnl(); }
+  else if (name === 'retro') { loadRetro(); }
+}
+
+function refreshCurrentTab() {
+  var icon = document.getElementById('refresh-icon');
+  if (icon) {
+    icon.style.transition = 'transform 0.5s';
+    icon.style.transform = 'rotate(360deg)';
+    setTimeout(function(){ icon.style.transform = ''; }, 600);
+  }
+  tabLoaded[currentTab] = false;
+  loadTabData(currentTab);
+  updateTimestamp();
+}
+
+function switchMarginType(t) {
+  currentMarginType = t;
+  var baseClass = "px-3 py-1 rounded text-xs font-bold uppercase tracking-wider transition-all";
+  var btnU = document.getElementById('btn-usdt');
+  var btnC = document.getElementById('btn-coin');
+  if (btnU) btnU.className = baseClass + (t === 'usdt' ? ' af' : ' text-on-surface-variant hover:text-on-surface');
+  if (btnC) btnC.className = baseClass + (t === 'coin' ? ' af' : ' text-on-surface-variant hover:text-on-surface');
+  Object.keys(tabLoaded).forEach(function(k){ tabLoaded[k] = false; });
+  loadTabData(currentTab);
+  tabLoaded[currentTab] = true;
+  if (currentTab === 'dailypnl') { initMonthSelector(); loadDailyPnl(); }
+}
+
+function onHoursChange(v) {
+  currentHours = parseInt(v) || 24;
+  Object.keys(tabLoaded).forEach(function(k){ tabLoaded[k] = false; });
+  loadTabData(currentTab);
+  tabLoaded[currentTab] = true;
+}
+
+// ============================================================
+// OVERVIEW
+// ============================================================
+function loadSummary() {
+  fetch('/api/futures/review/summary?account_id=' + accountId() + '&hours=' + currentHours)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var s = d.data || d || {};
+      document.getElementById('stat-total-open').textContent = s.total_trades || s.total || '--';
+      document.getElementById('stat-win').textContent = s.win_count || s.wins || '--';
+      document.getElementById('stat-loss').textContent = s.loss_count || s.losses || '--';
+      var pnlEl = document.getElementById('stat-pnl');
+      var pnlVal = s.total_pnl !== undefined ? s.total_pnl : s.pnl;
+      pnlEl.textContent = fmtPnl(pnlVal);
+      pnlEl.className = 'mono text-3xl font-medium ' + pCls(pnlVal);
+      var wr = s.win_rate !== undefined ? s.win_rate : s.winrate;
+      document.getElementById('stat-winrate').textContent = wr !== undefined
+        ? fmtNum(wr > 1 ? wr : wr * 100, 1) + '%' : '--';
+      renderSymbols(s.best_symbols || [], s.worst_symbols || []);
+    })
+    .catch(function(e){ console.error('loadSummary error:', e); });
+}
+
+function loadSignalAnalysis() {
+  fetch('/api/futures/review/signal-analysis?account_id=' + accountId() + '&hours=' + currentHours)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var items = d.data || d || [];
+      renderSignalBars(Array.isArray(items) ? items : (items.components || []), 'signal-analysis-list', 'signal-health-badge');
+    })
+    .catch(function(e){ console.error('loadSignalAnalysis error:', e); });
+}
+
+function renderSignalBars(items, listId, badgeId) {
+  var list = document.getElementById(listId);
+  var badge = document.getElementById(badgeId);
+  if (!list) return;
+  if (!items || items.length === 0) {
+    list.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>';
+    return;
+  }
+  var total = items.reduce(function(a, b){ return a + parseFloat(b.score || b.win_rate || 0); }, 0);
+  var avg = items.length > 0 ? total / items.length : 0;
+  if (badge) {
+    var health = avg >= 60 ? 'HEALTHY' : avg >= 40 ? 'FAIR' : 'WEAK';
+    var hcls = avg >= 60 ? 'bg-primary/20 text-primary' : avg >= 40 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-error/20 text-error';
+    badge.textContent = health;
+    badge.className = 'text-xs px-2 py-0.5 rounded-full ' + hcls;
+  }
+  var html = '';
+  items.slice(0, 12).forEach(function(item) {
+    var name = item.signal_type || item.component || item.name || '--';
+    var score = parseFloat(item.score || item.win_rate || 0);
+    var pct = Math.min(100, Math.max(0, score > 1 ? score : score * 100));
+    var color = pct >= 60 ? '#49f4c8' : pct >= 40 ? '#FFD700' : '#ff716c';
+    html += '<div class="space-y-1">' +
+      '<div class="flex justify-between text-xs">' +
+        '<span class="text-on-surface-variant truncate max-w-[160px]">' + name + '</span>' +
+        '<span class="mono text-[11px]" style="color:' + color + '">' + pct.toFixed(1) + '%</span>' +
+      '</div>' +
+      '<div class="bar-bg"><div class="bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
+      '</div>';
+  });
+  list.innerHTML = html;
+}
+
+function renderSymbols(best, worst) {
+  var el = document.getElementById('best-symbols-list');
+  if (!el) return;
+  if ((!best || best.length === 0) && (!worst || worst.length === 0)) {
+    el.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>';
+    return;
+  }
+  var html = '';
+  if (best && best.length > 0) {
+    html += '<p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2 font-bold">TOP 盈利</p>';
+    best.slice(0, 5).forEach(function(s) {
+      var sym = s.symbol || s.name || '--';
+      var pnl = s.total_pnl !== undefined ? s.total_pnl : s.pnl;
+      html += '<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 text-xs">' +
+        '<span class="text-on-surface font-medium">' + shortSym(sym) + '</span>' +
+        '<span class="mono ' + pCls(pnl) + '">' + fmtPnl(pnl) + ' U</span></div>';
+    });
+  }
+  if (worst && worst.length > 0) {
+    html += '<p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2 mt-4 font-bold">TOP 亏损</p>';
+    worst.slice(0, 5).forEach(function(s) {
+      var sym = s.symbol || s.name || '--';
+      var pnl = s.total_pnl !== undefined ? s.total_pnl : s.pnl;
+      html += '<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 text-xs">' +
+        '<span class="text-on-surface font-medium">' + shortSym(sym) + '</span>' +
+        '<span class="mono ' + pCls(pnl) + '">' + fmtPnl(pnl) + ' U</span></div>';
+    });
+  }
+  el.innerHTML = html;
+}
+
+// ============================================================
+// TRADES
+// ============================================================
+function loadTrades() {
+  fetch('/api/futures/review/trades?account_id=' + accountId() + '&hours=' + currentHours + '&page_size=200&page=1')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var list = d.data || d.trades || d || [];
+      allTrades = Array.isArray(list) ? list : [];
+      renderTradesTable();
+    })
+    .catch(function(e){ console.error('loadTrades error:', e); });
+}
+
+function renderTradesTable() {
+  var tbody = document.getElementById('trades-tbody');
+  if (!tbody) return;
+  var filtered = allTrades.filter(function(t) {
+    if (tradeDir !== 'all' && (t.position_side || t.side || '').toUpperCase() !== tradeDir) return false;
+    if (tradePnl === 'win' && parseFloat(t.realized_pnl || t.pnl || 0) < 0) return false;
+    if (tradePnl === 'loss' && parseFloat(t.realized_pnl || t.pnl || 0) >= 0) return false;
+    return true;
+  });
+  var cntEl = document.getElementById('trades-count');
+  if (cntEl) cntEl.textContent = filtered.length;
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无数据</td></tr>';
+    return;
+  }
+  var html = '';
+  filtered.forEach(function(t) {
+    var sym = t.symbol || '--';
+    var side = (t.position_side || t.side || '--').toUpperCase();
+    var sideColor = side === 'LONG' ? 'text-primary' : side === 'SHORT' ? 'text-error' : 'text-on-surface-variant';
+    var pnl = t.realized_pnl !== undefined ? t.realized_pnl : t.pnl;
+    var dur = t.hold_minutes !== undefined ? fmtHours(t.hold_minutes) : (t.duration || '--');
+    var reason = fmtCloseReason(t.close_reason || t.exit_reason);
+    html += '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
+      '<td class="px-4 py-3">' +
+        '<div class="font-medium text-on-surface">' + shortSym(sym) + '</div>' +
+        '<div class="text-on-surface-variant text-[10px] mono">' + fmtTime(t.open_time || t.created_at) + '</div>' +
+      '</td>' +
+      '<td class="px-4 py-3 ' + sideColor + ' font-bold text-[10px] uppercase tracking-wider">' + side + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmtNum(t.entry_price || t.open_price, 4) + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmtNum(t.exit_price || t.close_price, 4) + '</td>' +
+      '<td class="px-4 py-3 text-right mono font-medium ' + pCls(pnl) + '">' + fmtPnl(pnl) + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + dur + '</td>' +
+      '<td class="px-4 py-3 text-xs text-on-surface-variant">' + reason + '</td>' +
+      '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
+function setTradeDir(f, btn) {
+  tradeDir = f;
+  document.querySelectorAll('.trade-dir-btn').forEach(function(b){
+    b.classList.remove('af');
+    b.classList.add('text-on-surface-variant', 'hover:text-on-surface', 'bg-surface-container');
+  });
+  btn.classList.add('af');
+  btn.classList.remove('text-on-surface-variant', 'hover:text-on-surface', 'bg-surface-container');
+  renderTradesTable();
+}
+
+function setTradePnl(f, btn) {
+  tradePnl = f;
+  document.querySelectorAll('.trade-pnl-btn').forEach(function(b){
+    b.classList.remove('af');
+    b.classList.add('text-on-surface-variant', 'hover:text-on-surface', 'bg-surface-container');
+  });
+  btn.classList.add('af');
+  btn.classList.remove('text-on-surface-variant', 'hover:text-on-surface', 'bg-surface-container');
+  renderTradesTable();
+}
+
+// ============================================================
+// ANALYSIS
+// ============================================================
+function loadAnalysis() {
+  fetch('/api/futures/review/analysis?account_id=' + accountId() + '&hours=' + currentHours)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var s = d.data || d || {};
+      var lng = s.long || s.LONG || {};
+      var shrt = s.short || s.SHORT || {};
+
+      var setEl = function(id, val, cls) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = val;
+        if (cls) el.className = 'mono ' + cls;
+      };
+
+      setEl('long-count', lng.count || '--');
+      setEl('long-wr', lng.win_rate !== undefined ? fmtNum(lng.win_rate > 1 ? lng.win_rate : lng.win_rate*100, 1)+'%' : '--', 'text-primary');
+      var lpnl = lng.total_pnl !== undefined ? lng.total_pnl : lng.pnl;
+      var lpEl = document.getElementById('long-pnl');
+      if (lpEl) { lpEl.textContent = fmtPnl(lpnl); lpEl.className = 'mono ' + pCls(lpnl); }
+      setEl('long-avg', lng.avg_pnl !== undefined ? fmtPnl(lng.avg_pnl) : '--');
+
+      setEl('short-count', shrt.count || '--');
+      setEl('short-wr', shrt.win_rate !== undefined ? fmtNum(shrt.win_rate > 1 ? shrt.win_rate : shrt.win_rate*100, 1)+'%' : '--', 'text-primary');
+      var spnl = shrt.total_pnl !== undefined ? shrt.total_pnl : shrt.pnl;
+      var spEl = document.getElementById('short-pnl');
+      if (spEl) { spEl.textContent = fmtPnl(spnl); spEl.className = 'mono ' + pCls(spnl); }
+      setEl('short-avg', shrt.avg_pnl !== undefined ? fmtPnl(shrt.avg_pnl) : '--');
+
+      var entries = s.entry_signals || s.signals || [];
+      var etbody = document.getElementById('entry-analysis-body');
+      if (etbody) {
+        if (!entries.length) {
+          etbody.innerHTML = '<tr><td colspan="4" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>';
+        } else {
+          etbody.innerHTML = entries.map(function(e) {
+            var ep = e.total_pnl !== undefined ? e.total_pnl : e.pnl;
+            var ewr = e.win_rate !== undefined ? fmtNum(e.win_rate > 1 ? e.win_rate : e.win_rate*100, 1)+'%' : '--';
+            return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
+              '<td class="px-4 py-3 text-on-surface">' + (e.signal_type || e.name || '--') + '</td>' +
+              '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + (e.count || '--') + '</td>' +
+              '<td class="px-4 py-3 text-right mono text-secondary">' + ewr + '</td>' +
+              '<td class="px-4 py-3 text-right mono ' + pCls(ep) + '">' + fmtPnl(ep) + '</td></tr>';
+          }).join('');
         }
+      }
 
-        function pnlColor(val) {
-            return Number(val) >= 0 ? '#49f4c8' : '#ff716c';
+      var closes = s.close_reasons || s.exits || [];
+      var ctbody = document.getElementById('close-analysis-body');
+      if (ctbody) {
+        if (!closes.length) {
+          ctbody.innerHTML = '<tr><td colspan="4" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>';
+        } else {
+          ctbody.innerHTML = closes.map(function(c) {
+            var cp = c.total_pnl !== undefined ? c.total_pnl : c.pnl;
+            var ca = c.avg_pnl !== undefined ? c.avg_pnl : c.average_pnl;
+            return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
+              '<td class="px-4 py-3 text-on-surface">' + fmtCloseReason(c.close_reason || c.reason || '--') + '</td>' +
+              '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + (c.count || '--') + '</td>' +
+              '<td class="px-4 py-3 text-right mono ' + pCls(ca) + '">' + fmtPnl(ca) + '</td>' +
+              '<td class="px-4 py-3 text-right mono ' + pCls(cp) + '">' + fmtPnl(cp) + '</td></tr>';
+          }).join('');
         }
+      }
+    })
+    .catch(function(e){ console.error('loadAnalysis error:', e); });
+}
 
-        function fmtHours(h) {
-            if (h === null || h === undefined) return '-';
-            const n = Number(h);
-            if (n < 1) return Math.round(n * 60) + 'min';
-            return n.toFixed(1) + 'h';
+// ============================================================
+// SUGGESTIONS
+// ============================================================
+function loadSuggestions() {
+  fetch('/api/futures/review/suggestions?account_id=' + accountId() + '&hours=' + currentHours)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var items = d.data || d.suggestions || d || [];
+      var grid = document.getElementById('suggestions-grid');
+      if (!grid) return;
+      if (!Array.isArray(items) || items.length === 0) {
+        grid.innerHTML = '<p class="col-span-3 text-xs text-on-surface-variant text-center py-8">暂无建议</p>';
+        return;
+      }
+      var levelMap = { 'danger': 'danger', 'error': 'danger', 'warning': 'warning', 'warn': 'warning', 'success': 'success', 'ok': 'success', 'info': 'info' };
+      var iconMap = { 'danger': 'error', 'warning': 'warning', 'success': 'check_circle', 'info': 'info' };
+      var colorMap = { 'danger': '#ff716c', 'warning': '#FFD700', 'success': '#49f4c8', 'info': '#5b9eff' };
+      grid.innerHTML = items.map(function(item) {
+        var lvl = levelMap[(item.level || item.type || 'info').toLowerCase()] || 'info';
+        var icon = iconMap[lvl];
+        var color = colorMap[lvl];
+        var title = item.title || item.name || '';
+        var msg = item.message || item.content || item.text || '';
+        return '<div class="sc ' + lvl + '">' +
+          '<div class="flex items-center gap-2 mb-2">' +
+            '<span class="material-symbols-outlined text-[18px]" style="color:' + color + '">' + icon + '</span>' +
+            '<span class="text-xs font-bold" style="color:' + color + '">' + title + '</span>' +
+          '</div>' +
+          '<p class="text-xs text-on-surface-variant leading-relaxed">' + msg + '</p></div>';
+      }).join('');
+    })
+    .catch(function(e){ console.error('loadSuggestions error:', e); });
+}
+
+// ============================================================
+// SIGNALS
+// ============================================================
+function loadSignals() {
+  fetch('/api/futures/review/signal-analysis?account_id=' + accountId() + '&hours=' + currentHours)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var items = d.data || d || [];
+      renderSignalBars(Array.isArray(items) ? items : (items.components || []), 'sig-analysis-list2', 'sig-health-badge2');
+    })
+    .catch(function(e){ console.error('loadSignals sig error:', e); });
+
+  fetch('/api/futures/review/kline-signal-analysis?account_id=' + accountId() + '&hours=' + currentHours)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var s = d.data || d || {};
+      var setT = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v !== undefined ? v : '--'; };
+      setT('ks-total', s.total || '--');
+      setT('ks-triggered', s.triggered || '--');
+      setT('ks-avg-score', s.avg_score !== undefined ? fmtNum(s.avg_score, 1) : '--');
+      var rate = s.trigger_rate !== undefined ? fmtNum(s.trigger_rate > 1 ? s.trigger_rate : s.trigger_rate*100, 1)+'%' : '--';
+      setT('ks-rate', rate);
+      var topEl = document.getElementById('kline-top-signals');
+      if (topEl) {
+        var top = s.top_signals || [];
+        if (!top.length) { topEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>'; }
+        else {
+          topEl.innerHTML = top.slice(0, 8).map(function(t) {
+            var p = t.pnl !== undefined ? t.pnl : t.total_pnl;
+            return '<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 text-xs">' +
+              '<span class="text-on-surface">' + shortSym(t.symbol || '--') + '</span>' +
+              '<span class="mono ' + pCls(p) + '">' + fmtPnl(p) + '</span></div>';
+          }).join('');
         }
-
-        function fmtTime(iso) {
-            if (!iso) return '-';
-            try {
-                const hasZ = iso.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(iso) || /[+-]\d{4}$/.test(iso);
-                const d = new Date(hasZ ? iso : iso + 'Z');
-                if (isNaN(d.getTime())) return '-';
-                const u8 = new Date(d.getTime() + 8 * 3600 * 1000);
-                const mm = String(u8.getUTCMonth() + 1).padStart(2, '0');
-                const dd = String(u8.getUTCDate()).padStart(2, '0');
-                const hh = String(u8.getUTCHours()).padStart(2, '0');
-                const mn = String(u8.getUTCMinutes()).padStart(2, '0');
-                return mm + '-' + dd + ' ' + hh + ':' + mn;
-            } catch (e) {
-                return '-';
-            }
+      }
+      var missEl = document.getElementById('kline-missed-signals');
+      if (missEl) {
+        var missed = s.missed_signals || [];
+        if (!missed.length) { missEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>'; }
+        else {
+          missEl.innerHTML = missed.slice(0, 8).map(function(m) {
+            return '<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 text-xs">' +
+              '<span class="text-on-surface">' + shortSym(m.symbol || '--') + '</span>' +
+              '<span class="text-on-surface-variant">' + (m.reason || '--') + '</span></div>';
+          }).join('');
         }
+      }
+    })
+    .catch(function(e){ console.error('loadSignals kline error:', e); });
+}
 
-        const CLOSE_REASON_MAP = {
-            SL: '止损', STOP_LOSS: '止损',
-            TP: '止盈', TAKE_PROFIT: '止盈',
-            MANUAL: '手动', MANUAL_CLOSE: '手动',
-            TIMEOUT: '超时', MAX_HOLD: '超时'
-        };
+// ============================================================
+// OPPORTUNITY
+// ============================================================
+function loadOpportunity() {
+  fetch('/api/futures/review/opportunity-analysis?account_id=' + accountId() + '&hours=' + currentHours)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var s = d.data || d || {};
+      var setT = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v !== undefined ? v : '--'; };
+      setT('opp-total', s.total_opportunities || s.total || '--');
+      setT('opp-captured', s.captured || '--');
+      var rate = s.capture_rate !== undefined ? fmtNum(s.capture_rate > 1 ? s.capture_rate : s.capture_rate*100, 1)+'%' : '--';
+      setT('opp-rate', rate);
+      setT('opp-avg-move', s.avg_move !== undefined ? fmtNum(s.avg_move, 2)+'%' : '--');
 
-        function fmtCloseReason(r) {
-            if (!r) return '-';
-            return CLOSE_REASON_MAP[r.toUpperCase()] || r;
+      var tfEl = document.getElementById('opp-timeframes');
+      if (tfEl) {
+        var tfs = s.timeframes || s.by_timeframe || [];
+        if (!tfs.length) { tfEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>'; }
+        else {
+          tfEl.innerHTML = tfs.map(function(t) {
+            return '<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 text-xs">' +
+              '<span class="text-on-surface-variant">' + (t.timeframe || t.tf || '--') + '</span>' +
+              '<span class="mono text-on-surface">' + (t.count || '--') + '</span></div>';
+          }).join('');
         }
+      }
 
-        // ---------- 统计卡片更新 ----------
-
-        function updateStats(d) {
-            const totalOpen  = document.getElementById('stat-total-open');
-            const statWin    = document.getElementById('stat-win');
-            const statLoss   = document.getElementById('stat-loss');
-            const statPnl    = document.getElementById('stat-pnl');
-            const statWinrate = document.getElementById('stat-winrate');
-
-            if (totalOpen)  totalOpen.textContent  = d.total_open  !== undefined ? d.total_open  : '-';
-            if (statWin)    statWin.textContent     = d.win_count   !== undefined ? d.win_count   : '-';
-            if (statLoss)   statLoss.textContent    = d.loss_count  !== undefined ? d.loss_count  : '-';
-
-            if (statPnl) {
-                const pnl = Number(d.total_pnl) || 0;
-                statPnl.textContent = (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toFixed(2);
-                statPnl.style.color = pnlColor(pnl);
-            }
-
-            if (statWinrate) {
-                const wr = Number(d.win_rate) || 0;
-                statWinrate.innerHTML = wr.toFixed(1) + '<span class="text-sm ml-1">%</span>';
-                statWinrate.style.color = wr >= 50 ? '#FFD700' : '#ff716c';
-            }
+      var mrEl = document.getElementById('opp-miss-reasons');
+      if (mrEl) {
+        var mrs = s.miss_reasons || s.missed_reasons || [];
+        if (!mrs.length) { mrEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>'; }
+        else {
+          mrEl.innerHTML = mrs.map(function(m) {
+            return '<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 text-xs">' +
+              '<span class="text-on-surface-variant truncate max-w-[180px]">' + (m.reason || '--') + '</span>' +
+              '<span class="mono text-on-surface">' + (m.count || '--') + '</span></div>';
+          }).join('');
         }
+      }
 
-        // ---------- 信号分析 bar ----------
-
-        function renderSignalAnalysis(items) {
-            const list = document.getElementById('signal-analysis-list');
-            if (!list) return;
-            if (!items || items.length === 0) {
-                list.innerHTML = '<p class="text-xs text-on-surface-variant">暂无信号分析数据</p>';
-                return;
-            }
-
-            list.innerHTML = items.map(function(item) {
-                const wr  = Number(item.win_rate) || 0;
-                const cnt = item.count !== undefined ? item.count : '';
-                const name = item.component || item.name || '-';
-                const barColor = wr >= 60 ? '#49f4c8' : wr >= 40 ? '#5b9eff' : '#FFD700';
-                const wrText   = wr >= 60 ? '#49f4c8' : wr >= 40 ? '#5b9eff' : '#FFD700';
-
-                return '<div class="space-y-2">' +
-                    '<div class="flex justify-between text-[10px] font-headline tracking-wider uppercase text-on-surface-variant">' +
-                        '<span>' + name + (cnt ? ' (' + cnt + '单)' : '') + '</span>' +
-                        '<span class="mono" style="color:' + wrText + '">' + wr.toFixed(0) + '%</span>' +
-                    '</div>' +
-                    '<div class="h-2 bg-surface-container-highest rounded-full overflow-hidden">' +
-                        '<div class="h-full rounded-full" style="width:' + Math.min(wr, 100) + '%;background:' + barColor + '"></div>' +
-                    '</div>' +
-                '</div>';
-            }).join('');
-
-            // 健康指数徽章
-            const badge = document.getElementById('signal-health-badge');
-            if (badge && items.length > 0) {
-                const avgWr = items.reduce(function(s, i) { return s + (Number(i.win_rate) || 0); }, 0) / items.length;
-                badge.textContent = avgWr >= 60 ? 'HEALTHY' : avgWr >= 40 ? 'AVERAGE' : 'WEAK';
-                badge.style.color = avgWr >= 60 ? '#49f4c8' : avgWr >= 40 ? '#FFD700' : '#ff716c';
-            }
+      var symBody = document.getElementById('opp-symbols-body');
+      if (symBody) {
+        var syms = s.symbols || s.by_symbol || [];
+        if (!syms.length) {
+          symBody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>';
+        } else {
+          symBody.innerHTML = syms.map(function(sym) {
+            var cr = sym.capture_rate !== undefined ? fmtNum(sym.capture_rate > 1 ? sym.capture_rate : sym.capture_rate*100, 1)+'%' : '--';
+            var am = sym.avg_move !== undefined ? fmtNum(sym.avg_move, 2)+'%' : '--';
+            return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
+              '<td class="px-4 py-3 text-on-surface font-medium">' + shortSym(sym.symbol || '--') + '</td>' +
+              '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + (sym.total || '--') + '</td>' +
+              '<td class="px-4 py-3 text-right mono text-primary">' + (sym.captured || '--') + '</td>' +
+              '<td class="px-4 py-3 text-right mono text-secondary">' + cr + '</td>' +
+              '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + am + '</td></tr>';
+          }).join('');
         }
+      }
+    })
+    .catch(function(e){ console.error('loadOpportunity error:', e); });
+}
 
-        // ---------- 交易对表现 ----------
+// ============================================================
+// DAILY PNL
+// ============================================================
+function initMonthSelector() {
+  var sel = document.getElementById('month-selector');
+  if (!sel || sel.options.length > 0) return;
+  var now = new Date();
+  for (var i = 0; i < 12; i++) {
+    var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    var m = d.getMonth() + 1;
+    var val = d.getFullYear() + '-' + (m < 10 ? '0' : '') + m;
+    var lbl = d.getFullYear() + '年' + m + '月';
+    var opt = document.createElement('option');
+    opt.value = val; opt.textContent = lbl;
+    if (i === 0) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
 
-        function renderSymbols(best, worst) {
-            const list = document.getElementById('best-symbols-list');
-            if (!list) return;
+function loadDailyPnl() {
+  var sel = document.getElementById('month-selector');
+  var month = sel ? sel.value : '';
+  if (!month) return;
+  fetch('/api/futures/review/daily-pnl?month=' + month + '&margin_type=' + currentMarginType)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var s = d.data || d || {};
+      var tp = s.total_pnl !== undefined ? s.total_pnl : s.pnl;
+      var mpEl = document.getElementById('m-total-pnl');
+      if (mpEl) { mpEl.textContent = fmtPnl(tp); mpEl.className = 'mono text-2xl font-medium ' + pCls(tp); }
+      var setT = function(id, v, cls) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = v !== undefined && v !== null ? v : '--';
+        if (cls) el.className = 'mono text-2xl font-medium ' + cls;
+      };
+      setT('m-total-trades', s.total_trades || s.trades || '--');
+      setT('m-profit-days', s.profit_days || '--', 'text-primary');
+      var pr = s.profit_ratio !== undefined ? fmtNum(s.profit_ratio > 1 ? s.profit_ratio : s.profit_ratio*100, 1)+'%' : '--';
+      setT('m-profit-ratio', pr);
+      var ap = s.avg_daily_pnl !== undefined ? s.avg_daily_pnl : s.avg_pnl;
+      var apEl = document.getElementById('m-avg-pnl');
+      if (apEl) { apEl.textContent = fmtPnl(ap); apEl.className = 'mono text-2xl font-medium ' + pCls(ap); }
+      setT('m-trading-days', s.trading_days || '--');
+      var mp = s.max_pnl !== undefined ? s.max_pnl : s.best_pnl;
+      var mpPnlEl = document.getElementById('m-max-pnl');
+      if (mpPnlEl) { mpPnlEl.textContent = fmtPnl(mp); mpPnlEl.className = 'mono text-2xl font-medium text-primary'; }
+      setT('m-max-date', s.max_date || s.best_date || '--');
+      dpnlData = s.daily || s.days || [];
+      renderDpnlChart(dpnlData);
+      renderDpnlTable();
+    })
+    .catch(function(e){ console.error('loadDailyPnl error:', e); });
+}
 
-            const rows = [];
-
-            function addRow(item, isGood) {
-                const sym    = (item.symbol || '').replace('/USDT', '').replace('USDT', '').slice(0, 4);
-                const label  = item.symbol || '-';
-                const pnl    = Number(item.pnl) || 0;
-                const cnt    = item.count !== undefined ? item.count + '单' : '';
-                const bg     = isGood ? 'rgba(73,244,200,0.05)' : 'rgba(255,113,108,0.05)';
-                const color  = isGood ? '#49f4c8' : '#ff716c';
-                const sign   = pnl >= 0 ? '+' : '';
-
-                rows.push(
-                    '<div class="flex items-center justify-between p-3 rounded-lg" style="background:' + bg + '">' +
-                        '<div class="flex items-center gap-3">' +
-                            '<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">' +
-                                '<span class="mono text-[10px] font-bold" style="color:' + color + '">' + sym + '</span>' +
-                            '</div>' +
-                            '<div>' +
-                                '<span class="font-headline text-sm font-medium">' + label + '</span>' +
-                                (cnt ? '<span class="ml-2 text-[10px] text-on-surface-variant">' + cnt + '</span>' : '') +
-                            '</div>' +
-                        '</div>' +
-                        '<span class="mono text-sm font-bold" style="color:' + color + '">' + sign + '$' + Math.abs(pnl).toFixed(2) + '</span>' +
-                    '</div>'
-                );
-            }
-
-            (best  || []).forEach(function(i) { addRow(i, true);  });
-            (worst || []).forEach(function(i) { addRow(i, false); });
-
-            list.innerHTML = rows.length > 0 ? rows.join('') : '<p class="text-xs text-on-surface-variant">暂无数据</p>';
+function renderDpnlChart(data) {
+  var canvas = document.getElementById('daily-pnl-chart');
+  if (!canvas) return;
+  if (dailyPnlChart) { dailyPnlChart.destroy(); dailyPnlChart = null; }
+  if (!data || data.length === 0) return;
+  var labels = data.map(function(d){ return d.date ? d.date.slice(5) : '--'; });
+  var values = data.map(function(d){ return parseFloat(d.total_pnl !== undefined ? d.total_pnl : (d.pnl || 0)); });
+  var colors = values.map(function(v){ return v >= 0 ? 'rgba(73,244,200,0.7)' : 'rgba(255,113,108,0.7)'; });
+  var borders = values.map(function(v){ return v >= 0 ? '#49f4c8' : '#ff716c'; });
+  dailyPnlChart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '每日盈亏',
+        data: values,
+        backgroundColor: colors,
+        borderColor: borders,
+        borderWidth: 1,
+        borderRadius: 3
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: function(c){ return fmtPnl(c.parsed.y) + ' U'; } } }
+      },
+      scales: {
+        x: { ticks: { color: '#a8abb2', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+        y: {
+          ticks: { color: '#a8abb2', font: { size: 10 }, callback: function(v){ return v.toFixed(1); } },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+          border: { color: 'rgba(255,255,255,0.08)' }
         }
+      }
+    }
+  });
+}
 
-        // ---------- 交易记录表格 ----------
+function setDpnlFilter(f, btn) {
+  dpnlFilter = f;
+  document.querySelectorAll('.dpnl-btn').forEach(function(b){
+    b.classList.remove('af');
+    b.classList.add('text-on-surface-variant', 'hover:text-on-surface', 'bg-surface-container');
+  });
+  btn.classList.add('af');
+  btn.classList.remove('text-on-surface-variant', 'hover:text-on-surface', 'bg-surface-container');
+  renderDpnlTable();
+}
 
-        function renderTrades(trades) {
-            const tbody = document.getElementById('trades-tbody');
-            if (!tbody) return;
-            if (!trades || trades.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="px-8 py-8 text-center text-on-surface-variant text-xs">暂无交易记录</td></tr>';
-                return;
-            }
+function renderDpnlTable() {
+  var tbody = document.getElementById('daily-pnl-tbody');
+  if (!tbody) return;
+  var filtered = dpnlData.filter(function(d) {
+    var p = parseFloat(d.total_pnl !== undefined ? d.total_pnl : (d.pnl || 0));
+    if (dpnlFilter === 'profit') return p >= 0;
+    if (dpnlFilter === 'loss') return p < 0;
+    return true;
+  });
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>';
+    return;
+  }
+  tbody.innerHTML = filtered.map(function(d) {
+    var tp = d.total_pnl !== undefined ? d.total_pnl : d.pnl;
+    var wr = d.win_rate !== undefined ? fmtNum(d.win_rate > 1 ? d.win_rate : d.win_rate*100, 1)+'%' : '--';
+    var wins = d.wins || d.win_count || '--';
+    var losses = d.losses || d.loss_count || '--';
+    var gp = d.gross_profit || d.profit_amount;
+    var gl = d.gross_loss || d.loss_amount;
+    return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
+      '<td class="px-4 py-3 mono text-on-surface-variant">' + (d.date || '--') + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-on-surface">' + (d.trade_count || d.trades || '--') + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-primary">' + wins + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-error">' + losses + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-secondary">' + wr + '</td>' +
+      '<td class="px-4 py-3 text-right mono font-medium ' + pCls(tp) + '">' + fmtPnl(tp) + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-primary">' + (gp !== undefined ? fmtNum(gp, 2) : '--') + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-error">' + (gl !== undefined ? fmtNum(gl, 2) : '--') + '</td>' +
+      '</tr>';
+  }).join('');
+}
 
-            tbody.innerHTML = trades.map(function(t) {
-                // 兼容 review/trades (position_side=LONG/SHORT) 和 futures/trades (side=CLOSE_LONG/CLOSE_SHORT)
-                var sideStr = (t.position_side || '').toUpperCase();
-                if (!sideStr) sideStr = t.side === 'CLOSE_LONG' ? 'LONG' : 'SHORT';
-                const isLong  = sideStr === 'LONG';
-                const sideBg  = isLong ? 'rgba(73,244,200,0.1)'  : 'rgba(255,113,108,0.1)';
-                const sideClr = isLong ? '#49f4c8'               : '#ff716c';
-                const sideLabel = isLong ? 'LONG' : 'SHORT';
+// ============================================================
+// RETRO
+// ============================================================
+function loadRetro() {
+  fetch('/api/retrospective-analysis/latest')
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var s = d.data || d || {};
+      var setT = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v !== undefined && v !== null ? v : '--'; };
+      setT('retro-period', s.period || s.time_range || '--');
 
-                const pnl    = Number(t.realized_pnl) || 0;
-                const pnlClr = pnlColor(pnl);
-                const pnlTxt = (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toFixed(2);
+      var btc = s.btc_summary || s.btc || {};
+      setT('btc-open', btc.open !== undefined ? fmtNum(btc.open, 0) : '--');
+      setT('btc-close', btc.close !== undefined ? fmtNum(btc.close, 0) : '--');
+      var btcChg = btc.change_pct !== undefined ? btc.change_pct : btc.change;
+      var btcEl = document.getElementById('btc-change');
+      if (btcEl) { btcEl.textContent = btcChg !== undefined ? fmtNum(btcChg, 2)+'%' : '--'; btcEl.className = 'mono text-xl font-medium ' + pCls(btcChg); }
+      setT('btc-high', btc.high !== undefined ? fmtNum(btc.high, 0) : '--');
+      setT('btc-low', btc.low !== undefined ? fmtNum(btc.low, 0) : '--');
 
-                const entry  = t.entry_price  ? Number(t.entry_price).toFixed(4)  : '-';
-                // review/trades: close_price; futures/trades: price
-                const closeVal = t.close_price || t.price;
-                const close  = closeVal ? Number(closeVal).toFixed(4) : '-';
-                // review/trades: holding_minutes (convert to hours); futures/trades: no hold field
-                let hold;
-                if (t.holding_minutes !== undefined && t.holding_minutes !== null) {
-                    hold = fmtHours(t.holding_minutes / 60);
-                } else {
-                    hold = fmtHours(t.holding_hours !== undefined ? t.holding_hours : t.hold_hours);
-                }
-                // review/trades: close_reason_cn (pre-translated); fallback to raw close_reason
-                const reason = t.close_reason_cn || fmtCloseReason(t.close_reason || t.close_reason_code);
-                const time   = fmtTime(t.close_time || t.trade_time || t.created_at);
-
-                return '<tr class="hover:bg-surface-container transition-colors">' +
-                    '<td class="px-8 py-5 font-medium">' +
-                        '<div>' + (t.symbol || '-') + '</div>' +
-                        '<div class="text-[10px] text-on-surface-variant mono">' + time + '</div>' +
-                    '</td>' +
-                    '<td class="px-8 py-5">' +
-                        '<span class="px-2 py-1 text-[10px] font-bold rounded" style="background:' + sideBg + ';color:' + sideClr + '">' + sideLabel + '</span>' +
-                    '</td>' +
-                    '<td class="px-8 py-5 mono text-on-surface-variant">' + entry + '</td>' +
-                    '<td class="px-8 py-5 mono text-on-surface-variant">' + close + '</td>' +
-                    '<td class="px-8 py-5 mono font-bold" style="color:' + pnlClr + '">' + pnlTxt + '</td>' +
-                    '<td class="px-8 py-5 text-on-surface-variant">' + hold + '</td>' +
-                    '<td class="px-8 py-5">' +
-                        '<span class="text-[10px] bg-surface-container-highest px-2 py-0.5 rounded text-on-surface">' + reason + '</span>' +
-                    '</td>' +
-                '</tr>';
-            }).join('');
+      var hours = s.hourly_trend || s.hourly || [];
+      var htbody = document.getElementById('hourly-trend-tbody');
+      if (htbody) {
+        if (!hours.length) {
+          htbody.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>';
+        } else {
+          htbody.innerHTML = hours.map(function(h) {
+            var chg = h.change_pct !== undefined ? h.change_pct : h.change;
+            var dir = h.direction || (parseFloat(chg || 0) >= 0 ? 'UP' : 'DOWN');
+            var dirColor = dir === 'UP' ? 'text-primary' : 'text-error';
+            var hp = h.interval_pnl !== undefined ? h.interval_pnl : h.pnl;
+            var hwr = h.win_rate !== undefined ? fmtNum(h.win_rate > 1 ? h.win_rate : h.win_rate*100, 1)+'%' : '--';
+            return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
+              '<td class="px-4 py-3 mono text-on-surface-variant">' + (h.time_cst || h.hour || '--') + '</td>' +
+              '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmtNum(h.open, 0) + '</td>' +
+              '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmtNum(h.close, 0) + '</td>' +
+              '<td class="px-4 py-3 text-right mono ' + pCls(chg) + '">' + (chg !== undefined ? fmtNum(chg, 2)+'%' : '--') + '</td>' +
+              '<td class="px-4 py-3 text-xs font-bold ' + dirColor + '">' + dir + '</td>' +
+              '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + (h.trade_count || h.trades || '--') + '</td>' +
+              '<td class="px-4 py-3 text-right mono ' + pCls(hp) + '">' + fmtPnl(hp) + '</td>' +
+              '<td class="px-4 py-3 text-right mono text-secondary">' + hwr + '</td></tr>';
+          }).join('');
         }
+      }
 
-        // ---------- 计算统计（fallback） ----------
+      var perf = s.performance || s.stats || {};
+      var rtp = perf.total_pnl !== undefined ? perf.total_pnl : s.total_pnl;
+      var rpEl = document.getElementById('rp-total-pnl');
+      if (rpEl) { rpEl.textContent = fmtPnl(rtp); rpEl.className = 'mono text-xl font-medium ' + pCls(rtp); }
+      setT('rp-total-trades', perf.total_trades || s.total_trades || '--');
+      var rwr = perf.win_rate !== undefined ? perf.win_rate : s.win_rate;
+      setT('rp-winrate', rwr !== undefined ? fmtNum(rwr > 1 ? rwr : rwr*100, 1)+'%' : '--');
+      setT('rp-profit-hours', perf.profit_hours || s.profit_hours || '--');
+      setT('rp-best-hour', perf.best_hour || s.best_hour || '--');
+    })
+    .catch(function(e){ console.error('loadRetro error:', e); });
+}
 
-        function calcStats(trades) {
-            let winCount = 0, lossCount = 0, totalPnl = 0;
-            (trades || []).forEach(function(t) {
-                const p = Number(t.realized_pnl) || 0;
-                totalPnl += p;
-                if (p > 0) winCount++;
-                else if (p < 0) lossCount++;
-            });
-            const total = trades ? trades.length : 0;
-            const winRate = total > 0 ? (winCount / total * 100) : 0;
-            return { total_open: total, win_count: winCount, loss_count: lossCount, total_pnl: totalPnl, win_rate: winRate };
-        }
+// ============================================================
+// INIT
+// ============================================================
+updateTimestamp();
+loadTabData('overview');
+tabLoaded['overview'] = true;
+</script>
 
-        function calcBestWorst(trades) {
-            const map = {};
-            (trades || []).forEach(function(t) {
-                const sym = t.symbol || 'UNKNOWN';
-                if (!map[sym]) map[sym] = { symbol: sym, pnl: 0, count: 0 };
-                map[sym].pnl   += Number(t.realized_pnl) || 0;
-                map[sym].count += 1;
-            });
-            const arr = Object.values(map).sort(function(a, b) { return b.pnl - a.pnl; });
-            const best  = arr.filter(function(x) { return x.pnl >= 0; }).slice(0, 3);
-            const worst = arr.filter(function(x) { return x.pnl <  0; }).slice(-3).reverse();
-            return { best: best, worst: worst };
-        }
-
-        // ---------- 主入口 ----------
-
-        async function loadReview() {
-            // 更新时间戳
-            const tsEl = document.querySelector('header .mono.text-xs.text-on-surface');
-            if (tsEl) {
-                const now = new Date(Date.now() + 8 * 3600 * 1000);
-                const pad = function(n) { return String(n).padStart(2, '0'); };
-                tsEl.textContent = now.getUTCFullYear() + '-' +
-                    pad(now.getUTCMonth() + 1) + '-' +
-                    pad(now.getUTCDate())       + ' ' +
-                    pad(now.getUTCHours())      + ':' +
-                    pad(now.getUTCMinutes())    + ':' +
-                    pad(now.getUTCSeconds());
-            }
-
-            // 并发请求三个端点
-            const [r1, r2, r3] = await Promise.allSettled([
-                fetch('/api/futures/review/summary?account_id=2&hours=24'),
-                fetch('/api/futures/review/trades?account_id=2&hours=24&page_size=100'),
-                fetch('/api/futures/review/signal-analysis?account_id=2&hours=24')
-            ]);
-
-            let summaryOk = false;
-
-            // 处理统计摘要
-            if (r1.status === 'fulfilled' && r1.value.ok) {
-                try {
-                    const data = await r1.value.json();
-                    const d = data.data !== undefined ? data.data : data;
-                    const wl = d.win_loss_analysis || {};
-                    const ps = d.pnl_summary || {};
-                    updateStats({
-                        total_open: wl.total_closed_positions ?? d.total_open,
-                        win_count:  wl.winning_trades          ?? d.win_count,
-                        loss_count: wl.losing_trades           ?? d.loss_count,
-                        total_pnl:  ps.realized_pnl             ?? d.total_pnl,
-                        win_rate:   wl.win_rate                 ?? d.win_rate
-                    });
-                    const symPerf = d.symbol_performance || d.best_symbols || [];
-                    const best  = symPerf.filter(function(s) { return (s.pnl ?? s.total_pnl ?? 0) >= 0; })
-                                         .map(function(s) { return { symbol: s.symbol, pnl: s.pnl ?? s.total_pnl ?? 0, count: s.count ?? s.total_trades }; })
-                                         .slice(0, 3);
-                    const worst = symPerf.filter(function(s) { return (s.pnl ?? s.total_pnl ?? 0) < 0; })
-                                         .map(function(s) { return { symbol: s.symbol, pnl: s.pnl ?? s.total_pnl ?? 0, count: s.count ?? s.total_trades }; })
-                                         .slice(0, 3);
-                    renderSymbols(best, worst);
-                    summaryOk = true;
-                } catch (e) { console.error('解析 summary 失败:', e); }
-            }
-
-            // 处理详细交易记录
-            if (r2.status === 'fulfilled' && r2.value.ok) {
-                try {
-                    const raw = await r2.value.json();
-                    const d = raw.data !== undefined ? raw.data : raw;
-                    const trades = Array.isArray(d) ? d : (d.positions || d.trades || []);
-                    renderTrades(trades);
-                    if (!summaryOk && trades.length > 0) {
-                        updateStats(calcStats(trades));
-                        const sym = calcBestWorst(trades);
-                        renderSymbols(sym.best, sym.worst);
-                    }
-                } catch (e) {
-                    console.error('解析 trades 失败:', e);
-                    renderTrades([]);
-                }
-            } else {
-                // Fallback: /api/futures/trades
-                try {
-                    const r4 = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&limit=50');
-                    if (r4.ok) {
-                        const raw = await r4.json();
-                        const trades = Array.isArray(raw) ? raw : (raw.data || raw.trades || []);
-                        renderTrades(trades);
-                        if (!summaryOk) {
-                            updateStats(calcStats(trades));
-                            const sym = calcBestWorst(trades);
-                            renderSymbols(sym.best, sym.worst);
-                        }
-                    } else {
-                        renderTrades([]);
-                    }
-                } catch (e) {
-                    console.error('fallback trades 失败:', e);
-                    renderTrades([]);
-                }
-            }
-
-            // 处理信号分析
-            if (r3.status === 'fulfilled' && r3.value.ok) {
-                try {
-                    const raw = await r3.value.json();
-                    const d = raw.data !== undefined ? raw.data : raw;
-                    const stats = d.signal_stats || {};
-                    // 转为数组供 renderSignalAnalysis 使用
-                    const items = Object.entries(stats).map(function(entry) {
-                        return { component: entry[0], win_rate: entry[1].win_rate, count: entry[1].total_trades };
-                    }).sort(function(a, b) { return b.win_rate - a.win_rate; });
-                    renderSignalAnalysis(items);
-                } catch (e) {
-                    console.error('解析信号分析失败:', e);
-                    renderSignalAnalysis([]);
-                }
-            } else {
-                renderSignalAnalysis([]);
-            }
-        }
-
-        // 刷新按钮
-        const refreshBtn = document.querySelector('header button .material-symbols-outlined.text-primary');
-        if (refreshBtn) {
-            refreshBtn.closest('button').addEventListener('click', loadReview);
-        }
-
-        document.addEventListener('DOMContentLoaded', loadReview);
-    </script>
-</body></html>
+</body>
+</html>
