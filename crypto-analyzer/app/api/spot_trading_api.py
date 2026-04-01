@@ -168,31 +168,34 @@ async def get_spot_history(
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # 构建查询条件
-        where_conditions = ["status = 'closed'"]
+        # 构建查询条件（paper_trading_trades 表）
+        where_conditions = ["t.account_id = 1", "t.side = 'SELL'"]
         params = []
 
         if start_date:
-            where_conditions.append("DATE(updated_at) >= %s")
+            where_conditions.append("DATE(t.trade_time) >= %s")
             params.append(start_date)
 
         if end_date:
-            where_conditions.append("DATE(updated_at) <= %s")
+            where_conditions.append("DATE(t.trade_time) <= %s")
             params.append(end_date)
 
         where_clause = " AND ".join(where_conditions)
 
-        # 查询历史记录（使用paper_trading_positions表）
+        # 查询历史记录（使用paper_trading_trades表，SELL成交即为已平仓记录）
         query = f"""
             SELECT
-                p.id, p.symbol, p.avg_entry_price AS entry_price,
-                p.current_price AS exit_price, p.quantity, p.total_cost,
-                p.unrealized_pnl AS pnl, p.unrealized_pnl_pct AS pnl_pct,
+                t.id, t.symbol,
+                COALESCE(t.cost_price, t.price) AS entry_price,
+                t.price AS exit_price,
+                t.quantity, t.total_amount AS total_cost,
+                COALESCE(t.realized_pnl, 0) AS pnl,
+                COALESCE(t.pnl_pct, 0) AS pnl_pct,
                 '' AS close_reason, '' AS signal_details,
-                p.created_at, p.updated_at AS closed_at
-            FROM paper_trading_positions p
-            WHERE p.account_id = 1 AND {where_clause.replace("status = 'closed'", "p.status = 'closed'")}
-            ORDER BY p.updated_at DESC
+                t.trade_time AS created_at, t.trade_time AS closed_at
+            FROM paper_trading_trades t
+            WHERE {where_clause}
+            ORDER BY t.trade_time DESC
             LIMIT %s OFFSET %s
         """
 
@@ -206,12 +209,12 @@ async def get_spot_history(
             result.append(SpotHistoryPosition(
                 id=rec['id'],
                 symbol=rec['symbol'],
-                entry_price=float(rec['entry_price']),
-                exit_price=float(rec['exit_price']),
-                quantity=float(rec['quantity']),
-                total_cost=float(rec['total_cost']),
-                pnl=float(rec['pnl']),
-                pnl_pct=float(rec['pnl_pct']),
+                entry_price=float(rec['entry_price'] or 0),
+                exit_price=float(rec['exit_price'] or 0),
+                quantity=float(rec['quantity'] or 0),
+                total_cost=float(rec['total_cost'] or 0),
+                pnl=float(rec['pnl'] or 0),
+                pnl_pct=float(rec['pnl_pct'] or 0),
                 close_reason=rec['close_reason'],
                 signal_details=rec['signal_details'],
                 created_at=rec['created_at'],

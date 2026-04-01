@@ -153,6 +153,48 @@ body { background:#070b10; font-family:'Manrope',sans-serif; color:#ebeef5; -web
 </div>
 </div>
 
+<!-- Order Panel -->
+<div class="bg-surface-container-low rounded-2xl overflow-hidden shadow-2xl">
+<div class="p-6 bg-surface-container">
+<h4 class="font-headline font-bold flex items-center gap-2">
+<span class="w-1 h-4 bg-tertiary rounded-full"></span>
+模拟下单
+</h4>
+</div>
+<div class="p-6">
+<div class="grid grid-cols-2 md:grid-cols-5 gap-4 items-end">
+<div>
+<label class="text-xs text-on-surface-variant uppercase tracking-widest mb-2 block">交易对</label>
+<input id="order-symbol" type="text" placeholder="BTC/USDT" value="BTC/USDT"
+  class="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 text-sm monospace focus:outline-none focus:border-primary/50"/>
+</div>
+<div>
+<label class="text-xs text-on-surface-variant uppercase tracking-widest mb-2 block">方向</label>
+<select id="order-side" class="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary/50">
+<option value="BUY">买入 BUY</option>
+<option value="SELL">卖出 SELL</option>
+</select>
+</div>
+<div>
+<label class="text-xs text-on-surface-variant uppercase tracking-widest mb-2 block">数量</label>
+<input id="order-quantity" type="number" placeholder="0.01" step="0.0001" min="0"
+  class="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 text-sm monospace focus:outline-none focus:border-primary/50"/>
+</div>
+<div>
+<label class="text-xs text-on-surface-variant uppercase tracking-widest mb-2 block">价格（留空=市价）</label>
+<input id="order-price" type="number" placeholder="市价" step="0.01" min="0"
+  class="w-full bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-2 text-sm monospace focus:outline-none focus:border-primary/50"/>
+</div>
+<div>
+<button onclick="placeOrder()" class="w-full bg-primary text-on-primary font-bold py-2 px-4 rounded-lg text-sm hover:opacity-90 transition-all">
+下单
+</button>
+</div>
+</div>
+<p id="order-msg" class="mt-3 text-xs text-on-surface-variant hidden"></p>
+</div>
+</div>
+
 <!-- Positions Table -->
 <div class="bg-surface-container-low rounded-2xl overflow-hidden shadow-2xl">
 <div class="p-6 flex justify-between items-center bg-surface-container">
@@ -311,6 +353,48 @@ async function loadHistory() {
     } catch(e) {
         tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-10 text-center text-error text-xs">加载失败: ${e.message}</td></tr>`;
     }
+}
+
+async function placeOrder() {
+    const symbol = document.getElementById('order-symbol').value.trim().toUpperCase();
+    const side = document.getElementById('order-side').value;
+    const quantity = parseFloat(document.getElementById('order-quantity').value);
+    const priceInput = document.getElementById('order-price').value;
+    const price = priceInput ? parseFloat(priceInput) : null;
+    const msg = document.getElementById('order-msg');
+
+    if (!symbol || isNaN(quantity) || quantity <= 0) {
+        msg.textContent = '请填写交易对和有效数量';
+        msg.className = 'mt-3 text-xs text-error';
+        msg.classList.remove('hidden');
+        return;
+    }
+
+    const body = { account_id: 1, symbol, side, quantity, order_type: price ? 'LIMIT' : 'MARKET' };
+    if (price) body.price = price;
+
+    try {
+        const r = await fetch('/api/paper-trading/order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await r.json();
+        if (data.success || r.ok) {
+            msg.textContent = '下单成功: ' + (data.message || data.order_id || 'OK');
+            msg.className = 'mt-3 text-xs text-primary';
+            document.getElementById('order-quantity').value = '';
+            document.getElementById('order-price').value = '';
+            setTimeout(loadAll, 800);
+        } else {
+            msg.textContent = '下单失败: ' + (data.detail || data.message || '未知错误');
+            msg.className = 'mt-3 text-xs text-error';
+        }
+    } catch(e) {
+        msg.textContent = '请求失败: ' + e.message;
+        msg.className = 'mt-3 text-xs text-error';
+    }
+    msg.classList.remove('hidden');
 }
 
 function loadAll() {
