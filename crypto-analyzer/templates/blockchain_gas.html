@@ -447,10 +447,21 @@
   // -----------------------------------------------------------------------
   // Helpers
   // -----------------------------------------------------------------------
+  // DB 存储单位为 Wei，显示时转换为 Gwei (/ 1e9)
+  function weiToGwei(val) {
+    if (val == null || val === '' || isNaN(Number(val))) return null;
+    return Number(val) / 1e9;
+  }
+
   function fmtGas(val) {
-    if (val == null || val === '' || isNaN(Number(val))) return '--';
-    var n = Number(val);
-    return n.toFixed(1);
+    var g = weiToGwei(val);
+    if (g === null) return '--';
+    if (g === 0) return '0';
+    if (g < 0.001) return g.toFixed(6);
+    if (g < 0.1)   return g.toFixed(4);
+    if (g < 1)     return g.toFixed(3);
+    if (g < 100)   return g.toFixed(2);
+    return g.toFixed(1);
   }
 
   function fmtUsd(val) {
@@ -467,10 +478,10 @@
   }
 
   function gasStatusBadge(avgGasPrice) {
-    if (avgGasPrice == null || isNaN(Number(avgGasPrice))) {
+    var g = weiToGwei(avgGasPrice);
+    if (g === null) {
       return '<span class="px-2 py-1 bg-slate-500/10 text-slate-400 rounded text-[10px] font-bold">--</span>';
     }
-    var g = Number(avgGasPrice);
     if (g > 50) {
       return '<span class="px-2 py-1 bg-rose-500/10 text-rose-400 rounded text-[10px] font-bold">HIGH</span>';
     }
@@ -562,7 +573,7 @@
       var gasId = CARD_GAS_ID[key];
       if (!gasId) return;
       var gas = row.avg_gas_price != null ? Number(row.avg_gas_price) : null;
-      setText(gasId, gas != null ? gas.toFixed(1) : '--');
+      setText(gasId, gas != null ? fmtGas(gas) : '--');
     });
   }
 
@@ -593,7 +604,7 @@
         +   '<span class="w-1.5 h-1.5 rounded-full ' + dotCls + '"></span>'
         +   '<span class="text-white">' + label + '</span>'
         + '</td>'
-        + '<td class="px-4 py-4 text-right font-bold text-white">' + (gasPrice != null ? gasPrice.toFixed(1) : '--') + '</td>'
+        + '<td class="px-4 py-4 text-right font-bold text-white">' + fmtGas(gasPrice) + '</td>'
         + '<td class="px-4 py-4 text-right text-slate-400">' + (gasUsd != null ? '$' + gasUsd.toFixed(2) : '--') + '</td>'
         + '<td class="px-6 py-4 text-center">' + gasStatusBadge(gasPrice) + '</td>'
         + '</tr>';
