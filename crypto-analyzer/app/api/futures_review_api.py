@@ -1285,12 +1285,12 @@ async def get_signal_analysis(
                 'avg_holding_minutes': float(row['avg_holding_minutes']) if row['avg_holding_minutes'] else 0,
                 'captured_opportunities': row['captured_opportunities'],
                 'rating': row['rating'],
-                'score': row['score']
+                'score': float(row['score']) if row['score'] is not None else 0.0
             }
 
-        # 找出最佳和最差信号
-        best_signal = max(signal_stats.items(), key=lambda x: x[1]['score'])[0] if signal_stats else None
-        worst_signal = min(signal_stats.items(), key=lambda x: x[1]['score'])[0] if signal_stats else None
+        # 找出最佳和最差信号（score 可能为 NULL，用 0 兜底）
+        best_signal = max(signal_stats.items(), key=lambda x: x[1]['score'] or 0)[0] if signal_stats else None
+        worst_signal = min(signal_stats.items(), key=lambda x: x[1]['score'] or 0)[0] if signal_stats else None
 
         cursor.close()
         conn.close()
