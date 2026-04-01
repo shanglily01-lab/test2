@@ -1350,15 +1350,42 @@ async def coin_futures_trading_page():
 
 
 @app.get("/live_trading")
-async def live_trading_page():
+async def live_trading_page(request: Request):
     """
-    实盘合约交易页面
+    实盘合约交易页面（注入JWT token供前端API鉴权）
     """
     live_path = project_root / "templates" / "live_trading.html"
-    if live_path.exists():
-        return FileResponse(str(live_path))
-    else:
+    if not live_path.exists():
         raise HTTPException(status_code=404, detail="Live trading page not found")
+    # 从 Authorization header 或 cookie 中读取已有token并注入页面
+    access_token = ''
+    try:
+        auth_header = request.headers.get('Authorization', '')
+        if auth_header.startswith('Bearer '):
+            access_token = auth_header[7:]
+        if not access_token:
+            # 尝试从 mobile_session cookie 生成token
+            user_id, role = _parse_mobile_session(request)
+            if user_id:
+                import pymysql as _pymysql, os as _os
+                from app.auth.auth_service import get_auth_service as _get_auth_service
+                _conn = _pymysql.connect(
+                    host=_os.getenv("DB_HOST", "localhost"), port=int(_os.getenv("DB_PORT", 3306)),
+                    user=_os.getenv("DB_USER", "root"), password=_os.getenv("DB_PASSWORD", ""),
+                    database=_os.getenv("DB_NAME", "binance-data"), cursorclass=_pymysql.cursors.DictCursor)
+                _cur = _conn.cursor()
+                _cur.execute("SELECT id, username, role FROM users WHERE id=%s", (user_id,))
+                _u = _cur.fetchone(); _cur.close(); _conn.close()
+                if _u:
+                    access_token = _get_auth_service().create_access_token(
+                        user_id=_u['id'], username=_u['username'], role=_u['role'])
+    except Exception:
+        pass
+    html = live_path.read_text(encoding="utf-8")
+    inject = f'<script>window.__ACCESS_TOKEN__="{access_token}";</script>'
+    html = html.replace("</head>", inject + "\n</head>", 1)
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(html)
 
 
 @app.get("/futures_review")

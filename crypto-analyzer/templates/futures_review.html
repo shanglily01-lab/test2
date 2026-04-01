@@ -355,10 +355,10 @@
 <span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary">filter_list</span>
 </div>
 </div>
-<div class="overflow-x-auto">
+<div class="overflow-x-auto overflow-y-auto max-h-[480px]">
 <table class="w-full text-left border-collapse">
-<thead>
-<tr class="text-[10px] text-on-surface-variant uppercase tracking-widest font-headline">
+<thead class="sticky top-0 z-10">
+<tr class="text-[10px] text-on-surface-variant uppercase tracking-widest font-headline bg-surface-container-low">
 <th class="px-8 py-5">交易对</th>
 <th class="px-8 py-5">方向</th>
 <th class="px-8 py-5">开仓价</th>
@@ -612,7 +612,10 @@
             }
 
             tbody.innerHTML = trades.map(function(t) {
-                const isLong  = (t.position_side || '').toUpperCase() === 'LONG';
+                // 兼容 review/trades (position_side=LONG/SHORT) 和 futures/trades (side=CLOSE_LONG/CLOSE_SHORT)
+                var sideStr = (t.position_side || '').toUpperCase();
+                if (!sideStr) sideStr = t.side === 'CLOSE_LONG' ? 'LONG' : 'SHORT';
+                const isLong  = sideStr === 'LONG';
                 const sideBg  = isLong ? 'rgba(73,244,200,0.1)'  : 'rgba(255,113,108,0.1)';
                 const sideClr = isLong ? '#49f4c8'               : '#ff716c';
                 const sideLabel = isLong ? 'LONG' : 'SHORT';
@@ -622,13 +625,25 @@
                 const pnlTxt = (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toFixed(2);
 
                 const entry  = t.entry_price  ? Number(t.entry_price).toFixed(4)  : '-';
-                const close  = t.close_price  ? Number(t.close_price).toFixed(4)  : '-';
-                const hold   = fmtHours(t.hold_hours);
-                const reason = fmtCloseReason(t.close_reason);
-                const time   = fmtTime(t.created_at || t.close_time);
+                // review/trades: close_price; futures/trades: price
+                const closeVal = t.close_price || t.price;
+                const close  = closeVal ? Number(closeVal).toFixed(4) : '-';
+                // review/trades: holding_minutes (convert to hours); futures/trades: no hold field
+                let hold;
+                if (t.holding_minutes !== undefined && t.holding_minutes !== null) {
+                    hold = fmtHours(t.holding_minutes / 60);
+                } else {
+                    hold = fmtHours(t.holding_hours !== undefined ? t.holding_hours : t.hold_hours);
+                }
+                // review/trades: close_reason_cn (pre-translated); fallback to raw close_reason
+                const reason = t.close_reason_cn || fmtCloseReason(t.close_reason || t.close_reason_code);
+                const time   = fmtTime(t.close_time || t.trade_time || t.created_at);
 
                 return '<tr class="hover:bg-surface-container transition-colors">' +
-                    '<td class="px-8 py-5 font-medium">' + (t.symbol || '-') + '</td>' +
+                    '<td class="px-8 py-5 font-medium">' +
+                        '<div>' + (t.symbol || '-') + '</div>' +
+                        '<div class="text-[10px] text-on-surface-variant mono">' + time + '</div>' +
+                    '</td>' +
                     '<td class="px-8 py-5">' +
                         '<span class="px-2 py-1 text-[10px] font-bold rounded" style="background:' + sideBg + ';color:' + sideClr + '">' + sideLabel + '</span>' +
                     '</td>' +
@@ -688,25 +703,29 @@
                     pad(now.getUTCSeconds());
             }
 
-            // 尝试主端点
-            try {
-                const r1 = await fetch('/api/futures/review/summary?account_id=2&hours=24');
-                if (r1.ok) {
-                    const data = await r1.json();
-                    // 支持直接返回对象或 {data: {...}} 两种格式
+            // 并发请求三个端点
+            const [r1, r2, r3] = await Promise.allSettled([
+                fetch('/api/futures/review/summary?account_id=2&hours=24'),
+                fetch('/api/futures/review/trades?account_id=2&hours=24&page_size=100'),
+                fetch('/api/futures/review/signal-analysis?account_id=2&hours=24')
+            ]);
+
+            let summaryOk = false;
+
+            // 处理统计摘要
+            if (r1.status === 'fulfilled' && r1.value.ok) {
+                try {
+                    const data = await r1.value.json();
                     const d = data.data !== undefined ? data.data : data;
-
-                    const statsObj = {
-                        total_open: d.win_loss_analysis?.total_closed_positions ?? d.total_open,
-                        win_count:  d.win_loss_analysis?.winning_trades          ?? d.win_count,
-                        loss_count: d.win_loss_analysis?.losing_trades           ?? d.loss_count,
-                        total_pnl:  d.pnl_summary?.realized_pnl                  ?? d.total_pnl,
-                        win_rate:   d.win_loss_analysis?.win_rate                 ?? d.win_rate
-                    };
-                    updateStats(statsObj);
-
-                    renderSignalAnalysis(d.signal_analysis || []);
-
+                    const wl = d.win_loss_analysis || {};
+                    const ps = d.pnl_summary || {};
+                    updateStats({
+                        total_open: wl.total_closed_positions ?? d.total_open,
+                        win_count:  wl.winning_trades          ?? d.win_count,
+                        loss_count: wl.losing_trades           ?? d.loss_count,
+                        total_pnl:  ps.realized_pnl             ?? d.total_pnl,
+                        win_rate:   wl.win_rate                 ?? d.win_rate
+                    });
                     const symPerf = d.symbol_performance || d.best_symbols || [];
                     const best  = symPerf.filter(function(s) { return (s.pnl ?? s.total_pnl ?? 0) >= 0; })
                                          .map(function(s) { return { symbol: s.symbol, pnl: s.pnl ?? s.total_pnl ?? 0, count: s.count ?? s.total_trades }; })
@@ -715,37 +734,66 @@
                                          .map(function(s) { return { symbol: s.symbol, pnl: s.pnl ?? s.total_pnl ?? 0, count: s.count ?? s.total_trades }; })
                                          .slice(0, 3);
                     renderSymbols(best, worst);
-
-                    renderTrades([]);
-                    return;
-                }
-            } catch (e) {
-                console.error('主端点请求失败:', e);
+                    summaryOk = true;
+                } catch (e) { console.error('解析 summary 失败:', e); }
             }
 
-            // Fallback: /api/futures/trades
-            try {
-                const r2 = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&limit=50');
-                if (r2.ok) {
-                    const raw = await r2.json();
-                    const trades = Array.isArray(raw) ? raw : (raw.data || raw.trades || []);
-
-                    const stats = calcStats(trades);
-                    updateStats(stats);
-
-                    const sym = calcBestWorst(trades);
-                    renderSymbols(sym.best, sym.worst);
+            // 处理详细交易记录
+            if (r2.status === 'fulfilled' && r2.value.ok) {
+                try {
+                    const raw = await r2.value.json();
+                    const d = raw.data !== undefined ? raw.data : raw;
+                    const trades = Array.isArray(d) ? d : (d.positions || d.trades || []);
                     renderTrades(trades);
-
-                    // 无信号分析数据时清空
-                    renderSignalAnalysis([]);
-                    return;
+                    if (!summaryOk && trades.length > 0) {
+                        updateStats(calcStats(trades));
+                        const sym = calcBestWorst(trades);
+                        renderSymbols(sym.best, sym.worst);
+                    }
+                } catch (e) {
+                    console.error('解析 trades 失败:', e);
+                    renderTrades([]);
                 }
-            } catch (e) {
-                console.error('fallback 端点请求失败:', e);
+            } else {
+                // Fallback: /api/futures/trades
+                try {
+                    const r4 = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&limit=50');
+                    if (r4.ok) {
+                        const raw = await r4.json();
+                        const trades = Array.isArray(raw) ? raw : (raw.data || raw.trades || []);
+                        renderTrades(trades);
+                        if (!summaryOk) {
+                            updateStats(calcStats(trades));
+                            const sym = calcBestWorst(trades);
+                            renderSymbols(sym.best, sym.worst);
+                        }
+                    } else {
+                        renderTrades([]);
+                    }
+                } catch (e) {
+                    console.error('fallback trades 失败:', e);
+                    renderTrades([]);
+                }
             }
 
-            // 两个端点都失败时保留静态占位数据，不报错
+            // 处理信号分析
+            if (r3.status === 'fulfilled' && r3.value.ok) {
+                try {
+                    const raw = await r3.value.json();
+                    const d = raw.data !== undefined ? raw.data : raw;
+                    const stats = d.signal_stats || {};
+                    // 转为数组供 renderSignalAnalysis 使用
+                    const items = Object.entries(stats).map(function(entry) {
+                        return { component: entry[0], win_rate: entry[1].win_rate, count: entry[1].total_trades };
+                    }).sort(function(a, b) { return b.win_rate - a.win_rate; });
+                    renderSignalAnalysis(items);
+                } catch (e) {
+                    console.error('解析信号分析失败:', e);
+                    renderSignalAnalysis([]);
+                }
+            } else {
+                renderSignalAnalysis([]);
+            }
         }
 
         // 刷新按钮

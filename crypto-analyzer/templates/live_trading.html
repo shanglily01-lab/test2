@@ -389,17 +389,23 @@ let _refreshTimer = null;
 // ==================== Auth helpers ====================
 
 function makeHeaders() {
-    const token = window.__ACCESS_TOKEN__ || localStorage.getItem('auth_token') || localStorage.getItem('access_token');
+    const token = window.__ACCESS_TOKEN__ || localStorage.getItem('access_token') || localStorage.getItem('auth_token');
     return { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
 }
 
 async function refreshToken() {
     try {
-        const resp = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const refreshTok = localStorage.getItem('refresh_token');
+        if (!refreshTok) return false;
+        const resp = await fetch('/api/auth/refresh', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshTok })
+        });
         if (resp.ok) {
             const data = await resp.json();
             if (data.access_token) {
-                localStorage.setItem('auth_token', data.access_token);
+                localStorage.setItem('access_token', data.access_token);
                 return true;
             }
         }
