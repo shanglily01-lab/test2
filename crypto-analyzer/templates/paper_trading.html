@@ -312,19 +312,20 @@
         // ---------- loadStats ---------- //
         async function loadStats() {
             try {
-                var r = await fetch('/api/futures/stats?account_id=2');
+                var r = await fetch('/api/paper-trading/account/summary');
                 if (!r.ok) throw new Error('stats api ' + r.status);
                 var d = await r.json();
+                d = d.data || d;
                 var el;
                 el = document.getElementById('stat-active-signals');
-                if (el) el.textContent = _fmt(d.active_signals !== undefined ? d.active_signals : d.total_positions);
+                if (el) el.textContent = _fmt(d.open_positions_count ?? d.total_positions ?? '--');
                 el = document.getElementById('stat-pending');
-                if (el) el.textContent = _fmt(d.total_positions !== undefined ? d.total_positions : '--');
+                if (el) el.textContent = _fmt(d.total_positions ?? d.open_positions_count ?? '--');
                 el = document.getElementById('stat-completed');
-                if (el) el.textContent = _fmt(d.completed_positions !== undefined ? d.completed_positions : '--');
+                if (el) el.textContent = _fmt(d.closed_positions_count ?? d.completed_positions ?? '--');
                 el = document.getElementById('stat-pnl');
                 if (el) {
-                    var pnl = d.total_pnl !== undefined ? d.total_pnl : null;
+                    var pnl = d.realized_pnl ?? d.total_pnl ?? null;
                     if (pnl !== null) {
                         var n = parseFloat(pnl);
                         el.textContent = (n >= 0 ? '+' : '') + n.toFixed(2);

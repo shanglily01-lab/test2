@@ -155,8 +155,8 @@
 <div class="h-6 w-[1px] bg-outline-variant/20"></div>
 <div class="flex items-center gap-3">
 <div class="text-right">
-<p class="text-xs font-mono">2023-11-24</p>
-<p class="text-[10px] text-on-surface-variant uppercase tracking-tighter">14:32:05 UTC+8</p>
+<p class="text-xs font-mono" id="header-date">2023-11-24</p>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-tighter" id="header-time">14:32:05 UTC+8</p>
 </div>
 </div>
 </div>
@@ -414,7 +414,7 @@ function renderSignalRow(item) {
         + '<td class="py-5 text-center font-mono ' + tc + '">' + totalStr + '</td>'
         + '<td class="py-5 text-right">'
             + '<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary text-[10px] font-bold py-1.5 px-4 rounded-md shadow-[0_0_12px_rgba(73,244,200,0.2)] hover:opacity-90 transition-all uppercase"'
-            + ' onclick="window.location.href='/signals?symbol=' + symEnc + ''">Detail</button>'
+            + ' onclick="window.location.href=\'/technical-signals?symbol=\' + symEnc">Detail</button>'
         + '</td>'
         + '</tr>';
 }
@@ -424,8 +424,7 @@ async function loadSignals() {
     var tbody = document.getElementById('ema-tbody');
     var endpoints = [
         '/api/signals/scores?limit=20',
-        '/api/signals/ema-scores?limit=20',
-        '/api/futures/signals?limit=20'
+        '/api/futures/positions?account_id=2&status=open'
     ];
     var data = null;
     for (var i = 0; i < endpoints.length; i++) {
@@ -435,6 +434,15 @@ async function loadSignals() {
             var json = await resp.json();
             if (Array.isArray(json)) {
                 data = json;
+            } else if (json && Array.isArray(json.data) && json.data.length > 0 && json.data[0].position_side !== undefined) {
+                data = json.data.map(function(p) {
+                    return {
+                        symbol: p.symbol,
+                        direction: p.position_side || 'LONG',
+                        total_score: parseFloat(p.signal_score || p.entry_score || 60),
+                        updated_at: p.open_time || p.created_at
+                    };
+                });
             } else if (json && Array.isArray(json.data)) {
                 data = json.data;
             } else if (json && Array.isArray(json.signals)) {
@@ -469,14 +477,18 @@ async function loadStats() {
 
     // Try dedicated stats endpoint first
     try {
-        var resp = await fetch('/api/futures/stats?account_id=2');
+        var resp = await fetch('/api/futures/review/summary?account_id=2&hours=24');
         if (resp.ok) {
             var json = await resp.json();
-            if (json && (json.today_signals !== undefined || json.today_open !== undefined)) {
-                stats = json;
-            } else if (json && json.data) {
-                stats = json.data;
-            }
+            var d = json.data || json;
+            var wla = d.win_loss_analysis || {};
+            var pnl = d.pnl_summary || {};
+            stats = {
+                today_signals: wla.total_closed_positions,
+                today_open: (d.order_overview || {}).filled_orders,
+                today_pnl: pnl.realized_pnl,
+                win_rate: wla.win_rate
+            };
         }
     } catch (e) {
         console.error('loadStats stats endpoint failed:', e);
@@ -604,8 +616,22 @@ async function loadAll() {
     }
 }
 
+// Live clock displaying UTC+8 time in the header
+function updateClock() {
+    var now = new Date(Date.now() + 8 * 3600000);
+    var pad = function(n) { return n < 10 ? '0' + n : '' + n; };
+    var dateStr = now.getUTCFullYear() + '-' + pad(now.getUTCMonth()+1) + '-' + pad(now.getUTCDate());
+    var timeStr = pad(now.getUTCHours()) + ':' + pad(now.getUTCMinutes()) + ':' + pad(now.getUTCSeconds()) + ' UTC+8';
+    var d = document.getElementById('header-date');
+    var t = document.getElementById('header-time');
+    if (d) d.textContent = dateStr;
+    if (t) t.textContent = timeStr;
+}
+
 // Initial load on DOM ready, then auto-refresh every 30 seconds
 document.addEventListener('DOMContentLoaded', function() {
+    updateClock();
+    setInterval(updateClock, 1000);
     loadAll();
     setInterval(loadAll, 30000);
 });

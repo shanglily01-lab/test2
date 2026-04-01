@@ -1576,6 +1576,39 @@ async def _generate_trading_signal(symbol: str, timeframe: str = '1h'):
     return final_signal
 
 
+@app.get("/api/signals/scores")
+async def get_signal_scores(limit: int = 100, direction: str = None):
+    """读取 coin_kline_scores 表，返回信号评分列表（供 dashboard 和 technical_signals 页面使用）"""
+    try:
+        import pymysql
+        from app.utils.db_connection import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        sql = "SELECT symbol, total_score, direction, updated_at FROM coin_kline_scores"
+        params = []
+        if direction:
+            sql += " WHERE direction = %s"
+            params.append(direction.upper())
+        sql += " ORDER BY total_score DESC LIMIT %s"
+        params.append(limit)
+        cursor.execute(sql, params)
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        result = []
+        for r in rows:
+            result.append({
+                'symbol': r['symbol'],
+                'total_score': float(r['total_score'] or 0),
+                'direction': r['direction'] or 'NEUTRAL',
+                'updated_at': r['updated_at'].isoformat() if r['updated_at'] else None,
+            })
+        return {'success': True, 'data': result, 'count': len(result)}
+    except Exception as e:
+        logger.error(f"get_signal_scores failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/signals/batch")
 async def get_batch_signals(timeframe: str = '1h'):
     """

@@ -687,6 +687,60 @@ async def update_max_hold_hours(data: MaxHoldHoursUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Big4 trend status ────────────────────────────────────────────────────────
+
+@router.get("/big4-trend")
+async def get_big4_trend():
+    """获取最新 Big4 趋势状态（读取 big4_trend_history 最新一行）"""
+    try:
+        db_config = get_db_config()
+        conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor, autocommit=True)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT overall_signal, signal_strength, bullish_count, bearish_count,
+                   btc_signal, btc_strength,
+                   eth_signal, eth_strength,
+                   bnb_signal, bnb_strength,
+                   sol_signal, sol_strength,
+                   created_at
+            FROM big4_trend_history
+            ORDER BY created_at DESC
+            LIMIT 1
+        """)
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        if not row:
+            return {'success': True, 'data': None}
+
+        def norm_sig(s):
+            if not s:
+                return 'NEUTRAL'
+            s = s.upper()
+            if 'BULL' in s:
+                return 'BULLISH'
+            if 'BEAR' in s:
+                return 'BEARISH'
+            return 'NEUTRAL'
+
+        weight_map = {'btc': 0.50, 'eth': 0.30, 'bnb': 0.10, 'sol': 0.10}
+        data = {
+            'overall_signal': norm_sig(row['overall_signal']),
+            'signal_strength': float(row['signal_strength'] or 0),
+            'bullish_count': int(row['bullish_count'] or 0),
+            'bearish_count': int(row['bearish_count'] or 0),
+            'updated_at': row['created_at'].isoformat() if row['created_at'] else None,
+            'btc': {'signal': norm_sig(row['btc_signal']), 'score': float(row['btc_strength'] or 0), 'weight': weight_map['btc']},
+            'eth': {'signal': norm_sig(row['eth_signal']), 'score': float(row['eth_strength'] or 0), 'weight': weight_map['eth']},
+            'bnb': {'signal': norm_sig(row['bnb_signal']), 'score': float(row['bnb_strength'] or 0), 'weight': weight_map['bnb']},
+            'sol': {'signal': norm_sig(row['sol_signal']), 'score': float(row['sol_strength'] or 0), 'weight': weight_map['sol']},
+        }
+        return {'success': True, 'data': data}
+    except Exception as e:
+        logger.error(f"获取Big4趋势失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Admin password ──────────────────────────────────────────────────────────
 
 def _hash_pwd(password: str) -> str:

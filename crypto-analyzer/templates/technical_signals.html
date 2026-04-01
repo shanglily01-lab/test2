@@ -651,12 +651,12 @@
 
         // 加载信号列表，尝试两个端点
         async function loadSignals() {
-            var endpoints = ['/api/signals/scores', '/api/signals/coin-scores'];
+            var endpoints = ['/api/signals/scores?limit=100', '/api/signals/scores?direction=LONG&limit=100'];
             var data = null;
 
             for (var i = 0; i < endpoints.length; i++) {
                 try {
-                    var resp = await fetch(endpoints[i] + '?limit=50');
+                    var resp = await fetch(endpoints[i]);
                     if (!resp.ok) continue;
                     var result = await resp.json();
                     var arr = extractArray(result);

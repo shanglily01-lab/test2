@@ -429,12 +429,7 @@
     // Big4 市场状态实时数据接入
     // -------------------------------------------------------
 
-    // 尝试的 API 端点顺序
-    var BIG4_API_URLS = [
-        '/api/signals/big4-status',
-        '/api/signals/big4',
-        '/api/system/big4-status'
-    ];
+    var BIG4_API_URL = '/api/system/big4-trend';
 
     // 根据 signal 字符串生成徽章 HTML
     function signalBadge(signal) {
@@ -580,20 +575,14 @@
         }
     }
 
-    // 依次尝试 API 端点，返回成功的数据
     async function fetchBig4Data() {
-        for (var i = 0; i < BIG4_API_URLS.length; i++) {
-            try {
-                var resp = await fetch(BIG4_API_URLS[i]);
-                if (!resp.ok) continue;
-                var data = await resp.json();
-                // 支持直接返回对象或包裹在 data 字段中
-                if (data && data.overall_signal) return data;
-                if (data && data.data && data.data.overall_signal) return data.data;
-            } catch (e) {
-                // 当前端点失败，继续尝试下一个
-            }
-        }
+        try {
+            var resp = await fetch(BIG4_API_URL);
+            if (!resp.ok) return null;
+            var json = await resp.json();
+            var data = (json.data !== undefined) ? json.data : json;
+            if (data && data.overall_signal) return data;
+        } catch (e) {}
         return null;
     }
 

@@ -616,17 +616,19 @@ function loadStats(posResult, trades) {
 
 async function loadTradingStatus() {
     try {
-        var res = await fetch('/api/trading-control/status/' + ACCOUNT_ID + '/coin_futures');
-        var data = await res.json();
+        var [r1, r2] = await Promise.all([
+            fetch('/api/system/trading-services'),
+            fetch('/api/system/trading-direction')
+        ]);
+        var svc = (await r1.json()); svc = svc.data || svc;
+        var dir = (await r2.json()); dir = dir.data || dir;
         var t1 = document.getElementById('toggle-trading-enabled');
         var t2 = document.getElementById('toggle-allow-long');
         var t3 = document.getElementById('toggle-allow-short');
-        setToggleState(t1, data.enabled !== false);
-        setToggleState(t2, data.allow_long !== false);
-        setToggleState(t3, data.allow_short !== false);
-    } catch(e) {
-        // 加载失败保持默认状态
-    }
+        setToggleState(t1, svc.coin_futures_enabled !== false);
+        setToggleState(t2, (dir.allow_long?.value ?? dir.allow_long) !== false);
+        setToggleState(t3, (dir.allow_short?.value ?? dir.allow_short) !== false);
+    } catch(e) {}
 }
 
 // ---- Toggle 点击处理 ----
@@ -642,16 +644,25 @@ async function handleToggle(type) {
     var isOn = btn.dataset.state !== '1';
     setToggleState(btn, isOn);
 
-    var payload = {account_id: ACCOUNT_ID, trading_type: 'coin_futures'};
-    if (type === 'trading-enabled') payload.enabled = isOn;
-    else if (type === 'allow-long') payload.allow_long = isOn;
-    else if (type === 'allow-short') payload.allow_short = isOn;
+    var url, body;
+    if (type === 'trading-enabled') {
+        url = '/api/system/trading-services';
+        body = { coin_futures_enabled: isOn };
+    } else {
+        var t2 = document.getElementById('toggle-allow-long');
+        var t3 = document.getElementById('toggle-allow-short');
+        url = '/api/system/trading-direction';
+        body = {
+            allow_long: type === 'allow-long' ? isOn : (t2 ? t2.dataset.state === '1' : true),
+            allow_short: type === 'allow-short' ? isOn : (t3 ? t3.dataset.state === '1' : true)
+        };
+    }
 
     try {
-        var res = await fetch('/api/trading-control/toggle', {
-            method: 'POST',
+        var res = await fetch(url, {
+            method: 'PUT',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
+            body: JSON.stringify(body)
         });
         if (!res.ok) {
             var d = await res.json();

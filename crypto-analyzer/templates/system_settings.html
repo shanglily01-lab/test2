@@ -534,36 +534,44 @@
 
         async function loadAll() {
             try {
-                const [dirData, svcData, holdData, big4Data] = await Promise.all([
+                const [dirData, svcData, holdData, big4SettingData] = await Promise.all([
                     apiGet('/trading-direction'),
                     apiGet('/trading-services'),
                     apiGet('/max-hold-hours'),
-                    apiGet('/big4-status')
+                    apiGet('/settings/big4_filter_enabled')
                 ]);
 
+                const dir  = dirData.data  || dirData;
+                const svc  = svcData.data  || svcData;
+                const hold = holdData.data || holdData;
+                const big4Setting = big4SettingData.data || big4SettingData;
+
                 // 总开关 - 交易方向
-                setToggle('longToggle', !!dirData.allow_long);
-                setToggle('shortToggle', !!dirData.allow_short);
+                setToggle('longToggle',  dir.allow_long?.value  ?? true);
+                setToggle('shortToggle', dir.allow_short?.value ?? true);
 
                 // 总开关 - 交易服务
-                setToggle('liveToggle', !!svcData.live_trading_enabled);
-                setToggle('usdtToggle', !!svcData.u_futures_trading_enabled);
+                setToggle('liveToggle', svc.live_trading_enabled !== false);
+                setToggle('usdtToggle', svc.usdt_futures_enabled !== false);
 
                 // 策略开关
-                setToggle('btcMomentumToggle', !!svcData.btc_momentum_enabled);
-                setToggle('predictorToggle', !!svcData.predictor_enabled);
-                setToggle('uCoinStyleToggle', !!svcData.u_coin_style_enabled);
-                setToggle('big4Toggle', !!big4Data.enabled);
-                // 币本位：trading-services 中没有专门字段，用 u_futures_trading_enabled 作占位不会干扰实际功能
-                // 如果后端有 coin_futures_enabled 字段可改为 svcData.coin_futures_enabled
-                if ('coin_futures_enabled' in svcData) {
-                    setToggle('coinFuturesToggle', !!svcData.coin_futures_enabled);
+                setToggle('btcMomentumToggle', !!svc.btc_momentum_enabled);
+                setToggle('predictorToggle',   !!svc.predictor_enabled);
+                setToggle('uCoinStyleToggle',  !!svc.u_coin_style_enabled);
+                setToggle('big4Toggle',
+                    big4Setting.value === '1' ||
+                    big4Setting.value === 'true' ||
+                    big4Setting.value === 1
+                );
+                // 币本位：如果后端有 coin_futures_enabled 字段则读取
+                if ('coin_futures_enabled' in svc) {
+                    setToggle('coinFuturesToggle', !!svc.coin_futures_enabled);
                 }
 
                 // 最大持仓时长
                 const sel = document.getElementById('maxHoldHoursSelect');
-                if (sel && holdData.max_hold_hours != null) {
-                    sel.value = String(holdData.max_hold_hours);
+                if (sel) {
+                    sel.value = String(hold.hours ?? 4);
                 }
 
             } catch (err) {

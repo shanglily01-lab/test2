@@ -319,14 +319,11 @@
     // API Keys Management - 接入真实 API
     // ----------------------------------------------------------------
 
-    // 尝试的端点列表，按优先级排列
-    const API_ENDPOINTS = {
-        list:   ['/api/system/api-keys', '/api/live-trading/api-keys'],
-        create: ['/api/system/api-keys', '/api/live-trading/api-keys'],
-        update: (id) => `/api/system/api-keys/${id}`,
-        delete: (id) => `/api/system/api-keys/${id}`,
-        verify: (id) => `/api/system/api-keys/${id}/verify`,
-    };
+    const API_BASE = '/api/api-keys';
+    function authHeaders() {
+        var token = window.__ACCESS_TOKEN__ || localStorage.getItem('auth_token') || localStorage.getItem('access_token') || '';
+        return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+    }
 
     // 余额卡片元素引用（可选更新）
     const BALANCE_CARDS = {
@@ -421,7 +418,7 @@
         tbody.innerHTML = '<tr><td colspan="5" class="px-8 py-10 text-center text-on-surface-variant text-sm">加载中...</td></tr>';
 
         try {
-            const resp = await tryEndpoints(API_ENDPOINTS.list, { method: 'GET' });
+            const resp = await fetch(API_BASE + '/list', { method: 'GET', headers: authHeaders() });
             const data = await resp.json();
 
             // 兼容两种返回格式：数组 或 {data:[...]} 或 {api_keys:[...]}
@@ -512,9 +509,9 @@
         }
 
         try {
-            const resp = await tryEndpoints(API_ENDPOINTS.create, {
+            const resp = await fetch(API_BASE + '/save', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify(payload),
             });
             const result = await resp.json();
@@ -547,7 +544,7 @@
         if (!confirm('确定要删除 "' + name + '" 的 API 密钥吗？\n\n此操作不可恢复！')) return;
 
         try {
-            const resp = await apiFetch(API_ENDPOINTS.delete(id), { method: 'DELETE' });
+            const resp = await fetch(API_BASE + '/delete', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ api_key_id: id }) });
             const result = await resp.json();
             if (result.success || resp.ok) {
                 showNotification('已删除 ' + name, 'success');
@@ -567,7 +564,7 @@
         showNotification('正在验证...', 'info');
 
         try {
-            const resp = await apiFetch(API_ENDPOINTS.verify(id), { method: 'POST' });
+            const resp = await fetch(API_BASE + '/verify?exchange=binance', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ api_key_id: id }) });
             const result = await resp.json();
 
             if (result.success) {

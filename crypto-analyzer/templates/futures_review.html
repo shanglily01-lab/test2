@@ -666,16 +666,33 @@
 
             // 尝试主端点
             try {
-                const r1 = await fetch('/api/futures/review/24h?account_id=' + ACCOUNT_ID);
+                const r1 = await fetch('/api/futures/review/summary?account_id=2&hours=24');
                 if (r1.ok) {
                     const data = await r1.json();
                     // 支持直接返回对象或 {data: {...}} 两种格式
                     const d = data.data !== undefined ? data.data : data;
 
-                    updateStats(d);
+                    const statsObj = {
+                        total_open: d.win_loss_analysis?.total_closed_positions ?? d.total_open,
+                        win_count:  d.win_loss_analysis?.winning_trades          ?? d.win_count,
+                        loss_count: d.win_loss_analysis?.losing_trades           ?? d.loss_count,
+                        total_pnl:  d.pnl_summary?.realized_pnl                  ?? d.total_pnl,
+                        win_rate:   d.win_loss_analysis?.win_rate                 ?? d.win_rate
+                    };
+                    updateStats(statsObj);
+
                     renderSignalAnalysis(d.signal_analysis || []);
-                    renderSymbols(d.best_symbols || [], d.worst_symbols || []);
-                    renderTrades(d.trades || []);
+
+                    const symPerf = d.symbol_performance || d.best_symbols || [];
+                    const best  = symPerf.filter(function(s) { return (s.pnl ?? s.total_pnl ?? 0) >= 0; })
+                                         .map(function(s) { return { symbol: s.symbol, pnl: s.pnl ?? s.total_pnl ?? 0, count: s.count ?? s.total_trades }; })
+                                         .slice(0, 3);
+                    const worst = symPerf.filter(function(s) { return (s.pnl ?? s.total_pnl ?? 0) < 0; })
+                                         .map(function(s) { return { symbol: s.symbol, pnl: s.pnl ?? s.total_pnl ?? 0, count: s.count ?? s.total_trades }; })
+                                         .slice(0, 3);
+                    renderSymbols(best, worst);
+
+                    renderTrades([]);
                     return;
                 }
             } catch (e) {
@@ -684,7 +701,7 @@
 
             // Fallback: /api/futures/trades
             try {
-                const r2 = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&hours=24');
+                const r2 = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&limit=50');
                 if (r2.ok) {
                     const raw = await r2.json();
                     const trades = Array.isArray(raw) ? raw : (raw.data || raw.trades || []);

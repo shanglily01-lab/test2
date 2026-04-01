@@ -606,27 +606,43 @@ function loadStats(posResult, trades) {
 
 async function loadTradingStatus() {
     try {
-        var res = await fetch('/api/trading-control/status/' + ACCOUNT_ID + '/usdt_futures');
-        var data = await res.json();
+        var [r1, r2] = await Promise.all([
+            fetch('/api/system/trading-services'),
+            fetch('/api/system/trading-direction')
+        ]);
+        var svc = (await r1.json()); svc = svc.data || svc;
+        var dir = (await r2.json()); dir = dir.data || dir;
         var t1 = document.getElementById('toggle-trading-enabled');
         var t2 = document.getElementById('toggle-allow-long');
         var t3 = document.getElementById('toggle-allow-short');
-        if (t1) t1.checked = data.enabled !== false;
-        if (t2) t2.checked = data.allow_long !== false;
-        if (t3) t3.checked = data.allow_short !== false;
-    } catch(e) {
-        // 加载失败保持默认状态
-    }
+        if (t1) t1.checked = svc.usdt_futures_enabled !== false;
+        if (t2) t2.checked = (dir.allow_long?.value ?? dir.allow_long) !== false;
+        if (t3) t3.checked = (dir.allow_short?.value ?? dir.allow_short) !== false;
+    } catch(e) {}
 }
 
 // ---- Toggle 回调 ----
 
 async function _postToggle(payload) {
     try {
-        var res = await fetch('/api/trading-control/toggle', {
-            method: 'POST',
+        var url, body;
+        if ('enabled' in payload) {
+            url = '/api/system/trading-services';
+            body = { usdt_futures_enabled: payload.enabled };
+        } else {
+            // need current state of the other toggle
+            var t2 = document.getElementById('toggle-allow-long');
+            var t3 = document.getElementById('toggle-allow-short');
+            url = '/api/system/trading-direction';
+            body = {
+                allow_long: 'allow_long' in payload ? payload.allow_long : (t2 ? t2.checked : true),
+                allow_short: 'allow_short' in payload ? payload.allow_short : (t3 ? t3.checked : true)
+            };
+        }
+        var res = await fetch(url, {
+            method: 'PUT',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
+            body: JSON.stringify(body)
         });
         if (!res.ok) {
             var d = await res.json();
@@ -643,11 +659,11 @@ function onToggleTradingEnabled(el) {
 }
 
 function onToggleAllowLong(el) {
-    _postToggle({account_id: ACCOUNT_ID, trading_type: 'usdt_futures', allow_long: el.checked});
+    _postToggle({allow_long: el.checked});
 }
 
 function onToggleAllowShort(el) {
-    _postToggle({account_id: ACCOUNT_ID, trading_type: 'usdt_futures', allow_short: el.checked});
+    _postToggle({allow_short: el.checked});
 }
 
 // ---- 平仓 ----
@@ -682,7 +698,7 @@ async function closePosition(id, symbol) {
     var btns = header.querySelectorAll('.flex.bg-surface-container button');
     if (btns.length >= 2) {
         btns[1].addEventListener('click', function() {
-            window.location.href = '/live-trading';
+            window.location.href = '/live_trading';
         });
     }
 })();
