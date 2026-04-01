@@ -141,7 +141,8 @@ async def get_spot_positions():
         return result
 
     except Exception as e:
-        logger.error(f"获取现货持仓失败: {e}")
+        import traceback
+        logger.error(f"获取现货持仓失败: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"获取持仓失败: {str(e)}")
 
 

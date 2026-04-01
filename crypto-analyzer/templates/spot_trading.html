@@ -300,7 +300,9 @@ async function loadPositions() {
     const tbody = document.getElementById('positions-tbody');
     try {
         const r = await fetch(API + '/positions');
-        const rows = await r.json();
+        const data = await r.json();
+        const rows = Array.isArray(data) ? data : (data.data ?? data.positions ?? []);
+        if (!r.ok) throw new Error(data.detail || data.message || r.status);
         if (!rows || rows.length === 0) {
             tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-10 text-center text-on-surface-variant text-xs">暂无持仓</td></tr>';
             return;
@@ -335,7 +337,9 @@ async function loadHistory() {
     const limit = document.getElementById('history-limit').value;
     try {
         const r = await fetch(`${API}/history?limit=${limit}`);
-        const rows = await r.json();
+        const data = await r.json();
+        const rows = Array.isArray(data) ? data : (data.data ?? data.history ?? []);
+        if (!r.ok) throw new Error(data.detail || data.message || r.status);
         if (!rows || rows.length === 0) {
             tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-10 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
             return;
