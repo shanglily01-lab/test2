@@ -1617,10 +1617,17 @@ async def _generate_trading_signal(symbol: str, timeframe: str = '1h'):
 async def get_signal_scores(limit: int = 100, direction: str = None):
     """读取 coin_kline_scores 表，返回信号评分列表（供 dashboard 和 technical_signals 页面使用）"""
     try:
-        import pymysql
-        from app.utils.db_connection import get_db_connection
-        conn = get_db_connection()
-        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        import pymysql, os
+        conn = pymysql.connect(
+            host=os.getenv("DB_HOST", "localhost"),
+            port=int(os.getenv("DB_PORT", 3306)),
+            user=os.getenv("DB_USER", "root"),
+            password=os.getenv("DB_PASSWORD", ""),
+            database=os.getenv("DB_NAME", "binance-data"),
+            cursorclass=pymysql.cursors.DictCursor,
+            charset="utf8mb4",
+        )
+        cursor = conn.cursor()
         sql = "SELECT symbol, total_score, direction, updated_at FROM coin_kline_scores"
         params = []
         if direction:

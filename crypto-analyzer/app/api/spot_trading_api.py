@@ -114,7 +114,7 @@ async def get_spot_positions():
         for pos in positions:
             current_price = await _get_current_price(cursor, pos['symbol'])
 
-            current_value = float(pos['quantity']) * current_price if current_price else None
+            current_value = float(pos['quantity']) * float(current_price) if current_price else None
             unrealized_pnl = (current_value - float(pos['total_cost'])) if current_value else None
             unrealized_pnl_pct = (unrealized_pnl / float(pos['total_cost']) * 100) if unrealized_pnl else None
 
@@ -269,7 +269,7 @@ async def get_spot_summary():
         for pos in open_positions:
             current_price = await _get_current_price(cursor, pos['symbol'])
             if current_price:
-                value = float(pos['quantity']) * current_price
+                value = float(pos['quantity']) * float(current_price)
                 total_value += value
                 total_unrealized_pnl += (value - float(pos['total_cost']))
 

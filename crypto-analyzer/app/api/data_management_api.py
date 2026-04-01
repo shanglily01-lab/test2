@@ -22,6 +22,15 @@ import threading
 
 router = APIRouter(prefix="/api/data-management", tags=["数据管理"])
 
+
+def _iso(dt) -> Optional[str]:
+    """将 datetime/str/None 统一转为 ISO 字符串，容忍 DB 返回 str 的情况。"""
+    if dt is None:
+        return None
+    if hasattr(dt, 'isoformat'):
+        return dt.isoformat()
+    return str(dt)
+
 # 数据库连接池（全局变量）
 _db_pool = None
 _db_pool_lock = threading.Lock()
@@ -734,8 +743,8 @@ async def get_collection_status():
             'icon': 'bi-graph-up',
             'description': '各交易所的实时价格数据',
             'count': r.get('total_count', 0),
-            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
-            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'latest_time': _iso(r.get('latest_time')),
+            'oldest_time': _iso(r.get('oldest_time')),
             'symbol_count': r.get('symbol_count', 0),
             'exchange_count': r.get('exchange_count', 0),
             'status': _check_status_active(r['latest_time'], 600) if r.get('latest_time') else 'inactive'
@@ -768,8 +777,8 @@ async def get_collection_status():
             'icon': 'bi-bar-chart',
             'description': '不同时间周期的K线数据',
             'count': r.get('total_count', 0),
-            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
-            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'latest_time': _iso(r.get('latest_time')),
+            'oldest_time': _iso(r.get('oldest_time')),
             'symbol_count': r.get('symbol_count', 0),
             'timeframe_count': r.get('timeframe_count', 0),
             'status': status
@@ -783,8 +792,8 @@ async def get_collection_status():
             'icon': 'bi-graph-up-arrow',
             'description': '合约持仓量、资金费率、多空比等数据',
             'count': r.get('total_count', 0),
-            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
-            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'latest_time': _iso(r.get('latest_time')),
+            'oldest_time': _iso(r.get('oldest_time')),
             'status': _check_status_active(r['latest_time'], 1200) if r.get('latest_time') else 'inactive'
         })
 
@@ -796,8 +805,8 @@ async def get_collection_status():
             'icon': 'bi-newspaper',
             'description': '加密货币相关新闻',
             'count': r.get('total_count', 0),
-            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
-            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'latest_time': _iso(r.get('latest_time')),
+            'oldest_time': _iso(r.get('oldest_time')),
             'source_count': r.get('source_count', 0),
             'status': _check_status_active(r['latest_time'], 3600) if r.get('latest_time') else 'inactive'
         })
@@ -817,8 +826,8 @@ async def get_collection_status():
             'icon': 'bi-pie-chart',
             'description': '加密货币ETF资金流向数据（手动导入）',
             'count': r.get('total_count', 0),
-            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
-            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'latest_time': _iso(r.get('latest_time')),
+            'oldest_time': _iso(r.get('oldest_time')),
             'etf_count': r.get('etf_count', 0),
             'status': etf_status
         })
@@ -838,8 +847,8 @@ async def get_collection_status():
             'icon': 'bi-building',
             'description': '企业持仓和融资记录数据（手动导入）',
             'count': r.get('total_count', 0),
-            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
-            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'latest_time': _iso(r.get('latest_time')),
+            'oldest_time': _iso(r.get('oldest_time')),
             'company_count': r.get('company_count', 0),
             'status': treasury_status
         })
@@ -852,8 +861,8 @@ async def get_collection_status():
             'icon': 'bi-lightning-charge',
             'description': 'Hyperliquid平台聪明钱交易数据',
             'count': r.get('total_count', 0),
-            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
-            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'latest_time': _iso(r.get('latest_time')),
+            'oldest_time': _iso(r.get('oldest_time')),
             'wallet_count': r.get('wallet_count', 0),
             'trader_count': r.get('trader_count', 0),
             'monitored_count': r.get('monitored_count', 0),
@@ -869,14 +878,14 @@ async def get_collection_status():
             'icon': 'bi-wallet2',
             'description': '链上聪明钱交易和信号数据',
             'count': r.get('total_count', 0),
-            'latest_time': r['latest_time'].isoformat() if r.get('latest_time') else None,
-            'oldest_time': r['oldest_time'].isoformat() if r.get('oldest_time') else None,
+            'latest_time': _iso(r.get('latest_time')),
+            'oldest_time': _iso(r.get('oldest_time')),
             'wallet_count': r.get('wallet_count', 0),
             'address_count': r.get('address_count', 0),
             'token_count': r.get('token_count', 0),
             'blockchain_count': r.get('blockchain_count', 0),
             'signal_count': r.get('signal_count', 0),
-            'latest_signal_time': r['latest_signal_time'].isoformat() if r.get('latest_signal_time') else None,
+            'latest_signal_time': _iso(r.get('latest_signal_time')),
             'status': _check_status_active(r['latest_time'], 86400) if r.get('latest_time') else 'inactive'
         })
 
