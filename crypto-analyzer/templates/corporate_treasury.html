@@ -415,19 +415,22 @@
             .then(function (res) {
                 var d = (res.data || res);
                 if (!d) return;
-                setText('stat-total-companies', fmtNum(d.total_companies));
-                setText('stat-total-btc', fmtNum(d.total_btc_holdings));
-                var mv = d.total_market_value_usd;
+                // API 返回结构: {data: {summary: {...}, top_holders: [...]}}
+                var s = d.summary || d;
+                setText('stat-total-companies', fmtNum(s.total_companies));
+                setText('stat-total-btc', fmtNum(s.total_btc_holdings));
+                var mv = s.total_value_usd || s.total_market_value_usd;
                 if (mv !== null && mv !== undefined) {
                     var mvN = parseFloat(mv);
                     if (!isNaN(mvN)) {
                         setText('stat-market-value', '$' + (mvN / 1e8).toFixed(1));
                     }
                 }
-                setText('stat-active-companies', fmtNum(d.active_companies_30d));
+                setText('stat-active-companies', fmtNum(s.active_companies_30d));
 
-                if (d.top_companies && d.top_companies.length > 0) {
-                    updateDistributionPanel(d.top_companies);
+                var topList = d.top_holders || d.top_companies || [];
+                if (topList.length > 0) {
+                    updateDistributionPanel(topList);
                 }
                 updateLastRefresh();
             })
@@ -445,23 +448,41 @@
                 var tbody = document.getElementById('company-ranking-tbody');
                 if (!tbody) return;
                 tbody.innerHTML = '';
+                // 计算总持仓用于百分比
+                var totalBtc = list.reduce(function(s, i) { return s + (parseFloat(i.current_btc_holdings) || 0); }, 0);
                 list.forEach(function (item, idx) {
                     var rank = String(idx + 1).padStart(2, '0');
                     var btcHoldings = fmtNum(item.current_btc_holdings);
-                    var mv = parseFloat(item.market_value_usd);
-                    var mvStr = isNaN(mv) ? '--' : '$' + (mv / 1e8).toFixed(1);
-                    var pct = fmtPct(item.btc_percentage);
+                    // API 字段是 value_usd，不是 market_value_usd
+                    var mv = parseFloat(item.value_usd || item.market_value_usd);
+                    var mvStr = isNaN(mv) ? '--' : '$' + (mv / 1e8).toFixed(2) + '亿';
+                    // btc_percentage 不在API中，按列表内占比计算
+                    var holdings = parseFloat(item.current_btc_holdings) || 0;
+                    var pct = totalBtc > 0 ? (holdings / totalBtc * 100).toFixed(1) + '%' : '--';
+                    // 最近变动：last_change + last_action
+                    var changeVal = parseFloat(item.last_change) || 0;
+                    var action = (item.last_action || '').toLowerCase();
+                    var changeStr;
+                    if (changeVal === 0 || action === 'hold') {
+                        changeStr = '<span class="text-slate-500">持平</span>';
+                    } else if (action === 'buy' || changeVal > 0) {
+                        changeStr = '<span class="text-[#49f4c8]">+' + fmtNum(Math.abs(changeVal)) + '</span>';
+                    } else {
+                        changeStr = '<span class="text-[#ff716c]">-' + fmtNum(Math.abs(changeVal)) + '</span>';
+                    }
+                    // country 不在DB中，显示 category
+                    var typeStr = item.category || '--';
                     var rowBg = idx % 2 === 1 ? ' bg-slate-900/10' : '';
                     var tr = document.createElement('tr');
                     tr.className = 'hover:bg-slate-800/30 transition-colors' + rowBg;
                     tr.innerHTML =
                         '<td class="px-5 py-4 text-slate-400">' + rank + '</td>' +
                         '<td class="px-5 py-4 font-bold text-slate-100">' + (item.company_name || '--') + '</td>' +
-                        '<td class="px-5 py-4 text-slate-500">' + (item.country || '--') + (item.category ? ' / ' + item.category : '') + '</td>' +
+                        '<td class="px-5 py-4 text-slate-500">' + typeStr + '</td>' +
                         '<td class="px-5 py-4 text-right text-slate-100">' + btcHoldings + '</td>' +
                         '<td class="px-5 py-4 text-right text-slate-100">' + mvStr + '</td>' +
                         '<td class="px-5 py-4 text-right text-slate-400">' + pct + '</td>' +
-                        '<td class="px-5 py-4 text-right text-slate-500">--</td>';
+                        '<td class="px-5 py-4 text-right">' + changeStr + '</td>';
                     tbody.appendChild(tr);
                 });
             })
@@ -480,24 +501,25 @@
                 if (!tbody) return;
                 tbody.innerHTML = '';
                 list.forEach(function (item, idx) {
-                    var isBuy = (item.action_type || '').toUpperCase().indexOf('BUY') !== -1;
+                    // API 字段: action ('buy'/'sell'/'hold'), quantity, purchase_date, average_price
+                    var action = (item.action || item.action_type || '').toLowerCase();
+                    var isBuy = action === 'buy';
+                    var isSell = action === 'sell';
                     var rowBg = idx % 2 === 1 ? ' bg-slate-900/10' : '';
                     var actionHtml = isBuy
                         ? '<span class="px-2 py-1 rounded-sm bg-primary/10 text-primary border border-primary/20">买入 BUY</span>'
-                        : '<span class="px-2 py-1 rounded-sm bg-danger/10 text-danger border border-danger/20">卖出 SELL</span>';
-                    var statusLower = (item.status || '').toLowerCase();
-                    var statusHtml;
-                    if (statusLower === 'confirmed' || statusLower === 'completed' || statusLower === 'done') {
-                        statusHtml = '<span class="inline-flex items-center gap-1 text-[#49f4c8]"><span class="material-symbols-outlined text-[14px]">check_circle</span>已上链</span>';
-                    } else {
-                        statusHtml = '<span class="inline-flex items-center gap-1 text-slate-500"><span class="material-symbols-outlined text-[14px]">sync</span>确认中</span>';
-                    }
+                        : (isSell ? '<span class="px-2 py-1 rounded-sm bg-[#ff716c]/10 text-[#ff716c] border border-[#ff716c]/20">卖出 SELL</span>'
+                                  : '<span class="px-2 py-1 rounded-sm bg-slate-700/30 text-slate-400 border border-slate-700/30">持有 HOLD</span>');
+                    // 无 status 字段，从 purchase_date 判断是否为历史记录
+                    var statusHtml = '<span class="inline-flex items-center gap-1 text-[#49f4c8]"><span class="material-symbols-outlined text-[14px]">check_circle</span>已确认</span>';
                     var avgPrice = item.average_price ? '$' + fmtNum(item.average_price) : '--';
-                    var btcAmt = item.btc_amount ? fmtNum(item.btc_amount) + ' BTC' : '--';
+                    // API 字段是 quantity，不是 btc_amount
+                    var qty = parseFloat(item.quantity || item.btc_amount) || 0;
+                    var btcAmt = qty !== 0 ? fmtNum(Math.abs(qty)) + ' BTC' : '--';
                     var tr = document.createElement('tr');
                     tr.className = 'hover:bg-slate-800/30 transition-colors' + rowBg;
                     tr.innerHTML =
-                        '<td class="px-5 py-4 text-slate-400">' + (item.activity_date || '--') + '</td>' +
+                        '<td class="px-5 py-4 text-slate-400">' + (item.purchase_date || item.activity_date || '--') + '</td>' +
                         '<td class="px-5 py-4 font-bold text-slate-100">' + (item.company_name || '--') + '</td>' +
                         '<td class="px-5 py-4">' + actionHtml + '</td>' +
                         '<td class="px-5 py-4 text-right text-slate-100 font-bold">' + btcAmt + '</td>' +
@@ -518,10 +540,16 @@
         if (!panel) return;
         panel.innerHTML = '';
         var top5 = topCompanies.slice(0, 5);
+        // 计算总量用于占比（top_holders 用 btc_holdings，companies 用 current_btc_holdings）
+        var totalBtc = top5.reduce(function(s, c) {
+            return s + (parseFloat(c.btc_holdings || c.current_btc_holdings) || 0);
+        }, 0);
         top5.forEach(function (c, i) {
             var color = DONUT_COLORS[i] || '#64748b';
-            var pct = c.total_percentage !== null && c.total_percentage !== undefined
-                ? parseFloat(c.total_percentage).toFixed(1) + '%' : '--';
+            var holdings = parseFloat(c.btc_holdings || c.current_btc_holdings) || 0;
+            var pct = (c.total_percentage !== null && c.total_percentage !== undefined)
+                ? parseFloat(c.total_percentage).toFixed(1) + '%'
+                : (totalBtc > 0 ? (holdings / totalBtc * 100).toFixed(1) + '%' : '--');
             var row = document.createElement('div');
             row.className = 'flex items-center justify-between';
             row.innerHTML =
