@@ -361,8 +361,80 @@
 </div>
 </div>
 </div>
-<!-- System Logs / Activity Summary -->
+<!-- Data Import Section -->
 <div class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+  <!-- ETF Data Import -->
+  <div class="bg-brand-surface border border-slate-800 rounded-xl p-6">
+    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+      <span class="material-symbols-outlined text-sm text-brand-primary">upload_file</span>
+      ETF 数据导入
+    </h3>
+    <div class="space-y-3">
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-slate-400 w-20 shrink-0">资产类型</label>
+        <select id="etf-asset-type" class="bg-brand-bg border border-slate-700 text-xs text-slate-200 rounded px-3 py-1.5 focus:border-brand-primary focus:outline-none">
+          <option value="BTC">BTC ETF</option>
+          <option value="ETH">ETH ETF</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-slate-400 w-20 shrink-0">CSV 文件</label>
+        <label class="flex-1 flex items-center gap-2 px-3 py-2 bg-brand-bg border border-slate-700 border-dashed rounded cursor-pointer hover:border-brand-primary/50 transition-colors group">
+          <span class="material-symbols-outlined text-sm text-slate-500 group-hover:text-brand-primary">attach_file</span>
+          <span id="etf-file-name" class="text-xs text-slate-500 truncate">选择 .csv 文件...</span>
+          <input id="etf-file-input" type="file" accept=".csv" class="hidden">
+        </label>
+      </div>
+      <div class="flex items-center gap-2 pt-1">
+        <button id="etf-import-btn" class="px-4 py-1.5 bg-brand-primary/10 hover:bg-brand-primary/20 border border-brand-primary/30 text-brand-primary text-xs font-bold rounded transition-colors">
+          导入
+        </button>
+        <a href="/api/data-management/template/etf" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded transition-colors">
+          下载模板
+        </a>
+        <span id="etf-import-status" class="text-xs font-mono text-slate-500 ml-2"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Corporate Treasury Import -->
+  <div class="bg-brand-surface border border-slate-800 rounded-xl p-6">
+    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+      <span class="material-symbols-outlined text-sm text-brand-primary">account_balance</span>
+      企业金库数据导入
+    </h3>
+    <div class="space-y-3">
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-slate-400 w-20 shrink-0">数据日期</label>
+        <input id="treasury-date" type="date" class="bg-brand-bg border border-slate-700 text-xs text-slate-200 rounded px-3 py-1.5 focus:border-brand-primary focus:outline-none">
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="text-xs text-slate-400 w-20 shrink-0">文件</label>
+        <label class="flex-1 flex items-center gap-2 px-3 py-2 bg-brand-bg border border-slate-700 border-dashed rounded cursor-pointer hover:border-brand-primary/50 transition-colors group">
+          <span class="material-symbols-outlined text-sm text-slate-500 group-hover:text-brand-primary">attach_file</span>
+          <span id="treasury-file-name" class="text-xs text-slate-500 truncate">选择 .txt 或 .csv 文件...</span>
+          <input id="treasury-file-input" type="file" accept=".txt,.csv" class="hidden">
+        </label>
+      </div>
+      <div class="text-[10px] text-slate-600 font-mono">.txt = Bitcoin Treasuries 持仓格式 &nbsp;|&nbsp; .csv = 融资数据</div>
+      <div class="flex items-center gap-2 pt-1">
+        <button id="treasury-import-btn" class="px-4 py-1.5 bg-brand-primary/10 hover:bg-brand-primary/20 border border-brand-primary/30 text-brand-primary text-xs font-bold rounded transition-colors">
+          导入
+        </button>
+        <a href="/api/data-management/template/corporate-treasury" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded transition-colors">
+          持仓模板
+        </a>
+        <a href="/api/data-management/template/corporate-treasury-financing" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded transition-colors">
+          融资模板
+        </a>
+        <span id="treasury-import-status" class="text-xs font-mono text-slate-500 ml-2"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- System Logs / Activity Summary -->
+<div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
 <div class="bg-brand-surface border border-slate-800 rounded-xl p-6">
 <h3 class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
 <span class="material-symbols-outlined text-sm">history</span>
@@ -798,6 +870,114 @@
 
     loadData();
     setInterval(loadData, 30000);
+
+    // ---- Import: ETF ----
+
+    (function () {
+        var fileInput = document.getElementById('etf-file-input');
+        var fileNameEl = document.getElementById('etf-file-name');
+        var importBtn = document.getElementById('etf-import-btn');
+        var statusEl = document.getElementById('etf-import-status');
+
+        if (!fileInput) return;
+
+        fileInput.addEventListener('change', function () {
+            fileNameEl.textContent = fileInput.files[0] ? fileInput.files[0].name : '选择 .csv 文件...';
+            statusEl.textContent = '';
+        });
+
+        importBtn.addEventListener('click', async function () {
+            if (!fileInput.files[0]) { alert('请先选择文件'); return; }
+            var assetType = document.getElementById('etf-asset-type').value;
+
+            var fd = new FormData();
+            fd.append('file', fileInput.files[0]);
+            fd.append('asset_type', assetType);
+
+            importBtn.disabled = true;
+            statusEl.textContent = '导入中...';
+            statusEl.className = 'text-xs font-mono text-slate-400 ml-2';
+
+            try {
+                var res = await fetch('/api/data-management/import/etf', { method: 'POST', body: fd });
+                var d = await res.json();
+                if (d.success !== false && res.ok) {
+                    statusEl.textContent = 'OK: ' + (d.imported || 0) + ' 条导入' + (d.errors && d.errors.length ? '，' + d.errors.length + ' 条错误' : '');
+                    statusEl.className = 'text-xs font-mono text-brand-primary ml-2';
+                    fileInput.value = '';
+                    fileNameEl.textContent = '选择 .csv 文件...';
+                    loadData();
+                } else {
+                    statusEl.textContent = 'ERROR: ' + (d.detail || d.message || '导入失败');
+                    statusEl.className = 'text-xs font-mono text-red-400 ml-2';
+                }
+            } catch (err) {
+                statusEl.textContent = 'ERROR: 请求失败';
+                statusEl.className = 'text-xs font-mono text-red-400 ml-2';
+            } finally {
+                importBtn.disabled = false;
+            }
+        });
+    })();
+
+    // ---- Import: Corporate Treasury ----
+
+    (function () {
+        var fileInput = document.getElementById('treasury-file-input');
+        var fileNameEl = document.getElementById('treasury-file-name');
+        var importBtn = document.getElementById('treasury-import-btn');
+        var statusEl = document.getElementById('treasury-import-status');
+        var dateInput = document.getElementById('treasury-date');
+
+        if (!fileInput) return;
+
+        // 默认日期为今天
+        var today = new Date();
+        dateInput.value = today.toISOString().substring(0, 10);
+
+        fileInput.addEventListener('change', function () {
+            fileNameEl.textContent = fileInput.files[0] ? fileInput.files[0].name : '选择 .txt 或 .csv 文件...';
+            statusEl.textContent = '';
+        });
+
+        importBtn.addEventListener('click', async function () {
+            if (!fileInput.files[0]) { alert('请先选择文件'); return; }
+
+            var fd = new FormData();
+            fd.append('file', fileInput.files[0]);
+            fd.append('asset_type', 'BTC');
+            if (dateInput.value) fd.append('data_date', dateInput.value);
+
+            importBtn.disabled = true;
+            statusEl.textContent = '导入中...';
+            statusEl.className = 'text-xs font-mono text-slate-400 ml-2';
+
+            try {
+                var res = await fetch('/api/data-management/import/corporate-treasury', { method: 'POST', body: fd });
+                var d = await res.json();
+                if (d.success !== false && res.ok) {
+                    var msg = 'OK:';
+                    if (d.imported) msg += ' ' + d.imported + ' 新增';
+                    if (d.updated) msg += ' ' + d.updated + ' 更新';
+                    if (d.skipped) msg += ' ' + d.skipped + ' 跳过';
+                    if (d.errors && d.errors.length) msg += '，' + d.errors.length + ' 错误';
+                    statusEl.textContent = msg;
+                    statusEl.className = 'text-xs font-mono text-brand-primary ml-2';
+                    fileInput.value = '';
+                    fileNameEl.textContent = '选择 .txt 或 .csv 文件...';
+                    loadData();
+                } else {
+                    statusEl.textContent = 'ERROR: ' + (d.detail || d.message || '导入失败');
+                    statusEl.className = 'text-xs font-mono text-red-400 ml-2';
+                }
+            } catch (err) {
+                statusEl.textContent = 'ERROR: 请求失败';
+                statusEl.className = 'text-xs font-mono text-red-400 ml-2';
+            } finally {
+                importBtn.disabled = false;
+            }
+        });
+    })();
 
 })();
 </script>
