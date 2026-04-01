@@ -173,3 +173,48 @@ async def get_technical_signals(symbols: Optional[str] = None):
     except Exception as e:
         logger.error(f"获取技术信号失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/signals/scores")
+async def get_signal_scores(limit: int = 20):
+    """
+    获取 K线评分列表（来自 coin_kline_scores），供 Dashboard 信号评分表格使用
+    返回字段: symbol, direction, total_score, updated_at
+    """
+    try:
+        conn = pymysql.connect(
+            host=os.getenv('DB_HOST', 'localhost'),
+            port=int(os.getenv('DB_PORT', 3306)),
+            user=os.getenv('DB_USER', 'root'),
+            password=os.getenv('DB_PASSWORD', ''),
+            database=os.getenv('DB_NAME', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT symbol, direction, total_score, updated_at
+                    FROM coin_kline_scores
+                    WHERE exchange = 'binance_futures'
+                    ORDER BY ABS(total_score) DESC
+                    LIMIT %s
+                """, (limit,))
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+
+        data = []
+        for r in rows:
+            data.append({
+                'symbol':      r['symbol'],
+                'direction':   r['direction'] or 'NEUTRAL',
+                'total_score': float(r['total_score']) if r['total_score'] is not None else 0.0,
+                'updated_at':  r['updated_at'].isoformat() if r['updated_at'] else None,
+            })
+
+        return data
+
+    except Exception as e:
+        logger.error(f"获取信号评分列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
