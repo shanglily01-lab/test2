@@ -25,7 +25,16 @@ except ImportError:
                     os.environ.setdefault(_k.strip(), _v.strip())
 
 SYMBOLS_TO_BAN = [
-    'XVG/USDT',
+    '1000LUNC/USDT',
+    'CFX/USDT',
+    'DEGO/USDT',
+    'RLC/USDT',
+    'GRASS/USDT',
+    'PIPPIN/USDT',
+    'LISTA/USDT',
+    'BEAT/USDT',
+    'TWT/USDT',
+    'BANANAS31/USDT',
 ]
 REASON = "手动加入黑名单3级，永久禁止交易"
 
