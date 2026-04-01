@@ -175,8 +175,8 @@ function fmtPnl(n) {
 
 async function loadTradingStatus() {
     try {
-        const r = await fetch('/api/trading-control/status/2/usdt_futures').then(r => r.json());
-        const on = r.data?.is_trading_enabled || r.is_trading_enabled || false;
+        const r = await fetch('/api/system/trading-services').then(r => r.json());
+        const on = r.data?.u_futures_trading_enabled ?? r.u_futures_trading_enabled ?? false;
         document.getElementById('tradingDot').className =
             'w-1.5 h-1.5 rounded-full ' + (on ? 'bg-primary animate-pulse' : 'bg-[#44484e]');
         document.getElementById('tradingText').textContent = on ? '交易中' : '已暂停';
@@ -187,9 +187,9 @@ async function loadTradingStatus() {
 
 async function toggleTrading(val) {
     try {
-        const r = await fetch('/api/trading-control/toggle', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ account_id: 2, trading_type: 'usdt_futures', enabled: val })
+        const r = await fetch('/api/system/trading-services', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ u_futures_trading_enabled: val })
         }).then(r => r.json());
         if (r.success) { toast(val ? '交易已启用' : '交易已暂停'); loadTradingStatus(); }
         else toast('切换失败', 'err');
@@ -310,7 +310,7 @@ async function doClose() {
     if (!pendingClose) return;
     closeDialog();
     try {
-        const r = await fetch(`${API}/positions/${pendingClose.id}/close`, {
+        const r = await fetch(`${API}/close/${pendingClose.id}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ account_id: 2, reason: 'manual_mobile' })
         }).then(r => r.json());

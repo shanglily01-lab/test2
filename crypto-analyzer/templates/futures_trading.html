@@ -314,17 +314,17 @@
 <button class="p-2 bg-surface-container-highest rounded-lg hover:text-primary"><span class="material-symbols-outlined text-sm">download</span></button>
 </div>
 </div>
-<div class="overflow-x-auto">
+<div class="overflow-x-auto overflow-y-auto max-h-[480px]">
 <table class="w-full text-left border-collapse">
-<thead>
-<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-outline-variant/10">
+<thead class="sticky top-0 z-10">
+<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-outline-variant/10 bg-surface-container-low">
 <th class="px-6 py-5 font-semibold">成交时间</th>
 <th class="px-6 py-5 font-semibold">交易对</th>
 <th class="px-6 py-5 font-semibold">类型</th>
 <th class="px-6 py-5 font-semibold">开仓价</th>
 <th class="px-6 py-5 font-semibold">结平价</th>
 <th class="px-6 py-5 font-semibold text-right">实现盈亏 (PnL)</th>
-<th class="px-6 py-5 font-semibold text-right">手续费</th>
+<th class="px-6 py-5 font-semibold text-right">收益率</th>
 </tr>
 </thead>
 <tbody id="history-tbody" class="text-xs"><tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr></tbody>
@@ -533,7 +533,7 @@ async function loadHistory() {
             recentList.innerHTML = '<div class="py-4 text-center text-on-surface-variant text-xs">暂无记录</div>';
         } else {
             recentList.innerHTML = trades.slice(0, 5).map(function(t) {
-                var isLong = t.position_side === 'LONG';
+                var isLong = t.side === 'CLOSE_LONG';
                 var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
                 var sideLabel = isLong ? 'LONG' : 'SHORT';
                 var pnl = parseFloat(t.realized_pnl) || 0;
@@ -545,7 +545,7 @@ async function loadHistory() {
                     '</div>' +
                     '<div class="text-right">' +
                         '<p class="text-sm monospace ' + pnlClass + '">' + fmtPnl(pnl) + '</p>' +
-                        '<p class="text-[10px] text-on-surface-variant">' + fmtTime(t.close_time || t.created_at) + '</p>' +
+                        '<p class="text-[10px] text-on-surface-variant">' + fmtTime(t.close_time || t.trade_time) + '</p>' +
                     '</div>' +
                 '</div>';
             }).join('');
@@ -560,18 +560,19 @@ async function loadHistory() {
     }
 
     tbody.innerHTML = trades.map(function(t) {
-        var isLong = t.position_side === 'LONG';
+        var isLong = t.side === 'CLOSE_LONG';
         var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
         var pnl = parseFloat(t.realized_pnl) || 0;
         var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+        var pnlPct = t.pnl_pct != null ? parseFloat(t.pnl_pct) : null;
         return '<tr class="hover:bg-surface-container/50 border-b border-outline-variant/5 transition-colors">' +
-            '<td class="px-6 py-4 text-on-surface-variant monospace">' + fmtTime(t.close_time || t.created_at) + '</td>' +
+            '<td class="px-6 py-4 text-on-surface-variant monospace">' + fmtTime(t.close_time || t.trade_time) + '</td>' +
             '<td class="px-6 py-4 font-bold font-headline uppercase">' + (t.symbol || '--') + '</td>' +
             '<td class="px-6 py-4 ' + sideClass + '">' + (isLong ? 'LONG' : 'SHORT') + '</td>' +
             '<td class="px-6 py-4 monospace">' + fmtPrice(t.entry_price) + '</td>' +
-            '<td class="px-6 py-4 monospace">' + fmtPrice(t.close_price) + '</td>' +
+            '<td class="px-6 py-4 monospace">' + fmtPrice(t.price) + '</td>' +
             '<td class="px-6 py-4 text-right ' + pnlClass + ' font-bold monospace">' + fmtPnl(pnl) + '</td>' +
-            '<td class="px-6 py-4 text-right text-on-surface-variant monospace">--</td>' +
+            '<td class="px-6 py-4 text-right ' + pnlClass + ' monospace">' + (pnlPct != null ? (pnlPct * 100).toFixed(2) + '%' : '--') + '</td>' +
         '</tr>';
     }).join('');
 
@@ -697,7 +698,7 @@ async function closePosition(id, symbol) {
     var ok = confirm('确定要平仓 ' + symbol + ' (ID:' + id + ') ？\n此操作不可撤销。');
     if (!ok) return;
     try {
-        var res = await fetch('/api/futures/positions/' + id + '/close', {
+        var res = await fetch('/api/futures/close/' + id, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({})

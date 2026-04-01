@@ -247,9 +247,9 @@
 <thead>
 <tr class="text-on-surface-variant text-[10px] uppercase tracking-[0.2em] font-display">
 <th class="pb-6 font-medium">交易对</th>
-<th class="pb-6 font-medium text-center">1H EMA趋势</th>
-<th class="pb-6 font-medium text-center">4H EMA趋势</th>
-<th class="pb-6 font-medium text-center">1D EMA趋势</th>
+<th class="pb-6 font-medium text-center">方向</th>
+<th class="pb-6 font-medium text-center">评分段</th>
+<th class="pb-6 font-medium text-center">更新时间</th>
 <th class="pb-6 font-medium text-center">综合评分</th>
 <th class="pb-6 font-medium text-right">操作</th>
 </tr>
@@ -409,9 +409,6 @@ function formatSymbol(symbol) {
 function renderSignalRow(item) {
     var sym   = formatSymbol(item.symbol || '');
     var init  = symbolInitial(item.symbol || '');
-    var s1h   = item.score_1h  !== undefined ? item.score_1h  : item.score_1H;
-    var s4h   = item.score_4h  !== undefined ? item.score_4h  : item.score_4H;
-    var s1d   = item.score_1d  !== undefined ? item.score_1d  : item.score_1D;
     var total = item.total_score !== undefined ? item.total_score : item.score;
     var totalStr = (total !== null && total !== undefined && !isNaN(parseFloat(total)))
         ? parseFloat(total).toFixed(1)
@@ -419,6 +416,15 @@ function renderSignalRow(item) {
     var tc = (parseFloat(total) > 60) ? 'text-primary'
            : (parseFloat(total) < 40  ? 'text-error' : 'text-on-surface-variant');
     var symEnc = encodeURIComponent(item.symbol || '');
+
+    var dir = (item.direction || 'NEUTRAL').toUpperCase();
+    var dirColor = dir === 'LONG' ? 'text-primary' : dir === 'SHORT' ? 'text-error' : 'text-on-surface-variant';
+    var dirLabel = dir === 'LONG' ? 'LONG' : dir === 'SHORT' ? 'SHORT' : 'NEUTRAL';
+
+    var scoreN = parseFloat(total);
+    var scoreBand = scoreN >= 70 ? '强势' : scoreN >= 50 ? '中性偏强' : scoreN >= 30 ? '中性' : '弱势';
+
+    var updatedAt = item.updated_at ? String(item.updated_at).slice(11, 16) : '--';
 
     return '<tr class="hover:bg-surface-container transition-colors duration-150">'
         + '<td class="py-5">'
@@ -428,13 +434,12 @@ function renderSignalRow(item) {
                 + '</div>'
                 + '<div>'
                     + '<p class="font-mono font-medium text-sm">' + sym + '</p>'
-                    + '<p class="text-[10px] text-on-surface-variant">' + (item.direction || '') + '</p>'
                 + '</div>'
             + '</div>'
         + '</td>'
-        + '<td class="py-5 text-center">' + emaBadge(s1h) + '</td>'
-        + '<td class="py-5 text-center">' + emaBadge(s4h) + '</td>'
-        + '<td class="py-5 text-center">' + emaBadge(s1d) + '</td>'
+        + '<td class="py-5 text-center font-mono font-bold text-xs ' + dirColor + '">' + dirLabel + '</td>'
+        + '<td class="py-5 text-center text-xs text-on-surface-variant">' + scoreBand + '</td>'
+        + '<td class="py-5 text-center font-mono text-xs text-on-surface-variant">' + updatedAt + '</td>'
         + '<td class="py-5 text-center font-mono ' + tc + '">' + totalStr + '</td>'
         + '<td class="py-5 text-right">'
             + '<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary text-[10px] font-bold py-1.5 px-4 rounded-md shadow-[0_0_12px_rgba(73,244,200,0.2)] hover:opacity-90 transition-all uppercase"'

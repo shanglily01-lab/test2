@@ -493,7 +493,7 @@ async def get_review_summary(
                 MIN(realized_pnl) as max_loss,
                 AVG(TIMESTAMPDIFF(MINUTE, open_time, close_time)) as avg_holding_minutes
             FROM futures_positions
-            WHERE account_id = %s AND status = 'closed' AND close_time >= %s
+            WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
         """, (account_id, time_threshold))
         position_stats = cursor.fetchone()
 
@@ -501,7 +501,7 @@ async def get_review_summary(
         cursor.execute("""
             SELECT SUM(unrealized_pnl) as total_unrealized_pnl
             FROM futures_positions
-            WHERE account_id = %s AND status = 'open'
+            WHERE account_id = %s AND status = 'OPEN'
         """, (account_id,))
         unrealized = cursor.fetchone()
 
@@ -519,7 +519,7 @@ async def get_review_summary(
                 MAX(realized_pnl) as max_win,
                 MIN(realized_pnl) as max_loss
             FROM futures_positions
-            WHERE account_id = %s AND status = 'closed' AND close_time >= %s
+            WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
             GROUP BY symbol
             ORDER BY total_pnl DESC
         """, (account_id, time_threshold))
@@ -638,7 +638,7 @@ async def get_review_trades(
         cursor.execute(f"""
             SELECT COUNT(*) as total
             FROM futures_positions
-            WHERE account_id = %s AND status = 'closed' AND close_time >= %s
+            WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
             {filter_condition}
         """, (account_id, time_threshold))
         total_count = cursor.fetchone()['total']
@@ -653,7 +653,7 @@ async def get_review_trades(
                 holding_hours, entry_reason, notes as close_reason,
                 open_time, close_time, entry_signal_type, status
             FROM futures_positions
-            WHERE account_id = %s AND status = 'closed' AND close_time >= %s
+            WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
             {filter_condition}
             ORDER BY {order_by}
             LIMIT %s OFFSET %s
@@ -869,7 +869,7 @@ async def get_reason_analysis(
                 entry_reason, entry_signal_type, notes as close_reason,
                 realized_pnl, position_side
             FROM futures_positions
-            WHERE account_id = %s AND status = 'closed' AND close_time >= %s
+            WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
         """, (account_id, time_threshold))
 
         positions = cursor.fetchall()
@@ -1016,7 +1016,7 @@ async def get_strategy_suggestions(
                 realized_pnl, unrealized_pnl_pct, position_side,
                 stop_loss_pct, take_profit_pct, max_profit_pct
             FROM futures_positions
-            WHERE account_id = %s AND status = 'closed' AND close_time >= %s
+            WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
         """, (account_id, time_threshold))
         positions = cursor.fetchall()
 

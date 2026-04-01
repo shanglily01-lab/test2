@@ -707,7 +707,7 @@ async function closePosition(id, symbol) {
     var ok = confirm('确定要平仓 ' + symbol + ' (ID:' + id + ') ？\n此操作不可撤销。');
     if (!ok) return;
     try {
-        var res = await fetch('/api/futures/positions/' + id + '/close', {
+        var res = await fetch('/api/futures/close/' + id, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({})
