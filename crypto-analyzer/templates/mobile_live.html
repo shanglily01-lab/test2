@@ -8,75 +8,64 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <style>
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        }
-        .mono { font-family: 'JetBrains Mono', monospace; }
-        body {
-            background-color: #070b10;
-            color: #ebeef5;
-            font-family: 'Manrope', sans-serif;
-            -webkit-font-smoothing: antialiased;
-            min-height: 100dvh;
-            min-height: 100vh;
-            overscroll-behavior-y: contain;
-        }
-        .long-text { color: #00d4aa; }
-        .short-text { color: #ff4d6a; }
-        .live-accent { color: #ffb800; }
-        /* 底部导航安全区域 */
-        .bottom-nav {
-            padding-bottom: max(env(safe-area-inset-bottom), 8px);
-        }
-        main {
-            padding-bottom: calc(76px + max(env(safe-area-inset-bottom), 8px));
-        }
-        /* 触控优化 */
-        button, a { -webkit-tap-highlight-color: transparent; }
-        /* 横向滚动隐藏滚动条 */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    </style>
+.material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
+.mono { font-family:'JetBrains Mono',monospace; }
+body { background:#070b10; color:#ebeef5; font-family:'Manrope',sans-serif;
+    -webkit-font-smoothing:antialiased; min-height:100dvh; min-height:100vh;
+    overscroll-behavior-y:contain; }
+.bottom-nav { padding-bottom:max(env(safe-area-inset-bottom),8px); }
+main { padding-bottom:calc(76px + max(env(safe-area-inset-bottom),8px)); }
+button,a { -webkit-tap-highlight-color:transparent; }
+.no-scrollbar::-webkit-scrollbar { display:none; }
+.no-scrollbar { -ms-overflow-style:none;scrollbar-width:none; }
+#toast { position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:500;
+    background:#1a2235;color:#ebeef5;padding:8px 18px;border-radius:20px;
+    font-size:13px;font-weight:600;opacity:0;transition:opacity .2s;
+    border:1px solid #44484e;white-space:nowrap;pointer-events:none; }
+#toast.show { opacity:1; }
+#toast.err { border-color:rgba(255,77,106,.3);color:#ff4d6a; }
+.skeleton { background:linear-gradient(90deg,#1a2235 25%,#20283a 50%,#1a2235 75%);
+    background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px; }
+@keyframes shimmer { 0%{background-position:200% 0}100%{background-position:-200% 0} }
+#overlay { display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;
+    align-items:center;justify-content:center; }
+#overlay.show { display:flex; }
+.dialog { background:#0f1520;border:1px solid #1e2d45;border-radius:16px;
+    padding:24px;width:calc(100% - 48px);max-width:320px; }
+</style>
 <script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "error-dim": "#d7383b",
-                        "on-background": "#ebeef5",
-                        "primary-container": "#00d4aa",
-                        "on-surface-variant": "#a8abb2",
-                        "surface-variant": "#20262e",
-                        "primary-fixed-dim": "#33e5ba",
-                        "surface-container-lowest": "#000000",
-                        "surface-bright": "#262d35",
-                        "error": "#ff4d6a",
-                        "outline-variant": "#44484e",
-                        "primary": "#49f4c8",
-                        "surface-container-low": "#0f1419",
-                        "surface-dim": "#0a0f14",
-                        "surface-container-high": "#1a2027",
-                        "background": "#070b10",
-                        "surface": "#070b10",
-                        "surface-container": "#0f1520",
-                        "surface-container-highest": "#20262e"
-                    },
-                    fontFamily: {
-                        "headline": ["Space Grotesk"],
-                        "body": ["Manrope"],
-                        "label": ["Manrope"]
-                    }
-                }
-            }
-        }
-    </script>
+tailwind.config = {
+    darkMode: "class",
+    theme: { extend: { colors: {
+        "primary-container": "#00d4aa", "on-surface-variant": "#a8abb2",
+        "surface-variant": "#20262e", "error": "#ff4d6a",
+        "outline-variant": "#44484e", "primary": "#49f4c8",
+        "surface-container-low": "#0f1419", "background": "#070b10",
+        "surface": "#070b10", "surface-container": "#0f1520",
+        "surface-container-highest": "#20262e"
+    }, fontFamily: { "headline": ["Space Grotesk"], "body": ["Manrope"] } } }
+}
+</script>
 </head>
 <body class="antialiased overflow-x-hidden">
 
+<div id="toast"></div>
+
+<!-- 确认对话框 -->
+<div id="overlay">
+    <div class="dialog">
+        <h3 id="dialogTitle" class="font-headline font-bold text-base mb-2">确认操作</h3>
+        <p id="dialogMsg" class="text-sm text-on-surface-variant mb-6"></p>
+        <div class="flex gap-3">
+            <button onclick="closeDialog()" class="flex-1 h-11 rounded-xl border border-outline-variant/30 text-on-surface-variant text-sm font-semibold active:scale-95 transition-transform">取消</button>
+            <button id="dialogConfirm" class="flex-1 h-11 rounded-xl border border-error/40 text-error text-sm font-bold active:scale-95 transition-transform">确认</button>
+        </div>
+    </div>
+</div>
+
 <!-- 顶部栏 -->
-<header class="fixed top-0 w-full z-50 bg-[#0a0f14] border-b-2 border-[#ffb800] shadow-[0_4px_20px_rgba(0,0,0,0.3)]"
-        style="padding-top: env(safe-area-inset-top);">
+<header class="fixed top-0 w-full z-50 bg-[#0a0f14] border-b-2 border-[#ffb800] shadow-[0_4px_20px_rgba(0,0,0,.3)]"
+        style="padding-top:env(safe-area-inset-top);">
     <div class="flex items-center justify-between px-5 h-14 w-full">
         <div class="flex items-center gap-2.5">
             <span class="material-symbols-outlined text-[#00d4aa] text-xl">analytics</span>
@@ -86,28 +75,25 @@
                 <span class="text-[10px] font-bold text-[#ffb800] tracking-widest uppercase">LIVE</span>
             </div>
         </div>
-        <button class="w-10 h-10 flex items-center justify-center active:scale-95 transition-transform" aria-label="通知">
-            <span class="material-symbols-outlined text-[#a8abb2]">notifications</span>
+        <button class="w-10 h-10 flex items-center justify-center active:scale-95 transition-transform" onclick="loadAll()" aria-label="刷新">
+            <span class="material-symbols-outlined text-[#a8abb2]">refresh</span>
         </button>
     </div>
 </header>
 
-<main class="mt-14 px-4 space-y-5">
-
+<main class="mt-14 px-4 space-y-4">
     <!-- 账号选择器 -->
-    <section class="space-y-3">
-        <div class="flex overflow-x-auto gap-2 no-scrollbar pb-1 pt-2">
-            <button class="flex-shrink-0 px-4 py-2 rounded-full bg-[#ffb800] text-[#070b10] font-bold text-sm min-h-[40px]">OKX 1</button>
-            <button class="flex-shrink-0 px-4 py-2 rounded-full bg-surface-container text-on-surface-variant font-medium text-sm border border-outline-variant/20 min-h-[40px]">Binance Main</button>
-            <button class="flex-shrink-0 px-4 py-2 rounded-full bg-surface-container text-on-surface-variant font-medium text-sm border border-outline-variant/20 min-h-[40px]">Bybit Alpha</button>
-            <button class="flex-shrink-0 px-4 py-2 rounded-full bg-surface-container text-on-surface-variant font-medium text-sm border border-outline-variant/20 min-h-[40px]">Deribit 02</button>
+    <section class="space-y-3 pt-2">
+        <div id="accountBtns" class="flex overflow-x-auto gap-2 no-scrollbar pb-1">
+            <div class="skeleton h-9 w-24 flex-shrink-0"></div>
+            <div class="skeleton h-9 w-28 flex-shrink-0"></div>
         </div>
         <div class="flex items-center justify-between px-1">
             <div class="flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-[#00d4aa]"></span>
-                <span class="text-xs font-medium text-on-surface-variant uppercase tracking-tight">Connected</span>
+                <span id="connDot" class="w-2 h-2 rounded-full bg-[#44484e]"></span>
+                <span id="connText" class="text-xs font-medium text-on-surface-variant uppercase tracking-tight">加载中</span>
             </div>
-            <span class="text-[10px] font-mono text-on-surface-variant/60">UPDATED: 14:20:03</span>
+            <span id="lastUpdate" class="text-[10px] font-mono text-on-surface-variant/60"></span>
         </div>
     </section>
 
@@ -115,31 +101,31 @@
     <div class="grid grid-cols-3 gap-2.5">
         <div class="bg-surface-container p-3 rounded-xl border border-outline-variant/10">
             <p class="text-[10px] text-on-surface-variant uppercase font-bold mb-1">持仓数</p>
-            <p class="mono text-lg font-bold text-[#ffb800]">12</p>
+            <p id="posCount" class="mono text-lg font-bold text-[#ffb800]">--</p>
         </div>
         <div class="bg-surface-container p-3 rounded-xl border border-outline-variant/10">
             <p class="text-[10px] text-on-surface-variant uppercase font-bold mb-1">未实现盈亏</p>
-            <p class="mono text-base font-bold text-[#00d4aa]">+1,204.5</p>
+            <p id="totalPnl" class="mono text-base font-bold text-[#00d4aa]">--</p>
         </div>
         <div class="bg-surface-container p-3 rounded-xl border border-outline-variant/10">
-            <p class="text-[10px] text-on-surface-variant uppercase font-bold mb-1">保证金占用</p>
-            <p class="mono text-lg font-bold text-[#ffb800]">45.2%</p>
+            <p class="text-[10px] text-on-surface-variant uppercase font-bold mb-1">保证金</p>
+            <p id="totalMargin" class="mono text-lg font-bold text-[#ffb800]">--</p>
         </div>
     </div>
 
     <!-- 账户余额卡片 -->
-    <section class="bg-surface-container border border-[#ffb800]/40 rounded-2xl p-5 relative overflow-hidden">
+    <section id="balanceCard" style="display:none;" class="bg-surface-container border border-[#ffb800]/40 rounded-2xl p-5 relative overflow-hidden">
         <div class="absolute top-0 right-0 w-24 h-24 bg-[#ffb800]/5 rounded-full -mr-12 -mt-12 blur-3xl pointer-events-none"></div>
         <div class="relative z-10">
-            <h3 class="text-[10px] font-bold text-[#ffb800] uppercase tracking-[0.2em] mb-4">账户余额</h3>
+            <h3 class="text-[10px] font-bold text-[#ffb800] uppercase tracking-[.2em] mb-4">账户余额</h3>
             <div class="grid grid-cols-2 gap-6">
                 <div>
                     <p class="text-[10px] text-on-surface-variant uppercase font-medium mb-1">总权益 (USDT)</p>
-                    <p class="mono text-xl font-bold text-[#ffb800]">142,904.52</p>
+                    <p id="totalEquity" class="mono text-xl font-bold text-[#ffb800]">--</p>
                 </div>
                 <div>
                     <p class="text-[10px] text-on-surface-variant uppercase font-medium mb-1">可用保证金</p>
-                    <p class="mono text-xl font-bold text-[#ffb800]">78,310.18</p>
+                    <p id="availableMargin" class="mono text-xl font-bold text-[#ffb800]">--</p>
                 </div>
             </div>
         </div>
@@ -149,119 +135,18 @@
     <section class="space-y-3">
         <div class="flex items-center justify-between px-1">
             <h2 class="font-headline font-bold text-base">持仓列表</h2>
-            <span class="text-xs text-on-surface-variant">4 Active</span>
         </div>
-
-        <!-- 持仓卡片 1：BTC LONG -->
-        <div class="bg-surface-container/60 border-l-4 border-[#00d4aa] rounded-xl overflow-hidden">
-            <div class="p-4 space-y-3">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <span class="font-mono font-bold text-sm">BTC-USDT</span>
-                            <span class="px-1.5 py-0.5 rounded bg-[#00d4aa]/10 text-[#00d4aa] text-[10px] font-bold">LONG</span>
-                            <span class="text-[#ffb800] text-[10px] font-mono font-bold">50X</span>
-                        </div>
-                        <p class="text-[10px] text-on-surface-variant mt-0.5 uppercase">逐仓</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="mono text-base font-bold text-[#00d4aa]">+842.12</p>
-                        <p class="text-[10px] text-[#00d4aa] font-mono">+12.45%</p>
-                    </div>
-                </div>
-                <!-- 使用 2 列布局替代 3 列，窄屏更友好 -->
-                <div class="grid grid-cols-2 gap-y-3 gap-x-4">
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant uppercase">开仓价</p>
-                        <p class="mono text-xs font-medium">64,204.1</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant uppercase">标记价</p>
-                        <p class="mono text-xs font-medium">65,110.4</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant uppercase">数量 (BTC)</p>
-                        <p class="mono text-xs font-medium">1.250</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant uppercase">保证金</p>
-                        <p class="mono text-xs font-medium">1,605.10</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant uppercase">爆仓价</p>
-                        <p class="mono text-xs font-medium text-error">61,450.0</p>
-                    </div>
-                    <div class="flex items-end justify-end">
-                        <button class="min-h-[36px] px-4 py-1.5 rounded-lg border border-error/30 text-error text-[10px] font-bold uppercase active:bg-error/10 transition-colors">
-                            市价平仓
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 持仓卡片 2：ETH SHORT -->
-        <div class="bg-surface-container/60 border-l-4 border-error rounded-xl overflow-hidden">
-            <div class="p-4 space-y-3">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <div class="flex items-center gap-2 flex-wrap">
-                            <span class="font-mono font-bold text-sm">ETH-USDT</span>
-                            <span class="px-1.5 py-0.5 rounded bg-error/10 text-error text-[10px] font-bold">SHORT</span>
-                            <span class="text-[#ffb800] text-[10px] font-mono font-bold">20X</span>
-                        </div>
-                        <p class="text-[10px] text-on-surface-variant mt-0.5 uppercase">全仓</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="mono text-base font-bold text-error">-12.50</p>
-                        <p class="text-[10px] text-error font-mono">-0.45%</p>
-                    </div>
-                </div>
-                <div class="grid grid-cols-2 gap-y-3 gap-x-4">
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant uppercase">开仓价</p>
-                        <p class="mono text-xs font-medium">3,450.2</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant uppercase">标记价</p>
-                        <p class="mono text-xs font-medium">3,462.8</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant uppercase">数量 (ETH)</p>
-                        <p class="mono text-xs font-medium">15.00</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant uppercase">保证金</p>
-                        <p class="mono text-xs font-medium">2,587.65</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant uppercase">爆仓价</p>
-                        <p class="mono text-xs font-bold text-error">3,612.4</p>
-                    </div>
-                    <div class="flex items-end justify-end">
-                        <button class="min-h-[36px] px-4 py-1.5 rounded-lg border border-error/30 text-error text-[10px] font-bold uppercase active:bg-error/10 transition-colors">
-                            市价平仓
-                        </button>
-                    </div>
-                </div>
-            </div>
+        <div id="positionsList">
+            <div class="skeleton h-36 w-full mb-3"></div>
+            <div class="skeleton h-36 w-full"></div>
         </div>
     </section>
 
     <!-- 当前委托 -->
     <section class="space-y-3">
         <h2 class="font-headline font-bold text-base px-1">当前委托</h2>
-        <div class="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/10 flex justify-between items-center">
-            <div>
-                <div class="flex items-center gap-2">
-                    <span class="text-xs font-mono font-bold">SOL-USDT</span>
-                    <span class="text-[10px] text-[#00d4aa] font-bold">LIMIT / BUY</span>
-                </div>
-                <p class="mono text-[10px] text-on-surface-variant mt-1">价格: 142.50 | 数量: 100</p>
-            </div>
-            <button class="w-10 h-10 flex items-center justify-center active:scale-90 transition-transform" aria-label="撤单">
-                <span class="material-symbols-outlined text-on-surface-variant text-lg">close</span>
-            </button>
+        <div id="ordersList">
+            <div class="skeleton h-14 w-full"></div>
         </div>
     </section>
 
@@ -269,35 +154,24 @@
     <section class="space-y-3">
         <div class="flex items-center justify-between px-1">
             <h2 class="font-headline font-bold text-base">历史成交</h2>
-            <div class="flex gap-3">
-                <button class="text-[11px] font-bold text-[#ffb800] uppercase min-h-[36px] px-1">7D</button>
-                <button class="text-[11px] font-bold text-on-surface-variant uppercase opacity-40 min-h-[36px] px-1">30D</button>
-                <button class="text-[11px] font-bold text-on-surface-variant uppercase opacity-40 min-h-[36px] px-1">90D</button>
+            <div class="flex gap-2">
+                <button onclick="setDays(7,this)" class="days-btn text-[11px] font-bold text-[#ffb800] uppercase min-h-[36px] px-2">7D</button>
+                <button onclick="setDays(30,this)" class="days-btn text-[11px] font-bold text-on-surface-variant uppercase opacity-40 min-h-[36px] px-2">30D</button>
+                <button onclick="setDays(90,this)" class="days-btn text-[11px] font-bold text-on-surface-variant uppercase opacity-40 min-h-[36px] px-2">90D</button>
             </div>
         </div>
-        <div class="flex items-center justify-between p-3.5 bg-surface-container/40 rounded-xl">
-            <div class="flex gap-3 items-center">
-                <div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center flex-shrink-0">
-                    <span class="material-symbols-outlined text-[#00d4aa] text-lg">history</span>
-                </div>
-                <div>
-                    <p class="text-xs font-bold">BTC-USDT</p>
-                    <p class="text-[10px] text-on-surface-variant mt-0.5">已平仓 · 14:10</p>
-                </div>
-            </div>
-            <div class="text-right">
-                <p class="mono text-xs font-bold text-[#00d4aa]">+$242.00</p>
-                <span class="text-[9px] px-1.5 py-0.5 rounded bg-surface-variant text-on-surface-variant">BOT_A</span>
-            </div>
+        <div id="historyList">
+            <div class="skeleton h-16 w-full mb-2"></div>
+            <div class="skeleton h-16 w-full"></div>
         </div>
-        <button class="w-full py-3 rounded-xl border border-outline-variant/20 text-xs font-bold text-on-surface-variant uppercase tracking-widest active:bg-surface-container transition-colors min-h-[48px]">
-            加载更多历史
+        <button onclick="loadHistory()" class="w-full py-3 rounded-xl border border-outline-variant/20 text-xs font-bold text-on-surface-variant uppercase tracking-widest active:bg-surface-container transition-colors min-h-[48px]">
+            刷新历史
         </button>
     </section>
 </main>
 
-<!-- 底部导航（统一 3 标签：设置 / U本位 / 实盘[当前]） -->
-<nav class="bottom-nav fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 h-[68px] bg-[#0f1419]/90 backdrop-blur-xl shadow-[0_-4px_20px_rgba(73,248,200,0.05)] border-t border-[#44484e]/20">
+<!-- 底部导航 -->
+<nav class="bottom-nav fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 h-[68px] bg-[#0f1419]/90 backdrop-blur-xl shadow-[0_-4px_20px_rgba(73,248,200,.05)] border-t border-[#44484e]/20">
     <a class="flex flex-col items-center justify-center text-[#a8abb2] hover:text-[#49f4c8] transition-all min-w-[64px] h-full" href="/m/settings">
         <span class="material-symbols-outlined text-[22px] mb-0.5">settings</span>
         <span class="text-[10px] font-semibold uppercase tracking-wide">设置</span>
@@ -307,10 +181,303 @@
         <span class="text-[10px] font-semibold uppercase tracking-wide">U本位</span>
     </a>
     <a class="flex flex-col items-center justify-center text-[#ffb800] min-w-[64px] h-full" href="/m/live">
-        <span class="material-symbols-outlined text-[22px] mb-0.5" style="font-variation-settings: 'FILL' 1;">sensors</span>
+        <span class="material-symbols-outlined text-[22px] mb-0.5" style="font-variation-settings:'FILL' 1;">sensors</span>
         <span class="text-[10px] font-bold uppercase tracking-wide">实盘</span>
     </a>
 </nav>
 
+<script>
+const API = '/api/live-trading';
+const userId = window.__USER_ID__ || null;
+const userRole = window.__USER_ROLE__ || '';
+let authToken = window.__ACCESS_TOKEN__ || localStorage.getItem('auth_token') || '';
+let selectedApiKeyId = null;
+let histDays = 7;
+let pendingAction = null;
+
+function toast(msg, type='ok') {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.className = 'show ' + type;
+    setTimeout(() => el.className = '', 2200);
+}
+function fmt(n, d=2) { if (n == null || isNaN(n)) return '--'; return parseFloat(n).toFixed(d); }
+function fmtPnl(n) { const v = parseFloat(n) || 0; return (v >= 0 ? '+' : '') + v.toFixed(2) + 'U'; }
+
+function makeHeaders() {
+    const h = { 'Content-Type': 'application/json' };
+    if (authToken) h['Authorization'] = 'Bearer ' + authToken;
+    if (selectedApiKeyId) h['X-API-Key-ID'] = String(selectedApiKeyId);
+    return h;
+}
+async function authFetch(url, opts={}) {
+    return fetch(url, { ...opts, headers: makeHeaders() });
+}
+
+async function loadAccounts() {
+    try {
+        const r = await authFetch(`${API}/my-accounts`).then(r => r.json());
+        let accounts = r.data || r.accounts || [];
+        if (userRole !== 'admin' && userId) accounts = accounts.filter(a => a.user_id === userId);
+        const bar = document.getElementById('accountBtns');
+        if (!accounts.length) {
+            bar.innerHTML = '<span class="text-sm text-on-surface-variant">无可用账号</span>';
+            return;
+        }
+        bar.innerHTML = accounts.map(a =>
+            `<button class="acct-btn flex-shrink-0 px-4 py-2 rounded-full font-medium text-sm min-h-[40px] transition-all
+                ${selectedApiKeyId === a.id ? 'bg-[#ffb800] text-[#070b10] font-bold' : 'bg-surface-container text-on-surface-variant border border-outline-variant/20'}"
+                onclick="selectAccount(${a.id},'${a.account_name||a.exchange||'账号'+a.id}')">
+                ${a.account_name||a.exchange||'账号'+a.id}
+            </button>`
+        ).join('');
+        if (!selectedApiKeyId && accounts.length) {
+            selectAccount(accounts[0].id, accounts[0].account_name || '账号');
+        }
+    } catch(e) {}
+}
+
+function selectAccount(id, name) {
+    selectedApiKeyId = id;
+    document.querySelectorAll('.acct-btn').forEach(b => {
+        b.className = b.className.replace('bg-[#ffb800] text-[#070b10] font-bold', 'bg-surface-container text-on-surface-variant border border-outline-variant/20');
+        if (b.textContent.trim() === name) {
+            b.className = b.className.replace('bg-surface-container text-on-surface-variant border border-outline-variant/20', 'bg-[#ffb800] text-[#070b10] font-bold');
+        }
+    });
+    document.getElementById('connDot').className = 'w-2 h-2 rounded-full bg-[#00d4aa]';
+    document.getElementById('connText').textContent = 'Connected';
+    loadAll();
+}
+
+async function loadBalance() {
+    try {
+        const r = await authFetch(`${API}/account/balance`).then(r => r.json());
+        if (r.success && r.data) {
+            const d = r.data;
+            document.getElementById('balanceCard').style.display = 'block';
+            document.getElementById('totalEquity').textContent =
+                fmt(d.total_wallet_balance || d.totalWalletBalance || d.balance, 2);
+            document.getElementById('availableMargin').textContent =
+                fmt(d.available_balance || d.availableBalance || d.free, 2);
+        }
+    } catch(e) {}
+}
+
+async function loadPositions() {
+    try {
+        const r = await authFetch(`${API}/positions`).then(r => r.json());
+        if (!r.success) {
+            document.getElementById('positionsList').innerHTML =
+                '<div class="text-center py-8 text-on-surface-variant text-sm">无法加载持仓</div>';
+            return;
+        }
+        const positions = r.data || [];
+        document.getElementById('posCount').textContent = positions.length;
+        document.getElementById('lastUpdate').textContent =
+            'UPDATED: ' + new Date().toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+
+        if (!positions.length) {
+            document.getElementById('positionsList').innerHTML =
+                '<div class="text-center py-8 text-on-surface-variant text-sm">暂无持仓</div>';
+            document.getElementById('totalPnl').textContent = '0.00U';
+            document.getElementById('totalMargin').textContent = '0.00U';
+            return;
+        }
+
+        let totalPnl = 0, totalMargin = 0;
+        const html = positions.map(pos => {
+            const upnl = parseFloat(pos.unrealized_pnl) || parseFloat(pos.unrealizedProfit) || 0;
+            const margin = parseFloat(pos.margin) || parseFloat(pos.initialMargin) || 0;
+            const ep = parseFloat(pos.entry_price || pos.entryPrice) || 0;
+            const mp = parseFloat(pos.mark_price || pos.markPrice) || 0;
+            const liq = parseFloat(pos.liquidation_price || pos.liquidationPrice) || 0;
+            const lev = pos.leverage || '?';
+            const qty = Math.abs(parseFloat(pos.quantity || pos.positionAmt) || 0);
+            const isLong = pos.position_side === 'LONG' || (pos.positionSide || '').toUpperCase() === 'LONG';
+            const sym = pos.symbol || '';
+            totalPnl += upnl; totalMargin += margin;
+            const pnlCls = upnl >= 0 ? 'text-[#00d4aa]' : 'text-error';
+            const borderColor = isLong ? 'border-l-[#00d4aa]' : 'border-l-error';
+            return `
+            <div class="bg-surface-container/60 border border-outline-variant/10 border-l-4 ${borderColor} rounded-xl overflow-hidden">
+                <div class="p-4 space-y-3">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="font-mono font-bold text-sm">${sym.replace('USDT','').replace('/','')}-USDT</span>
+                                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold ${isLong?'bg-[#00d4aa]/10 text-[#00d4aa]':'bg-error/10 text-error'}">${isLong?'LONG':'SHORT'}</span>
+                                <span class="text-[#ffb800] text-[10px] font-mono font-bold">${lev}X</span>
+                            </div>
+                            <p class="text-[10px] text-on-surface-variant mt-0.5 uppercase">${pos.margin_type || (pos.isolated ? '逐仓' : '全仓')}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="mono text-base font-bold ${pnlCls}">${fmtPnl(upnl)}</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-y-3 gap-x-4">
+                        <div><p class="text-[10px] text-on-surface-variant uppercase">开仓价</p><p class="mono text-xs font-medium">${fmt(ep,4)}</p></div>
+                        <div><p class="text-[10px] text-on-surface-variant uppercase">标记价</p><p class="mono text-xs font-medium">${fmt(mp,4)}</p></div>
+                        <div><p class="text-[10px] text-on-surface-variant uppercase">数量</p><p class="mono text-xs font-medium">${fmt(qty,4)}</p></div>
+                        <div><p class="text-[10px] text-on-surface-variant uppercase">保证金</p><p class="mono text-xs font-medium">${margin ? fmt(margin,2) : '--'}</p></div>
+                        ${liq ? `<div><p class="text-[10px] text-on-surface-variant uppercase">爆仓价</p><p class="mono text-xs font-bold text-error">${fmt(liq,4)}</p></div>` : ''}
+                    </div>
+                    <button class="w-full min-h-[40px] mt-1 py-2 rounded-xl border border-error/30 text-error text-[11px] font-bold uppercase active:bg-error/10 transition-colors"
+                        onclick="confirmClose('${sym}','${isLong?'LONG':'SHORT'}')">市价平仓</button>
+                </div>
+            </div>`;
+        }).join('');
+        document.getElementById('positionsList').innerHTML = html;
+
+        const pEl = document.getElementById('totalPnl');
+        pEl.textContent = fmtPnl(totalPnl);
+        pEl.className = 'mono text-base font-bold ' + (totalPnl >= 0 ? 'text-[#00d4aa]' : 'text-error');
+        document.getElementById('totalMargin').textContent = fmt(totalMargin, 2) + 'U';
+    } catch(e) { console.error(e); }
+}
+
+async function loadOrders() {
+    try {
+        const r = await authFetch(`${API}/orders`).then(r => r.json());
+        if (!r.success || !r.data?.length) {
+            document.getElementById('ordersList').innerHTML =
+                '<div class="text-center py-6 text-on-surface-variant text-sm">暂无委托</div>';
+            return;
+        }
+        const typeMap = { STOP_MARKET:'止损', TAKE_PROFIT_MARKET:'止盈', LIMIT:'限价', MARKET:'市价' };
+        document.getElementById('ordersList').innerHTML = r.data.map(o => {
+            const price = parseFloat(o.price) || parseFloat(o.stopPrice) || 0;
+            return `
+            <div class="bg-surface-container-low p-3.5 rounded-xl border border-outline-variant/10 flex justify-between items-center">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-mono font-bold">${o.symbol.replace('USDT','')}</span>
+                        <span class="text-[10px] text-[#00d4aa] font-bold">${typeMap[o.type]||o.type} / ${o.side}</span>
+                    </div>
+                    <p class="mono text-[10px] text-on-surface-variant mt-1">价格: ${fmt(price,4)}</p>
+                </div>
+                <button class="w-10 h-10 flex items-center justify-center active:scale-90 transition-transform"
+                    onclick="confirmCancelOrder('${o.symbol}','${o.orderId}')">
+                    <span class="material-symbols-outlined text-on-surface-variant text-lg">close</span>
+                </button>
+            </div>`;
+        }).join('');
+    } catch(e) {}
+}
+
+function setDays(n, el) {
+    histDays = n;
+    document.querySelectorAll('.days-btn').forEach(b => {
+        b.className = b.className.replace('text-[#ffb800]', 'text-on-surface-variant opacity-40');
+    });
+    el.className = el.className.replace('text-on-surface-variant opacity-40', 'text-[#ffb800]');
+    loadHistory();
+}
+
+async function loadHistory() {
+    const el = document.getElementById('historyList');
+    el.innerHTML = '<div class="text-center py-6 text-on-surface-variant text-sm">加载中…</div>';
+    try {
+        const r = await authFetch(`${API}/history?days=${histDays}`).then(r => r.json());
+        if (!r.success) { el.innerHTML = '<div class="text-center py-6 text-error text-sm">加载失败</div>'; return; }
+        const rows = r.data || [];
+        if (!rows.length) {
+            el.innerHTML = `<div class="text-center py-6 text-on-surface-variant text-sm">${histDays}天内无成交记录</div>`;
+            return;
+        }
+        const srcMap = { SMART_TRADER:'主策略', BTC_MOMENTUM:'BTC动量', PREDICTOR:'预测器',
+                         U_COIN_STYLE:'破位策略', KLINE_PULLBACK:'K线回调' };
+        const fmtTime = s => s ? s.replace('T',' ').slice(0,16) : '--';
+        el.innerHTML = rows.map(h => {
+            const pnl = parseFloat(h.realized_pnl) || 0;
+            const isLong = (h.position_side || '').toUpperCase() === 'LONG';
+            const sym = (h.symbol || '').replace('USDT','').replace('/','');
+            const src = srcMap[h.source] || h.source || '--';
+            return `
+            <div class="flex items-center justify-between p-3.5 bg-surface-container/40 rounded-xl mb-2">
+                <div class="flex gap-3 items-center">
+                    <div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center flex-shrink-0">
+                        <span class="material-symbols-outlined text-[#00d4aa] text-lg">history</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <p class="text-xs font-bold">${sym}-USDT</p>
+                            <span class="text-[10px] px-1 py-0.5 rounded ${isLong?'bg-primary/10 text-primary':'bg-error/10 text-error'} font-bold">${isLong?'做多':'做空'}</span>
+                        </div>
+                        <p class="text-[10px] text-on-surface-variant mt-0.5">${src} · ${fmtTime(h.close_time)}</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="mono text-xs font-bold ${pnl>=0?'text-[#00d4aa]':'text-error'}">${pnl>=0?'+':''}${pnl.toFixed(2)}U</p>
+                    <span class="text-[9px] px-1.5 py-0.5 rounded bg-surface-variant text-on-surface-variant">${h.close_reason||'--'}</span>
+                </div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        document.getElementById('historyList').innerHTML = '<div class="text-center py-6 text-error text-sm">请求失败</div>';
+    }
+}
+
+function confirmClose(symbol, side) {
+    pendingAction = { type: 'close', symbol, side };
+    document.getElementById('dialogTitle').textContent = '确认平仓';
+    document.getElementById('dialogMsg').textContent =
+        `确认市价平掉 ${symbol} ${side==='LONG'?'做多':'做空'} 仓位？`;
+    document.getElementById('dialogConfirm').onclick = doClose;
+    document.getElementById('overlay').classList.add('show');
+}
+function confirmCancelOrder(symbol, orderId) {
+    pendingAction = { type: 'cancel', symbol, orderId };
+    document.getElementById('dialogTitle').textContent = '确认撤单';
+    document.getElementById('dialogMsg').textContent = `确认撤销 ${symbol} 的这笔挂单？`;
+    document.getElementById('dialogConfirm').onclick = doCancelOrder;
+    document.getElementById('overlay').classList.add('show');
+}
+function closeDialog() {
+    document.getElementById('overlay').classList.remove('show');
+    pendingAction = null;
+}
+
+async function doClose() {
+    if (!pendingAction) return; closeDialog();
+    try {
+        const r = await authFetch(`${API}/close-by-symbol`, {
+            method: 'POST',
+            body: JSON.stringify({ symbol: pendingAction.symbol, positionSide: pendingAction.side })
+        }).then(r => r.json());
+        if (r.success) { toast('平仓指令已发送'); setTimeout(loadPositions, 1500); }
+        else toast('平仓失败: ' + (r.message || ''), 'err');
+    } catch(e) { toast('请求失败', 'err'); }
+}
+async function doCancelOrder() {
+    if (!pendingAction) return; closeDialog();
+    try {
+        const r = await authFetch(`${API}/orders/cancel`, {
+            method: 'POST',
+            body: JSON.stringify({ symbol: pendingAction.symbol, orderId: pendingAction.orderId })
+        }).then(r => r.json());
+        if (r.success) { toast('撤单成功'); setTimeout(loadOrders, 800); }
+        else toast('撤单失败', 'err');
+    } catch(e) { toast('请求失败', 'err'); }
+}
+
+async function loadAll() {
+    await Promise.all([loadBalance(), loadPositions(), loadOrders()]);
+}
+
+// 初始化
+(async () => {
+    try {
+        const r = await fetch('/api/auth/refresh', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: authToken })
+        }).then(r => r.json());
+        if (r.access_token) { authToken = r.access_token; localStorage.setItem('auth_token', authToken); }
+    } catch(e) {}
+    await loadAccounts();
+    loadHistory();
+})();
+
+setInterval(() => { if (selectedApiKeyId) loadAll(); }, 30000);
+</script>
 </body>
 </html>

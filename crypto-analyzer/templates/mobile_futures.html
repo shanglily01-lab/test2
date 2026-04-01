@@ -8,77 +8,69 @@
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "on-surface": "#ebeef5",
-                        "surface": "#0a0f14",
-                        "surface-container-low": "#0f1419",
-                        "surface-container": "#151a20",
-                        "surface-container-high": "#1a2027",
-                        "surface-container-highest": "#20262e",
-                        "primary": "#49f4c8",
-                        "primary-container": "#00d4aa",
-                        "secondary": "#3b8ef8",
-                        "on-surface-variant": "#a8abb2",
-                        "outline-variant": "#44484e",
-                        "error": "#ff4d6a",
-                        "background": "#070b10",
-                    },
-                    fontFamily: {
-                        "headline": ["Space Grotesk"],
-                        "body": ["Manrope"],
-                        "mono": ["JetBrains Mono"],
-                    },
-                    borderRadius: {
-                        "lg": "12px",
-                        "xl": "16px",
-                    },
-                },
-            },
-        }
-    </script>
+tailwind.config = {
+    darkMode: "class",
+    theme: { extend: { colors: {
+        "on-surface": "#ebeef5", "surface": "#0a0f14",
+        "surface-container-low": "#0f1419", "surface-container": "#151a20",
+        "surface-container-high": "#1a2027", "surface-container-highest": "#20262e",
+        "primary": "#49f4c8", "primary-container": "#00d4aa",
+        "secondary": "#3b8ef8", "on-surface-variant": "#a8abb2",
+        "outline-variant": "#44484e", "error": "#ff4d6a", "background": "#070b10"
+    }, fontFamily: { "headline": ["Space Grotesk"], "body": ["Manrope"], "mono": ["JetBrains Mono"] } } }
+}
+</script>
 <style>
-        body {
-            background-color: #070b10;
-            color: #ebeef5;
-            font-family: 'Manrope', sans-serif;
-            -webkit-font-smoothing: antialiased;
-            min-height: 100dvh;
-            min-height: 100vh;
-            overscroll-behavior-y: contain;
-        }
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        }
-        .mono-nums {
-            font-family: 'JetBrains Mono', monospace;
-        }
-        /* 底部导航安全区域 */
-        .bottom-nav {
-            padding-bottom: max(env(safe-area-inset-bottom), 8px);
-        }
-        /* 内容区底部留空匹配导航高度 */
-        main {
-            padding-bottom: calc(80px + max(env(safe-area-inset-bottom), 8px));
-        }
-        button, a {
-            -webkit-tap-highlight-color: transparent;
-        }
-        /* 平仓按钮触控区 */
-        .close-btn {
-            min-height: 44px;
-        }
-    </style>
+body { background:#070b10; color:#ebeef5; font-family:'Manrope',sans-serif;
+    -webkit-font-smoothing:antialiased; min-height:100dvh; min-height:100vh;
+    overscroll-behavior-y:contain; }
+.material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
+.mono-nums { font-family:'JetBrains Mono',monospace; }
+.bottom-nav { padding-bottom:max(env(safe-area-inset-bottom),8px); }
+main { padding-bottom:calc(76px + max(env(safe-area-inset-bottom),8px)); }
+button,a { -webkit-tap-highlight-color:transparent; }
+.close-btn { min-height:44px; }
+/* Toast */
+#toast { position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:500;
+    background:#1a2235;color:#ebeef5;padding:8px 18px;border-radius:20px;
+    font-size:13px;font-weight:600;opacity:0;transition:opacity .2s;
+    border:1px solid #44484e;white-space:nowrap;pointer-events:none; }
+#toast.show { opacity:1; }
+#toast.err { border-color:rgba(255,77,106,.3);color:#ff4d6a; }
+/* Loading skeleton */
+.skeleton { background:linear-gradient(90deg,#1a2235 25%,#20283a 50%,#1a2235 75%);
+    background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px; }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+/* Dialog overlay */
+#overlay { display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;
+    align-items:center;justify-content:center; }
+#overlay.show { display:flex; }
+.dialog { background:#0f1520;border:1px solid #1e2d45;border-radius:16px;
+    padding:24px;width:calc(100% - 48px);max-width:320px; }
+</style>
 </head>
 <body class="bg-background overflow-x-hidden">
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<!-- 确认对话框 -->
+<div id="overlay">
+    <div class="dialog">
+        <h3 class="font-headline font-bold text-base mb-2">确认平仓</h3>
+        <p id="dialogMsg" class="text-sm text-on-surface-variant mb-6"></p>
+        <div class="flex gap-3">
+            <button onclick="closeDialog()" class="flex-1 h-11 rounded-xl border border-outline-variant/30 text-on-surface-variant text-sm font-semibold active:scale-95 transition-transform">取消</button>
+            <button id="dialogConfirm" class="flex-1 h-11 rounded-xl border border-error/40 text-error text-sm font-bold active:scale-95 transition-transform">确认平仓</button>
+        </div>
+    </div>
+</div>
+
 <!-- 顶部栏 -->
-<header class="fixed top-0 w-full z-50 flex justify-between items-center px-5 h-14 bg-[#0a0f14] shadow-[0_0_20px_rgba(73,244,200,0.05)]"
-        style="padding-top: env(safe-area-inset-top);">
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-5 h-14 bg-[#0a0f14] shadow-[0_0_20px_rgba(73,244,200,.05)]"
+        style="padding-top:env(safe-area-inset-top);">
     <div class="flex items-center gap-2">
-        <span class="material-symbols-outlined text-[#49f4c8]" style="font-variation-settings: 'FILL' 1;">psychology</span>
+        <span class="material-symbols-outlined text-[#49f4c8]" style="font-variation-settings:'FILL' 1;">psychology</span>
         <div class="flex items-baseline gap-2">
             <h1 class="text-xl font-bold tracking-tighter text-[#49f4c8] font-['Space_Grotesk']">超级大脑</h1>
             <span class="bg-surface-container-highest text-on-surface-variant text-[10px] px-1.5 py-0.5 rounded font-medium">模拟</span>
@@ -86,10 +78,10 @@
     </div>
     <div class="flex items-center gap-3">
         <div class="flex items-center gap-1.5 bg-[#0f1419] px-2.5 py-1.5 rounded-full">
-            <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-            <span class="text-[11px] font-medium text-on-surface-variant tracking-wider">交易中</span>
+            <span id="tradingDot" class="w-1.5 h-1.5 rounded-full bg-[#44484e]"></span>
+            <span id="tradingText" class="text-[11px] font-medium text-on-surface-variant tracking-wider">加载中</span>
         </div>
-        <button class="active:scale-95 transition-transform w-10 h-10 flex items-center justify-center" aria-label="刷新">
+        <button class="w-10 h-10 flex items-center justify-center active:scale-95 transition-transform" onclick="loadAll()" aria-label="刷新">
             <span class="material-symbols-outlined text-on-surface-variant text-xl">refresh</span>
         </button>
     </div>
@@ -100,26 +92,27 @@
     <section class="grid grid-cols-3 gap-2.5">
         <div class="bg-[#0f1520] border border-[#1e2d45] rounded-xl p-3">
             <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-semibold">持仓数</p>
-            <p class="text-xl font-bold text-secondary mono-nums">12</p>
+            <p id="posCount" class="text-xl font-bold text-secondary mono-nums">--</p>
         </div>
         <div class="bg-[#0f1520] border border-[#1e2d45] rounded-xl p-3">
             <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-semibold">浮动盈亏</p>
-            <p class="text-xl font-bold text-primary mono-nums">+2.4k</p>
+            <p id="totalPnl" class="text-xl font-bold text-primary mono-nums">--</p>
         </div>
         <div class="bg-[#0f1520] border border-[#1e2d45] rounded-xl p-3">
             <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-semibold">7日胜率</p>
-            <p class="text-xl font-bold text-primary mono-nums">68%</p>
+            <p id="winRate" class="text-xl font-bold text-primary mono-nums">--</p>
         </div>
     </section>
 
     <!-- 自动交易开关 -->
     <section class="bg-[#0f1520] border border-[#1e2d45] rounded-xl p-4 flex items-center justify-between">
         <div>
-            <h3 class="font-bold text-sm">自动交易</h3>
+            <h3 id="tradingLabel" class="font-bold text-sm">自动交易</h3>
             <p class="text-[11px] text-on-surface-variant mt-0.5">AI 神经网络策略执行中</p>
         </div>
         <label class="relative inline-flex items-center cursor-pointer">
-            <input checked class="sr-only peer" type="checkbox"/>
+            <input id="tradingToggle" type="checkbox" class="sr-only peer"
+                onchange="toggleTrading(this.checked)"/>
             <div class="w-11 h-6 bg-surface-container-highest rounded-full peer
                         peer-checked:after:translate-x-full
                         after:content-[''] after:absolute after:top-[2px] after:left-[2px]
@@ -131,154 +124,29 @@
     <!-- 持仓列表 -->
     <section class="space-y-3">
         <header class="flex justify-between items-center px-1">
-            <h2 class="text-[11px] font-bold text-on-surface-variant tracking-widest uppercase">持仓列表</h2>
+            <div class="flex items-center gap-2">
+                <h2 class="text-[11px] font-bold text-on-surface-variant tracking-widest uppercase">持仓列表</h2>
+                <span id="lastUpdate" class="text-[10px] text-on-surface-variant/50 font-mono"></span>
+            </div>
             <button class="w-10 h-10 flex items-center justify-center active:scale-95 transition-transform" aria-label="筛选">
                 <span class="material-symbols-outlined text-on-surface-variant text-xl">filter_list</span>
             </button>
         </header>
-
-        <!-- 持仓卡片 1：BTCUSDT LONG -->
-        <div class="bg-[#0f1520] border border-[#1e2d45] rounded-xl overflow-hidden">
-            <div class="p-4 bg-primary/5 border-b border-primary/10">
-                <div class="flex justify-between items-center">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <span class="font-headline font-bold text-base">BTCUSDT</span>
-                        <span class="bg-primary/20 text-primary text-[10px] px-1.5 py-0.5 rounded font-bold">LONG 20x</span>
-                    </div>
-                    <span class="text-primary font-bold mono-nums text-lg">+412.50</span>
-                </div>
-            </div>
-            <div class="p-4">
-                <div class="grid grid-cols-2 gap-y-3 gap-x-4">
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">开仓价</p>
-                        <p class="mono-nums text-sm">62,451.20</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">当前价</p>
-                        <p class="mono-nums text-sm text-primary">63,892.45</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">数量 (BTC)</p>
-                        <p class="mono-nums text-sm font-medium">0.450</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">盈亏%</p>
-                        <p class="mono-nums text-sm text-primary font-bold">+12.42%</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">止损 (SL)</p>
-                        <p class="mono-nums text-sm text-on-surface-variant">61,000.00</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">止盈 (TP)</p>
-                        <p class="mono-nums text-sm text-primary-container">68,500.00</p>
-                    </div>
-                </div>
-                <button class="close-btn w-full mt-4 py-2.5 rounded-xl border border-error/30 text-error font-bold text-sm active:bg-error/10 transition-colors">
-                    平仓
-                </button>
-            </div>
-        </div>
-
-        <!-- 持仓卡片 2：ETHUSDT SHORT -->
-        <div class="bg-[#0f1520] border border-[#1e2d45] rounded-xl overflow-hidden">
-            <div class="p-4 bg-error/5 border-b border-error/10">
-                <div class="flex justify-between items-center">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <span class="font-headline font-bold text-base">ETHUSDT</span>
-                        <span class="bg-error/20 text-error text-[10px] px-1.5 py-0.5 rounded font-bold">SHORT 50x</span>
-                    </div>
-                    <span class="text-error font-bold mono-nums text-lg">-84.20</span>
-                </div>
-            </div>
-            <div class="p-4">
-                <div class="grid grid-cols-2 gap-y-3 gap-x-4">
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">开仓价</p>
-                        <p class="mono-nums text-sm">3,421.15</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">当前价</p>
-                        <p class="mono-nums text-sm text-error">3,489.20</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">数量 (ETH)</p>
-                        <p class="mono-nums text-sm font-medium">12.500</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">盈亏%</p>
-                        <p class="mono-nums text-sm text-error font-bold">-2.15%</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">止损 (SL)</p>
-                        <p class="mono-nums text-sm text-error">3,550.00</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">止盈 (TP)</p>
-                        <p class="mono-nums text-sm text-on-surface-variant">3,100.00</p>
-                    </div>
-                </div>
-                <button class="close-btn w-full mt-4 py-2.5 rounded-xl border border-error/30 text-error font-bold text-sm active:bg-error/10 transition-colors">
-                    平仓
-                </button>
-            </div>
-        </div>
-
-        <!-- 持仓卡片 3：SOLUSDT LONG -->
-        <div class="bg-[#0f1520] border border-[#1e2d45] rounded-xl overflow-hidden">
-            <div class="p-4 bg-primary/5 border-b border-primary/10">
-                <div class="flex justify-between items-center">
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <span class="font-headline font-bold text-base">SOLUSDT</span>
-                        <span class="bg-primary/20 text-primary text-[10px] px-1.5 py-0.5 rounded font-bold">LONG 10x</span>
-                    </div>
-                    <span class="text-primary font-bold mono-nums text-lg">+12.05</span>
-                </div>
-            </div>
-            <div class="p-4">
-                <div class="grid grid-cols-2 gap-y-3 gap-x-4">
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">开仓价</p>
-                        <p class="mono-nums text-sm">142.15</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">当前价</p>
-                        <p class="mono-nums text-sm text-primary">145.22</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">数量 (SOL)</p>
-                        <p class="mono-nums text-sm font-medium">85.000</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">盈亏%</p>
-                        <p class="mono-nums text-sm text-primary font-bold">+2.15%</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">止损 (SL)</p>
-                        <p class="mono-nums text-sm text-on-surface-variant">--</p>
-                    </div>
-                    <div>
-                        <p class="text-[10px] text-on-surface-variant mb-0.5 uppercase">止盈 (TP)</p>
-                        <p class="mono-nums text-sm text-on-surface-variant">--</p>
-                    </div>
-                </div>
-                <button class="close-btn w-full mt-4 py-2.5 rounded-xl border border-error/30 text-error font-bold text-sm active:bg-error/10 transition-colors">
-                    平仓
-                </button>
-            </div>
+        <div id="positionsList">
+            <div class="skeleton h-32 w-full mb-3"></div>
+            <div class="skeleton h-32 w-full"></div>
         </div>
     </section>
 </main>
 
-<!-- 底部导航（统一 3 标签：设置 / U本位[当前] / 实盘） -->
-<nav class="bottom-nav fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 h-[68px] bg-[#0a0f14]/90 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.4)] border-t border-[#44484e]/20">
+<!-- 底部导航 -->
+<nav class="bottom-nav fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 h-[68px] bg-[#0a0f14]/90 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,.4)] border-t border-[#44484e]/20">
     <a class="flex flex-col items-center justify-center text-[#a8abb2] hover:text-[#49f4c8] transition-colors min-w-[64px] h-full" href="/m/settings">
         <span class="material-symbols-outlined text-[22px] mb-0.5">settings</span>
         <span class="text-[10px] font-semibold uppercase tracking-wide">设置</span>
     </a>
     <a class="flex flex-col items-center justify-center text-[#3b8ef8] font-bold min-w-[64px] h-full" href="/m/futures">
-        <span class="material-symbols-outlined text-[22px] mb-0.5" style="font-variation-settings: 'FILL' 1;">candlestick_chart</span>
+        <span class="material-symbols-outlined text-[22px] mb-0.5" style="font-variation-settings:'FILL' 1;">candlestick_chart</span>
         <span class="text-[10px] font-bold uppercase tracking-wide">U本位</span>
     </a>
     <a class="flex flex-col items-center justify-center text-[#a8abb2] hover:text-[#49f4c8] transition-colors min-w-[64px] h-full" href="/m/live">
@@ -286,5 +154,177 @@
         <span class="text-[10px] font-semibold uppercase tracking-wide">实盘</span>
     </a>
 </nav>
+
+<script>
+const API = '/api/futures';
+let pendingClose = null;
+
+function toast(msg, type='ok') {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.className = 'show ' + type;
+    setTimeout(() => el.className = '', 2200);
+}
+function fmt(n, d=2) {
+    if (n == null || isNaN(n)) return '--';
+    return parseFloat(n).toFixed(d);
+}
+function fmtPnl(n) {
+    const v = parseFloat(n) || 0;
+    return (v >= 0 ? '+' : '') + v.toFixed(2) + 'U';
+}
+
+async function loadTradingStatus() {
+    try {
+        const r = await fetch('/api/trading-control/status/2/usdt_futures').then(r => r.json());
+        const on = r.data?.is_trading_enabled || r.is_trading_enabled || false;
+        document.getElementById('tradingDot').className =
+            'w-1.5 h-1.5 rounded-full ' + (on ? 'bg-primary animate-pulse' : 'bg-[#44484e]');
+        document.getElementById('tradingText').textContent = on ? '交易中' : '已暂停';
+        document.getElementById('tradingLabel').textContent = on ? '自动交易（运行中）' : '自动交易（已暂停）';
+        document.getElementById('tradingToggle').checked = on;
+    } catch(e) {}
+}
+
+async function toggleTrading(val) {
+    try {
+        const r = await fetch('/api/trading-control/toggle', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_id: 2, trading_type: 'usdt_futures', enabled: val })
+        }).then(r => r.json());
+        if (r.success) { toast(val ? '交易已启用' : '交易已暂停'); loadTradingStatus(); }
+        else toast('切换失败', 'err');
+    } catch(e) { toast('请求失败', 'err'); }
+}
+
+async function loadStats() {
+    try {
+        const r = await fetch(`${API}/trades?account_id=2&page=1&page_size=50`).then(r => r.json());
+        if (r.success && r.data?.trades) {
+            const closed = r.data.trades.filter(t => t.realized_pnl != null);
+            const wins = closed.filter(t => parseFloat(t.realized_pnl) > 0);
+            const wr = closed.length ? Math.round(wins.length / closed.length * 100) : 0;
+            const el = document.getElementById('winRate');
+            el.textContent = wr + '%';
+            el.className = 'text-xl font-bold mono-nums ' + (wr >= 50 ? 'text-primary' : 'text-error');
+        }
+    } catch(e) {}
+}
+
+async function loadPositions() {
+    try {
+        const posRes = await fetch(`${API}/positions?account_id=2&status=open`).then(r => r.json());
+        if (!posRes.success) {
+            document.getElementById('positionsList').innerHTML =
+                '<div class="text-center py-10 text-on-surface-variant text-sm">无法加载持仓</div>';
+            return;
+        }
+        const positions = posRes.data || [];
+        document.getElementById('posCount').textContent = positions.length;
+        document.getElementById('lastUpdate').textContent =
+            new Date().toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+
+        if (!positions.length) {
+            document.getElementById('positionsList').innerHTML =
+                '<div class="text-center py-10 text-on-surface-variant text-sm">暂无持仓</div>';
+            document.getElementById('totalPnl').textContent = '0.00U';
+            document.getElementById('totalPnl').className = 'text-xl font-bold mono-nums text-primary';
+            return;
+        }
+
+        // 批量获取实时价格
+        const symbols = [...new Set(positions.map(p => p.symbol))];
+        let priceMap = {};
+        try {
+            const pr = await fetch(`${API}/prices/batch`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbols })
+            }).then(r => r.json());
+            if (pr.success) priceMap = pr.prices || {};
+        } catch(e) {}
+
+        let totalPnl = 0;
+        const html = positions.map(pos => {
+            const ep = parseFloat(pos.entry_price) || 0;
+            const qty = parseFloat(pos.quantity) || 0;
+            const margin = parseFloat(pos.margin) || 0;
+            const cp = parseFloat(priceMap[pos.symbol]?.price) || parseFloat(pos.current_price) || 0;
+            let upnl = 0, upnlPct = 0;
+            if (cp > 0 && ep > 0 && qty > 0) {
+                upnl = pos.position_side === 'LONG' ? (cp - ep) * qty : (ep - cp) * qty;
+                if (margin > 0) upnlPct = upnl / margin * 100;
+            } else {
+                upnl = parseFloat(pos.unrealized_pnl) || 0;
+                upnlPct = parseFloat(pos.unrealized_pnl_pct) || 0;
+            }
+            totalPnl += upnl;
+            const isLong = pos.position_side === 'LONG';
+            const pnlCls = upnl >= 0 ? 'text-primary' : 'text-error';
+            const borderCls = isLong ? 'border-l-[#49f4c8]' : 'border-l-error';
+            const sl = pos.stop_loss_price ? parseFloat(pos.stop_loss_price) : null;
+            const tp = pos.take_profit_price ? parseFloat(pos.take_profit_price) : null;
+            return `
+            <div class="bg-[#0f1520] border border-[#1e2d45] border-l-4 ${borderCls} rounded-xl overflow-hidden">
+                <div class="p-4 ${isLong?'bg-primary/5':'bg-error/5'} border-b ${isLong?'border-primary/10':'border-error/10'}">
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-headline font-bold text-base">${pos.symbol.replace('/USDT','')}</span>
+                            <span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${isLong?'bg-primary/20 text-primary':'bg-error/20 text-error'}">${isLong?'LONG':'SHORT'}</span>
+                        </div>
+                        <span class="${pnlCls} font-bold mono-nums text-lg">${fmtPnl(upnl)}</span>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <div class="grid grid-cols-2 gap-y-3 gap-x-4">
+                        <div><p class="text-[10px] text-on-surface-variant uppercase mb-0.5">开仓价</p><p class="mono-nums text-sm">${fmt(ep,4)}</p></div>
+                        <div><p class="text-[10px] text-on-surface-variant uppercase mb-0.5">当前价</p><p class="mono-nums text-sm ${pnlCls}">${cp ? fmt(cp,4) : '--'}</p></div>
+                        <div><p class="text-[10px] text-on-surface-variant uppercase mb-0.5">数量</p><p class="mono-nums text-sm">${fmt(qty,4)}</p></div>
+                        <div><p class="text-[10px] text-on-surface-variant uppercase mb-0.5">盈亏%</p><p class="mono-nums text-sm font-bold ${pnlCls}">${upnlPct>=0?'+':''}${fmt(upnlPct,1)}%</p></div>
+                        ${sl ? `<div><p class="text-[10px] text-on-surface-variant uppercase mb-0.5">止损</p><p class="mono-nums text-sm text-error">${fmt(sl,4)}</p></div>` : ''}
+                        ${tp ? `<div><p class="text-[10px] text-on-surface-variant uppercase mb-0.5">止盈</p><p class="mono-nums text-sm text-primary">${fmt(tp,4)}</p></div>` : ''}
+                    </div>
+                    <button class="close-btn w-full mt-4 py-2.5 rounded-xl border border-error/30 text-error font-bold text-sm active:bg-error/10 transition-colors"
+                        onclick="confirmClose(${pos.id},'${pos.symbol}','${pos.position_side}')">平仓</button>
+                </div>
+            </div>`;
+        }).join('');
+        document.getElementById('positionsList').innerHTML = html;
+
+        const pEl = document.getElementById('totalPnl');
+        pEl.textContent = fmtPnl(totalPnl);
+        pEl.className = 'text-xl font-bold mono-nums ' + (totalPnl >= 0 ? 'text-primary' : 'text-error');
+    } catch(e) { console.error(e); }
+}
+
+function confirmClose(id, symbol, side) {
+    pendingClose = { id, symbol, side };
+    document.getElementById('dialogMsg').textContent =
+        `确认平掉 ${symbol} ${side === 'LONG' ? '做多' : '做空'} 仓位？`;
+    document.getElementById('dialogConfirm').onclick = doClose;
+    document.getElementById('overlay').classList.add('show');
+}
+function closeDialog() {
+    document.getElementById('overlay').classList.remove('show');
+    pendingClose = null;
+}
+async function doClose() {
+    if (!pendingClose) return;
+    closeDialog();
+    try {
+        const r = await fetch(`${API}/positions/${pendingClose.id}/close`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ account_id: 2, reason: 'manual_mobile' })
+        }).then(r => r.json());
+        if (r.success) { toast('平仓成功'); setTimeout(loadPositions, 800); }
+        else toast('平仓失败: ' + (r.message || ''), 'err');
+    } catch(e) { toast('请求失败', 'err'); }
+}
+
+async function loadAll() {
+    await Promise.all([loadTradingStatus(), loadPositions(), loadStats()]);
+}
+
+loadAll();
+setInterval(loadAll, 30000);
+</script>
 </body>
 </html>

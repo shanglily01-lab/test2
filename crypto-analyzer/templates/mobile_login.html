@@ -8,213 +8,85 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "inverse-on-surface": "#51555c",
-                        "on-surface": "#ebeef5",
-                        "error-container": "#9f0519",
-                        "on-primary-fixed-variant": "#00624d",
-                        "secondary-fixed-dim": "#a4c5ff",
-                        "on-tertiary-fixed-variant": "#780022",
-                        "on-secondary-fixed-variant": "#00509c",
-                        "on-tertiary-container": "#100001",
-                        "on-primary-container": "#004132",
-                        "surface-dim": "#0a0f14",
-                        "surface-tint": "#49f4c8",
-                        "on-primary": "#005745",
-                        "surface-container-highest": "#20262e",
-                        "surface-variant": "#20262e",
-                        "tertiary": "#ff6e80",
-                        "surface": "#0a0f14",
-                        "on-secondary-fixed": "#003469",
-                        "primary-fixed-dim": "#33e5ba",
-                        "surface-container-low": "#0f1419",
-                        "inverse-primary": "#006c55",
-                        "tertiary-fixed-dim": "#ff7987",
-                        "tertiary-container": "#fa4966",
-                        "primary-container": "#00d4aa",
-                        "on-error-container": "#ffa8a3",
-                        "outline": "#72767c",
-                        "error": "#ff716c",
-                        "surface-bright": "#262d35",
-                        "on-error": "#490006",
-                        "on-primary-fixed": "#004334",
-                        "primary-fixed": "#49f4c8",
-                        "secondary-fixed": "#bbd2ff",
-                        "secondary-container": "#005eb5",
-                        "surface-container": "#151a20",
-                        "outline-variant": "#44484e",
-                        "on-tertiary-fixed": "#39000b",
-                        "on-tertiary": "#490011",
-                        "secondary": "#5b9eff",
-                        "inverse-surface": "#f8f9ff",
-                        "surface-container-lowest": "#000000",
-                        "primary": "#49f4c8",
-                        "on-secondary": "#002045",
-                        "primary-dim": "#33e5ba",
-                        "error-dim": "#d7383b",
-                        "background": "#0a0f14",
-                        "on-surface-variant": "#a8abb2",
-                        "on-background": "#ebeef5",
-                        "surface-container-high": "#1a2027",
-                        "tertiary-dim": "#ff6e80",
-                        "tertiary-fixed": "#ff909a",
-                        "on-secondary-container": "#f6f7ff",
-                        "secondary-dim": "#5b9eff"
-                    },
-                    fontFamily: {
-                        "headline": ["Space Grotesk"],
-                        "body": ["Manrope"],
-                        "label": ["Manrope"]
-                    },
-                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
-                },
-            },
-        }
-    </script>
+tailwind.config = {
+    darkMode: "class",
+    theme: { extend: { colors: {
+        "primary": "#49f4c8", "primary-container": "#00d4aa",
+        "surface": "#0a0f14", "on-surface": "#ebeef5",
+        "on-surface-variant": "#a8abb2", "outline-variant": "#44484e", "error": "#ff716c"
+    }, fontFamily: { "headline": ["Space Grotesk"], "body": ["Manrope"] } } }
+}
+</script>
 <style>
-        body {
-            background-color: #070b10;
-            font-family: 'Manrope', sans-serif;
-            color: #ebeef5;
-            min-height: 100dvh;
-            min-height: 100vh; /* fallback */
-            -webkit-font-smoothing: antialiased;
-            overscroll-behavior-y: contain;
-        }
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        }
-        .mono-nums {
-            font-variant-numeric: tabular-nums;
-            letter-spacing: -0.02em;
-        }
-        .login-card {
-            background-color: #0f1520;
-            border: 1px solid #1e2d45;
-        }
-        .input-fill {
-            background-color: #1a2235;
-        }
-        .glow-button {
-            box-shadow: 0 0 20px rgba(73, 244, 200, 0.2);
-        }
-        /* 安全区域适配 */
-        main {
-            padding-bottom: max(env(safe-area-inset-bottom), 24px);
-        }
-        /* 装饰光晕：缩小尺寸防止横向溢出 */
-        .bg-glow-top {
-            position: fixed;
-            top: -5%;
-            right: -5%;
-            width: 280px;
-            height: 280px;
-            border-radius: 50%;
-            background: rgba(73, 244, 200, 0.05);
-            filter: blur(80px);
-            pointer-events: none;
-            overflow: hidden;
-        }
-        .bg-glow-bottom {
-            position: fixed;
-            bottom: -5%;
-            left: -5%;
-            width: 220px;
-            height: 220px;
-            border-radius: 50%;
-            background: rgba(91, 158, 255, 0.05);
-            filter: blur(70px);
-            pointer-events: none;
-        }
-        /* 触控优化 */
-        button, input, label {
-            -webkit-tap-highlight-color: transparent;
-        }
-        input[type="text"],
-        input[type="password"] {
-            font-size: 16px; /* 防止 iOS 自动缩放 */
-        }
-    </style>
+body { background:#070b10; font-family:'Manrope',sans-serif; color:#ebeef5;
+    min-height:100dvh; min-height:100vh; -webkit-font-smoothing:antialiased;
+    overscroll-behavior-y:contain; }
+.material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
+.login-card { background:#0f1520; border:1px solid #1e2d45; }
+.input-fill { background:#1a2235; }
+.glow-button { box-shadow:0 0 20px rgba(73,244,200,.2); }
+.bg-glow-top { position:fixed;top:-5%;right:-5%;width:240px;height:240px;border-radius:50%;
+    background:rgba(73,244,200,.05);filter:blur(70px);pointer-events:none; }
+.bg-glow-bottom { position:fixed;bottom:-5%;left:-5%;width:200px;height:200px;border-radius:50%;
+    background:rgba(91,158,255,.05);filter:blur(60px);pointer-events:none; }
+button,input,label { -webkit-tap-highlight-color:transparent; }
+input[type="text"],input[type="password"] { font-size:16px; }
+main { padding-bottom:max(env(safe-area-inset-bottom),24px); }
+#toast { position:fixed;top:20px;left:50%;transform:translateX(-50%);
+    background:#1a2235;color:#ebeef5;padding:8px 18px;border-radius:20px;
+    font-size:13px;font-weight:600;z-index:999;opacity:0;transition:opacity .2s;
+    border:1px solid #44484e;white-space:nowrap;pointer-events:none; }
+#toast.show { opacity:1; }
+#toast.err { border-color:rgba(255,113,108,.3);color:#ff716c; }
+</style>
 </head>
 <body class="flex flex-col min-h-screen overflow-x-hidden">
-<!-- 装饰光晕（缩小版，不造成横向溢出） -->
 <div class="bg-glow-top"></div>
 <div class="bg-glow-bottom"></div>
+<div id="toast"></div>
 
 <main class="flex-grow flex items-center justify-center p-5 sm:p-10 relative z-10">
 <div class="login-card w-full max-w-sm rounded-2xl p-7 sm:p-10 flex flex-col items-center">
-    <!-- Logo -->
     <div class="mb-5 flex items-center justify-center w-14 h-14 bg-primary/10 rounded-xl">
-        <span class="material-symbols-outlined text-[52px] text-primary" style="font-variation-settings: 'FILL' 1;">psychology</span>
+        <span class="material-symbols-outlined text-[52px] text-primary" style="font-variation-settings:'FILL' 1;">psychology</span>
     </div>
-    <!-- 标题 -->
     <div class="text-center mb-8">
         <h1 class="font-headline text-2xl font-bold tracking-tight text-on-surface">超级大脑</h1>
         <p class="text-[13px] font-medium tracking-wide text-[#6b7fa3] mt-1">量化交易平台</p>
     </div>
-    <!-- 登录表单 -->
-    <form class="w-full space-y-5">
-        <!-- 用户名 -->
+    <form class="w-full space-y-5" onsubmit="login(); return false;">
         <div class="space-y-2">
-            <label class="text-[13px] font-semibold text-[#6b7fa3] ml-1">用户名</label>
-            <div class="relative">
-                <input
-                    class="w-full h-12 px-4 input-fill border border-[#1e2d45] focus:border-primary focus:ring-0 rounded-[10px] text-on-surface placeholder-[#44484e] transition-all outline-none text-base"
-                    placeholder="请输入您的用户名"
-                    type="text"
-                    autocomplete="username"
-                    autocorrect="off"
-                    autocapitalize="none"
-                />
-            </div>
+            <label class="text-[13px] font-semibold text-[#6b7fa3] ml-1" for="uname">用户名</label>
+            <input id="uname"
+                class="w-full h-12 px-4 input-fill border border-[#1e2d45] focus:border-primary focus:ring-0 rounded-[10px] text-on-surface placeholder-[#44484e] transition-all outline-none text-base"
+                placeholder="请输入您的用户名" type="text"
+                autocomplete="username" autocorrect="off" autocapitalize="none"/>
         </div>
-        <!-- 密码 -->
         <div class="space-y-2">
-            <label class="text-[13px] font-semibold text-[#6b7fa3] ml-1">密码</label>
+            <label class="text-[13px] font-semibold text-[#6b7fa3] ml-1" for="pwd">密码</label>
             <div class="relative">
-                <input
+                <input id="pwd"
                     class="w-full h-12 px-4 pr-12 input-fill border border-[#1e2d45] focus:border-primary focus:ring-0 rounded-[10px] text-on-surface placeholder-[#44484e] transition-all outline-none text-base"
-                    placeholder="请输入您的密码"
-                    type="password"
-                    autocomplete="current-password"
-                    id="pwd-input"
-                />
-                <button
-                    class="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b7fa3] hover:text-primary transition-colors w-9 h-9 flex items-center justify-center"
-                    type="button"
-                    onclick="togglePwd(this)"
-                    aria-label="显示/隐藏密码"
-                >
+                    placeholder="请输入您的密码" type="password" autocomplete="current-password"/>
+                <button class="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b7fa3] hover:text-primary transition-colors w-9 h-9 flex items-center justify-center"
+                    type="button" onclick="togglePwd(this)">
                     <span class="material-symbols-outlined text-[20px]">visibility_off</span>
                 </button>
             </div>
         </div>
-        <!-- 错误提示（默认隐藏） -->
-        <div class="hidden flex items-center gap-2 text-[13px] text-error px-1" id="err-msg">
+        <div id="err" style="display:none;" class="flex items-center gap-2 text-[13px] text-error px-1">
             <span class="material-symbols-outlined text-sm">error</span>
-            <span>用户名或密码错误</span>
+            <span id="err-text">用户名或密码错误</span>
         </div>
-        <!-- 登录按钮 -->
         <div class="pt-1">
-            <button
+            <button id="btn"
                 class="w-full h-[52px] bg-gradient-to-r from-primary to-primary-container text-[#070b10] font-bold text-base rounded-xl glow-button hover:opacity-90 active:scale-[0.97] transition-all duration-200"
-                type="submit"
-            >
-                登 录
-            </button>
+                type="submit">登 录</button>
         </div>
-        <!-- 记住登录 / 忘记密码 -->
         <div class="flex items-center justify-between pt-1">
-            <label class="flex items-center gap-2 cursor-pointer group min-h-[44px]">
+            <label class="flex items-center gap-2 cursor-pointer min-h-[44px]">
                 <div class="relative flex items-center">
-                    <input
-                        class="peer appearance-none w-4 h-4 rounded border border-[#1e2d45] bg-[#1a2235] checked:bg-primary checked:border-primary focus:ring-0 focus:ring-offset-0 transition-all cursor-pointer"
-                        type="checkbox"
-                    />
+                    <input class="peer appearance-none w-4 h-4 rounded border border-[#1e2d45] bg-[#1a2235] checked:bg-primary checked:border-primary focus:ring-0 transition-all cursor-pointer" type="checkbox"/>
                     <span class="material-symbols-outlined absolute text-[12px] text-[#070b10] opacity-0 peer-checked:opacity-100 left-0.5">check</span>
                 </div>
                 <span class="text-[12px] text-[#6b7fa3]">记住登录</span>
@@ -222,10 +94,9 @@
             <a class="text-[12px] text-[#6b7fa3] hover:text-primary transition-colors min-h-[44px] flex items-center px-1" href="#">忘记密码？</a>
         </div>
     </form>
-    <!-- 页脚 -->
     <div class="mt-10 w-full">
         <div class="h-[1px] w-full bg-[#1e2d45]/30"></div>
-        <p class="text-center text-[10px] text-[#44484e] mt-5 mono-nums tracking-widest uppercase">
+        <p class="text-center text-[10px] text-[#44484e] mt-5 tracking-widest uppercase">
             Secure Neural Network Encryption v4.0.2
         </p>
     </div>
@@ -233,17 +104,51 @@
 </main>
 
 <script>
-function togglePwd(btn) {
-    var input = document.getElementById('pwd-input');
-    var icon = btn.querySelector('.material-symbols-outlined');
-    if (input.type === 'password') {
-        input.type = 'text';
-        icon.textContent = 'visibility';
-    } else {
-        input.type = 'password';
-        icon.textContent = 'visibility_off';
-    }
+const SYS = '/api/system';
+const nextUrl = new URLSearchParams(location.search).get('next') || '/m/live';
+
+function toast(msg, type='ok') {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.className = 'show ' + type;
+    setTimeout(() => el.className = '', 2200);
 }
+function togglePwd(btn) {
+    const input = document.getElementById('pwd');
+    const icon = btn.querySelector('.material-symbols-outlined');
+    input.type = input.type === 'password' ? 'text' : 'password';
+    icon.textContent = input.type === 'password' ? 'visibility_off' : 'visibility';
+}
+function showErr(msg) {
+    document.getElementById('err-text').textContent = msg;
+    document.getElementById('err').style.display = 'flex';
+}
+
+async function login() {
+    const username = document.getElementById('uname').value.trim();
+    const password = document.getElementById('pwd').value;
+    const btn = document.getElementById('btn');
+    document.getElementById('err').style.display = 'none';
+    if (!username || !password) { showErr('请输入用户名和密码'); return; }
+    btn.textContent = '验证中…'; btn.disabled = true;
+    try {
+        const r = await fetch(`${SYS}/mobile/login`, {
+            method: 'POST', credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        }).then(r => r.json());
+        if (r.success) {
+            if (r.access_token) localStorage.setItem('auth_token', r.access_token);
+            location.href = nextUrl;
+        } else {
+            showErr(r.error || '登录失败');
+            document.getElementById('pwd').value = '';
+            document.getElementById('pwd').focus();
+        }
+    } catch(e) { showErr('网络错误: ' + e.message); }
+    btn.textContent = '登 录'; btn.disabled = false;
+}
+
+document.getElementById('pwd').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 </script>
 </body>
 </html>
