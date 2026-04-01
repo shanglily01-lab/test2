@@ -3,15 +3,17 @@
 API密钥管理接口
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional
 from loguru import logger
 
-from app.api.auth_api import get_current_user
 from app.services.api_key_service import get_api_key_service
 
 router = APIRouter(prefix="/api/api-keys", tags=["API密钥管理"])
+
+# 单用户系统，固定 user_id
+_USER_ID = 1
 
 
 # ==================== 请求模型 ====================
@@ -42,10 +44,22 @@ class UpdateRiskRequest(BaseModel):
     max_daily_loss: float = Field(ge=0)
 
 
+class VerifyByIdRequest(BaseModel):
+    """通过 ID 验证已保存的 API Key"""
+    api_key_id: int = Field(..., description='API密钥ID')
+
+
+class VerifyRawRequest(BaseModel):
+    """直接验证原始 API 密钥（用于保存前测试）"""
+    exchange: str = Field(default='binance', description='交易所')
+    api_key: str = Field(..., min_length=10, description='API Key')
+    api_secret: str = Field(..., min_length=10, description='API Secret')
+
+
 # ==================== 接口 ====================
 
 @router.get("/list")
-async def list_api_keys(current_user: dict = Depends(get_current_user)):
+async def list_api_keys():
     """
     获取当前用户的所有API密钥（不含密钥内容）
     """
@@ -55,7 +69,7 @@ async def list_api_keys(current_user: dict = Depends(get_current_user)):
             logger.error("API密钥服务未初始化")
             raise HTTPException(status_code=500, detail="API密钥服务未初始化，请检查服务器日志")
 
-        keys = service.get_user_api_keys(current_user['user_id'])
+        keys = service.get_user_api_keys(_USER_ID)
         return {
             'success': True,
             'api_keys': keys
@@ -70,10 +84,7 @@ async def list_api_keys(current_user: dict = Depends(get_current_user)):
 
 
 @router.post("/save")
-async def save_api_key(
-    request: SaveAPIKeyRequest,
-    current_user: dict = Depends(get_current_user)
-):
+async def save_api_key(request: SaveAPIKeyRequest):
     """
     保存API密钥（新增或更新）
     """
@@ -84,7 +95,7 @@ async def save_api_key(
             raise HTTPException(status_code=500, detail="API密钥服务未初始化，请检查服务器日志")
 
         result = service.save_api_key(
-            user_id=current_user['user_id'],
+            user_id=_USER_ID,
             exchange=request.exchange,
             account_name=request.account_name,
             api_key=request.api_key,
@@ -115,10 +126,7 @@ async def save_api_key(
 
 
 @router.post("/delete")
-async def delete_api_key(
-    request: DeleteAPIKeyRequest,
-    current_user: dict = Depends(get_current_user)
-):
+async def delete_api_key(request: DeleteAPIKeyRequest):
     """
     删除API密钥
     """
@@ -128,7 +136,7 @@ async def delete_api_key(
 
     try:
         result = service.delete_api_key(
-            user_id=current_user['user_id'],
+            user_id=_USER_ID,
             api_key_id=request.api_key_id
         )
 
@@ -146,41 +154,74 @@ async def delete_api_key(
 
 @router.post("/verify")
 async def verify_api_key(
-    exchange: str = 'binance',
-    current_user: dict = Depends(get_current_user)
+    request: VerifyByIdRequest,
+    exchange: str = 'binance'
 ):
     """
-    验证API密钥是否有效
+    验证已保存的 API 密钥是否有效（通过 api_key_id）
     """
-    service = get_api_key_service()
-    if not service:
-        raise HTTPException(status_code=500, detail="API密钥服务未初始化")
-
+    import pymysql, os
     try:
-        result = service.verify_api_key(
-            user_id=current_user['user_id'],
-            exchange=exchange
+        conn = pymysql.connect(
+            host=os.getenv('DB_HOST', 'localhost'),
+            port=int(os.getenv('DB_PORT', 3306)),
+            user=os.getenv('DB_USER', 'root'),
+            password=os.getenv('DB_PASSWORD', ''),
+            database=os.getenv('DB_NAME', 'binance-data'),
+            cursorclass=pymysql.cursors.DictCursor
         )
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT * FROM user_api_keys WHERE id=%s AND user_id=%s AND status='active'",
+            (request.api_key_id, _USER_ID)
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
 
-        return result
+        if not row:
+            return {'success': False, 'error': '未找到对应的 API 密钥'}
 
+        # 解密
+        service = get_api_key_service()
+        if service and hasattr(service, '_decrypt'):
+            api_key_plain = service._decrypt(row['api_key'])
+            api_secret_plain = service._decrypt(row['api_secret'])
+        else:
+            api_key_plain = row['api_key']
+            api_secret_plain = row['api_secret']
+
+        if row['exchange'] == 'binance':
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
+            from app.api.live_trading_api import get_db_config
+            temp_engine = BinanceFuturesEngine(
+                get_db_config(),
+                api_key=api_key_plain,
+                api_secret=api_secret_plain
+            )
+            balance = temp_engine.get_account_balance()
+            if balance and balance.get('success'):
+                return {
+                    'success': True,
+                    'balance': {
+                        'balance': float(balance.get('balance', 0)),
+                        'available': float(balance.get('available', 0))
+                    }
+                }
+            else:
+                return {'success': False, 'error': balance.get('error', '无法获取账户信息，请检查 API 权限')}
+        else:
+            return {'success': False, 'error': f'暂不支持 {row["exchange"]}'}
+
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"验证API密钥失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-class VerifyRawRequest(BaseModel):
-    """直接验证原始 API 密钥（用于保存前测试）"""
-    exchange: str = Field(default='binance', description='交易所')
-    api_key: str = Field(..., min_length=10, description='API Key')
-    api_secret: str = Field(..., min_length=10, description='API Secret')
+        return {'success': False, 'error': str(e)}
 
 
 @router.post("/verify-raw")
-async def verify_api_key_raw(
-    request: VerifyRawRequest,
-    current_user: dict = Depends(get_current_user)
-):
+async def verify_api_key_raw(request: VerifyRawRequest):
     """
     验证原始 API Key / Secret 是否有效（不需要先保存，用于填写后即时测试）
     """
@@ -212,10 +253,7 @@ async def verify_api_key_raw(
 
 
 @router.get("/has-key")
-async def has_api_key(
-    exchange: str = 'binance',
-    current_user: dict = Depends(get_current_user)
-):
+async def has_api_key(exchange: str = 'binance'):
     """
     检查用户是否已配置API密钥
     """
@@ -224,7 +262,7 @@ async def has_api_key(
         raise HTTPException(status_code=500, detail="API密钥服务未初始化")
 
     try:
-        api_key = service.get_api_key(current_user['user_id'], exchange)
+        api_key = service.get_api_key(_USER_ID, exchange)
         return {
             'success': True,
             'has_key': api_key is not None,
@@ -236,7 +274,7 @@ async def has_api_key(
 
 
 @router.put("/update-risk")
-async def update_risk(request: UpdateRiskRequest, current_user: dict = Depends(get_current_user)):
+async def update_risk(request: UpdateRiskRequest):
     """更新指定API Key的风控参数（杠杆/持仓/日亏损限额）"""
     import pymysql, os
     try:
@@ -246,12 +284,8 @@ async def update_risk(request: UpdateRiskRequest, current_user: dict = Depends(g
             database=os.getenv('DB_NAME', 'binance-data'), cursorclass=pymysql.cursors.DictCursor
         )
         cur = conn.cursor()
-        # 只允许更新自己的key（admin可更新任意）
-        if current_user.get('role') == 'admin':
-            cur.execute("SELECT id FROM user_api_keys WHERE id=%s", (request.api_key_id,))
-        else:
-            cur.execute("SELECT id FROM user_api_keys WHERE id=%s AND user_id=%s",
-                        (request.api_key_id, current_user['user_id']))
+        cur.execute("SELECT id FROM user_api_keys WHERE id=%s AND user_id=%s",
+                    (request.api_key_id, _USER_ID))
         if not cur.fetchone():
             raise HTTPException(status_code=403, detail="无权限或密钥不存在")
         cur.execute("""UPDATE user_api_keys
