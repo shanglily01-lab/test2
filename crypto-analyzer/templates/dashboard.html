@@ -175,7 +175,7 @@
 <div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
 <p class="text-xs font-display text-on-surface-variant uppercase tracking-widest mb-4">今日信号数</p>
 <div class="flex items-end justify-between">
-<h3 class="text-4xl font-display font-bold text-primary font-mono shadow-[0_0_20px_rgba(73,244,200,0.15)]">42</h3>
+<h3 class="text-4xl font-display font-bold text-primary font-mono shadow-[0_0_20px_rgba(73,244,200,0.15)]" id="stat-signals">--</h3>
 <span class="material-symbols-outlined text-primary/40 text-3xl" data-icon="sensors">sensors</span>
 </div>
 </div>
@@ -183,7 +183,7 @@
 <div class="bg-surface-container-low p-6 rounded-xl relative overflow-hidden group">
 <p class="text-xs font-display text-on-surface-variant uppercase tracking-widest mb-4">今日开仓</p>
 <div class="flex items-end justify-between">
-<h3 class="text-4xl font-display font-bold text-primary font-mono">12</h3>
+<h3 class="text-4xl font-display font-bold text-primary font-mono" id="stat-open">--</h3>
 <span class="material-symbols-outlined text-primary/40 text-3xl" data-icon="rocket_launch">rocket_launch</span>
 </div>
 </div>
@@ -191,7 +191,7 @@
 <div class="bg-surface-container-low p-6 rounded-xl relative overflow-hidden group">
 <p class="text-xs font-display text-on-surface-variant uppercase tracking-widest mb-4">今日盈亏</p>
 <div class="flex items-end justify-between">
-<h3 class="text-4xl font-display font-bold text-primary font-mono">+2,480.15 <span class="text-sm font-normal ml-1">USDT</span></h3>
+<h3 class="text-4xl font-display font-bold text-primary font-mono" id="stat-pnl">-- <span class="text-sm font-normal ml-1">USDT</span></h3>
 <span class="material-symbols-outlined text-primary/40 text-3xl" data-icon="trending_up">trending_up</span>
 </div>
 <div class="mt-4 h-1 w-full bg-surface-container-highest rounded-full overflow-hidden">
@@ -202,7 +202,7 @@
 <div class="bg-surface-container-low p-6 rounded-xl relative overflow-hidden group">
 <p class="text-xs font-display text-on-surface-variant uppercase tracking-widest mb-4">胜率</p>
 <div class="flex items-end justify-between">
-<h3 class="text-4xl font-display font-bold text-primary font-mono">68.5<span class="text-sm font-normal ml-1">%</span></h3>
+<h3 class="text-4xl font-display font-bold text-primary font-mono" id="stat-winrate">--<span class="text-sm font-normal ml-1">%</span></h3>
 <span class="material-symbols-outlined text-primary/40 text-3xl" data-icon="target">target</span>
 </div>
 </div>
@@ -230,114 +230,9 @@
 <th class="pb-6 font-medium text-right">操作</th>
 </tr>
 </thead>
-<tbody class="divide-y divide-outline-variant/10">
-<!-- BTC/USDT -->
-<tr class="hover:bg-surface-container transition-colors duration-150">
-<td class="py-5">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-full bg-[#f7931a]/10 flex items-center justify-center">
-<span class="text-[#f7931a] font-mono font-bold text-xs">₿</span>
-</div>
-<div>
-<p class="font-mono font-medium text-sm">BTC/USDT</p>
-<p class="text-[10px] text-on-surface-variant">Bitcoin / Tether</p>
-</div>
-</div>
-</td>
-<td class="py-5 text-center">
-<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
-</td>
-<td class="py-5 text-center">
-<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
-</td>
-<td class="py-5 text-center">
-<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-error/10 text-error uppercase">Bearish</span>
-</td>
-<td class="py-5 text-center font-mono text-primary">94.2</td>
-<td class="py-5 text-right">
-<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary text-[10px] font-bold py-1.5 px-4 rounded-md shadow-[0_0_12px_rgba(73,244,200,0.2)] hover:opacity-90 transition-all uppercase">Detail</button>
-</td>
-</tr>
-<!-- ETH/USDT -->
-<tr class="hover:bg-surface-container transition-colors duration-150">
-<td class="py-5">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-full bg-[#627eea]/10 flex items-center justify-center">
-<span class="text-[#627eea] font-mono font-bold text-xs">Ξ</span>
-</div>
-<div>
-<p class="font-mono font-medium text-sm">ETH/USDT</p>
-<p class="text-[10px] text-on-surface-variant">Ethereum / Tether</p>
-</div>
-</div>
-</td>
-<td class="py-5 text-center">
-<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
-</td>
-<td class="py-5 text-center">
-<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
-</td>
-<td class="py-5 text-center">
-<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
-</td>
-<td class="py-5 text-center font-mono text-primary">88.5</td>
-<td class="py-5 text-right">
-<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary text-[10px] font-bold py-1.5 px-4 rounded-md shadow-[0_0_12px_rgba(73,244,200,0.2)] hover:opacity-90 transition-all uppercase">Detail</button>
-</td>
-</tr>
-<!-- SOL/USDT -->
-<tr class="hover:bg-surface-container transition-colors duration-150">
-<td class="py-5">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-<span class="text-primary font-mono font-bold text-xs">S</span>
-</div>
-<div>
-<p class="font-mono font-medium text-sm">SOL/USDT</p>
-<p class="text-[10px] text-on-surface-variant">Solana / Tether</p>
-</div>
-</div>
-</td>
-<td class="py-5 text-center">
-<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-error/10 text-error uppercase">Bearish</span>
-</td>
-<td class="py-5 text-center">
-<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-error/10 text-error uppercase">Bearish</span>
-</td>
-<td class="py-5 text-center">
-<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
-</td>
-<td class="py-5 text-center font-mono text-primary">42.1</td>
-<td class="py-5 text-right">
-<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary text-[10px] font-bold py-1.5 px-4 rounded-md shadow-[0_0_12px_rgba(73,244,200,0.2)] hover:opacity-90 transition-all uppercase">Detail</button>
-</td>
-</tr>
-<!-- BNB/USDT -->
-<tr class="hover:bg-surface-container transition-colors duration-150">
-<td class="py-5">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-full bg-[#f3ba2f]/10 flex items-center justify-center">
-<span class="text-[#f3ba2f] font-mono font-bold text-xs">B</span>
-</div>
-<div>
-<p class="font-mono font-medium text-sm">BNB/USDT</p>
-<p class="text-[10px] text-on-surface-variant">Binance Coin / Tether</p>
-</div>
-</div>
-</td>
-<td class="py-5 text-center">
-<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
-</td>
-<td class="py-5 text-center">
-<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
-</td>
-<td class="py-5 text-center">
-<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>
-</td>
-<td class="py-5 text-center font-mono text-primary">76.0</td>
-<td class="py-5 text-right">
-<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary text-[10px] font-bold py-1.5 px-4 rounded-md shadow-[0_0_12px_rgba(73,244,200,0.2)] hover:opacity-90 transition-all uppercase">Detail</button>
-</td>
+<tbody id="ema-tbody" class="divide-y divide-outline-variant/10">
+<tr>
+<td colspan="6" class="py-8 text-center text-on-surface-variant text-sm font-mono">Loading...</td>
 </tr>
 </tbody>
 </table>
@@ -355,17 +250,17 @@
 <circle class="text-primary shadow-[0_0_15px_rgba(73,244,200,0.5)]" cx="96" cy="96" fill="transparent" r="88" stroke="currentColor" stroke-dasharray="552.92" stroke-dashoffset="193.52" stroke-width="8"></circle>
 </svg>
 <div class="absolute flex flex-col items-center">
-<span class="text-4xl font-display font-bold font-mono">65%</span>
-<span class="text-[10px] text-on-surface-variant uppercase tracking-widest mt-1">Bullish</span>
+<span class="text-4xl font-display font-bold font-mono" id="sentiment-pct">--%</span>
+<span class="text-[10px] text-on-surface-variant uppercase tracking-widest mt-1" id="sentiment-label">Loading</span>
 </div>
 </div>
 <div class="grid grid-cols-2 w-full gap-4 pt-4 border-t border-outline-variant/10">
 <div>
-<p class="text-primary font-mono font-bold text-lg">273</p>
+<p class="text-primary font-mono font-bold text-lg" id="sentiment-buy">--</p>
 <p class="text-[10px] text-on-surface-variant uppercase">Buy Signals</p>
 </div>
 <div>
-<p class="text-error font-mono font-bold text-lg">147</p>
+<p class="text-error font-mono font-bold text-lg" id="sentiment-sell">--</p>
 <p class="text-[10px] text-on-surface-variant uppercase">Sell Signals</p>
 </div>
 </div>
@@ -451,1624 +346,268 @@
 <!-- Background Decoration -->
 <div class="fixed top-[-10%] right-[-10%] w-[50%] h-[50%] bg-primary/5 blur-[120px] rounded-full -z-10 pointer-events-none"></div>
 <div class="fixed bottom-[-5%] left-[10%] w-[30%] h-[30%] bg-secondary/5 blur-[100px] rounded-full -z-10 pointer-events-none"></div>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="/static/js/auth.js"></script>
 <script>
-        // 页面加载前检查登录状态（可选：启用下面代码强制登录）
-        // if (!Auth.isLoggedIn()) {
-        //     window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
-        // }
-    </script>
-<script>
-        // 全局变量
-        let currentData = null;
-        let sortColumn = 'change_24h';
-        let sortDirection = 'desc';
-        let refreshCountdown = 15;
-        let refreshInterval = null;
-        let countdownInterval = null;
-        let recommendationsRefreshCountdown = 300; // 投资建议刷新倒计时（5分钟 = 300秒）
-        let recommendationsCountdownInterval = null;
-        let charts = {};
-
-        // 智能格式化价格
-        function formatPrice(price) {
-            if (price === null || price === undefined || isNaN(price)) return '-';
-            const num = parseFloat(price);
-            if (num >= 1000) {
-                return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            } else if (num >= 1) {
-                return num.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-            } else {
-                return num.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 });
-            }
-        }
-
-        // 格式化大数字
-        function formatLargeNumber(num) {
-            if (num >= 1000000000) return (num / 1000000000).toFixed(2) + 'B';
-            if (num >= 1000000) return (num / 1000000).toFixed(2) + 'M';
-            if (num >= 1000) return (num / 1000).toFixed(2) + 'K';
-            return num.toFixed(2);
-        }
-
-        // 格式化下单数量（8位小数）
-        function formatSize(num) {
-            if (num === null || num === undefined || isNaN(num)) return '-';
-            return parseFloat(num).toFixed(8);
-        }
-
-        // 加载数据
-        async function loadData() {
-            try {
-                const response = await fetch('/api/dashboard');
-                const data = await response.json();
-
-                if (data.success) {
-                    currentData = data.data;
-                    updateStats(data.data);
-                    updatePriceTable(data.data.prices);
-                    updateRecommendations(data.data.recommendations);
-                    updateNews(data.data.news);
-                    updateHyperliquid(data.data.hyperliquid);
-                    updateCharts(data.data);
-                    loadFuturesData();
-                    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('zh-CN');
-                    resetRefreshCountdown();
-                    resetRecommendationsRefreshCountdown(); // 启动投资建议刷新倒计时
-                    checkAlerts(data.data);
-                }
-            } catch (error) {
-                console.error('加载数据失败:', error);
-                showNotification('数据加载失败', 'error');
-            }
-        }
-
-        // 更新统计数据
-        function updateStats(data) {
-            // 统计面板已移除,此函数保留为空以兼容
-        }
-
-        // 更新图表
-        function updateCharts(data) {
-            // 迷你图表已移除,此函数保留为空以兼容
-        }
-
-        // 更新价格表
-        async function updatePriceTable(prices) {
-            const tbody = document.getElementById('priceTableBody');
-            const titleEl = document.getElementById('prices-title');
-            
-            // 更新标题数量统计
-            if (titleEl) {
-                const count = prices ? prices.length : 0;
-                titleEl.textContent = `实时价格【${count}】`;
-            }
-
-            if (!prices || prices.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="empty-state"><div class="empty-state-text">暂无数据</div></td></tr>';
-                return;
-            }
-
-            // 排序
-            let sortCol = sortColumn;
-            // 兼容旧的volume_24h排序，映射到quote_volume_24h
-            if (sortCol === 'volume_24h') {
-                sortCol = 'quote_volume_24h';
-            }
-            const sorted = [...prices].sort((a, b) => {
-                const aVal = a[sortCol] || 0;
-                const bVal = b[sortCol] || 0;
-                return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
-            });
-
-            tbody.innerHTML = sorted.map(p => {
-                return `
-                    <tr>
-                        <td><strong>${p.symbol}</strong></td>
-                        <td class="price font-mono">$${formatPrice(p.price)}</td>
-                        <td class="${p.change_24h >= 0 ? 'pnl-positive' : 'pnl-negative'} font-bold">
-                            ${p.change_24h >= 0 ? '+' : ''}${p.change_24h.toFixed(2)}%
-                        </td>
-                        <td class="text-secondary">$${formatLargeNumber(p.quote_volume_24h || p.volume_24h)}</td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // 排序价格表
-        function sortPrices(column) {
-            if (sortColumn === column) {
-                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-            } else {
-                sortColumn = column;
-                sortDirection = 'desc';
-            }
-            // 兼容旧的volume_24h排序，映射到quote_volume_24h
-            if (sortColumn === 'volume_24h') {
-                sortColumn = 'quote_volume_24h';
-            }
-            if (currentData) {
-                updatePriceTable(currentData.prices);
-            }
-        }
-
-        // 更新投资建议
-        async function updateRecommendations(recommendations) {
-            const container = document.getElementById('recommendationsContainer');
-            const titleEl = document.getElementById('recommendations-title');
-            
-            // 更新标题数量统计
-            if (titleEl) {
-                const count = recommendations ? recommendations.length : 0;
-                titleEl.textContent = `投资建议【${count}】`;
-            }
-            
-            // 更新买入/卖出信号统计
-            if (recommendations && recommendations.length > 0) {
-                const buyCount = recommendations.filter(r => r.signal === 'BUY' || r.signal === 'STRONG_BUY').length;
-                const sellCount = recommendations.filter(r => r.signal === 'SELL' || r.signal === 'STRONG_SELL').length;
-                
-                document.getElementById('buy-count').textContent = buyCount;
-                document.getElementById('sell-count').textContent = sellCount;
-                
-                // 显示统计徽章
-                const statsEl = document.getElementById('recommendations-stats');
-                if (statsEl) {
-                    statsEl.style.display = 'flex';
-                }
-            } else {
-                document.getElementById('buy-count').textContent = '0';
-                document.getElementById('sell-count').textContent = '0';
-            }
-
-            if (!recommendations || recommendations.length === 0) {
-                container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无建议</div></div>';
-                return;
-            }
-
-            // 显示所有建议（按置信度排序，已由后端完成）
-            const allRecs = recommendations;
-
-            container.innerHTML = allRecs.map(rec => {
-                // 根据信号类型设置样式
-                let cardClass = 'position-card';
-                let badgeClass = 'badge-neutral';
-                let badgeText = '观望';
-
-                if (rec.signal === 'STRONG_BUY') {
-                    cardClass += ' long';
-                    badgeClass = 'badge-success';
-                    badgeText = '强烈买入';
-                } else if (rec.signal === 'BUY') {
-                    cardClass += ' long';
-                    badgeClass = 'badge-success';
-                    badgeText = '买入';
-                } else if (rec.signal === 'STRONG_SELL') {
-                    cardClass += ' short';
-                    badgeClass = 'badge-danger';
-                    badgeText = '强烈卖出';
-                } else if (rec.signal === 'SELL') {
-                    cardClass += ' short';
-                    badgeClass = 'badge-danger';
-                    badgeText = '卖出';
-                }
-
-                // 获取维度评分，BTC和ETH有6个维度，其他币种5个维度
-                const scores = rec.scores || rec.score || {};
-                const isBTCorETH = rec.symbol === 'BTCUSDT' || rec.symbol === 'ETHUSDT' ||
-                                   rec.symbol === 'BTC/USDT' || rec.symbol === 'ETH/USDT' ||
-                                   rec.full_symbol === 'BTC/USDT' || rec.full_symbol === 'ETH/USDT';
-
-                // 解析reasons列表，提取各维度的理由
-                const reasons = rec.reasons || [];
-                const reasonMap = {
-                    technical: '基于EMA、MACD、RSI等指标综合分析',
-                    news: '分析最近24小时相关新闻情绪',
-                    funding: '永续合约资金费率反映多空力量',
-                    hyperliquid: '聪明钱交易动向追踪',
-                    ethereum: '链上活跃度和交易量分析',
-                    etf: 'ETF净流入/流出资金监控'
-                };
-
-                // 从reasons中提取理由
-                reasons.forEach(reason => {
-                    if (reason.includes('技术指标')) {
-                        reasonMap.technical = reason.replace('📊 ', '');
-                    } else if (reason.includes('新闻面')) {
-                        reasonMap.news = reason.replace('📰 ', '');
-                    } else if (reason.includes('资金费率')) {
-                        reasonMap.funding = reason.replace('💰 ', '');
-                    } else if (reason.includes('Hyperliquid')) {
-                        reasonMap.hyperliquid = reason.replace('🧠 ', '');
-                    } else if (reason.includes('链上')) {
-                        reasonMap.ethereum = reason.replace('⛓️  ', '');
-                    } else if (reason.includes('ETF')) {
-                        reasonMap.etf = reason.replace('🏦 ', '');
-                    }
-                });
-
-                const dimensions = [
-                    { name: '技术指标', key: 'technical', value: scores.technical || 50, reason: reasonMap.technical },
-                    { name: '新闻情绪', key: 'news', value: scores.news || 50, reason: reasonMap.news },
-                    { name: '资金费率', key: 'funding', value: scores.funding || 50, reason: reasonMap.funding },
-                    { name: 'Hyperliquid', key: 'hyperliquid', value: scores.hyperliquid || 50, reason: reasonMap.hyperliquid },
-                    { name: '链上数据', key: 'ethereum', value: scores.ethereum || 50, reason: reasonMap.ethereum }
-                ];
-
-                // 只有BTC和ETH才显示ETF维度，并且确保有ETF数据
-                if (isBTCorETH && (scores.etf !== undefined || reasonMap.etf !== 'ETF净流入/流出资金监控')) {
-                    dimensions.push({ name: 'ETF流向', key: 'etf', value: scores.etf || 50, reason: reasonMap.etf });
-                }
-
-                // 生成维度评分HTML，带气泡提示
-                const dimensionsHTML = dimensions.map(dim => {
-                    let color = 'var(--text-secondary)';
-                    if (dim.value >= 60) color = 'var(--success-green)';
-                    else if (dim.value <= 40) color = 'var(--danger-red)';
-
-                    return `
-                        <div style="display: flex; justify-content: space-between; align-items: center; position: relative;">
-                            <span style="font-size: 11px; cursor: help; position: relative;" class="tooltip-trigger" data-tooltip="${dim.reason}">
-                                ${dim.name} <i class="bi bi-info-circle" style="font-size: 10px; opacity: 0.6;"></i>
-                            </span>
-                            <div style="display: flex; align-items: center; gap: 6px;">
-                                <div style="width: 40px; height: 4px; background: var(--bg-primary); border-radius: 2px; overflow: hidden;">
-                                    <div style="width: ${dim.value}%; height: 100%; background: ${color}; transition: width 0.3s;"></div>
-                                </div>
-                                <span style="font-size: 11px; font-weight: 600; color: ${color}; min-width: 28px; text-align: right;">${Math.round(dim.value)}</span>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
-
-                return `
-                    <div class="${cardClass}" style="margin-bottom: 12px; padding: 16px;">
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                            <!-- 左侧：基本信息 -->
-                            <div>
-                                <div class="d-flex justify-between align-center mb-sm">
-                                    <strong style="font-size: 16px;">${rec.symbol}</strong>
-                                    <span class="badge ${badgeClass}">${badgeText}</span>
-                                </div>
-                                <div class="text-sm text-secondary" style="line-height: 1.8;">
-                                    <div>当前价: <span class="font-mono" style="color: var(--text-primary);">$${formatPrice(rec.current_price)}</span></div>
-                                    <div>建仓价: <span class="font-mono" style="color: var(--text-primary);">$${formatPrice(rec.entry_price)}</span></div>
-                                    <div>止损价: <span class="font-mono" style="color: var(--danger-red);">$${formatPrice(rec.stop_loss)}</span></div>
-                                    <div>止盈价: <span class="font-mono" style="color: var(--success-green);">$${formatPrice(rec.take_profit)}</span></div>
-                                    ${rec.signal_time ? `<div style="margin-top: 4px; font-size: 11px; color: var(--text-tertiary);">信号生成: <span style="color: var(--text-secondary);">${rec.signal_time}</span></div>` : ''}
-                                </div>
-                            </div>
-
-                            <!-- 右侧：多维分析 -->
-                            <div style="background: var(--bg-tertiary); padding: 12px; border-radius: var(--radius-md);">
-                                <div style="font-size: 11px; color: var(--text-secondary); margin-bottom: 8px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">${isBTCorETH ? '六维分析' : '五维分析'}</div>
-                                <div style="display: grid; gap: 5px;">
-                                    ${dimensionsHTML}
-                                </div>
-                                <div style="border-top: 1px solid var(--border-default); margin-top: 10px; padding-top: 10px;">
-                                    <div class="d-flex justify-between" style="font-size: 13px;">
-                                        <span style="color: var(--text-secondary); font-weight: 600;">综合置信度</span>
-                                        <span style="font-weight: 700; color: var(--primary-blue); font-size: 14px;">${rec.confidence.toFixed(0)}%</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        // 更新新闻
-        function updateNews(news) {
-            const container = document.getElementById('newsContainer');
-            const titleEl = document.getElementById('news-title');
-            
-            // 更新标题数量统计
-            if (titleEl) {
-                const count = news ? news.length : 0;
-                titleEl.textContent = `最新新闻【${count}】`;
-            }
-
-            if (!news || news.length === 0) {
-                container.innerHTML = '<div class="empty-state"><div class="empty-state-text">暂无新闻</div></div>';
-                return;
-            }
-
-            container.innerHTML = news.slice(0, 20).map(n => {
-                const sentimentBadge = n.sentiment === 'positive' ? '<span class="badge badge-success">利好</span>' :
-                                      n.sentiment === 'negative' ? '<span class="badge badge-danger">利空</span>' :
-                                      '<span class="badge badge-neutral">中性</span>';
-
-                return `
-                    <div class="portfolio-item" style="cursor: pointer;" onclick="window.open('${n.url}', '_blank')">
-                        <div class="d-flex justify-between align-center mb-sm">
-                            <strong style="flex: 1;">${n.title}</strong>
-                            ${sentimentBadge}
-                        </div>
-                        <div class="text-xs text-secondary d-flex justify-between">
-                            <span>${n.source}</span>
-                            <span>${n.published_at}</span>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        // 更新Hyperliquid数据
-        function updateHyperliquid(hl) {
-            if (!hl) return;
-
-            document.getElementById('hlVolume24h').textContent = '$' + formatLargeNumber(hl.total_volume_24h || 0);
-            document.getElementById('hlActiveWallets').textContent = hl.active_wallets || 0;
-            document.getElementById('hlRecentTrades').textContent = hl.recent_trades?.length || 0;
-
-            // 计算做多做空比例
-            const trades = hl.recent_trades || [];
-            const longCount = trades.filter(t => t.side === 'LONG').length;
-            const shortCount = trades.filter(t => t.side === 'SHORT').length;
-            const ratio = shortCount > 0 ? (longCount / shortCount).toFixed(2) : longCount;
-            document.getElementById('hlLongShortRatio').textContent = ratio;
-
-            const tbody = document.getElementById('hlTradesBody');
-
-            if (trades.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><div class="empty-state-text">暂无交易</div></td></tr>';
-                return;
-            }
-
-            // 确保按交易时间降序排列（最新的在最上面）
-            trades.sort((a, b) => new Date(b.trade_time) - new Date(a.trade_time));
-
-            tbody.innerHTML = trades.slice(0, 15).map(t => `
-                <tr>
-                    <td>
-                        <span class="badge badge-neutral" title="${t.wallet_label}">${t.wallet_label?.substring(0, 10) || 'Unknown'}</span>
-                    </td>
-                    <td><strong>${t.coin}</strong></td>
-                    <td>
-                        <span class="badge ${t.side === 'LONG' ? 'badge-success' : 'badge-danger'}">
-                            ${t.side === 'LONG' ? '做多' : '做空'}
-                        </span>
-                    </td>
-                    <td class="font-mono">$${formatPrice(t.price || 0)}</td>
-                    <td class="font-mono">${formatSize(t.size || 0)}</td>
-                    <td class="font-mono"><span class="badge badge-info">${(t.leverage || 1).toFixed(1)}x</span></td>
-                    <td class="font-mono">$${formatLargeNumber(t.notional_usd)}</td>
-                    <td class="${t.closed_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'} font-mono">
-                        ${t.closed_pnl !== 0 ? (t.closed_pnl >= 0 ? '+' : '') + formatLargeNumber(t.closed_pnl) : '-'}
-                    </td>
-                    <td class="text-secondary text-sm">${t.trade_time}</td>
-                </tr>
-            `).join('');
-        }
-
-        // 加载实时合约数据
-        async function loadFuturesData() {
-            try {
-                // 使用从API获取的合约数据
-                if (currentData && currentData.futures) {
-                    updateFuturesData(currentData.futures);
-                } else if (currentData && currentData.prices) {
-                    // 如果没有合约数据，使用价格数据作为fallback
-                    updateFuturesData(currentData.prices);
-                }
-            } catch (error) {
-                console.error('加载合约数据失败:', error);
-            }
-        }
-
-        // 更新实时合约数据
-        function updateFuturesData(futures) {
-            const tbody = document.getElementById('futuresBody');
-            const titleEl = document.getElementById('futures-title');
-            
-            // 更新标题数量统计
-            if (titleEl) {
-                const count = futures ? futures.length : 0;
-                titleEl.textContent = `实时合约【${count}】`;
-            }
-
-            if (!futures || futures.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><div class="empty-state-text">暂无合约数据</div></td></tr>';
-                return;
-            }
-
-            // 取前15个交易对
-            tbody.innerHTML = futures.slice(0, 15).map(f => {
-                // 使用真实数据字段
-                const price = f.price || f.current_price || 0;
-                const change24h = f.change_24h || f.price_change_24h || 0;
-                const fundingRate = f.funding_rate || f.current_rate || 0;
-                const fundingRatePct = f.funding_rate_pct || f.current_rate_pct || (fundingRate * 100);
-                const longShortRatio = f.long_short_account_ratio || f.long_short_ratio || 1.0;
-                const openInterest = f.open_interest || 0;
-                
-                const changeClass = change24h >= 0 ? 'pnl-positive' : 'pnl-negative';
-                const fundingClass = fundingRatePct >= 0 ? 'text-success' : 'text-danger';
-                const longShortClass = longShortRatio >= 1 ? 'pnl-positive' : 'pnl-negative';
-
-                return `
-                    <tr>
-                        <td><strong>${f.full_symbol || f.symbol}</strong></td>
-                        <td class="price font-mono">$${formatPrice(price)}</td>
-                        <td class="font-mono ${fundingClass}">${fundingRatePct >= 0 ? '+' : ''}${fundingRatePct.toFixed(4)}%</td>
-                        <td class="${changeClass} font-bold">
-                            ${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%
-                        </td>
-                        <td class="font-mono ${longShortClass}">${longShortRatio.toFixed(2)}</td>
-                        <td class="text-secondary">$${formatLargeNumber(openInterest)}</td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        // 检查告警
-        function checkAlerts(data) {
-            let alertCount = 0;
-
-            // 检查强烈买入信号
-            const strongBuys = data.recommendations?.filter(r => r.signal === 'STRONG_BUY' && r.confidence >= 70) || [];
-            alertCount += strongBuys.length;
-
-            // 检查异常波动
-            const highVolatility = data.prices?.filter(p => Math.abs(p.change_24h) > 10) || [];
-            alertCount += highVolatility.length;
-
-            const alertBadge = document.getElementById('alertCount');
-            if (alertCount > 0) {
-                alertBadge.textContent = alertCount;
-                alertBadge.style.display = 'flex';
-            } else {
-                alertBadge.style.display = 'none';
-            }
-        }
-
-        // 通知功能
-        function showNotification(message, type = 'success') {
-            const notification = document.createElement('div');
-            notification.className = `notification ${type}`;
-            notification.innerHTML = `
-                <div class="d-flex justify-between align-center">
-                    <strong>${message}</strong>
-                    <button class="btn btn-sm btn-ghost" onclick="this.parentElement.parentElement.remove()">
-                        <i class="bi bi-x"></i>
-                    </button>
-                </div>
-            `;
-            document.body.appendChild(notification);
-
-            setTimeout(() => {
-                notification.remove();
-            }, 5000);
-        }
-
-        // 刷新倒计时
-        function resetRefreshCountdown() {
-            refreshCountdown = 15;
-            if (countdownInterval) clearInterval(countdownInterval);
-
-            countdownInterval = setInterval(() => {
-                refreshCountdown--;
-                document.getElementById('nextRefresh').textContent = refreshCountdown;
-
-                if (refreshCountdown <= 0) {
-                    loadData();
-                }
-            }, 1000);
-        }
-        
-        // 重置投资建议刷新倒计时（每5分钟刷新一次）
-        function resetRecommendationsRefreshCountdown() {
-            recommendationsRefreshCountdown = 120; // 2分钟 = 120秒
-            if (recommendationsCountdownInterval) clearInterval(recommendationsCountdownInterval);
-
-            recommendationsCountdownInterval = setInterval(() => {
-                recommendationsRefreshCountdown--;
-
-                // 每2分钟刷新投资建议数据
-                if (recommendationsRefreshCountdown <= 0) {
-                    loadRecommendationsOnly();
-                    recommendationsRefreshCountdown = 120; // 重置倒计时
-                }
-            }, 1000);
-        }
-        
-        // 仅加载投资建议数据（不刷新其他数据）
-        async function loadRecommendationsOnly() {
-            try {
-                const response = await fetch('/api/dashboard');
-                const data = await response.json();
-
-                if (data.success && data.data) {
-                    // 只更新投资建议
-                    if (data.data.recommendations) {
-                        currentData.recommendations = data.data.recommendations;
-                        updateRecommendations(data.data.recommendations);
-                    }
-                    // 更新统计信息（包含信号统计）
-                    if (data.data.stats) {
-                        updateStats(data.data);
-                    }
-                }
-            } catch (error) {
-                console.error('刷新投资建议失败:', error);
-            }
-        }
-
-        // 刷新数据
-        function refreshData() {
-            showNotification('正在刷新数据...', 'success');
-            loadData();
-        }
-
-        // 滚动到指定区域
-        function scrollToSection(id) {
-            document.getElementById(id).scrollIntoView({ behavior: 'smooth' });
-        }
-
-        // 查看详情
-        function viewDetails(symbol) {
-            window.location.href = '/futures_trading?symbol=' + encodeURIComponent(symbol);
-        }
-
-        // 查看分析
-        function viewAnalysis(symbol) {
-            showNotification(`查看 ${symbol} 详细分析`, 'success');
-            // TODO: 打开分析模态框
-        }
-
-        // 交易
-        function trade(symbol) {
-            if (confirm('是否要交易 ' + symbol + '?')) {
-                window.location.href = '/futures_trading?symbol=' + encodeURIComponent(symbol);
-            }
-        }
-
-        // 添加到关注列表
-        function addToWatchlist(symbol) {
-            showNotification(`${symbol} 已添加到关注列表`, 'success');
-            // TODO: 保存到本地存储或服务器
-        }
-
-        // 交易合约
-        function tradeFutures(symbol) {
-            if (confirm('是否要进行 ' + symbol + ' 合约交易?')) {
-                window.location.href = '/futures_trading?symbol=' + encodeURIComponent(symbol);
-            }
-        }
-
-        // 切换提醒面板
-        function toggleAlerts() {
-            showNotification('提醒功能开发中...', 'warning');
-            // TODO: 显示提醒面板
-        }
-
-        // 初始化
-        window.addEventListener('load', () => {
-            loadData();
-            resetRefreshCountdown();
-            
-        });
-
-        // 页面可见性变化时停止/恢复刷新
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                if (countdownInterval) clearInterval(countdownInterval);
-            } else {
-                resetRefreshCountdown();
-            }
-        });
-
-        // 查看投资建议详情
-        async function viewRecommendationDetails(symbol) {
-            try {
-                // 从当前数据中找到对应的推荐
-                const recommendation = currentData.recommendations.find(r => r.symbol === symbol);
-                if (!recommendation) {
-                    showNotification('未找到该交易对的投资建议', 'error');
-                    return;
-                }
-
-                // 显示详情弹窗
-                showRecommendationModal(recommendation);
-            } catch (error) {
-                console.error('加载详情失败:', error);
-                showNotification('加载详情失败', 'error');
-            }
-        }
-
-        // 显示投资建议详情模态框
-        function showRecommendationModal(rec) {
-            const modal = document.getElementById('recommendationModal');
-            const modalContent = document.getElementById('modalContent');
-
-            // 计算潜在收益率
-            const potentialGain = ((rec.take_profit - rec.entry_price) / rec.entry_price * 100).toFixed(2);
-            const potentialLoss = ((rec.entry_price - rec.stop_loss) / rec.entry_price * 100).toFixed(2);
-            const riskRewardRatio = (potentialGain / potentialLoss).toFixed(2);
-
-            // 获取信号类型
-            let signalBadge = '';
-            if (rec.signal === 'STRONG_BUY') {
-                signalBadge = '<span class="badge badge-success" style="font-size: 14px; padding: 6px 12px;">强烈买入</span>';
-            } else if (rec.signal === 'BUY') {
-                signalBadge = '<span class="badge badge-success" style="font-size: 14px; padding: 6px 12px;">买入</span>';
-            } else if (rec.signal === 'STRONG_SELL') {
-                signalBadge = '<span class="badge badge-danger" style="font-size: 14px; padding: 6px 12px;">强烈卖出</span>';
-            } else if (rec.signal === 'SELL') {
-                signalBadge = '<span class="badge badge-danger" style="font-size: 14px; padding: 6px 12px;">卖出</span>';
-            } else {
-                signalBadge = '<span class="badge badge-neutral" style="font-size: 14px; padding: 6px 12px;">观望</span>';
-            }
-
-            modalContent.innerHTML = `
-                <div style="padding: 24px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-default);">
-                        <div>
-                            <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">${rec.symbol}</h2>
-                            <div style="font-size: 14px; color: var(--text-secondary);">投资分析报告</div>
-                        </div>
-                        <div>
-                            ${signalBadge}
-                        </div>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 24px;">
-                        <div style="background: var(--bg-tertiary); padding: 16px; border-radius: var(--radius-md);">
-                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">当前价格</div>
-                            <div style="font-size: 20px; font-weight: 700; font-family: var(--font-mono);">$${formatPrice(rec.current_price)}</div>
-                        </div>
-                        <div style="background: var(--bg-tertiary); padding: 16px; border-radius: var(--radius-md);">
-                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">置信度</div>
-                            <div style="font-size: 20px; font-weight: 700;">${rec.confidence.toFixed(0)}%</div>
-                        </div>
-                    </div>
-
-                    <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 24px;">
-                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">📊 交易建议</h3>
-                        <div style="display: grid; gap: 12px;">
-                            <div style="display: flex; justify-content: space-between;">
-                                <span style="color: var(--text-secondary);">建仓价格：</span>
-                                <span style="font-family: var(--font-mono); font-weight: 600;">$${formatPrice(rec.entry_price)}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between;">
-                                <span style="color: var(--text-secondary);">止损价格：</span>
-                                <span style="font-family: var(--font-mono); font-weight: 600; color: var(--danger-red);">$${formatPrice(rec.stop_loss)}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between;">
-                                <span style="color: var(--text-secondary);">止盈价格：</span>
-                                <span style="font-family: var(--font-mono); font-weight: 600; color: var(--success-green);">$${formatPrice(rec.take_profit)}</span>
-                            </div>
-                            ${rec.signal_time ? `
-                            <div style="display: flex; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-muted);">
-                                <span style="color: var(--text-secondary);">信号生成时间：</span>
-                                <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-tertiary);">${rec.signal_time}</span>
-                            </div>
-                            ` : ''}
-                        </div>
-                    </div>
-
-                    <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 24px;">
-                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px;">📈 风险收益分析</h3>
-                        <div style="display: grid; gap: 12px;">
-                            <div style="display: flex; justify-content: space-between;">
-                                <span style="color: var(--text-secondary);">潜在收益：</span>
-                                <span style="font-weight: 600; color: var(--success-green);">+${potentialGain}%</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between;">
-                                <span style="color: var(--text-secondary);">潜在损失：</span>
-                                <span style="font-weight: 600; color: var(--danger-red);">-${potentialLoss}%</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between;">
-                                <span style="color: var(--text-secondary);">风险收益比：</span>
-                                <span style="font-weight: 600;">1:${riskRewardRatio}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg);">
-                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 12px;">💡 投资建议</h3>
-                        <p style="color: var(--text-secondary); line-height: 1.6; margin-bottom: 12px;">
-                            基于六维分析系统，${rec.symbol} 当前呈现 <strong style="color: var(--text-primary);">${signalBadge.replace('<span class="badge', '<span style="display: inline;" class="badge').replace('</span>', '</span>')}</strong> 信号，综合置信度为 <strong style="color: var(--primary-blue);">${rec.confidence.toFixed(0)}%</strong>。
-                        </p>
-                        ${rec.signal.includes('BUY') ? `
-                        <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--success-green); margin-bottom: 12px;">
-                            <strong style="color: var(--success-green); display: block; margin-bottom: 8px;">📈 做多策略：</strong>
-                            <ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); line-height: 1.6;">
-                                <li style="margin-bottom: 4px;"><strong>建仓方式：</strong>建议在 <strong style="color: var(--text-primary);">$${formatPrice(rec.entry_price)}</strong> 附近分2-3批建仓，避免一次性满仓</li>
-                                <li style="margin-bottom: 4px;"><strong>止损设置：</strong>必须在 <strong style="color: var(--danger-red);">$${formatPrice(rec.stop_loss)}</strong> 处设置止损单，跌破止损果断离场</li>
-                                <li style="margin-bottom: 4px;"><strong>止盈目标：</strong>第一目标价 <strong style="color: var(--success-green);">$${formatPrice(rec.take_profit)}</strong>，达到后建议止盈50%仓位</li>
-                                <li style="margin-bottom: 4px;"><strong>仓位建议：</strong>${rec.confidence >= 80 ? '高置信度信号，可以使用20-30%总资金' : rec.confidence >= 70 ? '较高置信度，建议使用15-20%总资金' : '中等置信度，建议使用10-15%总资金'}</li>
-                                <li><strong>加仓条件：</strong>如价格突破 $${formatPrice(rec.entry_price * 1.02)}，可考虑加仓30%</li>
-                            </ul>
-                        </div>
-                        <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--warning-yellow);">
-                            <strong style="color: var(--warning-yellow); display: block; margin-bottom: 4px;">⚠️ 风险提示：</strong>
-                            <p style="margin: 0; color: var(--text-secondary); line-height: 1.6; font-size: 12px;">
-                                ${rec.confidence < 70 ? '当前置信度偏低，请谨慎操作，控制好仓位。' : ''}
-                                注意市场波动风险，严格执行止损策略。如遇重大利空消息或技术面破位，应及时调整策略。
-                            </p>
-                        </div>
-                        ` : rec.signal.includes('SELL') ? `
-                        <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--danger-red); margin-bottom: 12px;">
-                            <strong style="color: var(--danger-red); display: block; margin-bottom: 8px;">📉 做空/减仓策略：</strong>
-                            <ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); line-height: 1.6;">
-                                <li style="margin-bottom: 4px;"><strong>持仓者：</strong>建议在当前价位 <strong style="color: var(--text-primary);">$${formatPrice(rec.current_price)}</strong> 附近减仓50%或全部离场</li>
-                                <li style="margin-bottom: 4px;"><strong>做空者：</strong>可考虑在 <strong style="color: var(--text-primary);">$${formatPrice(rec.entry_price)}</strong> 附近建立空单</li>
-                                <li style="margin-bottom: 4px;"><strong>止损设置：</strong>空单止损设在 <strong style="color: var(--danger-red);">$${formatPrice(rec.stop_loss)}</strong>，突破止损立即平仓</li>
-                                <li style="margin-bottom: 4px;"><strong>目标价位：</strong>第一目标 <strong style="color: var(--success-green);">$${formatPrice(rec.take_profit)}</strong>，达到后止盈部分仓位</li>
-                                <li><strong>操作建议：</strong>空头市场风险较大，${rec.confidence >= 70 ? '但当前信号较强，可谨慎参与' : '建议观望为主，避免盲目做空'}</li>
-                            </ul>
-                        </div>
-                        <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--warning-yellow);">
-                            <strong style="color: var(--warning-yellow); display: block; margin-bottom: 4px;">⚠️ 注意事项：</strong>
-                            <p style="margin: 0; color: var(--text-secondary); line-height: 1.6; font-size: 12px;">
-                                做空风险高于做多，请严格控制仓位。如遇突发利好或技术面反转，应及时止损离场。
-                            </p>
-                        </div>
-                        ` : `
-                        <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--text-secondary); margin-bottom: 12px;">
-                            <strong style="color: var(--text-secondary); display: block; margin-bottom: 8px;">⏸️ 观望策略：</strong>
-                            <ul style="margin: 0; padding-left: 20px; color: var(--text-secondary); line-height: 1.6;">
-                                <li style="margin-bottom: 4px;"><strong>当前状态：</strong>市场信号不明朗，多空力量平衡，暂不建议操作</li>
-                                <li style="margin-bottom: 4px;"><strong>等待条件：</strong>等待综合置信度突破70%，或明确的趋势信号出现</li>
-                                <li style="margin-bottom: 4px;"><strong>关键价位：</strong>关注 $${formatPrice(rec.entry_price)} 附近的支撑/阻力情况</li>
-                                <li><strong>操作建议：</strong>保持观望，不要盲目进场，耐心等待更好的交易机会</li>
-                            </ul>
-                        </div>
-                        <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--info-blue);">
-                            <strong style="color: var(--info-blue); display: block; margin-bottom: 4px;">💡 提示：</strong>
-                            <p style="margin: 0; color: var(--text-secondary); line-height: 1.6; font-size: 12px;">
-                                观望是最好的策略之一。宁可错过，不可做错。继续关注市场变化，等待高置信度信号再行动。
-                            </p>
-                        </div>
-                        `}
-                    </div>
-
-                    <div style="display: flex; gap: 12px; margin-top: 24px;">
-                        <button class="btn btn-secondary" onclick="closeRecommendationModal()" style="flex: 1;">
-                            关闭
-                        </button>
-                        ${rec.signal.includes('BUY') ? `
-                        <button class="btn btn-success" onclick="trade('${rec.symbol}'); closeRecommendationModal();" style="flex: 1;">
-                            立即交易
-                        </button>
-                        ` : ''}
-                    </div>
-                </div>
-            `;
-
-            modal.style.display = 'flex';
-            modal.classList.add('active');
-            // 添加动画效果
-            setTimeout(() => {
-                const content = document.getElementById('explanationContent');
-                if (content) {
-                    content.style.animation = 'modalSlideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
-                }
-            }, 10);
-        }
-
-        // 关闭模态框
-        function closeRecommendationModal() {
-            const modal = document.getElementById('recommendationModal');
-            modal.style.display = 'none';
-        }
-
-        // 点击模态框外部关闭
-        window.onclick = function(event) {
-            const modal = document.getElementById('recommendationModal');
-            if (event.target === modal) {
-                closeRecommendationModal();
-            }
-            const explanationModal = document.getElementById('explanationModal');
-            if (event.target === explanationModal) {
-                closeExplanationModal();
-            }
-        }
-
-        // 显示智能投资说明
-        function showInvestmentExplanation() {
-            const modal = document.getElementById('explanationModal');
-            const modalContent = document.getElementById('explanationContent');
-
-            modalContent.innerHTML = `
-                <div class="explanation-content-wrapper">
-                    <div class="explanation-header">
-                        <div>
-                            <h2 class="explanation-title">智能投资建议说明</h2>
-                            <div class="explanation-subtitle">多维度分析系统</div>
-                        </div>
-                        <button class="explanation-close-btn" onclick="closeExplanationModal()">
-                            <i class="bi bi-x-lg"></i>
-                        </button>
-                    </div>
-
-            <div class="explanation-section">
-                <h3 class="explanation-section-title">📊 六维分析体系详解</h3>
-                        <div style="display: grid; gap: 12px;">
-                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--primary-blue);">
-                                <div style="font-weight: 600; margin-bottom: 6px;">1. 技术指标 (Technical Analysis)</div>
-                                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 8px;">
-                                    <strong>分析内容：</strong>综合运用 EMA、MACD、RSI、布林带等经典技术指标，多角度评估价格趋势和市场动能。
-                                </div>
-                                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
-                                    • <strong>EMA (指数移动平均线)：</strong>判断短期和长期趋势，金叉看涨，死叉看跌<br>
-                                    • <strong>MACD (指标背离)：</strong>识别动能转换和趋势反转信号<br>
-                                    • <strong>RSI (相对强弱)：</strong>超买(>70)预警回调，超卖(<30)提示反弹<br>
-                                    • <strong>布林带：</strong>价格突破上轨看涨，跌破下轨看跌<br>
-                                    <span style="color: var(--warning-yellow);">⚡ 评分>60为多头信号，<40为空头信号</span>
-                                </div>
-                            </div>
-                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--success-green);">
-                                <div style="font-weight: 600; margin-bottom: 6px;">2. 新闻情绪 (News Sentiment)</div>
-                                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 8px;">
-                                    <strong>分析内容：</strong>通过 AI 实时分析最新加密货币新闻的情绪倾向，量化市场舆论方向。
-                                </div>
-                                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
-                                    • <strong>数据来源：</strong>CoinDesk、CoinTelegraph、Decrypt 等权威媒体<br>
-                                    • <strong>情绪分类：</strong>利好(Positive)、中性(Neutral)、利空(Negative)<br>
-                                    • <strong>计算方式：</strong>24小时内利好新闻占比 × 权重系数<br>
-                                    <span style="color: var(--warning-yellow);">⚡ 评分>60表示舆论偏多，<40表示舆论偏空</span>
-                                </div>
-                            </div>
-                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--warning-yellow);">
-                                <div style="font-weight: 600; margin-bottom: 6px;">3. 资金费率 (Funding Rate)</div>
-                                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 8px;">
-                                    <strong>分析内容：</strong>监控永续合约资金费率，识别多空力量对比和过度杠杆风险，发现反转机会。
-                                </div>
-                                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
-                                    • <strong>正费率 (>0.01%)：</strong>多头支付空头，市场过热，警惕回调<br>
-                                    • <strong>负费率 (<-0.01%)：</strong>空头支付多头，恐慌情绪，关注反弹<br>
-                                    • <strong>中性费率 (-0.01%~0.01%)：</strong>多空平衡，趋势不明<br>
-                                    <span style="color: var(--warning-yellow);">⚡ 极端费率往往预示反转，建议逆向思考</span>
-                                </div>
-                            </div>
-                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--secondary-purple);">
-                                <div style="font-weight: 600; margin-bottom: 6px;">4. Hyperliquid 聪明钱追踪</div>
-                                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 8px;">
-                                    <strong>分析内容：</strong>追踪链上大户和高胜率交易者的持仓动向，捕捉聪明钱的交易信号。
-                                </div>
-                                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
-                                    • <strong>监控对象：</strong>历史胜率>60%的专业交易者和巨鲸地址<br>
-                                    • <strong>信号识别：</strong>大额开仓(>10万U)、集中建仓、持仓变化<br>
-                                    • <strong>多空比例：</strong>聪明钱做多做空比例反映市场预期<br>
-                                    <span style="color: var(--warning-yellow);">⚡ 聪明钱往往领先市场，是重要的前瞻指标</span>
-                                </div>
-                            </div>
-                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--info-blue);">
-                                <div style="font-weight: 600; margin-bottom: 6px;">5. 链上数据 (On-Chain Data)</div>
-                                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 8px;">
-                                    <strong>分析内容：</strong>分析区块链上的真实交易数据，评估网络活跃度和用户行为趋势。
-                                </div>
-                                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
-                                    • <strong>活跃地址：</strong>日活地址增长表示关注度上升<br>
-                                    • <strong>交易量：</strong>链上转账量放大预示资金流动加速<br>
-                                    • <strong>持币分布：</strong>大户增持看涨，散户恐慌看跌<br>
-                                    • <strong>交易所流入流出：</strong>净流出(提币)看涨，净流入(充值)看跌<br>
-                                    <span style="color: var(--warning-yellow);">⚡ 链上数据难以造假，是可靠的基本面指标</span>
-                                </div>
-                            </div>
-                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--secondary-orange);">
-                                <div style="font-weight: 600; margin-bottom: 6px;">6. ETF 资金流向 (仅BTC/ETH)</div>
-                                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 8px;">
-                                    <strong>分析内容：</strong>监控比特币和以太坊 ETF 的净流入/流出，评估华尔街机构资金动向。
-                                </div>
-                                <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
-                                    • <strong>净流入：</strong>机构资金持续买入，看涨信号强烈<br>
-                                    • <strong>净流出：</strong>机构资金撤离，谨慎对待<br>
-                                    • <strong>流向趋势：</strong>连续3天以上同向流动有明确指示作用<br>
-                                    <span style="color: var(--warning-yellow);">⚡ ETF是传统金融进入加密货币的主要渠道</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px;">
-                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--success-green);">🎯 综合置信度计算</h3>
-                        <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                            <p style="margin-bottom: 12px;">综合置信度由六个维度的评分加权计算得出，范围 0-100%。系统会根据各维度的权重和一致性计算最终信号强度：</p>
-
-                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 12px;">
-                                <strong style="color: var(--text-primary);">🔢 计算公式：</strong>
-                                <div style="margin-top: 8px; font-family: monospace; font-size: 12px;">
-                                    置信度 = (技术指标×30% + 新闻情绪×15% + 资金费率×20% + Hyperliquid×20% + 链上数据×10% + ETF流向×5%) × 一致性系数
-                                </div>
-                            </div>
-
-                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 12px;">
-                                <strong style="color: var(--text-primary);">📊 信号强度分级：</strong>
-                                <ul style="margin-left: 20px; margin-top: 8px; margin-bottom: 0;">
-                                    <li style="margin-bottom: 6px;"><strong style="color: var(--success-green);">80-100% (强烈信号)</strong>：六维评分高度一致，建议重点关注，可适度重仓</li>
-                                    <li style="margin-bottom: 6px;"><strong style="color: var(--primary-blue);">60-79% (较强信号)</strong>：多数维度支持，信号较为可靠，可以适度参与</li>
-                                    <li style="margin-bottom: 6px;"><strong style="color: var(--warning-yellow);">40-59% (模糊信号)</strong>：维度评分分散，信号不明确，建议观望等待</li>
-                                    <li><strong style="color: var(--danger-red);">0-39% (弱信号)</strong>：维度评分偏低或矛盾，不建议操作</li>
-                                </ul>
-                            </div>
-
-                            <p style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--warning-yellow); margin-bottom: 0;">
-                                <strong>⚠️ 风险提示：</strong> 本系统仅供参考，不构成投资建议。加密货币市场波动剧烈，黑天鹅事件时有发生，请根据自身风险承受能力谨慎决策，切勿梭哈。
-                            </p>
-                        </div>
-                    </div>
-
-                    <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg);">
-                        <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--primary-blue);">💡 实战使用指南</h3>
-                        <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-
-                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 12px; border-left: 3px solid var(--success-green);">
-                                <strong style="color: var(--text-primary); display: block; margin-bottom: 8px;">✅ 标准操作流程：</strong>
-                                <ol style="margin-left: 20px; margin-bottom: 0;">
-                                    <li style="margin-bottom: 6px;"><strong>筛选高置信度：</strong>优先关注综合置信度 ≥70% 的投资建议</li>
-                                    <li style="margin-bottom: 6px;"><strong>查看维度评分：</strong>确保至少4个维度评分 >50，避免单一维度驱动</li>
-                                    <li style="margin-bottom: 6px;"><strong>理解信号来源：</strong>鼠标悬停在维度名称上查看详细说明</li>
-                                    <li style="margin-bottom: 6px;"><strong>制定交易计划：</strong>参考建仓价、止损价、止盈价设置订单</li>
-                                    <li style="margin-bottom: 6px;"><strong>分批建仓：</strong>不要一次性满仓，建议分2-3次建仓</li>
-                                    <li><strong>严格止损：</strong>必须设置止损单，控制单笔损失在总资金的2-5%</li>
-                                </ol>
-                            </div>
-
-                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 12px; border-left: 3px solid var(--primary-blue);">
-                                <strong style="color: var(--text-primary); display: block; margin-bottom: 8px;">📈 信号类型解读：</strong>
-                                <ul style="margin-left: 20px; margin-bottom: 0; list-style: none; padding: 0;">
-                                    <li style="margin-bottom: 6px;">• <strong style="color: var(--success-green);">强烈买入：</strong>六维评分极高(>70)且方向一致，是强势突破信号</li>
-                                    <li style="margin-bottom: 6px;">• <strong style="color: var(--success-green);">买入：</strong>多数维度偏多，可以考虑入场，但需控制仓位</li>
-                                    <li style="margin-bottom: 6px;">• <strong style="color: var(--text-secondary);">观望：</strong>信号不明朗，等待更清晰的方向</li>
-                                    <li style="margin-bottom: 6px;">• <strong style="color: var(--danger-red);">卖出：</strong>多数维度偏空，持仓者考虑减仓或离场</li>
-                                    <li>• <strong style="color: var(--danger-red);">强烈卖出：</strong>六维评分极低(<30)，警惕大幅回调</li>
-                                </ul>
-                            </div>
-
-                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 12px; border-left: 3px solid var(--warning-yellow);">
-                                <strong style="color: var(--text-primary); display: block; margin-bottom: 8px;">⚡ 实战技巧：</strong>
-                                <ul style="margin-left: 20px; margin-bottom: 0; list-style: none; padding: 0;">
-                                    <li style="margin-bottom: 6px;">• <strong>多维共振：</strong>当5个以上维度同向(都>60或都<40)时，信号最可靠</li>
-                                    <li style="margin-bottom: 6px;">• <strong>背离警示：</strong>如技术指标看多但新闻/资金费率看空，需谨慎对待</li>
-                                    <li style="margin-bottom: 6px;">• <strong>聪明钱优先：</strong>Hyperliquid维度是领先指标，可作为重点参考</li>
-                                    <li style="margin-bottom: 6px;">• <strong>极端反转：</strong>资金费率极端时(>0.1%或<-0.1%)，考虑反向操作</li>
-                                    <li style="margin-bottom: 6px;">• <strong>市场环境：</strong>大盘震荡时降低仓位，趋势明确时可以加仓</li>
-                                    <li>• <strong>止盈策略：</strong>达到目标价后分批止盈，不要贪婪等顶</li>
-                                </ul>
-                            </div>
-
-                            <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--danger-red);">
-                                <strong style="color: var(--danger-red); display: block; margin-bottom: 8px;">🚫 禁忌事项：</strong>
-                                <ul style="margin-left: 20px; margin-bottom: 0; list-style: none; padding: 0;">
-                                    <li style="margin-bottom: 6px;">• ❌ <strong>不要盲目跟单：</strong>必须理解信号逻辑，结合自身判断</li>
-                                    <li style="margin-bottom: 6px;">• ❌ <strong>不要重仓单币：</strong>单个币种仓位不超过总资金的30%</li>
-                                    <li style="margin-bottom: 6px;">• ❌ <strong>不要频繁交易：</strong>避免被手续费和滑点消耗利润</li>
-                                    <li style="margin-bottom: 6px;">• ❌ <strong>不要逆势抄底：</strong>下跌趋势中的"买入"信号成功率较低</li>
-                                    <li>• ❌ <strong>不要忽视止损：</strong>宁可错过，不可做错；止损是生存的唯一法则</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="explanation-action-btn">
-                        <button class="btn btn-primary" onclick="closeExplanationModal()">
-                            我已了解
-                        </button>
-                    </div>
-                </div>
-            `;
-
-            modal.style.display = 'flex';
-            modal.classList.add('active');
-            // 添加动画效果
-            setTimeout(() => {
-                const content = document.getElementById('explanationContent');
-                if (content) {
-                    content.style.animation = 'modalSlideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
-                }
-            }, 10);
-        }
-
-        // 关闭说明模态框
-        function closeExplanationModal() {
-            const modal = document.getElementById('explanationModal');
-            modal.classList.remove('active');
-            modal.style.display = 'none';
-        }
-        // 通过点击遮罩层关闭
-        function closeExplanationModalByOverlay(event) {
-            if (event.target.id === 'explanationModal') {
-                closeExplanationModal();
-            }
-        }
-
-        // 实时价格说明
-        function showPriceExplanation() {
-    const modal = document.getElementById('explanationModal');
-    const modalContent = document.getElementById('explanationContent');
-
-    modalContent.innerHTML = `
-        <div class="explanation-content-wrapper">
-            <div class="explanation-header">
-                <div>
-                    <h2 class="explanation-title">实时价格详细说明</h2>
-                    <div class="explanation-subtitle">市场行情数据监控</div>
-                </div>
-                <button class="explanation-close-btn" onclick="closeExplanationModal()">
-                    <i class="bi bi-x-lg"></i>
-                </button>
-            </div>
-
-            <div class="explanation-section">
-                <h3 class="explanation-section-title">📊 数据采集</h3>
-                <div style="font-size: 13px; color: var(--text-primary); line-height: 1.8;">
-                    <div class="explanation-info-box">
-                        <strong style="color: var(--text-primary);">数据来源：</strong><span style="color: var(--text-primary);">币安现货市场 API（Binance Spot Market /ticker/24hr 接口）</span>
-                    </div>
-                    <div class="explanation-info-box">
-                        <strong style="color: var(--text-primary);">采集种类：</strong><span style="color: var(--text-primary);">实时价格、24小时最高/最低价、24小时涨跌幅、24小时成交量/成交额</span>
-                    </div>
-                    <div class="explanation-info-box">
-                        <strong style="color: var(--text-primary);">监控标的：</strong><span style="color: var(--text-primary);">币安所有 USDT 交易对，动态获取活跃交易对列表</span>
-                    </div>
-                    <div class="explanation-info-box">
-                        <strong style="color: var(--text-primary);">采集频率：</strong><span style="color: var(--text-primary);">每15秒自动刷新一次，页面显示倒计时和最后更新时间</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="explanation-section">
-                <h3 class="explanation-section-title">🔬 分析逻辑</h3>
-                <div style="font-size: 13px; color: var(--text-primary); line-height: 1.8;">
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">1. 数据处理</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px; color: var(--text-primary);">
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">价格格式化：</strong>根据价格大小自动调整精度
-                            <ul style="margin-left: 20px; margin-top: 4px; color: var(--text-primary);">
-                                <li style="color: var(--text-primary);">价格 ≥ 1000：保留2位小数（如 12,345.67）</li>
-                                <li style="color: var(--text-primary);">价格 1-1000：保留4位小数（如 123.4567）</li>
-                                <li style="color: var(--text-primary);">价格 < 1：保留6位小数（如 0.012345）</li>
-                            </ul>
-                        </li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">涨跌幅计算：</strong>((当前价 - 24h前价格) / 24h前价格) × 100%</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">成交量格式化：</strong>自动转换为 B(十亿)、M(百万)、K(千) 单位</li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">2. 排序功能</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px; color: var(--text-primary);">
-                        <li style="color: var(--text-primary);">点击表头可切换升序/降序排序</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">交易对：</strong>按字母顺序排序</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">价格：</strong>按数值大小排序</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">24h涨跌：</strong>按涨跌幅百分比排序（默认）</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">24h交易量：</strong>按成交额排序</li>
-                        <li style="color: var(--text-primary);">当前排序列显示排序图标（↑↓）</li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">3. 数据过滤</strong></p>
-                    <ul style="margin-left: 20px; color: var(--text-primary);">
-                        <li style="color: var(--text-primary);">过滤交易量过小的冷门币种（24h成交额 < $100,000）</li>
-                        <li style="color: var(--text-primary);">优先显示主流币种（BTC、ETH、BNB 等）</li>
-                        <li style="color: var(--text-primary);">自动去除异常数据和测试交易对</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div class="explanation-section">
-                <h3 class="explanation-section-title">📈 结果展示</h3>
-                <div style="font-size: 13px; color: var(--text-primary); line-height: 1.8;">
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">表格列说明：</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px; color: var(--text-primary);">
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">交易对：</strong>币种符号，如 BTCUSDT、ETHUSDT</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">价格(USDT)：</strong>当前最新成交价，使用等宽字体便于阅读</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">24h涨跌：</strong>24小时涨跌幅百分比，绿色上涨、红色下跌</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">24h交易量：</strong>24小时成交总额，单位为USDT，自动格式化</li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">交互功能：</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px; color: var(--text-primary);">
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">表头排序：</strong>点击列标题切换升/降序，支持四列排序</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">滚动浏览：</strong>表格最大高度600px，超出部分可滚动查看</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">粘性表头：</strong>滚动时表头固定，方便查看列名</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">行悬停：</strong>鼠标悬停行时背景高亮，提升可读性</li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">状态显示：</strong></p>
-                    <ul style="margin-left: 20px; color: var(--text-primary);">
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">最后更新：</strong>页面右上角显示最后数据更新时间</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">刷新倒计时：</strong>显示下次自动刷新剩余秒数</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">手动刷新：</strong>点击刷新按钮立即更新数据</li>
-                        <li style="color: var(--text-primary);"><strong style="color: var(--text-primary);">加载状态：</strong>数据加载时显示"加载中..."提示</li>
-                    </ul>
-                    <div class="explanation-info-box" style="border-left-color: var(--info-blue);">
-                        <strong style="color: var(--text-primary);">💡 使用建议：</strong>
-                        <ul style="margin: 8px 0 0 20px; line-height: 1.8; color: var(--text-primary);">
-                            <li style="color: var(--text-primary);">关注涨跌幅榜首尾，发现市场热点和异常波动</li>
-                            <li style="color: var(--text-primary);">观察成交量排名，判断市场活跃度和资金流向</li>
-                            <li style="color: var(--text-primary);">配合其他技术指标，制定交易策略</li>
-                            <li style="color: var(--text-primary);">价格仅供参考，实际交易以交易所报价为准</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <div class="explanation-info-box" style="background: rgba(59, 130, 246, 0.1); border-left: 4px solid var(--info-blue); margin-bottom: 20px;">
-                <strong style="color: var(--info-blue); font-size: 14px;">ℹ️ 数据说明</strong>
-                <ul style="margin: 8px 0 0 20px; font-size: 13px; color: var(--text-primary); line-height: 1.8;">
-                    <li style="color: var(--text-primary);">价格数据来源于币安交易所，具有权威性和实时性</li>
-                    <li style="color: var(--text-primary);">网络延迟可能导致轻微数据滞后（通常<1秒）</li>
-                    <li style="color: var(--text-primary);">极端行情下交易所可能限流，数据更新频率会降低</li>
-                </ul>
-            </div>
-
-            <div class="explanation-action-btn">
-                <button class="btn btn-primary" onclick="closeExplanationModal()">
-                    我已了解
-                </button>
-            </div>
-        </div>
-    `;
-
-    modal.style.display = 'flex';
-}
-
-        // 卡片信息说明（新闻和合约）
-        function showCardInfo(type) {
-            const modal = document.getElementById('explanationModal');
-            const modalContent = document.getElementById('explanationContent');
-
-            if (type === 'news') {
-                modalContent.innerHTML = `
-        <div style="padding: 24px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-default);">
-                <div>
-                    <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px;">最新新闻详细说明</h2>
-                    <div style="font-size: 14px; color: var(--text-secondary);">加密货币资讯聚合与情绪分析</div>
-                </div>
-                <button onclick="closeExplanationModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); padding: 0; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.background='var(--bg-tertiary)'; this.style.color='var(--text-primary)';" onmouseout="this.style.background='none'; this.style.color='var(--text-secondary)';">
-                    <i class="bi bi-x-lg"></i>
-                </button>
-            </div>
-
-            <div class="explanation-section">
-                <h3 class="explanation-section-title">📊 数据采集</h3>
-                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    <div class="explanation-info-box">
-                        <strong style="color: var(--text-primary);">数据来源：</strong>聚合多个权威加密货币媒体平台
-                        <ul style="margin: 8px 0 0 20px;">
-                            <li>主流媒体：CoinDesk、CoinTelegraph、Decrypt、The Block 等</li>
-                            <li>项目官方：Twitter、Medium、官网公告</li>
-                            <li>交易所：币安、Coinbase 等平台公告</li>
-                            <li>监管机构：SEC、CFTC 等官方发布</li>
-                        </ul>
-                    </div>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 10px;">
-                        <strong style="color: var(--text-primary);">采集种类：</strong>新闻标题、正文摘要、发布时间、来源媒体、原文链接
-                    </div>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 10px;">
-                        <strong style="color: var(--text-primary);">采集频率：</strong>每5-10分钟轮询一次各数据源，确保及时性
-                    </div>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md);">
-                        <strong style="color: var(--text-primary);">去重机制：</strong>基于标题+来源+时间生成唯一指纹，自动过滤重复内容
-                    </div>
-                </div>
-            </div>
-
-            <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px;">
-                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--success-green);">🔬 分析逻辑</h3>
-                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">1. NLP 情绪分析</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>文本预处理：</strong>清洗HTML标签、特殊字符，分词和词性标注</li>
-                        <li><strong>情感词典：</strong>加密货币领域专用情感词典（包含"pump"、"dump"、"bullish"等行业术语）</li>
-                        <li><strong>分类模型：</strong>基于Transformer的情感分类器，三分类输出
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li><strong style="color: var(--success-green);">Positive（利好）：</strong>概率 > 0.6</li>
-                                <li><strong>Neutral（中性）：</strong>概率 0.4-0.6</li>
-                                <li><strong style="color: var(--danger-red);">Negative（利空）：</strong>概率 < 0.4</li>
-                            </ul>
-                        </li>
-                        <li><strong>关键词提取：</strong>TF-IDF算法提取核心主题词</li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">2. 实体识别</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>币种识别：</strong>自动识别文中提及的加密货币（BTC、ETH等）</li>
-                        <li><strong>机构识别：</strong>标注涉及的交易所、基金、监管机构</li>
-                        <li><strong>事件类型：</strong>分类为技术更新、监管政策、市场动态、黑客事件等</li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">3. 重要性评分</strong></p>
-                    <ul style="margin-left: 20px;">
-                        <li>综合考虑：媒体权威性、阅读量、转发量、时效性</li>
-                        <li>权重分配：头部媒体权重更高，实时新闻优先展示</li>
-                        <li>优先级：重大事件（如监管政策）自动置顶</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px;">
-                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--warning-yellow);">📈 结果展示</h3>
-                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">新闻卡片信息：</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>标题：</strong>新闻主标题，点击可跳转到原文页面</li>
-                        <li><strong>情绪标签：</strong>
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li><span style="display: inline-block; padding: 2px 8px; background: var(--success-green-bg); color: var(--success-green); border-radius: 12px; font-size: 11px;">利好</span> - 正面消息，可能推动价格上涨</li>
-                                <li><span style="display: inline-block; padding: 2px 8px; background: var(--bg-tertiary); color: var(--text-secondary); border-radius: 12px; font-size: 11px;">中性</span> - 客观报道，无明显倾向</li>
-                                <li><span style="display: inline-block; padding: 2px 8px; background: var(--danger-red-bg); color: var(--danger-red); border-radius: 12px; font-size: 11px;">利空</span> - 负面消息，可能导致价格下跌</li>
-                            </ul>
-                        </li>
-                        <li><strong>来源媒体：</strong>显示新闻发布平台</li>
-                        <li><strong>发布时间：</strong>相对时间显示（如"2小时前"）</li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">排序与过滤：</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>默认排序：</strong>按发布时间倒序，最新新闻在最上方</li>
-                        <li><strong>显示数量：</strong>最多展示20条最新新闻</li>
-                        <li><strong>滚动加载：</strong>容器高度500px，支持滚动浏览</li>
-                        <li><strong>自动更新：</strong>每5-10分钟自动刷新新闻列表</li>
-                    </ul>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--info-blue);">
-                        <strong>💡 使用建议：</strong>
-                        <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
-                            <li>关注连续多条利好/利空新闻，可能形成趋势</li>
-                            <li>重大监管消息对市场影响最大，需高度重视</li>
-                            <li>结合价格走势验证新闻真实性，警惕虚假消息</li>
-                            <li>情绪标签仅供参考，需结合自身判断</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <div style="background: var(--warning-yellow-bg); padding: 16px; border-radius: var(--radius-lg); border-left: 4px solid var(--warning-yellow);">
-                <strong style="color: var(--warning-yellow);">⚠️ 注意事项</strong>
-                <ul style="margin: 8px 0 0 20px; font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    <li>新闻时效性强，建议实时关注，避免错过重要信息</li>
-                    <li>AI情绪分析可能存在误判，需人工二次确认</li>
-                    <li>部分新闻可能存在偏向性，建议多渠道交叉验证</li>
-                    <li>市场对同一新闻的反应可能不同，需结合技术面分析</li>
-                </ul>
-            </div>
-
-            <div style="display: flex; gap: 12px; margin-top: 24px;">
-                <button class="btn btn-primary" onclick="closeExplanationModal()" style="flex: 1;">
-                    我已了解
-                </button>
-            </div>
-        </div>
-    `;
-                  } else if (type === 'futures') {
-                    modalContent.innerHTML = `
-        <div style="padding: 24px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-default);">
-                <div>
-                    <h2 class="explanation-title">实时合约详细说明</h2>
-                    <div class="explanation-subtitle">永续合约市场数据监控</div>
-                </div>
-                <button class="explanation-close-btn" onclick="closeExplanationModal()">
-                    <i class="bi bi-x-lg"></i>
-                </button>
-            </div>
-
-            <div style="background: var(--warning-yellow-bg); padding: 16px; border-radius: var(--radius-lg); border-left: 4px solid var(--warning-yellow); margin-bottom: 20px;">
-                <strong style="color: var(--warning-yellow);">📢 当前状态说明</strong>
-                <div style="margin: 8px 0 0 0; font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    当前页面为<strong>演示模式</strong>，使用"现货价格"数据模拟展示合约表格。其中<strong>资金费率</strong>和<strong>多空比</strong>为前端随机生成的演示数据，仅用于界面展示效果。
-                    <br><br>
-                    <strong style="color: var(--text-primary);">计划升级：</strong>后续将切换至币安永续合约真实API，提供标记价格、实时资金费率、真实多空比、未平仓量等准确数据。
-                </div>
-            </div>
-
-            <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px;">
-                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--primary-blue);">📊 数据采集（计划）</h3>
-                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    <div class="explanation-info-box">
-                        <strong style="color: var(--text-primary);">数据来源：</strong>币安永续合约市场 API（Binance Futures Market）
-                        <ul style="margin: 8px 0 0 20px;">
-                            <li>/fapi/v1/premiumIndex - 标记价格和资金费率</li>
-                            <li>/fapi/v1/ticker/24hr - 24小时行情统计</li>
-                            <li>/fapi/v1/openInterest - 未平仓合约量</li>
-                            <li>/fapi/v1/globalLongShortAccountRatio - 多空账户比</li>
-                        </ul>
-                    </div>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 10px;">
-                        <strong style="color: var(--text-primary);">采集种类：</strong>标记价格、资金费率、资金费率倒计时、24h涨跌、多空比、未平仓量、24h成交量
-                    </div>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 10px;">
-                        <strong style="color: var(--text-primary);">监控标的：</strong>USDT本位永续合约，包括主流和热门币种
-                    </div>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md);">
-                        <strong style="color: var(--text-primary);">采集频率：</strong>15秒更新一次，资金费率每8小时结算一次
-                    </div>
-                </div>
-            </div>
-
-            <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px;">
-                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--success-green);">🔬 分析逻辑（目标）</h3>
-                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">1. 核心指标计算</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>标记价格：</strong>Mark Price = 指数价格 + 基差
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li>指数价格：多个现货交易所价格加权平均</li>
-                                <li>基差：合约价格与指数价格的差值</li>
-                                <li>用途：计算未实现盈亏和强平价格，防止市场操纵</li>
-                            </ul>
-                        </li>
-                        <li><strong>资金费率：</strong>Funding Rate = Clamp(TWAP Premium, -0.05%, 0.05%) + Interest
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li>正费率：多头支付空头，市场看多情绪强</li>
-                                <li>负费率：空头支付多头，市场看空情绪强</li>
-                                <li>结算周期：每8小时（00:00、08:00、16:00 UTC）</li>
-                            </ul>
-                        </li>
-                        <li><strong>多空比：</strong>Long/Short Ratio = 多头持仓账户数 / 空头持仓账户数
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li>比值 > 1：看多用户占多数</li>
-                                <li>比值 < 1：看空用户占多数</li>
-                                <li>极端值：>2 或 <0.5 需警惕反转</li>
-                            </ul>
-                        </li>
-                        <li><strong>未平仓量：</strong>Open Interest = 所有未平仓合约的名义价值总和
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li>上升：新资金进入，市场活跃</li>
-                                <li>下降：资金离场，市场降温</li>
-                                <li>配合价格：判断趋势强弱</li>
-                            </ul>
-                        </li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">2. 异常检测</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>资金费率异常：</strong>|费率| > 0.1% 时标记为极端情况，可能面临回调</li>
-                        <li><strong>多空比极端：</strong>比值 > 3 或 < 0.3 时预警，市场可能过热</li>
-                        <li><strong>OI暴增：</strong>未平仓量短期增长 > 50% 时，警惕爆仓风险</li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">3. 综合分析</strong></p>
-                    <ul style="margin-left: 20px;">
-                        <li>正资金费率 + 多空比>1 = 市场偏多，注意多头过度拥挤</li>
-                        <li>负资金费率 + 多空比<1 = 市场偏空，关注空头过度拥挤</li>
-                        <li>价格上涨 + OI上涨 = 趋势健康，新多头进场</li>
-                        <li>价格上涨 + OI下降 = 空头止损，警惕短期见顶</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px;">
-                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--warning-yellow);">📈 结果展示</h3>
-                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">表格列说明：</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>交易对：</strong>合约名称，如 BTCUSDT 永续</li>
-                        <li><strong>标记价格：</strong>用于计算盈亏的公允价格，防止操纵</li>
-                        <li><strong>资金费率：</strong>当前8小时周期费率，正值多付空，负值空付多</li>
-                        <li><strong>24h涨跌：</strong>标记价格24小时涨跌幅，绿涨红跌</li>
-                        <li><strong>多空比：</strong>多头/空头账户数比值，反映市场情绪</li>
-                        <li><strong>未平仓量：</strong>当前所有未平仓合约总价值（USDT）</li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">颜色标识：</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong style="color: var(--success-green);">绿色：</strong>上涨、正资金费率、多空比>1</li>
-                        <li><strong style="color: var(--danger-red);">红色：</strong>下跌、负资金费率、多空比<1</li>
-                        <li>颜色深浅反映程度强弱</li>
-                    </ul>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--info-blue);">
-                        <strong>💡 使用建议：</strong>
-                        <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
-                            <li><strong>资金费率策略：</strong>极端正费率时考虑做空，极端负费率时考虑做多</li>
-                            <li><strong>多空比参考：</strong>过度拥挤的一方容易被收割，逆向思考</li>
-                            <li><strong>OI配合判断：</strong>价格涨OI涨为强势，价格涨OI跌要警惕</li>
-                            <li><strong>合约杠杆风险：</strong>永续合约高杠杆，务必严格止损</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <div style="background: var(--danger-red-bg); padding: 16px; border-radius: var(--radius-lg); border-left: 4px solid var(--danger-red);">
-                <strong style="color: var(--danger-red);">⚠️ 风险警告</strong>
-                <ul style="margin: 8px 0 0 20px; font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    <li>永续合约使用杠杆，风险极高，可能导致全部本金损失</li>
-                    <li>资金费率和多空比仅供参考，不构成交易依据</li>
-                    <li>极端行情下可能发生强制平仓（爆仓）</li>
-                    <li>新手建议从现货开始，充分了解机制后再参与合约交易</li>
-                    <li>务必使用止损，控制单笔风险在总资金的2-5%以内</li>
-                </ul>
-            </div>
-
-            <div style="display: flex; gap: 12px; margin-top: 24px;">
-                <button class="btn btn-primary" onclick="closeExplanationModal()" style="flex: 1;">
-                    我已了解
-                </button>
-            </div>
-        </div>
-    `;
-        }
- modal.style.display = 'flex';
+// ===== EMA Dashboard - Functional JS =====
+
+// Badge HTML for a given score
+function emaBadge(score) {
+    if (score === null || score === undefined || isNaN(parseFloat(score))) {
+        return '<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-outline-variant/10 text-on-surface-variant uppercase">N/A</span>';
     }
-        // Hyperliquid说明
-        function showHyperliquidExplanation() {
-    const modal = document.getElementById('explanationModal');
-    const modalContent = document.getElementById('explanationContent');
-
-    modalContent.innerHTML = `
-        <div style="padding: 24px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border-default);">
-                <div>
-                    <h2 class="explanation-title">Hyperliquid 聪明钱活动详细说明</h2>
-                    <div class="explanation-subtitle">链上大户交易追踪与分析</div>
-                </div>
-                <button class="explanation-close-btn" onclick="closeExplanationModal()">
-                    <i class="bi bi-x-lg"></i>
-                </button>
-            </div>
-
-            <div class="explanation-section">
-                <h3 class="explanation-section-title">📊 数据采集</h3>
-                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    <div class="explanation-info-box">
-                        <strong style="color: var(--text-primary);">数据来源：</strong>Hyperliquid 去中心化永续合约交易所
-                        <ul style="margin: 8px 0 0 20px;">
-                            <li>链上数据：通过区块链浏览器和节点直接获取</li>
-                            <li>API接口：Hyperliquid 官方提供的公开API</li>
-                            <li>WebSocket：实时订阅交易流和账户更新</li>
-                        </ul>
-                    </div>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 10px;">
-                        <strong style="color: var(--text-primary);">采集种类：</strong>
-                        <ul style="margin: 8px 0 0 20px;">
-                            <li><strong>交易记录：</strong>钱包地址、币种、方向（多/空）、开仓/平仓价、数量、时间戳</li>
-                            <li><strong>持仓数据：</strong>当前持仓、未实现盈亏、杠杆倍数、保证金率</li>
-                            <li><strong>历史表现：</strong>累计盈亏、胜率、最大回撤、夏普比率</li>
-                            <li><strong>账户余额：</strong>USDC余额变化、出入金记录</li>
-                        </ul>
-                    </div>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); margin-bottom: 10px;">
-                        <strong style="color: var(--text-primary);">监控对象：</strong>
-                        <ul style="margin: 8px 0 0 20px;">
-                            <li><strong>高胜率钱包：</strong>近30天胜率 > 60%，且交易次数 > 20次</li>
-                            <li><strong>大额钱包：</strong>单笔交易金额 > $50,000 的地址</li>
-                            <li><strong>高频钱包：</strong>日均交易次数 > 5次的活跃账户</li>
-                            <li><strong>知名钱包：</strong>社区公认的专业交易员地址</li>
-                        </ul>
-                    </div>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md);">
-                        <strong style="color: var(--text-primary);">采集频率：</strong>
-                        <ul style="margin: 8px 0 0 20px;">
-                            <li>实时交易：通过 WebSocket 订阅，延迟 < 1秒</li>
-                            <li>持仓快照：每15秒轮询一次</li>
-                            <li>历史统计：每小时计算一次胜率、盈亏等指标</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px;">
-                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--success-green);">🔬 分析逻辑</h3>
-                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">1. 聪明钱识别算法</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>盈利能力评分（40%）：</strong>
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li>近30天累计盈亏：正向盈利加分</li>
-                                <li>ROI（投资回报率）：>20% 高分，>50% 满分</li>
-                                <li>盈亏比：平均盈利/平均亏损，>2为优秀</li>
-                            </ul>
-                        </li>
-                        <li><strong>稳定性评分（30%）：</strong>
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li>胜率：>60% 为合格，>70% 为优秀</li>
-                                <li>最大回撤：<20% 为稳健</li>
-                                <li>夏普比率：>1 为良好，>2 为优秀</li>
-                            </ul>
-                        </li>
-                        <li><strong>活跃度评分（20%）：</strong>
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li>交易频率：日均3-10次为最佳（过高可能过度交易）</li>
-                                <li>持续时间：连续活跃 > 30天</li>
-                            </ul>
-                        </li>
-                        <li><strong>资金规模评分（10%）：</strong>
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li>账户余额：>$10,000 为合格</li>
-                                <li>单笔金额：能承受较大仓位</li>
-                            </ul>
-                        </li>
-                        <li><strong>综合评分 ≥ 70分</strong>的钱包被标记为"聪明钱"</li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">2. 交易信号提取</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>集中交易检测：</strong>
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li>5分钟内 ≥3 个聪明钱钱包交易同一币种 → 强信号</li>
-                                <li>1小时内 ≥5 个钱包同方向 → 趋势确认</li>
-                            </ul>
-                        </li>
-                        <li><strong>反向指标：</strong>
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li>聪明钱大量平多 → 警惕顶部</li>
-                                <li>聪明钱大量平空 → 警惕底部</li>
-                            </ul>
-                        </li>
-                        <li><strong>持仓变化：</strong>
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li>追踪持仓规模变化，判断加仓/减仓意图</li>
-                            </ul>
-                        </li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">3. 趋势分析</strong></p>
-                    <ul style="margin-left: 20px;">
-                        <li><strong>多空比计算：</strong>做多次数 / 做空次数（24小时滚动窗口）</li>
-                        <li><strong>资金流向：</strong>聪明钱净流入/流出 Hyperliquid 的 USDC 金额</li>
-                        <li><strong>热度排行：</strong>统计交易次数最多的币种，发现市场焦点</li>
-                    </ul>
-                </div>
-            </div>
-
-            <div style="background: var(--bg-tertiary); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 20px;">
-                <h3 style="font-size: 16px; font-weight: 600; margin-bottom: 16px; color: var(--warning-yellow);">📈 结果展示</h3>
-                <div style="font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">顶部统计看板：</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>24h交易量：</strong>所有聪明钱钱包在 Hyperliquid 的总交易金额（USDC）</li>
-                        <li><strong>活跃钱包：</strong>24小时内有交易记录的聪明钱钱包数量</li>
-                        <li><strong>最近交易：</strong>最近一批数据中包含的交易笔数</li>
-                        <li><strong>做多/做空比：</strong>聪明钱做多交易次数 / 做空交易次数
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li>比值 > 1.5：市场偏多</li>
-                                <li>比值 0.7-1.5：相对平衡</li>
-                                <li>比值 < 0.7：市场偏空</li>
-                            </ul>
-                        </li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">交易明细表：</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>钱包：</strong>钱包标签（前10个字符），鼠标悬停可查看完整地址</li>
-                        <li><strong>币种：</strong>交易的加密货币符号</li>
-                        <li><strong>方向：</strong>
-                            <ul style="margin-left: 20px; margin-top: 4px;">
-                                <li><span style="display: inline-block; padding: 2px 8px; background: var(--success-green-bg); color: var(--success-green); border-radius: 12px; font-size: 11px;">做多</span> - 看涨，做多合约</li>
-                                <li><span style="display: inline-block; padding: 2px 8px; background: var(--danger-red-bg); color: var(--danger-red); border-radius: 12px; font-size: 11px;">做空</span> - 看跌，做空合约</li>
-                            </ul>
-                        </li>
-                        <li><strong>金额(USD)：</strong>交易的名义价值，使用 K/M/B 自动格式化</li>
-                        <li><strong>盈亏：</strong>该笔交易平仓后的已实现盈亏（绿色盈利，红色亏损）</li>
-                        <li><strong>时间：</strong>交易发生的时间戳</li>
-                    </ul>
-                    <p style="margin-bottom: 12px;"><strong style="color: var(--text-primary);">排序与更新：</strong></p>
-                    <ul style="margin-left: 20px; margin-bottom: 12px;">
-                        <li><strong>排序规则：</strong>按交易时间倒序，最新交易在最上方</li>
-                        <li><strong>显示数量：</strong>最多展示15条最新交易记录</li>
-                        <li><strong>自动更新：</strong>每30-60秒刷新一次数据</li>
-                    </ul>
-                    <div style="padding: 12px; background: var(--bg-card); border-radius: var(--radius-md); border-left: 3px solid var(--info-blue);">
-                        <strong>💡 使用建议：</strong>
-                        <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
-                            <li><strong>关注集中交易：</strong>多个聪明钱同时交易某币种，可能预示重要行情</li>
-                            <li><strong>观察方向偏好：</strong>多空比显著偏向一方时，可作为市场情绪参考</li>
-                            <li><strong>盈亏率分析：</strong>持续盈利的钱包操作更值得学习和参考</li>
-                            <li><strong>反向思考：</strong>极端拥挤（多空比>3或<0.3）时警惕反转</li>
-                            <li><strong>配合其他指标：</strong>聪明钱数据应与技术分析、基本面结合使用</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-
-            <div style="background: rgba(59, 130, 246, 0.1); padding: 16px; border-radius: var(--radius-lg); border-left: 4px solid var(--info-blue); margin-bottom: 20px;">
-                <strong style="color: var(--info-blue);">🧠 什么是聪明钱（Smart Money）</strong>
-                <div style="margin: 8px 0 0 0; font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    聪明钱指在市场中长期保持盈利、拥有专业知识和信息优势的投资者。Hyperliquid作为链上交易所，所有交易透明可查，为追踪聪明钱行为提供了独特优势。通过分析这些成功交易者的操作，可以洞察市场趋势和潜在机会。
-                </div>
-            </div>
-
-            <div style="background: var(--danger-red-bg); padding: 16px; border-radius: var(--radius-lg); border-left: 4px solid var(--danger-red);">
-                <strong style="color: var(--danger-red);">⚠️ 风险提示</strong>
-                <ul style="margin: 8px 0 0 20px; font-size: 13px; color: var(--text-secondary); line-height: 1.8;">
-                    <li>聪明钱也会犯错，历史表现不代表未来收益</li>
-                    <li>链上数据存在一定延迟，可能错过最佳入场时机</li>
-                    <li>部分交易可能是对冲或套利，不适合直接跟单</li>
-                    <li>需警惕"假聪明钱"（短期运气好的账户）</li>
-                    <li>盲目跟单风险极大，务必结合自身分析判断</li>
-                    <li>本系统仅供参考，不构成投资建议</li>
-                </ul>
-            </div>
-
-            <div class="explanation-action-btn">
-                <button class="btn btn-primary" onclick="closeExplanationModal()">
-                    我已了解
-                </button>
-            </div>
-        </div>
-    `;
-
-    modal.style.display = 'flex';
+    var n = parseFloat(score);
+    if (n > 60) {
+        return '<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-primary/10 text-primary uppercase">Bullish</span>';
+    } else if (n < 40) {
+        return '<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-error/10 text-error uppercase">Bearish</span>';
+    } else {
+        return '<span class="px-3 py-1 rounded-md text-[10px] font-bold tracking-wider bg-outline-variant/10 text-on-surface-variant uppercase">Neutral</span>';
+    }
 }
-    </script>
+
+// Symbol initials for avatar
+function symbolInitial(symbol) {
+    var s = (symbol || '').replace('/USDT', '').replace('USDT', '');
+    return s.charAt(0).toUpperCase() || '?';
+}
+
+// Format symbol: BTCUSDT -> BTC/USDT
+function formatSymbol(symbol) {
+    if (!symbol) return '';
+    if (symbol.indexOf('/') !== -1) return symbol;
+    if (symbol.endsWith('USDT')) {
+        return symbol.slice(0, -4) + '/USDT';
+    }
+    return symbol;
+}
+
+// Render one table row from a signal record
+function renderSignalRow(item) {
+    var sym   = formatSymbol(item.symbol || '');
+    var init  = symbolInitial(item.symbol || '');
+    var s1h   = item.score_1h  !== undefined ? item.score_1h  : item.score_1H;
+    var s4h   = item.score_4h  !== undefined ? item.score_4h  : item.score_4H;
+    var s1d   = item.score_1d  !== undefined ? item.score_1d  : item.score_1D;
+    var total = item.total_score !== undefined ? item.total_score : item.score;
+    var totalStr = (total !== null && total !== undefined && !isNaN(parseFloat(total)))
+        ? parseFloat(total).toFixed(1)
+        : '--';
+    var tc = (parseFloat(total) > 60) ? 'text-primary'
+           : (parseFloat(total) < 40  ? 'text-error' : 'text-on-surface-variant');
+    var symEnc = encodeURIComponent(item.symbol || '');
+
+    return '<tr class="hover:bg-surface-container transition-colors duration-150">'
+        + '<td class="py-5">'
+            + '<div class="flex items-center gap-3">'
+                + '<div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">'
+                    + '<span class="text-primary font-mono font-bold text-xs">' + init + '</span>'
+                + '</div>'
+                + '<div>'
+                    + '<p class="font-mono font-medium text-sm">' + sym + '</p>'
+                    + '<p class="text-[10px] text-on-surface-variant">' + (item.direction || '') + '</p>'
+                + '</div>'
+            + '</div>'
+        + '</td>'
+        + '<td class="py-5 text-center">' + emaBadge(s1h) + '</td>'
+        + '<td class="py-5 text-center">' + emaBadge(s4h) + '</td>'
+        + '<td class="py-5 text-center">' + emaBadge(s1d) + '</td>'
+        + '<td class="py-5 text-center font-mono ' + tc + '">' + totalStr + '</td>'
+        + '<td class="py-5 text-right">'
+            + '<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary text-[10px] font-bold py-1.5 px-4 rounded-md shadow-[0_0_12px_rgba(73,244,200,0.2)] hover:opacity-90 transition-all uppercase"'
+            + ' onclick="window.location.href='/signals?symbol=' + symEnc + ''">Detail</button>'
+        + '</td>'
+        + '</tr>';
+}
+
+// Load signal list from API and render EMA table
+async function loadSignals() {
+    var tbody = document.getElementById('ema-tbody');
+    var endpoints = [
+        '/api/signals/scores?limit=20',
+        '/api/signals/ema-scores?limit=20',
+        '/api/futures/signals?limit=20'
+    ];
+    var data = null;
+    for (var i = 0; i < endpoints.length; i++) {
+        try {
+            var resp = await fetch(endpoints[i]);
+            if (!resp.ok) continue;
+            var json = await resp.json();
+            if (Array.isArray(json)) {
+                data = json;
+            } else if (json && Array.isArray(json.data)) {
+                data = json.data;
+            } else if (json && Array.isArray(json.signals)) {
+                data = json.signals;
+            } else if (json && Array.isArray(json.items)) {
+                data = json.items;
+            } else if (json && json.success && Array.isArray(json.result)) {
+                data = json.result;
+            }
+            if (data !== null) break;
+        } catch (e) {
+            console.error('loadSignals endpoint ' + endpoints[i] + ' failed:', e);
+        }
+    }
+
+    if (data === null) {
+        tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-on-surface-variant text-sm font-mono">Failed to load signal data</td></tr>';
+        return null;
+    }
+    if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-on-surface-variant text-sm font-mono">No signals available</td></tr>';
+        return data;
+    }
+
+    tbody.innerHTML = data.map(renderSignalRow).join('');
+    return data;
+}
+
+// Load today stats from API and update stat cards
+async function loadStats() {
+    var stats = null;
+
+    // Try dedicated stats endpoint first
+    try {
+        var resp = await fetch('/api/futures/stats?account_id=2');
+        if (resp.ok) {
+            var json = await resp.json();
+            if (json && (json.today_signals !== undefined || json.today_open !== undefined)) {
+                stats = json;
+            } else if (json && json.data) {
+                stats = json.data;
+            }
+        }
+    } catch (e) {
+        console.error('loadStats stats endpoint failed:', e);
+    }
+
+    // Fallback: compute from trades list
+    if (!stats) {
+        try {
+            var resp2 = await fetch('/api/futures/trades?account_id=2&limit=100');
+            if (resp2.ok) {
+                var json2 = await resp2.json();
+                var trades = Array.isArray(json2) ? json2
+                    : (json2 && Array.isArray(json2.data)   ? json2.data
+                    : (json2 && Array.isArray(json2.trades) ? json2.trades : []));
+
+                var today = new Date().toISOString().slice(0, 10);
+                var todayTrades = trades.filter(function(t) {
+                    var ts = t.created_at || t.open_time || t.entry_time || '';
+                    return ts && String(ts).slice(0, 10) === today;
+                });
+                var closed = todayTrades.filter(function(t) {
+                    return t.status && t.status.toUpperCase() !== 'OPEN';
+                });
+                var wins = closed.filter(function(t) {
+                    return parseFloat(t.realized_pnl || t.pnl || t.profit || 0) > 0;
+                });
+                var totalPnl = closed.reduce(function(acc, t) {
+                    return acc + parseFloat(t.realized_pnl || t.pnl || t.profit || 0);
+                }, 0);
+                stats = {
+                    today_signals: todayTrades.length,
+                    today_open: todayTrades.filter(function(t) {
+                        return t.status && t.status.toUpperCase() === 'OPEN';
+                    }).length,
+                    today_pnl: totalPnl,
+                    win_rate: closed.length > 0 ? (wins.length / closed.length * 100) : null
+                };
+            }
+        } catch (e) {
+            console.error('loadStats trades fallback failed:', e);
+        }
+    }
+
+    if (!stats) return;
+
+    var elSignals = document.getElementById('stat-signals');
+    var elOpen    = document.getElementById('stat-open');
+    var elPnl     = document.getElementById('stat-pnl');
+    var elWinrate = document.getElementById('stat-winrate');
+
+    if (elSignals && stats.today_signals !== undefined && stats.today_signals !== null) {
+        elSignals.textContent = stats.today_signals;
+    }
+    if (elOpen && stats.today_open !== undefined && stats.today_open !== null) {
+        elOpen.textContent = stats.today_open;
+    }
+    if (elPnl && stats.today_pnl !== undefined && stats.today_pnl !== null) {
+        var pnl  = parseFloat(stats.today_pnl);
+        var sign = pnl >= 0 ? '+' : '';
+        elPnl.innerHTML = sign + pnl.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+            + ' <span class="text-sm font-normal ml-1">USDT</span>';
+        if (pnl < 0) {
+            elPnl.classList.add('text-error');
+            elPnl.classList.remove('text-primary');
+        } else {
+            elPnl.classList.remove('text-error');
+            elPnl.classList.add('text-primary');
+        }
+    }
+    if (elWinrate && stats.win_rate !== undefined && stats.win_rate !== null) {
+        var wr = parseFloat(stats.win_rate);
+        elWinrate.innerHTML = wr.toFixed(1) + '<span class="text-sm font-normal ml-1">%</span>';
+    }
+}
+
+// Update Signal Sentiment panel from signal list
+function updateSentiment(signals) {
+    if (!signals || signals.length === 0) return;
+
+    var buyCount  = 0;
+    var sellCount = 0;
+
+    signals.forEach(function(item) {
+        var direction = (item.direction || '').toUpperCase();
+        var total     = parseFloat(item.total_score !== undefined ? item.total_score : (item.score !== undefined ? item.score : 50));
+        if (direction === 'LONG' || direction === 'BUY' || total > 60) {
+            buyCount++;
+        } else if (direction === 'SHORT' || direction === 'SELL' || total < 40) {
+            sellCount++;
+        }
+    });
+
+    var total    = buyCount + sellCount;
+    var bullPct  = total > 0 ? Math.round(buyCount / total * 100) : 50;
+
+    var elPct   = document.getElementById('sentiment-pct');
+    var elLabel = document.getElementById('sentiment-label');
+    var elBuy   = document.getElementById('sentiment-buy');
+    var elSell  = document.getElementById('sentiment-sell');
+
+    if (elPct)  elPct.textContent  = bullPct + '%';
+    if (elBuy)  elBuy.textContent  = buyCount;
+    if (elSell) elSell.textContent = sellCount;
+
+    if (elLabel) {
+        if (bullPct >= 60)      elLabel.textContent = 'Bullish';
+        else if (bullPct <= 40) elLabel.textContent = 'Bearish';
+        else                    elLabel.textContent = 'Neutral';
+    }
+
+    // Update SVG progress circle (circumference = 2 * Math.PI * 88 ~= 552.92)
+    var circle = document.querySelector('circle.text-primary');
+    if (circle) {
+        var offset = 552.92 * (1 - bullPct / 100);
+        circle.setAttribute('stroke-dashoffset', offset.toFixed(2));
+    }
+}
+
+// Load all data sections and refresh UI
+async function loadAll() {
+    var signals = await loadSignals();
+    await loadStats();
+    if (Array.isArray(signals) && signals.length > 0) {
+        updateSentiment(signals);
+    }
+}
+
+// Initial load on DOM ready, then auto-refresh every 30 seconds
+document.addEventListener('DOMContentLoaded', function() {
+    loadAll();
+    setInterval(loadAll, 30000);
+});
+</script>
 </body></html>

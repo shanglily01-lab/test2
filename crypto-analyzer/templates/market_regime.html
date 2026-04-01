@@ -135,7 +135,7 @@
 <div class="h-4 w-px bg-outline-variant/30"></div>
 <div class="flex items-center gap-2 text-on-surface-variant">
 <span class="material-symbols-outlined text-sm" data-icon="update">update</span>
-<span class="text-xs data-mono">LAST UPDATE: 2024-05-24 14:32:05</span>
+<span class="text-xs data-mono" id="last-update-time">LAST UPDATE: --</span>
 </div>
 </div>
 <div class="flex items-center gap-6">
@@ -156,7 +156,7 @@
 <h3 class="text-xs font-headline font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-6">当前市场范式 (Market Regime)</h3>
 <div class="grid grid-cols-5 gap-4">
 <!-- Card 1: Strong Bull -->
-<div class="group p-5 rounded-xl bg-surface-container-low border border-primary/10 hover:border-primary/40 transition-all duration-300">
+<div id="regime-card-strong-bull" class="group p-5 rounded-xl bg-surface-container-low border border-primary/10 hover:border-primary/40 transition-all duration-300">
 <div class="flex justify-between items-start mb-4">
 <span class="material-symbols-outlined text-primary" data-icon="trending_up">trending_up</span>
 <span class="text-[10px] font-mono text-primary/60">BULLISH++</span>
@@ -167,7 +167,7 @@
 </div>
 </div>
 <!-- Card 2: Mild Bull -->
-<div class="p-5 rounded-xl bg-surface-container-low border border-primary/5 hover:border-primary/20 transition-all duration-300">
+<div id="regime-card-mild-bull" class="p-5 rounded-xl bg-surface-container-low border border-primary/5 hover:border-primary/20 transition-all duration-300">
 <div class="flex justify-between items-start mb-4">
 <span class="material-symbols-outlined text-primary/60" data-icon="keyboard_double_arrow_up">keyboard_double_arrow_up</span>
 <span class="text-[10px] font-mono text-on-surface-variant">MILD BULL</span>
@@ -176,7 +176,7 @@
 <div class="w-full h-1 bg-surface-container rounded-full"></div>
 </div>
 <!-- Card 3: Sideways (ACTIVE) -->
-<div class="p-5 rounded-xl bg-surface-container border-2 border-primary shadow-[0_0_20px_rgba(73,244,200,0.15)] relative overflow-hidden transition-all duration-300">
+<div id="regime-card-neutral" class="p-5 rounded-xl bg-surface-container border-2 border-primary shadow-[0_0_20px_rgba(73,244,200,0.15)] relative overflow-hidden transition-all duration-300">
 <div class="absolute top-0 right-0 p-2">
 <span class="flex h-2 w-2">
 <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
@@ -191,7 +191,7 @@
 <p class="text-[10px] font-mono text-on-surface-variant">RANGE: $62,400 - $64,800</p>
 </div>
 <!-- Card 4: Mild Bear -->
-<div class="p-5 rounded-xl bg-surface-container-low border border-error/5 hover:border-error/20 transition-all duration-300">
+<div id="regime-card-mild-bear" class="p-5 rounded-xl bg-surface-container-low border border-error/5 hover:border-error/20 transition-all duration-300">
 <div class="flex justify-between items-start mb-4">
 <span class="material-symbols-outlined text-error/60" data-icon="keyboard_double_arrow_down">keyboard_double_arrow_down</span>
 <span class="text-[10px] font-mono text-on-surface-variant">MILD BEAR</span>
@@ -200,7 +200,7 @@
 <div class="w-full h-1 bg-surface-container rounded-full"></div>
 </div>
 <!-- Card 5: Strong Bear -->
-<div class="p-5 rounded-xl bg-surface-container-low border border-error/10 hover:border-error/40 transition-all duration-300">
+<div id="regime-card-strong-bear" class="p-5 rounded-xl bg-surface-container-low border border-error/10 hover:border-error/40 transition-all duration-300">
 <div class="flex justify-between items-start mb-4">
 <span class="material-symbols-outlined text-error" data-icon="trending_down">trending_down</span>
 <span class="text-[10px] font-mono text-error/60">BEARISH--</span>
@@ -224,7 +224,7 @@
 <div class="absolute top-0 left-0 w-48 h-48 rounded-full border-[12px] border-primary/20 border-t-transparent border-r-transparent -rotate-45"></div>
 <div class="absolute top-0 left-0 w-48 h-48 rounded-full border-[12px] border-primary border-t-transparent border-r-transparent rotate-[20deg] shadow-[0_0_15px_rgba(73,244,200,0.2)]"></div>
 <div class="absolute bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center">
-<span class="text-2xl font-headline font-bold text-on-surface">中性</span>
+<span class="text-2xl font-headline font-bold text-on-surface" id="composite-label">中性</span>
 <span class="text-[10px] font-mono text-on-surface-variant">COMPOSITE</span>
 </div>
 </div>
@@ -234,19 +234,19 @@
 <div>
 <div class="flex justify-between text-[11px] mb-2">
 <span class="font-mono text-on-surface">BTC TREND PROGRESS</span>
-<span class="font-mono text-on-surface-variant">FLAT | 48.2%</span>
+<span class="font-mono text-on-surface-variant" id="btc-progress-label">FLAT | 48.2%</span>
 </div>
 <div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
-<div class="h-full bg-outline w-[48%] rounded-full opacity-50"></div>
+<div class="h-full bg-outline w-[48%] rounded-full opacity-50" id="btc-progress-bar"></div>
 </div>
 </div>
 <div>
 <div class="flex justify-between text-[11px] mb-2">
 <span class="font-mono text-on-surface">ETH TREND PROGRESS</span>
-<span class="font-mono text-on-surface-variant">FLAT | 51.5%</span>
+<span class="font-mono text-on-surface-variant" id="eth-progress-label">FLAT | 51.5%</span>
 </div>
 <div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
-<div class="h-full bg-outline w-[51%] rounded-full opacity-50"></div>
+<div class="h-full bg-outline w-[51%] rounded-full opacity-50" id="eth-progress-bar"></div>
 </div>
 </div>
 </div>
@@ -254,7 +254,7 @@
 <div class="pt-6 border-t border-outline-variant/10 flex items-center justify-between">
 <div>
 <p class="text-[10px] font-mono text-on-surface-variant uppercase tracking-widest">综合信号强度</p>
-<p class="text-3xl font-headline font-bold text-primary">42%</p>
+<p class="text-3xl font-headline font-bold text-primary" id="signal-strength">42%</p>
 </div>
 <div class="w-16 h-16 flex items-center justify-center rounded-full bg-primary/10 border border-primary/20">
 <span class="material-symbols-outlined text-primary text-3xl" data-icon="hub">hub</span>
@@ -291,14 +291,14 @@
 <span class="font-headline font-medium">BTC</span>
 </div>
 </td>
-<td class="py-4 font-mono text-xs">50%</td>
-<td class="py-4 text-center">
+<td class="py-4 font-mono text-xs" id="btc-weight">50%</td>
+<td class="py-4 text-center" id="btc-signal-cell">
 <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-error/10 text-error">BEAR</span>
 </td>
 <td class="py-4 text-center">
 <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>
 </td>
-<td class="py-4 text-right font-mono text-primary">48.2</td>
+<td class="py-4 text-right font-mono text-primary" id="btc-score">48.2</td>
 </tr>
 <tr class="group hover:bg-surface-container transition-colors">
 <td class="py-4">
@@ -309,14 +309,14 @@
 <span class="font-headline font-medium">ETH</span>
 </div>
 </td>
-<td class="py-4 font-mono text-xs">30%</td>
-<td class="py-4 text-center">
+<td class="py-4 font-mono text-xs" id="eth-weight">30%</td>
+<td class="py-4 text-center" id="eth-signal-cell">
 <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>
 </td>
 <td class="py-4 text-center">
 <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-surface-bright text-on-surface-variant">FLAT</span>
 </td>
-<td class="py-4 text-right font-mono text-primary">51.5</td>
+<td class="py-4 text-right font-mono text-primary" id="eth-score">51.5</td>
 </tr>
 <tr class="group hover:bg-surface-container transition-colors">
 <td class="py-4">
@@ -327,14 +327,14 @@
 <span class="font-headline font-medium">BNB</span>
 </div>
 </td>
-<td class="py-4 font-mono text-xs">10%</td>
-<td class="py-4 text-center">
+<td class="py-4 font-mono text-xs" id="bnb-weight">10%</td>
+<td class="py-4 text-center" id="bnb-signal-cell">
 <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-surface-bright text-on-surface-variant">FLAT</span>
 </td>
 <td class="py-4 text-center">
 <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-error/10 text-error">BEAR</span>
 </td>
-<td class="py-4 text-right font-mono text-on-surface-variant">32.8</td>
+<td class="py-4 text-right font-mono text-on-surface-variant" id="bnb-score">32.8</td>
 </tr>
 <tr class="group hover:bg-surface-container transition-colors">
 <td class="py-4">
@@ -345,14 +345,14 @@
 <span class="font-headline font-medium">SOL</span>
 </div>
 </td>
-<td class="py-4 font-mono text-xs">10%</td>
-<td class="py-4 text-center">
+<td class="py-4 font-mono text-xs" id="sol-weight">10%</td>
+<td class="py-4 text-center" id="sol-signal-cell">
 <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>
 </td>
 <td class="py-4 text-center">
 <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>
 </td>
-<td class="py-4 text-right font-mono text-primary">76.4</td>
+<td class="py-4 text-right font-mono text-primary" id="sol-score">76.4</td>
 </tr>
 </tbody>
 </table>
@@ -425,518 +425,197 @@
 </main>
 <!-- Floating Action Button (FAB) - Suppressed for this detailed view as per logic -->
 <script>
-        let currentStrategyId = null;
+    // -------------------------------------------------------
+    // Big4 市场状态实时数据接入
+    // -------------------------------------------------------
 
-        // Toast 通知
-        function showToast(message, type = 'info', duration = 3000) {
-            const existingToast = document.querySelector('.toast');
-            if (existingToast) existingToast.remove();
+    // 尝试的 API 端点顺序
+    var BIG4_API_URLS = [
+        '/api/signals/big4-status',
+        '/api/signals/big4',
+        '/api/system/big4-status'
+    ];
 
-            const icons = {
-                success: '✓',
-                error: '✗',
-                info: 'ℹ'
-            };
-
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.innerHTML = `<span style="font-size: 18px;">${icons[type] || icons.info}</span> ${message}`;
-            document.body.appendChild(toast);
-
-            setTimeout(() => {
-                toast.style.animation = 'slideIn 0.3s ease reverse';
-                setTimeout(() => toast.remove(), 300);
-            }, duration);
+    // 根据 signal 字符串生成徽章 HTML
+    function signalBadge(signal) {
+        if (!signal) {
+            return '<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-surface-bright text-on-surface-variant">--</span>';
         }
-
-        // 确认对话框
-        function showConfirmDialog(title, content, type = 'warning') {
-            return new Promise((resolve) => {
-                const icons = {
-                    success: '✓',
-                    error: '✗',
-                    warning: '⚠',
-                    danger: '⚠'
-                };
-
-                const overlay = document.createElement('div');
-                overlay.className = 'confirm-overlay';
-                overlay.innerHTML = `
-                    <div class="confirm-dialog">
-                        <h3 class="${type}">
-                            <span style="font-size: 22px;">${icons[type] || icons.warning}</span>
-                            ${title}
-                        </h3>
-                        <div class="content">${content}</div>
-                        <div class="buttons">
-                            <button class="btn btn-secondary" onclick="this.closest('.confirm-overlay').remove()">取消</button>
-                            <button class="btn ${type === 'danger' ? 'btn-danger' : 'btn-primary'}" id="confirm-yes-btn">确定</button>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(overlay);
-
-                overlay.querySelector('#confirm-yes-btn').onclick = () => {
-                    overlay.remove();
-                    resolve(true);
-                };
-                overlay.querySelector('.btn-secondary').onclick = () => {
-                    overlay.remove();
-                    resolve(false);
-                };
-
-                // 点击背景关闭
-                overlay.onclick = (e) => {
-                    if (e.target === overlay) {
-                        overlay.remove();
-                        resolve(false);
-                    }
-                };
-            });
+        var s = signal.toUpperCase();
+        if (s === 'BULLISH' || s === 'BULL') {
+            return '<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>';
         }
-
-        // 成功提示对话框（只有确定按钮）
-        function showSuccessDialog(title, content) {
-            return new Promise((resolve) => {
-                const overlay = document.createElement('div');
-                overlay.className = 'confirm-overlay';
-                overlay.innerHTML = `
-                    <div class="confirm-dialog">
-                        <h3 class="success">
-                            <span style="font-size: 22px;">✓</span>
-                            ${title}
-                        </h3>
-                        <div class="content">${content}</div>
-                        <div class="buttons">
-                            <button class="btn btn-primary" id="success-ok-btn">确定</button>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(overlay);
-
-                overlay.querySelector('#success-ok-btn').onclick = () => {
-                    overlay.remove();
-                    resolve(true);
-                };
-
-                // 点击背景关闭
-                overlay.onclick = (e) => {
-                    if (e.target === overlay) {
-                        overlay.remove();
-                        resolve(true);
-                    }
-                };
-            });
+        if (s === 'BEARISH' || s === 'BEAR') {
+            return '<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-error/10 text-error">BEAR</span>';
         }
+        return '<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-surface-bright text-on-surface-variant">FLAT</span>';
+    }
 
-        // Tab切换
-        function showTab(tabId) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            document.querySelector(`.tab[onclick="showTab('${tabId}')"]`).classList.add('active');
-            document.getElementById(tabId).classList.add('active');
+    // 根据 overall_signal + bullish_count/bearish_count 决定高亮哪张卡片
+    function resolveActiveCard(data) {
+        var sig = (data.overall_signal || '').toUpperCase();
+        var bullishCount = data.bullish_count || 0;
+        var bearishCount = data.bearish_count || 0;
+
+        if (sig === 'BULLISH') {
+            if (bullishCount >= 3) return 'regime-card-strong-bull';
+            return 'regime-card-mild-bull';
         }
-
-        // 加载行情汇总
-        async function loadSummary() {
-            const container = document.getElementById('regime-summary');
-            container.innerHTML = '<div class="loading">加载中...</div>';
-
-            try {
-                const resp = await fetch('/api/market-regime/summary?timeframe=15m');
-                const data = await resp.json();
-
-                if (data.success) {
-                    let html = '';
-                    const order = ['strong_uptrend', 'weak_uptrend', 'ranging', 'weak_downtrend', 'strong_downtrend'];
-                    const icons = {
-                        'strong_uptrend': '📈',
-                        'weak_uptrend': '↗️',
-                        'ranging': '↔️',
-                        'weak_downtrend': '↘️',
-                        'strong_downtrend': '📉'
-                    };
-
-                    for (const type of order) {
-                        const info = data.data[type];
-                        html += `
-                            <div class="regime-card ${type}">
-                                <div class="regime-icon">${icons[type]}</div>
-                                <div class="regime-name">${info.display.replace(/[📈↗️↔️↘️📉]/g, '')}</div>
-                                <div class="regime-count">${info.count}</div>
-                                <div class="regime-desc">${info.suggestion}</div>
-                                <div class="symbol-list">
-                                    ${info.symbols.slice(0, 5).map(s => `<span class="symbol-tag">${s.symbol}</span>`).join('')}
-                                    ${info.count > 5 ? `<span class="symbol-tag">+${info.count - 5}</span>` : ''}
-                                </div>
-                            </div>
-                        `;
-                    }
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = '<div class="loading">暂无数据</div>';
-                }
-            } catch (e) {
-                container.innerHTML = '<div class="loading">加载失败: ' + e.message + '</div>';
-            }
+        if (sig === 'BEARISH') {
+            if (bearishCount >= 3) return 'regime-card-strong-bear';
+            return 'regime-card-mild-bear';
         }
+        return 'regime-card-neutral';
+    }
 
-        // 检测单个交易对行情
-        async function detectRegime() {
-            const symbol = document.getElementById('detect-symbol').value;
-            const timeframe = document.getElementById('detect-timeframe').value;
-            const resultDiv = document.getElementById('detect-result');
+    // 高亮对应 regime 卡片，其余恢复默认
+    function applyRegimeHighlight(activeId) {
+        var cards = [
+            'regime-card-strong-bull',
+            'regime-card-mild-bull',
+            'regime-card-neutral',
+            'regime-card-mild-bear',
+            'regime-card-strong-bear'
+        ];
 
-            resultDiv.innerHTML = '<div class="loading">检测中...</div>';
-
-            try {
-                const resp = await fetch(`/api/market-regime/detect/${encodeURIComponent(symbol)}?timeframe=${timeframe}`);
-                const data = await resp.json();
-
-                if (data.success) {
-                    const r = data.data;
-                    const scoreColor = r.regime_score > 20 ? 'score-positive' : (r.regime_score < -20 ? 'score-negative' : 'score-neutral');
-                    const scoreWidth = Math.min(Math.abs(r.regime_score), 100);
-
-                    resultDiv.innerHTML = `
-                        <div class="card" style="margin: 0;">
-                            <h3>${r.regime_display}</h3>
-                            <p>得分: ${r.regime_score}</p>
-                            <div class="score-bar">
-                                <div class="score-fill ${scoreColor}" style="width: ${scoreWidth}%;"></div>
-                            </div>
-                            <p style="margin-top: 10px; color: #8b949e;">${r.trading_suggestion}</p>
-                            <p style="margin-top: 10px; font-size: 12px; color: #6e7681;">
-                                EMA差值: ${(r.ema_diff_pct || 0).toFixed(4)}% |
-                                ADX: ${(r.adx_value || 0).toFixed(2)} |
-                                趋势K线: ${r.trend_bars || 0}
-                            </p>
-                        </div>
-                    `;
-                } else {
-                    resultDiv.innerHTML = `<div class="loading">${data.error || '检测失败'}</div>`;
-                }
-            } catch (e) {
-                resultDiv.innerHTML = '<div class="loading">检测失败: ' + e.message + '</div>';
-            }
-        }
-
-        // 加载策略列表
-        async function loadStrategies() {
-            try {
-                const resp = await fetch('/api/futures/strategies');
-                const data = await resp.json();
-
-                const select = document.getElementById('strategy-select');
-                select.innerHTML = '<option value="">-- 请选择策略 --</option>';
-
-                // API返回的是 data.data，不是 data.strategies
-                const strategies = data.data || data.strategies || [];
-                if (data.success && strategies.length > 0) {
-                    for (const s of strategies) {
-                        select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
-                    }
-                }
-            } catch (e) {
-                console.error('加载策略失败:', e);
-            }
-        }
-
-        // 加载策略的行情参数
-        async function loadStrategyParams() {
-            const strategyId = document.getElementById('strategy-select').value;
-            if (!strategyId) {
-                document.getElementById('params-config').style.display = 'none';
-                return;
-            }
-
-            currentStrategyId = strategyId;
-            document.getElementById('params-config').style.display = 'block';
-
-            try {
-                const resp = await fetch(`/api/market-regime/params/${strategyId}`);
-                const data = await resp.json();
-
-                const tbody = document.getElementById('params-table');
-
-                if (data.success && data.data.length > 0) {
-                    tbody.innerHTML = data.data.map(p => `
-                        <tr>
-                            <td>${p.regime_display}</td>
-                            <td>
-                                <span class="status-badge ${p.enabled ? 'status-enabled' : 'status-disabled'}">
-                                    ${p.enabled ? '启用交易' : '禁用交易'}
-                                </span>
-                            </td>
-                            <td style="font-size: 12px; max-width: 300px; overflow: hidden;">
-                                ${formatParams(p.params)}
-                            </td>
-                            <td style="font-size: 12px; color: #8b949e;">${p.description || '-'}</td>
-                            <td>
-                                <button class="btn btn-secondary" onclick="editParam('${p.regime_type}', ${JSON.stringify(p).replace(/"/g, '&quot;')})">编辑</button>
-                                <button class="btn btn-danger" onclick="deleteParam('${p.regime_type}')">删除</button>
-                            </td>
-                        </tr>
-                    `).join('');
-                } else {
-                    tbody.innerHTML = '<tr><td colspan="5" class="loading">暂无配置，点击"添加配置"创建</td></tr>';
-                }
-            } catch (e) {
-                console.error('加载参数失败:', e);
-            }
-        }
-
-        function formatParams(params) {
-            if (!params) return '-';
-            const items = [];
-            if (params.sustainedTrend !== undefined) items.push(`持续趋势: ${params.sustainedTrend ? '是' : '否'}`);
-            if (params.sustainedTrendMinStrength) items.push(`最小强度: ${params.sustainedTrendMinStrength}%`);
-            // 处理新的 allowDirection 格式
-            if (params.allowDirection) {
-                const dirMap = {
-                    'both': '双向',
-                    'long_only': '仅做多',
-                    'short_only': '仅做空',
-                    'none': '禁止交易'
-                };
-                items.push(`方向: ${dirMap[params.allowDirection] || params.allowDirection}`);
+        cards.forEach(function(cardId) {
+            var el = document.getElementById(cardId);
+            if (!el) return;
+            if (cardId === activeId) {
+                el.classList.add('ring-2', 'ring-primary');
             } else {
-                // 兼容旧格式
-                if (params.allowLong !== undefined) items.push(`做多: ${params.allowLong ? '是' : '否'}`);
-                if (params.allowShort !== undefined) items.push(`做空: ${params.allowShort ? '是' : '否'}`);
+                el.classList.remove('ring-2', 'ring-primary');
             }
-            if (params.stopLossPercent) items.push(`止损: ${params.stopLossPercent}%`);
-            if (params.takeProfitPercent) items.push(`止盈: ${params.takeProfitPercent}%`);
-            return items.join(' | ') || JSON.stringify(params);
+        });
+    }
+
+    // 将 signal 字符串映射为中文显示
+    function signalToLabel(sig) {
+        var s = (sig || '').toUpperCase();
+        if (s === 'BULLISH' || s === 'BULL') return '多头';
+        if (s === 'BEARISH' || s === 'BEAR') return '空头';
+        return '中性';
+    }
+
+    // 更新仪表盘左侧指标区域
+    function updateIndicators(data) {
+        // 综合标签
+        var compositeEl = document.getElementById('composite-label');
+        if (compositeEl) {
+            compositeEl.textContent = signalToLabel(data.overall_signal);
         }
 
-        // 打开添加参数模态框
-        function openAddParamModal() {
-            document.getElementById('modal-title').textContent = '添加行情参数';
-            document.getElementById('param-regime-type').disabled = false;
-            document.getElementById('param-form').reset();
-            document.getElementById('param-enabled').checked = true;
-            document.getElementById('param-allow-direction').value = 'both';
-            document.getElementById('param-modal').style.display = 'block';
+        // BTC 进度条
+        var btcInfo = data.btc || {};
+        var btcScore = typeof btcInfo.score === 'number' ? btcInfo.score : 0;
+        var btcLabelEl = document.getElementById('btc-progress-label');
+        var btcBarEl = document.getElementById('btc-progress-bar');
+        if (btcLabelEl) {
+            btcLabelEl.textContent = signalToLabel(btcInfo.signal) + ' | ' + btcScore.toFixed(1) + '%';
+        }
+        if (btcBarEl) {
+            btcBarEl.style.width = Math.min(Math.abs(btcScore), 100) + '%';
         }
 
-        // 编辑参数
-        function editParam(regimeType, paramData) {
-            document.getElementById('modal-title').textContent = '编辑行情参数';
-            document.getElementById('param-regime-type').value = regimeType;
-            document.getElementById('param-regime-type').disabled = true;
-            document.getElementById('param-enabled').checked = paramData.enabled;
+        // ETH 进度条
+        var ethInfo = data.eth || {};
+        var ethScore = typeof ethInfo.score === 'number' ? ethInfo.score : 0;
+        var ethLabelEl = document.getElementById('eth-progress-label');
+        var ethBarEl = document.getElementById('eth-progress-bar');
+        if (ethLabelEl) {
+            ethLabelEl.textContent = signalToLabel(ethInfo.signal) + ' | ' + ethScore.toFixed(1) + '%';
+        }
+        if (ethBarEl) {
+            ethBarEl.style.width = Math.min(Math.abs(ethScore), 100) + '%';
+        }
 
-            const p = paramData.params || {};
-            document.getElementById('param-sustained-trend').checked = p.sustainedTrend || false;
-            document.getElementById('param-min-strength').value = p.sustainedTrendMinStrength || 0.3;
-            document.getElementById('param-max-strength').value = p.sustainedTrendMaxStrength || 2.0;
+        // 综合信号强度：以 bullish_count / 4 * 100 估算
+        var strengthEl = document.getElementById('signal-strength');
+        if (strengthEl) {
+            var bullishCount = data.bullish_count || 0;
+            var bearishCount = data.bearish_count || 0;
+            var total = bullishCount + bearishCount;
+            var pct = total > 0 ? Math.round((bullishCount / 4) * 100) : 0;
+            strengthEl.textContent = pct + '%';
+        }
+    }
 
-            // 处理新的 allowDirection 格式，兼容旧格式
-            if (p.allowDirection) {
-                document.getElementById('param-allow-direction').value = p.allowDirection;
-            } else {
-                // 从旧的 allowLong/allowShort 转换
-                if (p.allowLong === false && p.allowShort === false) {
-                    document.getElementById('param-allow-direction').value = 'none';
-                } else if (p.allowLong === false) {
-                    document.getElementById('param-allow-direction').value = 'short_only';
-                } else if (p.allowShort === false) {
-                    document.getElementById('param-allow-direction').value = 'long_only';
-                } else {
-                    document.getElementById('param-allow-direction').value = 'both';
-                }
+    // 更新 Big4 表格
+    function updateBig4Table(data) {
+        var symbols = ['btc', 'eth', 'bnb', 'sol'];
+        symbols.forEach(function(sym) {
+            var info = data[sym] || {};
+            var signalCellEl = document.getElementById(sym + '-signal-cell');
+            var weightEl = document.getElementById(sym + '-weight');
+            var scoreEl = document.getElementById(sym + '-score');
+
+            if (signalCellEl) {
+                signalCellEl.innerHTML = signalBadge(info.signal);
             }
+            if (weightEl && typeof info.weight === 'number') {
+                weightEl.textContent = Math.round(info.weight * 100) + '%';
+            }
+            if (scoreEl && typeof info.score === 'number') {
+                scoreEl.textContent = info.score.toFixed(1);
+            }
+        });
+    }
 
-            document.getElementById('param-stop-loss').value = p.stopLossPercent || 3.0;
-            document.getElementById('param-take-profit').value = p.takeProfitPercent || 6.0;
-            document.getElementById('param-description').value = paramData.description || '';
-
-            document.getElementById('param-modal').style.display = 'block';
+    // 更新最后刷新时间
+    function updateLastUpdateTime(updatedAt) {
+        var el = document.getElementById('last-update-time');
+        if (!el) return;
+        if (updatedAt) {
+            var d = new Date(updatedAt);
+            var pad = function(n) { return n < 10 ? '0' + n : String(n); };
+            var ts = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
+                + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+            el.textContent = 'LAST UPDATE: ' + ts;
+        } else {
+            var now = new Date();
+            var pad2 = function(n) { return n < 10 ? '0' + n : String(n); };
+            var ts2 = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate())
+                + ' ' + pad2(now.getHours()) + ':' + pad2(now.getMinutes()) + ':' + pad2(now.getSeconds());
+            el.textContent = 'LAST UPDATE: ' + ts2;
         }
+    }
 
-        // 关闭模态框
-        function closeModal() {
-            document.getElementById('param-modal').style.display = 'none';
-        }
-
-        // 保存参数
-        document.getElementById('param-form').onsubmit = async function(e) {
-            e.preventDefault();
-
-            const allowDirection = document.getElementById('param-allow-direction').value;
-            const params = {
-                sustainedTrend: document.getElementById('param-sustained-trend').checked,
-                sustainedTrendMinStrength: parseFloat(document.getElementById('param-min-strength').value),
-                sustainedTrendMaxStrength: parseFloat(document.getElementById('param-max-strength').value),
-                allowDirection: allowDirection,
-                // 同时保存兼容格式
-                allowLong: allowDirection === 'both' || allowDirection === 'long_only',
-                allowShort: allowDirection === 'both' || allowDirection === 'short_only',
-                stopLossPercent: parseFloat(document.getElementById('param-stop-loss').value),
-                takeProfitPercent: parseFloat(document.getElementById('param-take-profit').value)
-            };
-
-            const body = {
-                strategy_id: parseInt(currentStrategyId),
-                regime_type: document.getElementById('param-regime-type').value,
-                enabled: document.getElementById('param-enabled').checked,
-                params: params,
-                description: document.getElementById('param-description').value
-            };
-
+    // 依次尝试 API 端点，返回成功的数据
+    async function fetchBig4Data() {
+        for (var i = 0; i < BIG4_API_URLS.length; i++) {
             try {
-                const resp = await fetch('/api/market-regime/params', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const data = await resp.json();
-
-                if (data.success) {
-                    closeModal();
-                    // 显示成功对话框
-                    const regimeNames = {
-                        'strong_uptrend': '强趋势上涨',
-                        'weak_uptrend': '弱趋势上涨',
-                        'ranging': '震荡行情',
-                        'weak_downtrend': '弱趋势下跌',
-                        'strong_downtrend': '强趋势下跌'
-                    };
-                    const regimeType = document.getElementById('param-regime-type').value;
-                    const regimeName = regimeNames[regimeType] || regimeType;
-                    const enabled = document.getElementById('param-enabled').checked;
-
-                    await showSuccessDialog(
-                        '保存成功',
-                        `<div style="text-align: left;">
-                            <p style="margin-bottom: 12px;"><strong>${regimeName}</strong> 参数配置已保存</p>
-                            <div style="background: #21262d; padding: 12px; border-radius: 6px; font-size: 13px;">
-                                <p>• 交易状态: <span style="color: ${enabled ? '#3fb950' : '#f85149'};">${enabled ? '启用' : '禁用'}</span></p>
-                                <p>• 持续趋势: ${params.sustainedTrend ? '是' : '否'}</p>
-                                <p>• 强度范围: ${params.sustainedTrendMinStrength}% ~ ${params.sustainedTrendMaxStrength}%</p>
-                                <p>• 止损/止盈: ${params.stopLossPercent}% / ${params.takeProfitPercent}%</p>
-                            </div>
-                        </div>`
-                    );
-                    loadStrategyParams();
-                } else {
-                    showToast('保存失败: ' + (data.detail || data.message), 'error', 5000);
-                }
+                var resp = await fetch(BIG4_API_URLS[i]);
+                if (!resp.ok) continue;
+                var data = await resp.json();
+                // 支持直接返回对象或包裹在 data 字段中
+                if (data && data.overall_signal) return data;
+                if (data && data.data && data.data.overall_signal) return data.data;
             } catch (e) {
-                showToast('保存失败: ' + e.message, 'error', 5000);
-            }
-        };
-
-        // 删除参数
-        async function deleteParam(regimeType) {
-            const regimeNames = {
-                'strong_uptrend': '强趋势上涨',
-                'weak_uptrend': '弱趋势上涨',
-                'ranging': '震荡行情',
-                'weak_downtrend': '弱趋势下跌',
-                'strong_downtrend': '强趋势下跌'
-            };
-            const regimeName = regimeNames[regimeType] || regimeType;
-
-            const confirmed = await showConfirmDialog(
-                '删除确认',
-                `确定要删除 <strong>${regimeName}</strong> 的参数配置吗？<br><br><span style="color: #8b949e;">删除后该行情类型将使用默认策略参数。</span>`,
-                'danger'
-            );
-
-            if (!confirmed) return;
-
-            try {
-                const resp = await fetch(`/api/market-regime/params/${currentStrategyId}/${regimeType}`, {
-                    method: 'DELETE'
-                });
-                const data = await resp.json();
-
-                if (data.success) {
-                    showToast(`${regimeName} 配置已删除`, 'success');
-                    loadStrategyParams();
-                } else {
-                    showToast('删除失败: ' + (data.detail || data.message), 'error', 5000);
-                }
-            } catch (e) {
-                showToast('删除失败: ' + e.message, 'error', 5000);
+                // 当前端点失败，继续尝试下一个
             }
         }
+        return null;
+    }
 
-        // 加载所有历史记录（支持按交易对筛选）
-        async function loadAllHistory() {
-            const symbol = document.getElementById('history-symbol').value.trim();
-            const timeframe = document.getElementById('history-timeframe').value;
-            const tbody = document.getElementById('history-table');
-
-            tbody.innerHTML = '<tr><td colspan="5" class="loading">加载中...</td></tr>';
-
-            try {
-                // 如果有指定symbol则按symbol查询，否则查询全部
-                let url = `/api/market-regime/changes-all?timeframe=${timeframe}&limit=50`;
-                if (symbol) {
-                    url = `/api/market-regime/changes/${encodeURIComponent(symbol)}?timeframe=${timeframe}&limit=50`;
-                }
-
-                const resp = await fetch(url);
-                const data = await resp.json();
-
-                if (data.success && data.data && data.data.length > 0) {
-                    tbody.innerHTML = data.data.map(r => `
-                        <tr>
-                            <td>${formatTime(r.changed_at)}</td>
-                            <td><strong>${r.symbol || '-'}</strong></td>
-                            <td>${r.old_regime_display || '-'}</td>
-                            <td>${r.new_regime_display}</td>
-                            <td>${r.old_score || 0} &rarr; ${r.new_score || 0}</td>
-                        </tr>
-                    `).join('');
-                } else {
-                    tbody.innerHTML = '<tr><td colspan="5" class="loading">暂无切换记录</td></tr>';
-                }
-            } catch (e) {
-                tbody.innerHTML = '<tr><td colspan="5" class="loading">加载失败: ' + e.message + '</td></tr>';
-            }
+    // 主刷新函数
+    async function loadMarketRegime() {
+        var data = await fetchBig4Data();
+        if (!data) {
+            console.error('market_regime: 所有 Big4 API 端点均无响应');
+            return;
         }
 
-        function formatTime(t) {
-            if (!t) return '-';
-            const d = new Date(t);
-            return d.toLocaleString('zh-CN');
-        }
+        var activeCardId = resolveActiveCard(data);
+        applyRegimeHighlight(activeCardId);
+        updateBig4Table(data);
+        updateIndicators(data);
+        updateLastUpdateTime(data.updated_at || null);
+    }
 
-        // 加载配置的交易对列表
-        async function loadSymbols() {
-            try {
-                const resp = await fetch('/api/futures/symbols');
-                const data = await resp.json();
-
-                const select = document.getElementById('detect-symbol');
-                select.innerHTML = '';
-
-                if (data.success && data.symbols && data.symbols.length > 0) {
-                    for (const symbol of data.symbols) {
-                        const option = document.createElement('option');
-                        option.value = symbol;
-                        option.textContent = symbol;
-                        select.appendChild(option);
-                    }
-                } else {
-                    select.innerHTML = '<option value="BTC/USDT">BTC/USDT</option>';
-                }
-            } catch (e) {
-                console.error('加载交易对失败:', e);
-                document.getElementById('detect-symbol').innerHTML = '<option value="BTC/USDT">BTC/USDT</option>';
-            }
-        }
-
-        // 页面加载
-        window.onload = function() {
-            loadSummary();
-            loadStrategies();
-            loadSymbols();  // 加载交易对列表
-            loadAllHistory();  // 自动加载切换历史
-        };
+    // DOMContentLoaded 时首次加载并启动定时刷新（每30秒）
+    document.addEventListener('DOMContentLoaded', function() {
+        loadMarketRegime();
+        setInterval(loadMarketRegime, 30000);
+    });
     </script>
 </body></html>

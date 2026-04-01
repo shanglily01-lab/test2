@@ -190,13 +190,13 @@
 <div class="grid grid-cols-12 gap-6 mb-8">
 <div class="col-span-4 relative group">
 <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg group-focus-within:text-primary transition-colors">search</span>
-<input class="w-full bg-surface-container-highest border-none rounded-xl pl-12 pr-4 py-3 text-sm text-on-surface placeholder-on-surface-variant focus:ring-1 focus:ring-primary/50 transition-all" placeholder="Search symbol..." type="text"/>
+<input id="symbol-search" class="w-full bg-surface-container-highest border-none rounded-xl pl-12 pr-4 py-3 text-sm text-on-surface placeholder-on-surface-variant focus:ring-1 focus:ring-primary/50 transition-all" placeholder="Search symbol..." type="text"/>
 </div>
 <div class="col-span-3">
-<select class="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-sm text-on-surface focus:ring-1 focus:ring-primary/50 appearance-none">
-<option>Direction: All</option>
-<option>Direction: LONG</option>
-<option>Direction: SHORT</option>
+<select id="direction-filter" class="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3 text-sm text-on-surface focus:ring-1 focus:ring-primary/50 appearance-none">
+<option value="">Direction: All</option>
+<option value="LONG">Direction: LONG</option>
+<option value="SHORT">Direction: SHORT</option>
 </select>
 </div>
 <div class="col-span-5 flex items-center gap-4 bg-surface-container-highest px-6 py-3 rounded-xl">
@@ -230,7 +230,7 @@
 <th class="px-6 py-4 text-right">操作时间</th>
 </tr>
 </thead>
-<tbody class="divide-y divide-outline-variant/5">
+<tbody id="signals-tbody" class="divide-y divide-outline-variant/5">
 <!-- BTC/USDT -->
 <tr class="hover:bg-surface-container/50 transition-colors cursor-pointer group">
 <td class="px-6 py-5">
@@ -446,7 +446,7 @@
 <h3 class="text-sm font-bold font-['Space_Grotesk'] text-on-surface uppercase tracking-wider">最佳信号 (Top 5)</h3>
 <span class="text-[10px] font-mono text-on-surface-variant">H1 TIME FRAME</span>
 </div>
-<div class="space-y-4">
+<div id="score-list" class="space-y-4">
 <div class="flex items-center justify-between p-3 rounded-xl bg-surface-container border-l-2 border-primary">
 <div class="flex items-center gap-3">
 <span class="text-sm font-bold score-mono">BTC</span>
@@ -515,252 +515,180 @@
 </div>
 </main>
 <script>
-        // 加载技术信号数据
-        async function loadTechnicalSignals() {
-            try {
-                const response = await fetch('/api/technical-signals');
-                const result = await response.json();
+        // 全部信号数据缓存
+        var allSignals = [];
 
-                if (result.success && result.data) {
-                    renderTechnicalSignals(result.data);
-                    document.getElementById('updateTime').textContent = new Date().toLocaleString('zh-CN');
-                } else {
-                    showError('加载失败');
-                }
-            } catch (error) {
-                console.error('加载技术信号失败:', error);
-                showError(error.message);
-            }
+        // 从响应中提取数组，兼容多种格式
+        function extractArray(result) {
+            if (Array.isArray(result)) return result;
+            if (result && Array.isArray(result.data)) return result.data;
+            if (result && Array.isArray(result.signals)) return result.signals;
+            return [];
         }
 
-        // 渲染技术信号表格
-        function renderTechnicalSignals(data) {
-            const tbody = document.getElementById('technicalSignalsTableBody');
+        // 获取评分颜色类
+        function scoreColorClass(score) {
+            if (score >= 80) return 'text-primary';
+            if (score >= 60) return 'text-secondary';
+            return 'text-error';
+        }
 
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无数据</td></tr>';
+        // 获取进度条颜色类
+        function scoreBarClass(score) {
+            if (score >= 80) return 'bg-primary';
+            if (score >= 60) return 'bg-secondary';
+            return 'bg-error';
+        }
+
+        // 格式化更新时间
+        function formatTime(ts) {
+            if (!ts) return '--';
+            var d = new Date(ts);
+            if (isNaN(d.getTime())) return ts;
+            var h = String(d.getHours()).padStart(2, '0');
+            var m = String(d.getMinutes()).padStart(2, '0');
+            var s = String(d.getSeconds()).padStart(2, '0');
+            return h + ':' + m + ':' + s;
+        }
+
+        // 渲染表格
+        function renderTable() {
+            var tbody = document.getElementById('signals-tbody');
+            var searchVal = (document.getElementById('symbol-search').value || '').trim().toUpperCase();
+            var dirVal = (document.getElementById('direction-filter').value || '').trim().toUpperCase();
+
+            var filtered = allSignals.filter(function(item) {
+                var sym = (item.symbol || '').toUpperCase();
+                var dir = (item.direction || '').toUpperCase();
+                if (searchVal && sym.indexOf(searchVal) === -1) return false;
+                if (dirVal && dir !== dirVal) return false;
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-10 text-center text-on-surface-variant text-sm">No data</td></tr>';
                 return;
             }
 
-            tbody.innerHTML = data.map(item => {
-                const stats24h = item.stats_24h || {};
-                const stats4h = item.stats_4h || {};
-                const stats1h = item.stats_1h || {};
+            tbody.innerHTML = filtered.map(function(item) {
+                var sym = item.symbol || '--';
+                var dir = (item.direction || '').toUpperCase();
+                var score = parseFloat(item.total_score) || 0;
+                var scoreDisp = score.toFixed(0);
+                var colorClass = scoreColorClass(score);
+                var barClass = scoreBarClass(score);
+                var barPct = Math.min(100, Math.max(0, score)).toFixed(0);
+                var timeDisp = formatTime(item.updated_at);
+                var initial = sym.charAt(0);
 
-                // 综合趋势判断
-                const overallTrend = calculateOverallTrend(stats24h, stats4h, stats1h);
+                var dirBadge = dir === 'LONG'
+                    ? '<span class="px-2 py-1 rounded bg-primary/10 text-primary text-[10px] font-bold tracking-widest uppercase">LONG</span>'
+                    : dir === 'SHORT'
+                    ? '<span class="px-2 py-1 rounded bg-error/10 text-error text-[10px] font-bold tracking-widest uppercase">SHORT</span>'
+                    : '<span class="px-2 py-1 rounded bg-surface-container text-on-surface-variant text-[10px] font-bold tracking-widest uppercase">' + (dir || '--') + '</span>';
 
-                return `
-                    <tr>
-                        <td style="font-weight: 600; font-family: var(--font-mono);">${item.symbol}</td>
-                        <td>${render24HStats(stats24h)}</td>
-                        <td>${render4HStats(stats4h)}</td>
-                        <td>${render1HStats(stats1h)}</td>
-                        <td>${renderOverallTrend(overallTrend)}</td>
-                    </tr>
-                `;
+                return '<tr class="hover:bg-surface-container/50 transition-colors cursor-pointer">'
+                    + '<td class="px-6 py-5">'
+                    +   '<div class="flex items-center gap-2">'
+                    +     '<div class="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center text-[10px] font-bold text-on-surface">' + initial + '</div>'
+                    +     '<span class="text-sm font-bold score-mono">' + sym + '</span>'
+                    +   '</div>'
+                    + '</td>'
+                    + '<td class="px-6 py-5">' + dirBadge + '</td>'
+                    + '<td class="px-6 py-5">'
+                    +   '<div class="flex items-center gap-3">'
+                    +     '<span class="text-sm font-bold ' + colorClass + ' score-mono">' + scoreDisp + '</span>'
+                    +     '<div class="w-16 h-1 bg-surface-container-highest rounded-full overflow-hidden">'
+                    +       '<div class="h-full ' + barClass + '" style="width:' + barPct + '%"></div>'
+                    +     '</div>'
+                    +   '</div>'
+                    + '</td>'
+                    + '<td class="px-4 py-5 text-xs text-on-surface-variant score-mono">--</td>'
+                    + '<td class="px-4 py-5 text-xs text-on-surface-variant">--</td>'
+                    + '<td class="px-4 py-5 text-xs text-on-surface-variant">--</td>'
+                    + '<td class="px-4 py-5 text-xs text-right text-on-surface-variant score-mono">--</td>'
+                    + '<td class="px-4 py-5 text-xs text-on-surface">--</td>'
+                    + '<td class="px-6 py-5 text-xs text-right text-on-surface-variant score-mono">' + timeDisp + '</td>'
+                    + '</tr>';
             }).join('');
         }
 
-        // 渲染24H统计
-        function render24HStats(stats) {
-            if (!stats || !stats['1h']) {
-                return '<span class="badge badge-neutral">无数据</span>';
+        // 更新右侧 Top 5
+        function updateTopSignals() {
+            var scoreList = document.getElementById('score-list');
+            var sorted = allSignals.slice().sort(function(a, b) {
+                return (parseFloat(b.total_score) || 0) - (parseFloat(a.total_score) || 0);
+            });
+            var top5 = sorted.slice(0, 5);
+
+            if (top5.length === 0) {
+                scoreList.innerHTML = '<div class="text-xs text-on-surface-variant text-center py-4">No data</div>';
+                return;
             }
 
-            const h1 = stats['1h'];
-            const m15 = stats['15m'];
-            const m5 = stats['5m'];
+            scoreList.innerHTML = top5.map(function(item) {
+                var sym = (item.symbol || '--').replace('/USDT', '').replace('/USD', '');
+                var dir = (item.direction || '').toUpperCase();
+                var score = parseFloat(item.total_score) || 0;
+                var scoreDisp = score.toFixed(1);
+                var colorClass = scoreColorClass(score);
+                var borderColor = score >= 80 ? 'border-primary' : 'border-secondary';
+                var dirColor = dir === 'LONG' ? 'text-primary' : dir === 'SHORT' ? 'text-error' : 'text-on-surface-variant';
+                var confidence = score >= 80 ? 'HIGH' : score >= 60 ? 'MED' : 'LOW';
 
-            return `
-                <div class="kline-stats">
-                    ${renderKlineBar('1H', h1)}
-                    ${renderKlineBar('15M', m15)}
-                    ${renderKlineBar('5M', m5)}
-                </div>
-            `;
+                return '<div class="flex items-center justify-between p-3 rounded-xl bg-surface-container border-l-2 ' + borderColor + '">'
+                    +   '<div class="flex items-center gap-3">'
+                    +     '<span class="text-sm font-bold score-mono">' + sym + '</span>'
+                    +     '<span class="text-[10px] font-bold ' + dirColor + '">' + (dir || '--') + '</span>'
+                    +   '</div>'
+                    +   '<div class="text-right">'
+                    +     '<div class="text-sm font-bold ' + colorClass + ' score-mono">' + scoreDisp + '</div>'
+                    +     '<div class="text-[8px] text-on-surface-variant">CONFIDENCE: ' + confidence + '</div>'
+                    +   '</div>'
+                    + '</div>';
+            }).join('');
         }
 
-        // 渲染4H统计
-        function render4HStats(stats) {
-            if (!stats || !stats['15m']) {
-                return '<span class="badge badge-neutral">无数据</span>';
-            }
+        // 加载信号列表，尝试两个端点
+        async function loadSignals() {
+            var endpoints = ['/api/signals/scores', '/api/signals/coin-scores'];
+            var data = null;
 
-            const m15 = stats['15m'];
-            const m5 = stats['5m'];
-            const m1 = stats['1m'];
-
-            return `
-                <div class="kline-stats">
-                    ${renderKlineBar('15M', m15)}
-                    ${renderKlineBar('5M', m5)}
-                    ${m1 ? renderKlineBar('1M', m1) : ''}
-                </div>
-            `;
-        }
-
-        // 渲染1H统计
-        function render1HStats(stats) {
-            if (!stats || !stats['5m']) {
-                return '<span class="badge badge-neutral">无数据</span>';
-            }
-
-            const m5 = stats['5m'];
-            const m1 = stats['1m'];
-
-            return `
-                <div class="kline-stats">
-                    ${renderKlineBar('5M', m5)}
-                    ${m1 ? renderKlineBar('1M', m1) : ''}
-                </div>
-            `;
-        }
-
-        // 渲染K线条
-        function renderKlineBar(label, data) {
-            if (!data) return '';
-
-            const bullishPct = data.bullish_pct || 0;
-            const bearishPct = data.bearish_pct || 0;
-            const trend = data.trend || '震荡';
-            const avgBullishStrength = data.avg_bullish_strength || 0;
-            const avgBearishStrength = data.avg_bearish_strength || 0;
-
-            const trendClass = trend.includes('上涨') ? 'trend-up' : trend.includes('下跌') ? 'trend-down' : 'trend-neutral';
-
-            // 格式化力度显示 - 使用K格式简化大数值
-            function formatStrength(value) {
-                if (value >= 1000000) {
-                    return (value / 1000000).toFixed(1) + 'M';
-                } else if (value >= 1000) {
-                    return (value / 1000).toFixed(1) + 'K';
-                } else {
-                    return value.toFixed(1);
+            for (var i = 0; i < endpoints.length; i++) {
+                try {
+                    var resp = await fetch(endpoints[i] + '?limit=50');
+                    if (!resp.ok) continue;
+                    var result = await resp.json();
+                    var arr = extractArray(result);
+                    if (arr.length > 0) {
+                        data = arr;
+                        break;
+                    }
+                } catch (e) {
+                    console.error('loadSignals endpoint ' + endpoints[i] + ' ERROR:', e.message);
                 }
             }
 
-            const bullishStr = formatStrength(avgBullishStrength);
-            const bearishStr = formatStrength(avgBearishStrength);
-
-            // 力度对比：阳线力度 vs 阴线力度
-            const strengthRatio = avgBearishStrength > 0
-                ? (avgBullishStrength / avgBearishStrength).toFixed(2)
-                : '∞';
-
-            const strengthInfo = avgBullishStrength > 0 || avgBearishStrength > 0
-                ? `<span style="font-size: 10px; color: var(--text-tertiary); margin-left: 4px;"
-                         title="阳线平均力度: ${avgBullishStrength.toFixed(2)}&#10;阴线平均力度: ${avgBearishStrength.toFixed(2)}&#10;力度比: ${strengthRatio} (阳/阴)">
-                     [↑${bullishStr} ↓${bearishStr}]
-                   </span>`
-                : '';
-
-            return `
-                <div class="kline-bar">
-                    <div class="kline-bar-label">${label}</div>
-                    <div class="kline-bar-visual">
-                        <div class="kline-bar-fill bullish" style="width: ${bullishPct}%"></div>
-                    </div>
-                    <div class="kline-bar-value ${trendClass}">
-                        ${data.bullish_count}/${data.total_klines}
-                        ${strengthInfo}
-                    </div>
-                </div>
-            `;
-        }
-
-        // 计算综合趋势
-        function calculateOverallTrend(stats24h, stats4h, stats1h) {
-            // 优先看短期趋势(1H),结合4H和24H
-            let score = 0;
-            let count = 0;
-
-            // 1H趋势权重最高
-            if (stats1h && stats1h['5m']) {
-                const trend = stats1h['5m'].trend;
-                if (trend.includes('强势上涨')) score += 2;
-                else if (trend.includes('上涨')) score += 1;
-                else if (trend.includes('强势下跌')) score -= 2;
-                else if (trend.includes('下跌')) score -= 1;
-                count++;
+            if (data && data.length > 0) {
+                allSignals = data;
+            } else {
+                console.error('loadSignals: all endpoints returned no data');
             }
 
-            // 4H趋势
-            if (stats4h && stats4h['15m']) {
-                const trend = stats4h['15m'].trend;
-                if (trend.includes('强势上涨')) score += 1.5;
-                else if (trend.includes('上涨')) score += 0.75;
-                else if (trend.includes('强势下跌')) score -= 1.5;
-                else if (trend.includes('下跌')) score -= 0.75;
-                count++;
-            }
-
-            // 24H趋势
-            if (stats24h && stats24h['1h']) {
-                const trend = stats24h['1h'].trend;
-                if (trend.includes('强势上涨')) score += 1;
-                else if (trend.includes('上涨')) score += 0.5;
-                else if (trend.includes('强势下跌')) score -= 1;
-                else if (trend.includes('下跌')) score -= 0.5;
-                count++;
-            }
-
-            const avgScore = count > 0 ? score / count : 0;
-
-            if (avgScore >= 1.5) return { text: '强势上涨', class: 'trend-up', badge: 'success' };
-            if (avgScore >= 0.5) return { text: '上涨', class: 'trend-up', badge: 'success' };
-            if (avgScore <= -1.5) return { text: '强势下跌', class: 'trend-down', badge: 'danger' };
-            if (avgScore <= -0.5) return { text: '下跌', class: 'trend-down', badge: 'danger' };
-            return { text: '震荡', class: 'trend-neutral', badge: 'neutral' };
+            renderTable();
+            updateTopSignals();
         }
 
-        // 渲染综合趋势
-        function renderOverallTrend(trend) {
-            return `<span class="badge badge-${trend.badge} ${trend.class}">${trend.text}</span>`;
-        }
+        // 页面加载后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            var searchInput = document.getElementById('symbol-search');
+            var dirSelect = document.getElementById('direction-filter');
 
-        // 显示错误
-        function showError(message) {
-            const tbody = document.getElementById('technicalSignalsTableBody');
-            tbody.innerHTML = `<tr><td colspan="5" class="empty-state">❌ ${message}</td></tr>`;
-        }
+            searchInput.addEventListener('input', renderTable);
+            dirSelect.addEventListener('change', renderTable);
 
-        // 页面加载时初始化
-        document.addEventListener('DOMContentLoaded', () => {
-            loadTechnicalSignals();
-            // 每30秒刷新一次数据
-            setInterval(loadTechnicalSignals, 30000);
+            loadSignals();
+            setInterval(loadSignals, 30000);
         });
-
-        // 切换通知菜单
-        function toggleNotifications() {
-            const menu = document.getElementById('notificationMenu');
-            const userMenu = document.getElementById('userMenu');
-            menu.classList.toggle('active');
-            userMenu.classList.remove('active');
-        }
-
-        // 切换用户菜单
-        function toggleUserMenu() {
-            const menu = document.getElementById('userMenu');
-            const notificationMenu = document.getElementById('notificationMenu');
-            menu.classList.toggle('active');
-            notificationMenu.classList.remove('active');
-        }
-
-        // 点击外部关闭菜单
-        document.addEventListener('click', (event) => {
-            if (!event.target.closest('.user-dropdown')) {
-                document.querySelectorAll('.dropdown-menu').forEach(menu => {
-                    menu.classList.remove('active');
-                });
-            }
-        });
-
-        // 退出登录
-        function logout() {
-            // TODO: 实现退出登录逻辑
-            console.log('退出登录');
-        }
     </script>
 </body></html>

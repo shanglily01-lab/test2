@@ -174,17 +174,19 @@
 <!-- Account Selector -->
 <div>
 <label class="text-[10px] uppercase tracking-widest text-on-surface-variant block mb-3 font-headline font-bold">Active Account</label>
-<div class="bg-surface-container rounded-xl p-4 flex items-center justify-between border border-white/5 cursor-pointer hover:bg-surface-container-high transition-colors">
-<div class="flex items-center gap-3">
+<div class="bg-surface-container rounded-xl p-4 border border-white/5">
+<div class="flex items-center gap-3 mb-3">
 <div class="w-10 h-10 rounded-lg bg-gold/20 flex items-center justify-center text-gold">
 <span class="material-symbols-outlined">account_balance</span>
 </div>
-<div>
-<p class="text-sm font-bold font-headline tracking-tight">Prime Obsidian-01</p>
-<p class="text-[10px] font-mono text-on-surface-variant">0x71C...49f4</p>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-bold font-headline tracking-tight" id="active-account-name">加载中...</p>
+<p class="text-[10px] font-mono text-on-surface-variant" id="active-account-sub">请稍候</p>
 </div>
 </div>
-<span class="material-symbols-outlined text-on-surface-variant">expand_more</span>
+<select id="account-select" onchange="onAccountChange()" class="w-full bg-surface-container-high border border-white/10 rounded-lg px-3 py-2 text-sm text-on-surface font-mono focus:outline-none focus:border-gold/50 transition-colors">
+<option value="">加载账号...</option>
+</select>
 </div>
 </div>
 <!-- Balance Card -->
@@ -192,19 +194,19 @@
 <div class="bg-surface-container rounded-2xl p-6 relative overflow-hidden group">
 <div class="absolute top-0 right-0 w-32 h-32 bg-gold/5 blur-[60px] rounded-full -mr-10 -mt-10"></div>
 <p class="text-xs text-on-surface-variant mb-2 font-headline">账户净值 (Equity)</p>
-<h2 class="text-4xl font-bold font-mono text-gold tracking-tighter mb-6">¥1,284,592.42</h2>
+<h2 class="text-4xl font-bold font-mono text-gold tracking-tighter mb-6" id="total-equity">--</h2>
 <div class="grid grid-cols-1 gap-4">
 <div class="flex justify-between items-center text-sm border-b border-white/5 pb-2">
 <span class="text-on-surface-variant">可用余额</span>
-<span class="font-mono">¥492,102.15</span>
+<span class="font-mono" id="available-balance">--</span>
 </div>
 <div class="flex justify-between items-center text-sm border-b border-white/5 pb-2">
 <span class="text-on-surface-variant">已用保证金</span>
-<span class="font-mono">¥724,000.00</span>
+<span class="font-mono" id="used-margin">--</span>
 </div>
 <div class="flex justify-between items-center text-sm">
 <span class="text-on-surface-variant">未实现盈亏</span>
-<span class="font-mono text-primary">+¥68,490.27</span>
+<span class="font-mono" id="unrealized-pnl">--</span>
 </div>
 </div>
 </div>
@@ -212,15 +214,15 @@
 <div class="grid grid-cols-3 gap-4">
 <div class="bg-surface-container rounded-xl p-4 text-center border border-white/5">
 <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-bold">持仓数</p>
-<p class="text-xl font-bold text-gold font-mono tracking-tight">12</p>
+<p class="text-xl font-bold text-gold font-mono tracking-tight" id="positions-count">--</p>
 </div>
 <div class="bg-surface-container rounded-xl p-4 text-center border border-white/5">
 <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-bold">今日盈亏</p>
-<p class="text-xl font-bold text-primary font-mono tracking-tight">+4.2%</p>
+<p class="text-xl font-bold font-mono tracking-tight" id="today-pnl">--</p>
 </div>
 <div class="bg-surface-container rounded-xl p-4 text-center border border-white/5">
 <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-bold">胜率</p>
-<p class="text-xl font-bold text-secondary font-mono tracking-tight">68%</p>
+<p class="text-xl font-bold text-secondary font-mono tracking-tight" id="win-rate">--</p>
 </div>
 </div>
 </div>
@@ -259,161 +261,91 @@
 <section class="flex-1 bg-[#0a0f14] flex flex-col">
 <!-- Table Tabs -->
 <div class="px-8 border-b border-white/5 flex items-center h-14 space-x-12">
-<button class="relative h-full px-2 text-sm font-bold font-headline tracking-tight text-gold border-b-2 border-gold flex items-center gap-2">
-                    持仓 <span class="bg-gold/20 text-gold text-[10px] px-1.5 rounded">12</span>
+<button id="tab-btn-positions" data-tab="positions" onclick="switchTab('positions')" class="tab-btn relative h-full px-2 text-sm font-bold font-headline tracking-tight text-gold border-b-2 border-gold flex items-center gap-2">
+                    持仓 <span id="tab-badge-positions" class="bg-gold/20 text-gold text-[10px] px-1.5 rounded">0</span>
 </button>
-<button class="h-full px-2 text-sm font-headline tracking-tight text-on-surface-variant hover:text-white transition-colors flex items-center gap-2">
-                    挂单 <span class="bg-white/5 text-on-surface-variant text-[10px] px-1.5 rounded">4</span>
+<button id="tab-btn-orders" data-tab="orders" onclick="switchTab('orders')" class="tab-btn h-full px-2 text-sm font-headline tracking-tight text-on-surface-variant hover:text-white transition-colors flex items-center gap-2">
+                    挂单 <span id="tab-badge-orders" class="bg-white/5 text-on-surface-variant text-[10px] px-1.5 rounded">0</span>
 </button>
-<button class="h-full px-2 text-sm font-headline tracking-tight text-on-surface-variant hover:text-white transition-colors">
+<button id="tab-btn-history" data-tab="history" onclick="switchTab('history')" class="tab-btn h-full px-2 text-sm font-headline tracking-tight text-on-surface-variant hover:text-white transition-colors flex items-center gap-2">
                     历史
-                </button>
+                    <span class="flex items-center gap-1 ml-2">
+                      <button data-days="7"  onclick="event.stopPropagation();setHistoryDays(7)"  class="history-days-btn text-[9px] px-1.5 py-0.5 rounded border border-white/10 text-on-surface-variant hover:border-gold/40 hover:text-gold transition-colors">7D</button>
+                      <button data-days="30" onclick="event.stopPropagation();setHistoryDays(30)" class="history-days-btn text-[9px] px-1.5 py-0.5 rounded border border-white/10 text-on-surface-variant hover:border-gold/40 hover:text-gold transition-colors">30D</button>
+                      <button data-days="90" onclick="event.stopPropagation();setHistoryDays(90)" class="history-days-btn text-[9px] px-1.5 py-0.5 rounded border border-white/10 text-on-surface-variant hover:border-gold/40 hover:text-gold transition-colors">90D</button>
+                    </span>
+</button>
 </div>
-<!-- Positions Table -->
-<div class="flex-1 overflow-auto">
+<!-- Positions Panel -->
+<div id="panel-positions" class="tab-panel flex-1 overflow-auto">
 <table class="w-full text-left border-collapse">
 <thead class="sticky top-0 bg-[#0a0f14] z-10">
 <tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-white/5">
-<th class="py-5 px-8 font-bold">交易对 (Symbol)</th>
-<th class="py-5 px-4 font-bold">方向 (Side)</th>
-<th class="py-5 px-4 font-bold text-right">数量 (Qty)</th>
-<th class="py-5 px-4 font-bold text-right">开仓价 (Entry)</th>
-<th class="py-5 px-4 font-bold text-right">当前价 (Mark)</th>
-<th class="py-5 px-4 font-bold text-right">浮盈 (PnL)</th>
-<th class="py-5 px-8 font-bold text-center">操作 (Actions)</th>
+<th class="py-5 px-8 font-bold">交易对</th>
+<th class="py-5 px-4 font-bold">方向</th>
+<th class="py-5 px-4 font-bold text-right">数量</th>
+<th class="py-5 px-4 font-bold text-right">开仓价</th>
+<th class="py-5 px-4 font-bold text-right">当前价</th>
+<th class="py-5 px-4 font-bold text-right">浮盈</th>
+<th class="py-5 px-8 font-bold text-center">操作</th>
 </tr>
 </thead>
-<tbody class="divide-y divide-white/5">
-<!-- Table Row 1 -->
-<tr class="hover:bg-white/[0.02] transition-colors group">
-<td class="py-5 px-8">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-full bg-[#f5a623]/10 flex items-center justify-center border border-[#f5a623]/20">
-<span class="text-[10px] font-bold text-gold">BTC</span>
-</div>
-<div>
-<p class="text-sm font-bold font-headline">BTCUSDT</p>
-<p class="text-[10px] text-on-surface-variant">Perpetual 50x</p>
-</div>
-</div>
-</td>
-<td class="py-5 px-4">
-<span class="px-2.5 py-1 rounded text-[10px] font-bold tracking-wider bg-primary/10 text-primary">LONG</span>
-</td>
-<td class="py-5 px-4 font-mono text-sm text-right">0.850</td>
-<td class="py-5 px-4 font-mono text-sm text-right text-on-surface-variant">64,281.40</td>
-<td class="py-5 px-4 font-mono text-sm text-right">65,901.12</td>
-<td class="py-5 px-4 text-right">
-<p class="text-sm font-bold font-mono text-primary">+¥11,387.50</p>
-<p class="text-[10px] font-mono text-primary/70">+2.51%</p>
-</td>
-<td class="py-5 px-8 text-center">
-<button class="gold-gradient text-[#002045] text-xs font-bold px-4 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all active:scale-95">市价平仓</button>
-</td>
-</tr>
-<!-- Table Row 2 -->
-<tr class="hover:bg-white/[0.02] transition-colors group">
-<td class="py-5 px-8">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-full bg-[#5b9eff]/10 flex items-center justify-center border border-[#5b9eff]/20">
-<span class="text-[10px] font-bold text-secondary">ETH</span>
-</div>
-<div>
-<p class="text-sm font-bold font-headline">ETHUSDT</p>
-<p class="text-[10px] text-on-surface-variant">Perpetual 20x</p>
-</div>
-</div>
-</td>
-<td class="py-5 px-4">
-<span class="px-2.5 py-1 rounded text-[10px] font-bold tracking-wider bg-error/10 text-error">SHORT</span>
-</td>
-<td class="py-5 px-4 font-mono text-sm text-right">12.400</td>
-<td class="py-5 px-4 font-mono text-sm text-right text-on-surface-variant">3,490.12</td>
-<td class="py-5 px-4 font-mono text-sm text-right">3,540.80</td>
-<td class="py-5 px-4 text-right">
-<p class="text-sm font-bold font-mono text-error">-¥4,120.30</p>
-<p class="text-[10px] font-mono text-error/70">-1.45%</p>
-</td>
-<td class="py-5 px-8 text-center">
-<button class="gold-gradient text-[#002045] text-xs font-bold px-4 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all active:scale-95">市价平仓</button>
-</td>
-</tr>
-<!-- Table Row 3 -->
-<tr class="hover:bg-white/[0.02] transition-colors group">
-<td class="py-5 px-8">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-full bg-[#f5a623]/10 flex items-center justify-center border border-[#f5a623]/20">
-<span class="text-[10px] font-bold text-gold">SOL</span>
-</div>
-<div>
-<p class="text-sm font-bold font-headline">SOLUSDT</p>
-<p class="text-[10px] text-on-surface-variant">Isolated 10x</p>
-</div>
-</div>
-</td>
-<td class="py-5 px-4">
-<span class="px-2.5 py-1 rounded text-[10px] font-bold tracking-wider bg-primary/10 text-primary">LONG</span>
-</td>
-<td class="py-5 px-4 font-mono text-sm text-right">150.00</td>
-<td class="py-5 px-4 font-mono text-sm text-right text-on-surface-variant">142.15</td>
-<td class="py-5 px-4 font-mono text-sm text-right">148.90</td>
-<td class="py-5 px-4 text-right">
-<p class="text-sm font-bold font-mono text-primary">+¥6,820.00</p>
-<p class="text-[10px] font-mono text-primary/70">+4.75%</p>
-</td>
-<td class="py-5 px-8 text-center">
-<button class="gold-gradient text-[#002045] text-xs font-bold px-4 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all active:scale-95">市价平仓</button>
-</td>
-</tr>
-<!-- Table Row 4 -->
-<tr class="hover:bg-white/[0.02] transition-colors group">
-<td class="py-5 px-8">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center border border-white/5">
-<span class="text-[10px] font-bold text-on-surface-variant">BNB</span>
-</div>
-<div>
-<p class="text-sm font-bold font-headline">BNBUSDT</p>
-<p class="text-[10px] text-on-surface-variant">Perpetual 25x</p>
-</div>
-</div>
-</td>
-<td class="py-5 px-4">
-<span class="px-2.5 py-1 rounded text-[10px] font-bold tracking-wider bg-primary/10 text-primary">LONG</span>
-</td>
-<td class="py-5 px-4 font-mono text-sm text-right">45.00</td>
-<td class="py-5 px-4 font-mono text-sm text-right text-on-surface-variant">580.40</td>
-<td class="py-5 px-4 font-mono text-sm text-right">582.10</td>
-<td class="py-5 px-4 text-right">
-<p class="text-sm font-bold font-mono text-primary">+¥518.25</p>
-<p class="text-[10px] font-mono text-primary/70">+0.29%</p>
-</td>
-<td class="py-5 px-8 text-center">
-<button class="gold-gradient text-[#002045] text-xs font-bold px-4 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all active:scale-95">市价平仓</button>
-</td>
-</tr>
+<tbody id="positions-tbody" class="divide-y divide-white/5">
+<tr><td colspan="7" class="py-12 text-center text-on-surface-variant text-sm">加载中...</td></tr>
 </tbody>
 </table>
 </div>
-<!-- Footer Pagination/Status Bar -->
+<!-- Orders Panel -->
+<div id="panel-orders" class="tab-panel flex-1 overflow-auto hidden">
+<table class="w-full text-left border-collapse">
+<thead class="sticky top-0 bg-[#0a0f14] z-10">
+<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-white/5">
+<th class="py-5 px-8 font-bold">交易对</th>
+<th class="py-5 px-4 font-bold">方向</th>
+<th class="py-5 px-4 font-bold">类型</th>
+<th class="py-5 px-4 font-bold text-right">价格</th>
+<th class="py-5 px-4 font-bold text-right">数量</th>
+<th class="py-5 px-4 font-bold">状态</th>
+<th class="py-5 px-8 font-bold">时间</th>
+</tr>
+</thead>
+<tbody id="orders-tbody" class="divide-y divide-white/5">
+<tr><td colspan="7" class="py-12 text-center text-on-surface-variant text-sm">加载中...</td></tr>
+</tbody>
+</table>
+</div>
+<!-- History Panel -->
+<div id="panel-history" class="tab-panel flex-1 overflow-auto hidden">
+<table class="w-full text-left border-collapse">
+<thead class="sticky top-0 bg-[#0a0f14] z-10">
+<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-white/5">
+<th class="py-5 px-8 font-bold">交易对</th>
+<th class="py-5 px-4 font-bold">方向</th>
+<th class="py-5 px-4 font-bold text-right">开仓价</th>
+<th class="py-5 px-4 font-bold text-right">平仓价</th>
+<th class="py-5 px-4 font-bold text-right">已实现盈亏</th>
+<th class="py-5 px-4 font-bold">平仓时间</th>
+</tr>
+</thead>
+<tbody id="history-tbody" class="divide-y divide-white/5">
+<tr><td colspan="6" class="py-12 text-center text-on-surface-variant text-sm">加载中...</td></tr>
+</tbody>
+</table>
+</div>
+<!-- Footer Status Bar -->
 <div class="h-12 bg-surface-container-low border-t border-white/5 flex items-center justify-between px-8 text-[10px] text-on-surface-variant uppercase font-bold tracking-widest">
 <div class="flex items-center gap-6">
 <div class="flex items-center gap-2">
-<span class="w-1.5 h-1.5 rounded-full bg-primary"></span>
-<span>WebSocket: Connected</span>
+<span id="ws-status-dot" class="w-1.5 h-1.5 rounded-full bg-on-surface-variant"></span>
+<span id="ws-status-text">连接中...</span>
 </div>
 <div class="flex items-center gap-2">
 <span class="w-1.5 h-1.5 rounded-full bg-gold"></span>
-<span>Risk Level: Normal</span>
+<span>Last updated: <span id="last-updated-time">--</span></span>
 </div>
 </div>
 <div class="flex items-center gap-4">
-<span>Showing 1-12 of 12 Positions</span>
-<div class="flex items-center gap-2 ml-4">
-<span class="material-symbols-outlined text-xs cursor-pointer opacity-30">chevron_left</span>
-<span class="text-gold">1</span>
-<span class="material-symbols-outlined text-xs cursor-pointer opacity-30">chevron_right</span>
-</div>
+<span id="footer-count-text">--</span>
 </div>
 </div>
 </section>
@@ -421,1062 +353,482 @@
 <!-- Decorative Gradient Overlay -->
 <div class="fixed bottom-0 right-0 w-[500px] h-[500px] bg-gold/5 blur-[120px] rounded-full pointer-events-none -mr-[250px] -mb-[250px] z-0"></div>
 <script>
-        // API基础路径
-        const API_BASE = '/api/live-trading';
+// ==================== Live Trading Page JS ====================
+// Gold theme: #f5a623 | LONG: teal (#49f4c8) | SHORT: red (#ff716c)
+// Positive PnL: text-[#49f4c8] | Negative PnL: text-[#ff716c]
 
-        // 当前价格
-        let currentPrice = 0;
+const API_BASE = '/api/live-trading';
+let _currentHistoryDays = 7;
+let _activeApiKeyId = 0;
+let _refreshTimer = null;
 
-        // ==================== 认证与账号管理 ====================
+// ==================== Auth helpers ====================
 
-        function getToken() { return localStorage.getItem('access_token'); }
-        function getApiKeyId() { return parseInt(localStorage.getItem('active_api_key_id') || '0'); }
+function makeHeaders() {
+    const token = window.__ACCESS_TOKEN__ || localStorage.getItem('auth_token') || localStorage.getItem('access_token');
+    return { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
+}
 
-        // 自动刷新 access_token
-        async function tryRefreshToken() {
-            const refreshToken = localStorage.getItem('refresh_token');
-            if (!refreshToken) return false;
-            try {
-                const res = await fetch('/api/auth/refresh', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ refresh_token: refreshToken })
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.access_token) {
-                        localStorage.setItem('access_token', data.access_token);
-                        return true;
-                    }
-                }
-            } catch (e) {}
-            return false;
-        }
-
-        // 带 JWT 认证的 fetch 封装（401时自动refresh）
-        async function authFetch(url, options = {}) {
-            const token = getToken();
-            if (!token) {
-                window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
-                throw new Error('未登录');
-            }
-            const makeHeaders = () => ({ 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}`, ...(options.headers || {}) });
-            let resp = await fetch(url, { ...options, headers: makeHeaders() });
-            if (resp.status === 401) {
-                // 尝试用 refresh_token 换新 access_token
-                const refreshed = await tryRefreshToken();
-                if (refreshed) {
-                    resp = await fetch(url, { ...options, headers: makeHeaders() });
-                } else {
-                    localStorage.removeItem('access_token');
-                    window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
-                    throw new Error('登录已过期');
-                }
-            }
-            return resp;
-        }
-
-        // 在 URL 中附加 api_key_id 参数
-        function withApiKey(url) {
-            const id = getApiKeyId();
-            const sep = url.includes('?') ? '&' : '?';
-            return id > 0 ? `${url}${sep}api_key_id=${id}` : url;
-        }
-
-        function logout() {
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            localStorage.removeItem('active_api_key_id');
-            window.location.href = '/login';
-        }
-
-        function onAccountChange() {
-            const val = document.getElementById('accountSelect').value;
-            localStorage.setItem('active_api_key_id', val || '0');
-            // 切换账号后重置历史缓存
-            _historyLoaded = false;
-            document.getElementById('historyBody').innerHTML = '';
-            document.getElementById('historyTable').style.display = 'none';
-            document.getElementById('historyEmpty').style.display = 'none';
-            // 切换后刷新所有数据
-            Promise.all([testConnection(), loadAccountBalance(), loadPositions(), loadOrders()]);
-        }
-
-        async function loadMyAccounts() {
-            try {
-                const resp = await authFetch(`${API_BASE}/my-accounts`);
-                const data = await resp.json();
-                if (!data.success) return;
-
-                // 显示用户名
-                document.getElementById('userNameDisplay').textContent = data.username || '用户';
-
-                // admin 显示用户管理按钮
-                try {
-                    const meResp = await authFetch('/api/auth/me');
-                    const meData = await meResp.json();
-                    if (meData.success && meData.user && meData.user.role === 'admin') {
-                        document.getElementById('userMgmtBtn').style.display = '';
-                    }
-                } catch(e) {}
-
-                // 填充账号下拉框
-                const sel = document.getElementById('accountSelect');
-                const savedId = getApiKeyId();
-                sel.innerHTML = '<option value="0">自动选取</option>';
-                (data.accounts || []).forEach(acc => {
-                    const opt = document.createElement('option');
-                    opt.value = acc.id;
-                    opt.textContent = acc.account_name + (acc.is_testnet ? ' [测试网]' : '');
-                    if (acc.id == savedId) opt.selected = true;
-                    sel.appendChild(opt);
-                });
-
-                // 如果没有账号，提示添加
-                if (data.accounts.length === 0) {
-                    showNoAccountHint();
-                }
-            } catch (e) {
-                console.error('加载账号列表失败:', e);
+async function refreshToken() {
+    try {
+        const resp = await fetch('/api/auth/refresh', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        if (resp.ok) {
+            const data = await resp.json();
+            if (data.access_token) {
+                localStorage.setItem('auth_token', data.access_token);
+                return true;
             }
         }
+    } catch (e) {
+        console.error('refreshToken failed:', e);
+    }
+    return false;
+}
 
-        function showNoAccountHint() {
-            const warn = document.querySelector('.live-warning-banner');
-            if (warn && !document.getElementById('noAccountHint')) {
-                const hint = document.createElement('div');
-                hint.id = 'noAccountHint';
-                hint.className = 'no-account-hint card';
-                hint.innerHTML = `
-                    <div class="hint-icon">🔑</div>
-                    <div class="hint-text" style="font-size:15px; color: var(--warning-yellow);">
-                        您还没有配置币安账号，无法使用实盘交易功能
-                    </div>
-                    <button class="btn btn-primary" onclick="openAddAccountModal()">
-                        <i class="bi bi-plus-circle"></i> 立即添加币安账号
-                    </button>
-                `;
-                warn.after(hint);
-            }
+async function apiFetch(url, options) {
+    options = options || {};
+    options.headers = Object.assign(makeHeaders(), options.headers || {});
+    let resp = await fetch(url, options);
+    if (resp.status === 401) {
+        const ok = await refreshToken();
+        if (ok) {
+            options.headers = Object.assign(makeHeaders(), {});
+            resp = await fetch(url, options);
         }
+    }
+    return resp;
+}
 
-        // ==================== 用户管理弹窗（仅admin可见）====================
+function apiUrl(path) {
+    if (_activeApiKeyId > 0) {
+        const sep = path.includes('?') ? '&' : '?';
+        return API_BASE + path + sep + 'api_key_id=' + _activeApiKeyId;
+    }
+    return API_BASE + path;
+}
 
-        function openUserMgmtModal() {
-            document.getElementById('userMgmtModal').style.display = 'flex';
-            showUserTab('list');
-            loadUsers();
+// ==================== Formatting ====================
+
+function fmtNumber(num, decimals) {
+    decimals = (decimals === undefined) ? 2 : decimals;
+    if (num === null || num === undefined || isNaN(num)) return '--';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function fmtPrice(num) {
+    if (num === null || num === undefined || isNaN(num)) return '--';
+    const p = parseFloat(num);
+    if (p === 0) return '0';
+    let d;
+    if (p >= 1000) d = 2;
+    else if (p >= 1) d = 4;
+    else if (p >= 0.01) d = 5;
+    else d = 6;
+    return p.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+function fmtPnl(num) {
+    if (num === null || num === undefined || isNaN(num)) return '--';
+    const v = parseFloat(num);
+    return (v >= 0 ? '+' : '') + fmtNumber(v);
+}
+
+function pnlClass(num) {
+    const v = parseFloat(num);
+    return v >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+}
+
+function sideHtml(side) {
+    if (side === 'LONG' || side === 'BUY') {
+        return '<span class="px-2.5 py-1 rounded text-[10px] font-bold tracking-wider bg-[#49f4c8]/10 text-[#49f4c8]">LONG</span>';
+    }
+    return '<span class="px-2.5 py-1 rounded text-[10px] font-bold tracking-wider bg-[#ff716c]/10 text-[#ff716c]">SHORT</span>';
+}
+
+function symbolIcon(symbol) {
+    const base = symbol.replace(/USDT$|USD$|BUSD$/, '').slice(0, 4);
+    return '<div class="w-8 h-8 rounded-full bg-[#f5a623]/10 flex items-center justify-center border border-[#f5a623]/20"><span class="text-[9px] font-bold text-[#f5a623]">' + base + '</span></div>';
+}
+
+function fmtTime(ts) {
+    if (!ts) return '--';
+    return String(ts).replace('T', ' ').slice(0, 16);
+}
+
+// ==================== Toast ====================
+
+function showToast(msg, type) {
+    type = type || 'info';
+    const colors = { success: '#49f4c8', error: '#ff716c', info: '#f5a623', warning: '#f5a623' };
+    const color = colors[type] || colors.info;
+    const existing = document.getElementById('live-toast');
+    if (existing) existing.remove();
+    const el = document.createElement('div');
+    el.id = 'live-toast';
+    el.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;background:#151a20;border:1px solid ' + color + '40;border-radius:12px;padding:14px 20px;color:#ebeef5;font-size:13px;font-family:Manrope,sans-serif;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.5);transition:opacity 0.3s;';
+    el.innerHTML = '<span style="color:' + color + ';margin-right:8px;font-weight:bold;">[' + type.toUpperCase() + ']</span>' + msg;
+    document.body.appendChild(el);
+    setTimeout(function() { if (el.parentNode) el.remove(); }, 4000);
+}
+
+// ==================== Tab switching ====================
+
+function switchTab(tab) {
+    var tabs = ['positions', 'orders', 'history'];
+    tabs.forEach(function(t) {
+        var btn = document.getElementById('tab-btn-' + t);
+        var panel = document.getElementById('panel-' + t);
+        if (!btn || !panel) return;
+        if (t === tab) {
+            btn.classList.add('text-gold', 'border-b-2', 'border-gold', 'font-bold');
+            btn.classList.remove('text-on-surface-variant', 'font-headline');
+            panel.classList.remove('hidden');
+        } else {
+            btn.classList.remove('text-gold', 'border-b-2', 'border-gold', 'font-bold');
+            btn.classList.add('text-on-surface-variant');
+            panel.classList.add('hidden');
         }
+    });
+    if (tab === 'history') loadHistory(_currentHistoryDays);
+    updateFooterCount(tab);
+}
 
-        function closeUserMgmtModal() {
-            document.getElementById('userMgmtModal').style.display = 'none';
-            document.getElementById('newUserName').value = '';
-            document.getElementById('newUserEmail').value = '';
-            document.getElementById('newUserPassword').value = '';
-            document.getElementById('newUserRole').value = 'user';
-            const msg = document.getElementById('createUserMsg');
-            msg.style.display = 'none';
+function updateFooterCount(tab) {
+    var el = document.getElementById('footer-count-text');
+    if (!el) return;
+    var cnt = document.getElementById(tab === 'positions' ? 'tab-badge-positions' : (tab === 'orders' ? 'tab-badge-orders' : null));
+    if (cnt) {
+        el.textContent = cnt.textContent + (tab === 'history' ? ' records' : ' active');
+    }
+}
+
+// ==================== History days toggle ====================
+
+function setHistoryDays(days) {
+    _currentHistoryDays = days;
+    document.querySelectorAll('.history-days-btn').forEach(function(b) {
+        if (parseInt(b.getAttribute('data-days')) === days) {
+            b.style.color = '#f5a623';
+            b.style.borderColor = 'rgba(245,166,35,0.4)';
+        } else {
+            b.style.color = '';
+            b.style.borderColor = '';
         }
+    });
+    loadHistory(days);
+}
 
-        function showUserTab(tab) {
-            document.getElementById('tabUserList').style.display   = tab === 'list'   ? 'block' : 'none';
-            document.getElementById('tabCreateUser').style.display = tab === 'create' ? 'block' : 'none';
-            document.getElementById('tabUsersBtn').className  = 'tab-btn' + (tab === 'list'   ? ' active' : '');
-            document.getElementById('tabCreateBtn').className = 'tab-btn' + (tab === 'create' ? ' active' : '');
-        }
+// ==================== Account selector ====================
 
-        async function loadUsers() {
-            document.getElementById('userListLoading').style.display = 'block';
-            document.getElementById('userListContent').style.display = 'none';
-            try {
-                const resp = await authFetch('/api/auth/admin/users');
-                const data = await resp.json();
-                document.getElementById('userListLoading').style.display = 'none';
-                if (!data.success) { showToast('加载用户失败', 'error'); return; }
-                const fmtTime = s => s ? s.replace('T', ' ').slice(0, 16) : '—';
-                document.getElementById('userTableBody').innerHTML = (data.users || []).map(u => `
-                    <tr>
-                        <td><strong>${u.username}</strong></td>
-                        <td style="color:var(--text-secondary);font-size:12px;">${u.email}</td>
-                        <td><span class="badge-role-${u.role}">${u.role}</span></td>
-                        <td><span class="badge-status-${u.status}">${u.status === 'active' ? '正常' : '禁用'}</span></td>
-                        <td style="font-size:12px;color:var(--text-secondary);">${fmtTime(u.last_login)}</td>
-                        <td>
-                            <button class="btn btn-sm btn-${u.status === 'active' ? 'danger' : 'success'}"
-                                    style="font-size:12px;padding:4px 12px;"
-                                    onclick="toggleUserStatus(${u.id}, '${u.username}', '${u.status}')">
-                                ${u.status === 'active' ? '禁用' : '启用'}
-                            </button>
-                        </td>
-                    </tr>`).join('');
-                document.getElementById('userListContent').style.display = 'block';
-            } catch(e) {
-                document.getElementById('userListLoading').style.display = 'none';
-                showToast('加载用户列表失败', 'error');
-            }
-        }
+function onAccountChange() {
+    var sel = document.getElementById('account-select');
+    if (!sel) return;
+    var val = parseInt(sel.value) || 0;
+    _activeApiKeyId = val;
+    localStorage.setItem('active_api_key_id', val);
+    var opt = sel.options[sel.selectedIndex];
+    if (opt) {
+        var nameEl = document.getElementById('active-account-name');
+        var subEl = document.getElementById('active-account-sub');
+        if (nameEl) nameEl.textContent = opt.textContent || '未知账号';
+        if (subEl) subEl.textContent = val > 0 ? 'ID: ' + val : '自动选取';
+    }
+    loadAll();
+}
 
-        async function toggleUserStatus(userId, username, currentStatus) {
-            const action = currentStatus === 'active' ? '禁用' : '启用';
-            const confirmed = await showConfirmDialog(`${action}用户`, `确认要${action}用户 "${username}" 吗？`);
-            if (!confirmed) return;
-            try {
-                const resp = await authFetch(`/api/auth/admin/users/${userId}/status`, { method: 'PATCH' });
-                const data = await resp.json();
-                if (data.success) {
-                    showToast(`用户 ${username} 已${action}`, 'success');
-                    loadUsers();
-                } else {
-                    showToast(data.detail || `${action}失败`, 'error');
-                }
-            } catch(e) {
-                showToast('操作失败', 'error');
-            }
-        }
+// ==================== Load accounts ====================
 
-        async function submitCreateUser() {
-            const username = document.getElementById('newUserName').value.trim();
-            const email    = document.getElementById('newUserEmail').value.trim();
-            const password = document.getElementById('newUserPassword').value;
-            const role     = document.getElementById('newUserRole').value;
-            const msgEl    = document.getElementById('createUserMsg');
-            if (!username || !email || !password) {
-                msgEl.style.display = 'block';
-                msgEl.style.background = 'rgba(239,68,68,.12)';
-                msgEl.style.color = 'var(--danger-red)';
-                msgEl.textContent = '请填写全部必填项';
-                return;
-            }
-            const btn = document.getElementById('createUserBtn');
-            btn.disabled = true;
-            try {
-                const resp = await authFetch('/api/auth/admin/users', {
-                    method: 'POST',
-                    body: JSON.stringify({ username, email, password, role })
-                });
-                const data = await resp.json();
-                if (data.success) {
-                    msgEl.style.display = 'block';
-                    msgEl.style.background = 'rgba(16,185,129,.12)';
-                    msgEl.style.color = 'var(--success-green)';
-                    msgEl.textContent = data.message || '用户创建成功';
-                    document.getElementById('newUserName').value = '';
-                    document.getElementById('newUserEmail').value = '';
-                    document.getElementById('newUserPassword').value = '';
-                } else {
-                    msgEl.style.display = 'block';
-                    msgEl.style.background = 'rgba(239,68,68,.12)';
-                    msgEl.style.color = 'var(--danger-red)';
-                    msgEl.textContent = data.detail || '创建失败';
-                }
-            } catch(e) {
-                msgEl.style.display = 'block';
-                msgEl.style.background = 'rgba(239,68,68,.12)';
-                msgEl.style.color = 'var(--danger-red)';
-                msgEl.textContent = '请求失败';
-            }
-            btn.disabled = false;
-        }
+async function loadAccounts() {
+    try {
+        var resp = await apiFetch(API_BASE + '/my-accounts');
+        if (!resp.ok) return;
+        var data = await resp.json();
+        var accounts = data.accounts || data || [];
+        if (!Array.isArray(accounts)) return;
 
-        // ==================== 添加账号弹窗 ====================
+        var sel = document.getElementById('account-select');
+        if (!sel) return;
 
-        function copyServerIp() {
-            const ip = document.getElementById('serverIpField').value;
-            navigator.clipboard.writeText(ip).then(() => {
-                const btn = event.target.closest('button');
-                const orig = btn.innerHTML;
-                btn.innerHTML = '<i class="bi bi-check2"></i> 已复制';
-                setTimeout(() => btn.innerHTML = orig, 2000);
-            });
-        }
-
-        function openAddAccountModal() {
-            // 填充服务器 IP（从当前访问地址取 hostname/IP）
-            const serverIp = window.location.hostname;
-            document.getElementById('serverIpField').value = serverIp;
-            document.getElementById('serverIpHint').textContent = serverIp;
-            document.getElementById('addAccountModal').style.display = 'flex';
-            showAccountTab('guide');
-        }
-
-        function closeAddAccountModal() {
-            document.getElementById('addAccountModal').style.display = 'none';
-            document.getElementById('newAccountName').value = '';
-            document.getElementById('newApiKey').value = '';
-            document.getElementById('newApiSecret').value = '';
-            document.getElementById('testConnectionResult').style.display = 'none';
-        }
-
-        function showAccountTab(tab) {
-            document.getElementById('tabGuide').style.display = tab === 'guide' ? 'block' : 'none';
-            document.getElementById('tabForm').style.display  = tab === 'form'  ? 'block' : 'none';
-            document.getElementById('tabGuideBtn').className = 'tab-btn' + (tab === 'guide' ? ' active' : '');
-            document.getElementById('tabFormBtn').className  = 'tab-btn' + (tab === 'form'  ? ' active' : '');
-        }
-
-        function toggleSecretVisibility() {
-            const inp = document.getElementById('newApiSecret');
-            const icon = document.getElementById('secretEyeIcon');
-            if (inp.type === 'password') {
-                inp.type = 'text';
-                icon.className = 'bi bi-eye-slash';
-            } else {
-                inp.type = 'password';
-                icon.className = 'bi bi-eye';
-            }
-        }
-
-        async function testNewAccountConnection() {
-            const apiKey    = document.getElementById('newApiKey').value.trim();
-            const apiSecret = document.getElementById('newApiSecret').value.trim();
-            const resultDiv = document.getElementById('testConnectionResult');
-
-            if (!apiKey || !apiSecret) {
-                resultDiv.style.display = 'block';
-                resultDiv.innerHTML = '<div class="badge badge-danger" style="padding:8px 12px;">请先填写 API Key 和 Secret Key</div>';
-                return;
-            }
-
-            const btn = document.getElementById('testConnBtn');
-            btn.disabled = true;
-            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 验证中...';
-            resultDiv.style.display = 'none';
-
-            try {
-                const token = getToken();
-                const resp = await fetch('/api/api-keys/verify-raw', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({ exchange: 'binance', api_key: apiKey, api_secret: apiSecret })
-                });
-                const data = await resp.json();
-                resultDiv.style.display = 'block';
-                if (data.success) {
-                    const bal = data.balance;
-                    resultDiv.innerHTML = `<div style="background:var(--success-green-bg);color:var(--success-green);border-radius:8px;padding:10px 14px;">
-                        ✅ 连接成功！余额: ${bal ? (parseFloat(bal.balance||0).toFixed(2) + ' USDT') : '获取中...'}
-                    </div>`;
-                } else {
-                    resultDiv.innerHTML = `<div style="background:var(--danger-red-bg);color:var(--danger-red);border-radius:8px;padding:10px 14px;">
-                        ❌ 验证失败: ${data.error || data.detail || '请检查 API Key 是否正确及权限是否足够'}
-                    </div>`;
-                }
-            } catch (e) {
-                resultDiv.style.display = 'block';
-                resultDiv.innerHTML = `<div style="background:var(--danger-red-bg);color:var(--danger-red);border-radius:8px;padding:10px 14px;">❌ 网络错误: ${e.message}</div>`;
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-wifi"></i> 测试连接';
-            }
-        }
-
-        async function saveNewAccount() {
-            const accountName = document.getElementById('newAccountName').value.trim();
-            const apiKey      = document.getElementById('newApiKey').value.trim();
-            const apiSecret   = document.getElementById('newApiSecret').value.trim();
-
-            if (!accountName) { showToast('请填写账户名称', 'error'); return; }
-            if (!apiKey)      { showToast('请填写 API Key', 'error'); return; }
-            if (!apiSecret)   { showToast('请填写 Secret Key', 'error'); return; }
-
-            const btn = document.getElementById('saveAccountBtn');
-            btn.disabled = true;
-            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 保存中...';
-
-            try {
-                const token = getToken();
-                const resp = await fetch('/api/api-keys/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                    body: JSON.stringify({
-                        exchange: 'binance',
-                        account_name: accountName,
-                        api_key: apiKey,
-                        api_secret: apiSecret,
-                        permissions: 'futures',
-                        is_testnet: false,
-                        max_position_value: 10000,
-                        max_daily_loss: 500,
-                        max_leverage: 20
-                    })
-                });
-                const data = await resp.json();
-                if (data.success) {
-                    showToast(`账号「${accountName}」已保存！`, 'success');
-                    closeAddAccountModal();
-                    await loadMyAccounts();
-                    // 自动选中新账号
-                    if (data.api_key_id) {
-                        localStorage.setItem('active_api_key_id', data.api_key_id);
-                        document.getElementById('accountSelect').value = data.api_key_id;
-                    }
-                    // 移除无账号提示
-                    const hint = document.getElementById('noAccountHint');
-                    if (hint) hint.remove();
-                    // 刷新数据
-                    setTimeout(() => Promise.all([testConnection(), loadAccountBalance(), loadPositions(), loadOrders()]), 500);
-                } else {
-                    showToast('保存失败: ' + (data.detail || data.message || JSON.stringify(data)), 'error');
-                }
-            } catch (e) {
-                showToast('保存请求失败: ' + e.message, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-check2-circle"></i> 保存账号';
-            }
-        }
-
-        // ==================== 初始化 ====================
-
-        // 初始化
-        document.addEventListener('DOMContentLoaded', async function() {
-            // 登录检查
-            if (!getToken()) {
-                window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
-                return;
-            }
-
-            // 加载账号列表
-            await loadMyAccounts();
-
-            // 并行加载所有数据，加速页面初始化
-            await Promise.all([
-                testConnection(),
-                loadAccountBalance(),
-                loadPositions(),
-                loadOrders()
-            ]);
-
-            // 定时刷新
-            setInterval(loadPositions, 30000);
-            setInterval(loadAccountBalance, 60000);
+        var savedId = parseInt(localStorage.getItem('active_api_key_id') || '0');
+        sel.innerHTML = '<option value="0">自动选取</option>';
+        accounts.forEach(function(acc) {
+            var opt = document.createElement('option');
+            opt.value = acc.id;
+            opt.textContent = acc.account_name + (acc.exchange ? ' [' + acc.exchange + ']' : '');
+            if (acc.id === savedId) opt.selected = true;
+            sel.appendChild(opt);
         });
 
-        // 测试连接
-        async function testConnection() {
-            const statusDot = document.getElementById('connectionStatus');
-            const statusText = document.getElementById('connectionText');
-            const apiStatus = document.getElementById('apiStatus');
-            const apiStatusTime = document.getElementById('apiStatusTime');
+        if (savedId > 0) _activeApiKeyId = savedId;
 
-            statusDot.className = 'status-dot';
-            statusText.textContent = '检测中...';
+        // Update display name
+        var activeAcc = accounts.find(function(a) { return a.id === savedId; }) || accounts[0];
+        if (activeAcc) {
+            var nameEl = document.getElementById('active-account-name');
+            var subEl = document.getElementById('active-account-sub');
+            if (nameEl) nameEl.textContent = activeAcc.account_name;
+            if (subEl) subEl.textContent = activeAcc.exchange || 'Binance';
+        }
+    } catch (e) {
+        console.error('loadAccounts failed:', e);
+    }
+}
 
-            try {
-                const response = await authFetch(withApiKey(`${API_BASE}/test-connection`));
-                const data = await response.json();
+// ==================== Load balance ====================
 
-                if (data.success) {
-                    statusDot.classList.add('online');
-                    statusText.textContent = '已连接币安';
-                    apiStatus.textContent = '正常';
-                    apiStatus.className = 'stat-value text-success';
-                    apiStatusTime.textContent = new Date().toLocaleTimeString();
-                    showToast('币安API连接正常', 'success');
-                } else {
-                    statusDot.classList.add('offline');
-                    statusText.textContent = '连接失败';
-                    apiStatus.textContent = '异常';
-                    apiStatus.className = 'stat-value text-danger';
-                    apiStatusTime.textContent = data.message || '连接失败';
-                    showToast('币安API连接失败: ' + data.message, 'error');
-                }
-            } catch (error) {
-                statusDot.classList.add('offline');
-                statusText.textContent = '连接失败';
-                apiStatus.textContent = '错误';
-                apiStatus.className = 'stat-value text-danger';
-                apiStatusTime.textContent = error.message;
-                showToast('连接测试失败: ' + error.message, 'error');
-            }
+async function loadBalance() {
+    try {
+        var resp = await apiFetch(apiUrl('/account/balance'));
+        if (!resp.ok) return;
+        var data = await resp.json();
+        var d = data.data || data;
+
+        var equity = parseFloat(d.total_equity || d.balance || 0);
+        var available = parseFloat(d.available_balance || d.available || 0);
+        var usedMargin = parseFloat(d.used_margin || d.margin || 0);
+        var upnl = parseFloat(d.unrealized_pnl || d.unrealized_pnl || 0);
+
+        var eqEl = document.getElementById('total-equity');
+        if (eqEl) eqEl.textContent = fmtNumber(equity);
+
+        var avEl = document.getElementById('available-balance');
+        if (avEl) avEl.textContent = fmtNumber(available);
+
+        var umEl = document.getElementById('used-margin');
+        if (umEl) umEl.textContent = fmtNumber(usedMargin);
+
+        var upEl = document.getElementById('unrealized-pnl');
+        if (upEl) {
+            upEl.textContent = fmtPnl(upnl);
+            upEl.className = 'font-mono ' + pnlClass(upnl);
         }
 
-        // 加载账户余额
-        async function loadAccountBalance() {
-            try {
-                const response = await authFetch(withApiKey(`${API_BASE}/account/balance`));
-                const data = await response.json();
-
-                document.getElementById('accountLoading').style.display = 'none';
-                document.getElementById('accountStats').style.display = 'grid';
-
-                if (data.success) {
-                    document.getElementById('walletBalance').textContent = formatNumber(data.data.balance);
-                    document.getElementById('availableBalance').textContent = formatNumber(data.data.available);
-
-                    const unrealizedPnl = data.data.unrealized_pnl || 0;
-                    document.getElementById('unrealizedPnl').textContent = formatNumber(unrealizedPnl);
-                    document.getElementById('unrealizedPnl').className = 'stat-value ' + (unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative');
-                    document.getElementById('unrealizedPnlChange').textContent = unrealizedPnl >= 0 ? '盈利' : '亏损';
-                    document.getElementById('unrealizedPnlChange').className = 'stat-change ' + (unrealizedPnl >= 0 ? 'positive' : 'negative');
-
-                    // 更新时间
-                    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
-                }
-            } catch (error) {
-                console.error('加载余额失败:', error);
-            }
+        // today pnl from history if available, otherwise show upnl as proxy
+        var todayEl = document.getElementById('today-pnl');
+        if (todayEl) {
+            todayEl.textContent = fmtPnl(upnl);
+            todayEl.className = 'text-xl font-bold font-mono tracking-tight ' + pnlClass(upnl);
         }
 
-        // 同步余额
-        async function syncBalance() {
-            showToast('正在同步余额...', 'info');
-            await loadAccountBalance();
-            showToast('余额同步完成', 'success');
+        // Update WS status indicator
+        var dot = document.getElementById('ws-status-dot');
+        var txt = document.getElementById('ws-status-text');
+        if (dot) dot.style.backgroundColor = '#49f4c8';
+        if (txt) txt.textContent = 'API: Connected';
+
+        var lastEl = document.getElementById('last-updated-time');
+        if (lastEl) lastEl.textContent = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    } catch (e) {
+        console.error('loadBalance failed:', e);
+        var dot = document.getElementById('ws-status-dot');
+        var txt = document.getElementById('ws-status-text');
+        if (dot) dot.style.backgroundColor = '#ff716c';
+        if (txt) txt.textContent = 'API: Error';
+    }
+}
+
+// ==================== Load positions ====================
+
+async function loadPositions() {
+    var tbody = document.getElementById('positions-tbody');
+    if (!tbody) return;
+    try {
+        var resp = await apiFetch(apiUrl('/positions'));
+        if (!resp.ok) {
+            tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-[#ff716c] text-sm">加载失败 (HTTP ' + resp.status + ')</td></tr>';
+            return;
+        }
+        var data = await resp.json();
+        var list = data.data || data || [];
+        if (!Array.isArray(list)) list = [];
+
+        var cntEl = document.getElementById('positions-count');
+        if (cntEl) cntEl.textContent = list.length;
+
+        var badgeEl = document.getElementById('tab-badge-positions');
+        if (badgeEl) badgeEl.textContent = list.length;
+
+        if (list.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="py-16 text-center text-on-surface-variant text-sm">暂无持仓</td></tr>';
+            return;
         }
 
-        // 加载持仓
-        async function loadPositions() {
-            try {
-                const response = await authFetch(withApiKey(`${API_BASE}/positions`));
-                const data = await response.json();
+        tbody.innerHTML = list.map(function(pos) {
+            var side = pos.side || pos.position_side || '';
+            var pnl = parseFloat(pos.unrealized_pnl || 0);
+            var pct = parseFloat(pos.percentage || 0);
+            return '<tr class="hover:bg-white/[0.02] transition-colors group">' +
+                '<td class="py-4 px-8"><div class="flex items-center gap-3">' + symbolIcon(pos.symbol) +
+                '<div><p class="text-sm font-bold font-headline">' + pos.symbol + '</p></div></div></td>' +
+                '<td class="py-4 px-4">' + sideHtml(side) + '</td>' +
+                '<td class="py-4 px-4 font-mono text-sm text-right">' + fmtNumber(pos.size || pos.quantity, 4) + '</td>' +
+                '<td class="py-4 px-4 font-mono text-sm text-right text-on-surface-variant">' + fmtPrice(pos.entry_price) + '</td>' +
+                '<td class="py-4 px-4 font-mono text-sm text-right">' + fmtPrice(pos.mark_price) + '</td>' +
+                '<td class="py-4 px-4 text-right"><p class="text-sm font-bold font-mono ' + pnlClass(pnl) + '">' + fmtPnl(pnl) + '</p>' +
+                '<p class="text-[10px] font-mono ' + pnlClass(pct) + '">' + (pct >= 0 ? '+' : '') + fmtNumber(pct) + '%</p></td>' +
+                '<td class="py-4 px-8 text-center">' +
+                '<button onclick="closePosition(\'' + pos.symbol + '\',\'' + side + '\')" ' +
+                'class="gold-gradient text-[#002045] text-xs font-bold px-4 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all active:scale-95">市价平仓</button>' +
+                '</td></tr>';
+        }).join('');
+    } catch (e) {
+        console.error('loadPositions failed:', e);
+        tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-[#ff716c] text-sm">加载失败: ' + e.message + '</td></tr>';
+    }
+}
 
-                document.getElementById('positionsLoading').style.display = 'none';
+// ==================== Load orders ====================
 
-                if (data.success && data.data && data.data.length > 0) {
-                    document.getElementById('positionsTable').style.display = 'block';
-                    document.getElementById('positionsEmpty').style.display = 'none';
-                    document.getElementById('positionsCountBadge').textContent = data.data.length + ' 个持仓';
-                    document.getElementById('tabPosBadge').textContent = data.data.length;
-                    document.getElementById('positionCount').textContent = data.data.length;
+async function loadOrders() {
+    var tbody = document.getElementById('orders-tbody');
+    if (!tbody) return;
+    try {
+        var resp = await apiFetch(apiUrl('/orders'));
+        if (!resp.ok) {
+            tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-[#ff716c] text-sm">加载失败 (HTTP ' + resp.status + ')</td></tr>';
+            return;
+        }
+        var data = await resp.json();
+        var list = data.data || data || [];
+        if (!Array.isArray(list)) list = [];
 
-                    const tbody = document.getElementById('positionsBody');
-                    tbody.innerHTML = data.data.map(pos => `
-                        <tr>
-                            <td><strong>${pos.symbol}</strong></td>
-                            <td>
-                                <span class="badge ${pos.position_side === 'LONG' ? 'badge-success' : 'badge-danger'}">
-                                    ${pos.position_side === 'LONG' ? '做多' : '做空'}
-                                </span>
-                            </td>
-                            <td class="font-mono">${formatNumber(pos.quantity, 4)}</td>
-                            <td class="font-mono">${formatPrice(pos.entry_price)}</td>
-                            <td class="font-mono">${formatPrice(pos.mark_price)}</td>
-                            <td class="font-mono ${pos.unrealized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
-                                ${pos.unrealized_pnl >= 0 ? '+' : ''}${formatNumber(pos.unrealized_pnl)}
-                            </td>
-                            <td>${pos.leverage}x</td>
-                            <td class="font-mono text-danger">${formatPrice(pos.liquidation_price)}</td>
-                            <td>
-                                <button class="btn btn-sm btn-danger" onclick="closePositionBySymbol('${pos.symbol}', '${pos.position_side}')">
-                                    平仓
-                                </button>
-                            </td>
-                        </tr>
-                    `).join('');
+        var badgeEl = document.getElementById('tab-badge-orders');
+        if (badgeEl) badgeEl.textContent = list.length;
 
-                    // 计算总保证金
-                    const totalMargin = data.data.reduce((sum, pos) => sum + (pos.margin || 0), 0);
-                    document.getElementById('totalMargin').textContent = formatNumber(totalMargin);
-                } else {
-                    document.getElementById('positionsTable').style.display = 'none';
-                    document.getElementById('positionsEmpty').style.display = 'block';
-                    document.getElementById('positionsCountBadge').textContent = '0 个持仓';
-                    document.getElementById('positionCount').textContent = '0';
-                    document.getElementById('totalMargin').textContent = '0.00';
-                }
-            } catch (error) {
-                console.error('加载持仓失败:', error);
-                document.getElementById('positionsLoading').style.display = 'none';
-                document.getElementById('positionsEmpty').style.display = 'block';
-            }
+        if (list.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="py-16 text-center text-on-surface-variant text-sm">暂无挂单</td></tr>';
+            return;
         }
 
-        // 加载挂单
-        async function loadOrders() {
-            try {
-                const response = await authFetch(withApiKey(`${API_BASE}/orders`));
-                const data = await response.json();
+        tbody.innerHTML = list.map(function(ord) {
+            var side = ord.side || '';
+            var typeMap = { STOP_MARKET: '止损', TAKE_PROFIT_MARKET: '止盈', LIMIT: '限价', MARKET: '市价' };
+            var typeLabel = typeMap[ord.type] || ord.type || '--';
+            var price = parseFloat(ord.price || ord.stopPrice || 0);
+            var statusLabel = ord.status || '--';
+            return '<tr class="hover:bg-white/[0.02] transition-colors">' +
+                '<td class="py-4 px-8"><div class="flex items-center gap-3">' + symbolIcon(ord.symbol) +
+                '<p class="text-sm font-bold font-headline">' + ord.symbol + '</p></div></td>' +
+                '<td class="py-4 px-4">' + sideHtml(side) + '</td>' +
+                '<td class="py-4 px-4 text-sm text-on-surface-variant">' + typeLabel + '</td>' +
+                '<td class="py-4 px-4 font-mono text-sm text-right">' + fmtPrice(price) + '</td>' +
+                '<td class="py-4 px-4 font-mono text-sm text-right">' + fmtNumber(ord.quantity || ord.origQty, 4) + '</td>' +
+                '<td class="py-4 px-4 text-xs text-on-surface-variant">' + statusLabel + '</td>' +
+                '<td class="py-4 px-8 text-xs text-on-surface-variant">' + fmtTime(ord.created_at || ord.time) + '</td>' +
+                '</tr>';
+        }).join('');
+    } catch (e) {
+        console.error('loadOrders failed:', e);
+        tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-[#ff716c] text-sm">加载失败: ' + e.message + '</td></tr>';
+    }
+}
 
-                document.getElementById('ordersLoading').style.display = 'none';
+// ==================== Load history ====================
 
-                if (data.success && data.data && data.data.length > 0) {
-                    document.getElementById('ordersTable').style.display = 'block';
-                    document.getElementById('ordersEmpty').style.display = 'none';
-                    document.getElementById('tabOrdBadge').textContent = data.data.length;
+async function loadHistory(days) {
+    days = days || _currentHistoryDays;
+    _currentHistoryDays = days;
+    var tbody = document.getElementById('history-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-on-surface-variant text-sm">加载中...</td></tr>';
+    try {
+        var resp = await apiFetch(apiUrl('/history?days=' + days));
+        if (!resp.ok) {
+            tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-[#ff716c] text-sm">加载失败 (HTTP ' + resp.status + ')</td></tr>';
+            return;
+        }
+        var data = await resp.json();
+        var list = data.data || data || [];
+        if (!Array.isArray(list)) list = [];
 
-                    const tbody = document.getElementById('ordersBody');
-                    tbody.innerHTML = data.data.map(order => {
-                        // 获取价格：限价单用price，止损止盈单用stopPrice
-                        let displayPrice = 0;
-                        if (order.type === 'LIMIT') {
-                            displayPrice = parseFloat(order.price) || 0;
-                        } else if (order.type === 'STOP_MARKET' || order.type === 'TAKE_PROFIT_MARKET') {
-                            displayPrice = parseFloat(order.stopPrice) || 0;
-                        } else {
-                            displayPrice = parseFloat(order.price) || parseFloat(order.stopPrice) || 0;
-                        }
-
-                        // 订单类型显示
-                        let typeDisplay = order.type;
-                        if (order.type === 'STOP_MARKET') typeDisplay = '止损';
-                        else if (order.type === 'TAKE_PROFIT_MARKET') typeDisplay = '止盈';
-                        else if (order.type === 'LIMIT') typeDisplay = '限价';
-                        else if (order.type === 'MARKET') typeDisplay = '市价';
-
-                        return `
-                        <tr>
-                            <td><strong>${order.symbol}</strong></td>
-                            <td>${typeDisplay}</td>
-                            <td>
-                                <span class="badge ${order.side === 'BUY' ? 'badge-success' : 'badge-danger'}">
-                                    ${order.side}
-                                </span>
-                            </td>
-                            <td class="font-mono">${formatPrice(displayPrice)}</td>
-                            <td class="font-mono">${formatNumber(order.origQty, 4)}</td>
-                            <td>
-                                <button class="btn btn-sm btn-danger" onclick="cancelOrder('${order.symbol}', '${order.orderId}')" title="撤销此订单">
-                                    <i class="bi bi-x-circle"></i> 撤单
-                                </button>
-                            </td>
-                        </tr>
-                    `}).join('');
-                } else {
-                    document.getElementById('ordersTable').style.display = 'none';
-                    document.getElementById('ordersEmpty').style.display = 'block';
-                }
-            } catch (error) {
-                console.error('加载挂单失败:', error);
-                document.getElementById('ordersLoading').style.display = 'none';
-                document.getElementById('ordersEmpty').style.display = 'block';
-            }
+        if (list.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="py-16 text-center text-on-surface-variant text-sm">暂无历史记录</td></tr>';
+            return;
         }
 
-        // 获取价格
-        async function refreshPrice() {
-            const symbol = document.getElementById('symbol').value;
-            if (!symbol) return;
+        tbody.innerHTML = list.map(function(h) {
+            var pnl = parseFloat(h.realized_pnl || 0);
+            var side = h.side || h.position_side || '';
+            return '<tr class="hover:bg-white/[0.02] transition-colors">' +
+                '<td class="py-4 px-8"><div class="flex items-center gap-3">' + symbolIcon(h.symbol) +
+                '<p class="text-sm font-bold font-headline">' + h.symbol + '</p></div></td>' +
+                '<td class="py-4 px-4">' + sideHtml(side) + '</td>' +
+                '<td class="py-4 px-4 font-mono text-sm text-right text-on-surface-variant">' + fmtPrice(h.entry_price) + '</td>' +
+                '<td class="py-4 px-4 font-mono text-sm text-right">' + fmtPrice(h.exit_price || h.close_price) + '</td>' +
+                '<td class="py-4 px-4 font-mono text-sm text-right font-bold ' + pnlClass(pnl) + '">' + fmtPnl(pnl) + '</td>' +
+                '<td class="py-4 px-8 text-xs text-on-surface-variant">' + fmtTime(h.close_time) + '</td>' +
+                '</tr>';
+        }).join('');
+    } catch (e) {
+        console.error('loadHistory failed:', e);
+        tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-[#ff716c] text-sm">加载失败: ' + e.message + '</td></tr>';
+    }
+}
 
-            try {
-                const response = await fetch(`${API_BASE}/price/${encodeURIComponent(symbol)}`);
-                const data = await response.json();
+// ==================== Close position ====================
 
-                if (data.success) {
-                    currentPrice = data.data.price;
-                    document.getElementById('current-price-display').textContent = formatPrice(currentPrice);
-                    updateEstimatedMargin();
-                }
-            } catch (error) {
-                console.error('获取价格失败:', error);
-            }
+async function closePosition(symbol, side) {
+    var confirmed = window.confirm('确认平仓 ' + symbol + ' ' + side + '?\n\n这将执行实盘平仓操作。');
+    if (!confirmed) return;
+    try {
+        var body = { symbol: symbol, side: side };
+        if (_activeApiKeyId > 0) body.api_key_id = _activeApiKeyId;
+        var resp = await apiFetch(API_BASE + '/close-by-symbol', {
+            method: 'POST',
+            body: JSON.stringify(body)
+        });
+        var data = await resp.json();
+        if (data.success) {
+            showToast('平仓成功: ' + (data.message || symbol), 'success');
+            setTimeout(function() { loadPositions(); loadBalance(); }, 1000);
+        } else {
+            showToast('平仓失败: ' + (data.message || data.detail || '未知错误'), 'error');
         }
+    } catch (e) {
+        showToast('平仓请求失败: ' + e.message, 'error');
+    }
+}
 
-        // 交易对改变
-        function onSymbolChange() {
-            refreshPrice();
+// ==================== Load all & auto-refresh ====================
+
+async function loadAll() {
+    await Promise.all([loadBalance(), loadPositions(), loadOrders()]);
+}
+
+function startAutoRefresh() {
+    if (_refreshTimer) clearInterval(_refreshTimer);
+    _refreshTimer = setInterval(function() {
+        loadBalance();
+        loadPositions();
+        var histPanel = document.getElementById('panel-history');
+        if (histPanel && !histPanel.classList.contains('hidden')) {
+            loadHistory(_currentHistoryDays);
         }
+    }, 30000);
+}
 
-        // 选择方向
-        function selectPositionSide(side) {
-            document.getElementById('position-side').value = side;
+// ==================== Init ====================
 
-            if (side === 'LONG') {
-                document.getElementById('long-btn').className = 'btn btn-success';
-                document.getElementById('short-btn').className = 'btn btn-secondary';
-            } else {
-                document.getElementById('long-btn').className = 'btn btn-secondary';
-                document.getElementById('short-btn').className = 'btn btn-danger';
-            }
-        }
+document.addEventListener('DOMContentLoaded', async function() {
+    // Activate 7D button by default
+    setHistoryDays(7);
 
-        // 选择订单类型
-        function selectOrderType(type) {
-            document.getElementById('order-type').value = type;
+    // Check token
+    var token = window.__ACCESS_TOKEN__ || localStorage.getItem('auth_token') || localStorage.getItem('access_token');
+    if (!token) {
+        window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+        return;
+    }
 
-            if (type === 'MARKET') {
-                document.getElementById('market-btn').className = 'btn btn-primary';
-                document.getElementById('limit-btn').className = 'btn btn-secondary';
-                document.getElementById('limit-price-group').style.display = 'none';
-                document.getElementById('limit-order-note').style.display = 'none';
-            } else {
-                document.getElementById('market-btn').className = 'btn btn-secondary';
-                document.getElementById('limit-btn').className = 'btn btn-primary';
-                document.getElementById('limit-price-group').style.display = 'block';
-                document.getElementById('limit-order-note').style.display = 'block';
-                // 设置默认限价为当前价格
-                if (currentPrice > 0) {
-                    document.getElementById('limit-price').value = currentPrice;
-                    document.getElementById('limit-price-hint').textContent = formatPrice(currentPrice);
-                }
-            }
-        }
+    // Restore saved api key id
+    var savedId = parseInt(localStorage.getItem('active_api_key_id') || '0');
+    if (savedId > 0) _activeApiKeyId = savedId;
 
-        // 更新预计保证金
-        function updateEstimatedMargin() {
-            const quantity = parseFloat(document.getElementById('quantity').value) || 0;
-            const leverage = parseInt(document.getElementById('leverage').value) || 1;
-            const orderType = document.getElementById('order-type').value;
-            const limitPrice = parseFloat(document.getElementById('limit-price').value) || 0;
-
-            const price = orderType === 'LIMIT' && limitPrice > 0 ? limitPrice : currentPrice;
-
-            if (price > 0 && quantity > 0) {
-                const margin = (price * quantity) / leverage;
-                document.getElementById('estimated-margin').textContent = margin.toFixed(2);
-            } else {
-                document.getElementById('estimated-margin').textContent = '0.00';
-            }
-        }
-
-        // 监听输入
-        document.getElementById('quantity').addEventListener('input', updateEstimatedMargin);
-        document.getElementById('leverage').addEventListener('change', updateEstimatedMargin);
-        document.getElementById('limit-price').addEventListener('input', updateEstimatedMargin);
-
-        // 开仓
-        async function openPosition() {
-            const symbol = document.getElementById('symbol').value;
-            const positionSide = document.getElementById('position-side').value;
-            const quantity = parseFloat(document.getElementById('quantity').value);
-            const leverage = parseInt(document.getElementById('leverage').value);
-            const orderType = document.getElementById('order-type').value;
-            const limitPrice = parseFloat(document.getElementById('limit-price').value) || null;
-            const stopLossPrice = parseFloat(document.getElementById('stop-loss-price').value) || null;
-            const takeProfitPrice = parseFloat(document.getElementById('take-profit-price').value) || null;
-
-            if (!symbol) {
-                showToast('请选择交易对', 'error');
-                return;
-            }
-            if (!quantity || quantity <= 0) {
-                showToast('请输入有效的数量', 'error');
-                return;
-            }
-            if (orderType === 'LIMIT' && (!limitPrice || limitPrice <= 0)) {
-                showToast('限价单请输入有效的价格', 'error');
-                return;
-            }
-
-            const priceForMargin = orderType === 'LIMIT' ? limitPrice : currentPrice;
-            const estimatedMargin = ((priceForMargin * quantity) / leverage).toFixed(2);
-
-            // 双重确认
-            const confirmed = await showConfirmDialog(
-                '实盘开仓确认',
-                `<div style="margin-bottom: 12px;">
-                    <p style="color: var(--danger-red); font-weight: bold; margin-bottom: 12px;">
-                        <i class="bi bi-exclamation-triangle"></i> 这是真实资金交易！
-                    </p>
-                    <strong>交易对:</strong> ${symbol}<br>
-                    <strong>方向:</strong> ${positionSide === 'LONG' ? '做多' : '做空'}<br>
-                    <strong>订单类型:</strong> ${orderType === 'LIMIT' ? '限价单' : '市价单'}<br>
-                    ${orderType === 'LIMIT' ? `<strong>限价:</strong> ${formatPrice(limitPrice)}<br>` : ''}
-                    <strong>数量:</strong> ${quantity}<br>
-                    <strong>杠杆:</strong> ${leverage}x<br>
-                    <strong>预计保证金:</strong> ${estimatedMargin} USDT<br>
-                    ${stopLossPrice ? `<strong>止损价:</strong> ${formatPrice(stopLossPrice)}<br>` : ''}
-                    ${takeProfitPrice ? `<strong>止盈价:</strong> ${formatPrice(takeProfitPrice)}<br>` : ''}
-                </div>
-                <p style="color: var(--warning-yellow);">确定要执行此交易吗？</p>`,
-                'danger'
-            );
-
-            if (!confirmed) return;
-
-            try {
-                const response = await authFetch(`${API_BASE}/open`, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        api_key_id: getApiKeyId(),
-                        account_id: 1,
-                        symbol: symbol,
-                        position_side: positionSide,
-                        quantity: quantity,
-                        leverage: leverage,
-                        limit_price: orderType === 'LIMIT' ? limitPrice : null,
-                        stop_loss_price: stopLossPrice,
-                        take_profit_price: takeProfitPrice,
-                        source: 'manual'
-                    })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    showToast(`开仓成功！${data.message || ''}`, 'success');
-
-                    // 清空表单
-                    document.getElementById('quantity').value = '';
-                    document.getElementById('limit-price').value = '';
-                    document.getElementById('stop-loss-price').value = '';
-                    document.getElementById('take-profit-price').value = '';
-                    updateEstimatedMargin();
-
-                    // 刷新数据
-                    setTimeout(() => {
-                        loadPositions();
-                        loadAccountBalance();
-                    }, 1000);
-                } else {
-                    showToast('开仓失败: ' + (data.message || data.detail), 'error');
-                }
-            } catch (error) {
-                showToast('开仓请求失败: ' + error.message, 'error');
-            }
-        }
-
-        // 平仓
-        async function closePositionBySymbol(symbol, positionSide) {
-            const confirmed = await showConfirmDialog(
-                '实盘平仓确认',
-                `<p style="color: var(--danger-red); font-weight: bold;">
-                    <i class="bi bi-exclamation-triangle"></i> 这是真实资金交易！
-                </p>
-                <p>确定要平掉 ${symbol} 的 ${positionSide === 'LONG' ? '多头' : '空头'} 仓位吗？</p>`,
-                'danger'
-            );
-
-            if (!confirmed) return;
-
-            showToast('正在执行平仓...', 'info');
-
-            try {
-                const response = await authFetch(`${API_BASE}/close-by-symbol`, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        api_key_id: getApiKeyId(),
-                        symbol: symbol,
-                        position_side: positionSide,
-                        reason: 'manual'
-                    })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    showToast(`平仓成功！${data.message || ''}`, 'success');
-
-                    // 刷新数据
-                    setTimeout(() => {
-                        loadPositions();
-                        loadAccountBalance();
-                    }, 1000);
-                } else {
-                    showToast('平仓失败: ' + (data.message || data.detail), 'error');
-                }
-            } catch (error) {
-                showToast('平仓请求失败: ' + error.message, 'error');
-            }
-        }
-
-        // 取消订单
-        async function cancelOrder(symbol, orderId) {
-            const confirmed = await showConfirmDialog(
-                '撤销订单',
-                `确定要撤销 ${symbol} 的订单 #${orderId} 吗？`,
-                'danger'
-            );
-
-            if (!confirmed) return;
-
-            try {
-                const response = await authFetch(`${API_BASE}/order`, {
-                    method: 'DELETE',
-                    body: JSON.stringify({ api_key_id: getApiKeyId(), symbol, order_id: orderId })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    showToast('订单已撤销', 'success');
-                    loadOrders();
-                } else {
-                    showToast('撤单失败: ' + (data.message || data.detail), 'error');
-                }
-            } catch (error) {
-                showToast('撤单请求失败: ' + error.message, 'error');
-            }
-        }
-
-        // 取消所有订单
-        async function cancelAllOrders() {
-            const symbol = document.getElementById('symbol').value;
-            if (!symbol) {
-                showToast('请先选择交易对', 'error');
-                return;
-            }
-
-            const confirmed = await showConfirmDialog(
-                '取消所有订单',
-                `确定要取消 ${symbol} 的所有挂单吗？`,
-                'danger'
-            );
-
-            if (!confirmed) return;
-
-            try {
-                const response = await authFetch(withApiKey(`${API_BASE}/orders/${encodeURIComponent(symbol)}`), {
-                    method: 'DELETE'
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    showToast('已取消所有订单', 'success');
-                    loadOrders();
-                } else {
-                    showToast('取消失败: ' + data.message, 'error');
-                }
-            } catch (error) {
-                showToast('取消请求失败: ' + error.message, 'error');
-            }
-        }
-
-        // 刷新数据
-        function refreshData() {
-            loadAccountBalance();
-            loadPositions();
-            loadOrders();
-            refreshPrice();
-            showToast('数据已刷新', 'info');
-        }
-
-        // 格式化数字
-        function formatNumber(num, decimals = 2) {
-            if (num === null || num === undefined || isNaN(num)) return '--';
-            return parseFloat(num).toLocaleString('en-US', {
-                minimumFractionDigits: decimals,
-                maximumFractionDigits: decimals
-            });
-        }
-
-        // 智能格式化价格（根据价格大小自动选择小数位）
-        function formatPrice(num) {
-            if (num === null || num === undefined || isNaN(num)) return '--';
-            const price = parseFloat(num);
-            if (price === 0) return '0';
-
-            let decimals;
-            if (price >= 1000) {
-                decimals = 2;       // BTC等大币: 65432.12
-            } else if (price >= 1) {
-                decimals = 4;       // ETH等中等币: 3500.1234
-            } else if (price >= 0.01) {
-                decimals = 5;       // DOGE等小币: 0.40123
-            } else {
-                decimals = 6;       // 更小的币: 0.001234
-            }
-
-            return price.toLocaleString('en-US', {
-                minimumFractionDigits: decimals,
-                maximumFractionDigits: decimals
-            });
-        }
-
-        // Toast通知
-        function showToast(message, type = 'info') {
-            const existingToast = document.querySelector('.toast');
-            if (existingToast) existingToast.remove();
-
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.innerHTML = `
-                <div style="display: flex; align-items: flex-start; gap: 12px;">
-                    <i class="bi ${type === 'success' ? 'bi-check-circle' : type === 'error' ? 'bi-x-circle' : 'bi-info-circle'}"
-                       style="font-size: 20px; color: ${type === 'success' ? 'var(--success-green)' : type === 'error' ? 'var(--danger-red)' : 'var(--info-blue)'};"></i>
-                    <div style="flex: 1; white-space: pre-line;">${message}</div>
-                    <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 0; font-size: 18px;">
-                        <i class="bi bi-x"></i>
-                    </button>
-                </div>
-            `;
-            document.body.appendChild(toast);
-
-            setTimeout(() => toast.remove(), 5000);
-        }
-
-        // 确认对话框
-        function showConfirmDialog(title, message, type = 'info') {
-            return new Promise(resolve => {
-                const overlay = document.createElement('div');
-                overlay.className = 'modal-overlay';
-                overlay.innerHTML = `
-                    <div class="modal-content">
-                        <div class="modal-title">
-                            <i class="bi bi-exclamation-triangle-fill"></i>
-                            ${title}
-                        </div>
-                        <div class="modal-body">${message}</div>
-                        <div class="modal-footer">
-                            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">取消</button>
-                            <button class="btn btn-danger" id="confirmBtn">确认</button>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(overlay);
-
-                overlay.querySelector('#confirmBtn').onclick = () => {
-                    overlay.remove();
-                    resolve(true);
-                };
-
-                overlay.querySelector('.btn-secondary').onclick = () => {
-                    overlay.remove();
-                    resolve(false);
-                };
-            });
-        }
-
-        // ── 持仓/挂单/历史 Tab 切换 ──────────────────────────────
-        (function() {
-            document.querySelectorAll('.pos-tab-btn').forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    document.querySelectorAll('.pos-tab-btn').forEach(function(b) { b.classList.remove('active'); });
-                    document.querySelectorAll('.pos-tab-panel').forEach(function(p) { p.classList.remove('active'); });
-                    btn.classList.add('active');
-                    var panelId = btn.getAttribute('data-panel');
-                    var panel = document.getElementById(panelId);
-                    if (panel) panel.classList.add('active');
-                    if (panelId === 'panelHistory' && !_historyLoaded) loadHistory();
-                });
-            });
-        })();
-
-        var _historyLoaded = false;
-
-        async function loadHistory(force) {
-            if (!force && _historyLoaded) return;
-            _historyLoaded = false;
-            document.getElementById('historyLoading').style.display = 'flex';
-            document.getElementById('historyTable').style.display = 'none';
-            document.getElementById('historyEmpty').style.display = 'none';
-            try {
-                var resp = await authFetch(withApiKey(API_BASE + '/history'));
-                var data = await resp.json();
-                document.getElementById('historyLoading').style.display = 'none';
-                if (data.success && data.data && data.data.length > 0) {
-                    document.getElementById('historyTable').style.display = 'block';
-                    var tbody = document.getElementById('historyBody');
-                    tbody.innerHTML = data.data.map(function(h) {
-                        var pnl = h.realized_pnl || 0;
-                        var pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                        var pnlStr = (pnl >= 0 ? '+' : '') + formatNumber(pnl);
-                        var closeTime = h.close_time ? h.close_time.replace('T', ' ').slice(0, 16) : '-';
-                        var src = h.source || 'manual';
-                        return '<tr>' +
-                            '<td><strong>' + h.symbol + '</strong></td>' +
-                            '<td><span class="badge ' + (h.position_side === 'LONG' ? 'badge-success' : 'badge-danger') + '">' + (h.position_side === 'LONG' ? '做多' : '做空') + '</span></td>' +
-                            '<td class="font-mono">' + formatNumber(h.quantity, 4) + '</td>' +
-                            '<td class="font-mono">' + formatPrice(h.entry_price) + '</td>' +
-                            '<td class="font-mono">' + (h.close_price ? formatPrice(h.close_price) : '-') + '</td>' +
-                            '<td class="font-mono ' + pnlClass + '">' + pnlStr + '</td>' +
-                            '<td>' + (h.leverage || '-') + 'x</td>' +
-                            '<td><span class="badge badge-secondary" style="font-size:11px;">' + src + '</span></td>' +
-                            '<td style="font-size:12px;">' + closeTime + '</td>' +
-                            '<td style="font-size:12px;">' + (h.close_reason || '-') + '</td>' +
-                        '</tr>';
-                    }).join('');
-                    _historyLoaded = true;
-                } else {
-                    document.getElementById('historyEmpty').style.display = 'block';
-                    _historyLoaded = true;
-                }
-            } catch(e) {
-                console.error('加载历史订单失败:', e);
-                document.getElementById('historyLoading').style.display = 'none';
-                document.getElementById('historyEmpty').style.display = 'block';
-            }
-        }
+    // Load accounts then data
+    await loadAccounts();
+    await loadAll();
+    startAutoRefresh();
+});
     </script>
 </body></html>

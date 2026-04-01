@@ -181,23 +181,23 @@
 <div class="grid grid-cols-5 gap-4">
 <div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-primary/30">
 <p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">24H开仓数</p>
-<p class="mono text-3xl font-medium text-on-surface">42</p>
+<p class="mono text-3xl font-medium text-on-surface" id="stat-total-open">42</p>
 </div>
 <div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-primary/30">
 <p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">24H盈利单数</p>
-<p class="mono text-3xl font-medium text-primary">28</p>
+<p class="mono text-3xl font-medium text-primary" id="stat-win">28</p>
 </div>
 <div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-error/30">
 <p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">24H亏损单数</p>
-<p class="mono text-3xl font-medium text-error">14</p>
+<p class="mono text-3xl font-medium text-error" id="stat-loss">14</p>
 </div>
 <div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-primary/30">
 <p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">24H总盈亏</p>
-<p class="mono text-3xl font-medium text-primary">+$12,482.50</p>
+<p class="mono text-3xl font-medium text-primary" id="stat-pnl">+$12,482.50</p>
 </div>
 <div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-secondary/30">
 <p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">胜率</p>
-<p class="mono text-3xl font-medium text-[#FFD700]">66.7<span class="text-sm ml-1">%</span></p>
+<p class="mono text-3xl font-medium text-[#FFD700]" id="stat-winrate">66.7<span class="text-sm ml-1">%</span></p>
 </div>
 </div>
 <!-- Analysis Section (2 Columns) -->
@@ -209,9 +209,9 @@
 <h3 class="font-headline text-lg font-bold text-on-surface mb-1">信号质量分析</h3>
 <p class="text-xs text-on-surface-variant">Signal Component Efficiency Tracking</p>
 </div>
-<span class="mono text-primary text-xs bg-primary/10 px-2 py-1 rounded">HEALTHY</span>
+<span class="mono text-primary text-xs bg-primary/10 px-2 py-1 rounded" id="signal-health-badge">HEALTHY</span>
 </div>
-<div class="space-y-6">
+<div class="space-y-6" id="signal-analysis-list">
 <div class="space-y-2">
 <div class="flex justify-between text-[10px] font-headline tracking-wider uppercase text-on-surface-variant">
 <span>Momentum (动量)</span>
@@ -244,7 +244,7 @@
 <!-- Symbol Performance -->
 <div class="bg-surface-container-low p-8 rounded-2xl">
 <h3 class="font-headline text-lg font-bold text-on-surface mb-6">交易对表现</h3>
-<div class="space-y-4">
+<div class="space-y-4" id="best-symbols-list">
 <!-- Top Performers -->
 <div class="flex items-center justify-between p-3 bg-primary/5 rounded-lg">
 <div class="flex items-center gap-3">
@@ -344,7 +344,7 @@
 <th class="px-8 py-5">平仓原因</th>
 </tr>
 </thead>
-<tbody class="text-sm border-t border-outline-variant/10">
+<tbody class="text-sm border-t border-outline-variant/10" id="trades-tbody">
 <!-- Row 1 -->
 <tr class="hover:bg-surface-container transition-colors group">
 <td class="px-8 py-5 font-medium">BTC/USDT</td>
@@ -418,1188 +418,301 @@
 </div>
 </footer>
 </main>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
 <script>
-        // Global state
-        let currentFilter = 'all';
-        let currentSort = 'time';
-        let hours = 24;
-        let tradesPage = 1;
-        const pageSize = 100;
-        let currentMarginType = 'usdt'; // 合约类型: usdt=U本位, coin=币本位
+        // ==================================================================
+        // 24H 合约复盘 — 功能 JS
+        // 调用 /api/futures/review/24h?account_id=2
+        // 若不存在则 fallback 到 /api/futures/trades?account_id=2&hours=24
+        // ==================================================================
 
-        // 合约类型切换
-        function switchMarginType(type) {
-            currentMarginType = type;
+        const ACCOUNT_ID = 2;
 
-            // 更新按钮状态
-            const usdtBtn = document.getElementById('usdtMarginBtn');
-            const coinBtn = document.getElementById('coinMarginBtn');
+        // ---------- 工具函数 ----------
 
-            if (type === 'usdt') {
-                usdtBtn.classList.remove('btn-outline-primary');
-                usdtBtn.classList.add('btn-primary');
-                coinBtn.classList.remove('btn-primary');
-                coinBtn.classList.add('btn-outline-primary');
-            } else {
-                coinBtn.classList.remove('btn-outline-primary');
-                coinBtn.classList.add('btn-primary');
-                usdtBtn.classList.remove('btn-primary');
-                usdtBtn.classList.add('btn-outline-primary');
-            }
-
-            // 重新加载所有数据
-            refreshAll();
+        function fmtPnl(val) {
+            const n = Number(val) || 0;
+            const sign = n >= 0 ? '+' : '';
+            return sign + n.toFixed(2);
         }
 
-        // Format helpers
-        function formatNumber(num, decimals = 2) {
-            if (num === null || num === undefined) return '-';
-            return Number(num).toFixed(decimals);
+        function pnlColor(val) {
+            return Number(val) >= 0 ? '#49f4c8' : '#ff716c';
         }
 
-        function formatPnl(pnl) {
-            if (pnl === null || pnl === undefined) return '-';
-            const value = Number(pnl);
-            const formatted = value >= 0 ? `+${value.toFixed(2)}` : value.toFixed(2);
-            const className = value >= 0 ? 'pnl-positive' : 'pnl-negative';
-            return `<span class="${className}">${formatted}</span>`;
+        function fmtHours(h) {
+            if (h === null || h === undefined) return '-';
+            const n = Number(h);
+            if (n < 1) return Math.round(n * 60) + 'min';
+            return n.toFixed(1) + 'h';
         }
 
-        function formatPnlPct(pct) {
-            if (pct === null || pct === undefined) return '-';
-            const value = Number(pct);
-            const formatted = value >= 0 ? `+${value.toFixed(2)}%` : `${value.toFixed(2)}%`;
-            const className = value >= 0 ? 'pnl-positive' : 'pnl-negative';
-            return `<span class="${className}">${formatted}</span>`;
-        }
-
-        function formatTime(isoString) {
-            if (!isoString) return '-';
-
+        function fmtTime(iso) {
+            if (!iso) return '-';
             try {
-                // 后端返回UTC+0时间，前端转换为UTC+8显示
-                let date;
-                if (typeof isoString === 'string') {
-                    // 检查是否有时区标识（Z或±HH:MM）
-                    // 注意：不能用 includes('-') 判断，因为日期格式本身包含 '-'
-                    const hasTimezone = isoString.endsWith('Z') ||
-                                       /[+-]\d{2}:\d{2}$/.test(isoString) ||
-                                       /[+-]\d{4}$/.test(isoString);
-
-                    if (!hasTimezone) {
-                        // 没有时区信息，假设是UTC时间，添加Z后缀
-                        date = new Date(isoString + 'Z');
-                    } else {
-                        date = new Date(isoString);
-                    }
-                } else {
-                    date = new Date(isoString);
-                }
-
-                // 检查日期是否有效
-                if (isNaN(date.getTime())) {
-                    return '-';
-                }
-
-                // 转换为UTC+8（北京时间）
-                const utc8Date = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-
-                const month = String(utc8Date.getUTCMonth() + 1).padStart(2, '0');
-                const day = String(utc8Date.getUTCDate()).padStart(2, '0');
-                const hours = String(utc8Date.getUTCHours()).padStart(2, '0');
-                const minutes = String(utc8Date.getUTCMinutes()).padStart(2, '0');
-
-                return `${month}-${day} ${hours}:${minutes}`;
+                const hasZ = iso.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(iso) || /[+-]\d{4}$/.test(iso);
+                const d = new Date(hasZ ? iso : iso + 'Z');
+                if (isNaN(d.getTime())) return '-';
+                const u8 = new Date(d.getTime() + 8 * 3600 * 1000);
+                const mm = String(u8.getUTCMonth() + 1).padStart(2, '0');
+                const dd = String(u8.getUTCDate()).padStart(2, '0');
+                const hh = String(u8.getUTCHours()).padStart(2, '0');
+                const mn = String(u8.getUTCMinutes()).padStart(2, '0');
+                return mm + '-' + dd + ' ' + hh + ':' + mn;
             } catch (e) {
-                console.error('时间格式化失败:', e, isoString);
                 return '-';
             }
         }
 
-        function formatHoldingTime(minutes) {
-            if (minutes === null || minutes === undefined) return '-';
-            if (minutes < 60) return `${minutes}分钟`;
-            if (minutes < 1440) return `${(minutes / 60).toFixed(1)}小时`;
-            return `${(minutes / 1440).toFixed(1)}天`;
+        const CLOSE_REASON_MAP = {
+            SL: '止损', STOP_LOSS: '止损',
+            TP: '止盈', TAKE_PROFIT: '止盈',
+            MANUAL: '手动', MANUAL_CLOSE: '手动',
+            TIMEOUT: '超时', MAX_HOLD: '超时'
+        };
+
+        function fmtCloseReason(r) {
+            if (!r) return '-';
+            return CLOSE_REASON_MAP[r.toUpperCase()] || r;
         }
 
-        // Tab switching
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+        // ---------- 统计卡片更新 ----------
 
-            event.target.classList.add('active');
-            document.getElementById(`${tabName}-tab`).classList.add('active');
+        function updateStats(d) {
+            const totalOpen  = document.getElementById('stat-total-open');
+            const statWin    = document.getElementById('stat-win');
+            const statLoss   = document.getElementById('stat-loss');
+            const statPnl    = document.getElementById('stat-pnl');
+            const statWinrate = document.getElementById('stat-winrate');
 
-            // 切换到每日盈亏统计时加载数据
-            if (tabName === 'daily-pnl') {
-                if (!document.getElementById('monthSelector').options.length) {
-                    initMonthSelector();
-                }
-                loadDailyPnl();
+            if (totalOpen)  totalOpen.textContent  = d.total_open  !== undefined ? d.total_open  : '-';
+            if (statWin)    statWin.textContent     = d.win_count   !== undefined ? d.win_count   : '-';
+            if (statLoss)   statLoss.textContent    = d.loss_count  !== undefined ? d.loss_count  : '-';
+
+            if (statPnl) {
+                const pnl = Number(d.total_pnl) || 0;
+                statPnl.textContent = (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toFixed(2);
+                statPnl.style.color = pnlColor(pnl);
             }
 
-            // 切换到复盘分析时加载数据
-            if (tabName === 'retrospective') {
-                loadRetrospectiveAnalysis();
+            if (statWinrate) {
+                const wr = Number(d.win_rate) || 0;
+                statWinrate.innerHTML = wr.toFixed(1) + '<span class="text-sm ml-1">%</span>';
+                statWinrate.style.color = wr >= 50 ? '#FFD700' : '#ff716c';
             }
         }
 
-        // Filter and sort
-        function filterTrades(filter) {
-            currentFilter = filter;
-            tradesPage = 1;  // Reset to first page
-            document.querySelectorAll('.filter-group:first-child .filter-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
-            loadTrades();
-        }
+        // ---------- 信号分析 bar ----------
 
-        function sortTrades(sort) {
-            currentSort = sort;
-            tradesPage = 1;  // Reset to first page
-            document.querySelectorAll('.filter-group:last-child .filter-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
-            loadTrades();
-        }
-
-        // Pagination helper
-        function renderPagination(containerId, currentPage, totalPages, onPageChange) {
-            if (totalPages <= 1) {
-                document.getElementById(containerId).innerHTML = '';
+        function renderSignalAnalysis(items) {
+            const list = document.getElementById('signal-analysis-list');
+            if (!list) return;
+            if (!items || items.length === 0) {
+                list.innerHTML = '<p class="text-xs text-on-surface-variant">暂无信号分析数据</p>';
                 return;
             }
 
-            let html = '<div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 16px; padding: 16px 0;">';
+            list.innerHTML = items.map(function(item) {
+                const wr  = Number(item.win_rate) || 0;
+                const cnt = item.count !== undefined ? item.count : '';
+                const name = item.component || item.name || '-';
+                const barColor = wr >= 60 ? '#49f4c8' : wr >= 40 ? '#5b9eff' : '#FFD700';
+                const wrText   = wr >= 60 ? '#49f4c8' : wr >= 40 ? '#5b9eff' : '#FFD700';
 
-            // Previous button
-            html += `<button class="btn btn-sm btn-secondary" onclick="${onPageChange}(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>
-                <i class="bi bi-chevron-left"></i> 上一页
-            </button>`;
+                return '<div class="space-y-2">' +
+                    '<div class="flex justify-between text-[10px] font-headline tracking-wider uppercase text-on-surface-variant">' +
+                        '<span>' + name + (cnt ? ' (' + cnt + '单)' : '') + '</span>' +
+                        '<span class="mono" style="color:' + wrText + '">' + wr.toFixed(0) + '%</span>' +
+                    '</div>' +
+                    '<div class="h-2 bg-surface-container-highest rounded-full overflow-hidden">' +
+                        '<div class="h-full rounded-full" style="width:' + Math.min(wr, 100) + '%;background:' + barColor + '"></div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
 
-            // Page info
-            html += `<span style="color: var(--text-secondary); margin: 0 16px;">第 ${currentPage} / ${totalPages} 页</span>`;
-
-            // Next button
-            html += `<button class="btn btn-sm btn-secondary" onclick="${onPageChange}(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>
-                下一页 <i class="bi bi-chevron-right"></i>
-            </button>`;
-
-            html += '</div>';
-            document.getElementById(containerId).innerHTML = html;
+            // 健康指数徽章
+            const badge = document.getElementById('signal-health-badge');
+            if (badge && items.length > 0) {
+                const avgWr = items.reduce(function(s, i) { return s + (Number(i.win_rate) || 0); }, 0) / items.length;
+                badge.textContent = avgWr >= 60 ? 'HEALTHY' : avgWr >= 40 ? 'AVERAGE' : 'WEAK';
+                badge.style.color = avgWr >= 60 ? '#49f4c8' : avgWr >= 40 ? '#FFD700' : '#ff716c';
+            }
         }
 
-        function goToTradesPage(page) {
-            tradesPage = page;
-            loadTrades();
-        }
+        // ---------- 交易对表现 ----------
 
-        // API calls
-        async function loadSummary() {
-            document.getElementById('summaryLoading').style.display = 'flex';
-            document.getElementById('summaryStats').style.display = 'none';
+        function renderSymbols(best, worst) {
+            const list = document.getElementById('best-symbols-list');
+            if (!list) return;
 
-            try {
-                // 根据合约类型选择account_id: U本位=2, 币本位=3
-                const accountId = currentMarginType === 'usdt' ? 2 : 3;
-                const response = await fetch(`/api/futures/review/summary?hours=${hours}&account_id=${accountId}`);
-                const result = await response.json();
+            const rows = [];
 
-                if (result.success) {
-                    const data = result.data;
-                    const overview = data.order_overview;
-                    const pnl = data.pnl_summary;
-                    const winLoss = data.win_loss_analysis;
-                    const extremes = data.extremes;
+            function addRow(item, isGood) {
+                const sym    = (item.symbol || '').replace('/USDT', '').replace('USDT', '').slice(0, 4);
+                const label  = item.symbol || '-';
+                const pnl    = Number(item.pnl) || 0;
+                const cnt    = item.count !== undefined ? item.count + '单' : '';
+                const bg     = isGood ? 'rgba(73,244,200,0.05)' : 'rgba(255,113,108,0.05)';
+                const color  = isGood ? '#49f4c8' : '#ff716c';
+                const sign   = pnl >= 0 ? '+' : '';
 
-                    document.getElementById('summary-title').textContent = `${hours}小时交易统计`;
-                    document.getElementById('summary-update').textContent = `更新于 ${new Date().toLocaleTimeString('zh-CN')}`;
-
-                    document.getElementById('summaryStats').innerHTML = `
-                        <div class="stat-card">
-                            <div class="stat-label">总订单/成交</div>
-                            <div class="stat-value">${overview.total_orders}/${overview.filled_orders}</div>
-                            <div class="stat-change">成功率 ${overview.success_rate}%</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">已实现盈亏</div>
-                            <div class="stat-value ${pnl.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
-                                ${pnl.realized_pnl >= 0 ? '+' : ''}${formatNumber(pnl.realized_pnl)}
-                            </div>
-                            <div class="stat-change">手续费: ${formatNumber(pnl.total_fee)}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">胜率</div>
-                            <div class="stat-value">${winLoss.win_rate}%</div>
-                            <div class="stat-change">${winLoss.winning_trades}胜 / ${winLoss.losing_trades}负</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">盈亏比</div>
-                            <div class="stat-value">${winLoss.profit_loss_ratio}</div>
-                            <div class="stat-change">均盈${formatNumber(winLoss.avg_profit)} / 均亏${formatNumber(winLoss.avg_loss)}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">最大盈利</div>
-                            <div class="stat-value pnl-positive">+${formatNumber(extremes.max_profit)}</div>
-                            <div class="stat-change">单笔最高</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">最大亏损</div>
-                            <div class="stat-value pnl-negative">${formatNumber(extremes.max_loss)}</div>
-                            <div class="stat-change">单笔最低</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">平均持仓</div>
-                            <div class="stat-value">${formatHoldingTime(data.avg_holding_minutes)}</div>
-                            <div class="stat-change">持仓时长</div>
-                        </div>
-                    `;
-
-                    // 更新交易对表现表格
-                    if (data.symbol_performance && data.symbol_performance.length > 0) {
-                        const symbolsTableBody = document.getElementById('symbolsTableBody');
-                        symbolsTableBody.innerHTML = data.symbol_performance.map((item, index) => `
-                            <tr>
-                                <td><strong>${index + 1}</strong></td>
-                                <td><strong>${item.symbol}</strong></td>
-                                <td>${item.total_trades}</td>
-                                <td class="pnl-positive">${item.wins}</td>
-                                <td class="pnl-negative">${item.losses}</td>
-                                <td class="text-secondary">${item.break_even}</td>
-                                <td>
-                                    <span class="${item.win_rate >= 50 ? 'pnl-positive' : 'pnl-negative'}">
-                                        ${item.win_rate}%
-                                    </span>
-                                </td>
-                                <td>
-                                    ${formatPnl(item.total_pnl)}
-                                </td>
-                                <td>${formatPnl(item.avg_win)}</td>
-                                <td>${formatPnl(item.avg_loss)}</td>
-                                <td>${formatPnl(item.max_win)}</td>
-                                <td>${formatPnl(item.max_loss)}</td>
-                            </tr>
-                        `).join('');
-                    }
-                }
-            } catch (error) {
-                console.error('加载统计失败:', error);
+                rows.push(
+                    '<div class="flex items-center justify-between p-3 rounded-lg" style="background:' + bg + '">' +
+                        '<div class="flex items-center gap-3">' +
+                            '<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center">' +
+                                '<span class="mono text-[10px] font-bold" style="color:' + color + '">' + sym + '</span>' +
+                            '</div>' +
+                            '<div>' +
+                                '<span class="font-headline text-sm font-medium">' + label + '</span>' +
+                                (cnt ? '<span class="ml-2 text-[10px] text-on-surface-variant">' + cnt + '</span>' : '') +
+                            '</div>' +
+                        '</div>' +
+                        '<span class="mono text-sm font-bold" style="color:' + color + '">' + sign + '$' + Math.abs(pnl).toFixed(2) + '</span>' +
+                    '</div>'
+                );
             }
 
-            document.getElementById('summaryLoading').style.display = 'none';
-            document.getElementById('summaryStats').style.display = 'grid';
+            (best  || []).forEach(function(i) { addRow(i, true);  });
+            (worst || []).forEach(function(i) { addRow(i, false); });
+
+            list.innerHTML = rows.length > 0 ? rows.join('') : '<p class="text-xs text-on-surface-variant">暂无数据</p>';
         }
 
-        async function loadTrades() {
-            document.getElementById('tradesLoading').style.display = 'flex';
-            document.getElementById('tradesContent').style.display = 'none';
-
-            try {
-                const accountId = currentMarginType === 'usdt' ? 2 : 3;
-                const response = await fetch(`/api/futures/review/trades?hours=${hours}&account_id=${accountId}&filter_type=${currentFilter}&sort_by=${currentSort}&page=${tradesPage}&page_size=${pageSize}`);
-                const result = await response.json();
-
-                if (result.success) {
-                    const data = result.data;
-                    const trades = data.trades;
-                    const tbody = document.getElementById('trades-table-body');
-
-                    if (trades.length === 0) {
-                        tbody.innerHTML = `<tr><td colspan="11" class="empty-state">暂无交易记录</td></tr>`;
-                        document.getElementById('trades-pagination').innerHTML = '';
-                    } else {
-                        tbody.innerHTML = trades.map(trade => `
-                            <tr>
-                                <td>${formatTime(trade.close_time)}</td>
-                                <td><strong>${trade.symbol}</strong></td>
-                                <td>
-                                    <span class="badge ${trade.position_side === 'LONG' ? 'badge-success' : 'badge-danger'}">
-                                        ${trade.position_side_cn}
-                                    </span>
-                                </td>
-                                <td>${trade.leverage}x</td>
-                                <td class="font-mono">${formatNumber(trade.entry_price, 4)}</td>
-                                <td class="font-mono">${formatNumber(trade.close_price, 4)}</td>
-                                <td class="font-mono">${formatPnl(trade.realized_pnl)}</td>
-                                <td class="font-mono">${formatPnlPct(trade.pnl_pct)}</td>
-                                <td>${formatHoldingTime(trade.holding_minutes)}</td>
-                                <td><span class="badge badge-info">${trade.entry_reason_cn}</span></td>
-                                <td><span class="badge badge-neutral">${trade.close_reason_cn}</span></td>
-                            </tr>
-                        `).join('');
-
-                        // Render pagination
-                        renderPagination('trades-pagination', data.page, data.total_pages, 'goToTradesPage');
-                    }
-                }
-            } catch (error) {
-                console.error('加载交易记录失败:', error);
-            }
-
-            document.getElementById('tradesLoading').style.display = 'none';
-            document.getElementById('tradesContent').style.display = 'block';
-        }
-
-        async function loadAnalysis() {
-            document.getElementById('analysisLoading').style.display = 'flex';
-            document.getElementById('analysisContent').style.display = 'none';
-
-            try {
-                const accountId = currentMarginType === 'usdt' ? 2 : 3;
-                const response = await fetch(`/api/futures/review/analysis?hours=${hours}&account_id=${accountId}`);
-                const result = await response.json();
-
-                if (result.success) {
-                    const data = result.data;
-
-                    // Entry analysis
-                    const entryBody = document.getElementById('entry-analysis-body');
-                    if (data.entry_analysis.length === 0) {
-                        entryBody.innerHTML = `<tr><td colspan="4" class="empty-state">暂无数据</td></tr>`;
-                    } else {
-                        entryBody.innerHTML = data.entry_analysis.map(e => `
-                            <tr>
-                                <td><span class="badge badge-info">${e.name_cn}</span></td>
-                                <td>${e.count}</td>
-                                <td>${e.win_rate}%</td>
-                                <td>${formatPnl(e.total_pnl)}</td>
-                            </tr>
-                        `).join('');
-                    }
-
-                    // Close analysis
-                    const closeBody = document.getElementById('close-analysis-body');
-                    if (data.close_analysis.length === 0) {
-                        closeBody.innerHTML = `<tr><td colspan="4" class="empty-state">暂无数据</td></tr>`;
-                    } else {
-                        closeBody.innerHTML = data.close_analysis.map(c => `
-                            <tr>
-                                <td><span class="badge badge-neutral">${c.name_cn}</span></td>
-                                <td>${c.count}</td>
-                                <td>${formatPnl(c.avg_pnl)}</td>
-                                <td>${formatPnl(c.total_pnl)}</td>
-                            </tr>
-                        `).join('');
-                    }
-
-                    // Direction analysis
-                    document.getElementById('direction-analysis').innerHTML = data.direction_analysis.map(d => `
-                        <div class="stat-card" style="border-left: 4px solid ${d.side === 'LONG' ? 'var(--success-green)' : 'var(--danger-red)'};">
-                            <div class="stat-label">${d.side_cn}</div>
-                            <div class="stat-value">${d.win_rate}%</div>
-                            <div class="stat-change">${d.wins}胜/${d.count}总 | ${formatPnl(d.total_pnl)}</div>
-                        </div>
-                    `).join('');
-                }
-            } catch (error) {
-                console.error('加载分析数据失败:', error);
-            }
-
-            document.getElementById('analysisLoading').style.display = 'none';
-            document.getElementById('analysisContent').style.display = 'block';
-        }
-
-        async function loadSuggestions() {
-            document.getElementById('suggestionsLoading').style.display = 'flex';
-            document.getElementById('suggestionsContent').style.display = 'none';
-
-            try {
-                const accountId = currentMarginType === 'usdt' ? 2 : 3;
-                const response = await fetch(`/api/futures/review/suggestions?hours=${hours}&account_id=${accountId}`);
-                const result = await response.json();
-
-                if (result.success) {
-                    const suggestions = result.data.suggestions;
-                    const container = document.getElementById('suggestionsContent');
-
-                    if (suggestions.length === 0) {
-                        container.innerHTML = `
-                            <div class="empty-state">
-                                <div class="empty-state-icon"><i class="bi bi-check-circle"></i></div>
-                                <div class="empty-state-text">暂无优化建议，继续保持！</div>
-                            </div>
-                        `;
-                    } else {
-                        container.innerHTML = suggestions.map(s => `
-                            <div class="suggestion-card ${s.type}">
-                                <div class="suggestion-category">
-                                    <i class="bi bi-${s.type === 'danger' ? 'exclamation-triangle' : s.type === 'warning' ? 'exclamation-circle' : s.type === 'success' ? 'check-circle' : 'info-circle'}"></i>
-                                    ${s.category}
-                                </div>
-                                <div class="suggestion-message">${s.message}</div>
-                            </div>
-                        `).join('');
-                    }
-                }
-            } catch (error) {
-                console.error('加载建议失败:', error);
-            }
-
-            document.getElementById('suggestionsLoading').style.display = 'none';
-            document.getElementById('suggestionsContent').style.display = 'block';
-        }
-
-        async function loadSignalAnalysis() {
-            document.getElementById('signalsLoading').style.display = 'flex';
-            document.getElementById('signalsContent').style.display = 'none';
-
-            try {
-                const response = await fetch(`/api/futures/review/kline-signal-analysis?hours=${hours}`);
-                const result = await response.json();
-
-                if (result.success && result.data && result.data.has_data) {
-                    const data = result.data;
-
-                    // 1. 显示总体统计
-                    const summary = data.summary;
-                    document.getElementById('kline-summary').innerHTML = `
-                        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 16px;">
-                            <div class="stat-card" style="border-left: 4px solid var(--primary-blue);">
-                                <div class="stat-label">分析交易对</div>
-                                <div class="stat-value">${summary.total_analyzed}</div>
-                            </div>
-                            <div class="stat-card" style="border-left: 4px solid var(--warning-yellow);">
-                                <div class="stat-label">有交易机会</div>
-                                <div class="stat-value">${summary.should_trade}</div>
-                            </div>
-                            <div class="stat-card" style="border-left: 4px solid var(--success-green);">
-                                <div class="stat-label">已开仓</div>
-                                <div class="stat-value">${summary.has_position}</div>
-                                <div class="stat-change">正确${summary.correct_captures}个 / 错误${summary.wrong_direction}个</div>
-                            </div>
-                            <div class="stat-card" style="border-left: 4px solid var(--danger-red);">
-                                <div class="stat-label">有效捕获率</div>
-                                <div class="stat-value ${summary.capture_rate >= 60 ? 'pnl-positive' : 'pnl-negative'}">${summary.capture_rate.toFixed(1)}%</div>
-                                <div class="stat-change">错过${summary.missed_opportunities}个机会</div>
-                            </div>
-                        </div>
-                        <div style="text-align: right; color: var(--text-tertiary); font-size: 12px;">
-                            分析时间: ${data.analysis_time}
-                        </div>
-                    `;
-
-                    // 2. 显示Top强力信号
-                    const opportunitiesBody = document.getElementById('kline-opportunities-body');
-                    if (data.top_opportunities && data.top_opportunities.length > 0) {
-                        opportunitiesBody.innerHTML = data.top_opportunities.map((opp, index) => {
-                            const formatKline = (kline) => `
-                                阳线${kline.bull_pct.toFixed(0)}% (${kline.bull}/${kline.total}) |
-                                强阳${kline.strong_bull} 强阴${kline.strong_bear} |
-                                净力量<span class="${kline.net_power >= 0 ? 'pnl-positive' : 'pnl-negative'}">${kline.net_power >= 0 ? '+' : ''}${kline.net_power}</span>
-                            `;
-
-                            const trendBadge = `<span class="badge ${
-                                opp.trend === '强多' ? 'badge-success' :
-                                opp.trend === '强空' ? 'badge-danger' :
-                                opp.trend === '偏多' ? 'badge-info' :
-                                opp.trend === '偏空' ? 'badge-warning' : 'badge-neutral'
-                            }">${opp.trend}</span>`;
-
-                            const statusBadge = opp.status_type === 'captured'
-                                ? `<span class="badge badge-success">${opp.status}</span>`
-                                : `<span class="badge badge-danger">${opp.status}</span>`;
-
-                            return `
-                                <tr>
-                                    <td>${index + 1}</td>
-                                    <td><strong>${opp.symbol}</strong></td>
-                                    <td>${trendBadge}</td>
-                                    <td>${statusBadge}</td>
-                                    <td style="font-size: 11px;">${formatKline(opp.kline_1h)}</td>
-                                    <td style="font-size: 11px;">${formatKline(opp.kline_15m)}</td>
-                                    <td style="font-size: 11px;">${formatKline(opp.kline_5m)}</td>
-                                </tr>
-                            `;
-                        }).join('');
-                    } else {
-                        opportunitiesBody.innerHTML = '<tr><td colspan="7" class="empty-state">暂无数据</td></tr>';
-                    }
-
-                    // 3. 显示错过的机会
-                    const missedBody = document.getElementById('kline-missed-body');
-                    if (data.missed_opportunities && data.missed_opportunities.length > 0) {
-                        missedBody.innerHTML = data.missed_opportunities.map((missed, index) => {
-                            const sideBadge = missed.side === 'LONG'
-                                ? '<span class="badge badge-success">LONG</span>'
-                                : '<span class="badge badge-danger">SHORT</span>';
-
-                            const formatPower = (power) => `<span class="${power >= 0 ? 'pnl-positive' : 'pnl-negative'}">${power >= 0 ? '+' : ''}${power}</span>`;
-
-                            return `
-                                <tr>
-                                    <td>${index + 1}</td>
-                                    <td><strong>${missed.symbol}</strong></td>
-                                    <td>${sideBadge}</td>
-                                    <td style="font-size: 12px;">${missed.reason}</td>
-                                    <td>${formatPower(missed.net_power_1h)}</td>
-                                    <td>${formatPower(missed.net_power_15m)}</td>
-                                    <td>${formatPower(missed.net_power_5m)}</td>
-                                    <td style="font-size: 11px;">${missed.possible_reasons[0] || ''}</td>
-                                </tr>
-                            `;
-                        }).join('');
-                    } else {
-                        missedBody.innerHTML = '<tr><td colspan="8" class="empty-state">无错过机会</td></tr>';
-                    }
-
-                    // 4. 显示历史趋势
-                    const historyBody = document.getElementById('kline-history-body');
-                    if (data.history && data.history.length > 0) {
-                        historyBody.innerHTML = data.history.map(h => `
-                            <tr>
-                                <td>${h.time}</td>
-                                <td>${h.total_analyzed}</td>
-                                <td>${h.should_trade}</td>
-                                <td>${h.has_position}</td>
-                                <td>${h.missed_opportunities}</td>
-                                <td><span class="${h.capture_rate >= 60 ? 'pnl-positive' : 'pnl-negative'}">${h.capture_rate.toFixed(1)}%</span></td>
-                            </tr>
-                        `).join('');
-                    } else {
-                        historyBody.innerHTML = '<tr><td colspan="6" class="empty-state">暂无历史数据</td></tr>';
-                    }
-
-                } else {
-                    // 没有数据
-                    document.getElementById('kline-summary').innerHTML = `
-                        <div class="empty-state" style="padding: 40px;">
-                            <div class="empty-state-icon"><i class="bi bi-inbox"></i></div>
-                            <div class="empty-state-text">${result.data.message || '暂无信号分析数据，请等待首次分析完成'}</div>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                console.error('加载K线信号分析失败:', error);
-                document.getElementById('kline-summary').innerHTML = `
-                    <div class="empty-state" style="padding: 40px;">
-                        <div class="empty-state-icon"><i class="bi bi-exclamation-triangle"></i></div>
-                        <div class="empty-state-text">加载失败，请稍后重试</div>
-                    </div>
-                `;
-            }
-
-            document.getElementById('signalsLoading').style.display = 'none';
-            document.getElementById('signalsContent').style.display = 'block';
-        }
-
-        async function loadOpportunityAnalysis() {
-            document.getElementById('opportunitiesLoading').style.display = 'flex';
-            document.getElementById('opportunitiesContent').style.display = 'none';
-
-            try {
-                const accountId = currentMarginType === 'usdt' ? 2 : 3;
-                const response = await fetch(`/api/futures/review/realtime-opportunity-analysis?account_id=${accountId}`);
-                const result = await response.json();
-
-                if (result.success && result.data && result.data.has_data) {
-                    const data = result.data;
-
-                    // 渲染总体统计
-                    const summary = data.summary;
-                    document.getElementById('opportunities-summary').innerHTML = `
-                        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
-                            <div class="stat-card">
-                                <div class="stat-label">监控交易对</div>
-                                <div class="stat-value">${summary.total_monitored}</div>
-                                <div class="stat-change">正在分析</div>
-                            </div>
-                            <div class="stat-card" style="border-left: 4px solid var(--warning-yellow);">
-                                <div class="stat-label">有效信号</div>
-                                <div class="stat-value">${summary.total_signals}</div>
-                                <div class="stat-change">强信号${summary.strong_signals}个</div>
-                            </div>
-                            <div class="stat-card" style="border-left: 4px solid var(--success-green);">
-                                <div class="stat-label">已捕获</div>
-                                <div class="stat-value">${summary.captured}</div>
-                                <div class="stat-change">正确${summary.correct_captures}个 / 错误${summary.wrong_direction}个</div>
-                            </div>
-                            <div class="stat-card" style="border-left: 4px solid var(--danger-red);">
-                                <div class="stat-label">捕获率</div>
-                                <div class="stat-value ${summary.capture_rate >= 60 ? 'pnl-positive' : 'pnl-negative'}">${summary.capture_rate}%</div>
-                                <div class="stat-change">错过${summary.missed}个</div>
-                            </div>
-                        </div>
-                        <div style="text-align: right; margin-top: 12px; color: var(--text-tertiary); font-size: 12px;">
-                            分析时间: ${data.analysis_time} | 可用余额: $${summary.available_balance.toFixed(2)} | 黑名单: ${summary.blacklist_count}个
-                        </div>
-                    `;
-
-                    // 已捕获的信号（按强度排序）
-                    const capturedSignals = data.captured_signals || [];
-                    const tbody1 = document.getElementById('timeframe-analysis-body');
-
-                    if (capturedSignals.length > 0) {
-                        tbody1.innerHTML = capturedSignals.map(sig => {
-                            const directionBadge = sig.signal_direction === 'LONG'
-                                ? `<span class="badge badge-success">做多</span>`
-                                : `<span class="badge badge-danger">做空</span>`;
-
-                            const qualityBadge = sig.signal_quality === '强'
-                                ? `<span class="badge badge-success">${sig.signal_quality}</span>`
-                                : `<span class="badge badge-info">${sig.signal_quality}</span>`;
-
-                            const statusBadge = sig.correct_direction
-                                ? `<span class="badge badge-success">✅ 正确</span>`
-                                : `<span class="badge badge-danger">⚠️ 错误</span>`;
-
-                            const formatPower = (power) => `<span class="${power >= 0 ? 'pnl-positive' : 'pnl-negative'}">${power >= 0 ? '+' : ''}${power}</span>`;
-
-                            return `
-                                <tr>
-                                    <td><strong>${sig.symbol}</strong></td>
-                                    <td>${directionBadge}</td>
-                                    <td>${qualityBadge}</td>
-                                    <td>${sig.signal_strength.toFixed(1)}</td>
-                                    <td>${formatPower(sig.net_power_1h)}</td>
-                                    <td>${formatPower(sig.net_power_15m)}</td>
-                                    <td>${formatPower(sig.net_power_5m)}</td>
-                                    <td>${statusBadge}</td>
-                                </tr>
-                            `;
-                        }).join('');
-                    } else {
-                        tbody1.innerHTML = '<tr><td colspan="8" class="empty-state">暂无已捕获信号</td></tr>';
-                    }
-
-                    // 错过原因分析
-                    const missReasonStats = data.miss_reason_stats || {};
-                    if (Object.keys(missReasonStats).length > 0) {
-                        const sortedReasons = Object.entries(missReasonStats).sort((a, b) => b[1].count - a[1].count);
-
-                        document.getElementById('miss-reasons-content').innerHTML = sortedReasons.map(([reason, stats]) => `
-                            <div class="suggestion-card warning">
-                                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-                                    <div class="suggestion-category">${reason}</div>
-                                    <div>
-                                        <span class="badge badge-warning">${stats.count}次</span>
-                                    </div>
-                                </div>
-                                ${stats.examples && stats.examples.length > 0 ? `
-                                    <div class="suggestion-message" style="font-size: 12px; color: var(--text-secondary);">
-                                        示例: ${stats.examples.map(ex =>
-                                            `${ex.symbol} ${ex.direction} 强度${ex.strength} (${ex.quality})`
-                                        ).join(' | ')}
-                                    </div>
-                                ` : ''}
-                            </div>
-                        `).join('');
-                    } else {
-                        document.getElementById('miss-reasons-content').innerHTML = `
-                            <div class="empty-state">
-                                <div class="empty-state-text">✅ 没有错过任何信号</div>
-                            </div>
-                        `;
-                    }
-
-                    // 错过的高质量机会
-                    const missedOpps = data.missed_opportunities || [];
-                    const tbody2 = document.getElementById('best-symbols-body');
-                    const tbody3 = document.getElementById('worst-symbols-body');
-
-                    if (missedOpps.length > 0) {
-                        tbody2.innerHTML = missedOpps.map(sig => {
-                            const directionBadge = sig.signal_direction === 'LONG'
-                                ? `<span class="badge badge-success">做多</span>`
-                                : `<span class="badge badge-danger">做空</span>`;
-
-                            const qualityBadge = sig.signal_quality === '强'
-                                ? `<span class="badge badge-danger">${sig.signal_quality}</span>`
-                                : `<span class="badge badge-warning">${sig.signal_quality}</span>`;
-
-                            const formatPower = (power) => `<span class="${power >= 0 ? 'pnl-positive' : 'pnl-negative'}">${power >= 0 ? '+' : ''}${power}</span>`;
-
-                            return `
-                                <tr>
-                                    <td><strong>${sig.symbol}</strong></td>
-                                    <td>${directionBadge}</td>
-                                    <td>${qualityBadge}</td>
-                                    <td>${sig.signal_strength.toFixed(1)}</td>
-                                    <td>${formatPower(sig.net_power_1h)}</td>
-                                    <td>${formatPower(sig.net_power_15m)}</td>
-                                    <td>${formatPower(sig.net_power_5m)}</td>
-                                    <td style="font-size: 11px;">${sig.main_reason}</td>
-                                </tr>
-                            `;
-                        }).join('');
-                    } else {
-                        tbody2.innerHTML = '<tr><td colspan="8" class="empty-state">✅ 没有错过任何强信号</td></tr>';
-                    }
-
-                    // 清空右侧表格（不再需要）
-                    tbody3.innerHTML = '<tr><td colspan="4" class="empty-state">-</td></tr>';
-
-                } else {
-                    // 没有数据
-                    document.getElementById('opportunities-summary').innerHTML = `
-                        <div class="empty-state" style="padding: 40px;">
-                            <div class="empty-state-icon"><i class="bi bi-inbox"></i></div>
-                            <div class="empty-state-text">${result.data?.message || '暂无实时机会分析数据'}</div>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                console.error('加载机会分析失败:', error);
-                document.getElementById('opportunities-summary').innerHTML = `
-                    <div class="empty-state" style="padding: 40px;">
-                        <div class="empty-state-icon"><i class="bi bi-exclamation-triangle"></i></div>
-                        <div class="empty-state-text">加载失败，请稍后重试</div>
-                    </div>
-                `;
-            }
-
-            document.getElementById('opportunitiesLoading').style.display = 'none';
-            document.getElementById('opportunitiesContent').style.display = 'block';
-        }
-
-        // Daily PnL Statistics
-        let dailyPnlChart = null;
-        let currentPnlFilter = 'all';
-
-        function initMonthSelector() {
-            const selector = document.getElementById('monthSelector');
-            const now = new Date();
-            const months = [];
-
-            // 生成最近12个月
-            for (let i = 0; i < 12; i++) {
-                const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                const label = `${date.getFullYear()}年${date.getMonth() + 1}月`;
-                months.push({value, label, isCurrentMonth: i === 0});
-            }
-
-            selector.innerHTML = months.map(m =>
-                `<option value="${m.value}" ${m.isCurrentMonth ? 'selected' : ''}>${m.label}</option>`
-            ).join('');
-        }
-
-        async function loadDailyPnl() {
-            const selectedMonth = document.getElementById('monthSelector').value;
-            document.getElementById('dailyPnlLoading').style.display = 'flex';
-            document.getElementById('dailyPnlContent').style.display = 'none';
-
-            try {
-                const response = await fetch(`/api/futures/review/daily-pnl?month=${selectedMonth}&margin_type=${currentMarginType}`);
-                const result = await response.json();
-
-                if (result.success && result.data) {
-                    renderDailyPnlStats(result.data.summary);
-                    renderDailyPnlChart(result.data.daily_data);
-                    renderDailyPnlTable(result.data.daily_data);
-                } else {
-                    showDailyPnlError(result.message || '加载失败');
-                }
-            } catch (error) {
-                console.error('加载每日盈亏失败:', error);
-                showDailyPnlError('加载失败，请稍后重试');
-            }
-
-            document.getElementById('dailyPnlLoading').style.display = 'none';
-            document.getElementById('dailyPnlContent').style.display = 'block';
-        }
-
-        function renderDailyPnlStats(summary) {
-            // 本月总盈亏
-            const totalPnl = summary.total_pnl || 0;
-            document.getElementById('monthTotalPnl').textContent = `$${totalPnl.toFixed(2)}`;
-            document.getElementById('monthTotalPnl').className = `stat-value ${totalPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}`;
-            document.getElementById('monthTotalPnlChange').textContent = `${summary.total_trades || 0}笔交易`;
-
-            // 盈利天数
-            const profitDays = summary.profit_days || 0;
-            const totalDays = summary.total_days || 0;
-            const profitRatio = totalDays > 0 ? (profitDays / totalDays * 100).toFixed(1) : 0;
-            document.getElementById('profitDays').textContent = profitDays;
-            document.getElementById('profitDaysRatio').textContent = `${profitRatio}% (${profitDays}/${totalDays}天)`;
-            document.getElementById('profitDaysRatio').className = profitRatio >= 50 ? 'stat-change positive' : 'stat-change negative';
-
-            // 日均盈亏
-            const avgPnl = summary.avg_daily_pnl || 0;
-            document.getElementById('avgDailyPnl').textContent = `$${avgPnl.toFixed(2)}`;
-            document.getElementById('avgDailyPnl').className = `stat-value ${avgPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}`;
-            document.getElementById('avgDailyPnlChange').textContent = `基于${totalDays}个交易日`;
-
-            // 最大单日盈亏
-            const maxPnl = summary.max_daily_pnl || 0;
-            const maxPnlDate = summary.max_daily_pnl_date || '-';
-            document.getElementById('maxDailyPnl').textContent = `$${maxPnl.toFixed(2)}`;
-            document.getElementById('maxDailyPnl').className = `stat-value ${maxPnl >= 0 ? 'pnl-positive' : 'pnl-negative'}`;
-            document.getElementById('maxDailyPnlDate').textContent = maxPnlDate;
-        }
-
-        function renderDailyPnlChart(dailyData) {
-            const ctx = document.getElementById('dailyPnlChart');
-
-            // 销毁旧图表
-            if (dailyPnlChart) {
-                dailyPnlChart.destroy();
-            }
-
-            // 准备数据
-            const labels = dailyData.map(d => d.date.substring(5)); // MM-DD
-            const pnlData = dailyData.map(d => d.total_pnl);
-            const colors = pnlData.map(p => p >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)');
-
-            dailyPnlChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: '每日盈亏 (USDT)',
-                        data: pnlData,
-                        backgroundColor: colors,
-                        borderColor: colors.map(c => c.replace('0.8', '1')),
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: true,
-                            labels: {
-                                color: '#8B949E'
-                            }
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    const value = context.parsed.y;
-                                    const data = dailyData[context.dataIndex];
-                                    return [
-                                        `盈亏: $${value.toFixed(2)}`,
-                                        `交易: ${data.total_trades}笔`,
-                                        `胜率: ${data.win_rate.toFixed(1)}%`
-                                    ];
-                                }
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            grid: {
-                                color: '#30363D'
-                            },
-                            ticks: {
-                                color: '#8B949E',
-                                callback: function(value) {
-                                    return '$' + value.toFixed(0);
-                                }
-                            }
-                        },
-                        x: {
-                            grid: {
-                                display: false
-                            },
-                            ticks: {
-                                color: '#8B949E'
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        function renderDailyPnlTable(dailyData) {
-            const tbody = document.getElementById('daily-pnl-table-body');
-
-            if (!dailyData || dailyData.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="empty-state">暂无数据</td></tr>';
+        // ---------- 交易记录表格 ----------
+
+        function renderTrades(trades) {
+            const tbody = document.getElementById('trades-tbody');
+            if (!tbody) return;
+            if (!trades || trades.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="px-8 py-8 text-center text-on-surface-variant text-xs">暂无交易记录</td></tr>';
                 return;
             }
 
-            // 应用过滤
-            let filteredData = dailyData;
-            if (currentPnlFilter === 'profit') {
-                filteredData = dailyData.filter(d => d.total_pnl > 0);
-            } else if (currentPnlFilter === 'loss') {
-                filteredData = dailyData.filter(d => d.total_pnl < 0);
-            }
+            tbody.innerHTML = trades.map(function(t) {
+                const isLong  = (t.position_side || '').toUpperCase() === 'LONG';
+                const sideBg  = isLong ? 'rgba(73,244,200,0.1)'  : 'rgba(255,113,108,0.1)';
+                const sideClr = isLong ? '#49f4c8'               : '#ff716c';
+                const sideLabel = isLong ? 'LONG' : 'SHORT';
 
-            if (filteredData.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="empty-state">暂无数据</td></tr>';
-                return;
-            }
+                const pnl    = Number(t.realized_pnl) || 0;
+                const pnlClr = pnlColor(pnl);
+                const pnlTxt = (pnl >= 0 ? '+' : '') + '$' + Math.abs(pnl).toFixed(2);
 
-            tbody.innerHTML = filteredData.map(day => {
-                const pnlClass = day.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                const profitLoss = day.profit_loss_ratio > 0 ? day.profit_loss_ratio.toFixed(2) : '-';
+                const entry  = t.entry_price  ? Number(t.entry_price).toFixed(4)  : '-';
+                const close  = t.close_price  ? Number(t.close_price).toFixed(4)  : '-';
+                const hold   = fmtHours(t.hold_hours);
+                const reason = fmtCloseReason(t.close_reason);
+                const time   = fmtTime(t.created_at || t.close_time);
 
-                return `
-                    <tr>
-                        <td><strong>${day.date}</strong></td>
-                        <td>${day.total_trades}</td>
-                        <td class="pnl-positive">${day.profit_trades}</td>
-                        <td class="pnl-negative">${day.loss_trades}</td>
-                        <td>
-                            <span class="badge ${day.win_rate >= 50 ? 'badge-success' : 'badge-danger'}">
-                                ${day.win_rate.toFixed(1)}%
-                            </span>
-                        </td>
-                        <td class="${pnlClass}"><strong>$${day.total_pnl.toFixed(2)}</strong></td>
-                        <td class="pnl-positive">$${day.profit_amount.toFixed(2)}</td>
-                        <td class="pnl-negative">$${Math.abs(day.loss_amount).toFixed(2)}</td>
-                        <td>${profitLoss}</td>
-                        <td class="${pnlClass}">${day.roi.toFixed(2)}%</td>
-                    </tr>
-                `;
+                return '<tr class="hover:bg-surface-container transition-colors">' +
+                    '<td class="px-8 py-5 font-medium">' + (t.symbol || '-') + '</td>' +
+                    '<td class="px-8 py-5">' +
+                        '<span class="px-2 py-1 text-[10px] font-bold rounded" style="background:' + sideBg + ';color:' + sideClr + '">' + sideLabel + '</span>' +
+                    '</td>' +
+                    '<td class="px-8 py-5 mono text-on-surface-variant">' + entry + '</td>' +
+                    '<td class="px-8 py-5 mono text-on-surface-variant">' + close + '</td>' +
+                    '<td class="px-8 py-5 mono font-bold" style="color:' + pnlClr + '">' + pnlTxt + '</td>' +
+                    '<td class="px-8 py-5 text-on-surface-variant">' + hold + '</td>' +
+                    '<td class="px-8 py-5">' +
+                        '<span class="text-[10px] bg-surface-container-highest px-2 py-0.5 rounded text-on-surface">' + reason + '</span>' +
+                    '</td>' +
+                '</tr>';
             }).join('');
         }
 
-        function filterDailyPnl(filter) {
-            currentPnlFilter = filter;
+        // ---------- 计算统计（fallback） ----------
 
-            // 更新按钮状态
-            document.querySelectorAll('#daily-pnl-tab .filter-btn').forEach(btn => {
-                btn.classList.remove('active');
+        function calcStats(trades) {
+            let winCount = 0, lossCount = 0, totalPnl = 0;
+            (trades || []).forEach(function(t) {
+                const p = Number(t.realized_pnl) || 0;
+                totalPnl += p;
+                if (p > 0) winCount++;
+                else if (p < 0) lossCount++;
             });
-            event.target.classList.add('active');
-
-            // 重新渲染表格
-            const selectedMonth = document.getElementById('monthSelector').value;
-            loadDailyPnl();
+            const total = trades ? trades.length : 0;
+            const winRate = total > 0 ? (winCount / total * 100) : 0;
+            return { total_open: total, win_count: winCount, loss_count: lossCount, total_pnl: totalPnl, win_rate: winRate };
         }
 
-        function showDailyPnlError(message) {
-            document.getElementById('dailyPnlContent').innerHTML = `
-                <div class="empty-state" style="padding: 40px;">
-                    <div class="empty-state-icon"><i class="bi bi-exclamation-triangle"></i></div>
-                    <div class="empty-state-text">${message}</div>
-                </div>
-            `;
+        function calcBestWorst(trades) {
+            const map = {};
+            (trades || []).forEach(function(t) {
+                const sym = t.symbol || 'UNKNOWN';
+                if (!map[sym]) map[sym] = { symbol: sym, pnl: 0, count: 0 };
+                map[sym].pnl   += Number(t.realized_pnl) || 0;
+                map[sym].count += 1;
+            });
+            const arr = Object.values(map).sort(function(a, b) { return b.pnl - a.pnl; });
+            const best  = arr.filter(function(x) { return x.pnl >= 0; }).slice(0, 3);
+            const worst = arr.filter(function(x) { return x.pnl <  0; }).slice(-3).reverse();
+            return { best: best, worst: worst };
         }
 
-        // 加载12小时复盘分析
-        async function loadRetrospectiveAnalysis() {
-            const loading = document.getElementById('retrospectiveLoading');
-            const content = document.getElementById('retrospectiveContent');
+        // ---------- 主入口 ----------
 
-            loading.style.display = 'flex';
-            content.style.display = 'none';
+        async function loadReview() {
+            // 更新时间戳
+            const tsEl = document.querySelector('header .mono.text-xs.text-on-surface');
+            if (tsEl) {
+                const now = new Date(Date.now() + 8 * 3600 * 1000);
+                const pad = function(n) { return String(n).padStart(2, '0'); };
+                tsEl.textContent = now.getUTCFullYear() + '-' +
+                    pad(now.getUTCMonth() + 1) + '-' +
+                    pad(now.getUTCDate())       + ' ' +
+                    pad(now.getUTCHours())      + ':' +
+                    pad(now.getUTCMinutes())    + ':' +
+                    pad(now.getUTCSeconds());
+            }
 
+            // 尝试主端点
             try {
-                const response = await fetch('/api/retrospective-analysis/latest');
-                const data = await response.json();
+                const r1 = await fetch('/api/futures/review/24h?account_id=' + ACCOUNT_ID);
+                if (r1.ok) {
+                    const data = await r1.json();
+                    // 支持直接返回对象或 {data: {...}} 两种格式
+                    const d = data.data !== undefined ? data.data : data;
 
-                if (!data || !data.btc_summary) {
-                    throw new Error('暂无复盘分析数据');
+                    updateStats(d);
+                    renderSignalAnalysis(d.signal_analysis || []);
+                    renderSymbols(d.best_symbols || [], d.worst_symbols || []);
+                    renderTrades(d.trades || []);
+                    return;
                 }
-
-                document.getElementById('retroPeriod').textContent = data.period || '';
-                renderBtcSummary(data.btc_summary);
-                renderHourlyTrend(data.hourly_trend || []);
-                renderRetroPerformance(data.performance);
-
-                content.style.display = 'block';
-            } catch (error) {
-                console.error('加载复盘分析失败:', error);
-                content.innerHTML = `<div class="empty-state">${error.message}</div>`;
-                content.style.display = 'block';
-            } finally {
-                loading.style.display = 'none';
-            }
-        }
-
-        function renderBtcSummary(s) {
-            const chgClass = s.change_pct >= 0 ? 'pnl-positive' : 'pnl-negative';
-            document.getElementById('btcSummaryGrid').innerHTML = `
-                <div class="stat-card">
-                    <div class="stat-label">整体走势</div>
-                    <div class="stat-value ${chgClass}">${s.direction}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">12H涨跌</div>
-                    <div class="stat-value ${chgClass}">${s.change_pct > 0 ? '+' : ''}${s.change_pct}%</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">期初价格</div>
-                    <div class="stat-value">${s.start_price.toLocaleString()}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">当前价格</div>
-                    <div class="stat-value">${s.end_price.toLocaleString()}</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">区间 高/低</div>
-                    <div class="stat-value" style="font-size:13px;">
-                        <span class="pnl-positive">${s.high.toLocaleString()}</span> /
-                        <span class="pnl-negative">${s.low.toLocaleString()}</span>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderHourlyTrend(rows) {
-            const tbody = document.getElementById('hourlyTrendTable');
-            if (!rows.length) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#888;">暂无数据</td></tr>';
-                return;
-            }
-            tbody.innerHTML = rows.map(r => {
-                const chgClass = r.change_pct >= 0 ? 'pnl-positive' : 'pnl-negative';
-                const pnlClass = r.pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                const dirColor = r.direction.includes('上涨') ? '#26a69a' : r.direction.includes('下跌') ? '#ef5350' : '#888';
-                return `
-                    <tr>
-                        <td style="font-weight:500;">${r.hour_cst}</td>
-                        <td>${r.open.toLocaleString()}</td>
-                        <td>${r.close.toLocaleString()}</td>
-                        <td class="${chgClass}">${r.change_pct > 0 ? '+' : ''}${r.change_pct}%</td>
-                        <td style="color:${dirColor};font-weight:500;">${r.direction}</td>
-                        <td>${r.trades > 0 ? r.trades + '笔' : '-'}</td>
-                        <td class="${pnlClass}">${r.pnl !== 0 ? (r.pnl > 0 ? '+' : '') + r.pnl + 'U' : '-'}</td>
-                        <td>${r.trades > 0 ? r.win_rate + '%' : '-'}</td>
-                    </tr>
-                `;
-            }).join('');
-        }
-
-        function renderRetroPerformance(p) {
-            const pnlClass = p.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-            const wrClass  = p.win_rate >= 50 ? 'pnl-positive' : 'pnl-negative';
-            document.getElementById('retroPerformanceGrid').innerHTML = `
-                <div class="stat-card">
-                    <div class="stat-label">总开仓</div>
-                    <div class="stat-value">${p.total_trades}笔</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">盈利</div>
-                    <div class="stat-value pnl-positive">${p.profit_trades}笔</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">亏损</div>
-                    <div class="stat-value pnl-negative">${p.loss_trades}笔</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">胜率</div>
-                    <div class="stat-value ${wrClass}">${p.win_rate}%</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">总盈亏</div>
-                    <div class="stat-value ${pnlClass}">${p.total_pnl > 0 ? '+' : ''}${p.total_pnl}U</div>
-                </div>
-            `;
-        }
-
-        function renderTradingPerformance(performance) {
-            const grid = document.getElementById('tradingPerformanceStats');
-
-            const performanceRating = performance.win_rate >= 60 ? '优秀' :
-                                     performance.win_rate >= 40 ? '良好' :
-                                     performance.win_rate >= 20 ? '一般' : '较差';
-            const ratingClass = performance.win_rate >= 40 ? 'pnl-positive' : 'pnl-negative';
-
-            grid.innerHTML = `
-                <div class="stat-card">
-                    <div class="stat-label">总交易数</div>
-                    <div class="stat-value">${performance.total_trades}笔</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">盈利交易</div>
-                    <div class="stat-value pnl-positive">${performance.profit_trades}笔</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">亏损交易</div>
-                    <div class="stat-value pnl-negative">${performance.loss_trades}笔</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">胜率</div>
-                    <div class="stat-value ${ratingClass}">${formatNumber(performance.win_rate, 1)}%</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">总盈亏</div>
-                    <div class="stat-value ${performance.total_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
-                        ${formatNumber(performance.total_pnl, 2)} USDT
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">表现评级</div>
-                    <div class="stat-value ${ratingClass}">${performanceRating}</div>
-                </div>
-            `;
-        }
-
-        function renderLossAnalysis(lossData) {
-            const container = document.getElementById('lossAnalysis');
-
-            if (!lossData || !lossData.loss_trades || lossData.loss_trades.length === 0) {
-                container.innerHTML = '<div class="empty-state">暂无亏损交易</div>';
-                return;
+            } catch (e) {
+                console.error('主端点请求失败:', e);
             }
 
-            container.innerHTML = `
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>交易对</th>
-                                <th>方向</th>
-                                <th>亏损</th>
-                                <th>问题诊断</th>
-                                <th>改进建议</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${lossData.loss_trades.slice(0, 10).map(trade => `
-                                <tr>
-                                    <td>${trade.symbol}</td>
-                                    <td><span class="badge badge-${trade.side.toLowerCase()}">${trade.side}</span></td>
-                                    <td class="pnl-negative">${formatNumber(trade.pnl, 2)} USDT (${formatNumber(trade.pnl_pct, 2)}%)</td>
-                                    <td style="font-size: 12px;">${(trade.issues || []).join('; ')}</td>
-                                    <td style="font-size: 12px;">${(trade.recommendations || []).join('; ')}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-        }
+            // Fallback: /api/futures/trades
+            try {
+                const r2 = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&hours=24');
+                if (r2.ok) {
+                    const raw = await r2.json();
+                    const trades = Array.isArray(raw) ? raw : (raw.data || raw.trades || []);
 
-        function renderImprovementSuggestions(suggestions) {
-            const container = document.getElementById('improvementSuggestions');
+                    const stats = calcStats(trades);
+                    updateStats(stats);
 
-            if (!suggestions || suggestions.length === 0) {
-                container.innerHTML = '<div class="empty-state">暂无改进建议</div>';
-                return;
+                    const sym = calcBestWorst(trades);
+                    renderSymbols(sym.best, sym.worst);
+                    renderTrades(trades);
+
+                    // 无信号分析数据时清空
+                    renderSignalAnalysis([]);
+                    return;
+                }
+            } catch (e) {
+                console.error('fallback 端点请求失败:', e);
             }
 
-            container.innerHTML = `
-                <div style="display: flex; flex-direction: column; gap: 12px;">
-                    ${suggestions.map((item, index) => `
-                        <div class="card" style="border-left: 3px solid var(--warning-yellow);">
-                            <div style="padding: 16px;">
-                                <h5 style="margin-bottom: 8px;">
-                                    <i class="bi bi-exclamation-circle"></i> ${item.issue}
-                                </h5>
-                                <p style="color: var(--text-secondary); margin-bottom: 8px;">
-                                    出现次数: ${item.count}次
-                                </p>
-                                <p style="color: var(--text-secondary);">
-                                    <i class="bi bi-arrow-right"></i> ${item.suggestion}
-                                </p>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
+            // 两个端点都失败时保留静态占位数据，不报错
         }
 
-        function refreshAll() {
-            hours = parseInt(document.getElementById('hours-select').value);
-            // Reset page numbers when time range changes
-            tradesPage = 1;
-            loadSummary();
-            loadTrades();
-            loadAnalysis();
-            loadSuggestions();
-            loadSignalAnalysis();
-            loadOpportunityAnalysis();
+        // 刷新按钮
+        const refreshBtn = document.querySelector('header button .material-symbols-outlined.text-primary');
+        if (refreshBtn) {
+            refreshBtn.closest('button').addEventListener('click', loadReview);
         }
 
-        // Initialize
-        document.getElementById('hours-select').addEventListener('change', refreshAll);
-        refreshAll();
+        document.addEventListener('DOMContentLoaded', loadReview);
     </script>
 </body></html>

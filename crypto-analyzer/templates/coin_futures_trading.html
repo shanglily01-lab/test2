@@ -181,27 +181,27 @@
 <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
 <div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
 <div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">持仓数</div>
-<div class="font-mono text-2xl font-medium text-on-surface">12</div>
+<div id="stat-position-count" class="font-mono text-2xl font-medium text-on-surface">--</div>
 </div>
 <div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
 <div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">总保证金 (BTC)</div>
-<div class="font-mono text-2xl font-medium text-on-surface">4.52 BTC</div>
+<div id="stat-total-margin" class="font-mono text-2xl font-medium text-on-surface">--</div>
 </div>
 <div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
 <div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">总浮盈 (BTC)</div>
-<div class="font-mono text-2xl font-medium text-primary">+0.24 BTC</div>
+<div id="stat-total-pnl" class="font-mono text-2xl font-medium text-primary">--</div>
 </div>
 <div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
 <div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">24H 盈亏</div>
-<div class="font-mono text-2xl font-medium text-primary">+12.42%</div>
+<div id="stat-24h-pnl" class="font-mono text-2xl font-medium text-primary">--</div>
 </div>
 <div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
 <div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">胜率</div>
-<div class="font-mono text-2xl font-medium text-secondary">68%</div>
+<div id="stat-win-rate" class="font-mono text-2xl font-medium text-secondary">--</div>
 </div>
 <div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
 <div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">总交易数</div>
-<div class="font-mono text-2xl font-medium text-on-surface">47</div>
+<div id="stat-total-trades" class="font-mono text-2xl font-medium text-on-surface">--</div>
 </div>
 </div>
 <!-- Middle Section -->
@@ -228,88 +228,8 @@
 <th class="px-6 py-4 font-bold">操作</th>
 </tr>
 </thead>
-<tbody class="text-sm font-medium">
-<!-- Long Position -->
-<tr class="group hover:bg-primary/5 transition-colors border-b border-outline-variant/5 bg-primary/[0.02]">
-<td class="px-6 py-4">
-<div class="flex items-center gap-2">
-<div class="w-6 h-6 rounded-full bg-surface-bright flex items-center justify-center text-[10px] font-bold border border-primary/20">BTC</div>
-<span class="font-headline font-semibold">BTCUSD_PERP</span>
-</div>
-</td>
-<td class="px-6 py-4">
-<span class="px-2 py-0.5 rounded text-[10px] bg-primary/20 text-primary border border-primary/30 uppercase">Long</span>
-</td>
-<td class="px-6 py-4 font-mono">
-<div class="text-on-surface">62,431.50</div>
-<div class="text-on-surface-variant text-xs opacity-70">64,210.12</div>
-</td>
-<td class="px-6 py-4 font-mono text-primary">+0.1242 BTC</td>
-<td class="px-6 py-4">
-<div class="flex items-center gap-2">
-<span class="text-error text-xs font-mono">60.2k</span>
-<span class="text-on-surface-variant">/</span>
-<span class="text-primary text-xs font-mono">72.0k</span>
-</div>
-</td>
-<td class="px-6 py-4">
-<button class="text-on-surface-variant hover:text-error transition-colors px-2 py-1 rounded bg-surface-container/50">平仓</button>
-</td>
-</tr>
-<!-- Short Position -->
-<tr class="group hover:bg-error/5 transition-colors border-b border-outline-variant/5 bg-error/[0.02]">
-<td class="px-6 py-4">
-<div class="flex items-center gap-2">
-<div class="w-6 h-6 rounded-full bg-surface-bright flex items-center justify-center text-[10px] font-bold border border-error/20">ETH</div>
-<span class="font-headline font-semibold">ETHUSD_PERP</span>
-</div>
-</td>
-<td class="px-6 py-4">
-<span class="px-2 py-0.5 rounded text-[10px] bg-error/20 text-error border border-error/30 uppercase">Short</span>
-</td>
-<td class="px-6 py-4 font-mono">
-<div class="text-on-surface">3,452.11</div>
-<div class="text-on-surface-variant text-xs opacity-70">3,480.45</div>
-</td>
-<td class="px-6 py-4 font-mono text-error">-0.0154 BTC</td>
-<td class="px-6 py-4">
-<div class="flex items-center gap-2">
-<span class="text-error text-xs font-mono">3.6k</span>
-<span class="text-on-surface-variant">/</span>
-<span class="text-primary text-xs font-mono">3.1k</span>
-</div>
-</td>
-<td class="px-6 py-4">
-<button class="text-on-surface-variant hover:text-error transition-colors px-2 py-1 rounded bg-surface-container/50">平仓</button>
-</td>
-</tr>
-<!-- Long Position -->
-<tr class="group hover:bg-primary/5 transition-colors border-b border-outline-variant/5 bg-primary/[0.02]">
-<td class="px-6 py-4">
-<div class="flex items-center gap-2">
-<div class="w-6 h-6 rounded-full bg-surface-bright flex items-center justify-center text-[10px] font-bold border border-primary/20">SOL</div>
-<span class="font-headline font-semibold">SOLUSD_PERP</span>
-</div>
-</td>
-<td class="px-6 py-4">
-<span class="px-2 py-0.5 rounded text-[10px] bg-primary/20 text-primary border border-primary/30 uppercase">Long</span>
-</td>
-<td class="px-6 py-4 font-mono">
-<div class="text-on-surface">145.20</div>
-<div class="text-on-surface-variant text-xs opacity-70">152.88</div>
-</td>
-<td class="px-6 py-4 font-mono text-primary">+0.0821 BTC</td>
-<td class="px-6 py-4">
-<div class="flex items-center gap-2">
-<span class="text-error text-xs font-mono">130.0</span>
-<span class="text-on-surface-variant">/</span>
-<span class="text-primary text-xs font-mono">185.0</span>
-</div>
-</td>
-<td class="px-6 py-4">
-<button class="text-on-surface-variant hover:text-error transition-colors px-2 py-1 rounded bg-surface-container/50">平仓</button>
-</td>
-</tr>
+<tbody id="positions-tbody" class="text-sm font-medium">
+<tr><td colspan="6" class="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
 </tbody>
 </table>
 </div>
@@ -322,56 +242,27 @@
 <div class="space-y-4 mb-8">
 <div class="flex items-center justify-between">
 <span class="text-sm font-medium text-on-surface">策略总开关</span>
-<button class="w-10 h-5 bg-primary rounded-full relative shadow-[0_0_8px_rgba(73,244,200,0.4)]">
-<span class="absolute right-1 top-1 bg-on-primary w-3 h-3 rounded-full"></span>
+<button id="toggle-trading-enabled" data-state="0" onclick="handleToggle('trading-enabled')" class="w-10 h-5 bg-surface-variant rounded-full relative transition-colors duration-200">
+<span class="toggle-knob absolute left-1 top-1 bg-on-surface-variant w-3 h-3 rounded-full transition-all duration-200"></span>
 </button>
 </div>
 <div class="flex items-center justify-between">
-<span class="text-sm font-medium text-on-surface">仅做多</span>
-<button class="w-10 h-5 bg-surface-variant rounded-full relative">
-<span class="absolute left-1 top-1 bg-on-surface-variant w-3 h-3 rounded-full"></span>
+<span class="text-sm font-medium text-on-surface">允许做多</span>
+<button id="toggle-allow-long" data-state="0" onclick="handleToggle('allow-long')" class="w-10 h-5 bg-surface-variant rounded-full relative transition-colors duration-200">
+<span class="toggle-knob absolute left-1 top-1 bg-on-surface-variant w-3 h-3 rounded-full transition-all duration-200"></span>
 </button>
 </div>
 <div class="flex items-center justify-between">
-<span class="text-sm font-medium text-on-surface">仅做空</span>
-<button class="w-10 h-5 bg-surface-variant rounded-full relative">
-<span class="absolute left-1 top-1 bg-on-surface-variant w-3 h-3 rounded-full"></span>
+<span class="text-sm font-medium text-on-surface">允许做空</span>
+<button id="toggle-allow-short" data-state="0" onclick="handleToggle('allow-short')" class="w-10 h-5 bg-surface-variant rounded-full relative transition-colors duration-200">
+<span class="toggle-knob absolute left-1 top-1 bg-on-surface-variant w-3 h-3 rounded-full transition-all duration-200"></span>
 </button>
 </div>
 </div>
 <div class="space-y-4">
 <div class="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant mb-2">最近成交</div>
-<div class="space-y-3">
-<div class="flex justify-between items-center text-xs">
-<div class="flex flex-col">
-<span class="font-bold">BTCUSD_PERP</span>
-<span class="text-[10px] text-on-surface-variant uppercase">Short Sell</span>
-</div>
-<div class="text-right">
-<div class="font-mono text-error">63,420.50</div>
-<div class="text-[10px] text-on-surface-variant font-mono">14:22:10</div>
-</div>
-</div>
-<div class="flex justify-between items-center text-xs">
-<div class="flex flex-col">
-<span class="font-bold">ETHUSD_PERP</span>
-<span class="text-[10px] text-on-surface-variant uppercase">Long Buy</span>
-</div>
-<div class="text-right">
-<div class="font-mono text-primary">3,421.90</div>
-<div class="text-[10px] text-on-surface-variant font-mono">14:15:33</div>
-</div>
-</div>
-<div class="flex justify-between items-center text-xs">
-<div class="flex flex-col">
-<span class="font-bold">LINKUSD_PERP</span>
-<span class="text-[10px] text-on-surface-variant uppercase">Close Long</span>
-</div>
-<div class="text-right">
-<div class="font-mono text-on-surface">18.42</div>
-<div class="text-[10px] text-on-surface-variant font-mono">13:58:01</div>
-</div>
-</div>
+<div id="recent-trades-list" class="space-y-3">
+<div class="text-xs text-on-surface-variant text-center py-2">加载中...</div>
 </div>
 </div>
 <button class="w-full mt-8 py-3 rounded-lg bg-error-container text-on-error font-bold text-sm tracking-wide hover:brightness-110 active:scale-[0.98] transition-all">一键清空所有持仓</button>
@@ -403,43 +294,8 @@
 <th class="px-6 py-4 font-bold">手续费</th>
 </tr>
 </thead>
-<tbody class="text-sm font-medium">
-<tr class="border-b border-outline-variant/5 hover:bg-surface-container transition-colors">
-<td class="px-6 py-4 font-mono text-xs text-on-surface-variant">2023-11-20 12:45:01</td>
-<td class="px-6 py-4 font-bold">BTCUSD_PERP</td>
-<td class="px-6 py-4"><span class="text-primary">BUY/LONG</span></td>
-<td class="px-6 py-4 font-mono text-on-surface">61,421.50</td>
-<td class="px-6 py-4 font-mono text-on-surface">62,880.00</td>
-<td class="px-6 py-4 font-mono text-primary">+0.0452 BTC</td>
-<td class="px-6 py-4 font-mono text-on-surface-variant">0.0004 BTC</td>
-</tr>
-<tr class="border-b border-outline-variant/5 hover:bg-surface-container transition-colors">
-<td class="px-6 py-4 font-mono text-xs text-on-surface-variant">2023-11-20 11:20:44</td>
-<td class="px-6 py-4 font-bold">ETHUSD_PERP</td>
-<td class="px-6 py-4"><span class="text-error">SELL/SHORT</span></td>
-<td class="px-6 py-4 font-mono text-on-surface">3,540.10</td>
-<td class="px-6 py-4 font-mono text-on-surface">3,490.22</td>
-<td class="px-6 py-4 font-mono text-primary">+0.0121 BTC</td>
-<td class="px-6 py-4 font-mono text-on-surface-variant">0.0001 BTC</td>
-</tr>
-<tr class="border-b border-outline-variant/5 hover:bg-surface-container transition-colors">
-<td class="px-6 py-4 font-mono text-xs text-on-surface-variant">2023-11-19 23:12:15</td>
-<td class="px-6 py-4 font-bold">SOLUSD_PERP</td>
-<td class="px-6 py-4"><span class="text-primary">BUY/LONG</span></td>
-<td class="px-6 py-4 font-mono text-on-surface">155.40</td>
-<td class="px-6 py-4 font-mono text-on-surface">150.10</td>
-<td class="px-6 py-4 font-mono text-error">-0.0088 BTC</td>
-<td class="px-6 py-4 font-mono text-on-surface-variant">0.0002 BTC</td>
-</tr>
-<tr class="border-b border-outline-variant/5 hover:bg-surface-container transition-colors">
-<td class="px-6 py-4 font-mono text-xs text-on-surface-variant">2023-11-19 18:05:59</td>
-<td class="px-6 py-4 font-bold">ADAUSD_PERP</td>
-<td class="px-6 py-4"><span class="text-error">SELL/SHORT</span></td>
-<td class="px-6 py-4 font-mono text-on-surface">0.6241</td>
-<td class="px-6 py-4 font-mono text-on-surface">0.6552</td>
-<td class="px-6 py-4 font-mono text-error">-0.0041 BTC</td>
-<td class="px-6 py-4 font-mono text-on-surface-variant">0.0000 BTC</td>
-</tr>
+<tbody id="history-tbody" class="text-sm font-medium">
+<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
 </tbody>
 </table>
 </div>
@@ -463,2893 +319,391 @@
 <div class="fixed top-[20%] right-[10%] w-[400px] h-[400px] bg-primary/5 rounded-full blur-[120px] pointer-events-none -z-10"></div>
 <div class="fixed bottom-[10%] left-[300px] w-[300px] h-[300px] bg-secondary/5 rounded-full blur-[100px] pointer-events-none -z-10"></div>
 <script>
-        const API_BASE = '/api/coin-futures';
-        let currentSymbol = 'BTC/USDT';
-        let currentPrice = 0;
-        let previousPrice = 0; // 用于价格变化检测
-        let symbols = [];
-        let currentTradingMode = 'paper'; // 交易模式: paper=模拟, live=实盘
+// ==========================================
+// Coin-Margined Futures Monitor - Functional JS
+// account_id=3 (币本位合约)
+// ==========================================
 
-        // 统一的时间格式化工具（UTC+0 → UTC+8）
-        function formatTimeUTC8(utcTime, format = 'datetime', showTimezone = false) {
-            if (!utcTime) return '-';
+var ACCOUNT_ID = 3;
+var _refreshTimer = null;
 
-            try {
-                let date;
-                if (typeof utcTime === 'string') {
-                    // 检查是否有时区标识（Z或±HH:MM）
-                    // 注意：不能用 includes('-') 判断，因为日期格式本身包含 '-'
-                    const hasTimezone = utcTime.endsWith('Z') ||
-                                       /[+-]\d{2}:\d{2}$/.test(utcTime) ||
-                                       /[+-]\d{4}$/.test(utcTime);
+// ---- 工具函数 ----
 
-                    if (!hasTimezone) {
-                        // 没有时区信息，假设是UTC时间，添加Z后缀
-                        date = new Date(utcTime + 'Z');
-                    } else {
-                        date = new Date(utcTime);
-                    }
-                } else {
-                    date = new Date(utcTime);
-                }
+function fmtPrice(p) {
+    if (p === null || p === undefined || p === '') return '--';
+    var n = parseFloat(p);
+    if (isNaN(n)) return '--';
+    if (n >= 1000) return n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (n >= 1) return n.toFixed(4);
+    return n.toFixed(6);
+}
 
-                if (isNaN(date.getTime())) {
-                    return '-';
-                }
+function fmtBtc(n) {
+    if (n === null || n === undefined || isNaN(parseFloat(n))) return '--';
+    var v = parseFloat(n);
+    if (isNaN(v)) return '--';
+    return v.toFixed(6) + ' BTC';
+}
 
-                // 转换为UTC+8（北京时间）
-                const utc8Date = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+function fmtPnlBtc(n) {
+    if (n === null || n === undefined) return '--';
+    var v = parseFloat(n);
+    if (isNaN(v)) return '--';
+    var sign = v >= 0 ? '+' : '';
+    return sign + v.toFixed(6) + ' BTC';
+}
 
-                const year = utc8Date.getUTCFullYear();
-                const month = String(utc8Date.getUTCMonth() + 1).padStart(2, '0');
-                const day = String(utc8Date.getUTCDate()).padStart(2, '0');
-                const hours = String(utc8Date.getUTCHours()).padStart(2, '0');
-                const minutes = String(utc8Date.getUTCMinutes()).padStart(2, '0');
-                const seconds = String(utc8Date.getUTCSeconds()).padStart(2, '0');
+function fmtTime(t) {
+    if (!t) return '--';
+    try {
+        var ts = (typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t)) ? t + 'Z' : t;
+        var d = new Date(ts);
+        if (isNaN(d.getTime())) return '--';
+        var u = new Date(d.getTime() + 8 * 3600000);
+        var pad = function(x) { return String(x).padStart(2, '0'); };
+        return (u.getUTCMonth()+1) + '-' + pad(u.getUTCDate()) + ' ' + pad(u.getUTCHours()) + ':' + pad(u.getUTCMinutes());
+    } catch(e) { return '--'; }
+}
 
-                const tz = showTimezone ? ' (UTC+8)' : '';
+function showToast(msg, type) {
+    var el = document.createElement('div');
+    var colors = {success: '#49f4c8', error: '#ff716c', info: '#5b9eff', warning: '#f59e0b'};
+    var c = colors[type] || colors.info;
+    el.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;padding:12px 18px;border-radius:10px;background:#1a2027;border-left:3px solid ' + c + ';color:#ebeef5;font-size:13px;max-width:320px;box-shadow:0 4px 20px rgba(0,0,0,0.4);';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function() { el.remove(); }, 4000);
+}
 
-                if (format === 'full') {
-                    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}${tz}`;
-                } else if (format === 'datetime') {
-                    return `${month}-${day} ${hours}:${minutes}${tz}`;
-                } else {
-                    return `${year}-${month}-${day}`;
-                }
-            } catch (e) {
-                console.error('时间格式化失败:', e, utcTime);
-                return '-';
-            }
-        }
+// ---- Toggle 视觉状态 ----
 
-        // Pagination variables
-        let allPositions = [];
-        let currentPositionsPage = 1;
-        let positionsRowsPerPage = 10;
+function setToggleState(btn, isOn) {
+    if (!btn) return;
+    btn.dataset.state = isOn ? '1' : '0';
+    var knob = btn.querySelector('.toggle-knob');
+    if (isOn) {
+        btn.style.background = '#49f4c8';
+        btn.style.boxShadow = '0 0 8px rgba(73,244,200,0.4)';
+        if (knob) { knob.style.left = ''; knob.style.right = '4px'; knob.style.background = '#005745'; }
+    } else {
+        btn.style.background = '';
+        btn.style.boxShadow = '';
+        if (knob) { knob.style.right = ''; knob.style.left = '4px'; knob.style.background = ''; }
+    }
+}
 
-        // 交易模式切换
-        function switchTradingMode(mode) {
-            currentTradingMode = mode;
+// ---- 加载持仓 ----
 
-            // 更新按钮状态
-            const paperBtn = document.getElementById('paperTradingBtn');
-            const liveBtn = document.getElementById('liveTradingBtn');
+async function loadPositions() {
+    var tbody = document.getElementById('positions-tbody');
+    if (!tbody) return null;
 
-            if (mode === 'paper') {
-                paperBtn.classList.remove('btn-outline-primary');
-                paperBtn.classList.add('btn-primary');
-                liveBtn.classList.remove('btn-primary');
-                liveBtn.classList.add('btn-outline-primary');
-            } else {
-                liveBtn.classList.remove('btn-outline-primary');
-                liveBtn.classList.add('btn-primary');
-                paperBtn.classList.remove('btn-primary');
-                paperBtn.classList.add('btn-outline-primary');
-            }
+    var positions = [];
+    try {
+        var res = await fetch('/api/futures/positions?account_id=' + ACCOUNT_ID + '&status=open');
+        var data = await res.json();
+        positions = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+    } catch(e) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败: ' + e.message + '</td></tr>';
+        return null;
+    }
 
-            // 重新加载数据
-            loadAccount();
-            loadPositions();
+    if (positions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无持仓</td></tr>';
+        return {count: 0, totalMargin: 0, totalPnl: 0};
+    }
 
-            showToast(mode === 'paper' ? '已切换到模拟交易模式' : '已切换到实盘交易模式', 'info');
-        }
-
-        // 加载交易对列表
-        async function loadSymbols() {
-            try {
-                // 从API获取交易对列表（从配置文件读取）
-                const response = await fetch('/api/coin-futures/symbols');
-                const data = await response.json();
-                
-                if (data.success && data.symbols && data.symbols.length > 0) {
-                    symbols = data.symbols;
-                    
-                    const symbolSelect = document.getElementById('symbol');
-                    symbolSelect.innerHTML = symbols.map(s => `<option value="${s}">${s}</option>`).join('');
-                    
-                    // 设置默认交易对
-                    currentSymbol = symbols[0];
-                    symbolSelect.value = currentSymbol;
-                    await refreshPrice();
-                } else {
-                    // 使用默认交易对
-                    symbols = ['BTC/USDT', 'ETH/USDT'];
-                    const symbolSelect = document.getElementById('symbol');
-                    symbolSelect.innerHTML = symbols.map(s => `<option value="${s}">${s}</option>`).join('');
-                    currentSymbol = symbols[0];
-                    symbolSelect.value = currentSymbol;
-                    await refreshPrice();
-                }
-            } catch (error) {
-                // 静默处理加载失败
-                // 失败时使用默认值
-                symbols = ['BTC/USDT', 'ETH/USDT'];
-                const symbolSelect = document.getElementById('symbol');
-                symbolSelect.innerHTML = symbols.map(s => `<option value="${s}">${s}</option>`).join('');
-                currentSymbol = symbols[0];
-                symbolSelect.value = currentSymbol;
-                showToast('加载交易对失败，使用默认值', 'warning');
-            }
-        }
-
-        // 选择交易对
-        document.getElementById('symbol').addEventListener('change', async function(e) {
-            currentSymbol = e.target.value;
-            // 切换交易对时立即刷新价格（显示加载状态）
-            const priceDisplay = document.getElementById('current-price-display');
-            priceDisplay.textContent = '加载中...';
-            priceDisplay.style.color = 'var(--text-secondary)';
-            // 立即刷新，不等待
-            refreshPrice().catch(err => {
-                // 静默处理价格刷新失败
-                priceDisplay.textContent = '加载失败';
-                priceDisplay.style.color = 'var(--danger-red)';
-            });
+    // 批量获取实时价格
+    var symbols = positions.map(function(p) { return p.symbol; }).filter(function(v, i, a) { return a.indexOf(v) === i; });
+    var priceMap = {};
+    try {
+        var pr = await fetch('/api/futures/prices/batch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({symbols: symbols})
         });
+        if (pr.ok) {
+            var pd = await pr.json();
+            priceMap = pd.prices || pd || {};
+        }
+    } catch(e) { /* 使用 entry_price 作为回退 */ }
 
-        // 选择方向
-        function selectPositionSide(side) {
-            document.getElementById('position-side').value = side;
-            const longBtn = document.getElementById('long-btn');
-            const shortBtn = document.getElementById('short-btn');
-            
-            if (side === 'LONG') {
-                longBtn.classList.remove('btn-secondary');
-                longBtn.classList.add('btn-success');
-                shortBtn.classList.remove('btn-danger');
-                shortBtn.classList.add('btn-secondary');
-            } else {
-                longBtn.classList.remove('btn-success');
-                longBtn.classList.add('btn-secondary');
-                shortBtn.classList.remove('btn-secondary');
-                shortBtn.classList.add('btn-danger');
-            }
+    var totalMargin = 0, totalPnl = 0;
+
+    var rows = positions.map(function(pos) {
+        var isLong = pos.position_side === 'LONG';
+        var entry = parseFloat(pos.entry_price) || 0;
+        var qty = parseFloat(pos.quantity) || 0;
+        var margin = parseFloat(pos.margin) || 0;
+        totalMargin += margin;
+
+        // 获取当前价
+        var curPrice = parseFloat(pos.current_price) || entry;
+        var pm = priceMap[pos.symbol];
+        if (pm) {
+            var pp = (typeof pm === 'object' && pm !== null) ? (pm.price || pm) : pm;
+            var pv = parseFloat(pp);
+            if (pv > 0) curPrice = pv;
         }
 
-        // 价格缓存（避免重复请求）
-        let futuresPriceCache = {};
-        let futuresPriceCacheTime = {};
-        const FUTURES_PRICE_CACHE_DURATION = 3000; // 3秒缓存
+        // 计算浮盈 (BTC)
+        var pnl = parseFloat(pos.unrealized_pnl) || 0;
+        totalPnl += pnl;
 
-        // 刷新价格（优化：使用缓存和更短的超时）
-        async function refreshPrice() {
-            const symbol = document.getElementById('symbol').value;
-            if (!symbol) {
-                document.getElementById('current-price-display').textContent = '--';
-                currentPrice = 0;
-                updateEstimatedMargin();
-                return;
-            }
+        var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+        var rowBg = isLong ? 'bg-[#49f4c8]/[0.02] hover:bg-[#49f4c8]/5' : 'bg-[#ff716c]/[0.02] hover:bg-[#ff716c]/5';
+        var dirBg = isLong ? 'bg-[#49f4c8]/20 text-[#49f4c8] border border-[#49f4c8]/30' : 'bg-[#ff716c]/20 text-[#ff716c] border border-[#ff716c]/30';
+        var dirLabel = isLong ? 'Long' : 'Short';
+        var posId = pos.id || pos.position_id;
+        var sym = pos.symbol || '--';
+        var abbr = sym.replace('USD_PERP','').replace('USDT','').replace('USD','').substring(0,4);
+        var lvg = pos.leverage || 1;
+        var sl = pos.stop_loss_price ? fmtPrice(pos.stop_loss_price) : '--';
+        var tp = pos.take_profit_price ? fmtPrice(pos.take_profit_price) : '--';
 
-            // 检查缓存
-            const now = Date.now();
-            if (futuresPriceCache[symbol] && futuresPriceCacheTime[symbol] && (now - futuresPriceCacheTime[symbol]) < FUTURES_PRICE_CACHE_DURATION) {
-                const cachedPrice = futuresPriceCache[symbol];
-                currentPrice = cachedPrice;
-                previousPrice = cachedPrice;
-                document.getElementById('current-price-display').textContent = formatPrice(cachedPrice);
-                document.getElementById('current-price-display').style.color = 'var(--primary-blue)';
-                updateEstimatedMargin();
-                return;
-            }
+        return '<tr class="' + rowBg + ' transition-colors border-b border-outline-variant/5">' +
+            '<td class="px-6 py-4">' +
+                '<div class="flex items-center gap-2">' +
+                    '<div class="w-6 h-6 rounded-full bg-surface-bright flex items-center justify-center text-[10px] font-bold text-on-surface-variant">' + abbr + '</div>' +
+                    '<div>' +
+                        '<p class="font-headline font-semibold">' + sym + '</p>' +
+                        '<p class="text-[10px] text-on-surface-variant">' + lvg + 'x lever</p>' +
+                    '</div>' +
+                '</div>' +
+            '</td>' +
+            '<td class="px-6 py-4">' +
+                '<span class="px-2 py-0.5 rounded text-[10px] ' + dirBg + ' uppercase">' + dirLabel + '</span>' +
+            '</td>' +
+            '<td class="px-6 py-4 font-mono">' +
+                '<div class="text-on-surface">' + fmtPrice(entry) + '</div>' +
+                '<div class="text-on-surface-variant text-xs opacity-70">' + fmtPrice(curPrice) + '</div>' +
+            '</td>' +
+            '<td class="px-6 py-4 font-mono ' + pnlClass + '">' + fmtPnlBtc(pnl) + '</td>' +
+            '<td class="px-6 py-4">' +
+                '<div class="flex items-center gap-2">' +
+                    '<span class="text-[#ff716c] text-xs font-mono">' + sl + '</span>' +
+                    '<span class="text-on-surface-variant">/</span>' +
+                    '<span class="text-[#49f4c8] text-xs font-mono">' + tp + '</span>' +
+                '</div>' +
+            '</td>' +
+            '<td class="px-6 py-4">' +
+                '<button onclick="closePosition(' + posId + ', \'' + sym + '\')" ' +
+                    'class="text-on-surface-variant hover:text-[#ff716c] transition-colors px-2 py-1 rounded bg-surface-container/50 text-xs">平仓</button>' +
+            '</td>' +
+        '</tr>';
+    });
 
-            const priceDisplay = document.getElementById('current-price-display');
-            
-            try {
-                let price = null;
-                let priceSource = null;
-                
-                // 使用后端API获取合约价格（避免CORS问题）
-                // 使用AbortController设置超时，避免长时间等待
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 2000); // 缩短到2秒超时
-                
-                try {
-                    const response = await fetch(`/api/coin-futures/price/${encodeURIComponent(symbol)}`, {
-                        signal: controller.signal
-                    });
-                    clearTimeout(timeoutId);
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.success && data.price) {
-                            price = parseFloat(data.price);
-                            priceSource = data.source || 'unknown';
-                            // 只在调试时输出日志
-                            // console.log(`✅ 从后端API获取 ${symbol} 合约价格 (${priceSource}): ${price}`);
-                        }
-                    }
-                } catch (e) {
-                    clearTimeout(timeoutId);
-                    // 静默处理超时，不输出警告（因为会自动回退到现货价格）
-                    if (e.name !== 'AbortError') {
-                        // 尝试现货价格API
-                    }
-                }
-                
-                // 如果合约价格获取失败，回退到现货价格API（不使用force_refresh，使用缓存）
-                if (!price || price === 0) {
-                    try {
-                        const controller2 = new AbortController();
-                        const timeoutId2 = setTimeout(() => controller2.abort(), 1500); // 缩短到1.5秒超时
-                        
-                        const response = await fetch(`/api/paper-trading/price?symbol=${encodeURIComponent(symbol)}`, {
-                            signal: controller2.signal
-                        });
-                        clearTimeout(timeoutId2);
-                        
-                        const data = await response.json();
-                        if (data.price && data.price > 0) {
-                            price = parseFloat(data.price);
-                            priceSource = data.source || 'spot_cache';
-                        }
-                    } catch (e) {
-                        if (e.name !== 'AbortError') {
-                            // 静默处理获取失败
-                        }
-                    }
-                }
-                
-                if (price && price > 0) {
-                    // 更新缓存
-                    futuresPriceCache[symbol] = price;
-                    futuresPriceCacheTime[symbol] = now;
-                    // 价格变化检测和动画
-                    const priceChangeIndicator = document.getElementById('price-change-indicator');
-                    if (previousPrice > 0 && previousPrice !== price) {
-                        const priceChange = price - previousPrice;
-                        const changePercent = ((priceChange / previousPrice) * 100).toFixed(4);
-                        
-                        // 添加价格变化动画
-                        priceDisplay.style.transition = 'all 0.3s ease';
-                        
-                        if (priceChange > 0) {
-                            // 价格上涨：绿色闪烁
-                            priceDisplay.style.color = 'var(--success-green)';
-                            priceDisplay.style.transform = 'scale(1.1)';
-                            if (priceChangeIndicator) {
-                                priceChangeIndicator.textContent = `↑ +${changePercent}%`;
-                                priceChangeIndicator.style.color = 'var(--success-green)';
-                                priceChangeIndicator.style.opacity = '1';
-                                setTimeout(() => {
-                                    priceChangeIndicator.style.opacity = '0';
-                                }, 2000);
-                            }
-                            setTimeout(() => {
-                                priceDisplay.style.transform = 'scale(1)';
-                                priceDisplay.style.color = 'var(--primary-blue)';
-                            }, 300);
-                        } else {
-                            // 价格下跌：红色闪烁
-                            priceDisplay.style.color = 'var(--danger-red)';
-                            priceDisplay.style.transform = 'scale(0.95)';
-                            if (priceChangeIndicator) {
-                                priceChangeIndicator.textContent = `↓ ${changePercent}%`;
-                                priceChangeIndicator.style.color = 'var(--danger-red)';
-                                priceChangeIndicator.style.opacity = '1';
-                                setTimeout(() => {
-                                    priceChangeIndicator.style.opacity = '0';
-                                }, 2000);
-                            }
-                            setTimeout(() => {
-                                priceDisplay.style.transform = 'scale(1)';
-                                priceDisplay.style.color = 'var(--primary-blue)';
-                            }, 300);
-                        }
-                    } else if (previousPrice === 0) {
-                        // 首次加载，正常显示
-                        priceDisplay.style.color = 'var(--primary-blue)';
-                        if (priceChangeIndicator) {
-                            priceChangeIndicator.style.opacity = '0';
-                        }
-                    }
-                    
-                    currentPrice = price;
-                    previousPrice = price;
-                    priceDisplay.textContent = formatPrice(currentPrice);
-                    updateEstimatedMargin();
-                } else {
-                    priceDisplay.textContent = '获取失败';
-                    priceDisplay.style.color = 'var(--danger-red)';
-                    currentPrice = 0;
-                    previousPrice = 0;
-                    showToast(`无法获取 ${symbol} 的合约价格，请检查网络连接或稍后重试`, 'error');
-                }
-            } catch (error) {
-                // 静默处理获取价格失败
-                priceDisplay.textContent = '获取失败';
-                priceDisplay.style.color = 'var(--danger-red)';
-                currentPrice = 0;
-                showToast('获取价格失败: ' + error.message, 'error');
-            }
+    tbody.innerHTML = rows.join('');
+    return {count: positions.length, totalMargin: totalMargin, totalPnl: totalPnl};
+}
+
+// ---- 加载历史交易 ----
+
+async function loadHistory() {
+    var tbody = document.getElementById('history-tbody');
+    var recentList = document.getElementById('recent-trades-list');
+
+    var trades = [];
+    try {
+        var res = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&limit=20');
+        var data = await res.json();
+        trades = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+    } catch(e) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败</td></tr>';
+        return [];
+    }
+
+    // 更新最近成交 panel
+    if (recentList) {
+        if (trades.length === 0) {
+            recentList.innerHTML = '<div class="py-4 text-center text-on-surface-variant text-xs">暂无记录</div>';
+        } else {
+            recentList.innerHTML = trades.slice(0, 5).map(function(t) {
+                var isLong = t.position_side === 'LONG';
+                var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+                var sideLabel = isLong ? 'LONG' : 'SHORT';
+                var pnl = parseFloat(t.realized_pnl) || 0;
+                var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+                return '<div class="flex justify-between items-center text-xs border-b border-outline-variant/10 pb-2">' +
+                    '<div class="flex flex-col">' +
+                        '<span class="font-bold ' + sideClass + '">' + (t.symbol || '--') + '</span>' +
+                        '<span class="text-[10px] text-on-surface-variant uppercase">' + sideLabel + '</span>' +
+                    '</div>' +
+                    '<div class="text-right">' +
+                        '<div class="font-mono ' + pnlClass + '">' + fmtPnlBtc(pnl) + '</div>' +
+                        '<div class="text-[10px] text-on-surface-variant font-mono">' + fmtTime(t.close_time || t.created_at) + '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
         }
+    }
 
-        // 更新预计保证金
-        function updateEstimatedMargin() {
-            const quantity = parseFloat(document.getElementById('quantity').value) || 0;
-            const leverage = parseInt(document.getElementById('leverage').value) || 1;
-            // 优先使用用户输入的价格，如果没有则使用当前实时价格
-            const userPrice = parseFloat(document.getElementById('current-price').value) || currentPrice;
-            
-            if (userPrice > 0 && quantity > 0) {
-                const margin = (userPrice * quantity) / leverage;
-                document.getElementById('estimated-margin').textContent = margin.toFixed(2);
-            } else {
-                document.getElementById('estimated-margin').textContent = '0.00';
-            }
+    // 更新历史记录表格
+    if (!tbody) return trades;
+    if (trades.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
+        return trades;
+    }
+
+    tbody.innerHTML = trades.map(function(t) {
+        var isLong = t.position_side === 'LONG';
+        var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+        var pnl = parseFloat(t.realized_pnl) || 0;
+        var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+        return '<tr class="hover:bg-surface-container/50 border-b border-outline-variant/5 transition-colors">' +
+            '<td class="px-6 py-4 font-mono text-xs text-on-surface-variant">' + fmtTime(t.close_time || t.created_at) + '</td>' +
+            '<td class="px-6 py-4 font-bold font-headline">' + (t.symbol || '--') + '</td>' +
+            '<td class="px-6 py-4 ' + sideClass + '">' + (isLong ? 'BUY/LONG' : 'SELL/SHORT') + '</td>' +
+            '<td class="px-6 py-4 font-mono text-on-surface">' + fmtPrice(t.entry_price) + '</td>' +
+            '<td class="px-6 py-4 font-mono text-on-surface">' + fmtPrice(t.close_price) + '</td>' +
+            '<td class="px-6 py-4 font-mono ' + pnlClass + '">' + fmtPnlBtc(pnl) + '</td>' +
+            '<td class="px-6 py-4 font-mono text-on-surface-variant">--</td>' +
+        '</tr>';
+    }).join('');
+
+    return trades;
+}
+
+// ---- 加载统计数据 ----
+
+function loadStats(posResult, trades) {
+    var elCount = document.getElementById('stat-position-count');
+    var elMargin = document.getElementById('stat-total-margin');
+    var elPnl = document.getElementById('stat-total-pnl');
+    var el24h = document.getElementById('stat-24h-pnl');
+    var elWin = document.getElementById('stat-win-rate');
+    var elTotal = document.getElementById('stat-total-trades');
+
+    if (posResult) {
+        if (elCount) elCount.textContent = posResult.count;
+        if (elMargin) elMargin.textContent = fmtBtc(posResult.totalMargin);
+        if (elPnl) {
+            elPnl.textContent = fmtPnlBtc(posResult.totalPnl);
+            elPnl.className = 'font-mono text-2xl font-medium ' + (posResult.totalPnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
         }
+    }
 
-        // 监听数量、杠杆和价格输入变化
-        document.getElementById('quantity').addEventListener('input', updateEstimatedMargin);
-        document.getElementById('leverage').addEventListener('change', updateEstimatedMargin);
-        document.getElementById('current-price').addEventListener('input', updateEstimatedMargin);
+    if (trades && trades.length > 0) {
+        var totalCount = trades.length;
+        var wins = trades.filter(function(t) { return (parseFloat(t.realized_pnl) || 0) > 0; }).length;
+        var winRate = totalCount > 0 ? Math.round(wins / totalCount * 100) : 0;
 
-        // 开仓
-        async function openPosition() {
-            const symbol = document.getElementById('symbol').value;
-            const positionSide = document.getElementById('position-side').value;
-            const quantity = parseFloat(document.getElementById('quantity').value);
-            const leverage = parseInt(document.getElementById('leverage').value);
-            // 优先使用用户输入的价格，如果没有则使用当前实时价格
-            const userPrice = parseFloat(document.getElementById('current-price').value);
-            const entryPrice = userPrice && userPrice > 0 ? userPrice : currentPrice;
-            const stopLossPrice = document.getElementById('stop-loss-price').value ? parseFloat(document.getElementById('stop-loss-price').value) : null;
-            const takeProfitPrice = document.getElementById('take-profit-price').value ? parseFloat(document.getElementById('take-profit-price').value) : null;
+        // 24H 盈亏 (BTC)
+        var cutoff = Date.now() - 24 * 3600000;
+        var pnl24h = trades
+            .filter(function(t) {
+                var ct = t.close_time || t.created_at;
+                if (!ct) return false;
+                var ts = new Date((typeof ct === 'string' && !ct.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(ct)) ? ct + 'Z' : ct).getTime();
+                return ts >= cutoff;
+            })
+            .reduce(function(s, t) { return s + (parseFloat(t.realized_pnl) || 0); }, 0);
 
-            // 验证
-            if (!symbol) {
-                showToast('请选择交易对', 'error');
-                return;
-            }
-            if (!quantity || quantity <= 0) {
-                showToast('请输入有效的数量', 'error');
-                return;
-            }
-            if (!entryPrice || entryPrice <= 0) {
-                showToast('请先获取当前价格或输入限价', 'error');
-                return;
-            }
-
-            const estimatedMargin = ((entryPrice * quantity) / leverage).toFixed(2);
-            const priceType = userPrice && userPrice > 0 ? '限价' : '市价';
-            
-            // 使用自定义确认对话框
-            const openConfirmMsg = `
-                <div style="margin-bottom: 12px;">
-                    <strong>交易对:</strong> ${symbol}<br>
-                    <strong>方向:</strong> ${positionSide === 'LONG' ? '做多' : '做空'}<br>
-                    <strong>数量:</strong> ${quantity}<br>
-                    <strong>订单类型:</strong> ${priceType}<br>
-                    ${priceType === '限价' ? `<strong>限价:</strong> ${formatPrice(entryPrice)}<br>` : ''}
-                    <strong>杠杆:</strong> ${leverage}x<br>
-                    <strong>预计保证金:</strong> ${estimatedMargin} USDT
-                </div>
-            `;
-            const confirmed = await showConfirmDialog(
-                `确定要${positionSide === 'LONG' ? '做多' : '做空'}吗？`,
-                openConfirmMsg,
-                'info'
-            );
-            if (!confirmed) return;
-
-            try {
-                // 如果用户输入了价格，则传递限价参数
-                const limitPrice = userPrice && userPrice > 0 ? userPrice : null;
-                
-                // 币本位合约固定使用account_id=3
-                const accountId = 3;
-
-                const response = await fetch(`${API_BASE}/open`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        account_id: accountId,
-                        symbol: symbol,
-                        position_side: positionSide,
-                        quantity: quantity,
-                        leverage: leverage,
-                        limit_price: limitPrice,
-                        stop_loss_price: stopLossPrice,
-                        take_profit_price: takeProfitPrice,
-                        source: 'manual'
-                    })
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    // 检查是否是限价单（从data或data.data中获取）
-                    const orderType = data.order_type || data.data?.order_type;
-                    const orderStatus = data.status || data.data?.status;
-                    
-                    if (orderType === 'LIMIT' && orderStatus === 'PENDING') {
-                        // 限价单未成交
-                        const limitPrice = data.limit_price || data.data?.limit_price;
-                        const currentPrice = data.current_price || data.data?.current_price;
-                        const limitMsg = `限价单已创建\n` +
-                            `交易对: ${symbol}\n` +
-                            `方向: ${positionSide === 'LONG' ? '做多' : '做空'}\n` +
-                            `数量: ${quantity}\n` +
-                            `限价: ${formatPrice(limitPrice)}\n` +
-                            `当前价: ${formatPrice(currentPrice)}\n` +
-                            `杠杆: ${leverage}x\n` +
-                            `状态: 未成交，等待价格达到限价\n` +
-                            `⚠ 超时后若价格偏离超过1%将自动取消`;
-                        showToast(limitMsg, 'info');
-                    } else {
-                        // 市价单立即成交
-                        const entryPrice = data.entry_price || data.data?.entry_price;
-                        const margin = data.margin || data.data?.margin;
-                        const successMsg = `开仓成功！已成交\n` +
-                            `交易对: ${symbol}\n` +
-                            `方向: ${positionSide === 'LONG' ? '做多' : '做空'}\n` +
-                            `数量: ${quantity}\n` +
-                            `开仓价: ${formatPrice(entryPrice)}\n` +
-                            `杠杆: ${leverage}x\n` +
-                            `保证金: ${formatLargeNumber(margin || 0)} USDT\n` +
-                            `状态: 已成交`;
-                        showToast(successMsg, 'success');
-                    }
-                    // 清空表单
-                    document.getElementById('quantity').value = '';
-                    document.getElementById('current-price').value = '';
-                    document.getElementById('stop-loss-price').value = '';
-                    document.getElementById('take-profit-price').value = '';
-                    updateEstimatedMargin();
-                    // 开仓后，检查持仓数量是否变化，如果变化才重新加载持仓列表
-                    // 否则只更新价格和盈亏
-                    setTimeout(async () => {
-                        try {
-                            const response = await fetch(`${API_BASE}/positions?account_id=3&status=open`);
-                            const data = await response.json();
-                            const positionsBody = document.getElementById('positionsBody');
-                            const currentCount = positionsBody ? positionsBody.querySelectorAll('.position-card[data-symbol]').length : 0;
-                            const newCount = data.success && data.data ? data.data.length : 0;
-                            
-                            // 如果持仓数量变化了，才重新加载持仓列表
-                            if (newCount !== currentCount) {
-                                await loadPositions();
-                            } else {
-                                // 否则只更新价格和盈亏
-                                updatePositionsPrices();
-                            }
-                        } catch (e) {
-                            // 如果检查失败，只更新价格和盈亏
-                            updatePositionsPrices();
-                        }
-                    }, 500);
-                } else {
-                    showToast('开仓失败: ' + (data.message || data.detail || '未知错误'), 'error');
-                }
-            } catch (error) {
-                // 开仓失败已在UI中显示
-                showToast('开仓失败: ' + error.message, 'error');
-            }
+        if (el24h) {
+            el24h.textContent = fmtPnlBtc(pnl24h);
+            el24h.className = 'font-mono text-2xl font-medium ' + (pnl24h >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
         }
-
-        // 显示自定义确认对话框
-        function showConfirmDialog(title, message, type = 'warning') {
-            return new Promise((resolve) => {
-                const overlay = document.createElement('div');
-                overlay.className = 'modal-overlay';
-                
-                const iconConfig = {
-                    'warning': { icon: 'exclamation-triangle-fill', color: 'var(--warning-yellow)' },
-                    'danger': { icon: 'x-circle-fill', color: 'var(--danger-red)' },
-                    'info': { icon: 'info-circle-fill', color: 'var(--info-blue)' }
-                };
-                const config = iconConfig[type] || iconConfig['warning'];
-                
-                overlay.innerHTML = `
-                    <div class="modal-dialog">
-                        <div class="modal-header">
-                            <div class="modal-title">
-                                <div class="modal-icon" style="background: linear-gradient(135deg, ${type === 'warning' ? 'rgba(245, 158, 11, 0.2)' : type === 'danger' ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)'} 0%, ${type === 'warning' ? 'rgba(245, 158, 11, 0.1)' : type === 'danger' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)'} 100%); border-color: ${type === 'warning' ? 'rgba(245, 158, 11, 0.3)' : type === 'danger' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)'};">
-                                    <i class="bi bi-${config.icon}" style="font-size: 24px; color: ${config.color};"></i>
-                                </div>
-                                <span>${title}</span>
-                            </div>
-                        </div>
-                        <div class="modal-body">
-                            ${message}
-                        </div>
-                        <div class="modal-footer">
-                            <button class="btn btn-secondary" id="modal-cancel-btn" style="min-width: 100px;">
-                                <i class="bi bi-x-circle"></i> 取消
-                            </button>
-                            <button class="btn btn-danger" id="modal-confirm-btn" style="min-width: 100px;">
-                                <i class="bi bi-check-circle"></i> 确定
-                            </button>
-                        </div>
-                    </div>
-                `;
-                
-                document.body.appendChild(overlay);
-                
-                const cancelBtn = overlay.querySelector('#modal-cancel-btn');
-                const confirmBtn = overlay.querySelector('#modal-confirm-btn');
-                const dialog = overlay.querySelector('.modal-dialog');
-                
-                const closeModal = (result) => {
-                    dialog.style.animation = 'slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) reverse';
-                    overlay.style.animation = 'fadeIn 0.2s ease-out reverse';
-                    setTimeout(() => {
-                        overlay.remove();
-                        resolve(result);
-                    }, 300);
-                };
-                
-                cancelBtn.addEventListener('click', () => closeModal(false));
-                confirmBtn.addEventListener('click', () => closeModal(true));
-                
-                overlay.addEventListener('click', (e) => {
-                    if (e.target === overlay) {
-                        closeModal(false);
-                    }
-                });
-                
-                // ESC键关闭
-                const handleEsc = (e) => {
-                    if (e.key === 'Escape') {
-                        closeModal(false);
-                        document.removeEventListener('keydown', handleEsc);
-                    }
-                };
-                document.addEventListener('keydown', handleEsc);
-            });
-        }
-
-        // 显示提示消息
-        function showToast(message, type = 'info') {
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            
-            // 将换行符转换为HTML换行，并转义HTML特殊字符
-            const escapedMessage = message
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/\n/g, '<br>');
-            
-            // 根据类型选择图标和颜色
-            const iconMap = {
-                'success': { icon: 'check-circle-fill', color: 'var(--success-green)', bg: 'rgba(16, 185, 129, 0.15)' },
-                'error': { icon: 'x-circle-fill', color: 'var(--danger-red)', bg: 'rgba(239, 68, 68, 0.15)' },
-                'info': { icon: 'info-circle-fill', color: 'var(--info-blue)', bg: 'rgba(59, 130, 246, 0.15)' }
-            };
-            const iconConfig = iconMap[type] || iconMap['info'];
-            
-            // 解析消息，提取标题和内容
-            const lines = message.split('\n');
-            const title = lines[0];
-            const content = lines.slice(1).join('<br>');
-            
-            toast.innerHTML = `
-                <div style="display: flex; align-items: flex-start; gap: var(--spacing-md);">
-                    <div style="
-                        width: 40px; 
-                        height: 40px; 
-                        border-radius: 50%; 
-                        background: ${iconConfig.bg}; 
-                        display: flex; 
-                        align-items: center; 
-                        justify-content: center; 
-                        flex-shrink: 0;
-                        animation: pulse 0.6s ease-out;
-                    ">
-                        <i class="bi bi-${iconConfig.icon}" style="font-size: 22px; color: ${iconConfig.color};"></i>
-                    </div>
-                    <div style="flex: 1; min-width: 0;">
-                        <div style="
-                            font-weight: 600; 
-                            font-size: 15px; 
-                            color: var(--text-primary); 
-                            margin-bottom: ${content ? '6px' : '0'};
-                            line-height: 1.4;
-                        ">${title}</div>
-                        ${content ? `<div style="
-                            font-size: 13px; 
-                            color: var(--text-secondary); 
-                            line-height: 1.6; 
-                            white-space: normal;
-                            margin-top: 4px;
-                        ">${content}</div>` : ''}
-                    </div>
-                    <button onclick="this.parentElement.parentElement.remove()" style="
-                        background: rgba(139, 148, 158, 0.1); 
-                        border: none; 
-                        color: var(--text-secondary); 
-                        cursor: pointer; 
-                        padding: 4px; 
-                        width: 24px; 
-                        height: 24px; 
-                        display: flex; 
-                        align-items: center; 
-                        justify-content: center; 
-                        flex-shrink: 0;
-                        border-radius: 4px;
-                        transition: all var(--transition-fast);
-                    " onmouseover="this.style.background='rgba(139, 148, 158, 0.2)'; this.style.color='var(--text-primary)'" onmouseout="this.style.background='rgba(139, 148, 158, 0.1)'; this.style.color='var(--text-secondary)'">
-                        <i class="bi bi-x" style="font-size: 14px;"></i>
-                    </button>
-                </div>
-            `;
-            
-            document.body.appendChild(toast);
-            
-            // 根据消息长度调整显示时间（多行消息显示更长时间）
-            const displayTime = message.split('\n').length > 3 ? 7000 : 5000;
-            setTimeout(() => {
-                toast.style.animation = 'slideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) reverse';
-                toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 400);
-            }, displayTime);
-        }
-
-        // 格式化价格
-        function formatPrice(price) {
-            if (!price && price !== 0) return '-';
-            const num = parseFloat(price);
-            if (num >= 1000) return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            if (num >= 1) return num.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-            return num.toLocaleString('en-US', { minimumFractionDigits: 6, maximumFractionDigits: 6 });
-        }
-
-        // 格式化大额数字
-        function formatLargeNumber(num) {
-            if (!num && num !== 0) return '-';
-            const absNum = Math.abs(num);
-            if (absNum >= 1e9) return `$${(num / 1e9).toFixed(2)}B`;
-            if (absNum >= 1e6) return `$${(num / 1e6).toFixed(2)}M`;
-            if (absNum >= 1e3) return `$${(num / 1e3).toFixed(2)}K`;
-            return `$${num.toFixed(2)}`;
-        }
-
-        // 格式化开仓原因
-        function formatEntryReason(reason) {
-            if (!reason) return '';
-
-            // 震荡市开仓原因格式化
-            if (reason.includes('[震荡市]')) {
-                let formatted = reason.replace('[震荡市]', '<span class="badge" style="background: var(--warning-yellow); color: var(--bg-primary); font-size: 11px; padding: 2px 6px; border-radius: 3px; margin-right: 6px;">震荡市</span>');
-
-                // 高亮关键信息
-                formatted = formatted.replace(/布林带下轨/g, '<strong style="color: var(--success-green);">布林带下轨</strong>');
-                formatted = formatted.replace(/布林带上轨/g, '<strong style="color: var(--danger-red);">布林带上轨</strong>');
-                formatted = formatted.replace(/RSI超卖/g, '<strong style="color: var(--success-green);">RSI超卖</strong>');
-                formatted = formatted.replace(/RSI超买/g, '<strong style="color: var(--danger-red);">RSI超买</strong>');
-                formatted = formatted.replace(/成交量放大/g, '<strong style="color: var(--primary-blue);">成交量放大</strong>');
-
-                return formatted;
-            }
-
-            // 其他开仓原因保持原样
-            return reason;
-        }
-
-        // ========== 交易控制功能 ==========
-        let currentTradingEnabled = true; // 当前交易状态
-
-        // 自定义确认对话框 (用于交易控制)
-        function showTradingControlDialog(message, onConfirm) {
-            const overlay = document.createElement('div');
-            overlay.className = 'modal-overlay';
-            overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000; animation: fadeIn 0.2s;';
-
-            const dialog = document.createElement('div');
-            dialog.className = 'modal-dialog';
-            dialog.style.cssText = 'background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); max-width: 500px; width: 90%; box-shadow: var(--shadow-xl); animation: slideUp 0.3s;';
-
-            const lines = message.split('\n\n');
-            const title = lines[0];
-            const desc = lines[1] || '';
-
-            dialog.innerHTML = `
-                <div style="margin-bottom: var(--spacing-xl);">
-                    <div style="font-size: 20px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--spacing-md); display: flex; align-items: center; gap: var(--spacing-md);">
-                        <i class="bi bi-question-circle" style="color: var(--warning-yellow);"></i>
-                        ${title}
-                    </div>
-                    ${desc ? `<div style="color: var(--text-secondary); line-height: 1.6;">${desc}</div>` : ''}
-                </div>
-                <div style="display: flex; gap: var(--spacing-md); justify-content: flex-end;">
-                    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">
-                        取消
-                    </button>
-                    <button class="btn btn-primary" id="confirmBtn">
-                        确定
-                    </button>
-                </div>
-            `;
-
-            overlay.appendChild(dialog);
-            document.body.appendChild(overlay);
-
-            document.getElementById('confirmBtn').onclick = () => {
-                overlay.remove();
-                onConfirm();
-            };
-
-            overlay.onclick = (e) => {
-                if (e.target === overlay) {
-                    overlay.remove();
-                }
-            };
-        }
-
-        // 自定义提示对话框
-        function showAlertDialog(message, type = 'success') {
-            const overlay = document.createElement('div');
-            overlay.className = 'modal-overlay';
-            overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000; animation: fadeIn 0.2s;';
-
-            const dialog = document.createElement('div');
-            dialog.className = 'modal-dialog';
-            dialog.style.cssText = 'background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--spacing-xl); max-width: 400px; width: 90%; box-shadow: var(--shadow-xl); animation: slideUp 0.3s;';
-
-            const iconMap = {
-                'success': { icon: 'check-circle-fill', color: 'var(--success-green)' },
-                'error': { icon: 'x-circle-fill', color: 'var(--danger-red)' },
-                'warning': { icon: 'exclamation-circle-fill', color: 'var(--warning-yellow)' }
-            };
-
-            const iconInfo = iconMap[type] || iconMap['success'];
-
-            dialog.innerHTML = `
-                <div style="text-align: center; margin-bottom: var(--spacing-xl);">
-                    <div style="font-size: 48px; color: ${iconInfo.color}; margin-bottom: var(--spacing-md);">
-                        <i class="bi bi-${iconInfo.icon}"></i>
-                    </div>
-                    <div style="font-size: 18px; color: var(--text-primary); font-weight: 500;">
-                        ${message}
-                    </div>
-                </div>
-                <div style="display: flex; justify-content: center;">
-                    <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">
-                        确定
-                    </button>
-                </div>
-            `;
-
-            overlay.appendChild(dialog);
-            document.body.appendChild(overlay);
-
-            overlay.onclick = (e) => {
-                if (e.target === overlay) {
-                    overlay.remove();
-                }
-            };
-
-            // 3秒后自动关闭
-            setTimeout(() => {
-                if (overlay.parentNode) {
-                    overlay.remove();
-                }
-            }, 3000);
-        }
-
-        // 加载交易状态
-        async function loadTradingStatus() {
-            try {
-                const response = await fetch('/api/trading-control/status/3/coin_futures');
-                const data = await response.json();
-                currentTradingEnabled = data.trading_enabled;
-                updateTradingButton(currentTradingEnabled);
-            } catch (error) {
-                console.error('加载交易状态失败:', error);
-                // 默认启用
-                currentTradingEnabled = true;
-                updateTradingButton(true);
-            }
-        }
-
-        // 更新交易按钮状态
-        function updateTradingButton(enabled) {
-            const btn = document.getElementById('tradingToggleBtn');
-            const statusText = document.getElementById('tradingStatusText');
-
-            if (enabled) {
-                btn.classList.remove('btn-success');
-                btn.classList.add('btn-danger');
-                btn.innerHTML = '<i class="bi bi-pause-circle"></i> <span id="tradingStatusText">停止交易</span>';
-                statusText.textContent = '停止交易';
-            } else {
-                btn.classList.remove('btn-danger');
-                btn.classList.add('btn-success');
-                btn.innerHTML = '<i class="bi bi-play-circle"></i> <span id="tradingStatusText">启动交易</span>';
-                statusText.textContent = '启动交易';
-            }
-        }
-
-        // 切换交易状态
-        async function toggleTrading() {
-            const newStatus = !currentTradingEnabled;
-            const confirmMsg = newStatus ?
-                '确定要启动币本位合约交易吗？\n\n系统将开始根据信号自动开仓。' :
-                '确定要停止币本位合约交易吗？\n\n系统将停止自动开仓，但不影响已有持仓。';
-
-            showTradingControlDialog(confirmMsg, async () => {
-                try {
-                    const response = await fetch('/api/trading-control/toggle', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            account_id: 3,
-                            trading_type: 'coin_futures',
-                            trading_enabled: newStatus,
-                            updated_by: 'web_user'
-                        })
-                    });
-
-                    if (!response.ok) {
-                        throw new Error('切换交易状态失败');
-                    }
-
-                    const data = await response.json();
-                    currentTradingEnabled = data.trading_enabled;
-                    updateTradingButton(currentTradingEnabled);
-
-                    const statusMsg = currentTradingEnabled ? '交易已启动' : '交易已停止';
-                    showAlertDialog(statusMsg, 'success');
-                } catch (error) {
-                    console.error('切换交易状态失败:', error);
-                    showAlertDialog('操作失败: ' + error.message, 'error');
-                }
-            });
-        }
-        // ========== 交易控制功能结束 ==========
-
-
-        // 加载所有数据
-        async function loadData() {
-            await Promise.all([
-                loadAccount(),
-                loadPositions(),
-                loadTrades()
-            ]);
-            updateLastUpdateTime();
-        }
-
-        // 加载账户信息
-        async function loadAccount() {
-            try {
-                // 币本位合约固定使用account_id=3
-                const accountId = 3;
-                const response = await fetch(`${API_BASE}/account/${accountId}`);
-                const responseText = await response.text();
-                let data;
-                try {
-                    data = JSON.parse(responseText);
-                } catch (e) {
-                    console.error('账户数据解析失败:', responseText);
-                    return;
-                }
-
-                if (data.success) {
-                    const account = data.data;
-                    const accountStats = document.getElementById('accountStats');
-                    const accountTitle = document.getElementById('account-title');
-
-                    accountStats.innerHTML = `
-                        <div class="stat-card">
-                            <div class="stat-label">账户余额</div>
-                            <div class="stat-value">${formatLargeNumber(account.current_balance)}</div>
-                            <div class="stat-change">可用: ${formatLargeNumber(account.available_balance)}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">冻结保证金</div>
-                            <div class="stat-value">${formatLargeNumber(account.frozen_balance)}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">未实现盈亏</div>
-                            <div class="stat-value ${account.unrealized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
-                                ${account.unrealized_pnl >= 0 ? '+' : ''}${formatLargeNumber(account.unrealized_pnl)}
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">总权益</div>
-                            <div class="stat-value">${formatLargeNumber(account.total_equity)}</div>
-                            <div class="stat-change ${account.total_profit_loss_pct >= 0 ? 'positive' : 'negative'}">
-                                收益率: ${account.total_profit_loss_pct >= 0 ? '+' : ''}${account.total_profit_loss_pct.toFixed(2)}%
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">已实现盈亏</div>
-                            <div class="stat-value ${account.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
-                                ${account.realized_pnl >= 0 ? '+' : ''}${formatLargeNumber(account.realized_pnl)}
-                            </div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">交易统计</div>
-                            <div class="stat-value">${account.total_trades || 0}</div>
-                            <div class="stat-change">胜率: ${(account.win_rate || 0).toFixed(1)}%</div>
-                        </div>
-                    `;
-
-                    // 更新标题显示数量
-                    accountTitle.textContent = `账户总览 [6]`;
-
-                    document.getElementById('accountLoading').style.display = 'none';
-                    accountStats.style.display = 'grid';
-                    document.getElementById('account-update').textContent = new Date().toLocaleTimeString('zh-CN');
-                } else {
-                    throw new Error(data.message || '加载账户失败');
-                }
-            } catch (error) {
-                // 静默处理账户加载失败
-                document.getElementById('accountLoading').innerHTML = `<div class="empty-state-text">加载失败: ${error.message}</div>`;
-                showToast('加载账户信息失败', 'error');
-            }
-        }
-
-        // ========== Pagination Functions ==========
-
-        // Positions pagination
-        function updatePositionsPagination(start, end, total, current, totalPages) {
-            document.getElementById('positionsPageStart').textContent = start;
-            document.getElementById('positionsPageEnd').textContent = end;
-            document.getElementById('positionsTotalRows').textContent = total;
-            document.getElementById('positionsCurrentPage').textContent = current;
-            document.getElementById('positionsTotalPages').textContent = totalPages;
-
-            document.getElementById('positionsPrevBtn').disabled = current <= 1;
-            document.getElementById('positionsNextBtn').disabled = current >= totalPages;
-
-            // Show/hide pagination based on total rows
-            const paginationEl = document.getElementById('positionsPagination');
-            if (paginationEl) {
-                paginationEl.style.display = total > positionsRowsPerPage ? 'flex' : 'none';
-            }
-        }
-
-        function renderPositionsPage() {
-            const positionsBody = document.getElementById('positionsBody');
-            const totalRows = allPositions.length;
-            const totalPages = Math.ceil(totalRows / positionsRowsPerPage);
-
-            const startIndex = (currentPositionsPage - 1) * positionsRowsPerPage;
-            const endIndex = Math.min(startIndex + positionsRowsPerPage, totalRows);
-
-            const pageData = allPositions.slice(startIndex, endIndex);
-
-            positionsBody.innerHTML = pageData.map(pos => pos.html).join('');
-
-            updatePositionsPagination(startIndex + 1, endIndex, totalRows, currentPositionsPage, totalPages);
-        }
-
-        function changePositionsPage(direction) {
-            const totalPages = Math.ceil(allPositions.length / positionsRowsPerPage);
-            const newPage = currentPositionsPage + direction;
-
-            if (newPage < 1 || newPage > totalPages) return;
-
-            currentPositionsPage = newPage;
-            renderPositionsPage();
-        }
-
-        function changePositionsRowsPerPage() {
-            positionsRowsPerPage = parseInt(document.getElementById('positionsRowsPerPage').value);
-            currentPositionsPage = 1;
-            renderPositionsPage();
-        }
-        // ========== End Pagination Functions ==========
-
-        // 加载持仓
-        async function loadPositions() {
-            try {
-                // 币本位合约固定使用account_id=3
-                const accountId = 3;
-                const response = await fetch(`${API_BASE}/positions?account_id=${accountId}&status=open`);
-
-                // 安全解析 JSON
-                const responseText = await response.text();
-                let data;
-                try {
-                    data = JSON.parse(responseText);
-                } catch (parseError) {
-                    console.error('持仓数据解析失败:', responseText);
-                    throw new Error('服务器返回无效数据');
-                }
-
-                const positionsBody = document.getElementById('positionsBody');
-                const positionsTable = document.getElementById('positionsTable');
-                const positionsEmpty = document.getElementById('positionsEmpty');
-                const positionCount = document.getElementById('positionCount');
-                const positionsLoading = document.getElementById('positionsLoading');
-                const positionsTitle = document.getElementById('positions-title');
-
-                positionsLoading.style.display = 'none';
-
-                if (data.success && data.data && data.data.length > 0) {
-                    // 批量获取所有持仓的价格（优化性能，单次请求）
-                    const symbols = [...new Set(data.data.map(pos => pos.symbol))];
-                    let priceMap = {};
-
-                    try {
-                        const priceResponse = await fetch('/api/coin-futures/prices/batch', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ symbols: symbols })
-                        });
-                        if (priceResponse.ok) {
-                            const priceData = await priceResponse.json();
-                            if (priceData.success && priceData.prices) {
-                                priceMap = priceData.prices;
-                            }
-                        }
-                    } catch (e) {
-                        // 批量获取失败，使用后端返回的价格
-                        console.debug('批量获取价格失败，使用缓存价格');
-                    }
-
-                    // 为每个持仓设置价格并计算盈亏
-                    const positionsWithPrices = data.data.map((pos) => {
-                        // 使用批量获取的价格，或后端返回的价格
-                        let currentPrice = pos.current_price || 0;
-                        if (priceMap[pos.symbol] && priceMap[pos.symbol].price) {
-                            currentPrice = parseFloat(priceMap[pos.symbol].price);
-                        }
-
-                        // 计算实时盈亏（基于名义价值，不乘以杠杆）
-                        // 杠杆只影响保证金，不影响盈亏本身
-                        const quantity = parseFloat(pos.quantity) || 0;
-                        const entryPrice = parseFloat(pos.entry_price) || 0;
-                        const margin = parseFloat(pos.margin) || 0;
-                        
-                        let unrealizedPnl = 0;
-                        let unrealizedPnlPct = 0;
-                        
-                        if (currentPrice > 0 && entryPrice > 0 && quantity > 0) {
-                            if (pos.position_side === 'LONG') {
-                                unrealizedPnl = (currentPrice - entryPrice) * quantity;
-                            } else {
-                                unrealizedPnl = (entryPrice - currentPrice) * quantity;
-                            }
-                            // 盈亏百分比基于保证金计算（杠杆收益率）
-                            if (margin > 0) {
-                                unrealizedPnlPct = (unrealizedPnl / margin) * 100;
-                            }
-                        } else {
-                            // 使用后端计算的盈亏
-                            unrealizedPnl = parseFloat(pos.unrealized_pnl) || 0;
-                            unrealizedPnlPct = parseFloat(pos.unrealized_pnl_pct) || 0;
-                        }
-                        
-                        // 处理止盈止损价格：直接使用数据库返回的值（根据订单号加载）
-                        let stopLossPrice = null;
-                        let takeProfitPrice = null;
-                        
-                        if (pos.stop_loss_price !== null && pos.stop_loss_price !== undefined && pos.stop_loss_price !== '') {
-                            const parsed = parseFloat(pos.stop_loss_price);
-                            if (!isNaN(parsed) && parsed > 0) {
-                                stopLossPrice = parsed;
-                            }
-                        }
-                        
-                        if (pos.take_profit_price !== null && pos.take_profit_price !== undefined && pos.take_profit_price !== '') {
-                            const parsed = parseFloat(pos.take_profit_price);
-                            if (!isNaN(parsed) && parsed > 0) {
-                                takeProfitPrice = parsed;
-                            }
-                        }
-                        
-                        const positionData = {
-                            ...pos,
-                            current_price: currentPrice,
-                            unrealized_pnl: unrealizedPnl,
-                            unrealized_pnl_pct: unrealizedPnlPct,
-                            stop_loss_price: stopLossPrice,
-                            take_profit_price: takeProfitPrice
-                        };
-                        
-                        // 保存到映射表，用于后续快速更新（使用position_id作为键，而不是symbol）
-                        const dbId = pos.position_id || pos.id;
-                        if (dbId) {
-                            positionsDataMap[dbId] = {
-                            entry_price: parseFloat(pos.entry_price) || 0,
-                            quantity: parseFloat(pos.quantity) || 0,
-                            margin: parseFloat(pos.margin) || 0,
-                            position_side: pos.position_side,
-                            current_price: currentPrice,
-                            unrealized_pnl: unrealizedPnl,
-                            unrealized_pnl_pct: unrealizedPnlPct
-                        };
-                        }
-                        
-                        return positionData;
-                    });
-
-                    // 计算所有持仓的未实现盈亏总和
-                    const totalUnrealizedPnl = positionsWithPrices.reduce((sum, pos) => {
-                        return sum + (parseFloat(pos.unrealized_pnl) || 0);
-                    }, 0);
-                    
-                    // 更新账户信息中的未实现盈亏显示
-                    const unrealizedPnlCard = document.querySelector('.stat-card:nth-child(3) .stat-value');
-                    if (unrealizedPnlCard) {
-                        const pnlClass = totalUnrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                        unrealizedPnlCard.className = `stat-value ${pnlClass}`;
-                        unrealizedPnlCard.textContent = (totalUnrealizedPnl >= 0 ? '+' : '') + formatLargeNumber(totalUnrealizedPnl);
-                    }
-                    
-                    // 使用卡片样式渲染持仓
-                    positionsBody.innerHTML = positionsWithPrices.map(pos => {
-                        const priceColor = pos.current_price > 0 && pos.entry_price > 0 
-                            ? (pos.current_price > pos.entry_price ? 'var(--success-green)' : 
-                               pos.current_price < pos.entry_price ? 'var(--danger-red)' : 'var(--text-secondary)')
-                            : 'var(--text-secondary)';
-                        const pnlClass = pos.unrealized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                        const cardClass = pos.position_side === 'LONG' ? 'long' : 'short';
-                        
-                        // 确保使用正确的数据库ID
-                        const dbId = pos.position_id || pos.id;
-                        
-                        return `
-                            <div class="position-card ${cardClass}" 
-                                 data-position-id="${dbId}" 
-                                 data-symbol="${pos.symbol}"
-                                 style="margin-bottom: 12px;">
-                                <div style="display: grid; grid-template-columns: 1fr 280px; gap: 16px;">
-                                    <!-- 左侧：持仓信息 -->
-                                    <div>
-                                        <div class="d-flex justify-between align-center" style="margin-bottom: 8px;">
-                                            <div>
-                                                <strong class="text-lg">${pos.symbol}</strong>
-                                                <span class="badge ${pos.position_side === 'LONG' ? 'badge-success' : 'badge-danger'}" style="margin-left: 8px;">
-                                                    ${pos.position_side === 'LONG' ? '做多' : '做空'}
-                                                </span>
-                                                <span class="badge badge-info" style="margin-left: 8px;">${pos.leverage || 1}x</span>
-                                            </div>
-                                            <span class="${pnlClass} font-mono" style="font-size: 16px; font-weight: 600;" data-pnl="${dbId}">
-                                ${pos.unrealized_pnl >= 0 ? '+' : ''}${formatLargeNumber(pos.unrealized_pnl || 0)}
-                                            </span>
-                                        </div>
-                                        <div class="text-sm text-secondary" style="margin-bottom: 6px;">
-                                            数量: ${pos.quantity || '--'} 张 | ${pos.source && pos.source.includes('limit') ? '<span style="color: var(--warning-yellow);">限价</span>' : ''}开仓价: $${formatPrice(pos.entry_price)} | 现价: <span class="font-mono current-price-cell" data-symbol="${pos.symbol}" style="color: ${priceColor}; font-weight: 600;">$${pos.current_price ? formatPrice(pos.current_price) : '--'}</span>
-                                        </div>
-                                        <div class="text-sm text-secondary" style="margin-bottom: 6px;">
-                                            保证金: ${formatLargeNumber(pos.margin || 0)} | 收益率: <span class="${pnlClass}" data-pnl-pct="${dbId}">${pos.unrealized_pnl_pct >= 0 ? '+' : ''}${(pos.unrealized_pnl_pct || 0).toFixed(2)}%</span>
-                                        </div>
-                                        <div class="text-sm text-secondary" style="margin-bottom: 6px;">
-                                            开仓时间: ${pos.open_time ? formatTimeUTC8(pos.open_time, 'full') : '--'}
-                                        </div>
-                                        ${pos.entry_reason ? `
-                                        <div class="text-sm" style="margin-bottom: 6px; color: var(--text-tertiary);">
-                                            <i class="bi bi-info-circle"></i> ${formatEntryReason(pos.entry_reason)}
-                                        </div>
-                                        ` : ''}
-                                        ${(pos.stop_loss_price !== null && pos.stop_loss_price !== undefined && pos.stop_loss_price > 0) || (pos.take_profit_price !== null && pos.take_profit_price !== undefined && pos.take_profit_price > 0) ? `
-                                        <div class="stop-loss-take-profit-display text-xs text-secondary" style="display: flex; gap: 12px; align-items: center; margin-top: 6px;">
-                                            ${(pos.stop_loss_price !== null && pos.stop_loss_price !== undefined && pos.stop_loss_price > 0) ? `<span style="color: var(--danger-red);"><i class="bi bi-shield-exclamation"></i> 止损: $${formatPrice(pos.stop_loss_price)}</span>` : ''}
-                                            ${(pos.take_profit_price !== null && pos.take_profit_price !== undefined && pos.take_profit_price > 0) ? `<span style="color: var(--success-green);"><i class="bi bi-bullseye"></i> 止盈: $${formatPrice(pos.take_profit_price)}</span>` : ''}
-                                        </div>
-                                        ` : ''}
-                                    </div>
-                                    <!-- 右侧：止盈止损设置和平仓按钮 -->
-                                    <div style="border-left: 1px solid var(--border-default); padding-left: 16px; display: flex; flex-direction: column; gap: 8px; justify-content: space-between;">
-                                        <!-- 止盈止损输入 -->
-                                        <div style="display: flex; flex-direction: column; gap: 6px;">
-                                            <div style="display: flex; align-items: center; gap: 6px;">
-                                                <label style="font-size: 11px; color: var(--text-tertiary); min-width: 50px;">止损:</label>
-                                                <input type="number" 
-                                                       id="stopLoss_${dbId}" 
-                                                       data-position-id="${dbId}"
-                                                       value="${(pos.stop_loss_price !== null && pos.stop_loss_price !== undefined && pos.stop_loss_price > 0) ? pos.stop_loss_price : ''}" 
-                                                       placeholder="止损价"
-                                                       step="0.00000001"
-                                                       style="flex: 1; padding: 4px 8px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 12px; font-family: var(--font-mono);"
-                                                       onblur="saveStopLossTakeProfitInline(${dbId}, '${pos.symbol}')"
-                                                       onkeypress="if(event.key === 'Enter') { this.blur(); }">
-                                            </div>
-                                            <div style="display: flex; align-items: center; gap: 6px;">
-                                                <label style="font-size: 11px; color: var(--text-tertiary); min-width: 50px;">止盈:</label>
-                                                <input type="number" 
-                                                       id="takeProfit_${dbId}" 
-                                                       data-position-id="${dbId}"
-                                                       value="${(pos.take_profit_price !== null && pos.take_profit_price !== undefined && pos.take_profit_price > 0) ? pos.take_profit_price : ''}" 
-                                                       placeholder="止盈价"
-                                                       step="0.00000001"
-                                                       style="flex: 1; padding: 4px 8px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-primary); font-size: 12px; font-family: var(--font-mono);"
-                                                       onblur="saveStopLossTakeProfitInline(${dbId}, '${pos.symbol}')"
-                                                       onkeypress="if(event.key === 'Enter') { this.blur(); }">
-                                            </div>
-                                        </div>
-                                        <button class="btn btn-sm btn-danger" style="padding: 6px 12px; font-size: 12px; min-width: auto;" onclick="event.stopPropagation(); closePosition(${dbId})" title="平仓">
-                                    <i class="bi bi-x-circle"></i> 平仓
-                                </button>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
-
-                    const count = data.data.length;
-                    positionCount.textContent = `${count} 个持仓`;
-                    positionsTitle.textContent = `持仓中 [${count}]`;
-                    positionsTable.style.display = 'block';
-                    positionsEmpty.style.display = 'none';
-                    document.getElementById('positions-update').textContent = new Date().toLocaleTimeString('zh-CN');
-                    // 显示一键平仓按钮
-                    const closeAllBtn = document.getElementById('closeAllPositionsBtn');
-                    if (closeAllBtn) closeAllBtn.style.display = 'inline-flex';
-                } else {
-                    positionCount.textContent = '0 个持仓';
-                    positionsTitle.textContent = '持仓中 [0]';
-                    positionsTable.style.display = 'none';
-                    positionsEmpty.style.display = 'block';
-                    document.getElementById('positions-update').textContent = new Date().toLocaleTimeString('zh-CN');
-                    // 隐藏一键平仓按钮
-                    const closeAllBtn = document.getElementById('closeAllPositionsBtn');
-                    if (closeAllBtn) closeAllBtn.style.display = 'none';
-                }
-            } catch (error) {
-                // 静默处理持仓加载失败
-                document.getElementById('positionsLoading').innerHTML = `<div class="empty-state-text">加载失败: ${error.message}</div>`;
-                showToast('加载持仓失败', 'error');
-            }
-        }
-
-        // 更新订单止盈止损
-        async function updateOrderStopLossTakeProfit(orderId, type, price) {
-            const priceValue = price && price.trim() !== '' ? parseFloat(price) : null;
-            
-            const requestData = {
-                order_id: orderId
-            };
-            
-            // 获取当前订单的止盈止损值
-            const stopLossInput = document.getElementById(`order_stop_loss_${orderId}`);
-            const takeProfitInput = document.getElementById(`order_take_profit_${orderId}`);
-            
-            if (type === 'stop_loss') {
-                requestData.stop_loss_price = priceValue;
-                // 保留原有的止盈
-                if (takeProfitInput && takeProfitInput.value) {
-                    requestData.take_profit_price = parseFloat(takeProfitInput.value);
-                }
-            } else if (type === 'take_profit') {
-                requestData.take_profit_price = priceValue;
-                // 保留原有的止损
-                if (stopLossInput && stopLossInput.value) {
-                    requestData.stop_loss_price = parseFloat(stopLossInput.value);
-                }
-            }
-            
-            try {
-                const response = await fetch(`${API_BASE}/orders/stop-loss-take-profit`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestData)
-                });
-                
-                const data = await response.json();
-                if (data.success) {
-                    showToast(`${type === 'stop_loss' ? '止损' : '止盈'}已更新`, 'success');
-                    // 刷新订单列表
-                    setTimeout(() => {
-                        }, 300);
-                } else {
-                    showToast('更新失败: ' + (data.message || data.detail || '未知错误'), 'error');
-                    // 恢复原值
-                    if (type === 'stop_loss' && stopLossInput) {
-                        stopLossInput.value = stopLossInput.defaultValue || '';
-                    } else if (type === 'take_profit' && takeProfitInput) {
-                        takeProfitInput.value = takeProfitInput.defaultValue || '';
-                    }
-                }
-            } catch (error) {
-                showToast('更新失败: ' + error.message, 'error');
-                // 恢复原值
-                if (type === 'stop_loss' && stopLossInput) {
-                    stopLossInput.value = stopLossInput.defaultValue || '';
-                } else if (type === 'take_profit' && takeProfitInput) {
-                    takeProfitInput.value = takeProfitInput.defaultValue || '';
-                }
-            }
-        }
-        
-        // 清除订单止损
-        async function clearOrderStopLoss(orderId) {
-            const takeProfitInput = document.getElementById(`order_take_profit_${orderId}`);
-            const requestData = {
-                order_id: orderId,
-                stop_loss_price: null
-            };
-            
-            // 保留原有的止盈
-            if (takeProfitInput && takeProfitInput.value) {
-                requestData.take_profit_price = parseFloat(takeProfitInput.value);
-            }
-            
-            try {
-                const response = await fetch(`${API_BASE}/orders/stop-loss-take-profit`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestData)
-                });
-                
-                const data = await response.json();
-                if (data.success) {
-                    showToast('止损已清除', 'success');
-                    setTimeout(() => {
-                        }, 300);
-                } else {
-                    showToast('清除失败: ' + (data.message || data.detail || '未知错误'), 'error');
-                }
-            } catch (error) {
-                showToast('清除失败: ' + error.message, 'error');
-            }
-        }
-        
-        // 清除订单止盈
-        async function clearOrderTakeProfit(orderId) {
-            const stopLossInput = document.getElementById(`order_stop_loss_${orderId}`);
-            const requestData = {
-                order_id: orderId,
-                take_profit_price: null
-            };
-            
-            // 保留原有的止损
-            if (stopLossInput && stopLossInput.value) {
-                requestData.stop_loss_price = parseFloat(stopLossInput.value);
-            }
-            
-            try {
-                const response = await fetch(`${API_BASE}/orders/stop-loss-take-profit`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestData)
-                });
-                
-                const data = await response.json();
-                if (data.success) {
-                    showToast('止盈已清除', 'success');
-                    setTimeout(() => {
-                        }, 300);
-                } else {
-                    showToast('清除失败: ' + (data.message || data.detail || '未知错误'), 'error');
-                }
-            } catch (error) {
-                showToast('清除失败: ' + error.message, 'error');
-            }
-        }
-
-        async function cancelOrder(orderId) {
-            // 使用自定义确认对话框
-            const confirmed = await showConfirmDialog(
-                '确定要撤销这个订单吗？',
-                '撤销后，冻结的保证金将被释放回可用余额。',
-                'warning'
-            );
-            if (!confirmed) return;
-
-            try {
-                // 手动撤单，传递 reason=manual
-                const response = await fetch(`${API_BASE}/orders/${encodeURIComponent(orderId)}?account_id=3&reason=manual`, {
-                    method: 'DELETE'
-                });
-
-                const data = await response.json();
-
-                if (data.success) {
-                    showToast('订单已撤销', 'success');
-                    // 刷新账户余额（释放冻结资金）、待成交订单列表和成交历史
-                    setTimeout(() => {
-                        loadAccount();  // 刷新账户余额和冻结资金
-                        loadTrades();
-                        updatePositionsPrices();
-                    }, 500);
-                } else {
-                    showToast('撤销订单失败: ' + (data.message || data.detail || '未知错误'), 'error');
-                }
-            } catch (error) {
-                // 撤销失败已在UI中显示
-                showToast('撤销订单失败: ' + error.message, 'error');
-            }
-        }
-
-        // 分页相关变量
-        let currentTradesPage = 1;
-        const tradesPageSize = 10;
-        let totalTradesPages = 1;
-        let totalTradesCount = 0;
-
-        // 加载交易记录（从futures_trades表获取，支持分页）
-        async function loadTradesPage(page = 1) {
-            try {
-                const response = await fetch(`${API_BASE}/trades?account_id=3&page=${page}&page_size=${tradesPageSize}`);
-                const responseText = await response.text();
-                let data;
-                try {
-                    data = JSON.parse(responseText);
-                } catch (e) {
-                    console.error('交易记录数据解析失败:', responseText);
-                    return;
-                }
-
-                const tradesBody = document.getElementById('tradesBody');
-                const tradesTable = document.getElementById('tradesTable');
-                const tradesEmpty = document.getElementById('tradesEmpty');
-                const tradesLoading = document.getElementById('tradesLoading');
-                const tradesTitle = document.getElementById('trades-title');
-                const tradesPagination = document.getElementById('tradesPagination');
-
-                tradesLoading.style.display = 'none';
-
-                if (data.success && data.data && data.data.length > 0) {
-                    currentTradesPage = data.page || page;
-                    totalTradesPages = data.total_pages || 1;
-                    totalTradesCount = data.total_count || 0;
-                    
-                    const recentTrades = data.data;
-
-                    // 平仓原因英文到中文的映射
-                    const closeReasonMap = {
-                        // 止损相关
-                        'hard_stop_loss': '硬止损',
-                        'stop_loss': '止损',
-                        'STOP_LOSS': '止损',
-                        'trailing_stop_loss': '移动止损',
-                        '5m_death_cross_sl': '5分钟死叉止损',
-                        '5m_golden_cross_sl': '5分钟金叉止损',
-                        // 止盈相关
-                        'max_take_profit': '最大止盈',
-                        'TAKE_PROFIT': '固定止盈',
-                        'trailing_take_profit': '移动止盈',
-                        'ema_diff_narrowing_tp': 'EMA差值收窄止盈',
-                        'ema_direction_reversal_tp': 'EMA方向反转止盈',
-                        // 超级大脑智能顶底识别
-                        'TOP_DETECTED': '智能顶部识别',
-                        'BOTTOM_DETECTED': '智能底部识别',
-                        // 超级大脑超时和对冲
-                        'TIMEOUT_4H': '超时平仓',
-                        '对冲止损平仓': '对冲止损平仓',
-                        'reverse_signal': '反向信号平仓',
-                        // 反转相关
-                        'death_cross_reversal': '死叉反转平仓',
-                        'golden_cross_reversal': '金叉反转平仓',
-                        'trend_reversal_bearish': '趋势转跌平仓',  // 趋势转为看跌，平多仓
-                        'trend_reversal_bullish': '趋势转涨平仓',  // 趋势转为看涨，平空仓
-                        'reversal_warning': '反转预警平仓',
-                        // 趋势相关
-                        'trend_weakening': '趋势减弱平仓',
-                        // 手动/其他
-                        'manual': '手动',
-                        'strategy': '策略',
-                        'liquidation': '强平'
-                    };
-
-                    // 格式化平仓原因（notes字段）
-                    function formatNotes(notes) {
-                        if (!notes) return '--';
-
-                        // 处理超级大脑智能顶底识别格式：TOP_DETECTED(高点回落1.4%,盈利-0.4%)
-                        if (notes.startsWith('TOP_DETECTED(') || notes.startsWith('BOTTOM_DETECTED(')) {
-                            const match = notes.match(/^(TOP_DETECTED|BOTTOM_DETECTED)\((.*?)\)$/);
-                            if (match) {
-                                const type = match[1];
-                                const params = match[2];
-                                const label = type === 'TOP_DETECTED' ? '智能顶部识别' : '智能底部识别';
-                                return `<span class="badge badge-primary">${label}</span> <span class="text-secondary">${params}</span>`;
-                            }
-                        }
-
-                        // 处理超时平仓格式：TIMEOUT_4H(持仓5小时)
-                        if (notes.startsWith('TIMEOUT_4H(')) {
-                            const match = notes.match(/^TIMEOUT_4H\((.*?)\)$/);
-                            if (match) {
-                                const params = match[1];
-                                return `<span class="badge badge-warning">超时平仓</span> <span class="text-secondary">${params}</span>`;
-                            }
-                        }
-
-                        // 处理中文平仓原因（直接显示）
-                        if (notes === '对冲止损平仓') {
-                            return '<span class="badge badge-danger">对冲止损平仓</span>';
-                        }
-
-                        // 提取第一个关键字（在|之前的部分）
-                        const key = notes.split('|')[0].trim();
-                        const chineseReason = closeReasonMap[key];
-                        if (chineseReason) {
-                            // 提取参数部分（|之后的内容）
-                            const params = notes.includes('|') ? notes.substring(notes.indexOf('|') + 1) : '';
-                            return params ? `${chineseReason} (${params})` : chineseReason;
-                        }
-                        return notes;
-                    }
-
-                    // 格式化平仓原因
-                    function formatCloseReason(orderSource) {
-                        // 如果 order_source 为空或未定义，默认为手动
-                        if (!orderSource || orderSource === null || orderSource === undefined || orderSource === '') {
-                            return '<span class="badge badge-info">手动</span>';
-                        }
-                        const reasonMap = {
-                            'manual': '<span class="badge badge-info">手动</span>',
-                            'strategy': '<span class="badge badge-primary">策略</span>',
-                            'limit_order': '<span class="badge badge-warning">限价单</span>',
-                            'stop_loss': '<span class="badge badge-danger">止损</span>',
-                            'take_profit': '<span class="badge badge-success">止盈</span>',
-                            'trailing_stop': '<span class="badge badge-warning">移动止损</span>',
-                            'liquidation': '<span class="badge badge-warning">强平</span>',
-                            'signal': '<span class="badge badge-secondary">信号</span>',
-                            'auto': '<span class="badge badge-secondary">自动</span>',
-                            'strategy_signal': '<span class="badge badge-primary">策略信号</span>'
-                        };
-                        // 转换为小写进行比较，确保匹配
-                        const sourceLower = String(orderSource).toLowerCase().trim();
-                        return reasonMap[sourceLower] || `<span class="badge badge-info">${orderSource}</span>`;
-                    }
-                    
-                    // 格式化止盈止损信息
-                    function formatStopLossTakeProfit(stopLossPrice, takeProfitPrice) {
-                        const parts = [];
-                        if (stopLossPrice && stopLossPrice > 0) {
-                            parts.push(`<span class="text-danger" title="止损价">止损: $${formatPrice(stopLossPrice)}</span>`);
-                        }
-                        if (takeProfitPrice && takeProfitPrice > 0) {
-                            parts.push(`<span class="text-success" title="止盈价">止盈: $${formatPrice(takeProfitPrice)}</span>`);
-                        }
-                        if (parts.length === 0) {
-                            return '<span class="text-secondary">-</span>';
-                        }
-                        return parts.join('<br>');
-                    }
-
-                    tradesBody.innerHTML = recentTrades.map(trade => {
-                        const isLong = trade.side === 'CLOSE_LONG';
-                        const sideText = isLong ? '多' : '空';
-                        const sideBadge = isLong ? 'badge-success' : 'badge-danger';
-
-                        // 使用保证金而非名义价值
-                        const margin = trade.margin || 0;
-
-                        // 格式化时间函数（使用全局的UTC+8转换）
-                        function formatTradeTime(timeStr) {
-                            return formatTimeUTC8(timeStr, 'datetime', false);
-                        }
-
-                        return `
-                        <tr>
-                            <td><strong>${trade.symbol}</strong></td>
-                            <td><span class="badge ${sideBadge}">${sideText}</span></td>
-                            <td><span class="badge badge-info">${trade.leverage || 1}x</span></td>
-                            <td class="text-sm">
-                                <div>开: <span class="font-mono">$${trade.entry_price ? formatPrice(trade.entry_price) : '--'}</span></div>
-                                <div class="text-secondary">平: <span class="font-mono">$${formatPrice(trade.price)}</span></div>
-                            </td>
-                            <td>${trade.quantity || '--'}</td>
-                            <td class="font-mono">${formatLargeNumber(margin)}</td>
-                            <td class="pnl ${trade.realized_pnl >= 0 ? 'pnl-positive' : 'pnl-negative'}">
-                                ${trade.realized_pnl >= 0 ? '+' : ''}${formatLargeNumber(trade.realized_pnl || 0)}
-                            </td>
-                            <td class="pnl ${trade.roi >= 0 ? 'pnl-positive' : 'pnl-negative'}">
-                                ${trade.roi >= 0 ? '+' : ''}${(trade.roi || 0).toFixed(2)}%
-                            </td>
-                            <td class="text-sm" title="${trade.close_reason || ''}">${formatNotes(trade.close_reason) || formatCloseReason(trade.order_source)}</td>
-                            <td class="text-sm">${formatStopLossTakeProfit(trade.stop_loss_price, trade.take_profit_price)}</td>
-                            <td class="text-sm">${formatLargeNumber(trade.fee || 0)}</td>
-                            <td class="text-sm text-secondary">${formatTradeTime(trade.open_time)}</td>
-                            <td class="text-sm text-secondary">${formatTradeTime(trade.close_time)}</td>
-                        </tr>
-                    `;
-                    }).join('');
-
-                    // 更新分页信息
-                    document.getElementById('tradesPageInfo').textContent = `第 ${currentTradesPage} 页，共 ${totalTradesPages} 页（共 ${totalTradesCount} 条）`;
-                    
-                    // 更新分页按钮状态
-                    const prevBtn = document.getElementById('tradesPrevBtn');
-                    const nextBtn = document.getElementById('tradesNextBtn');
-                    prevBtn.disabled = currentTradesPage <= 1;
-                    nextBtn.disabled = currentTradesPage >= totalTradesPages;
-                    
-                    tradesTitle.textContent = `最近交易记录 [${totalTradesCount}]`;
-                    tradesTable.style.display = 'flex';
-                    tradesPagination.style.display = 'flex';
-                    tradesEmpty.style.display = 'none';
-                    document.getElementById('trades-update').textContent = new Date().toLocaleTimeString('zh-CN');
-                } else {
-                    tradesTitle.textContent = '最近交易记录 [0]';
-                    tradesTable.style.display = 'none';
-                    tradesPagination.style.display = 'none';
-                    tradesEmpty.style.display = 'flex';
-                    document.getElementById('trades-update').textContent = new Date().toLocaleTimeString('zh-CN');
-                }
-            } catch (error) {
-                // 静默处理交易记录加载失败
-                document.getElementById('tradesLoading').innerHTML = `<div class="empty-state-text">加载失败: ${error.message}</div>`;
-                showToast('加载交易记录失败', 'error');
-            }
-        }
-
-        // 兼容旧函数名
-        function loadTrades() {
-            loadTradesPage(1);
-        }
-
-        // 平仓
-        async function closePosition(positionId) {
-            // 验证positionId
-            if (!positionId || positionId === 'undefined' || positionId === undefined) {
-                // positionId无效
-                showToast('平仓失败: 持仓ID无效', 'error');
-                return;
-            }
-            
-            // 确保positionId是数字
-            positionId = parseInt(positionId);
-            if (isNaN(positionId) || positionId <= 0) {
-                // positionId格式错误
-                showToast('平仓失败: 持仓ID无效', 'error');
-                return;
-            }
-            
-            // 使用自定义确认对话框
-            const confirmed = await showConfirmDialog(
-                '确定要平仓吗？',
-                '此操作不可撤销，平仓后将计算已实现盈亏并释放保证金。',
-                'warning'
-            );
-            if (!confirmed) return;
-
-            try {
-                const response = await fetch(`${API_BASE}/close/${positionId}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        close_quantity: null,
-                        reason: 'manual' 
-                    })
-                });
-
-                let data;
-                const responseText = await response.text();
-                try {
-                    data = JSON.parse(responseText);
-                } catch (jsonError) {
-                    // 响应格式错误
-                    console.error('平仓响应解析失败:', responseText);
-                    showToast('平仓失败: 服务器返回了无效的响应', 'error');
-                    return;
-                }
-
-                if (!response.ok) {
-                    // HTTP错误状态码
-                    const errorMsg = data.detail || data.message || `HTTP ${response.status}: ${response.statusText}`;
-                    // 平仓失败已在UI中显示
-                    showToast('平仓失败: ' + errorMsg, 'error');
-                    return;
-                }
-
-                if (data.success) {
-                    // 美化平仓成功提示
-                    const closeData = data.data || {};
-                    const realizedPnl = closeData.realized_pnl || 0;
-                    const pnlPct = closeData.pnl_pct || 0;
-                    const roi = closeData.roi || 0;
-                    const symbol = closeData.symbol || '';
-                    const closePrice = closeData.close_price || 0;
-                    const entryPrice = closeData.entry_price || 0;
-                    const positionSide = closeData.position_side || '';
-                    const closeQuantity = closeData.close_quantity || 0;
-                    
-                    const pnlColor = realizedPnl >= 0 ? 'var(--success-green)' : 'var(--danger-red)';
-                    const pnlSign = realizedPnl >= 0 ? '+' : '';
-                    
-                    // 创建自定义的美化平仓成功提示框
-                    const toast = document.createElement('div');
-                    toast.className = 'toast success';
-                    const isProfit = realizedPnl >= 0;
-                    const profitIcon = isProfit ? 'bi-trending-up' : 'bi-trending-down';
-                    
-                    toast.innerHTML = `
-                        <div style="
-                            position: relative;
-                            overflow: hidden;
-                        ">
-                            <!-- 背景装饰 -->
-                            <div style="
-                                position: absolute;
-                                top: -50px;
-                                right: -50px;
-                                width: 150px;
-                                height: 150px;
-                                background: ${isProfit ? 'radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, transparent 70%)' : 'radial-gradient(circle, rgba(239, 68, 68, 0.1) 0%, transparent 70%)'};
-                                border-radius: 50%;
-                                pointer-events: none;
-                            "></div>
-                            
-                            <div style="display: flex; align-items: flex-start; gap: var(--spacing-lg); position: relative; z-index: 1;">
-                                <!-- 图标区域 -->
-                                <div style="
-                                    width: 56px; 
-                                    height: 56px; 
-                                    border-radius: 16px; 
-                                    background: ${isProfit ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%)' : 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%)'}; 
-                                    border: 2px solid ${isProfit ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'};
-                                    display: flex; 
-                                    align-items: center; 
-                                    justify-content: center; 
-                                    flex-shrink: 0;
-                                    animation: pulse 0.6s ease-out;
-                                    box-shadow: 0 4px 12px ${isProfit ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
-                                ">
-                                    <i class="bi ${profitIcon}" style="font-size: 28px; color: ${pnlColor};"></i>
-                                </div>
-                                
-                                <!-- 内容区域 -->
-                                <div style="flex: 1; min-width: 0;">
-                                    <!-- 标题 -->
-                                    <div style="
-                                        font-weight: 700; 
-                                        font-size: 18px; 
-                                        color: var(--text-primary); 
-                                        margin-bottom: 12px;
-                                        line-height: 1.3;
-                                        display: flex;
-                                        align-items: center;
-                                        gap: 8px;
-                                    ">
-                                        <span>平仓成功</span>
-                                        <span style="
-                                            font-size: 12px;
-                                            padding: 2px 8px;
-                                            border-radius: 12px;
-                                            background: ${isProfit ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)'};
-                                            color: ${pnlColor};
-                                            font-weight: 600;
-                                        ">${isProfit ? '盈利' : '亏损'}</span>
-                                    </div>
-                                    
-                                    <!-- 详细信息 -->
-                                    <div style="
-                                        background: rgba(139, 148, 158, 0.05);
-                                        border-radius: 12px;
-                                        padding: 12px;
-                                        margin-bottom: 12px;
-                                    ">
-                                        <div style="
-                                            display: grid;
-                                            grid-template-columns: 1fr 1fr;
-                                            gap: 8px;
-                                            font-size: 13px;
-                                            color: var(--text-secondary);
-                                        ">
-                                            <div><span style="color: var(--text-tertiary);">交易对:</span> <strong style="color: var(--text-primary);">${symbol}</strong></div>
-                                            <div><span style="color: var(--text-tertiary);">方向:</span> <strong style="color: var(--text-primary);">${positionSide === 'LONG' ? '多' : '空'}</strong></div>
-                                            <div><span style="color: var(--text-tertiary);">数量:</span> <strong style="color: var(--text-primary);">${closeQuantity}</strong></div>
-                                            <div><span style="color: var(--text-tertiary);">杠杆:</span> <strong style="color: var(--text-primary);">${closeData.leverage || '--'}x</strong></div>
-                                        </div>
-                                        
-                                        <div style="
-                                            margin-top: 10px;
-                                            padding-top: 10px;
-                                            border-top: 1px solid var(--border-default);
-                                            display: grid;
-                                            grid-template-columns: 1fr 1fr;
-                                            gap: 8px;
-                                        ">
-                                            <div>
-                                                <div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 2px;">开仓价</div>
-                                                <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); font-family: var(--font-mono);">${formatPrice(entryPrice)}</div>
-                                            </div>
-                                            <div>
-                                                <div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 2px;">平仓价</div>
-                                                <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); font-family: var(--font-mono);">${formatPrice(closePrice)}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    <!-- 盈亏信息卡片 -->
-                                    <div style="
-                                        background: ${isProfit ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%)' : 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%)'};
-                                        border: 1px solid ${isProfit ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'};
-                                        border-radius: 12px;
-                                        padding: 14px;
-                                        display: grid;
-                                        grid-template-columns: repeat(3, 1fr);
-                                        gap: 12px;
-                                    ">
-                                        <div style="text-align: center;">
-                                            <div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">已实现盈亏</div>
-                                            <div style="font-size: 18px; font-weight: 700; color: ${pnlColor}; font-family: var(--font-mono);">
-                                                ${pnlSign}${formatLargeNumber(realizedPnl)}
-                                            </div>
-                                            <div style="font-size: 11px; color: var(--text-tertiary); margin-top: 2px;">USDT</div>
-                                        </div>
-                                        <div style="text-align: center; border-left: 1px solid var(--border-default); padding: 0 12px;">
-                                            <div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;">ROI</div>
-                                            <div style="font-size: 18px; font-weight: 700; color: ${pnlColor}; font-family: var(--font-mono);">
-                                                ${pnlSign}${roi.toFixed(2)}%
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- 关闭按钮 -->
-                                <button onclick="this.parentElement.parentElement.remove()" style="
-                                    background: rgba(139, 148, 158, 0.1); 
-                                    border: none; 
-                                    color: var(--text-secondary); 
-                                    cursor: pointer; 
-                                    padding: 6px; 
-                                    width: 28px; 
-                                    height: 28px; 
-                                    display: flex; 
-                                    align-items: center; 
-                                    justify-content: center; 
-                                    flex-shrink: 0;
-                                    border-radius: 6px;
-                                    transition: all var(--transition-fast);
-                                    position: absolute;
-                                    top: 0;
-                                    right: 0;
-                                " onmouseover="this.style.background='rgba(139, 148, 158, 0.2)'; this.style.color='var(--text-primary)'; this.style.transform='scale(1.1)'" onmouseout="this.style.background='rgba(139, 148, 158, 0.1)'; this.style.color='var(--text-secondary)'; this.style.transform='scale(1)'">
-                                    <i class="bi bi-x" style="font-size: 16px;"></i>
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                    document.body.appendChild(toast);
-                    setTimeout(() => {
-                        toast.style.animation = 'slideInRight 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) reverse';
-                        toast.style.opacity = '0';
-                        setTimeout(() => toast.remove(), 400);
-                    }, 8000);
-                    
-                    // 平仓后，移除对应的持仓行（如果存在），并刷新账户余额和冻结资金
-                    const positionsBody = document.getElementById('positionsBody');
-                    if (positionsBody) {
-                        const row = positionsBody.querySelector(`.position-card[data-position-id="${positionId}"]`);
-                        if (row) {
-                            row.remove();
-                            // 更新持仓数量
-                            const remainingRows = positionsBody.querySelectorAll('.position-card[data-symbol]');
-                            const count = remainingRows.length;
-                            const positionCount = document.getElementById('positionCount');
-                            const positionsTitle = document.getElementById('positions-title');
-                            if (positionCount) positionCount.textContent = `${count} 个持仓`;
-                            if (positionsTitle) positionsTitle.textContent = `持仓中 [${count}]`;
-
-                            // 如果没有持仓了，显示空状态
-                            if (count === 0) {
-                                const positionsTable = document.getElementById('positionsTable');
-                                const positionsEmpty = document.getElementById('positionsEmpty');
-                                if (positionsTable) positionsTable.style.display = 'none';
-                                if (positionsEmpty) positionsEmpty.style.display = 'block';
-                            }
-                        }
-                    }
-                    // 刷新账户余额（释放冻结资金）、待成交订单列表和成交历史
-                    setTimeout(() => {
-                        loadAccount();  // 刷新账户余额和冻结资金
-                        loadTrades();
-                        updatePositionsPrices();
-                    }, 500);
-                } else {
-                    const errorMsg = data.message || data.detail || data.error || '未知错误';
-                    // 平仓失败已在UI中显示
-                    showToast('平仓失败: ' + errorMsg, 'error');
-                }
-            } catch (error) {
-                // 平仓请求失败已在UI中显示
-                showToast('平仓失败: ' + (error.message || '网络错误'), 'error');
-            }
-        }
-
-        // 刷新数据
-        function refreshData() {
-            loadData();
-            showToast('正在刷新数据...', 'info');
-        }
-
-        // 一键平仓所有持仓
-        async function closeAllPositions() {
-            // 获取所有持仓卡片
-            const positionCards = document.querySelectorAll('#positionsBody .position-card');
-            if (positionCards.length === 0) {
-                showToast('没有持仓需要平仓', 'warning');
-                return;
-            }
-
-            // 收集所有持仓ID
-            const positionIds = [];
-            positionCards.forEach(card => {
-                const positionId = card.getAttribute('data-position-id');
-                if (positionId) {
-                    positionIds.push(parseInt(positionId));
-                }
-            });
-
-            if (positionIds.length === 0) {
-                showToast('没有有效的持仓ID', 'warning');
-                return;
-            }
-
-            // 确认对话框
-            const confirmed = await showConfirmDialog(
-                `确定要平仓全部 ${positionIds.length} 个持仓吗？`,
-                '此操作不可撤销，所有持仓将按市价平仓。',
-                'warning'
-            );
-            if (!confirmed) return;
-
-            // 显示进度提示
-            showToast(`正在平仓 ${positionIds.length} 个持仓...`, 'info');
-
-            // 禁用按钮防止重复点击
-            const closeAllBtn = document.getElementById('closeAllPositionsBtn');
-            if (closeAllBtn) {
-                closeAllBtn.disabled = true;
-                closeAllBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> 平仓中...';
-            }
-
-            try {
-                // 使用批量平仓API
-                const response = await fetch(`${API_BASE}/close-batch`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        position_ids: positionIds,
-                        reason: 'manual_close_all'
-                    })
-                });
-
-                const data = await response.json();
-                const successCount = data.success_count || 0;
-                const failCount = data.fail_count || 0;
-
-                // 移除成功平仓的持仓卡片
-                if (data.results) {
-                    data.results.forEach(result => {
-                        if (result.success) {
-                            const card = document.querySelector(`#positionsBody .position-card[data-position-id="${result.position_id}"]`);
-                            if (card) {
-                                card.style.transition = 'opacity 0.3s, transform 0.3s';
-                                card.style.opacity = '0';
-                                card.style.transform = 'translateX(50px)';
-                                setTimeout(() => card.remove(), 300);
-                            }
-                        }
-                    });
-                }
-
-                // 显示结果
-                if (successCount > 0 && failCount === 0) {
-                    showToast(`成功平仓 ${successCount} 个持仓`, 'success');
-                } else if (successCount > 0 && failCount > 0) {
-                    showToast(`平仓完成: ${successCount} 个成功, ${failCount} 个失败`, 'warning');
-                } else {
-                    showToast(`平仓失败: ${failCount} 个持仓`, 'error');
-                }
-            } catch (error) {
-                console.error('批量平仓失败:', error);
-                showToast('批量平仓请求失败', 'error');
-            }
-
-            // 恢复按钮状态
-            if (closeAllBtn) {
-                closeAllBtn.disabled = false;
-                closeAllBtn.innerHTML = '<i class="bi bi-x-circle"></i> 一键平仓';
-            }
-
-            // 刷新数据
-            setTimeout(() => {
-                loadPositions();
-                loadAccount();
-                loadTrades();
-            }, 500);
-        }
-
-        // 更新止盈止损
-        async function updateStopLossTakeProfit(positionId, symbol, type, value) {
-            if (!value || value === '' || value === null) {
-                return; // 空值不处理，由清除按钮处理
-            }
-            
-            const price = parseFloat(value);
-            if (isNaN(price) || price <= 0) {
-                showToast('价格无效', 'error');
-                return;
-            }
-            
-            // 确保 positionId 是数字
-            positionId = parseInt(positionId);
-            if (isNaN(positionId) || positionId <= 0) {
-                showToast('持仓ID无效', 'error');
-                return;
-            }
-            
-            try {
-                // 只发送需要更新的字段，后端API会保留未提供的字段
-                const requestData = {};
-                if (type === 'stop_loss') {
-                    requestData.stop_loss_price = price;
-                } else if (type === 'take_profit') {
-                    requestData.take_profit_price = price;
-                }
-
-                const url = `${API_BASE}/positions/${positionId}/stop-loss-take-profit`;
-
-                const response = await fetch(url, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestData)
-                });
-                
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
-                }
-                
-                const data = await response.json();
-                if (data.success) {
-                    showToast(`${type === 'stop_loss' ? '止损' : '止盈'}设置成功`, 'success');
-                    // 重新加载持仓数据，确保从数据库获取最新值
-                    // 添加短暂延迟，确保数据库更新完成
-                    setTimeout(async () => {
-                        await loadPositions();
-                    }, 100);
-                } else {
-                    showToast(`设置失败: ${data.detail || data.message || '未知错误'}`, 'error');
-                }
-            } catch (error) {
-                showToast(`设置失败: ${error.message}`, 'error');
-            }
-        }
-
-        // 清除止损
-        async function clearStopLoss(positionId, symbol) {
-            // 确保 positionId 是数字
-            positionId = parseInt(positionId);
-            if (isNaN(positionId) || positionId <= 0) {
-                showToast('持仓ID无效', 'error');
-                return;
-            }
-            
-            try {
-                // 只发送需要清除的字段，后端API会保留未提供的字段
-                const requestData = {
-                    stop_loss_price: null
-                };
-
-                const response = await fetch(`${API_BASE}/positions/${positionId}/stop-loss-take-profit`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestData)
-                });
-                
-                const data = await response.json();
-                if (data.success) {
-                    showToast('止损已清除', 'success');
-                    // 重新加载持仓数据，确保从数据库获取最新值
-                    await loadPositions();
-                } else {
-                    showToast(`清除失败: ${data.detail || data.message || '未知错误'}`, 'error');
-                }
-            } catch (error) {
-                showToast(`清除失败: ${error.message}`, 'error');
-            }
-        }
-
-        // 清除止盈
-        async function clearTakeProfit(positionId, symbol) {
-            // 确保 positionId 是数字
-            positionId = parseInt(positionId);
-            if (isNaN(positionId) || positionId <= 0) {
-                showToast('持仓ID无效', 'error');
-                return;
-            }
-            
-            try {
-                // 只发送需要清除的字段，后端API会保留未提供的字段
-                const requestData = {
-                    take_profit_price: null
-                };
-
-                const response = await fetch(`${API_BASE}/positions/${positionId}/stop-loss-take-profit`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestData)
-                });
-                
-                const data = await response.json();
-                if (data.success) {
-                    showToast('止盈已清除', 'success');
-                    // 重新加载持仓数据，确保从数据库获取最新值
-                    await loadPositions();
-                } else {
-                    showToast(`清除失败: ${data.detail || data.message || '未知错误'}`, 'error');
-                }
-            } catch (error) {
-                showToast(`清除失败: ${error.message}`, 'error');
-            }
-        }
-
-        // 更新最后更新时间
-        function updateLastUpdateTime() {
-            document.getElementById('lastUpdate').textContent = formatTimeUTC8(new Date(), 'full', true);
-        }
-
-        // 实时更新止盈止损显示
-        function updateStopLossTakeProfitDisplay(positionId, symbol, type, value) {
-            // 更新输入框
-            const inputId = type === 'stop_loss' 
-                ? `stopLoss_${symbol}_${positionId}`
-                : `takeProfit_${symbol}_${positionId}`;
-            const input = document.getElementById(inputId);
-            if (input) {
-                input.value = value || '';
-            }
-            
-            // 更新卡片中的显示区域
-            const card = document.querySelector(`.position-card[data-position-id="${positionId}"]`);
-            if (card) {
-                // 查找或创建显示区域
-                let displayArea = card.querySelector('.stop-loss-take-profit-display');
-                if (!displayArea) {
-                    // 如果不存在，在保证金行后面插入
-                    const marginRow = card.querySelector('.text-sm.text-secondary:last-of-type');
-                    if (marginRow) {
-                        displayArea = document.createElement('div');
-                        displayArea.className = 'stop-loss-take-profit-display text-xs text-secondary';
-                        displayArea.style.cssText = 'display: flex; gap: 12px; align-items: center; margin-top: 6px;';
-                        marginRow.parentNode.insertBefore(displayArea, marginRow.nextSibling);
-                    }
-                }
-                
-                if (displayArea) {
-                    // 获取当前的止盈止损值
-                    const stopLossInput = document.getElementById(`stopLoss_${symbol}_${positionId}`);
-                    const takeProfitInput = document.getElementById(`takeProfit_${symbol}_${positionId}`);
-                    const stopLossValue = stopLossInput ? stopLossInput.value : '';
-                    const takeProfitValue = takeProfitInput ? takeProfitInput.value : '';
-                    
-                    // 更新显示
-                    let html = '';
-                    if (stopLossValue) {
-                        html += `<span style="color: var(--danger-red);"><i class="bi bi-shield-exclamation"></i> 止损: $${formatPrice(parseFloat(stopLossValue))}</span>`;
-                    }
-                    if (takeProfitValue) {
-                        html += `<span style="color: var(--success-green);"><i class="bi bi-bullseye"></i> 止盈: $${formatPrice(parseFloat(takeProfitValue))}</span>`;
-                    }
-                    displayArea.innerHTML = html;
-                    
-                    // 如果没有设置，隐藏显示区域
-                    if (!stopLossValue && !takeProfitValue) {
-                        displayArea.style.display = 'none';
-                    } else {
-                        displayArea.style.display = 'flex';
-                    }
-                }
-            }
-        }
-
-        // 存储持仓数据映射（用于快速更新）
-        let positionsDataMap = {};
-        
-        let priceUpdateInterval = null;
-
-        // 直接在页面上保存止盈止损
-        async function saveStopLossTakeProfitInline(positionId, symbol) {
-            try {
-                positionId = parseInt(positionId);
-                if (isNaN(positionId) || positionId <= 0) {
-                    return;
-                }
-                
-                const stopLossInput = document.getElementById(`stopLoss_${positionId}`);
-                const takeProfitInput = document.getElementById(`takeProfit_${positionId}`);
-                
-                const stopLossValue = stopLossInput.value.trim();
-                const takeProfitValue = takeProfitInput.value.trim();
-                
-                const stopLossPrice = stopLossValue ? parseFloat(stopLossValue) : null;
-                const takeProfitPrice = takeProfitValue ? parseFloat(takeProfitValue) : null;
-                
-                // 验证价格有效性
-                if (stopLossPrice !== null && (isNaN(stopLossPrice) || stopLossPrice <= 0)) {
-                    showToast('止损价格无效', 'error');
-                    return;
-                }
-                
-                if (takeProfitPrice !== null && (isNaN(takeProfitPrice) || takeProfitPrice <= 0)) {
-                    showToast('止盈价格无效', 'error');
-                    return;
-                }
-                
-                // 先获取当前持仓信息，保留另一个字段的值
-                let currentStopLoss = null;
-                let currentTakeProfit = null;
-                
-                try {
-                    const positionResponse = await fetch(`${API_BASE}/positions/${positionId}`);
-                    const positionData = await positionResponse.json();
-                    if (positionData.success && positionData.data) {
-                        currentStopLoss = positionData.data.stop_loss_price;
-                        currentTakeProfit = positionData.data.take_profit_price;
-                    }
-                } catch (e) {
-                }
-                
-                // 构建请求数据：总是同时传递两个字段，确保另一个字段被保留
-                const requestData = {
-                    stop_loss_price: stopLossPrice !== undefined && stopLossPrice !== null ? stopLossPrice : (currentStopLoss !== null && currentStopLoss !== undefined ? currentStopLoss : null),
-                    take_profit_price: takeProfitPrice !== undefined && takeProfitPrice !== null ? takeProfitPrice : (currentTakeProfit !== null && currentTakeProfit !== undefined ? currentTakeProfit : null)
-                };
-                
-                const url = `${API_BASE}/positions/${positionId}/stop-loss-take-profit`;
-                const response = await fetch(url, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestData)
-                });
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
-                }
-                
-                const data = await response.json();
-                if (data.success) {
-                    showToast('止盈止损设置成功', 'success');
-                    // 不重新加载整个列表，只更新左侧显示区域
-                    const card = document.querySelector(`.position-card[data-position-id="${positionId}"]`);
-                    if (card) {
-                        // 更新左侧显示区域
-                        let displayArea = card.querySelector('.stop-loss-take-profit-display');
-                        if (displayArea) {
-                            // 更新显示
-                            let displayHtml = '';
-                            if (stopLossPrice !== null && stopLossPrice > 0) {
-                                displayHtml += `<span style="color: var(--danger-red);"><i class="bi bi-shield-exclamation"></i> 止损: $${formatPrice(stopLossPrice)}</span>`;
-                            }
-                            if (takeProfitPrice !== null && takeProfitPrice > 0) {
-                                if (displayHtml) displayHtml += ' ';
-                                displayHtml += `<span style="color: var(--success-green);"><i class="bi bi-bullseye"></i> 止盈: $${formatPrice(takeProfitPrice)}</span>`;
-                            }
-                            displayArea.innerHTML = displayHtml;
-                            displayArea.style.display = displayHtml ? 'flex' : 'none';
-                        } else if ((stopLossPrice !== null && stopLossPrice > 0) || (takeProfitPrice !== null && takeProfitPrice > 0)) {
-                            // 如果显示区域不存在，创建它
-                            const leftSection = card.querySelector('div > div:first-child');
-                            if (leftSection) {
-                                displayArea = document.createElement('div');
-                                displayArea.className = 'stop-loss-take-profit-display text-xs text-secondary';
-                                displayArea.style.cssText = 'display: flex; gap: 12px; align-items: center; margin-top: 6px;';
-                                let displayHtml = '';
-                                if (stopLossPrice !== null && stopLossPrice > 0) {
-                                    displayHtml += `<span style="color: var(--danger-red);"><i class="bi bi-shield-exclamation"></i> 止损: $${formatPrice(stopLossPrice)}</span>`;
-                                }
-                                if (takeProfitPrice !== null && takeProfitPrice > 0) {
-                                    if (displayHtml) displayHtml += ' ';
-                                    displayHtml += `<span style="color: var(--success-green);"><i class="bi bi-bullseye"></i> 止盈: $${formatPrice(takeProfitPrice)}</span>`;
-                                }
-                                displayArea.innerHTML = displayHtml;
-                                leftSection.appendChild(displayArea);
-                            }
-                        }
-                    }
-                } else {
-                    showToast(`设置失败: ${data.detail || data.message || '未知错误'}`, 'error');
-                }
-            } catch (error) {
-                showToast(`设置失败: ${error.message}`, 'error');
-            }
-        }
-
-        // 打开止盈止损设置弹框（已废弃，保留以防其他地方调用）
-        function openStopLossTakeProfitModal(positionId, symbol, isLong, entryPrice, currentStopLoss, currentTakeProfit) {
-            // 暂停价格更新
-            stopLossTakeProfitModalOpen = true;
-            if (priceUpdateInterval) {
-                clearInterval(priceUpdateInterval);
-                priceUpdateInterval = null;
-            }
-            
-            const overlay = document.createElement('div');
-            overlay.id = 'stopLossTakeProfitModal';
-            overlay.className = 'modal-overlay';
-            
-            overlay.innerHTML = `
-                <div class="modal-dialog" style="max-width: 500px;">
-                    <div class="modal-header" style="background: linear-gradient(135deg, rgba(43, 111, 237, 0.1) 0%, transparent 100%);">
-                        <div class="modal-title">
-                            <div class="modal-icon" style="background: linear-gradient(135deg, rgba(43, 111, 237, 0.2) 0%, rgba(43, 111, 237, 0.1) 100%); border-color: rgba(43, 111, 237, 0.3);">
-                                <i class="bi bi-shield-check" style="font-size: 24px; color: var(--primary-blue);"></i>
-                            </div>
-                            <span>设置止盈止损 - ${symbol}</span>
-                        </div>
-                    </div>
-                    <div class="modal-body">
-                        <div style="margin-bottom: 16px; padding: 12px; background: var(--bg-tertiary); border-radius: var(--radius-md);">
-                            <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">持仓信息</div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px;">
-                                <div><span style="color: var(--text-tertiary);">方向:</span> <strong style="color: var(--text-primary);">${isLong ? '做多' : '做空'}</strong></div>
-                                <div><span style="color: var(--text-tertiary);">开仓价:</span> <strong style="color: var(--text-primary); font-family: var(--font-mono);">$${formatPrice(entryPrice)}</strong></div>
-                            </div>
-                        </div>
-                        
-                        <div style="margin-bottom: 16px;">
-                            <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">
-                                <i class="bi bi-shield-exclamation" style="color: var(--danger-red);"></i> 止损价格
-                            </label>
-                            <input type="number" 
-                                   id="modalStopLossPrice" 
-                                   value="${currentStopLoss !== null && currentStopLoss !== undefined && currentStopLoss !== 'null' ? currentStopLoss : ''}" 
-                                   placeholder="请输入止损价格"
-                                   step="0.00000001"
-                                   style="width: 100%; padding: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; font-family: var(--font-mono);">
-                            <div style="margin-top: 4px; font-size: 11px; color: var(--text-tertiary);">
-                                ${isLong ? '止损价应低于开仓价' : '止损价应高于开仓价'}
-                            </div>
-                        </div>
-                        
-                        <div style="margin-bottom: 16px;">
-                            <label style="display: block; font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 8px;">
-                                <i class="bi bi-bullseye" style="color: var(--success-green);"></i> 止盈价格
-                            </label>
-                            <input type="number" 
-                                   id="modalTakeProfitPrice" 
-                                   value="${currentTakeProfit !== null && currentTakeProfit !== undefined && currentTakeProfit !== 'null' ? currentTakeProfit : ''}" 
-                                   placeholder="请输入止盈价格"
-                                   step="0.00000001"
-                                   style="width: 100%; padding: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md); color: var(--text-primary); font-size: 14px; font-family: var(--font-mono);">
-                            <div style="margin-top: 4px; font-size: 11px; color: var(--text-tertiary);">
-                                ${isLong ? '止盈价应高于开仓价' : '止盈价应低于开仓价'}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button class="btn btn-secondary" id="modalCancelBtn" style="min-width: 100px;">
-                            <i class="bi bi-x-circle"></i> 取消
-                        </button>
-                        <button class="btn btn-ghost" id="modalClearBtn" style="min-width: 100px;">
-                            <i class="bi bi-trash"></i> 清除
-                        </button>
-                        <button class="btn btn-primary" id="modalSaveBtn" style="min-width: 100px;">
-                            <i class="bi bi-check-circle"></i> 保存
-                        </button>
-                    </div>
-                </div>
-            `;
-            
-            document.body.appendChild(overlay);
-            
-            const closeModal = () => {
-                overlay.style.animation = 'fadeIn 0.2s ease-out reverse';
-                const dialog = overlay.querySelector('.modal-dialog');
-                dialog.style.animation = 'slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) reverse';
-                setTimeout(() => {
-                    overlay.remove();
-                    stopLossTakeProfitModalOpen = false;
-                    // 恢复价格更新
-                    if (!priceUpdateInterval) {
-                        priceUpdateInterval = setInterval(updatePositionsPrices, 2000);
-                    }
-                }, 300);
-            };
-            
-            overlay.querySelector('#modalCancelBtn').onclick = closeModal;
-            overlay.querySelector('#modalClearBtn').onclick = async () => {
-                if (await showConfirmDialog('清除止盈止损', '确定要清除所有止盈止损设置吗？', 'warning')) {
-                    await saveStopLossTakeProfit(positionId, symbol, null, null, closeModal);
-                }
-            };
-            overlay.querySelector('#modalSaveBtn').onclick = async () => {
-                const stopLossInput = document.getElementById('modalStopLossPrice');
-                const takeProfitInput = document.getElementById('modalTakeProfitPrice');
-                
-                // 获取输入值，空字符串视为 null
-                const stopLossValue = stopLossInput.value.trim();
-                const takeProfitValue = takeProfitInput.value.trim();
-                
-                // 转换为数字或 null
-                const stopLossPrice = stopLossValue ? parseFloat(stopLossValue) : null;
-                const takeProfitPrice = takeProfitValue ? parseFloat(takeProfitValue) : null;
-                
-                // 验证价格有效性
-                if (stopLossPrice !== null && (isNaN(stopLossPrice) || stopLossPrice <= 0)) {
-                    showToast('止损价格无效', 'error');
-                    return;
-                }
-                
-                if (takeProfitPrice !== null && (isNaN(takeProfitPrice) || takeProfitPrice <= 0)) {
-                    showToast('止盈价格无效', 'error');
-                    return;
-                }
-                
-                // 如果两个都为空，提示用户
-                if (stopLossPrice === null && takeProfitPrice === null) {
-                    showToast('请至少设置一个止盈或止损价格', 'warning');
-                    return;
-                }
-                
-                await saveStopLossTakeProfit(
-                    positionId, 
-                    symbol, 
-                    stopLossPrice, 
-                    takeProfitPrice, 
-                    closeModal
-                );
-            };
-            
-            // 点击遮罩层关闭
-            overlay.onclick = (e) => {
-                if (e.target === overlay) {
-                    closeModal();
-                }
-            };
-        }
-        
-        // 保存止盈止损设置 - 直接根据订单号保存到数据库
-        async function saveStopLossTakeProfit(positionId, symbol, stopLossPrice, takeProfitPrice, closeCallback) {
-            try {
-                positionId = parseInt(positionId);
-                
-                if (isNaN(positionId) || positionId <= 0) {
-                    showToast('持仓ID无效', 'error');
-                    return;
-                }
-                
-                // 先获取当前持仓信息，保留另一个字段的值
-                let currentStopLoss = null;
-                let currentTakeProfit = null;
-                
-                try {
-                    const positionResponse = await fetch(`${API_BASE}/positions/${positionId}`);
-                    const positionData = await positionResponse.json();
-                    
-                    if (positionData.success && positionData.data) {
-                        currentStopLoss = positionData.data.stop_loss_price;
-                        currentTakeProfit = positionData.data.take_profit_price;
-                    } else {
-                        showToast(`获取持仓信息失败: ${positionData.detail || '未知错误'}`, 'error');
-                        return;
-                    }
-                } catch (e) {
-                    showToast(`获取持仓信息失败: ${e.message}`, 'error');
-                    return;
-                }
-                
-                // 构建请求数据：总是同时传递两个字段，确保另一个字段被保留
-                const requestData = {
-                    stop_loss_price: stopLossPrice !== undefined && stopLossPrice !== null ? stopLossPrice : (currentStopLoss !== null && currentStopLoss !== undefined ? currentStopLoss : null),
-                    take_profit_price: takeProfitPrice !== undefined && takeProfitPrice !== null ? takeProfitPrice : (currentTakeProfit !== null && currentTakeProfit !== undefined ? currentTakeProfit : null)
-                };
-                
-                
-                const url = `${API_BASE}/positions/${positionId}/stop-loss-take-profit`;
-                const response = await fetch(url, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestData)
-                });
-                
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
-                }
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showToast('止盈止损设置成功', 'success');
-                    if (closeCallback) closeCallback();
-                    // 重新加载持仓数据，确保显示最新数据
-                    await loadPositions();
-                } else {
-                    showToast(`设置失败: ${data.detail || data.message || '未知错误'}`, 'error');
-                }
-            } catch (error) {
-                showToast(`设置失败: ${error.message}`, 'error');
-            }
-        }
-        
-        // 更新持仓价格和盈亏（不重新加载整个持仓列表）
-        async function updatePositionsPrices() {
-            try {
-                const positionsBody = document.getElementById('positionsBody');
-                if (!positionsBody) {
-                    return;
-                }
-
-                // 获取所有持仓卡片
-                const positionRows = positionsBody.querySelectorAll('.position-card[data-symbol]');
-
-                if (positionRows.length === 0) {
-                    // 如果没有持仓，尝试重新加载一次
-                    await loadPositions();
-                    return;
-                }
-
-                // 收集所有需要获取价格的交易对
-                const symbolsSet = new Set();
-                const rowsData = [];
-                Array.from(positionRows).forEach(row => {
-                    const symbol = row.getAttribute('data-symbol');
-                    const positionId = row.getAttribute('data-position-id');
-                    if (symbol && positionId) {
-                        symbolsSet.add(symbol);
-                        rowsData.push({ row, symbol, positionId });
-                    }
-                });
-
-                if (symbolsSet.size === 0) {
-                    return;
-                }
-
-                // 批量获取价格（单次API调用）
-                let pricesMap = {};
-                try {
-                    const priceResponse = await fetch('/api/coin-futures/prices/batch', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ symbols: Array.from(symbolsSet) })
-                    });
-                    if (priceResponse.ok) {
-                        const priceData = await priceResponse.json();
-                        if (priceData.success && priceData.prices) {
-                            pricesMap = priceData.prices;
-                        }
-                    }
-                } catch (e) {
-                    console.error('批量获取价格失败:', e);
-                    return;
-                }
-
-                // 为每个持仓更新价格和盈亏
-                rowsData.forEach(({ row, symbol, positionId }) => {
-                    try {
-                        const priceInfo = pricesMap[symbol];
-                    if (!priceInfo || !priceInfo.price) {
-                        return;
-                    }
-                    const currentPrice = parseFloat(priceInfo.price);
-
-                    // 获取持仓数据（从映射表或卡片数据，使用position_id作为键）
-                    let positionData = positionsDataMap[positionId];
-                    if (!positionData) {
-                        // 从卡片文本中提取数据
-                        const cardText = row.textContent;
-                        const entryPriceMatch = cardText.match(/开仓价:\s*\$?([\d,]+\.?\d*)/);
-                        const quantityMatch = cardText.match(/数量:\s*([\d,]+\.?\d*)/);
-                        const marginMatch = cardText.match(/保证金:\s*([\d,]+\.?\d*)/);
-                        const positionSide = row.querySelector('.badge-success') ? 'LONG' : 'SHORT';
-
-                        if (entryPriceMatch && quantityMatch && marginMatch) {
-                            const entryPrice = parseFloat(entryPriceMatch[1].replace(/,/g, '')) || 0;
-                            const quantity = parseFloat(quantityMatch[1].replace(/,/g, '')) || 0;
-                            const margin = parseFloat(marginMatch[1].replace(/,/g, '')) || 0;
-
-                            positionData = {
-                                entry_price: entryPrice,
-                                quantity: quantity,
-                                margin: margin,
-                                position_side: positionSide
-                            };
-                            positionsDataMap[positionId] = positionData;
-                        } else {
-                            return; // 无法获取持仓数据，跳过
-                        }
-                    }
-
-                    const { entry_price, quantity, margin, position_side } = positionData;
-
-                    // 计算实时盈亏
-                    let unrealizedPnl = 0;
-                    let unrealizedPnlPct = 0;
-
-                    // 确保所有值都是数字
-                    const currentPriceNum = parseFloat(currentPrice) || 0;
-                    const entryPriceNum = parseFloat(entry_price) || 0;
-                    const quantityNum = parseFloat(quantity) || 0;
-                    const marginNum = parseFloat(margin) || 0;
-
-                    if (currentPriceNum > 0 && entryPriceNum > 0 && quantityNum > 0) {
-                        if (position_side === 'LONG') {
-                            unrealizedPnl = (currentPriceNum - entryPriceNum) * quantityNum;
-                        } else {
-                            unrealizedPnl = (entryPriceNum - currentPriceNum) * quantityNum;
-                        }
-
-                        // 盈亏百分比基于保证金计算
-                        if (marginNum > 0) {
-                            unrealizedPnlPct = (unrealizedPnl / marginNum) * 100;
-                        }
-                    } else {
-                        return; // 数据无效，跳过
-                    }
-
-                    // 更新价格显示 - 尝试多种选择器
-                    let priceCell = row.querySelector('.current-price-cell[data-symbol="' + symbol + '"]');
-                    if (!priceCell) {
-                        // 尝试其他可能的选择器
-                        priceCell = row.querySelector('[data-symbol="' + symbol + '"].current-price-cell');
-                    }
-                    if (!priceCell) {
-                        // 尝试查找包含价格的单元格
-                        const allCells = row.querySelectorAll('td, .cell, [class*="price"]');
-                        for (let cell of allCells) {
-                            if (cell.textContent.includes('$') || cell.textContent.match(/[\d,]+\.?\d*/)) {
-                                priceCell = cell;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (priceCell) {
-                        priceCell.textContent = '$' + formatPrice(currentPrice);
-
-                        // 根据价格变化添加颜色标注
-                        if (currentPrice > entry_price) {
-                            priceCell.style.color = 'var(--success-green)';
-                        } else if (currentPrice < entry_price) {
-                            priceCell.style.color = 'var(--danger-red)';
-                        } else {
-                            priceCell.style.color = 'var(--primary-blue)';
-                        }
-                    }
-
-                    // 更新止盈止损输入框的值（只有在输入框没有焦点时才更新，避免覆盖用户正在输入的值）
-                    if (positionId) {
-                        const stopLossInput = document.getElementById(`stopLoss_${positionId}`);
-                        const takeProfitInput = document.getElementById(`takeProfit_${positionId}`);
-
-                        // 只有当输入框没有焦点时，才从数据库更新值
-                        if (stopLossInput && document.activeElement !== stopLossInput) {
-                            // 不更新，保持用户输入的值
-                        }
-                        if (takeProfitInput && document.activeElement !== takeProfitInput) {
-                            // 不更新，保持用户输入的值
-                        }
-                    }
-
-                    // 更新未实现盈亏（卡片样式，使用position_id作为唯一标识）
-                    let pnlCell = row.querySelector(`[data-pnl="${positionId}"]`);
-                    if (pnlCell) {
-                        const pnlClass = unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                        pnlCell.className = `${pnlClass} font-mono`;
-                        let formattedPnl = formatLargeNumber(unrealizedPnl);
-                        const newPnlText = (unrealizedPnl >= 0 ? '+' : '') + formattedPnl;
-                        pnlCell.textContent = newPnlText;
-                    }
-
-                    // 更新未实现盈亏百分比（卡片样式，使用position_id作为唯一标识）
-                    let pnlPctCell = row.querySelector(`[data-pnl-pct="${positionId}"]`);
-                    if (pnlPctCell) {
-                        const pnlClass = unrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                        pnlPctCell.className = pnlClass;
-                        const newPnlPctText = (unrealizedPnlPct >= 0 ? '+' : '') + unrealizedPnlPct.toFixed(2) + '%';
-                        pnlPctCell.textContent = newPnlPctText;
-                    }
-
-                    // 更新映射表中的数据
-                    positionData.current_price = currentPrice;
-                    positionData.unrealized_pnl = unrealizedPnl;
-                    positionData.unrealized_pnl_pct = unrealizedPnlPct;
-                    } catch (e) {
-                        console.error(`updatePositionsPrices: ${symbol} 更新失败`, e);
-                    }
-                });
-                
-                // 更新账户信息中的未实现盈亏总和
-                const totalUnrealizedPnl = Object.values(positionsDataMap).reduce((sum, pos) => {
-                    return sum + (parseFloat(pos.unrealized_pnl) || 0);
-                }, 0);
-                
-                const unrealizedPnlCard = document.querySelector('.stat-card:nth-child(3) .stat-value');
-                if (unrealizedPnlCard) {
-                    const pnlClass = totalUnrealizedPnl >= 0 ? 'pnl-positive' : 'pnl-negative';
-                    unrealizedPnlCard.className = `stat-value ${pnlClass}`;
-                    unrealizedPnlCard.textContent = (totalUnrealizedPnl >= 0 ? '+' : '') + formatLargeNumber(totalUnrealizedPnl);
-                }
-            } catch (error) {
-                // 静默处理更新失败
-            }
-        }
-        
-        // 初始加载
-        document.addEventListener('DOMContentLoaded', function() {
-            loadSymbols();
-            loadTradingStatus(); // 加载交易控制状态
-            loadTradingMode(); // 加载交易模式状态
-
-            // 先加载数据（只加载一次，不自动刷新）
-            loadData().then(() => {
-                // 延迟1秒后开始第一次价格和盈亏更新，确保持仓数据已完全渲染
-                setTimeout(() => {
-                    // 立即执行一次更新
-                    updatePositionsPrices();
-                    // 然后每2秒只更新价格和盈亏，不刷新其他内容
-                    if (!priceUpdateInterval) {
-                        priceUpdateInterval = setInterval(() => {
-                            updatePositionsPrices();
-                        }, 2000);
-                    }
-                }, 1000);
-            }).catch(err => {
-                // 静默处理初始数据加载失败
-                // 即使加载失败，也尝试启动价格更新
-                setTimeout(() => {
-                    updatePositionsPrices();
-                    if (!priceUpdateInterval) {
-                        priceUpdateInterval = setInterval(() => {
-                            updatePositionsPrices();
-                        }, 2000);
-                    }
-                }, 2000);
-            });
-            
-            // 已禁用 loadData 的定时刷新，避免刷新持仓列表、订单列表等
-            // 只保留价格和盈亏的实时更新
-            // setInterval(loadData, 5000);  // 不再自动刷新持仓列表
-            // setInterval(refreshPrice, 2000);  // 不再单独刷新价格，已合并到 updatePositionsPrices
+        if (elWin) elWin.textContent = winRate + '%';
+        if (elTotal) elTotal.textContent = totalCount;
+    } else if (trades !== undefined) {
+        if (el24h) el24h.textContent = '0.000000 BTC';
+        if (elWin) elWin.textContent = '--';
+        if (elTotal) elTotal.textContent = '0';
+    }
+}
+
+// ---- 加载交易开关状态 ----
+
+async function loadTradingStatus() {
+    try {
+        var res = await fetch('/api/trading-control/status/' + ACCOUNT_ID + '/coin_futures');
+        var data = await res.json();
+        var t1 = document.getElementById('toggle-trading-enabled');
+        var t2 = document.getElementById('toggle-allow-long');
+        var t3 = document.getElementById('toggle-allow-short');
+        setToggleState(t1, data.enabled !== false);
+        setToggleState(t2, data.allow_long !== false);
+        setToggleState(t3, data.allow_short !== false);
+    } catch(e) {
+        // 加载失败保持默认状态
+    }
+}
+
+// ---- Toggle 点击处理 ----
+
+async function handleToggle(type) {
+    var idMap = {
+        'trading-enabled': 'toggle-trading-enabled',
+        'allow-long': 'toggle-allow-long',
+        'allow-short': 'toggle-allow-short'
+    };
+    var btn = document.getElementById(idMap[type]);
+    if (!btn) return;
+    var isOn = btn.dataset.state !== '1';
+    setToggleState(btn, isOn);
+
+    var payload = {account_id: ACCOUNT_ID, trading_type: 'coin_futures'};
+    if (type === 'trading-enabled') payload.enabled = isOn;
+    else if (type === 'allow-long') payload.allow_long = isOn;
+    else if (type === 'allow-short') payload.allow_short = isOn;
+
+    try {
+        var res = await fetch('/api/trading-control/toggle', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
         });
-
-        // ========== 交易模式 (固定趋势模式) ==========
-        // 注释: 系统已固定使用趋势模式,不再支持模式切换
-        let currentTradingModeType = 'trend'; // 固定为趋势模式
-
-        // 加载交易模式状态 (仅用于显示)
-        async function loadTradingMode() {
-            // 固定显示趋势模式
-            const indicator = document.getElementById('modeIndicator');
-            if (indicator) {
-                indicator.textContent = '趋势模式';
-                indicator.className = 'mode-indicator trend';
-            }
+        if (!res.ok) {
+            var d = await res.json();
+            throw new Error(d.message || 'HTTP ' + res.status);
         }
-        // ========== 交易模式功能结束 ==========
+        showToast(type + ' ' + (isOn ? '已开启' : '已关闭'), 'success');
+    } catch(e) {
+        showToast('切换失败: ' + e.message, 'error');
+        // 回滚
+        setToggleState(btn, !isOn);
+    }
+}
 
+// ---- 平仓 ----
 
-        // ========== 评级管理功能 (复用U本位的API) ==========
-        async function loadRatingConfig() {
-            try {
-                const response = await fetch('/api/rating/config');
-                const data = await response.json();
-                if (data.success) {
-                    const upgradeConfig = data.upgrade_config;
-                    document.getElementById('upgradeConfig').textContent = `盈利≥$${upgradeConfig.profit_amount} 且 胜率≥${(upgradeConfig.win_rate * 100).toFixed(0)}%`;
-                    document.getElementById('observationDays').textContent = `${upgradeConfig.observation_days}天`;
-                }
-            } catch (error) {
-                console.error('加载评级配置失败:', error);
-            }
+async function closePosition(id, symbol) {
+    if (!id || isNaN(parseInt(id))) { showToast('持仓ID无效', 'error'); return; }
+    var ok = confirm('确定要平仓 ' + symbol + ' (ID:' + id + ') ？\n此操作不可撤销。');
+    if (!ok) return;
+    try {
+        var res = await fetch('/api/futures/positions/' + id + '/close', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({})
+        });
+        var data = await res.json();
+        if (data.success || res.ok) {
+            showToast(symbol + ' 平仓成功', 'success');
+            setTimeout(loadAll, 500);
+        } else {
+            throw new Error(data.message || data.detail || '平仓失败');
         }
+    } catch(e) {
+        showToast('平仓失败: ' + e.message, 'error');
+    }
+}
 
-        async function loadRatings() {
-            const loading = document.getElementById('ratingsLoading');
-            const empty = document.getElementById('ratingsEmpty');
-            loading.style.display = 'flex';
-            empty.style.display = 'none';
-            for (let level = 0; level <= 3; level++) {
-                document.getElementById(`level${level}Container`).style.display = 'none';
-            }
-            try {
-                // 币本位页面只显示USD结尾的交易对(排除USDT)
-                const response = await fetch('/api/rating/current?trading_type=coin_futures');
-                const data = await response.json();
-                if (data.success) {
-                    const ratings = data.ratings;
-                    let totalCount = 0;
-                    for (let level = 0; level <= 3; level++) {
-                        const levelData = ratings[`level${level}`] || [];
-                        totalCount += levelData.length;
-                        if (levelData.length > 0) {
-                            document.getElementById(`level${level}Container`).style.display = 'block';
-                            document.getElementById(`level${level}Count`).textContent = levelData.length;
-                            const listContainer = document.getElementById(`level${level}List`);
-                            listContainer.innerHTML = levelData.map(item => `
-                                <div class="rating-symbol-badge" onclick="showSymbolRatingDetail('${item.symbol}')" title="点击查看详情">
-                                    <span class="symbol-name">${item.symbol}</span>
-                                    <i class="bi bi-info-circle rating-icon"></i>
-                                </div>
-                            `).join('');
-                        }
-                    }
-                    document.getElementById('totalRatings').textContent = totalCount;
-                    if (totalCount === 0) empty.style.display = 'block';
-                }
-            } catch (error) {
-                console.error('加载评级数据失败:', error);
-                showToast('加载评级数据失败', 'error');
-                empty.style.display = 'block';
-            } finally {
-                loading.style.display = 'none';
-            }
-        }
+// ---- 主加载函数 ----
 
-        async function triggerRatingUpdate() {
-            const btn = document.getElementById('updateRatingBtn');
-            const originalHtml = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> 更新中...';
-            try {
-                const response = await fetch('/api/rating/update', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({})
-                });
-                const data = await response.json();
-                if (data.success) {
-                    const results = data.results;
-                    const upgraded = results.upgraded.length;
-                    const downgraded = results.downgraded.length;
-                    const newRated = results.new_rated.length;
-                    let message = `评级更新完成: `;
-                    let parts = [];
-                    if (upgraded > 0) parts.push(`${upgraded}个降级`);
-                    if (downgraded > 0) parts.push(`${downgraded}个升级`);
-                    if (newRated > 0) parts.push(`${newRated}个新增`);
-                    showToast(parts.length === 0 ? message + '无变化' : message + parts.join(', '), 'success');
-                    await loadRatings();
-                } else {
-                    throw new Error(data.message || '更新失败');
-                }
-            } catch (error) {
-                console.error('评级更新失败:', error);
-                showToast('评级更新失败: ' + error.message, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = originalHtml;
-            }
-        }
+async function loadAll() {
+    var results = await Promise.all([loadPositions(), loadHistory()]);
+    var posResult = results[0];
+    var trades = results[1];
+    loadStats(posResult, trades);
+    await loadTradingStatus();
+}
 
-        async function showSymbolRatingDetail(symbol) {
-            try {
-                const response = await fetch(`/api/rating/symbol/${encodeURIComponent(symbol)}`);
-                const data = await response.json();
-                if (data.success) {
-                    const rating = data.current_rating;
-                    const stats = data.performance_stats;
-                    const potential = data.potential_change;
-                    const levelLabels = {0: 'Level 0 - 白名单', 1: 'Level 1 - 黑名单一级', 2: 'Level 2 - 黑名单二级', 3: 'Level 3 - 永久禁止'};
-                    const levelColors = {0: '#10b981', 1: '#f59e0b', 2: '#ef4444', 3: '#6b7280'};
-                    const overlay = document.createElement('div');
-                    overlay.className = 'modal-overlay';
-                    overlay.innerHTML = `<div class="modal-dialog" style="max-width: 550px;"><div class="modal-header" style="background: linear-gradient(135deg, ${levelColors[rating.level]}15 0%, transparent 100%);"><div class="modal-title"><div class="modal-icon" style="background: linear-gradient(135deg, ${levelColors[rating.level]}20 0%, ${levelColors[rating.level]}10 100%); border-color: ${levelColors[rating.level]}30; font-size: 24px;">${rating.level === 0 ? '✅' : rating.level === 3 ? '🚫' : '⚠️'}</div><div><div style="font-size: 18px; font-weight: 700;">${symbol}</div><div style="font-size: 13px; font-weight: 400; color: var(--text-secondary); margin-top: 4px;">${levelLabels[rating.level]}</div></div></div></div><div class="modal-body"><div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); margin-bottom: var(--spacing-md);"><div style="background: var(--bg-secondary); padding: var(--spacing-md); border-radius: var(--radius-md);"><div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">交易次数</div><div style="font-size: 20px; font-weight: 700; color: var(--text-primary);">${stats.total_trades}</div></div><div style="background: var(--bg-secondary); padding: var(--spacing-md); border-radius: var(--radius-md);"><div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">胜率</div><div style="font-size: 20px; font-weight: 700; color: ${stats.win_rate >= 0.6 ? 'var(--success-green)' : 'var(--error-red)'};">${(stats.win_rate * 100).toFixed(1)}%</div></div><div style="background: var(--bg-secondary); padding: var(--spacing-md); border-radius: var(--radius-md);"><div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">盈利金额</div><div style="font-size: 20px; font-weight: 700; color: var(--success-green);">$${stats.total_profit_amount.toFixed(2)}</div></div><div style="background: var(--bg-secondary); padding: var(--spacing-md); border-radius: var(--radius-md);"><div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">亏损金额</div><div style="font-size: 20px; font-weight: 700; color: var(--error-red);">$${stats.total_loss_amount.toFixed(2)}</div></div></div><div style="background: var(--bg-secondary); padding: var(--spacing-md); border-radius: var(--radius-md); margin-bottom: var(--spacing-md);"><div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">净盈亏</div><div style="font-size: 24px; font-weight: 700; color: ${stats.net_pnl >= 0 ? 'var(--success-green)' : 'var(--error-red)'};">$${stats.net_pnl.toFixed(2)}</div></div><div style="background: var(--bg-secondary); padding: var(--spacing-md); border-radius: var(--radius-md);"><div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;">Hard Stop Loss次数</div><div style="font-size: 18px; font-weight: 700; color: ${stats.hard_stop_loss_count > 0 ? 'var(--error-red)' : 'var(--text-primary)'};">${stats.hard_stop_loss_count}</div></div>${potential.would_change ? `<div style="margin-top: var(--spacing-md); padding: var(--spacing-md); background: linear-gradient(135deg, ${levelColors[potential.new_level]}15 0%, transparent 100%); border-radius: var(--radius-md); border-left: 3px solid ${levelColors[potential.new_level]};"><div style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;"><i class="bi bi-info-circle"></i> 潜在变化</div><div style="font-size: 13px; color: var(--text-secondary);">${potential.reason}</div></div>` : ''}</div><div class="modal-footer"><button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()"><i class="bi bi-x-lg"></i> 关闭</button></div></div>`;
-                    document.body.appendChild(overlay);
-                    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
-                    const handleEsc = (e) => { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', handleEsc); } };
-                    document.addEventListener('keydown', handleEsc);
-                }
-            } catch (error) {
-                console.error('加载交易对详情失败:', error);
-                showToast('加载详情失败', 'error');
-            }
-        }
+// ---- 初始化 ----
 
-        // 页面加载时初始化评级数据
-        if (typeof loadRatingConfig === 'function') {
-            loadRatingConfig();
-            loadRatings();
-        }
-        // ========== 评级管理功能结束 ==========
+document.addEventListener('DOMContentLoaded', function() {
+    loadAll();
+    _refreshTimer = setInterval(loadAll, 30000);
+});
 </script>
 </body></html>

@@ -183,19 +183,19 @@
 </div>
 <h3 class="text-xl font-headline font-semibold">添加 / 编辑密钥</h3>
 </div>
-<form class="space-y-6">
+<form class="space-y-6" id="form-add-key">
 <div class="space-y-2">
 <label class="text-xs font-bold text-on-surface-variant uppercase tracking-widest ml-1">Account Name</label>
-<input class="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3.5 text-on-surface focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-on-surface-variant/40" placeholder="e.g. 主账号" type="text"/>
+<input id="input-account-name" class="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3.5 text-on-surface focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-on-surface-variant/40" placeholder="e.g. 主账号" type="text"/>
 </div>
 <div class="grid grid-cols-2 gap-4">
 <div class="space-y-2">
 <label class="text-xs font-bold text-on-surface-variant uppercase tracking-widest ml-1">Exchange</label>
 <div class="relative">
-<select class="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3.5 text-on-surface focus:ring-1 focus:ring-primary/50 appearance-none transition-all">
-<option>Binance</option>
-<option>OKX</option>
-<option>Bybit</option>
+<select id="input-exchange" class="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3.5 text-on-surface focus:ring-1 focus:ring-primary/50 appearance-none transition-all">
+<option value="binance">Binance</option>
+<option value="okx">OKX</option>
+<option value="bybit">Bybit</option>
 </select>
 <span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">expand_more</span>
 </div>
@@ -203,10 +203,10 @@
 <div class="space-y-2">
 <label class="text-xs font-bold text-on-surface-variant uppercase tracking-widest ml-1">Account Type</label>
 <div class="relative">
-<select class="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3.5 text-on-surface focus:ring-1 focus:ring-primary/50 appearance-none transition-all">
-<option>U本位合约</option>
-<option>币本位合约</option>
-<option>现货交易</option>
+<select id="input-account-type" class="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3.5 text-on-surface focus:ring-1 focus:ring-primary/50 appearance-none transition-all">
+<option value="U本位合约">U本位合约</option>
+<option value="币本位合约">币本位合约</option>
+<option value="现货交易">现货交易</option>
 </select>
 <span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">expand_more</span>
 </div>
@@ -215,8 +215,8 @@
 <div class="space-y-2">
 <label class="text-xs font-bold text-on-surface-variant uppercase tracking-widest ml-1">API Key</label>
 <div class="relative">
-<input class="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3.5 text-on-surface font-mono text-sm focus:ring-1 focus:ring-primary/50 transition-all" type="password" value="x9823hdkasdh9238ndas923"/>
-<button class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors" type="button">
+<input id="input-api-key" class="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3.5 text-on-surface font-mono text-sm focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-on-surface-variant/40" type="password" placeholder="请输入 API Key"/>
+<button class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors" type="button" onclick="toggleVisibility('input-api-key', this)">
 <span class="material-symbols-outlined text-xl">visibility</span>
 </button>
 </div>
@@ -224,14 +224,14 @@
 <div class="space-y-2">
 <label class="text-xs font-bold text-on-surface-variant uppercase tracking-widest ml-1">Secret Key</label>
 <div class="relative">
-<input class="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3.5 text-on-surface font-mono text-sm focus:ring-1 focus:ring-primary/50 transition-all" type="password" value="8923hjkadhf9238hsdjkfh23"/>
-<button class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors" type="button">
+<input id="input-secret-key" class="w-full bg-surface-container-highest border-none rounded-xl px-4 py-3.5 text-on-surface font-mono text-sm focus:ring-1 focus:ring-primary/50 transition-all placeholder:text-on-surface-variant/40" type="password" placeholder="请输入 Secret Key"/>
+<button class="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-primary transition-colors" type="button" onclick="toggleVisibility('input-secret-key', this)">
 <span class="material-symbols-outlined text-xl">visibility</span>
 </button>
 </div>
 </div>
 <div class="pt-4">
-<button class="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary py-4 rounded-xl font-bold tracking-widest uppercase text-sm hover:shadow-[0_4px_24px_rgba(0,212,170,0.2)] transition-all active:scale-[0.98]" type="submit">
+<button id="btn-submit" class="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary py-4 rounded-xl font-bold tracking-widest uppercase text-sm hover:shadow-[0_4px_24px_rgba(0,212,170,0.2)] transition-all active:scale-[0.98]" type="submit">
                                 验证并保存
                             </button>
 </div>
@@ -269,7 +269,7 @@
 <div class="bg-surface-container-low rounded-2xl border border-outline-variant/10 overflow-hidden">
 <div class="px-8 py-6 border-b border-outline-variant/10 flex justify-between items-center">
 <h3 class="font-headline font-semibold text-lg">已绑定账号</h3>
-<span class="text-xs text-on-surface-variant mono">3 ACCOUNTS CONNECTED</span>
+<span id="keys-count" class="text-xs text-on-surface-variant mono">0 ACCOUNTS CONNECTED</span>
 </div>
 <div class="overflow-x-auto">
 <table class="w-full text-left">
@@ -282,92 +282,12 @@
 <th class="px-8 py-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] text-right">Actions</th>
 </tr>
 </thead>
-<tbody class="divide-y divide-outline-variant/5">
-<!-- Row 1 -->
-<tr class="hover:bg-surface-container/30 transition-colors group">
-<td class="px-8 py-6">
-<div class="font-bold text-on-surface font-headline">主账号</div>
-</td>
-<td class="px-6 py-6">
-<div class="text-sm text-on-surface">Binance</div>
-<div class="text-[11px] text-on-surface-variant font-medium">U本位合约</div>
-</td>
-<td class="px-6 py-6">
-<div class="text-sm font-mono text-on-surface-variant">•••• •••• a923</div>
-</td>
-<td class="px-6 py-6">
-<span class="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold tracking-widest uppercase border border-primary/20">ACTIVE</span>
-</td>
-<td class="px-8 py-6 text-right">
-<div class="flex items-center justify-end gap-3">
-<button class="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-container-highest text-on-surface-variant hover:text-primary transition-all">
-<span class="material-symbols-outlined text-lg">edit</span>
-</button>
-<button class="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-container-highest text-on-surface-variant hover:text-error transition-all">
-<span class="material-symbols-outlined text-lg">delete</span>
-</button>
-</div>
-</td>
-</tr>
-<!-- Row 2 -->
-<tr class="hover:bg-surface-container/30 transition-colors group">
-<td class="px-8 py-6">
-<div class="font-bold text-on-surface font-headline">测试账号</div>
-</td>
-<td class="px-6 py-6">
-<div class="text-sm text-on-surface">Binance</div>
-<div class="text-[11px] text-on-surface-variant font-medium">币本位合约</div>
-</td>
-<td class="px-6 py-6">
-<div class="text-sm font-mono text-on-surface-variant">•••• •••• h714</div>
-</td>
-<td class="px-6 py-6">
-<span class="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold tracking-widest uppercase border border-primary/20">ACTIVE</span>
-</td>
-<td class="px-8 py-6 text-right">
-<div class="flex items-center justify-end gap-3">
-<button class="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-container-highest text-on-surface-variant hover:text-primary transition-all">
-<span class="material-symbols-outlined text-lg">edit</span>
-</button>
-<button class="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-container-highest text-on-surface-variant hover:text-error transition-all">
-<span class="material-symbols-outlined text-lg">delete</span>
-</button>
-</div>
-</td>
-</tr>
-<!-- Row 3 -->
-<tr class="hover:bg-surface-container/30 transition-colors group">
-<td class="px-8 py-6">
-<div class="font-bold text-on-surface font-headline">备用账号</div>
-</td>
-<td class="px-6 py-6">
-<div class="text-sm text-on-surface">OKX</div>
-<div class="text-[11px] text-on-surface-variant font-medium">现货交易</div>
-</td>
-<td class="px-6 py-6">
-<div class="text-sm font-mono text-on-surface-variant">•••• •••• z388</div>
-</td>
-<td class="px-6 py-6">
-<span class="px-2.5 py-0.5 rounded-full bg-outline-variant/20 text-on-surface-variant text-[10px] font-bold tracking-widest uppercase border border-outline-variant/30">INACTIVE</span>
-</td>
-<td class="px-8 py-6 text-right">
-<div class="flex items-center justify-end gap-3">
-<button class="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-container-highest text-on-surface-variant hover:text-primary transition-all">
-<span class="material-symbols-outlined text-lg">edit</span>
-</button>
-<button class="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-container-highest text-on-surface-variant hover:text-error transition-all">
-<span class="material-symbols-outlined text-lg">delete</span>
-</button>
-</div>
-</td>
+<tbody id="keys-list" class="divide-y divide-outline-variant/5">
+<tr>
+<td colspan="5" class="px-8 py-10 text-center text-on-surface-variant text-sm">加载中...</td>
 </tr>
 </tbody>
 </table>
-</div>
-<div class="p-8 flex items-center justify-center border-t border-outline-variant/10">
-<button class="text-xs font-bold text-on-surface-variant hover:text-primary transition-colors tracking-widest uppercase flex items-center gap-2">
-                            Load More History <span class="material-symbols-outlined text-sm">arrow_downward</span>
-</button>
 </div>
 </div>
 <!-- Async Activity Monitor (Bonus Editorial Element) -->
@@ -395,320 +315,293 @@
 </main>
 <script src="/static/js/auth.js"></script>
 <script>
-        // 页面加载时检查登录状态
-        document.addEventListener('DOMContentLoaded', function() {
-            if (!Auth.requireLogin()) return;
-            loadApiKeys();
-            document.getElementById('editModal').addEventListener('click', function(e) {
-                if (e.target === this) closeEdit();
-            });
-        });
+    // ----------------------------------------------------------------
+    // API Keys Management - 接入真实 API
+    // ----------------------------------------------------------------
 
-        // 切换密钥显示
-        function toggleSecretVisibility() {
-            const input = document.getElementById('apiSecret');
-            const checkbox = document.getElementById('showSecret');
-            input.type = checkbox.checked ? 'text' : 'password';
+    // 尝试的端点列表，按优先级排列
+    const API_ENDPOINTS = {
+        list:   ['/api/system/api-keys', '/api/live-trading/api-keys'],
+        create: ['/api/system/api-keys', '/api/live-trading/api-keys'],
+        update: (id) => `/api/system/api-keys/${id}`,
+        delete: (id) => `/api/system/api-keys/${id}`,
+        verify: (id) => `/api/system/api-keys/${id}/verify`,
+    };
+
+    // 余额卡片元素引用（可选更新）
+    const BALANCE_CARDS = {
+        total:     document.querySelector('.grid.grid-cols-2 .bg-surface-container-low:nth-child(1) p.text-lg'),
+        available: document.querySelector('.grid.grid-cols-2 .bg-surface-container-low:nth-child(2) p.text-lg'),
+        margin:    document.querySelector('.grid.grid-cols-2 .bg-surface-container-low:nth-child(3) p.text-lg'),
+        pnl:       document.querySelector('.grid.grid-cols-2 .bg-surface-container-low:nth-child(4) p.text-lg'),
+    };
+
+    // ---- 工具函数 ----
+
+    function showNotification(message, type) {
+        type = type || 'info';
+        const el = document.createElement('div');
+        el.style.cssText = [
+            'position:fixed', 'top:20px', 'right:20px', 'z-index:10000',
+            'padding:14px 22px', 'border-radius:10px', 'font-size:14px',
+            'font-weight:500', 'box-shadow:0 8px 24px rgba(0,0,0,0.4)',
+            'transition:opacity 0.3s'
+        ].join(';');
+        if (type === 'success') {
+            el.style.background = 'linear-gradient(135deg,#10B981,#059669)';
+            el.style.color = '#fff';
+        } else if (type === 'error') {
+            el.style.background = 'linear-gradient(135deg,#EF4444,#DC2626)';
+            el.style.color = '#fff';
+        } else {
+            el.style.background = '#1a2027';
+            el.style.border = '1px solid #44484e';
+            el.style.color = '#ebeef5';
         }
+        el.textContent = message;
+        document.body.appendChild(el);
+        setTimeout(function() {
+            el.style.opacity = '0';
+            setTimeout(function() { el.remove(); }, 300);
+        }, 3000);
+    }
 
-        // 加载API密钥列表
-        async function loadApiKeys() {
-            const container = document.getElementById('apiKeysList');
-            container.innerHTML = '<div class="empty-state"><div class="spinner"></div><p class="loading-text">加载中...</p></div>';
+    // 对 Auth.authFetch 做封装；若 auth.js 未加载则直接用 fetch
+    function apiFetch(url, options) {
+        if (window.Auth && Auth.authFetch) {
+            return Auth.authFetch(url, options);
+        }
+        return fetch(url, options);
+    }
 
+    // 尝试多个端点，返回第一个成功响应（非 4xx/5xx）
+    async function tryEndpoints(urls, options) {
+        let lastErr = null;
+        for (const url of urls) {
             try {
-                const response = await Auth.authFetch('/api/api-keys/list');
-                const data = await response.json();
-
-                if (data.success && data.api_keys) {
-                    if (data.api_keys.length === 0) {
-                        container.innerHTML = `
-                            <div class="empty-state">
-                                <div class="empty-state-icon"><i class="bi bi-key"></i></div>
-                                <p class="empty-state-text">暂无配置的API密钥</p>
-                                <p class="empty-state-hint">在左侧添加您的交易所API密钥开始交易</p>
-                            </div>
-                        `;
-                        return;
-                    }
-
-                    let html = '<div class="table-container"><table>';
-                    html += `
-                        <thead>
-                            <tr>
-                                <th>交易所</th>
-                                <th>账户名称</th>
-                                <th>状态</th>
-                                <th>风控</th>
-                                <th>最后使用</th>
-                                <th>操作</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                    `;
-
-                    for (const key of data.api_keys) {
-                        const statusBadge = key.status === 'active'
-                            ? '<span class="badge badge-success">活跃</span>'
-                            : '<span class="badge badge-danger">禁用</span>';
-                        const testnetBadge = key.is_testnet
-                            ? '<span class="badge badge-warning" style="margin-left: 6px;">测试网</span>'
-                            : '';
-                        const lastUsed = key.last_used_at
-                            ? new Date(key.last_used_at).toLocaleString('zh-CN')
-                            : '<span style="color: var(--text-tertiary);">从未使用</span>';
-                        const riskInfo = `${key.max_leverage}x / ${key.max_position_value}U`;
-
-                        html += `
-                            <tr class="fade-in">
-                                <td>
-                                    <strong>${key.exchange.toUpperCase()}</strong>
-                                    ${testnetBadge}
-                                </td>
-                                <td>${key.account_name}</td>
-                                <td>${statusBadge}</td>
-                                <td><span style="font-family: var(--font-mono); font-size: 12px;">${riskInfo}</span></td>
-                                <td style="font-size: 12px;">${lastUsed}</td>
-                                <td>
-                                    <div class="action-buttons">
-                                        <button class="btn btn-outline btn-sm" onclick="verifyApiKey(${key.id}, '${key.exchange}')">
-                                            <i class="bi bi-wifi"></i> 测试连接
-                                        </button>
-                                        <button class="btn btn-secondary btn-sm" onclick="openEdit(${key.id}, '${key.account_name}', ${key.max_leverage}, ${key.max_position_value}, ${key.max_daily_loss})">
-                                            <i class="bi bi-pencil"></i> 编辑
-                                        </button>
-                                        <button class="btn btn-danger btn-icon" onclick="deleteApiKey(${key.id}, '${key.account_name}')" title="删除">
-                                            <i class="bi bi-trash"></i>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        `;
-                    }
-
-                    html += '</tbody></table></div>';
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle"></i> ${data.detail || '加载失败'}</div>`;
+                const resp = await apiFetch(url, options);
+                if (resp.ok || resp.status === 400) {
+                    // 400 可能是业务错误，交给调用方处理
+                    return resp;
                 }
-            } catch (error) {
-                console.error('加载API密钥失败:', error);
-                container.innerHTML = `<div class="alert alert-danger"><i class="bi bi-x-circle"></i> 加载失败: ${error.message}</div>`;
+            } catch (e) {
+                lastErr = e;
             }
         }
+        throw lastErr || new Error('所有端点均无法访问');
+    }
 
-        // 保存API密钥
-        document.getElementById('apiKeyForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
+    // 格式化 API key 显示（只显示末4位）
+    function maskKey(keyStr) {
+        if (!keyStr) return '****';
+        const s = String(keyStr);
+        const tail = s.slice(-4);
+        return '\u2022\u2022\u2022\u2022 \u2022\u2022\u2022\u2022 ' + tail;
+    }
 
-            const submitBtn = this.querySelector('button[type="submit"]');
-            const originalText = submitBtn.innerHTML;
-            submitBtn.innerHTML = '<div class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></div> 保存中...';
-            submitBtn.disabled = true;
-
-            const data = {
-                exchange: document.getElementById('exchange').value,
-                account_name: document.getElementById('accountName').value,
-                api_key: document.getElementById('apiKey').value,
-                api_secret: document.getElementById('apiSecret').value,
-                max_position_value: parseFloat(document.getElementById('maxPositionValue').value) || 1000,
-                max_daily_loss: parseFloat(document.getElementById('maxDailyLoss').value) || 100,
-                max_leverage: parseInt(document.getElementById('maxLeverage').value) || 10,
-                is_testnet: document.getElementById('isTestnet').checked
-            };
-
-            try {
-                const response = await Auth.authFetch('/api/api-keys/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    // 清空表单
-                    document.getElementById('accountName').value = '';
-                    document.getElementById('apiKey').value = '';
-                    document.getElementById('apiSecret').value = '';
-                    // 刷新列表
-                    loadApiKeys();
-                    showNotification('API密钥保存成功！', 'success');
-                } else {
-                    showNotification('保存失败: ' + (result.detail || result.error || '未知错误'), 'error');
-                }
-            } catch (error) {
-                console.error('保存API密钥失败:', error);
-                showNotification('保存失败: ' + error.message, 'error');
-            } finally {
-                submitBtn.innerHTML = originalText;
-                submitBtn.disabled = false;
-            }
-        });
-
-        // 验证API密钥
-        async function verifyApiKey(keyId, exchange) {
-            const resultCard = document.getElementById('verifyResultCard');
-            const resultContainer = document.getElementById('verifyResult');
-
-            resultCard.style.display = 'block';
-            resultCard.className = 'card verify-card fade-in';
-            resultContainer.innerHTML = '<div class="empty-state"><div class="spinner"></div><p class="loading-text">验证中...</p></div>';
-
-            try {
-                const response = await Auth.authFetch(`/api/api-keys/verify?exchange=${exchange}`, {
-                    method: 'POST'
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    const balance = result.balance || {};
-                    resultCard.classList.add('verify-success');
-                    resultContainer.innerHTML = `
-                        <div class="alert alert-success">
-                            <i class="bi bi-check-circle-fill"></i> API密钥验证成功！连接正常。
-                        </div>
-                        <div class="balance-grid">
-                            <div class="balance-item">
-                                <div class="balance-label">总余额</div>
-                                <div class="balance-value">${parseFloat(balance.total_wallet_balance || 0).toFixed(2)}</div>
-                            </div>
-                            <div class="balance-item">
-                                <div class="balance-label">可用余额</div>
-                                <div class="balance-value">${parseFloat(balance.available_balance || 0).toFixed(2)}</div>
-                            </div>
-                            <div class="balance-item">
-                                <div class="balance-label">未实现盈亏</div>
-                                <div class="balance-value" style="color: ${parseFloat(balance.total_unrealized_pnl || 0) >= 0 ? 'var(--success-green)' : 'var(--danger-red)'}">
-                                    ${parseFloat(balance.total_unrealized_pnl || 0).toFixed(2)}
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    resultCard.classList.add('verify-error');
-                    resultContainer.innerHTML = `
-                        <div class="alert alert-danger">
-                            <i class="bi bi-x-circle-fill"></i> 验证失败: ${result.error || '未知错误'}
-                        </div>
-                        <p style="color: var(--text-secondary); font-size: 13px; margin-top: var(--spacing-md);">
-                            请检查：1. API密钥是否正确 2. 是否开启了合约交易权限 3. IP白名单设置
-                        </p>
-                    `;
-                }
-            } catch (error) {
-                console.error('验证API密钥失败:', error);
-                resultCard.classList.add('verify-error');
-                resultContainer.innerHTML = `
-                    <div class="alert alert-danger">
-                        <i class="bi bi-x-circle-fill"></i> 验证请求失败: ${error.message}
-                    </div>
-                `;
-            }
+    // eye 图标切换 input type
+    function toggleVisibility(inputId, btn) {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        const icon = btn.querySelector('.material-symbols-outlined');
+        if (input.type === 'password') {
+            input.type = 'text';
+            if (icon) icon.textContent = 'visibility_off';
+        } else {
+            input.type = 'password';
+            if (icon) icon.textContent = 'visibility';
         }
+    }
 
-        // 删除API密钥
-        async function deleteApiKey(keyId, accountName) {
-            if (!confirm(`确定要删除 "${accountName}" 的API密钥吗？\n\n此操作不可恢复！`)) {
+    // ---- 加载密钥列表 ----
+
+    async function loadKeys() {
+        const tbody = document.getElementById('keys-list');
+        const countEl = document.getElementById('keys-count');
+        tbody.innerHTML = '<tr><td colspan="5" class="px-8 py-10 text-center text-on-surface-variant text-sm">加载中...</td></tr>';
+
+        try {
+            const resp = await tryEndpoints(API_ENDPOINTS.list, { method: 'GET' });
+            const data = await resp.json();
+
+            // 兼容两种返回格式：数组 或 {data:[...]} 或 {api_keys:[...]}
+            let keys = [];
+            if (Array.isArray(data)) {
+                keys = data;
+            } else if (Array.isArray(data.data)) {
+                keys = data.data;
+            } else if (Array.isArray(data.api_keys)) {
+                keys = data.api_keys;
+            }
+
+            if (countEl) {
+                countEl.textContent = keys.length + ' ACCOUNT' + (keys.length !== 1 ? 'S' : '') + ' CONNECTED';
+            }
+
+            if (keys.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="px-8 py-10 text-center text-on-surface-variant text-sm">暂无已绑定账号，请在左侧添加</td></tr>';
                 return;
             }
 
-            try {
-                const response = await Auth.authFetch('/api/api-keys/delete', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ api_key_id: keyId })
-                });
+            tbody.innerHTML = keys.map(function(k) {
+                const isActive = String(k.is_active) === '1' || k.is_active === true || String(k.is_active).toLowerCase() === 'active';
+                const statusBadge = isActive
+                    ? '<span class="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold tracking-widest uppercase border border-primary/20">ACTIVE</span>'
+                    : '<span class="px-2.5 py-0.5 rounded-full bg-outline-variant/20 text-on-surface-variant text-[10px] font-bold tracking-widest uppercase border border-outline-variant/30">INACTIVE</span>';
 
-                const result = await response.json();
+                const displayKey = k.api_key_display ? maskKey(k.api_key_display) : maskKey(k.api_key);
+                const exchangeName = k.exchange ? String(k.exchange).toUpperCase() : '-';
+                const accountType = k.account_type || '';
+                const createdAt = k.created_at ? new Date(k.created_at).toLocaleDateString('zh-CN') : '-';
 
-                if (result.success) {
-                    showNotification('API密钥已删除', 'success');
-                    loadApiKeys();
-                    // 隐藏验证结果
-                    document.getElementById('verifyResultCard').style.display = 'none';
-                } else {
-                    showNotification('删除失败: ' + (result.detail || result.error || '未知错误'), 'error');
-                }
-            } catch (error) {
-                console.error('删除API密钥失败:', error);
-                showNotification('删除失败: ' + error.message, 'error');
-            }
+                return [
+                    '<tr class="hover:bg-surface-container/30 transition-colors group">',
+                    '  <td class="px-8 py-6">',
+                    '    <div class="font-bold text-on-surface font-headline">' + (k.account_name || '-') + '</div>',
+                    '    <div class="text-[11px] text-on-surface-variant font-medium mt-0.5">' + createdAt + '</div>',
+                    '  </td>',
+                    '  <td class="px-6 py-6">',
+                    '    <div class="text-sm text-on-surface">' + exchangeName + '</div>',
+                    '    <div class="text-[11px] text-on-surface-variant font-medium">' + accountType + '</div>',
+                    '  </td>',
+                    '  <td class="px-6 py-6">',
+                    '    <div class="text-sm font-mono text-on-surface-variant">' + displayKey + '</div>',
+                    '  </td>',
+                    '  <td class="px-6 py-6">' + statusBadge + '</td>',
+                    '  <td class="px-8 py-6 text-right">',
+                    '    <div class="flex items-center justify-end gap-2">',
+                    '      <button onclick="verifyKey(' + k.id + ')" title="验证连接" class="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all">验证</button>',
+                    '      <button onclick="deleteKey(' + k.id + ',\'' + (k.account_name || '').replace(/'/g, "\\'") + '\')" title="删除" class="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-container-highest text-on-surface-variant hover:text-error transition-all">',
+                    '        <span class="material-symbols-outlined text-lg">delete</span>',
+                    '      </button>',
+                    '    </div>',
+                    '  </td>',
+                    '</tr>'
+                ].join('\n');
+            }).join('\n');
+
+        } catch (err) {
+            console.error('loadKeys failed:', err);
+            tbody.innerHTML = '<tr><td colspan="5" class="px-8 py-10 text-center text-error text-sm">加载失败: ' + err.message + '</td></tr>';
+        }
+    }
+
+    // ---- 提交表单 ----
+
+    document.getElementById('form-add-key').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const btn = document.getElementById('btn-submit');
+        const originalText = btn.textContent;
+        btn.textContent = '保存中...';
+        btn.disabled = true;
+
+        const payload = {
+            account_name: (document.getElementById('input-account-name').value || '').trim(),
+            exchange:     (document.getElementById('input-exchange').value || '').trim(),
+            account_type: (document.getElementById('input-account-type').value || '').trim(),
+            api_key:      (document.getElementById('input-api-key').value || '').trim(),
+            secret_key:   (document.getElementById('input-secret-key').value || '').trim(),
+        };
+
+        if (!payload.account_name || !payload.api_key || !payload.secret_key) {
+            showNotification('请填写账户名称、API Key 和 Secret Key', 'error');
+            btn.textContent = originalText;
+            btn.disabled = false;
+            return;
         }
 
-        // 显示通知
-        function showNotification(message, type = 'info') {
-            const notification = document.createElement('div');
-            notification.style.cssText = `
-                position: fixed; top: 20px; right: 20px; z-index: 10000;
-                padding: 16px 24px; border-radius: 8px; font-size: 14px; font-weight: 500;
-                animation: slideInRight 0.3s ease-out;
-                box-shadow: 0 10px 20px rgba(0,0,0,0.3);
-            `;
+        try {
+            const resp = await tryEndpoints(API_ENDPOINTS.create, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const result = await resp.json();
 
-            if (type === 'success') {
-                notification.style.background = 'linear-gradient(135deg, #10B981 0%, #059669 100%)';
-                notification.style.color = 'white';
-            } else if (type === 'error') {
-                notification.style.background = 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)';
-                notification.style.color = 'white';
+            if (result.success || result.id) {
+                showNotification('API 密钥保存成功', 'success');
+                // 重置表单
+                document.getElementById('input-account-name').value = '';
+                document.getElementById('input-api-key').value = '';
+                document.getElementById('input-secret-key').value = '';
+                // 恢复密码类型
+                document.getElementById('input-api-key').type = 'password';
+                document.getElementById('input-secret-key').type = 'password';
+                loadKeys();
             } else {
-                notification.style.background = 'var(--bg-card)';
-                notification.style.border = '1px solid var(--border-default)';
-                notification.style.color = 'var(--text-primary)';
+                showNotification('保存失败: ' + (result.detail || result.error || result.message || '未知错误'), 'error');
             }
-
-            notification.innerHTML = `<i class="bi bi-${type === 'success' ? 'check-circle' : type === 'error' ? 'x-circle' : 'info-circle'}"></i> ${message}`;
-            document.body.appendChild(notification);
-
-            setTimeout(() => {
-                notification.style.animation = 'fadeOut 0.3s ease-out';
-                setTimeout(() => notification.remove(), 300);
-            }, 3000);
+        } catch (err) {
+            console.error('submit failed:', err);
+            showNotification('保存失败: ' + err.message, 'error');
+        } finally {
+            btn.textContent = originalText;
+            btn.disabled = false;
         }
+    });
 
-        // 编辑风控
-        function openEdit(id, name, leverage, position, dailyLoss) {
-            document.getElementById('editKeyId').value = id;
-            document.getElementById('editAccountName').textContent = name;
-            document.getElementById('editMaxLeverage').value = leverage;
-            document.getElementById('editMaxPosition').value = position;
-            document.getElementById('editMaxDailyLoss').value = dailyLoss;
-            document.getElementById('editModal').style.display = 'flex';
+    // ---- 删除密钥 ----
+
+    async function deleteKey(id, name) {
+        if (!confirm('确定要删除 "' + name + '" 的 API 密钥吗？\n\n此操作不可恢复！')) return;
+
+        try {
+            const resp = await apiFetch(API_ENDPOINTS.delete(id), { method: 'DELETE' });
+            const result = await resp.json();
+            if (result.success || resp.ok) {
+                showNotification('已删除 ' + name, 'success');
+                loadKeys();
+            } else {
+                showNotification('删除失败: ' + (result.detail || result.error || result.message || '未知错误'), 'error');
+            }
+        } catch (err) {
+            console.error('deleteKey failed:', err);
+            showNotification('删除失败: ' + err.message, 'error');
         }
+    }
 
-        function closeEdit() {
-            document.getElementById('editModal').style.display = 'none';
-        }
+    // ---- 验证密钥 ----
 
-        async function saveEdit() {
-            const id = parseInt(document.getElementById('editKeyId').value);
-            const leverage = parseInt(document.getElementById('editMaxLeverage').value);
-            const position = parseFloat(document.getElementById('editMaxPosition').value);
-            const dailyLoss = parseFloat(document.getElementById('editMaxDailyLoss').value);
-            try {
-                const r = await Auth.authFetch(`/api/api-keys/update-risk`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ api_key_id: id, max_leverage: leverage, max_position_value: position, max_daily_loss: dailyLoss })
-                }).then(r => r.json());
-                if (r.success) {
-                    showNotification('风控设置已保存', 'success');
-                    closeEdit();
-                    loadApiKeys();
-                } else {
-                    showNotification('保存失败: ' + (r.detail || r.error || '未知错误'), 'error');
+    async function verifyKey(id) {
+        showNotification('正在验证...', 'info');
+
+        try {
+            const resp = await apiFetch(API_ENDPOINTS.verify(id), { method: 'POST' });
+            const result = await resp.json();
+
+            if (result.success) {
+                const bal = result.balance || {};
+                const totalEq    = parseFloat(bal.total_wallet_balance  || bal.totalEquity      || bal.equity    || 0).toFixed(2);
+                const available  = parseFloat(bal.available_balance      || bal.availableBalance || bal.available || 0).toFixed(2);
+                const margin     = parseFloat(bal.total_margin_balance   || bal.marginBalance    || bal.margin    || 0).toFixed(2);
+                const upnl       = parseFloat(bal.total_unrealized_pnl   || bal.unrealizedPnl    || bal.pnl       || 0).toFixed(2);
+                const pnlColor   = parseFloat(upnl) >= 0 ? '#49f4c8' : '#ff716c';
+
+                // 可选：更新余额卡片
+                if (BALANCE_CARDS.total)     BALANCE_CARDS.total.textContent     = '$' + totalEq;
+                if (BALANCE_CARDS.available) BALANCE_CARDS.available.textContent = '$' + available;
+                if (BALANCE_CARDS.margin)    BALANCE_CARDS.margin.textContent    = '$' + margin;
+                if (BALANCE_CARDS.pnl) {
+                    BALANCE_CARDS.pnl.textContent = (parseFloat(upnl) >= 0 ? '+$' : '-$') + Math.abs(parseFloat(upnl)).toFixed(2);
+                    BALANCE_CARDS.pnl.style.color = pnlColor;
                 }
-            } catch(e) {
-                showNotification('保存失败: ' + e.message, 'error');
-            }
-        }
 
-        // 退出登录
-        async function logout() {
-            await Auth.logout();
-            window.location.href = '/login';
+                showNotification('验证成功 | 总权益: $' + totalEq + ' | 可用: $' + available, 'success');
+            } else {
+                showNotification('验证失败: ' + (result.detail || result.error || result.message || '请检查 API 权限'), 'error');
+            }
+        } catch (err) {
+            console.error('verifyKey failed:', err);
+            showNotification('验证请求失败: ' + err.message, 'error');
         }
-    </script>
+    }
+
+    // ---- 页面初始化 ----
+
+    document.addEventListener('DOMContentLoaded', function() {
+        if (window.Auth && Auth.requireLogin && !Auth.requireLogin()) return;
+        loadKeys();
+    });
+</script>
 </body></html>
