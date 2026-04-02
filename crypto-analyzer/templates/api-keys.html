@@ -432,7 +432,7 @@
             }
 
             tbody.innerHTML = keys.map(function(k) {
-                const isActive = String(k.is_active) === '1' || k.is_active === true || String(k.is_active).toLowerCase() === 'active';
+                const isActive = String(k.status).toLowerCase() === 'active' || String(k.is_active) === '1' || k.is_active === true;
                 const statusBadge = isActive
                     ? '<span class="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold tracking-widest uppercase border border-primary/20">ACTIVE</span>'
                     : '<span class="px-2.5 py-0.5 rounded-full bg-outline-variant/20 text-on-surface-variant text-[10px] font-bold tracking-widest uppercase border border-outline-variant/30">INACTIVE</span>';
@@ -481,7 +481,7 @@
 
     async function loadBalanceStats(keys) {
         const activeKeys = keys.filter(function(k) {
-            return String(k.is_active) === '1' || k.is_active === true || String(k.is_active).toLowerCase() === 'active';
+            return String(k.status).toLowerCase() === 'active' || String(k.is_active) === '1' || k.is_active === true;
         });
         if (activeKeys.length === 0) return;
 
