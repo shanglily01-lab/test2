@@ -217,13 +217,14 @@
 <tr class="text-[10px] uppercase tracking-widest text-on-surface-variant bg-surface-container-low">
 <th class="px-6 py-4 font-semibold whitespace-nowrap">交易对</th>
 <th class="px-6 py-4 font-semibold text-center whitespace-nowrap">方向</th>
+<th class="px-6 py-4 font-semibold whitespace-nowrap">保证金</th>
 <th class="px-6 py-4 font-semibold whitespace-nowrap">开仓/当前价</th>
 <th class="px-6 py-4 font-semibold whitespace-nowrap">浮盈 (PNL)</th>
 <th class="px-6 py-4 font-semibold whitespace-nowrap">操作</th>
 </tr>
 </thead>
 <tbody id="positions-tbody" class="text-sm">
-<tr id="positions-loading-row"><td colspan="5" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>
+<tr id="positions-loading-row"><td colspan="6" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>
 </tbody>
 </table>
 </div>
@@ -397,12 +398,12 @@ async function loadPositions() {
         var data = await res.json();
         positions = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
     } catch(e) {
-        tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败: ' + e.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败: ' + e.message + '</td></tr>';
         return null;
     }
 
     if (positions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无持仓</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无持仓</td></tr>';
         return {count: 0, totalMargin: 0, totalPnl: 0};
     }
 
@@ -470,6 +471,9 @@ async function loadPositions() {
             '</td>' +
             '<td class="px-6 py-4 text-center">' +
                 '<span class="px-2 py-1 ' + dirBg + ' rounded-md text-[10px] font-bold uppercase tracking-wider">' + dirLabel + '</span>' +
+            '</td>' +
+            '<td class="px-6 py-4 monospace">' +
+                '<div class="font-medium">' + (margin > 0 ? margin.toFixed(2) + ' U' : '--') + '</div>' +
             '</td>' +
             '<td class="px-6 py-4 monospace">' +
                 '<div class="text-xs text-on-surface-variant">' + fmtPrice(entry) + '</div>' +
