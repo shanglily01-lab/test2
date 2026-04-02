@@ -798,7 +798,7 @@
                         }),
                         apiPut('/big4-filter', { enabled: getToggle('big4Toggle') }),
                         apiPut('/max-hold-hours', { hours: hours }),
-                        apiPut('/settings/max_positions', { setting_value: String(mpVal), description: '最大持仓数量' })
+                        apiPut('/settings/max_positions', { setting_key: 'max_positions', setting_value: String(mpVal), description: '最大持仓数量' })
                     ]);
 
                     saveBtnText.textContent = '已保存';
