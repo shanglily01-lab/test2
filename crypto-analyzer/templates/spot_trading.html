@@ -36,7 +36,7 @@ body { background:#070b10; font-family:'Manrope',sans-serif; color:#ebeef5; -web
 .pnl-neg { color: #ff716c; }
 </style>
 </head>
-<body class="flex min-h-screen overflow-hidden">
+<body class="flex min-h-screen overflow-x-hidden">
 
 <!-- Sidebar -->
 <aside class="fixed left-0 top-0 h-screen w-[240px] bg-[#0a0f14] border-r border-slate-800 flex flex-col py-6 z-50">
@@ -76,7 +76,7 @@ body { background:#070b10; font-family:'Manrope',sans-serif; color:#ebeef5; -web
 </aside>
 
 <!-- Main Content -->
-<main class="ml-[240px] flex-1 min-h-screen flex flex-col bg-background">
+<main class="ml-[240px] flex-1 min-h-screen flex flex-col bg-background overflow-y-auto">
 <!-- Top Navbar -->
 <header class="fixed top-0 right-0 left-[240px] h-16 bg-[#0a0f14]/80 backdrop-blur-xl flex items-center justify-between px-8 z-40">
 <div class="flex items-center gap-4">
@@ -225,7 +225,7 @@ body { background:#070b10; font-family:'Manrope',sans-serif; color:#ebeef5; -web
 </select>
 </div>
 </div>
-<div class="overflow-x-auto overflow-y-auto max-h-[576px]">
+<div class="overflow-x-auto">
 <table class="w-full text-left border-collapse">
 <thead class="sticky top-0 bg-surface-container-low z-10">
 <tr class="text-[10px] uppercase tracking-widest text-on-surface-variant">
