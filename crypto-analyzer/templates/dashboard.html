@@ -235,7 +235,7 @@
 <div class="space-y-6">
 <!-- Market Sentiment Gauge -->
 <div class="bg-surface-container-low rounded-2xl p-8 flex flex-col items-center justify-center text-center">
-<h4 class="text-xs font-display text-on-surface-variant uppercase tracking-[0.2em] mb-8 w-full text-left">Signal Sentiment</h4>
+<h4 class="text-xs font-display text-on-surface-variant uppercase tracking-[0.2em] mb-8 w-full text-left">信号情绪</h4>
 <div class="relative w-48 h-48 flex items-center justify-center mb-6">
 <!-- Background Circle -->
 <svg class="w-full h-full transform -rotate-90">
@@ -244,39 +244,41 @@
 </svg>
 <div class="absolute flex flex-col items-center">
 <span class="text-4xl font-display font-bold font-mono" id="sentiment-pct">--%</span>
-<span class="text-[10px] text-on-surface-variant uppercase tracking-widest mt-1" id="sentiment-label">Loading</span>
+<span class="text-[10px] text-on-surface-variant uppercase tracking-widest mt-1" id="sentiment-label">加载中</span>
 </div>
 </div>
 <div class="grid grid-cols-2 w-full gap-4 pt-4 border-t border-outline-variant/10">
 <div>
 <p class="text-primary font-mono font-bold text-lg" id="sentiment-buy">--</p>
-<p class="text-[10px] text-on-surface-variant uppercase">Buy Signals</p>
+<p class="text-[10px] text-on-surface-variant uppercase">做多信号</p>
 </div>
 <div>
 <p class="text-error font-mono font-bold text-lg" id="sentiment-sell">--</p>
-<p class="text-[10px] text-on-surface-variant uppercase">Sell Signals</p>
+<p class="text-[10px] text-on-surface-variant uppercase">做空信号</p>
 </div>
 </div>
 </div>
-<!-- Neural Efficiency Graph -->
+<!-- Win Rate Trend Chart -->
 <div class="bg-surface-container-low rounded-2xl p-8 h-[240px] relative overflow-hidden flex flex-col">
-<h4 class="text-xs font-display text-on-surface-variant uppercase tracking-[0.2em] mb-4">Brain Efficiency</h4>
-<div class="flex-1 flex items-end gap-1 px-2">
-<div class="flex-1 bg-primary/20 rounded-t-sm" style="height: 40%"></div>
-<div class="flex-1 bg-primary/30 rounded-t-sm" style="height: 60%"></div>
-<div class="flex-1 bg-primary/40 rounded-t-sm" style="height: 45%"></div>
-<div class="flex-1 bg-primary/60 rounded-t-sm" style="height: 70%"></div>
-<div class="flex-1 bg-primary/40 rounded-t-sm" style="height: 55%"></div>
-<div class="flex-1 bg-primary/80 rounded-t-sm shadow-[0_0_15px_rgba(73,244,200,0.4)]" style="height: 90%"></div>
-<div class="flex-1 bg-primary/50 rounded-t-sm" style="height: 65%"></div>
-<div class="flex-1 bg-primary/30 rounded-t-sm" style="height: 40%"></div>
-<div class="flex-1 bg-primary/40 rounded-t-sm" style="height: 50%"></div>
-<div class="flex-1 bg-primary/70 rounded-t-sm" style="height: 85%"></div>
+<div class="flex items-center justify-between mb-4 shrink-0">
+<h4 class="text-xs font-display text-on-surface-variant uppercase tracking-[0.2em]">近10日胜率趋势</h4>
+<span class="text-[10px] font-mono text-on-surface-variant" id="winrate-latest">--</span>
 </div>
-<div class="absolute bottom-4 left-8 right-8 flex justify-between text-[8px] text-on-surface-variant font-mono opacity-50 uppercase tracking-widest">
-<span>L-01</span>
-<span>L-05</span>
-<span>L-10</span>
+<div id="winrate-bars" class="flex-1 flex items-end gap-1 px-1">
+<!-- 由 JS 动态渲染 -->
+<div class="flex-1 bg-surface-container/50 rounded-t-sm" style="height:40%"></div>
+<div class="flex-1 bg-surface-container/50 rounded-t-sm" style="height:40%"></div>
+<div class="flex-1 bg-surface-container/50 rounded-t-sm" style="height:40%"></div>
+<div class="flex-1 bg-surface-container/50 rounded-t-sm" style="height:40%"></div>
+<div class="flex-1 bg-surface-container/50 rounded-t-sm" style="height:40%"></div>
+<div class="flex-1 bg-surface-container/50 rounded-t-sm" style="height:40%"></div>
+<div class="flex-1 bg-surface-container/50 rounded-t-sm" style="height:40%"></div>
+<div class="flex-1 bg-surface-container/50 rounded-t-sm" style="height:40%"></div>
+<div class="flex-1 bg-surface-container/50 rounded-t-sm" style="height:40%"></div>
+<div class="flex-1 bg-surface-container/50 rounded-t-sm" style="height:40%"></div>
+</div>
+<div id="winrate-dates" class="flex justify-between mt-1 px-1">
+<!-- 由 JS 动态渲染日期标签 -->
 </div>
 </div>
 </div>
@@ -697,6 +699,50 @@ function renderHyperliquidPanel(payload) {
     _hlRenderPage();
 }
 
+// ===== 近10日胜率趋势图 =====
+function renderWinrateChart(history) {
+    var barsEl  = document.getElementById('winrate-bars');
+    var datesEl = document.getElementById('winrate-dates');
+    var latestEl = document.getElementById('winrate-latest');
+    if (!barsEl || !history || !history.length) return;
+
+    // 取有胜率数据的条目；若全为 null 则用 capture_rate 替代
+    var hasWr = history.some(function(d) { return d.win_rate != null; });
+    var values = history.map(function(d) {
+        return hasWr ? d.win_rate : d.capture_rate;
+    });
+
+    var max = Math.max.apply(null, values.filter(function(v){ return v != null; })) || 100;
+    // 图表基准线：超过50%高度开始；最低高度8%
+    var minH = 8;
+
+    barsEl.innerHTML = values.map(function(v, i) {
+        if (v == null) {
+            return '<div class="flex-1 bg-surface-container/30 rounded-t-sm" style="height:' + minH + '%"></div>';
+        }
+        var heightPct = Math.max(minH, Math.round(v / max * 100));
+        var isHigh    = v >= 50;
+        var colorClass = isHigh ? 'bg-primary/70' : 'bg-error/50';
+        var glow       = (i === values.length - 1 && isHigh) ? ' shadow-[0_0_10px_rgba(73,244,200,0.4)]' : '';
+        return '<div class="relative flex-1 ' + colorClass + ' rounded-t-sm' + glow + '" style="height:' + heightPct + '%">'
+            + '<span class="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-mono text-on-surface-variant whitespace-nowrap">'
+            + (v != null ? v.toFixed(0) + '%' : '')
+            + '</span></div>';
+    }).join('');
+
+    datesEl.innerHTML = history.map(function(d) {
+        return '<span class="text-[8px] font-mono text-on-surface-variant/50">' + (d.date || '') + '</span>';
+    }).join('');
+
+    // 最新一天数值展示在标题右侧
+    var last = values[values.length - 1];
+    if (last != null && latestEl) {
+        var label = hasWr ? '胜率 ' : '捕获率 ';
+        latestEl.textContent = label + last.toFixed(1) + '%';
+        latestEl.className = 'text-[10px] font-mono ' + (last >= 50 ? 'text-primary' : 'text-error');
+    }
+}
+
 // ===== 主加载：单次请求快照，分发到各面板 =====
 async function loadSnapshot() {
     try {
@@ -712,6 +758,7 @@ async function loadSnapshot() {
         renderFuturesPanel(d.futures || []);
         renderNewsPanel(d.news || []);
         renderHyperliquidPanel(d.hyperliquid || {});
+        renderWinrateChart(d.winrate_history || []);
     } catch (e) {
         console.error('loadSnapshot failed:', e);
         var msg = (e.message && e.message.indexOf('503') !== -1)
@@ -901,9 +948,9 @@ function updateSentiment(signals) {
     if (elSell) elSell.textContent = sellCount;
 
     if (elLabel) {
-        if (bullPct >= 60)      elLabel.textContent = 'Bullish';
-        else if (bullPct <= 40) elLabel.textContent = 'Bearish';
-        else                    elLabel.textContent = 'Neutral';
+        if (bullPct >= 60)      elLabel.textContent = '看涨';
+        else if (bullPct <= 40) elLabel.textContent = '看跌';
+        else                    elLabel.textContent = '中性';
     }
 
     // Update SVG progress circle (circumference = 2 * Math.PI * 88 ~= 552.92)

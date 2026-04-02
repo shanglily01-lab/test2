@@ -164,6 +164,31 @@ def _fetch_futures(cursor):
     return result
 
 
+def _fetch_winrate_history(cursor):
+    """近10日每日胜率 + 捕获率，用于看板趋势图"""
+    cursor.execute("""
+        SELECT date,
+               CAST(JSON_UNQUOTE(JSON_EXTRACT(report_json, '$.trading_summary.win_rate'))
+                    AS DECIMAL(6,2)) AS win_rate,
+               capture_rate
+        FROM daily_review_reports
+        ORDER BY date DESC
+        LIMIT 10
+    """)
+    rows = cursor.fetchall()
+    result = []
+    for r in rows:
+        d = r['date']
+        date_str = d.strftime('%m/%d') if hasattr(d, 'strftime') else str(d)[5:10]
+        result.append({
+            'date':         date_str,
+            'win_rate':     float(r['win_rate'])     if r['win_rate']     is not None else None,
+            'capture_rate': float(r['capture_rate']) if r['capture_rate'] is not None else None,
+        })
+    result.reverse()   # 由旧到新，左到右显示
+    return result
+
+
 def _fetch_news(cursor):
     cursor.execute("""
         SELECT title, source, sentiment, symbols, published_datetime, url
@@ -260,19 +285,21 @@ def update_dashboard_snapshot():
         _ensure_table(cursor)
         conn.commit()
 
-        signals    = _fetch_signals(cursor)
-        stats      = _fetch_stats(cursor)
-        futures    = _fetch_futures(cursor)
-        news       = _fetch_news(cursor)
-        hyperliquid = _fetch_hyperliquid(cursor)
+        signals         = _fetch_signals(cursor)
+        stats           = _fetch_stats(cursor)
+        futures         = _fetch_futures(cursor)
+        news            = _fetch_news(cursor)
+        hyperliquid     = _fetch_hyperliquid(cursor)
+        winrate_history = _fetch_winrate_history(cursor)
 
         snapshot = {
-            'signals':     signals,
-            'stats':       stats,
-            'futures':     futures,
-            'news':        news,
-            'hyperliquid': hyperliquid,
-            'updated_at':  datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+            'signals':         signals,
+            'stats':           stats,
+            'futures':         futures,
+            'news':            news,
+            'hyperliquid':     hyperliquid,
+            'winrate_history': winrate_history,
+            'updated_at':      datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
         }
 
         snapshot_json = json.dumps(snapshot, ensure_ascii=False, default=str)
