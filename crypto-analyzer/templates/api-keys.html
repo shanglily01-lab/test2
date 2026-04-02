@@ -241,19 +241,19 @@
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
 <div class="bg-surface-container-low p-5 rounded-2xl border border-outline-variant/10">
 <p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">总权益</p>
-<p class="text-lg font-headline font-bold text-primary mono">$142,509.22</p>
+<p id="stat-total-equity" class="text-lg font-headline font-bold text-primary mono">--</p>
 </div>
 <div class="bg-surface-container-low p-5 rounded-2xl border border-outline-variant/10">
 <p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">可用余额</p>
-<p class="text-lg font-headline font-bold text-primary mono">$34,812.00</p>
+<p id="stat-available" class="text-lg font-headline font-bold text-primary mono">--</p>
 </div>
 <div class="bg-surface-container-low p-5 rounded-2xl border border-outline-variant/10">
 <p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">保证金</p>
-<p class="text-lg font-headline font-bold text-primary mono">$107,697.22</p>
+<p id="stat-margin" class="text-lg font-headline font-bold text-primary mono">--</p>
 </div>
 <div class="bg-surface-container-low p-5 rounded-2xl border border-outline-variant/10">
 <p class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-1">未实现盈亏</p>
-<p class="text-lg font-headline font-bold text-primary mono">+$2,401.45</p>
+<p id="stat-upnl" class="text-lg font-headline font-bold text-primary mono">--</p>
 </div>
 </div>
 <!-- Keys List Container -->
@@ -468,9 +468,55 @@
                 ].join('\n');
             }).join('\n');
 
+            // 加载余额统计
+            loadBalanceStats(keys);
+
         } catch (err) {
             console.error('loadKeys failed:', err);
             tbody.innerHTML = '<tr><td colspan="5" class="px-8 py-10 text-center text-error text-sm">加载失败: ' + err.message + '</td></tr>';
+        }
+    }
+
+    // ---- 余额统计 ----
+
+    async function loadBalanceStats(keys) {
+        const activeKeys = keys.filter(function(k) {
+            return String(k.is_active) === '1' || k.is_active === true || String(k.is_active).toLowerCase() === 'active';
+        });
+        if (activeKeys.length === 0) return;
+
+        const results = await Promise.all(activeKeys.map(function(k) {
+            return fetch(API_BASE + '/balance/' + k.id, { method: 'GET', headers: authHeaders() })
+                .then(function(r) { return r.json(); })
+                .catch(function() { return { success: false }; });
+        }));
+
+        var totalEquity = 0, totalAvailable = 0, totalMargin = 0, totalUpnl = 0, hasData = false;
+        results.forEach(function(r) {
+            if (r.success && r.data) {
+                totalEquity    += parseFloat(r.data.total_equity    || 0);
+                totalAvailable += parseFloat(r.data.available_balance || 0);
+                totalMargin    += parseFloat(r.data.used_margin      || 0);
+                totalUpnl      += parseFloat(r.data.unrealized_pnl   || 0);
+                hasData = true;
+            }
+        });
+        if (!hasData) return;
+
+        function fmt(n) { return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+        function fmtPnl(n) { return (n >= 0 ? '+' : '') + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+        var eqEl = document.getElementById('stat-total-equity');
+        var avEl = document.getElementById('stat-available');
+        var mgEl = document.getElementById('stat-margin');
+        var upEl = document.getElementById('stat-upnl');
+
+        if (eqEl) eqEl.textContent = fmt(totalEquity);
+        if (avEl) avEl.textContent = fmt(totalAvailable);
+        if (mgEl) mgEl.textContent = fmt(totalMargin);
+        if (upEl) {
+            upEl.textContent = fmtPnl(totalUpnl);
+            upEl.style.color = totalUpnl >= 0 ? '#49f4c8' : '#ff716c';
         }
     }
 

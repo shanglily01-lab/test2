@@ -553,7 +553,7 @@
                     apiGet('/trading-services'),
                     apiGet('/max-hold-hours'),
                     apiGet('/settings/big4_filter_enabled'),
-                    apiGet('/settings/max_positions')
+                    apiGet('/settings/max_positions').catch(function() { return { data: { value: '50' } }; })
                 ]);
 
                 const dir  = dirData.data  || dirData;
