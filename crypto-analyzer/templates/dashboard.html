@@ -675,9 +675,15 @@ async function loadSnapshot() {
         renderHyperliquidPanel(d.hyperliquid || {});
     } catch (e) {
         console.error('loadSnapshot failed:', e);
-        // 快照不可用时提示，不降级到慢接口
+        var msg = (e.message && e.message.indexOf('503') !== -1)
+            ? '快照初始化中，60秒后自动刷新...'
+            : '数据加载失败，请稍后刷新';
         var tbody = document.getElementById('ema-tbody');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-error text-sm font-mono">数据加载失败，请稍后刷新</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-warning text-sm font-mono">' + msg + '</td></tr>';
+        // 503 时 30 秒后自动重试
+        if (e.message && e.message.indexOf('503') !== -1) {
+            setTimeout(loadSnapshot, 30000);
+        }
     }
 }
 

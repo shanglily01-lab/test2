@@ -556,8 +556,12 @@ async def get_dashboard_snapshot():
     except HTTPException:
         raise
     except Exception as e:
+        # 表不存在（首次启动，调度任务尚未运行）→ 当作 503 而非 500
+        err_str = str(e)
+        if "doesn't exist" in err_str or "1146" in err_str:
+            raise HTTPException(status_code=503, detail="Snapshot table not yet created, retry in 60 seconds")
         logger.error(f"读取Dashboard快照失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=err_str)
 
 
 # ==================== Hyperliquid聪明钱交易API ====================
