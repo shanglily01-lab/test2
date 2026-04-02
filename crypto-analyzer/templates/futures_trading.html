@@ -165,10 +165,6 @@
 <h3 class="font-headline text-3xl font-bold tracking-tighter">U本位合约</h3>
 <p class="text-on-surface-variant text-sm mt-1">实时多维度持仓监控与执行终端</p>
 </div>
-<button class="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-primary to-primary-container text-on-primary rounded-xl font-bold text-sm shadow-[0_0_20px_rgba(73,244,200,0.15)] active:scale-[0.98] transition-all">
-<span class="material-symbols-outlined text-lg">add</span>
-                    新建交易策略
-                </button>
 </div>
 <!-- Stats Row -->
 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -230,9 +226,9 @@
 </div>
 </div>
 <!-- Right Section (40%) -->
-<div class="lg:col-span-5 space-y-6">
+<div class="lg:col-span-5 flex flex-col h-full gap-6">
 <!-- Quick Actions Panel -->
-<div class="bg-surface-container p-6 rounded-2xl shadow-xl">
+<div class="bg-surface-container p-6 rounded-2xl shadow-xl shrink-0">
 <h4 class="font-headline font-bold flex items-center gap-2 mb-6">
 <span class="w-1 h-4 bg-secondary rounded-full"></span>
                             快速操作
@@ -269,15 +265,15 @@
 </div>
 </div>
 <!-- Recent Trades -->
-<div class="bg-surface-container p-6 rounded-2xl shadow-xl flex-1">
-<div class="flex justify-between items-center mb-6">
+<div class="bg-surface-container p-6 rounded-2xl shadow-xl flex-1 flex flex-col min-h-0">
+<div class="flex justify-between items-center mb-6 shrink-0">
 <h4 class="font-headline font-bold flex items-center gap-2">
 <span class="w-1 h-4 bg-tertiary rounded-full"></span>
                                 最近成交
                             </h4>
 <span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary">refresh</span>
 </div>
-<div id="recent-trades-list" class="space-y-4"><div class="py-4 text-center text-on-surface-variant text-xs">加载中...</div></div>
+<div id="recent-trades-list" class="space-y-4 overflow-y-auto flex-1"><div class="py-4 text-center text-on-surface-variant text-xs">加载中...</div></div>
 </div>
 </div>
 </div>
@@ -289,8 +285,8 @@
     历史交易记录
   </h4>
   <div class="flex flex-wrap items-center gap-2">
-    <input id="history-search" type="text" placeholder="搜索交易对..." class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 w-36"/>
-    <select id="history-side-filter" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:outline-none focus:border-primary/50">
+    <input id="history-search" type="text" placeholder="搜索交易对..." oninput="applyHistoryFilter(true)" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 w-36"/>
+    <select id="history-side-filter" onchange="applyHistoryFilter(true)" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:outline-none focus:border-primary/50">
       <option value="">全部方向</option>
       <option value="LONG">LONG</option>
       <option value="SHORT">SHORT</option>
@@ -304,9 +300,9 @@
     <button id="history-refresh-btn" onclick="loadHistory()" class="px-3 py-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/20 text-primary rounded-lg text-xs font-bold transition-colors">刷新</button>
   </div>
 </div>
-<div class="overflow-x-auto overflow-y-auto max-h-[1000px]">
+<div class="overflow-x-auto">
 <table class="w-full text-left border-collapse">
-<thead class="sticky top-0 z-10">
+<thead>
 <tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-outline-variant/10 bg-surface-container">
 <th class="px-5 py-4 font-semibold whitespace-nowrap">成交时间</th>
 <th class="px-5 py-4 font-semibold whitespace-nowrap">交易对</th>
@@ -320,8 +316,9 @@
 <tbody id="history-tbody" class="text-xs divide-y divide-outline-variant/5"><tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr></tbody>
 </table>
 </div>
-<div class="px-5 py-3 bg-surface-container border-t border-outline-variant/10 flex items-center justify-between">
+<div class="px-5 py-3 bg-surface-container border-t border-outline-variant/10 flex items-center justify-between flex-wrap gap-3">
   <span id="history-count-label" class="text-xs text-on-surface-variant font-mono">--</span>
+  <div id="history-pagination" class="flex items-center gap-1"></div>
 </div>
 </div>
 </div>
@@ -499,12 +496,16 @@ async function loadPositions() {
 // ---- 加载历史交易 ----
 
 var _historyAllTrades = [];
+var _historyPage = 1;
+var _historyPageSize = 30;
 
-function applyHistoryFilter() {
-    var tbody = document.getElementById('history-tbody');
+function applyHistoryFilter(resetPage) {
+    if (resetPage) _historyPage = 1;
+    var tbody   = document.getElementById('history-tbody');
     var countEl = document.getElementById('history-count-label');
-    var search = (document.getElementById('history-search') || {}).value || '';
-    var side   = (document.getElementById('history-side-filter') || {}).value || '';
+    var pagEl   = document.getElementById('history-pagination');
+    var search  = (document.getElementById('history-search') || {}).value || '';
+    var side    = (document.getElementById('history-side-filter') || {}).value || '';
     search = search.trim().toLowerCase();
 
     var filtered = _historyAllTrades.filter(function(t) {
@@ -515,10 +516,15 @@ function applyHistoryFilter() {
         return matchSearch && matchSide;
     });
 
-    if (filtered.length === 0) {
+    var totalPages = Math.max(1, Math.ceil(filtered.length / _historyPageSize));
+    _historyPage = Math.min(Math.max(1, _historyPage), totalPages);
+    var start = (_historyPage - 1) * _historyPageSize;
+    var pageRows = filtered.slice(start, start + _historyPageSize);
+
+    if (pageRows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无符合条件的记录</td></tr>';
     } else {
-        tbody.innerHTML = filtered.map(function(t) {
+        tbody.innerHTML = pageRows.map(function(t) {
             var isLong = t.side === 'CLOSE_LONG';
             var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
             var pnl = parseFloat(t.realized_pnl) || 0;
@@ -535,7 +541,37 @@ function applyHistoryFilter() {
                 '</tr>';
         }).join('');
     }
-    if (countEl) countEl.textContent = '共 ' + _historyAllTrades.length + ' 条，显示 ' + filtered.length + ' 条';
+
+    if (countEl) {
+        countEl.textContent = '共 ' + filtered.length + ' 条  第 ' + _historyPage + ' / ' + totalPages + ' 页';
+    }
+
+    // Render pagination buttons
+    if (pagEl) {
+        var btnClass = 'px-3 py-1 rounded text-xs font-mono border transition-colors ';
+        var html = '';
+        html += '<button ' + (_historyPage <= 1 ? 'disabled ' : '') + 'onclick="_historyPage--;applyHistoryFilter()" class="' + btnClass + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&lsaquo;</button>';
+        var pages = [];
+        if (totalPages <= 7) {
+            for (var i = 1; i <= totalPages; i++) pages.push(i);
+        } else {
+            pages = [1, 2];
+            if (_historyPage > 4) pages.push('...');
+            for (var p = Math.max(3, _historyPage - 1); p <= Math.min(totalPages - 2, _historyPage + 1); p++) pages.push(p);
+            if (_historyPage < totalPages - 3) pages.push('...');
+            pages.push(totalPages - 1, totalPages);
+        }
+        pages.forEach(function(p) {
+            if (p === '...') {
+                html += '<span class="px-2 text-on-surface-variant text-xs">...</span>';
+            } else {
+                var active = p === _historyPage;
+                html += '<button onclick="_historyPage=' + p + ';applyHistoryFilter()" class="' + btnClass + (active ? 'bg-primary text-background border-primary font-bold' : 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container') + '">' + p + '</button>';
+            }
+        });
+        html += '<button ' + (_historyPage >= totalPages ? 'disabled ' : '') + 'onclick="_historyPage++;applyHistoryFilter()" class="' + btnClass + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&rsaquo;</button>';
+        pagEl.innerHTML = html;
+    }
 }
 
 async function loadHistory() {
@@ -589,7 +625,7 @@ async function loadHistory() {
         return trades;
     }
 
-    applyHistoryFilter();
+    applyHistoryFilter(true);
     return trades;
 }
 
