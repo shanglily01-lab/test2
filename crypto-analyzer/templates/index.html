@@ -1,291 +1,705 @@
-<!DOCTYPE html>
-
-<html class="dark" lang="zh-CN"><head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "tertiary-dim": "#ff6e80",
-                        "on-tertiary-fixed-variant": "#780022",
-                        "on-primary-container": "#004132",
-                        "primary-dim": "#33e5ba",
-                        "error-dim": "#d7383b",
-                        "surface-dim": "#0a0f14",
-                        "primary": "#49f4c8",
-                        "inverse-surface": "#f8f9ff",
-                        "surface-container-lowest": "#000000",
-                        "on-error-container": "#ffa8a3",
-                        "inverse-primary": "#006c55",
-                        "on-background": "#ebeef5",
-                        "primary-container": "#00d4aa",
-                        "error-container": "#9f0519",
-                        "on-primary-fixed": "#004334",
-                        "on-tertiary": "#490011",
-                        "surface-tint": "#49f4c8",
-                        "secondary-container": "#005eb5",
-                        "on-secondary": "#002045",
-                        "tertiary-fixed": "#ff909a",
-                        "on-tertiary-fixed": "#39000b",
-                        "secondary": "#5b9eff",
-                        "on-secondary-fixed-variant": "#00509c",
-                        "secondary-fixed-dim": "#a4c5ff",
-                        "on-surface-variant": "#a8abb2",
-                        "primary-fixed": "#49f4c8",
-                        "secondary-dim": "#5b9eff",
-                        "outline": "#72767c",
-                        "error": "#ff716c",
-                        "outline-variant": "#44484e",
-                        "primary-fixed-dim": "#33e5ba",
-                        "surface-bright": "#262d35",
-                        "on-primary-fixed-variant": "#00624d",
-                        "on-error": "#490006",
-                        "on-primary": "#005745",
-                        "on-surface": "#ebeef5",
-                        "surface-variant": "#20262e",
-                        "surface-container-highest": "#20262e",
-                        "on-secondary-fixed": "#003469",
-                        "inverse-on-surface": "#51555c",
-                        "on-secondary-container": "#f6f7ff",
-                        "tertiary-fixed-dim": "#ff7987",
-                        "surface-container": "#151a20",
-                        "tertiary-container": "#fa4966",
-                        "secondary-fixed": "#bbd2ff",
-                        "surface-container-high": "#1a2027",
-                        "on-tertiary-container": "#100001",
-                        "background": "#0a0f14",
-                        "surface": "#0a0f14",
-                        "surface-container-low": "#0f1419",
-                        "tertiary": "#ff6e80"
-                    },
-                    fontFamily: {
-                        "headline": ["Space Grotesk"],
-                        "body": ["Manrope"],
-                        "label": ["Manrope"]
-                    },
-                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
-                },
-            },
-        }
-    </script>
-<style>
-        .material-symbols-outlined {
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-        }
-        .neural-glow {
-            box-shadow: 0 0 20px 2px rgba(73, 244, 200, 0.1);
-        }
-        .glass-nav {
-            background: rgba(10, 15, 20, 0.8);
-            backdrop-filter: blur(20px);
-        }
-    </style>
-</head>
-<body class="bg-background text-on-surface font-body selection:bg-primary/30">
-<!-- Top Navigation Bar -->
-<nav class="fixed top-0 w-full z-50 bg-[#0a0f14]/80 backdrop-blur-xl shadow-[0_8px_32px_0_rgba(73,244,200,0.05)] border-b border-outline-variant/10">
-<div class="flex justify-between items-center max-w-[1440px] mx-auto px-8 h-20">
-<div class="flex items-center gap-3">
-<div class="w-8 h-8 flex items-center justify-center bg-primary-container rounded-lg neural-glow">
-<span class="material-symbols-outlined text-on-primary-container" style="font-variation-settings: 'FILL' 1;">psychology</span>
-</div>
-<span class="text-2xl font-bold tracking-tighter text-[#49f4c8] font-headline">超级大脑</span>
-</div>
-<div class="hidden md:flex items-center space-x-10">
-<a class="font-['Space_Grotesk'] uppercase tracking-wider text-sm text-[#49f4c8] border-b-2 border-[#49f4c8] pb-1 transition-all" href="#">首页</a>
-<a class="font-['Space_Grotesk'] uppercase tracking-wider text-sm text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#features">功能</a>
-<a class="font-['Space_Grotesk'] uppercase tracking-wider text-sm text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#docs">文档</a>
-<a class="font-['Space_Grotesk'] uppercase tracking-wider text-sm text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#about">关于</a>
-</div>
-<div class="flex items-center gap-6">
-<a href="/login" class="text-[#a8abb2] font-['Space_Grotesk'] uppercase tracking-wider text-sm hover:text-primary transition-colors hover:opacity-80 transition-all duration-300 scale-95 active:scale-90 transition-transform">登录</a>
-<a href="/dashboard" class="bg-gradient-to-r from-primary to-primary-container text-on-primary font-['Space_Grotesk'] uppercase tracking-wider text-sm px-6 py-2.5 rounded-lg font-bold shadow-[0_0_20px_rgba(73,244,200,0.2)] hover:opacity-80 transition-all duration-300 scale-95 active:scale-90 transition-transform">进入系统</a>
-</div>
-</div>
-</nav>
-<main class="pt-20">
-<!-- Hero Section -->
-<section class="relative min-h-[921px] flex items-center overflow-hidden px-8 max-w-[1440px] mx-auto">
-<div class="grid lg:grid-cols-2 gap-16 items-center z-10">
-<div class="space-y-8">
-<div class="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/20 rounded-full">
-<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-<span class="text-xs font-bold tracking-widest text-primary uppercase font-headline">AI Neural Execution Engine</span>
-</div>
-<h1 class="text-6xl md:text-8xl font-bold font-headline leading-tight tracking-tighter text-on-surface">
-                        超级大脑<br/>
-<span class="text-transparent bg-clip-text bg-gradient-to-r from-primary via-primary-container to-secondary">量化交易平台</span>
-</h1>
-<p class="text-xl text-on-surface-variant max-w-xl leading-relaxed">
-                        基于AI信号的全自动合约交易系统。深度集成神经网络算法，实现毫秒级策略响应与动态风险矩阵闭环，为您的加密资产保驾护航。
-                    </p>
-<div class="flex flex-wrap gap-4 pt-4">
-<a href="/dashboard" class="px-8 py-4 bg-gradient-to-r from-primary to-primary-container text-on-primary rounded-xl font-bold text-lg neural-glow hover:translate-y-[-2px] transition-all">
-                            进入系统
-                        </a>
-<button class="px-8 py-4 border border-outline-variant/30 text-on-surface rounded-xl font-bold text-lg hover:bg-surface-container transition-all">
-                            了解更多
-                        </button>
-</div>
-</div>
-<div class="relative h-[600px] hidden lg:block">
-<div class="absolute inset-0 bg-gradient-to-tr from-primary/5 to-secondary/5 rounded-3xl overflow-hidden border border-outline-variant/10">
-<img alt="AI Neural Network Pathing" class="w-full h-full object-cover mix-blend-overlay opacity-60" data-alt="Abstract 3D digital visualization of dark glowing teal neural network nodes connected by crystalline paths in a high-tech synthetic space" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAd7g7Eh-YxfRee8_y8VF7PDQ-t-jcUIHl2LDgzXjXg3gHMNdhYUO7mVZwqdr52HirCxXUKtBN9ZSpwo5Sh_Iu-neRJmQAvxZ_DAAUX_Gf6xeq3DyqBp_w5Vw1eqzECqMo_m71IWkSndQiCy3ex5gT9FK2qYiy7zPq67AkAWv25JcUt481bCcUSh36zHDOT0KoZ1jY3KWvOjUUki0WE7aOMYu3QXEh8gg6ZTYjfzAIeZymmctMdiv7McxbHfVxdlW3tzh2OdyWPEZsi"/>
-<!-- Decorative UI overlays -->
-<div class="absolute top-12 left-12 p-4 bg-surface-container/60 backdrop-blur-md rounded-xl border border-primary/20">
-<div class="flex items-center gap-3 mb-2">
-<span class="material-symbols-outlined text-primary text-sm">trending_up</span>
-<span class="text-xs font-mono text-primary">BTC/USDT LONG</span>
-</div>
-<div class="h-2 w-32 bg-surface-container-highest rounded-full overflow-hidden">
-<div class="h-full bg-primary w-[75%]"></div>
-</div>
-</div>
-<div class="absolute bottom-12 right-12 p-6 bg-surface-container/80 backdrop-blur-xl rounded-2xl border border-secondary/20 shadow-2xl">
-<span class="text-[10px] font-mono text-secondary-dim uppercase block mb-1">Execution Speed</span>
-<span class="text-3xl font-headline font-bold text-on-surface">14.2ms</span>
-</div>
-</div>
-</div>
-</div>
-<!-- Background Ambient Glows -->
-<div class="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-primary/5 blur-[120px] rounded-full pointer-events-none"></div>
-<div class="absolute bottom-[-10%] left-[-5%] w-[400px] h-[400px] bg-secondary/5 blur-[100px] rounded-full pointer-events-none"></div>
-</section>
-<!-- Stats Section -->
-<section class="bg-surface-container-low py-16">
-<div class="max-w-[1440px] mx-auto px-8">
-<div class="flex flex-col md:flex-row justify-between items-center gap-12">
-<div class="text-center md:text-left">
-<span class="text-5xl md:text-7xl font-bold font-headline text-on-surface neural-glow">300<span class="text-primary">+</span></span>
-<p class="text-sm font-label uppercase tracking-widest text-on-surface-variant mt-2">监控交易对</p>
-</div>
-<div class="h-px md:h-16 w-32 md:w-px bg-outline-variant/20"></div>
-<div class="text-center md:text-left">
-<span class="text-5xl md:text-7xl font-bold font-headline text-on-surface">14</span>
-<p class="text-sm font-label uppercase tracking-widest text-on-surface-variant mt-2">信号组件</p>
-</div>
-<div class="h-px md:h-16 w-32 md:w-px bg-outline-variant/20"></div>
-<div class="text-center md:text-left">
-<span class="text-5xl md:text-7xl font-bold font-headline text-primary">24/7</span>
-<p class="text-sm font-label uppercase tracking-widest text-on-surface-variant mt-2">全天候运行</p>
-</div>
-</div>
-</div>
-</section>
-<!-- Features Grid -->
-<section class="py-32 px-8 max-w-[1440px] mx-auto">
-<div class="mb-20 text-center lg:text-left">
-<h2 class="text-4xl md:text-5xl font-bold font-headline mb-6">核心功能矩阵</h2>
-<div class="w-20 h-1 bg-primary rounded-full hidden lg:block"></div>
-</div>
-<div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-<!-- Card 1 -->
-<div class="group bg-surface-container-low p-8 rounded-2xl hover:bg-surface-container transition-all duration-500 border border-transparent hover:border-primary/20">
-<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
-<span class="material-symbols-outlined text-primary">insights</span>
-</div>
-<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">智能信号分析</h3>
-<p class="text-on-surface-variant leading-relaxed">
-                        深度整合多层感知器与卷积神经网络，实时捕捉微弱市场信号，提供高于行业平均水平的预测精度。
-                    </p>
-</div>
-<!-- Card 2 -->
-<div class="group bg-surface-container p-8 rounded-2xl hover:bg-surface-container-high transition-all duration-500 border border-transparent hover:border-primary/20">
-<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
-<span class="material-symbols-outlined text-primary">bolt</span>
-</div>
-<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">全自动交易执行</h3>
-<p class="text-on-surface-variant leading-relaxed">
-                        毫秒级API响应速度，无延迟开平仓。支持所有主流合约对，确保在波动瞬间锁定最佳进场点位。
-                    </p>
-</div>
-<!-- Card 3 -->
-<div class="group bg-surface-container-low p-8 rounded-2xl hover:bg-surface-container transition-all duration-500 border border-transparent hover:border-primary/20">
-<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
-<span class="material-symbols-outlined text-primary">shield</span>
-</div>
-<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">实时风险控制</h3>
-<p class="text-on-surface-variant leading-relaxed">
-                        多层级仓位管理与硬性止损机制，动态计算资产最大回撤，根据实时波动率调整止盈目标。
-                    </p>
-</div>
-<!-- Card 4 -->
-<div class="group bg-surface-container p-8 rounded-2xl hover:bg-surface-container-high transition-all duration-500 border border-transparent hover:border-primary/20">
-<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
-<span class="material-symbols-outlined text-primary">filter_alt</span>
-</div>
-<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">Big4趋势过滤</h3>
-<p class="text-on-surface-variant leading-relaxed">
-                        独创四重趋势确认算法，排除市场随机噪音，仅在多周期趋势共振时发出高确定性执行指令。
-                    </p>
-</div>
-<!-- Card 5 -->
-<div class="group bg-surface-container-low p-8 rounded-2xl hover:bg-surface-container transition-all duration-500 border border-transparent hover:border-primary/20">
-<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
-<span class="material-symbols-outlined text-primary">hub</span>
-</div>
-<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">多策略协同</h3>
-<p class="text-on-surface-variant leading-relaxed">
-                        支持趋势、震荡、高频等多种策略同时运行。系统自动调配资金权重，实现投资组合的平稳增长。
-                    </p>
-</div>
-<!-- Card 6 -->
-<div class="group bg-surface-container p-8 rounded-2xl hover:bg-surface-container-high transition-all duration-500 border border-transparent hover:border-primary/20">
-<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
-<span class="material-symbols-outlined text-primary">database</span>
-</div>
-<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">数据驱动决策</h3>
-<p class="text-on-surface-variant leading-relaxed">
-                        基于PB级历史K线与链上数据的回测系统，所有策略均经过严苛的压力测试与统计学验证。
-                    </p>
-</div>
-</div>
-</section>
-<!-- Final CTA Section -->
-<section class="py-24 px-8 max-w-[1440px] mx-auto">
-<div class="bg-gradient-to-br from-surface-container to-surface-container-low rounded-3xl p-12 md:p-24 border border-outline-variant/10 text-center relative overflow-hidden">
-<div class="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">
-<img alt="Tech Background" class="w-full h-full object-cover" data-alt="Vibrant tech concept background with glowing blue and green particles forming a digital world map on a dark surface" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD3PO8dAjtQBnilhglBm0wmCv82nTLS8PjrRiqqRoBsZimekeoo-EaZNAwPUkaljipEDP9G_iUKSDHoHE_J0o0aesz2E2aDGLqPazRemrBA9zl42K5XzDiC-UKC5XNm67Z8bOrjbKA4sL1fd5U1Lk4prJhL7--o0F7zeDMOPE94JgdGLFcWMZIeLclPdJdBqMmBchqzkdNBA9YlYuMHoHIX3TMrc8nBjAIpPSoISJsgnePOzYoaCxaxBMEohI0c5e_8AoPdoTqt3NRP"/>
-</div>
-<h2 class="text-4xl md:text-6xl font-bold font-headline mb-8 relative z-10">准备好开启智能交易时代了吗？</h2>
-<p class="text-xl text-on-surface-variant mb-12 max-w-2xl mx-auto relative z-10">
-                    加入 5,000+ 活跃量化交易员，体验由 AI 驱动的极致交易效率。
-                </p>
-<div class="flex flex-col md:flex-row justify-center gap-4 relative z-10">
-<a href="/dashboard" class="px-10 py-5 bg-primary text-on-primary rounded-xl font-bold text-xl neural-glow hover:opacity-90 transition-all">
-                        立即开始使用
-                    </a>
-<button class="px-10 py-5 border border-outline-variant text-on-surface rounded-xl font-bold text-xl hover:bg-surface-container transition-all">
-                        查看官方文档
-                    </button>
-</div>
-</div>
-</section>
-</main>
-<!-- Footer -->
-<footer class="bg-[#0a0f14] w-full border-t border-[#44484e]/20">
-<div class="flex flex-col md:flex-row justify-between items-center max-w-[1440px] mx-auto px-8 py-12 gap-6">
-<div class="flex items-center gap-2">
-<span class="font-['Space_Grotesk'] font-bold text-[#49f4c8] text-xl">超级大脑</span>
-<span class="font-['Manrope'] text-xs text-[#a8abb2] hidden md:inline ml-4">Neural Precision Trading.</span>
-</div>
-<div class="flex gap-8">
-<a class="font-['Manrope'] text-xs text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#">隐私政策</a>
-<a class="font-['Manrope'] text-xs text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#">服务条款</a>
-<a class="font-['Manrope'] text-xs text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#">风险提示</a>
-<a class="font-['Manrope'] text-xs text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#">联系我们</a>
-</div>
-<div class="font-['Manrope'] text-xs text-[#a8abb2]">
-                © 2024 超级大脑 (Super Brain). All rights reserved.
-            </div>
+<!DOCTYPE html>
+
+
+
+<html class="dark" lang="zh-CN"><head>
+
+<meta charset="utf-8"/>
+
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+
+<script id="tailwind-config">
+
+        tailwind.config = {
+
+            darkMode: "class",
+
+            theme: {
+
+                extend: {
+
+                    colors: {
+
+                        "tertiary-dim": "#ff6e80",
+
+                        "on-tertiary-fixed-variant": "#780022",
+
+                        "on-primary-container": "#004132",
+
+                        "primary-dim": "#33e5ba",
+
+                        "error-dim": "#d7383b",
+
+                        "surface-dim": "#0a0f14",
+
+                        "primary": "#49f4c8",
+
+                        "inverse-surface": "#f8f9ff",
+
+                        "surface-container-lowest": "#000000",
+
+                        "on-error-container": "#ffa8a3",
+
+                        "inverse-primary": "#006c55",
+
+                        "on-background": "#ebeef5",
+
+                        "primary-container": "#00d4aa",
+
+                        "error-container": "#9f0519",
+
+                        "on-primary-fixed": "#004334",
+
+                        "on-tertiary": "#490011",
+
+                        "surface-tint": "#49f4c8",
+
+                        "secondary-container": "#005eb5",
+
+                        "on-secondary": "#002045",
+
+                        "tertiary-fixed": "#ff909a",
+
+                        "on-tertiary-fixed": "#39000b",
+
+                        "secondary": "#5b9eff",
+
+                        "on-secondary-fixed-variant": "#00509c",
+
+                        "secondary-fixed-dim": "#a4c5ff",
+
+                        "on-surface-variant": "#a8abb2",
+
+                        "primary-fixed": "#49f4c8",
+
+                        "secondary-dim": "#5b9eff",
+
+                        "outline": "#72767c",
+
+                        "error": "#ff716c",
+
+                        "outline-variant": "#44484e",
+
+                        "primary-fixed-dim": "#33e5ba",
+
+                        "surface-bright": "#262d35",
+
+                        "on-primary-fixed-variant": "#00624d",
+
+                        "on-error": "#490006",
+
+                        "on-primary": "#005745",
+
+                        "on-surface": "#ebeef5",
+
+                        "surface-variant": "#20262e",
+
+                        "surface-container-highest": "#20262e",
+
+                        "on-secondary-fixed": "#003469",
+
+                        "inverse-on-surface": "#51555c",
+
+                        "on-secondary-container": "#f6f7ff",
+
+                        "tertiary-fixed-dim": "#ff7987",
+
+                        "surface-container": "#151a20",
+
+                        "tertiary-container": "#fa4966",
+
+                        "secondary-fixed": "#bbd2ff",
+
+                        "surface-container-high": "#1a2027",
+
+                        "on-tertiary-container": "#100001",
+
+                        "background": "#0a0f14",
+
+                        "surface": "#0a0f14",
+
+                        "surface-container-low": "#0f1419",
+
+                        "tertiary": "#ff6e80"
+
+                    },
+
+                    fontFamily: {
+
+                        "headline": ["Space Grotesk"],
+
+                        "body": ["Manrope"],
+
+                        "label": ["Manrope"]
+
+                    },
+
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+
+                },
+
+            },
+
+        }
+
+    </script>
+
+<style>
+
+        .material-symbols-outlined {
+
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+
+        }
+
+        .neural-glow {
+
+            box-shadow: 0 0 20px 2px rgba(73, 244, 200, 0.1);
+
+        }
+
+        .glass-nav {
+
+            background: rgba(10, 15, 20, 0.8);
+
+            backdrop-filter: blur(20px);
+
+        }
+
+    </style>
+
+</head>
+
+<body class="bg-background text-on-surface font-body selection:bg-primary/30">
+
+<!-- Top Navigation Bar -->
+
+<nav class="fixed top-0 w-full z-50 bg-[#0a0f14]/80 backdrop-blur-xl shadow-[0_8px_32px_0_rgba(73,244,200,0.05)] border-b border-outline-variant/10">
+
+<div class="flex justify-between items-center max-w-[1440px] mx-auto px-8 h-20">
+
+<div class="flex items-center gap-3">
+
+<div class="w-8 h-8 flex items-center justify-center bg-primary-container rounded-lg neural-glow">
+
+<span class="material-symbols-outlined text-on-primary-container" style="font-variation-settings: 'FILL' 1;">psychology</span>
+
+</div>
+
+<span class="text-2xl font-bold tracking-tighter text-[#49f4c8] font-headline">超级大脑</span>
+
+</div>
+
+<div class="hidden md:flex items-center space-x-10">
+
+<a class="font-['Space_Grotesk'] uppercase tracking-wider text-sm text-[#49f4c8] border-b-2 border-[#49f4c8] pb-1 transition-all" href="#">首页</a>
+
+<a class="font-['Space_Grotesk'] uppercase tracking-wider text-sm text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#features">功能</a>
+
+<a class="font-['Space_Grotesk'] uppercase tracking-wider text-sm text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#docs">文档</a>
+
+<a class="font-['Space_Grotesk'] uppercase tracking-wider text-sm text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#about">关于</a>
+
+</div>
+
+<div class="flex items-center gap-6">
+
+<a href="/login" class="text-[#a8abb2] font-['Space_Grotesk'] uppercase tracking-wider text-sm hover:text-primary transition-colors hover:opacity-80 transition-all duration-300 scale-95 active:scale-90 transition-transform">登录</a>
+
+<a href="/dashboard" class="bg-gradient-to-r from-primary to-primary-container text-on-primary font-['Space_Grotesk'] uppercase tracking-wider text-sm px-6 py-2.5 rounded-lg font-bold shadow-[0_0_20px_rgba(73,244,200,0.2)] hover:opacity-80 transition-all duration-300 scale-95 active:scale-90 transition-transform">进入系统</a>
+
+</div>
+
+</div>
+
+</nav>
+
+<main class="pt-20">
+
+<!-- Hero Section -->
+
+<section class="relative min-h-[921px] flex items-center overflow-hidden px-8 max-w-[1440px] mx-auto">
+
+<div class="grid lg:grid-cols-2 gap-16 items-center z-10">
+
+<div class="space-y-8">
+
+<div class="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/20 rounded-full">
+
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+
+<span class="text-xs font-bold tracking-widest text-primary uppercase font-headline">AI Neural Execution Engine</span>
+
+</div>
+
+<h1 class="text-6xl md:text-8xl font-bold font-headline leading-tight tracking-tighter text-on-surface">
+
+                        超级大脑<br/>
+
+<span class="text-transparent bg-clip-text bg-gradient-to-r from-primary via-primary-container to-secondary">量化交易平台</span>
+
+</h1>
+
+<p class="text-xl text-on-surface-variant max-w-xl leading-relaxed">
+
+                        基于AI信号的全自动合约交易系统。深度集成神经网络算法，实现毫秒级策略响应与动态风险矩阵闭环，为您的加密资产保驾护航。
+
+                    </p>
+
+<div class="flex flex-wrap gap-4 pt-4">
+
+<a href="/dashboard" class="px-8 py-4 bg-gradient-to-r from-primary to-primary-container text-on-primary rounded-xl font-bold text-lg neural-glow hover:translate-y-[-2px] transition-all">
+
+                            进入系统
+
+                        </a>
+
+<button class="px-8 py-4 border border-outline-variant/30 text-on-surface rounded-xl font-bold text-lg hover:bg-surface-container transition-all">
+
+                            了解更多
+
+                        </button>
+
+</div>
+
+</div>
+
+<div class="relative h-[600px] hidden lg:block">
+
+<div class="absolute inset-0 bg-gradient-to-tr from-primary/5 to-secondary/5 rounded-3xl overflow-hidden border border-outline-variant/10">
+
+<img alt="AI Neural Network Pathing" class="w-full h-full object-cover mix-blend-overlay opacity-60" data-alt="Abstract 3D digital visualization of dark glowing teal neural network nodes connected by crystalline paths in a high-tech synthetic space" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAd7g7Eh-YxfRee8_y8VF7PDQ-t-jcUIHl2LDgzXjXg3gHMNdhYUO7mVZwqdr52HirCxXUKtBN9ZSpwo5Sh_Iu-neRJmQAvxZ_DAAUX_Gf6xeq3DyqBp_w5Vw1eqzECqMo_m71IWkSndQiCy3ex5gT9FK2qYiy7zPq67AkAWv25JcUt481bCcUSh36zHDOT0KoZ1jY3KWvOjUUki0WE7aOMYu3QXEh8gg6ZTYjfzAIeZymmctMdiv7McxbHfVxdlW3tzh2OdyWPEZsi"/>
+
+<!-- Decorative UI overlays -->
+
+<div class="absolute top-12 left-12 p-4 bg-surface-container/60 backdrop-blur-md rounded-xl border border-primary/20">
+
+<div class="flex items-center gap-3 mb-2">
+
+<span class="material-symbols-outlined text-primary text-sm">trending_up</span>
+
+<span class="text-xs font-mono text-primary">BTC/USDT LONG</span>
+
+</div>
+
+<div class="h-2 w-32 bg-surface-container-highest rounded-full overflow-hidden">
+
+<div class="h-full bg-primary w-[75%]"></div>
+
+</div>
+
+</div>
+
+<div class="absolute bottom-12 right-12 p-6 bg-surface-container/80 backdrop-blur-xl rounded-2xl border border-secondary/20 shadow-2xl">
+
+<span class="text-[10px] font-mono text-secondary-dim uppercase block mb-1">Execution Speed</span>
+
+<span class="text-3xl font-headline font-bold text-on-surface">14.2ms</span>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- Background Ambient Glows -->
+
+<div class="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-primary/5 blur-[120px] rounded-full pointer-events-none"></div>
+
+<div class="absolute bottom-[-10%] left-[-5%] w-[400px] h-[400px] bg-secondary/5 blur-[100px] rounded-full pointer-events-none"></div>
+
+</section>
+
+<!-- Stats Section -->
+
+<section class="bg-surface-container-low py-16">
+
+<div class="max-w-[1440px] mx-auto px-8">
+
+<div class="flex flex-col md:flex-row justify-between items-center gap-12">
+
+<div class="text-center md:text-left">
+
+<span class="text-5xl md:text-7xl font-bold font-headline text-on-surface neural-glow">300<span class="text-primary">+</span></span>
+
+<p class="text-sm font-label uppercase tracking-widest text-on-surface-variant mt-2">监控交易对</p>
+
+</div>
+
+<div class="h-px md:h-16 w-32 md:w-px bg-outline-variant/20"></div>
+
+<div class="text-center md:text-left">
+
+<span class="text-5xl md:text-7xl font-bold font-headline text-on-surface">14</span>
+
+<p class="text-sm font-label uppercase tracking-widest text-on-surface-variant mt-2">信号组件</p>
+
+</div>
+
+<div class="h-px md:h-16 w-32 md:w-px bg-outline-variant/20"></div>
+
+<div class="text-center md:text-left">
+
+<span class="text-5xl md:text-7xl font-bold font-headline text-primary">24/7</span>
+
+<p class="text-sm font-label uppercase tracking-widest text-on-surface-variant mt-2">全天候运行</p>
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+<!-- Features Grid -->
+
+<section id="features" class="py-32 px-8 max-w-[1440px] mx-auto">
+
+<div class="mb-20 text-center lg:text-left">
+
+<h2 class="text-4xl md:text-5xl font-bold font-headline mb-6">核心功能矩阵</h2>
+
+<div class="w-20 h-1 bg-primary rounded-full hidden lg:block"></div>
+
+</div>
+
+<div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+
+<!-- Card 1 -->
+
+<div class="group bg-surface-container-low p-8 rounded-2xl hover:bg-surface-container transition-all duration-500 border border-transparent hover:border-primary/20">
+
+<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
+
+<span class="material-symbols-outlined text-primary">insights</span>
+
+</div>
+
+<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">智能信号分析</h3>
+
+<p class="text-on-surface-variant leading-relaxed">
+
+                        深度整合多层感知器与卷积神经网络，实时捕捉微弱市场信号，提供高于行业平均水平的预测精度。
+
+                    </p>
+
+</div>
+
+<!-- Card 2 -->
+
+<div class="group bg-surface-container p-8 rounded-2xl hover:bg-surface-container-high transition-all duration-500 border border-transparent hover:border-primary/20">
+
+<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
+
+<span class="material-symbols-outlined text-primary">bolt</span>
+
+</div>
+
+<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">全自动交易执行</h3>
+
+<p class="text-on-surface-variant leading-relaxed">
+
+                        毫秒级API响应速度，无延迟开平仓。支持所有主流合约对，确保在波动瞬间锁定最佳进场点位。
+
+                    </p>
+
+</div>
+
+<!-- Card 3 -->
+
+<div class="group bg-surface-container-low p-8 rounded-2xl hover:bg-surface-container transition-all duration-500 border border-transparent hover:border-primary/20">
+
+<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
+
+<span class="material-symbols-outlined text-primary">shield</span>
+
+</div>
+
+<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">实时风险控制</h3>
+
+<p class="text-on-surface-variant leading-relaxed">
+
+                        多层级仓位管理与硬性止损机制，动态计算资产最大回撤，根据实时波动率调整止盈目标。
+
+                    </p>
+
+</div>
+
+<!-- Card 4 -->
+
+<div class="group bg-surface-container p-8 rounded-2xl hover:bg-surface-container-high transition-all duration-500 border border-transparent hover:border-primary/20">
+
+<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
+
+<span class="material-symbols-outlined text-primary">filter_alt</span>
+
+</div>
+
+<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">Big4趋势过滤</h3>
+
+<p class="text-on-surface-variant leading-relaxed">
+
+                        独创四重趋势确认算法，排除市场随机噪音，仅在多周期趋势共振时发出高确定性执行指令。
+
+                    </p>
+
+</div>
+
+<!-- Card 5 -->
+
+<div class="group bg-surface-container-low p-8 rounded-2xl hover:bg-surface-container transition-all duration-500 border border-transparent hover:border-primary/20">
+
+<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
+
+<span class="material-symbols-outlined text-primary">hub</span>
+
+</div>
+
+<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">多策略协同</h3>
+
+<p class="text-on-surface-variant leading-relaxed">
+
+                        支持趋势、震荡、高频等多种策略同时运行。系统自动调配资金权重，实现投资组合的平稳增长。
+
+                    </p>
+
+</div>
+
+<!-- Card 6 -->
+
+<div class="group bg-surface-container p-8 rounded-2xl hover:bg-surface-container-high transition-all duration-500 border border-transparent hover:border-primary/20">
+
+<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
+
+<span class="material-symbols-outlined text-primary">database</span>
+
+</div>
+
+<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">数据驱动决策</h3>
+
+<p class="text-on-surface-variant leading-relaxed">
+
+                        基于PB级历史K线与链上数据的回测系统，所有策略均经过严苛的压力测试与统计学验证。
+
+                    </p>
+
+</div>
+
+</div>
+
+</section>
+
+<!-- Docs Section -->
+<section id="docs" class="py-32 px-8 max-w-[1440px] mx-auto">
+<div class="mb-16 text-center lg:text-left">
+<div class="inline-flex items-center gap-2 px-3 py-1 bg-secondary/10 border border-secondary/20 rounded-full mb-6">
+<span class="material-symbols-outlined text-secondary text-sm">menu_book</span>
+<span class="text-xs font-bold tracking-widest text-secondary uppercase font-headline">Documentation</span>
+</div>
+<h2 class="text-4xl md:text-5xl font-bold font-headline mb-6">系统使用文档</h2>
+<div class="w-20 h-1 bg-secondary rounded-full hidden lg:block"></div>
+</div>
+<div class="grid md:grid-cols-2 gap-8">
+
+<div class="bg-surface-container-low p-8 rounded-2xl border border-outline-variant/10">
+<div class="flex items-center gap-3 mb-6">
+<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-xl">functions</span>
+</div>
+<h3 class="text-lg font-bold font-headline text-on-surface">信号评分机制</h3>
+</div>
+<ul class="space-y-3 text-sm text-on-surface-variant">
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>14 个信号组件综合评分，覆盖动量、均线、K 线形态等多个维度</li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>LONG 满分 217 分，SHORT 满分 243 分，开仓阈值默认 60 分</li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>Big4 趋势过滤：BTC 50% + ETH 30% + BNB 10% + SOL 10% 加权</li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>熊市封禁多头（阈值动态调至 100），保护资金安全</li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>信号权重每日 00:00 UTC 自动优化，持续适应市场环境</li>
+</ul>
+</div>
+
+<div class="bg-surface-container-low p-8 rounded-2xl border border-outline-variant/10">
+<div class="flex items-center gap-3 mb-6">
+<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-xl">account_tree</span>
+</div>
+<h3 class="text-lg font-bold font-headline text-on-surface">策略体系</h3>
+</div>
+<ul class="space-y-3 text-sm text-on-surface-variant">
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span><span><b class="text-on-surface">主策略 V2</b>：每 5 分钟扫描 300+ 交易对，分批建仓（30%-30%-40%）</span></li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span><span><b class="text-on-surface">BTC 动量跟随</b>：BTC 15~60 分钟内涨跌 ≥1.5% 时同向跟进全市场</span></li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span><span><b class="text-on-surface">U 本位破位策略</b>：每 5 分钟检测大周期破位，加权评分独立开仓</span></li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span><span><b class="text-on-surface">市场预测器</b>：每 6 小时 AI 预测，置信度 ≥70% 触发真实模拟单</span></li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span><span><b class="text-on-surface">币本位合约</b>：独立账户运行，以币计价，止损 3% / 止盈 2%</span></li>
+</ul>
+</div>
+
+<div class="bg-surface-container-low p-8 rounded-2xl border border-outline-variant/10">
+<div class="flex items-center gap-3 mb-6">
+<div class="w-10 h-10 rounded-xl bg-error/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-error text-xl">shield</span>
+</div>
+<h3 class="text-lg font-bold font-headline text-on-surface">风险控制</h3>
+</div>
+<ul class="space-y-3 text-sm text-on-surface-variant">
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>硬性止损 2%，止盈 6%，SmartExitOptimizer 实时监控每笔持仓</li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>最大持仓数量 50 单限制，防止资金过度分散</li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>移动止盈：盈利达 3% 后自动上移止盈位，锁定浮盈</li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>信号黑名单：自动屏蔽持续表现不佳的信号组合</li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>熔断保护：3 小时内亏损 &gt;300U 时策略自动暂停</li>
+</ul>
+</div>
+
+<div class="bg-surface-container-low p-8 rounded-2xl border border-outline-variant/10">
+<div class="flex items-center gap-3 mb-6">
+<div class="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary text-xl">dashboard</span>
+</div>
+<h3 class="text-lg font-bold font-headline text-on-surface">平台功能导览</h3>
+</div>
+<ul class="space-y-3 text-sm text-on-surface-variant">
+<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span><span><b class="text-on-surface">监控中心</b>：实时 Dashboard，信号情绪仪表盘，近10日胜率趋势</span></li>
+<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span><span><b class="text-on-surface">信号分析</b>：300+ 交易对实时评分，K 线分布，Top 10 最佳信号</span></li>
+<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span><span><b class="text-on-surface">实盘交易</b>：多账号管理，持仓监控，历史订单分页查询</span></li>
+<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span><span><b class="text-on-surface">系统设置</b>：开关控制、方向过滤、止损参数、信号黑名单</span></li>
+<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span><span><b class="text-on-surface">每日复盘</b>：00:00 UTC 自动生成报告，Telegram 实时推送</span></li>
+</ul>
+</div>
+
+</div>
+</section>
+
+<!-- About Section -->
+<section id="about" class="py-32 px-8 max-w-[1440px] mx-auto">
+<div class="mb-16 text-center lg:text-left">
+<div class="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/20 rounded-full mb-6">
+<span class="material-symbols-outlined text-primary text-sm">info</span>
+<span class="text-xs font-bold tracking-widest text-primary uppercase font-headline">About</span>
+</div>
+<h2 class="text-4xl md:text-5xl font-bold font-headline mb-6">关于超级大脑</h2>
+<div class="w-20 h-1 bg-primary rounded-full hidden lg:block"></div>
+</div>
+<div class="grid lg:grid-cols-3 gap-8">
+<div class="lg:col-span-2 bg-surface-container-low p-10 rounded-2xl border border-outline-variant/10 space-y-6">
+<p class="text-on-surface-variant leading-relaxed text-base">超级大脑是一套专为 Binance 合约市场设计的全自动量化交易平台，基于 Python FastAPI 构建，7&#215;24 小时不间断运行。系统通过 14 个独立信号组件对 300+ 交易对进行实时评分，融合多周期趋势过滤（Big4）与动态风控机制，在高波动环境下自动识别优质进场机会并执行开平仓操作。</p>
+<p class="text-on-surface-variant leading-relaxed text-base">系统支持模拟盘与实盘双轨并行，所有策略参数可通过 Web 管理界面实时调整。每日零点自动生成复盘报告，分析各信号组件胜率与权重，持续自我优化。实盘开平仓通过 Telegram Bot 实时推送，全程透明可追溯。</p>
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
+<div class="bg-surface-container rounded-xl p-4 text-center">
+<p class="text-2xl font-bold font-headline text-primary">300+</p>
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mt-1">监控交易对</p>
+</div>
+<div class="bg-surface-container rounded-xl p-4 text-center">
+<p class="text-2xl font-bold font-headline text-on-surface">14</p>
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mt-1">信号组件</p>
+</div>
+<div class="bg-surface-container rounded-xl p-4 text-center">
+<p class="text-2xl font-bold font-headline text-secondary">5</p>
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mt-1">并行策略</p>
+</div>
+<div class="bg-surface-container rounded-xl p-4 text-center">
+<p class="text-2xl font-bold font-headline text-primary">24/7</p>
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mt-1">全天候运行</p>
+</div>
+</div>
+</div>
+<div class="bg-surface-container-low p-10 rounded-2xl border border-outline-variant/10">
+<h3 class="text-lg font-bold font-headline text-on-surface mb-6">技术架构</h3>
+<ul class="space-y-4">
+<li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span><div><p class="text-sm font-bold text-on-surface">后端框架</p><p class="text-xs text-on-surface-variant">Python / FastAPI / asyncio</p></div></li>
+<li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span><div><p class="text-sm font-bold text-on-surface">数据存储</p><p class="text-xs text-on-surface-variant">MySQL (AWS RDS)，550+ 交易对 K 线历史</p></div></li>
+<li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-secondary flex-shrink-0"></span><div><p class="text-sm font-bold text-on-surface">行情数据</p><p class="text-xs text-on-surface-variant">Binance WebSocket 实时价格推送</p></div></li>
+<li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-secondary flex-shrink-0"></span><div><p class="text-sm font-bold text-on-surface">链上数据</p><p class="text-xs text-on-surface-variant">Hyperliquid 聪明钱流向实时监控</p></div></li>
+<li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span><div><p class="text-sm font-bold text-on-surface">通知推送</p><p class="text-xs text-on-surface-variant">Telegram Bot 开平仓实时通知</p></div></li>
+<li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-on-surface-variant flex-shrink-0"></span><div><p class="text-sm font-bold text-on-surface">前端界面</p><p class="text-xs text-on-surface-variant">Tailwind CSS / 纯 HTML + JS，无框架依赖</p></div></li>
+</ul>
+</div>
+</div>
+</section>
+
+<!-- Final CTA Section -->
+
+<section class="py-24 px-8 max-w-[1440px] mx-auto">
+
+<div class="bg-gradient-to-br from-surface-container to-surface-container-low rounded-3xl p-12 md:p-24 border border-outline-variant/10 text-center relative overflow-hidden">
+
+<div class="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">
+
+<img alt="Tech Background" class="w-full h-full object-cover" data-alt="Vibrant tech concept background with glowing blue and green particles forming a digital world map on a dark surface" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD3PO8dAjtQBnilhglBm0wmCv82nTLS8PjrRiqqRoBsZimekeoo-EaZNAwPUkaljipEDP9G_iUKSDHoHE_J0o0aesz2E2aDGLqPazRemrBA9zl42K5XzDiC-UKC5XNm67Z8bOrjbKA4sL1fd5U1Lk4prJhL7--o0F7zeDMOPE94JgdGLFcWMZIeLclPdJdBqMmBchqzkdNBA9YlYuMHoHIX3TMrc8nBjAIpPSoISJsgnePOzYoaCxaxBMEohI0c5e_8AoPdoTqt3NRP"/>
+
+</div>
+
+<h2 class="text-4xl md:text-6xl font-bold font-headline mb-8 relative z-10">准备好开启智能交易时代了吗？</h2>
+
+<p class="text-xl text-on-surface-variant mb-12 max-w-2xl mx-auto relative z-10">
+
+                    加入 5,000+ 活跃量化交易员，体验由 AI 驱动的极致交易效率。
+
+                </p>
+
+<div class="flex flex-col md:flex-row justify-center gap-4 relative z-10">
+
+<a href="/dashboard" class="px-10 py-5 bg-primary text-on-primary rounded-xl font-bold text-xl neural-glow hover:opacity-90 transition-all">
+
+                        立即开始使用
+
+                    </a>
+
+<button class="px-10 py-5 border border-outline-variant text-on-surface rounded-xl font-bold text-xl hover:bg-surface-container transition-all">
+
+                        查看官方文档
+
+                    </button>
+
+</div>
+
+</div>
+
+</section>
+
+</main>
+
+<!-- Footer -->
+
+<footer class="bg-[#0a0f14] w-full border-t border-[#44484e]/20">
+
+<div class="flex flex-col md:flex-row justify-between items-center max-w-[1440px] mx-auto px-8 py-12 gap-6">
+
+<div class="flex items-center gap-2">
+
+<span class="font-['Space_Grotesk'] font-bold text-[#49f4c8] text-xl">超级大脑</span>
+
+<span class="font-['Manrope'] text-xs text-[#a8abb2] hidden md:inline ml-4">Neural Precision Trading.</span>
+
+</div>
+
+<div class="flex gap-8">
+
+<a class="font-['Manrope'] text-xs text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#">隐私政策</a>
+
+<a class="font-['Manrope'] text-xs text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#">服务条款</a>
+
+<a class="font-['Manrope'] text-xs text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#">风险提示</a>
+
+<a class="font-['Manrope'] text-xs text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#">联系我们</a>
+
+</div>
+
+<div class="font-['Manrope'] text-xs text-[#a8abb2]">
+
+                © 2024 超级大脑 (Super Brain). All rights reserved.
+
+            </div>
+
 </di<script>
         // Smooth scroll for anchor links
         document.addEventListener('DOMContentLoaded', function () {
@@ -309,5 +723,6 @@
                 }
             }
         });
-    </script>
+    </script>
+
 </body></html>
