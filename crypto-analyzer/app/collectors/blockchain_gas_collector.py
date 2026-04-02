@@ -21,9 +21,10 @@ CHAIN_CONFIGS = {
     'ethereum': {
         'display_name': 'Ethereum',
         'native_token': 'ETH',
-        'rpc_url': 'https://eth.llamarpc.com',
-        'explorer_api': 'https://api.etherscan.io/api',  # V1 API (deprecated)
-        'explorer_api_v2': 'https://api.etherscan.io/v2',  # V2 API
+        'rpc_url': 'https://rpc.ankr.com/eth',           # ankr 公共 RPC，稳定可靠
+        'rpc_url_fallback': 'https://cloudflare-eth.com',
+        'explorer_api': 'https://api.etherscan.io/api',
+        'explorer_api_v2': 'https://api.etherscan.io/v2',
         'explorer_api_key': None,  # 从config.yaml读取
         'chain_id': 1,
         'decimals': 18
@@ -31,7 +32,8 @@ CHAIN_CONFIGS = {
     'bsc': {
         'display_name': 'BSC',
         'native_token': 'BNB',
-        'rpc_url': 'https://bsc-dataseed1.binance.org',
+        'rpc_url': 'https://rpc.ankr.com/bsc',
+        'rpc_url_fallback': 'https://bsc-dataseed1.binance.org',
         'explorer_api': 'https://api.bscscan.com/api',
         'explorer_api_key': None,
         'chain_id': 56,
@@ -40,7 +42,8 @@ CHAIN_CONFIGS = {
     'polygon': {
         'display_name': 'Polygon',
         'native_token': 'MATIC',
-        'rpc_url': 'https://polygon-rpc.com',
+        'rpc_url': 'https://rpc.ankr.com/polygon',       # polygon-rpc.com 已废弃
+        'rpc_url_fallback': 'https://polygon.llamarpc.com',
         'explorer_api': 'https://api.polygonscan.com/api',
         'explorer_api_key': None,
         'chain_id': 137,
@@ -49,7 +52,8 @@ CHAIN_CONFIGS = {
     'arbitrum': {
         'display_name': 'Arbitrum',
         'native_token': 'ETH',
-        'rpc_url': 'https://arb1.arbitrum.io/rpc',
+        'rpc_url': 'https://rpc.ankr.com/arbitrum',
+        'rpc_url_fallback': 'https://arb1.arbitrum.io/rpc',
         'explorer_api': 'https://api.arbiscan.io/api',
         'explorer_api_key': None,
         'chain_id': 42161,
@@ -58,7 +62,8 @@ CHAIN_CONFIGS = {
     'optimism': {
         'display_name': 'Optimism',
         'native_token': 'ETH',
-        'rpc_url': 'https://mainnet.optimism.io',
+        'rpc_url': 'https://rpc.ankr.com/optimism',
+        'rpc_url_fallback': 'https://mainnet.optimism.io',
         'explorer_api': 'https://api-optimistic.etherscan.io/api',
         'explorer_api_key': None,
         'chain_id': 10,
@@ -67,7 +72,8 @@ CHAIN_CONFIGS = {
     'avalanche': {
         'display_name': 'Avalanche',
         'native_token': 'AVAX',
-        'rpc_url': 'https://api.avax.network/ext/bc/C/rpc',
+        'rpc_url': 'https://rpc.ankr.com/avalanche',
+        'rpc_url_fallback': 'https://api.avax.network/ext/bc/C/rpc',
         'explorer_api': 'https://api.snowtrace.io/api',
         'explorer_api_key': None,
         'chain_id': 43114,
@@ -371,7 +377,7 @@ class BlockchainGasCollector:
                 "params": params,
                 "id": 1
             }
-            
+
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     rpc_url,
@@ -383,11 +389,13 @@ class BlockchainGasCollector:
                         if 'result' in data:
                             return data['result']
                         elif 'error' in data:
-                            logger.warning(f"RPC调用失败: {data['error']}")
+                            logger.warning(f"RPC调用错误 [{rpc_url}] {method}: {data['error']}")
                             return None
+                    else:
+                        logger.warning(f"RPC HTTP {resp.status} [{rpc_url}] {method}")
                     return None
         except Exception as e:
-            logger.debug(f"RPC调用异常: {e}")
+            logger.warning(f"RPC调用异常 [{rpc_url}] {method}: {e}")
             return None
     
     async def fetch_gas_stats_from_rpc(
@@ -435,11 +443,16 @@ class BlockchainGasCollector:
                         native_price = 0.0
             
             rpc_url = chain_config['rpc_url']
-            
-            # 1. 获取当前 Gas 价格
+            rpc_url_fallback = chain_config.get('rpc_url_fallback')
+
+            # 1. 获取当前 Gas 价格（主 RPC 失败时尝试 fallback）
             gas_price_hex = await self._rpc_call(rpc_url, "eth_gasPrice", [])
+            if not gas_price_hex and rpc_url_fallback:
+                logger.info(f"{chain_name} 主 RPC 失败，尝试 fallback: {rpc_url_fallback}")
+                rpc_url = rpc_url_fallback
+                gas_price_hex = await self._rpc_call(rpc_url, "eth_gasPrice", [])
             if not gas_price_hex:
-                logger.warning(f"{chain_name} 无法从RPC获取Gas价格")
+                logger.warning(f"{chain_name} 主/fallback RPC 均无法获取 Gas 价格，跳过")
                 return None
             
             # 转换为十进制（Wei）
@@ -616,7 +629,8 @@ class BlockchainGasCollector:
             return False
         
         # 如果数据源是估算数据，且 API 密钥已配置，说明 API 调用失败，不保存估算数据
-        if stats.get('data_source') == 'estimated' and chain_config.get('explorer_api_key'):
+        _chain_cfg = CHAIN_CONFIGS.get(chain_name, {})
+        if stats.get('data_source') == 'estimated' and _chain_cfg.get('explorer_api_key'):
             logger.warning(f"{chain_name} API调用失败，跳过保存估算数据（避免产生测试数据）")
             logger.info(f"提示：Etherscan V1 API 已废弃，需要迁移到 V2 API 或使用其他数据源")
             return False
