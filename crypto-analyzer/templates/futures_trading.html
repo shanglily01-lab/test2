@@ -539,7 +539,7 @@ function applyHistoryFilter(resetPage) {
                 '<td class="px-5 py-3.5 font-bold text-xs ' + sideClass + '">' + (isLong ? 'LONG' : 'SHORT') + '</td>' +
                 '<td class="px-5 py-3.5 monospace whitespace-nowrap">' + fmtPrice(t.entry_price) + '</td>' +
                 '<td class="px-5 py-3.5 monospace whitespace-nowrap">' + fmtPrice(t.price) + '</td>' +
-                '<td class="px-5 py-3.5 text-xs text-on-surface-variant max-w-[140px] truncate" title="' + (t.entry_reason || '') + '">' + (t.entry_reason || '--') + '</td>' +
+                '<td class="px-5 py-3.5 text-xs text-on-surface-variant max-w-[140px] truncate" title="' + (t.entry_source || t.entry_reason || '') + '">' + (t.entry_source || t.entry_reason || '--') + '</td>' +
                 '<td class="px-5 py-3.5 text-xs text-on-surface-variant max-w-[140px] truncate" title="' + (t.close_reason || '') + '">' + (t.close_reason || '--') + '</td>' +
                 '<td class="px-5 py-3.5 monospace text-right whitespace-nowrap text-on-surface-variant">' + (t.margin != null ? fmtUsdt(t.margin) : '--') + '</td>' +
                 '<td class="px-5 py-3.5 monospace text-right whitespace-nowrap text-on-surface-variant">' + (t.fee != null ? fmtUsdt(t.fee) : '--') + '</td>' +
