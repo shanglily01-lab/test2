@@ -245,6 +245,76 @@ body { background:#070b10; font-family:'Manrope',sans-serif; color:#ebeef5; -web
 </div>
 </main>
 
+<!-- Sell Confirm Modal -->
+<div id="sell-modal" class="fixed inset-0 z-[100] flex items-center justify-center hidden">
+  <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeSellModal()"></div>
+  <div class="relative w-[420px] bg-[#0f1520] border border-[#ff716c]/20 rounded-2xl shadow-[0_0_60px_rgba(255,113,108,0.12)] overflow-hidden">
+    <!-- Header -->
+    <div class="px-6 py-5 border-b border-white/5 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-[#ff716c]/10 flex items-center justify-center">
+        <span class="material-symbols-outlined text-[#ff716c] text-[20px]">sell</span>
+      </div>
+      <div>
+        <p class="font-headline font-bold text-sm">确认市价卖出</p>
+        <p class="text-[10px] text-on-surface-variant uppercase tracking-widest">Spot Market Sell</p>
+      </div>
+      <button onclick="closeSellModal()" class="ml-auto text-on-surface-variant hover:text-on-surface transition-colors">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+    <!-- Body -->
+    <div class="px-6 py-5 space-y-3">
+      <div class="flex justify-between items-center">
+        <span class="text-xs text-on-surface-variant uppercase tracking-wider">交易对</span>
+        <span id="sell-modal-symbol" class="font-headline font-bold text-base text-on-surface monospace"></span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-xs text-on-surface-variant uppercase tracking-wider">卖出数量</span>
+        <span id="sell-modal-qty" class="monospace text-sm text-on-surface"></span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-xs text-on-surface-variant uppercase tracking-wider">参考价格</span>
+        <span id="sell-modal-price" class="monospace text-sm text-primary"></span>
+      </div>
+      <div class="mt-1 p-3 rounded-xl bg-[#ff716c]/5 border border-[#ff716c]/10">
+        <p class="text-[11px] text-[#ff716c]/70">将以 Binance 当前市价全仓卖出，操作不可撤销。</p>
+      </div>
+    </div>
+    <!-- Footer -->
+    <div class="px-6 pb-6 flex gap-3">
+      <button onclick="closeSellModal()" class="flex-1 py-2.5 rounded-xl border border-outline-variant/30 text-on-surface-variant text-sm font-bold hover:bg-white/5 transition-colors">
+        取消
+      </button>
+      <button id="sell-modal-confirm-btn" class="flex-1 py-2.5 rounded-xl bg-[#ff716c]/10 hover:bg-[#ff716c]/20 text-[#ff716c] border border-[#ff716c]/30 text-sm font-bold transition-colors flex items-center justify-center gap-2">
+        <span class="material-symbols-outlined text-[16px]">sell</span>
+        确认卖出
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Sell Result Modal -->
+<div id="sell-result-modal" class="fixed inset-0 z-[100] flex items-center justify-center hidden">
+  <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeSellResultModal()"></div>
+  <div class="relative w-[400px] bg-[#0f1520] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+    <div class="px-6 py-5 border-b border-white/5 flex items-center gap-3">
+      <div id="sell-result-icon" class="w-9 h-9 rounded-xl flex items-center justify-center">
+        <span class="material-symbols-outlined text-[20px]"></span>
+      </div>
+      <p id="sell-result-title" class="font-headline font-bold text-sm"></p>
+      <button onclick="closeSellResultModal()" class="ml-auto text-on-surface-variant hover:text-on-surface">
+        <span class="material-symbols-outlined text-[20px]">close</span>
+      </button>
+    </div>
+    <div id="sell-result-body" class="px-6 py-5 space-y-3"></div>
+    <div class="px-6 pb-6">
+      <button onclick="closeSellResultModal()" class="w-full py-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-sm font-bold transition-colors">
+        确定
+      </button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = '/api/spot-trading';
 
@@ -327,11 +397,32 @@ function renderPositionRows(priceMap) {
     }).join('');
 }
 
-async function sellPosition(posId, symbol, qty, curPrice) {
-    const confirmed = window.confirm(
-        `确认市价卖出 ${symbol}?\n数量: ${qty}\n参考价: ${curPrice}\n\n此操作将关闭该持仓。`
-    );
-    if (!confirmed) return;
+var _sellPending = null;
+
+function sellPosition(posId, symbol, qty, curPrice) {
+    _sellPending = {posId, symbol};
+    document.getElementById('sell-modal-symbol').textContent = symbol;
+    document.getElementById('sell-modal-qty').textContent = Number(qty).toFixed(6);
+    document.getElementById('sell-modal-price').textContent = curPrice ? Number(curPrice).toFixed(4) : '--';
+    document.getElementById('sell-modal').classList.remove('hidden');
+    document.getElementById('sell-modal-confirm-btn').onclick = doSell;
+}
+
+function closeSellModal() {
+    document.getElementById('sell-modal').classList.add('hidden');
+    _sellPending = null;
+}
+
+function closeSellResultModal() {
+    document.getElementById('sell-result-modal').classList.add('hidden');
+}
+
+async function doSell() {
+    if (!_sellPending) return;
+    const {posId, symbol} = _sellPending;
+    const btn = document.getElementById('sell-modal-confirm-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined text-[16px] animate-spin">sync</span> 提交中...';
 
     try {
         const r = await fetch(API + '/sell', {
@@ -340,13 +431,52 @@ async function sellPosition(posId, symbol, qty, curPrice) {
             body: JSON.stringify({position_id: posId, symbol})
         });
         const data = await r.json();
+        closeSellModal();
+
+        const iconEl  = document.getElementById('sell-result-icon');
+        const titleEl = document.getElementById('sell-result-title');
+        const bodyEl  = document.getElementById('sell-result-body');
+
         if (!r.ok) throw new Error(data.detail || r.status);
-        const pnlSign = data.realized_pnl >= 0 ? '+' : '';
-        alert(`卖出成功\n${symbol}\n成交价: ${Number(data.exit_price).toFixed(4)}\n盈亏: ${pnlSign}${Number(data.realized_pnl).toFixed(2)} USDT (${pnlSign}${Number(data.pnl_pct).toFixed(2)}%)`);
+
+        const pnl     = Number(data.realized_pnl);
+        const pnlPct  = Number(data.pnl_pct);
+        const isProfit = pnl >= 0;
+        const pnlColor = isProfit ? '#49f4c8' : '#ff716c';
+        const pnlSign  = isProfit ? '+' : '';
+
+        iconEl.className = `w-9 h-9 rounded-xl flex items-center justify-center ${isProfit ? 'bg-[#49f4c8]/10' : 'bg-[#ff716c]/10'}`;
+        iconEl.innerHTML = `<span class="material-symbols-outlined text-[20px]" style="color:${pnlColor}">${isProfit ? 'trending_up' : 'trending_down'}</span>`;
+        titleEl.textContent = '卖出成功';
+        bodyEl.innerHTML = `
+          <div class="flex justify-between"><span class="text-xs text-on-surface-variant">交易对</span><span class="monospace font-bold">${data.symbol}</span></div>
+          <div class="flex justify-between"><span class="text-xs text-on-surface-variant">成交价</span><span class="monospace text-primary">${Number(data.exit_price).toFixed(4)}</span></div>
+          <div class="flex justify-between"><span class="text-xs text-on-surface-variant">卖出数量</span><span class="monospace">${Number(data.quantity).toFixed(6)}</span></div>
+          <div class="h-px bg-white/5 my-1"></div>
+          <div class="flex justify-between items-center">
+            <span class="text-xs text-on-surface-variant">实现盈亏</span>
+            <span class="monospace font-bold text-base" style="color:${pnlColor}">${pnlSign}${pnl.toFixed(2)} USDT</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-xs text-on-surface-variant">盈亏率</span>
+            <span class="monospace font-bold" style="color:${pnlColor}">${pnlSign}${pnlPct.toFixed(2)}%</span>
+          </div>`;
+        document.getElementById('sell-result-modal').classList.remove('hidden');
         loadPositions();
         loadSummary();
     } catch(e) {
-        alert('卖出失败: ' + e.message);
+        closeSellModal();
+        const iconEl  = document.getElementById('sell-result-icon');
+        const titleEl = document.getElementById('sell-result-title');
+        const bodyEl  = document.getElementById('sell-result-body');
+        iconEl.className = 'w-9 h-9 rounded-xl bg-[#ff716c]/10 flex items-center justify-center';
+        iconEl.innerHTML = '<span class="material-symbols-outlined text-[#ff716c] text-[20px]">error</span>';
+        titleEl.textContent = '卖出失败';
+        bodyEl.innerHTML = `<p class="text-sm text-[#ff716c]">${e.message}</p>`;
+        document.getElementById('sell-result-modal').classList.remove('hidden');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-symbols-outlined text-[16px]">sell</span> 确认卖出';
     }
 }
 
