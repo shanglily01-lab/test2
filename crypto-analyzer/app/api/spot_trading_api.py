@@ -314,6 +314,112 @@ async def get_spot_summary():
         raise HTTPException(status_code=500, detail=f"获取概览失败: {str(e)}")
 
 
+class SellRequest(BaseModel):
+    position_id: int
+    symbol: str
+
+
+@router.post("/sell")
+async def sell_spot_position(req: SellRequest):
+    """
+    市价卖出现货持仓（全仓）
+    1. 从 Binance Spot 获取当前价
+    2. 计算盈亏
+    3. 更新 paper_trading_positions -> status=closed
+    4. 写入 paper_trading_trades 记录
+    """
+    import aiohttp
+    from aiohttp import ClientTimeout
+    from datetime import datetime as dt
+    import uuid
+
+    # 1. 获取实时价格
+    exit_price = None
+    try:
+        timeout = ClientTimeout(total=3)
+        clean = req.symbol.replace("/", "").upper()
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(f"https://api.binance.com/api/v3/ticker/price?symbol={clean}") as resp:
+                if resp.status == 200:
+                    d = await resp.json()
+                    exit_price = float(d["price"])
+    except Exception as e:
+        logger.warning(f"获取Binance现货价格失败: {e}")
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # 2. 查询持仓
+        cursor.execute(
+            "SELECT id, symbol, avg_entry_price, quantity, total_cost, account_id "
+            "FROM paper_trading_positions WHERE id = %s AND status = 'open'",
+            (req.position_id,)
+        )
+        pos = cursor.fetchone()
+        if not pos:
+            raise HTTPException(status_code=404, detail="持仓不存在或已平仓")
+
+        avg_cost = float(pos["avg_entry_price"])
+        qty      = float(pos["quantity"])
+        total_cost = float(pos["total_cost"])
+        account_id = pos["account_id"]
+
+        if exit_price is None:
+            # fallback: use latest kline price
+            cursor.execute(
+                "SELECT close_price FROM kline_data WHERE symbol=%s ORDER BY open_time DESC LIMIT 1",
+                (req.symbol,)
+            )
+            row = cursor.fetchone()
+            exit_price = float(row["close_price"]) if row else avg_cost
+
+        sell_amount  = exit_price * qty
+        realized_pnl = sell_amount - total_cost
+        pnl_pct      = (realized_pnl / total_cost * 100) if total_cost > 0 else 0
+        now          = dt.utcnow()
+        trade_id     = str(uuid.uuid4())[:16]
+        order_id     = f"MANUAL_SELL_{req.position_id}_{int(now.timestamp())}"
+
+        # 3. 关闭持仓
+        cursor.execute(
+            "UPDATE paper_trading_positions SET status='closed', updated_at=%s WHERE id=%s",
+            (now, req.position_id)
+        )
+
+        # 4. 写交易记录
+        cursor.execute(
+            """INSERT INTO paper_trading_trades
+               (account_id, order_id, trade_id, symbol, side, price, quantity,
+                total_amount, fee, cost_price, realized_pnl, pnl_pct, trade_time)
+               VALUES (%s,%s,%s,%s,'SELL',%s,%s,%s,0,%s,%s,%s,%s)""",
+            (account_id, order_id, trade_id, req.symbol,
+             exit_price, qty, sell_amount, avg_cost,
+             realized_pnl, pnl_pct, now)
+        )
+        conn.commit()
+        cursor.close()
+
+        return {
+            "success": True,
+            "symbol": req.symbol,
+            "exit_price": exit_price,
+            "quantity": qty,
+            "realized_pnl": round(realized_pnl, 4),
+            "pnl_pct": round(pnl_pct, 2),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"卖出持仓失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if conn:
+            conn.close()
+
+
 @router.post("/prices/batch")
 async def get_spot_prices_batch(symbols: List[str] = Body(..., embed=True)):
     """批量获取现货实时价格（从 Binance Spot API），body: {"symbols": [...]}"""
