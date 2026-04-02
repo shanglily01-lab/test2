@@ -442,7 +442,7 @@ async function doClose() {
     try {
         const r = await authFetch(`${API}/close-by-symbol`, {
             method: 'POST',
-            body: JSON.stringify({ symbol: pendingAction.symbol, positionSide: pendingAction.side })
+            body: JSON.stringify({ symbol: pendingAction.symbol, position_side: pendingAction.side })
         }).then(r => r.json());
         if (r.success) { toast('平仓指令已发送'); setTimeout(loadPositions, 1500); }
         else toast('平仓失败: ' + (r.message || ''), 'err');
