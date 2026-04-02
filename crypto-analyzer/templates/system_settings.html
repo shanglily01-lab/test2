@@ -608,7 +608,7 @@
         // U本位模拟交易
         bindToggle('usdtToggle', async function (enabled) {
             try {
-                await apiPut('/trading-services', { u_futures_trading_enabled: enabled });
+                await apiPut('/trading-services', { usdt_futures_enabled: enabled });
                 showToast('U本位模拟交易已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
@@ -764,6 +764,7 @@
                         apiPut('/trading-services', {
                             live_trading_enabled: getToggle('liveToggle'),
                             usdt_futures_enabled: getToggle('usdtToggle'),
+                            coin_futures_enabled: getToggle('coinFuturesToggle'),
                             btc_momentum_enabled: getToggle('btcMomentumToggle'),
                             predictor_enabled: getToggle('predictorToggle'),
                             u_coin_style_enabled: getToggle('uCoinStyleToggle'),
