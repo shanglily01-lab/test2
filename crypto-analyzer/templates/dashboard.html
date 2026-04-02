@@ -348,9 +348,9 @@
 <h4 class="text-xl font-display font-bold tracking-tight">合约板块</h4>
 <span class="px-3 py-1 bg-surface-container-highest text-[10px] font-mono text-on-surface-variant rounded-full">OI · L/S Ratio</span>
 </div>
-<div class="overflow-x-auto no-scrollbar">
+<div class="overflow-x-auto overflow-y-auto" style="max-height:420px;">
 <table class="w-full text-left border-collapse text-sm">
-<thead>
+<thead class="sticky top-0 bg-surface-container-low z-10">
 <tr class="text-on-surface-variant text-[10px] uppercase tracking-[0.15em] font-display">
 <th class="pb-4 font-medium">交易对</th>
 <th class="pb-4 font-medium text-right">持仓量</th>
@@ -372,7 +372,7 @@
 <h4 class="text-xl font-display font-bold tracking-tight">新闻板块</h4>
 <span class="px-3 py-1 bg-surface-container-highest text-[10px] font-mono text-on-surface-variant rounded-full">24H NEWS</span>
 </div>
-<div id="news-list" class="space-y-3 overflow-y-auto max-h-[420px] no-scrollbar pr-1">
+<div id="news-list" class="space-y-3 overflow-y-auto pr-1" style="max-height:420px;">
 <div class="py-6 text-center text-on-surface-variant text-xs font-mono">Loading...</div>
 </div>
 </div>
@@ -413,9 +413,9 @@
 </div>
 </div>
 <!-- Trades Table -->
-<div class="overflow-x-auto no-scrollbar">
+<div class="overflow-x-auto overflow-y-auto" style="max-height:380px;">
 <table class="w-full text-left border-collapse text-sm">
-<thead>
+<thead class="sticky top-0 bg-surface-container-low z-10">
 <tr class="text-on-surface-variant text-[10px] uppercase tracking-[0.15em] font-display">
 <th class="pb-4 font-medium">币种</th>
 <th class="pb-4 font-medium text-center">方向</th>
@@ -430,6 +430,18 @@
 <tr><td colspan="7" class="py-6 text-center text-on-surface-variant text-xs font-mono">Loading...</td></tr>
 </tbody>
 </table>
+</div>
+<!-- 分页控件 -->
+<div class="flex items-center justify-between mt-4">
+<span class="text-xs text-on-surface-variant font-mono" id="hl-page-info">--</span>
+<div class="flex gap-2">
+<button id="hl-prev-btn" onclick="hlPageChange(-1)"
+  class="px-3 py-1.5 text-xs font-mono bg-surface-container hover:bg-surface-container-high rounded-lg transition-colors disabled:opacity-30"
+  disabled>上一页</button>
+<button id="hl-next-btn" onclick="hlPageChange(1)"
+  class="px-3 py-1.5 text-xs font-mono bg-surface-container hover:bg-surface-container-high rounded-lg transition-colors disabled:opacity-30"
+  disabled>下一页</button>
+</div>
 </div>
 </div>
 
@@ -610,30 +622,25 @@ function renderNewsPanel(news) {
     }).join('');
 }
 
-// ===== Hyperliquid 板块渲染（接受聚合对象）=====
-function renderHyperliquidPanel(payload) {
+// ===== Hyperliquid 分页状态 =====
+var _hlTrades = [];
+var _hlPage   = 1;
+var _hlPageSize = 10;
+
+function _hlRenderPage() {
     var tbody = document.getElementById('hl-tbody');
     if (!tbody) return;
-    var stats  = (payload && payload.statistics) || {};
-    var trades = (payload && payload.trades)     || [];
-
-    var netFlow = stats.net_flow_usd != null ? parseFloat(stats.net_flow_usd) : null;
-    document.getElementById('hl-total-count').textContent = stats.total_count  != null ? stats.total_count  : '--';
-    document.getElementById('hl-long-count').textContent  = stats.long_count   != null ? stats.long_count   : '--';
-    document.getElementById('hl-short-count').textContent = stats.short_count  != null ? stats.short_count  : '--';
-    document.getElementById('hl-wallets').textContent     = stats.unique_wallets != null ? stats.unique_wallets : '--';
-    document.getElementById('hl-ls-ratio').textContent    = stats.long_short_ratio != null ? parseFloat(stats.long_short_ratio).toFixed(2) : '--';
-    var netEl = document.getElementById('hl-net-flow');
-    if (netFlow != null) {
-        var sign = netFlow >= 0 ? '+' : '';
-        netEl.textContent = sign + (netFlow / 1000).toFixed(1) + 'K';
-        netEl.className = 'text-xl font-mono font-bold ' + (netFlow >= 0 ? 'text-primary' : 'text-error');
-    }
-    if (!trades.length) {
+    if (!_hlTrades.length) {
         tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-on-surface-variant text-xs font-mono">暂无大额交易</td></tr>';
+        document.getElementById('hl-page-info').textContent = '';
+        document.getElementById('hl-prev-btn').disabled = true;
+        document.getElementById('hl-next-btn').disabled = true;
         return;
     }
-    tbody.innerHTML = trades.map(function(t) {
+    var totalPages = Math.ceil(_hlTrades.length / _hlPageSize);
+    var start = (_hlPage - 1) * _hlPageSize;
+    var pageRows = _hlTrades.slice(start, start + _hlPageSize);
+    tbody.innerHTML = pageRows.map(function(t) {
         var coin   = t.coin || '--';
         var action = (t.action || t.side || '').toUpperCase();
         var isLong = action === 'LONG' || action === 'B';
@@ -656,6 +663,38 @@ function renderHyperliquidPanel(payload) {
             + '<td class="py-3 font-mono text-xs text-right text-on-surface-variant">' + ts + '</td>'
             + '</tr>';
     }).join('');
+    document.getElementById('hl-page-info').textContent = '第 ' + _hlPage + ' / ' + totalPages + ' 页，共 ' + _hlTrades.length + ' 条';
+    document.getElementById('hl-prev-btn').disabled = (_hlPage <= 1);
+    document.getElementById('hl-next-btn').disabled = (_hlPage >= totalPages);
+}
+
+function hlPageChange(delta) {
+    var totalPages = Math.ceil(_hlTrades.length / _hlPageSize);
+    _hlPage = Math.max(1, Math.min(totalPages, _hlPage + delta));
+    _hlRenderPage();
+}
+
+// ===== Hyperliquid 板块渲染（接受聚合对象）=====
+function renderHyperliquidPanel(payload) {
+    var stats  = (payload && payload.statistics) || {};
+    var trades = (payload && payload.trades)     || [];
+
+    var netFlow = stats.net_flow_usd != null ? parseFloat(stats.net_flow_usd) : null;
+    document.getElementById('hl-total-count').textContent = stats.total_count  != null ? stats.total_count  : '--';
+    document.getElementById('hl-long-count').textContent  = stats.long_count   != null ? stats.long_count   : '--';
+    document.getElementById('hl-short-count').textContent = stats.short_count  != null ? stats.short_count  : '--';
+    document.getElementById('hl-wallets').textContent     = stats.unique_wallets != null ? stats.unique_wallets : '--';
+    document.getElementById('hl-ls-ratio').textContent    = stats.long_short_ratio != null ? parseFloat(stats.long_short_ratio).toFixed(2) : '--';
+    var netEl = document.getElementById('hl-net-flow');
+    if (netFlow != null) {
+        var sign = netFlow >= 0 ? '+' : '';
+        netEl.textContent = sign + (netFlow / 1000).toFixed(1) + 'K';
+        netEl.className = 'text-xl font-mono font-bold ' + (netFlow >= 0 ? 'text-primary' : 'text-error');
+    }
+    // 重置分页并渲染
+    _hlTrades = trades;
+    _hlPage   = 1;
+    _hlRenderPage();
 }
 
 // ===== 主加载：单次请求快照，分发到各面板 =====
