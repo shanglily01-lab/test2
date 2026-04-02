@@ -297,7 +297,6 @@ def update_dashboard_snapshot():
         news            = _fetch_news(cursor)
         hyperliquid     = _fetch_hyperliquid(cursor)
         winrate_history = _fetch_winrate_history(cursor)
-        recent_trades   = _fetch_recent_trades(cursor)
 
         snapshot = {
             'signals':         signals,
@@ -306,7 +305,6 @@ def update_dashboard_snapshot():
             'news':            news,
             'hyperliquid':     hyperliquid,
             'winrate_history': winrate_history,
-            'recent_trades':   recent_trades,
             'updated_at':      datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
         }
 
