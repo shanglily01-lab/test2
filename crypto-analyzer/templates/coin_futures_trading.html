@@ -169,11 +169,11 @@
 <div id="stat-position-count" class="font-mono text-2xl font-medium text-on-surface">--</div>
 </div>
 <div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
-<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">总保证金 (BTC)</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">总保证金 (USDT)</div>
 <div id="stat-total-margin" class="font-mono text-2xl font-medium text-on-surface">--</div>
 </div>
 <div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
-<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">总浮盈 (BTC)</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">总浮盈 (USDT)</div>
 <div id="stat-total-pnl" class="font-mono text-2xl font-medium text-primary">--</div>
 </div>
 <div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
@@ -208,7 +208,7 @@
 <th class="px-6 py-4 font-bold whitespace-nowrap">交易对</th>
 <th class="px-6 py-4 font-bold whitespace-nowrap">方向</th>
 <th class="px-6 py-4 font-bold whitespace-nowrap">开仓/当前价</th>
-<th class="px-6 py-4 font-bold whitespace-nowrap">浮盈 (BTC)</th>
+<th class="px-6 py-4 font-bold whitespace-nowrap">浮盈 (USDT)</th>
 <th class="px-6 py-4 font-bold whitespace-nowrap">止损/止盈</th>
 <th class="px-6 py-4 font-bold whitespace-nowrap">操作</th>
 </tr>
@@ -284,19 +284,16 @@
 </tbody>
 </table>
 </div>
-<div class="px-6 py-4 flex justify-end items-center gap-4">
-<span class="text-xs text-on-surface-variant">Page 1 of 4</span>
-<div class="flex gap-1">
-<button class="w-8 h-8 flex items-center justify-center rounded border border-outline-variant/20 hover:bg-surface-variant text-on-surface-variant transition-colors">
-<span class="material-symbols-outlined text-sm">chevron_left</span>
-</button>
-<button class="w-8 h-8 flex items-center justify-center rounded bg-primary text-on-primary font-bold text-xs">1</button>
-<button class="w-8 h-8 flex items-center justify-center rounded border border-outline-variant/20 hover:bg-surface-variant text-on-surface-variant transition-colors text-xs">2</button>
-<button class="w-8 h-8 flex items-center justify-center rounded border border-outline-variant/20 hover:bg-surface-variant text-on-surface-variant transition-colors text-xs">3</button>
-<button class="w-8 h-8 flex items-center justify-center rounded border border-outline-variant/20 hover:bg-surface-variant text-on-surface-variant transition-colors">
-<span class="material-symbols-outlined text-sm">chevron_right</span>
-</button>
-</div>
+<div class="px-6 py-3 bg-surface-container border-t border-outline-variant/10 flex items-center justify-between flex-wrap gap-3">
+  <div class="flex items-center gap-3">
+    <select id="history-limit" onchange="loadHistory(1)" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:outline-none focus:border-primary/50">
+      <option value="30">每页 30 条</option>
+      <option value="50">每页 50 条</option>
+      <option value="100">每页 100 条</option>
+    </select>
+    <span id="history-count-label" class="text-xs text-on-surface-variant font-mono">--</span>
+  </div>
+  <div id="history-pagination" class="flex items-center gap-1"></div>
 </div>
 </div>
 </main>
@@ -311,6 +308,10 @@
 
 var ACCOUNT_ID = 3;
 var _refreshTimer = null;
+var _historyAllTrades = [];
+var _historyPage = 1;
+var _historyPageSize = 30;
+var _historyTotalCount = 0;
 
 // ---- 工具函数 ----
 
@@ -323,19 +324,19 @@ function fmtPrice(p) {
     return n.toFixed(6);
 }
 
-function fmtBtc(n) {
+function fmtUsdt(n) {
     if (n === null || n === undefined || isNaN(parseFloat(n))) return '--';
     var v = parseFloat(n);
     if (isNaN(v)) return '--';
-    return v.toFixed(6) + ' BTC';
+    return v.toFixed(2) + ' USDT';
 }
 
-function fmtPnlBtc(n) {
+function fmtPnl(n) {
     if (n === null || n === undefined) return '--';
     var v = parseFloat(n);
     if (isNaN(v)) return '--';
     var sign = v >= 0 ? '+' : '';
-    return sign + v.toFixed(6) + ' BTC';
+    return sign + v.toFixed(2) + ' USDT';
 }
 
 function fmtTime(t) {
@@ -463,7 +464,7 @@ async function loadPositions() {
                 '<div class="text-on-surface">' + fmtPrice(entry) + '</div>' +
                 '<div class="text-on-surface-variant text-xs opacity-70">' + fmtPrice(curPrice) + '</div>' +
             '</td>' +
-            '<td class="px-6 py-4 font-mono ' + pnlClass + '">' + fmtPnlBtc(pnl) + '</td>' +
+            '<td class="px-6 py-4 font-mono ' + pnlClass + '">' + fmtPnl(pnl) + '</td>' +
             '<td class="px-6 py-4">' +
                 '<div class="flex items-center gap-2">' +
                     '<span class="text-[#ff716c] text-xs font-mono">' + sl + '</span>' +
@@ -484,27 +485,84 @@ async function loadPositions() {
 
 // ---- 加载历史交易 ----
 
-async function loadHistory() {
+function renderHistoryPage() {
+    var tbody   = document.getElementById('history-tbody');
+    var countEl = document.getElementById('history-count-label');
+    var pagEl   = document.getElementById('history-pagination');
+    var totalPages = Math.max(1, Math.ceil(_historyTotalCount / _historyPageSize));
+
+    if (_historyAllTrades.length === 0) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
+    } else {
+        tbody.innerHTML = _historyAllTrades.map(function(t) {
+            var isLong = t.side === 'CLOSE_LONG';
+            var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+            var pnl = parseFloat(t.realized_pnl) || 0;
+            var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+            return '<tr class="hover:bg-surface-container/50 border-b border-outline-variant/5 transition-colors">' +
+                '<td class="px-6 py-4 font-mono text-xs text-on-surface-variant">' + fmtTime(t.close_time || t.trade_time) + '</td>' +
+                '<td class="px-6 py-4 font-bold font-headline">' + (t.symbol || '--') + '</td>' +
+                '<td class="px-6 py-4 text-xs ' + sideClass + '">' + (isLong ? 'BUY/LONG' : 'SELL/SHORT') + '</td>' +
+                '<td class="px-6 py-4 font-mono text-on-surface">' + fmtPrice(t.entry_price) + '</td>' +
+                '<td class="px-6 py-4 font-mono text-on-surface">' + fmtPrice(t.price) + '</td>' +
+                '<td class="px-6 py-4 font-mono ' + pnlClass + '">' + fmtPnl(pnl) + '</td>' +
+                '<td class="px-6 py-4 font-mono text-on-surface-variant text-xs">' + (t.fee != null ? parseFloat(t.fee).toFixed(4) : '--') + '</td>' +
+            '</tr>';
+        }).join('');
+    }
+
+    if (countEl) countEl.textContent = '共 ' + _historyTotalCount + ' 条  第 ' + _historyPage + ' / ' + totalPages + ' 页';
+
+    if (pagEl) {
+        var bc = 'px-3 py-1 rounded text-xs font-mono border transition-colors ';
+        var html = '<button ' + (_historyPage <= 1 ? 'disabled ' : '') + 'onclick="loadHistory(' + (_historyPage - 1) + ')" class="' + bc + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&lsaquo;</button>';
+        var pages = [];
+        if (totalPages <= 7) { for (var i = 1; i <= totalPages; i++) pages.push(i); }
+        else {
+            pages = [1, 2];
+            if (_historyPage > 4) pages.push('...');
+            for (var p = Math.max(3, _historyPage - 1); p <= Math.min(totalPages - 2, _historyPage + 1); p++) pages.push(p);
+            if (_historyPage < totalPages - 3) pages.push('...');
+            pages.push(totalPages - 1, totalPages);
+        }
+        pages.forEach(function(p) {
+            if (p === '...') { html += '<span class="px-2 text-on-surface-variant text-xs">...</span>'; return; }
+            var active = p === _historyPage;
+            html += '<button onclick="loadHistory(' + p + ')" class="' + bc + (active ? 'bg-primary text-background border-primary font-bold' : 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container') + '">' + p + '</button>';
+        });
+        html += '<button ' + (_historyPage >= totalPages ? 'disabled ' : '') + 'onclick="loadHistory(' + (_historyPage + 1) + ')" class="' + bc + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&rsaquo;</button>';
+        pagEl.innerHTML = html;
+    }
+}
+
+async function loadHistory(page) {
+    if (page !== undefined) _historyPage = page;
     var tbody = document.getElementById('history-tbody');
     var recentList = document.getElementById('recent-trades-list');
+    var limitEl = document.getElementById('history-limit');
+    _historyPageSize = limitEl ? parseInt(limitEl.value) || 30 : 30;
+
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>';
 
     var trades = [];
     try {
-        var res = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&limit=20');
+        var res = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&page=' + _historyPage + '&page_size=' + _historyPageSize);
         var data = await res.json();
         trades = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+        _historyTotalCount = data.total_count || 0;
     } catch(e) {
         if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败</td></tr>';
         return [];
     }
+    _historyAllTrades = trades;
 
-    // 更新最近成交 panel
-    if (recentList) {
+    // 更新最近成交 panel (page 1 only)
+    if (recentList && _historyPage === 1) {
         if (trades.length === 0) {
             recentList.innerHTML = '<div class="py-4 text-center text-on-surface-variant text-xs">暂无记录</div>';
         } else {
             recentList.innerHTML = trades.slice(0, 5).map(function(t) {
-                var isLong = t.position_side === 'LONG';
+                var isLong = t.side === 'CLOSE_LONG';
                 var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
                 var sideLabel = isLong ? 'LONG' : 'SHORT';
                 var pnl = parseFloat(t.realized_pnl) || 0;
@@ -515,37 +573,15 @@ async function loadHistory() {
                         '<span class="text-[10px] text-on-surface-variant uppercase">' + sideLabel + '</span>' +
                     '</div>' +
                     '<div class="text-right">' +
-                        '<div class="font-mono ' + pnlClass + '">' + fmtPnlBtc(pnl) + '</div>' +
-                        '<div class="text-[10px] text-on-surface-variant font-mono">' + fmtTime(t.close_time || t.created_at) + '</div>' +
+                        '<div class="font-mono ' + pnlClass + '">' + fmtPnl(pnl) + '</div>' +
+                        '<div class="text-[10px] text-on-surface-variant font-mono">' + fmtTime(t.close_time || t.trade_time) + '</div>' +
                     '</div>' +
                 '</div>';
             }).join('');
         }
     }
 
-    // 更新历史记录表格
-    if (!tbody) return trades;
-    if (trades.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
-        return trades;
-    }
-
-    tbody.innerHTML = trades.map(function(t) {
-        var isLong = t.position_side === 'LONG';
-        var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
-        var pnl = parseFloat(t.realized_pnl) || 0;
-        var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
-        return '<tr class="hover:bg-surface-container/50 border-b border-outline-variant/5 transition-colors">' +
-            '<td class="px-6 py-4 font-mono text-xs text-on-surface-variant">' + fmtTime(t.close_time || t.created_at) + '</td>' +
-            '<td class="px-6 py-4 font-bold font-headline">' + (t.symbol || '--') + '</td>' +
-            '<td class="px-6 py-4 ' + sideClass + '">' + (isLong ? 'BUY/LONG' : 'SELL/SHORT') + '</td>' +
-            '<td class="px-6 py-4 font-mono text-on-surface">' + fmtPrice(t.entry_price) + '</td>' +
-            '<td class="px-6 py-4 font-mono text-on-surface">' + fmtPrice(t.close_price) + '</td>' +
-            '<td class="px-6 py-4 font-mono ' + pnlClass + '">' + fmtPnlBtc(pnl) + '</td>' +
-            '<td class="px-6 py-4 font-mono text-on-surface-variant">--</td>' +
-        '</tr>';
-    }).join('');
-
+    renderHistoryPage();
     return trades;
 }
 
@@ -561,23 +597,19 @@ function loadStats(posResult, trades) {
 
     if (posResult) {
         if (elCount) elCount.textContent = posResult.count;
-        if (elMargin) elMargin.textContent = fmtBtc(posResult.totalMargin);
+        if (elMargin) elMargin.textContent = fmtUsdt(posResult.totalMargin);
         if (elPnl) {
-            elPnl.textContent = fmtPnlBtc(posResult.totalPnl);
+            elPnl.textContent = fmtPnl(posResult.totalPnl);
             elPnl.className = 'font-mono text-2xl font-medium ' + (posResult.totalPnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
         }
     }
 
+    // 24H 盈亏 — computed from current page's trades
     if (trades && trades.length > 0) {
-        var totalCount = trades.length;
-        var wins = trades.filter(function(t) { return (parseFloat(t.realized_pnl) || 0) > 0; }).length;
-        var winRate = totalCount > 0 ? Math.round(wins / totalCount * 100) : 0;
-
-        // 24H 盈亏 (BTC)
         var cutoff = Date.now() - 24 * 3600000;
         var pnl24h = trades
             .filter(function(t) {
-                var ct = t.close_time || t.created_at;
+                var ct = t.close_time || t.trade_time;
                 if (!ct) return false;
                 var ts = new Date((typeof ct === 'string' && !ct.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(ct)) ? ct + 'Z' : ct).getTime();
                 return ts >= cutoff;
@@ -585,16 +617,28 @@ function loadStats(posResult, trades) {
             .reduce(function(s, t) { return s + (parseFloat(t.realized_pnl) || 0); }, 0);
 
         if (el24h) {
-            el24h.textContent = fmtPnlBtc(pnl24h);
+            el24h.textContent = fmtPnl(pnl24h);
             el24h.className = 'font-mono text-2xl font-medium ' + (pnl24h >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
         }
-        if (elWin) elWin.textContent = winRate + '%';
-        if (elTotal) elTotal.textContent = totalCount;
     } else if (trades !== undefined) {
-        if (el24h) el24h.textContent = '0.000000 BTC';
-        if (elWin) elWin.textContent = '--';
-        if (elTotal) elTotal.textContent = '0';
+        if (el24h) el24h.textContent = '0.00 USDT';
     }
+    // win_rate and total_trades loaded from account API in loadAccountInfo()
+}
+
+// ---- 加载账户统计 ----
+
+async function loadAccountInfo() {
+    try {
+        var res = await fetch('/api/futures/account/' + ACCOUNT_ID);
+        if (!res.ok) return;
+        var data = await res.json();
+        var acc = data.data || data;
+        var elWin   = document.getElementById('stat-win-rate');
+        var elTotal = document.getElementById('stat-total-trades');
+        if (elWin   && acc.win_rate    != null) elWin.textContent   = parseFloat(acc.win_rate).toFixed(1) + '%';
+        if (elTotal && acc.total_trades != null) elTotal.textContent = acc.total_trades;
+    } catch(e) {}
 }
 
 // ---- 加载交易开关状态 ----
@@ -688,7 +732,7 @@ async function closePosition(id, symbol) {
 // ---- 主加载函数 ----
 
 async function loadAll() {
-    var results = await Promise.all([loadPositions(), loadHistory()]);
+    var results = await Promise.all([loadPositions(), loadHistory(1), loadAccountInfo()]);
     var posResult = results[0];
     var trades = results[1];
     loadStats(posResult, trades);
