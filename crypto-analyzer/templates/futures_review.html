@@ -393,55 +393,64 @@
 
   <!-- ============ OPPORTUNITY ============ -->
   <div id="pane-opportunity" class="tab-pane space-y-6">
-    <div id="opp-summary-grid" class="grid grid-cols-4 gap-4">
+    <!-- 统计概览 -->
+    <div class="grid grid-cols-5 gap-4">
       <div class="bg-surface-container-low rounded-xl p-5">
-        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">总机会数</p>
-        <p class="mono text-2xl font-medium text-on-surface" id="opp-total">--</p>
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">监控交易对</p>
+        <p class="mono text-2xl font-medium text-on-surface" id="opp-total-monitored">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">有效信号</p>
+        <p class="mono text-2xl font-medium text-on-surface" id="opp-total-signals">--</p>
       </div>
       <div class="bg-surface-container-low rounded-xl p-5">
         <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">已捕获</p>
         <p class="mono text-2xl font-medium text-primary" id="opp-captured">--</p>
       </div>
       <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">已错过</p>
+        <p class="mono text-2xl font-medium text-error" id="opp-missed">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
         <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">捕获率</p>
         <p class="mono text-2xl font-medium text-secondary" id="opp-rate">--</p>
       </div>
-      <div class="bg-surface-container-low rounded-xl p-5">
-        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">平均涨幅</p>
-        <p class="mono text-2xl font-medium text-on-surface" id="opp-avg-move">--</p>
-      </div>
     </div>
     <div class="grid grid-cols-2 gap-6">
+      <!-- 错过原因 -->
       <div class="bg-surface-container-low rounded-xl p-6">
-        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">时间框架分布</h3>
-        <div id="opp-timeframes" class="space-y-2">
-          <p class="text-xs text-on-surface-variant">加载中...</p>
-        </div>
-      </div>
-      <div class="bg-surface-container-low rounded-xl p-6">
-        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">遗漏原因</h3>
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">遗漏原因分布</h3>
         <div id="opp-miss-reasons" class="space-y-2">
           <p class="text-xs text-on-surface-variant">加载中...</p>
         </div>
       </div>
+      <!-- 已捕获信号 -->
+      <div class="bg-surface-container-low rounded-xl p-6">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">已捕获信号</h3>
+        <div id="opp-captured-list" class="space-y-2">
+          <p class="text-xs text-on-surface-variant">加载中...</p>
+        </div>
+      </div>
     </div>
+    <!-- 错过的机会明细 -->
     <div class="bg-surface-container-low rounded-xl overflow-hidden">
       <div class="px-6 py-4 border-b border-outline-variant/20">
-        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">交易对机会明细</h3>
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">错过的强信号</h3>
       </div>
-      <div class="overflow-x-auto">
+      <div class="overflow-x-auto max-h-[420px] overflow-y-auto">
         <table class="w-full text-xs">
-          <thead class="bg-surface-container sticky top-0">
+          <thead class="bg-surface-container sticky top-0 z-10">
             <tr class="border-b border-outline-variant/20">
               <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">交易对</th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总机会</th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">已捕获</th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">捕获率</th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">平均涨幅</th>
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">方向</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">信号强度</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">1H力度</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">15M力度</th>
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">错过原因</th>
             </tr>
           </thead>
-          <tbody id="opp-symbols-body">
-            <tr><td colspan="5" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
+          <tbody id="opp-missed-body">
+            <tr><td colspan="6" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
           </tbody>
         </table>
       </div>
@@ -1109,80 +1118,86 @@ function loadSignals() {
 // OPPORTUNITY
 // ============================================================
 function loadOpportunity() {
-  fetch('/api/futures/review/opportunity-analysis?account_id=' + accountId() + '&hours=' + currentHours)
+  fetch('/api/futures/review/realtime-opportunity-analysis?account_id=' + accountId())
     .then(function(r){ return r.json(); })
     .then(function(d) {
       var s = d.data || d || {};
-      var summary = s.summary || {};
-      var tfAnalysis = s.timeframe_analysis || {};
-      var missReasonsObj = s.miss_reasons || {};
-      var symAnalysis = s.symbol_analysis || {};
-
-      // Compute derived totals
-      var totalOpps = summary.total_opportunities || 0;
-      var totalCaptured = 0;
-      for (var tf in tfAnalysis) { if (tfAnalysis.hasOwnProperty(tf)) totalCaptured += tfAnalysis[tf].captured || 0; }
-      var capRate = totalOpps > 0 ? (totalCaptured / totalOpps * 100) : 0;
-      // avg missed change
-      var avgMove = '--';
-      var missKeys = Object.keys(missReasonsObj);
-      if (missKeys.length > 0) {
-        var totalChange = 0, totalMissCount = 0;
-        missKeys.forEach(function(k){ totalChange += missReasonsObj[k].total_pct_change || (missReasonsObj[k].avg_missed_change * missReasonsObj[k].count) || 0; totalMissCount += missReasonsObj[k].count || 0; });
-        if (totalMissCount > 0) avgMove = fmtNum(totalChange / totalMissCount, 2) + '%';
+      if (!s.has_data) {
+        document.getElementById('opp-miss-reasons').innerHTML = '<p class="text-xs text-on-surface-variant">' + (s.message || '暂无数据') + '</p>';
+        return;
       }
-
+      var sum = s.summary || {};
       var setT = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v !== undefined && v !== null ? v : '--'; };
-      setT('opp-total', totalOpps || '--');
-      setT('opp-captured', totalCaptured || '--');
-      setT('opp-rate', totalOpps > 0 ? fmtNum(capRate, 1)+'%' : '--');
-      setT('opp-avg-move', avgMove);
+      setT('opp-total-monitored', sum.total_monitored || '--');
+      setT('opp-total-signals', sum.total_signals || '--');
+      setT('opp-captured', sum.captured || '--');
+      setT('opp-missed', sum.missed || '--');
+      setT('opp-rate', sum.capture_rate !== undefined ? fmtNum(sum.capture_rate, 1) + '%' : '--');
 
-      var tfEl = document.getElementById('opp-timeframes');
-      if (tfEl) {
-        var tfsArr = Object.keys(tfAnalysis).map(function(k) { return Object.assign({ timeframe: k }, tfAnalysis[k]); });
-        if (!tfsArr.length) { tfEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>'; }
-        else {
-          tfEl.innerHTML = tfsArr.map(function(t) {
-            var cr = t.total_opportunities > 0 ? fmtNum(t.capture_rate, 1)+'%' : '--';
-            return '<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 text-xs">' +
-              '<span class="text-on-surface-variant">' + (t.timeframe || '--') + '</span>' +
-              '<span class="mono text-on-surface">' + (t.total_opportunities || '--') + ' 次</span>' +
-              '<span class="mono text-primary">' + cr + '</span></div>';
-          }).join('');
-        }
-      }
-
+      // 错过原因
       var mrEl = document.getElementById('opp-miss-reasons');
       if (mrEl) {
-        var mrsArr = Object.keys(missReasonsObj).map(function(k) { return { reason: k, count: missReasonsObj[k].count || 0 }; });
-        mrsArr.sort(function(a,b){ return b.count - a.count; });
-        if (!mrsArr.length) { mrEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>'; }
-        else {
+        var mrs = s.miss_reason_stats || {};
+        var mrsArr = Object.keys(mrs).map(function(k) { return { reason: k, count: mrs[k].count || 0 }; });
+        mrsArr.sort(function(a, b) { return b.count - a.count; });
+        if (!mrsArr.length) {
+          mrEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无遗漏记录</p>';
+        } else {
+          var maxCnt = mrsArr[0].count;
           mrEl.innerHTML = mrsArr.slice(0, 10).map(function(m) {
-            return '<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 text-xs">' +
-              '<span class="text-on-surface-variant truncate max-w-[180px]">' + (m.reason || '--') + '</span>' +
-              '<span class="mono text-on-surface">' + (m.count || '--') + '</span></div>';
+            var pct = maxCnt > 0 ? Math.round(m.count / maxCnt * 100) : 0;
+            return '<div class="space-y-1">' +
+              '<div class="flex justify-between text-xs"><span class="text-on-surface-variant truncate max-w-[200px]">' + m.reason + '</span>' +
+              '<span class="mono text-on-surface">' + m.count + '</span></div>' +
+              '<div class="bar-bg"><div class="bar-fill" style="width:' + pct + '%;background:#ff716c"></div></div>' +
+              '</div>';
           }).join('');
         }
       }
 
-      var symBody = document.getElementById('opp-symbols-body');
-      if (symBody) {
-        var symsAll = symAnalysis.all_symbols || {};
-        var symsArr = Object.keys(symsAll).map(function(sym) { return Object.assign({ symbol: sym }, symsAll[sym]); });
-        symsArr.sort(function(a,b){ return b.total_opportunities - a.total_opportunities; });
-        if (!symsArr.length) {
-          symBody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>';
+      // 已捕获信号
+      var capEl = document.getElementById('opp-captured-list');
+      if (capEl) {
+        var caps = s.captured_signals || [];
+        if (!caps.length) {
+          capEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无已捕获信号</p>';
         } else {
-          symBody.innerHTML = symsArr.slice(0, 50).map(function(sym) {
-            var cr = sym.total_opportunities > 0 ? fmtNum(sym.capture_rate, 1)+'%' : '--';
+          capEl.innerHTML = caps.slice(0, 12).map(function(c) {
+            var dirColor = c.signal_direction === 'LONG' ? 'text-primary' : 'text-error';
+            var qColor = c.signal_quality === '强' ? '#49f4c8' : c.signal_quality === '中' ? '#FFD700' : '#a8abb2';
+            return '<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 text-xs">' +
+              '<span class="text-on-surface font-medium">' + shortSym(c.symbol) + '</span>' +
+              '<span class="' + dirColor + ' font-bold text-[10px]">' + (c.signal_direction || '--') + '</span>' +
+              '<span class="text-[10px] font-bold" style="color:' + qColor + '">' + (c.signal_quality || '--') + '</span>' +
+              '<span class="mono text-on-surface-variant">' + fmtNum(c.signal_strength, 1) + '</span>' +
+              '</div>';
+          }).join('');
+        }
+      }
+
+      // 错过的强信号表格
+      var missBody = document.getElementById('opp-missed-body');
+      if (missBody) {
+        var missed = s.missed_opportunities || [];
+        if (!missed.length) {
+          missBody.innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无错过的强信号</td></tr>';
+        } else {
+          missBody.innerHTML = missed.map(function(m) {
+            var dirColor = m.signal_direction === 'LONG' ? 'text-primary' : 'text-error';
+            var qColor = m.signal_quality === '强' ? 'text-primary' : 'text-yellow-400';
+            var reason = (m.miss_reasons && m.miss_reasons.length) ? m.miss_reasons[0] : (m.main_reason || '--');
+            var np1h = m.net_power_1h !== undefined ? fmtNum(m.net_power_1h, 1) : '--';
+            var np15m = m.net_power_15m !== undefined ? fmtNum(m.net_power_15m, 1) : '--';
+            var np1hColor = parseFloat(np1h) >= 0 ? 'text-primary' : 'text-error';
+            var np15mColor = parseFloat(np15m) >= 0 ? 'text-primary' : 'text-error';
             return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
-              '<td class="px-4 py-3 text-on-surface font-medium">' + shortSym(sym.symbol || '--') + '</td>' +
-              '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + (sym.total_opportunities || '--') + '</td>' +
-              '<td class="px-4 py-3 text-right mono text-primary">' + (sym.captured || '--') + '</td>' +
-              '<td class="px-4 py-3 text-right mono text-secondary">' + cr + '</td>' +
-              '<td class="px-4 py-3 text-right mono text-on-surface-variant">--</td></tr>';
+              '<td class="px-4 py-3 text-on-surface font-medium">' + shortSym(m.symbol || '--') + '</td>' +
+              '<td class="px-4 py-3 ' + dirColor + ' font-bold text-[10px] uppercase">' + (m.signal_direction || '--') + '</td>' +
+              '<td class="px-4 py-3 text-right mono ' + qColor + '">' + (m.signal_quality || '--') + ' (' + fmtNum(m.signal_strength, 1) + ')</td>' +
+              '<td class="px-4 py-3 text-right mono ' + np1hColor + '">' + np1h + '</td>' +
+              '<td class="px-4 py-3 text-right mono ' + np15mColor + '">' + np15m + '</td>' +
+              '<td class="px-4 py-3 text-xs text-on-surface-variant truncate max-w-[200px]">' + reason + '</td>' +
+              '</tr>';
           }).join('');
         }
       }
@@ -1321,7 +1336,7 @@ function renderDpnlTable() {
     var gl = d.loss_amount !== undefined ? d.loss_amount : d.gross_loss;
     return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
       '<td class="px-4 py-3 mono text-on-surface-variant">' + (d.date || '--') + '</td>' +
-      '<td class="px-4 py-3 text-right mono text-on-surface">' + (d.trade_count || d.trades || '--') + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-on-surface">' + (d.total_trades || d.trade_count || d.trades || '--') + '</td>' +
       '<td class="px-4 py-3 text-right mono text-primary">' + wins + '</td>' +
       '<td class="px-4 py-3 text-right mono text-error">' + losses + '</td>' +
       '<td class="px-4 py-3 text-right mono text-secondary">' + wr + '</td>' +
