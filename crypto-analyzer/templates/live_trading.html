@@ -95,7 +95,7 @@
         .scrollbar-hide::-webkit-scrollbar { display: none; }
     </style>
 </head>
-<body class="flex min-h-screen overflow-hidden">
+<body class="flex h-screen overflow-hidden">
 <!-- SideNavBar Component -->
 <aside class="fixed left-0 top-0 h-screen w-[240px] bg-[#0a0f14] border-r border-slate-800 flex flex-col py-6 z-50">
 <div class="px-5 mb-6">
@@ -164,7 +164,7 @@
 </div>
 </header>
 <!-- Main Layout Container -->
-<main class="flex flex-1 pt-16 ml-[240px]">
+<main class="flex flex-1 h-full overflow-hidden pt-16 ml-[240px]">
 <!-- Left Panel (Accounts & Balance) -->
 <section class="w-[380px] bg-[#0f1419] border-r border-white/5 flex flex-col overflow-y-auto scrollbar-hide">
 <div class="p-6 space-y-8">
@@ -711,7 +711,7 @@ async function loadOrders() {
 
 var _historyAllRows = [];
 var _historyPage    = 1;
-var _historyPageSize = 30;
+var _historyPageSize = 15;
 
 function renderHistoryPage() {
     var tbody   = document.getElementById('history-tbody');
