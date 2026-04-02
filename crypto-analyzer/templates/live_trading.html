@@ -563,10 +563,13 @@ async function loadBalance() {
         var data = await resp.json();
         var d = data.data || data;
 
-        var equity = parseFloat(d.total_equity || d.balance || 0);
+        var balance = parseFloat(d.balance || 0);
         var available = parseFloat(d.available_balance || d.available || 0);
-        var usedMargin = parseFloat(d.used_margin || d.margin || 0);
-        var upnl = parseFloat(d.unrealized_pnl || d.unrealized_pnl || 0);
+        var upnl = parseFloat(d.unrealized_pnl || 0);
+        // total_equity = wallet balance + unrealized PnL (Binance totalMarginBalance)
+        var equity = parseFloat(d.total_equity || 0) || (balance + upnl);
+        // used_margin = equity - available balance
+        var usedMargin = parseFloat(d.used_margin || d.margin || 0) || Math.max(0, equity - available);
 
         var eqEl = document.getElementById('total-equity');
         if (eqEl) eqEl.textContent = fmtNumber(equity);

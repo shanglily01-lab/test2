@@ -169,11 +169,11 @@
 <div id="stat-position-count" class="font-mono text-2xl font-medium text-on-surface">--</div>
 </div>
 <div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
-<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">总保证金 (USDT)</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">账户余额 (USDT)</div>
 <div id="stat-total-margin" class="font-mono text-2xl font-medium text-on-surface">--</div>
 </div>
 <div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
-<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">总浮盈 (USDT)</div>
+<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">总已实现 (USDT)</div>
 <div id="stat-total-pnl" class="font-mono text-2xl font-medium text-primary">--</div>
 </div>
 <div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
@@ -597,11 +597,7 @@ function loadStats(posResult, trades) {
 
     if (posResult) {
         if (elCount) elCount.textContent = posResult.count;
-        if (elMargin) elMargin.textContent = fmtUsdt(posResult.totalMargin);
-        if (elPnl) {
-            elPnl.textContent = fmtPnl(posResult.totalPnl);
-            elPnl.className = 'font-mono text-2xl font-medium ' + (posResult.totalPnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
-        }
+        // elMargin and elPnl are populated by loadAccountInfo() from account DB
     }
 
     // 24H 盈亏 — computed from current page's trades
@@ -634,10 +630,18 @@ async function loadAccountInfo() {
         if (!res.ok) return;
         var data = await res.json();
         var acc = data.data || data;
-        var elWin   = document.getElementById('stat-win-rate');
-        var elTotal = document.getElementById('stat-total-trades');
-        if (elWin   && acc.win_rate    != null) elWin.textContent   = parseFloat(acc.win_rate).toFixed(1) + '%';
-        if (elTotal && acc.total_trades != null) elTotal.textContent = acc.total_trades;
+        var elWin    = document.getElementById('stat-win-rate');
+        var elTotal  = document.getElementById('stat-total-trades');
+        var elMargin = document.getElementById('stat-total-margin');
+        var elPnl    = document.getElementById('stat-total-pnl');
+        if (elWin    && acc.win_rate     != null) elWin.textContent    = parseFloat(acc.win_rate).toFixed(1) + '%';
+        if (elTotal  && acc.total_trades != null) elTotal.textContent  = acc.total_trades;
+        if (elMargin && acc.current_balance != null) elMargin.textContent = fmtUsdt(acc.current_balance);
+        if (elPnl    && acc.realized_pnl    != null) {
+            var rpnl = parseFloat(acc.realized_pnl);
+            elPnl.textContent = fmtPnl(rpnl);
+            elPnl.className = 'font-mono text-2xl font-medium ' + (rpnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
+        }
     } catch(e) {}
 }
 

@@ -678,10 +678,18 @@ async function loadAccountInfo() {
         if (!res.ok) return;
         var data = await res.json();
         var acc = data.data || data;
-        var elWin   = document.getElementById('stat-win-rate');
-        var elTotal = document.getElementById('stat-total-trades');
-        if (elWin   && acc.win_rate    != null) elWin.textContent   = parseFloat(acc.win_rate).toFixed(1) + '%';
-        if (elTotal && acc.total_trades != null) elTotal.textContent = acc.total_trades;
+        var elWin    = document.getElementById('stat-win-rate');
+        var elTotal  = document.getElementById('stat-total-trades');
+        var elMargin = document.getElementById('stat-total-margin');
+        var elPnl    = document.getElementById('stat-total-pnl');
+        if (elWin    && acc.win_rate     != null) elWin.textContent    = parseFloat(acc.win_rate).toFixed(1) + '%';
+        if (elTotal  && acc.total_trades != null) elTotal.textContent  = acc.total_trades;
+        if (elMargin && acc.current_balance != null) elMargin.textContent = fmtUsdt(acc.current_balance);
+        if (elPnl    && acc.realized_pnl    != null) {
+            var rpnl = parseFloat(acc.realized_pnl);
+            elPnl.textContent = fmtPnl(rpnl);
+            elPnl.className = 'text-2xl font-headline font-bold monospace ' + (rpnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
+        }
     } catch(e) {}
 }
 
