@@ -711,13 +711,13 @@
                         }),
                         apiPut('/trading-services', {
                             live_trading_enabled: getToggle('liveToggle'),
-                            u_futures_trading_enabled: getToggle('usdtToggle'),
+                            usdt_futures_enabled: getToggle('usdtToggle'),
                             btc_momentum_enabled: getToggle('btcMomentumToggle'),
                             predictor_enabled: getToggle('predictorToggle'),
-                            u_coin_style_enabled: getToggle('uCoinStyleToggle'),
-                            big4_filter_enabled: getToggle('big4Toggle')
+                            u_coin_style_enabled: getToggle('uCoinStyleToggle')
                         }),
-                        apiPut('/max-hold-hours', { max_hold_hours: hours })
+                        apiPut('/big4-filter', { enabled: getToggle('big4Toggle') }),
+                        apiPut('/max-hold-hours', { hours: hours })
                     ]);
 
                     saveBtnText.textContent = '已保存';
