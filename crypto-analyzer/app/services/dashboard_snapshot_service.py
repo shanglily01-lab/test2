@@ -195,41 +195,6 @@ def _fetch_winrate_history(cursor):
     return result
 
 
-def _fetch_recent_trades(cursor):
-    """今日已平仓记录，最多100条，用于 Dashboard 实时成交记录面板"""
-    cursor.execute("""
-        SELECT symbol, position_side, entry_price, close_price,
-               realized_pnl, leverage, source, open_time, close_time
-        FROM futures_positions
-        WHERE account_id = 2
-          AND status <> 'OPEN'
-          AND DATE(open_time) = CURDATE()
-        ORDER BY close_time DESC
-        LIMIT 100
-    """)
-    result = []
-    for r in cursor.fetchall():
-        entry = float(r['entry_price']) if r['entry_price'] is not None else None
-        close = float(r['close_price']) if r['close_price'] is not None else None
-        pnl   = float(r['realized_pnl']) if r['realized_pnl'] is not None else None
-        pct   = round((close - entry) / entry * 100, 2) if entry and close and entry != 0 else None
-        if r['position_side'] == 'SHORT' and pct is not None:
-            pct = -pct
-        result.append({
-            'symbol':       r['symbol'],
-            'side':         r['position_side'],
-            'entry_price':  entry,
-            'close_price':  close,
-            'pnl':          pct,
-            'realized_pnl': pnl,
-            'leverage':     int(r['leverage']) if r['leverage'] is not None else None,
-            'source':       r['source'],
-            'open_time':    r['open_time'].strftime('%m-%d %H:%M')  if r['open_time']  else '',
-            'close_time':   r['close_time'].strftime('%m-%d %H:%M') if r['close_time'] else '',
-        })
-    return result
-
-
 def _fetch_news(cursor):
     cursor.execute("""
         SELECT title, source, sentiment, symbols, published_datetime, url
