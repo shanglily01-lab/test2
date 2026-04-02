@@ -754,17 +754,22 @@ function loadSummary() {
     .then(function(r){ return r.json(); })
     .then(function(d) {
       var s = d.data || d || {};
-      document.getElementById('stat-total-open').textContent = s.total_trades || s.total || '--';
-      document.getElementById('stat-win').textContent = s.win_count || s.wins || '--';
-      document.getElementById('stat-loss').textContent = s.loss_count || s.losses || '--';
+      var wla = s.win_loss_analysis || {};
+      var pnls = s.pnl_summary || {};
+      var syms = s.symbol_performance || [];
+      document.getElementById('stat-total-open').textContent = wla.total_closed_positions || s.total_trades || s.total || '--';
+      document.getElementById('stat-win').textContent = wla.winning_trades || s.win_count || s.wins || '--';
+      document.getElementById('stat-loss').textContent = wla.losing_trades || s.loss_count || s.losses || '--';
       var pnlEl = document.getElementById('stat-pnl');
-      var pnlVal = s.total_pnl !== undefined ? s.total_pnl : s.pnl;
+      var pnlVal = pnls.realized_pnl !== undefined ? pnls.realized_pnl : (s.total_pnl !== undefined ? s.total_pnl : s.pnl);
       pnlEl.textContent = fmtPnl(pnlVal);
       pnlEl.className = 'mono text-3xl font-medium ' + pCls(pnlVal);
-      var wr = s.win_rate !== undefined ? s.win_rate : s.winrate;
+      var wr = wla.win_rate !== undefined ? wla.win_rate : (s.win_rate !== undefined ? s.win_rate : s.winrate);
       document.getElementById('stat-winrate').textContent = wr !== undefined
         ? fmtNum(wr > 1 ? wr : wr * 100, 1) + '%' : '--';
-      renderSymbols(s.best_symbols || [], s.worst_symbols || []);
+      var best = syms.filter(function(x){ return parseFloat(x.total_pnl || 0) > 0; }).slice(0, 5);
+      var worst = syms.filter(function(x){ return parseFloat(x.total_pnl || 0) <= 0; }).slice(-5).reverse();
+      renderSymbols(best, worst);
     })
     .catch(function(e){ console.error('loadSummary error:', e); });
 }
@@ -773,10 +778,27 @@ function loadSignalAnalysis() {
   fetch('/api/futures/review/signal-analysis?account_id=' + accountId() + '&hours=' + currentHours)
     .then(function(r){ return r.json(); })
     .then(function(d) {
-      var items = d.data || d || [];
-      renderSignalBars(Array.isArray(items) ? items : (items.components || []), 'signal-analysis-list', 'signal-health-badge');
+      var items = signalStatsToArray(d);
+      renderSignalBars(items, 'signal-analysis-list', 'signal-health-badge');
     })
     .catch(function(e){ console.error('loadSignalAnalysis error:', e); });
+}
+
+function signalStatsToArray(d) {
+  var data = d.data || d || {};
+  if (Array.isArray(data)) return data;
+  if (data.components && Array.isArray(data.components)) return data.components;
+  var stats = data.signal_stats || {};
+  if (typeof stats === 'object' && !Array.isArray(stats)) {
+    var arr = [];
+    for (var k in stats) {
+      if (stats.hasOwnProperty(k)) {
+        arr.push(Object.assign({ signal_type: k }, stats[k]));
+      }
+    }
+    return arr;
+  }
+  return [];
 }
 
 function renderSignalBars(items, listId, badgeId) {
@@ -850,7 +872,7 @@ function loadTrades() {
   fetch('/api/futures/review/trades?account_id=' + accountId() + '&hours=' + currentHours + '&page_size=200&page=1')
     .then(function(r){ return r.json(); })
     .then(function(d) {
-      var list = d.data || d.trades || d || [];
+      var list = (d.data && d.data.trades) ? d.data.trades : (d.data || d.trades || d || []);
       allTrades = Array.isArray(list) ? list : [];
       renderTradesTable();
     })
@@ -878,8 +900,8 @@ function renderTradesTable() {
     var side = (t.position_side || t.side || '--').toUpperCase();
     var sideColor = side === 'LONG' ? 'text-primary' : side === 'SHORT' ? 'text-error' : 'text-on-surface-variant';
     var pnl = t.realized_pnl !== undefined ? t.realized_pnl : t.pnl;
-    var dur = t.hold_minutes !== undefined ? fmtHours(t.hold_minutes) : (t.duration || '--');
-    var reason = fmtCloseReason(t.close_reason || t.exit_reason);
+    var dur = t.holding_minutes !== undefined ? fmtHours(t.holding_minutes) : (t.hold_minutes !== undefined ? fmtHours(t.hold_minutes) : (t.duration || '--'));
+    var reason = t.close_reason_cn || fmtCloseReason(t.close_reason || t.exit_reason);
     html += '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
       '<td class="px-4 py-3">' +
         '<div class="font-medium text-on-surface">' + shortSym(sym) + '</div>' +
@@ -926,8 +948,12 @@ function loadAnalysis() {
     .then(function(r){ return r.json(); })
     .then(function(d) {
       var s = d.data || d || {};
-      var lng = s.long || s.LONG || {};
-      var shrt = s.short || s.SHORT || {};
+      var dirArr = s.direction_analysis || [];
+      var lng = dirArr.find(function(x){ return x.side === 'LONG'; }) || s.long || s.LONG || {};
+      var shrt = dirArr.find(function(x){ return x.side === 'SHORT'; }) || s.short || s.SHORT || {};
+      // compute avg_pnl if not present
+      if (lng.avg_pnl === undefined && lng.total_pnl !== undefined && lng.count > 0) lng.avg_pnl = lng.total_pnl / lng.count;
+      if (shrt.avg_pnl === undefined && shrt.total_pnl !== undefined && shrt.count > 0) shrt.avg_pnl = shrt.total_pnl / shrt.count;
 
       var setEl = function(id, val, cls) {
         var el = document.getElementById(id);
@@ -950,7 +976,7 @@ function loadAnalysis() {
       if (spEl) { spEl.textContent = fmtPnl(spnl); spEl.className = 'mono ' + pCls(spnl); }
       setEl('short-avg', shrt.avg_pnl !== undefined ? fmtPnl(shrt.avg_pnl) : '--');
 
-      var entries = s.entry_signals || s.signals || [];
+      var entries = s.entry_analysis || s.entry_signals || s.signals || [];
       var etbody = document.getElementById('entry-analysis-body');
       if (etbody) {
         if (!entries.length) {
@@ -960,7 +986,7 @@ function loadAnalysis() {
             var ep = e.total_pnl !== undefined ? e.total_pnl : e.pnl;
             var ewr = e.win_rate !== undefined ? fmtNum(e.win_rate > 1 ? e.win_rate : e.win_rate*100, 1)+'%' : '--';
             return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
-              '<td class="px-4 py-3 text-on-surface">' + (e.signal_type || e.name || '--') + '</td>' +
+              '<td class="px-4 py-3 text-on-surface">' + (e.name_cn || e.signal_type || e.name || '--') + '</td>' +
               '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + (e.count || '--') + '</td>' +
               '<td class="px-4 py-3 text-right mono text-secondary">' + ewr + '</td>' +
               '<td class="px-4 py-3 text-right mono ' + pCls(ep) + '">' + fmtPnl(ep) + '</td></tr>';
@@ -968,7 +994,7 @@ function loadAnalysis() {
         }
       }
 
-      var closes = s.close_reasons || s.exits || [];
+      var closes = s.close_analysis || s.close_reasons || s.exits || [];
       var ctbody = document.getElementById('close-analysis-body');
       if (ctbody) {
         if (!closes.length) {
@@ -978,7 +1004,7 @@ function loadAnalysis() {
             var cp = c.total_pnl !== undefined ? c.total_pnl : c.pnl;
             var ca = c.avg_pnl !== undefined ? c.avg_pnl : c.average_pnl;
             return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
-              '<td class="px-4 py-3 text-on-surface">' + fmtCloseReason(c.close_reason || c.reason || '--') + '</td>' +
+              '<td class="px-4 py-3 text-on-surface">' + (c.name_cn || fmtCloseReason(c.close_reason || c.reason || '--')) + '</td>' +
               '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + (c.count || '--') + '</td>' +
               '<td class="px-4 py-3 text-right mono ' + pCls(ca) + '">' + fmtPnl(ca) + '</td>' +
               '<td class="px-4 py-3 text-right mono ' + pCls(cp) + '">' + fmtPnl(cp) + '</td></tr>';
@@ -996,7 +1022,7 @@ function loadSuggestions() {
   fetch('/api/futures/review/suggestions?account_id=' + accountId() + '&hours=' + currentHours)
     .then(function(r){ return r.json(); })
     .then(function(d) {
-      var items = d.data || d.suggestions || d || [];
+      var items = (d.data && d.data.suggestions) ? d.data.suggestions : (d.suggestions || (Array.isArray(d) ? d : []));
       var grid = document.getElementById('suggestions-grid');
       if (!grid) return;
       if (!Array.isArray(items) || items.length === 0) {
@@ -1010,7 +1036,7 @@ function loadSuggestions() {
         var lvl = levelMap[(item.level || item.type || 'info').toLowerCase()] || 'info';
         var icon = iconMap[lvl];
         var color = colorMap[lvl];
-        var title = item.title || item.name || '';
+        var title = item.category || item.title || item.name || '';
         var msg = item.message || item.content || item.text || '';
         return '<div class="sc ' + lvl + '">' +
           '<div class="flex items-center gap-2 mb-2">' +
@@ -1030,8 +1056,8 @@ function loadSignals() {
   fetch('/api/futures/review/signal-analysis?account_id=' + accountId() + '&hours=' + currentHours)
     .then(function(r){ return r.json(); })
     .then(function(d) {
-      var items = d.data || d || [];
-      renderSignalBars(Array.isArray(items) ? items : (items.components || []), 'sig-analysis-list2', 'sig-health-badge2');
+      var items = signalStatsToArray(d);
+      renderSignalBars(items, 'sig-analysis-list2', 'sig-health-badge2');
     })
     .catch(function(e){ console.error('loadSignals sig error:', e); });
 
@@ -1039,34 +1065,38 @@ function loadSignals() {
     .then(function(r){ return r.json(); })
     .then(function(d) {
       var s = d.data || d || {};
-      var setT = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v !== undefined ? v : '--'; };
-      setT('ks-total', s.total || '--');
-      setT('ks-triggered', s.triggered || '--');
-      setT('ks-avg-score', s.avg_score !== undefined ? fmtNum(s.avg_score, 1) : '--');
-      var rate = s.trigger_rate !== undefined ? fmtNum(s.trigger_rate > 1 ? s.trigger_rate : s.trigger_rate*100, 1)+'%' : '--';
+      var sum = s.summary || {};
+      var setT = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v !== undefined && v !== null ? v : '--'; };
+      setT('ks-total', sum.total_analyzed || s.total || '--');
+      setT('ks-triggered', sum.correct_captures !== undefined ? sum.correct_captures : (s.triggered || '--'));
+      setT('ks-avg-score', sum.capture_rate !== undefined ? fmtNum(sum.capture_rate, 1)+'%' : '--');
+      var rate = sum.capture_rate !== undefined ? fmtNum(sum.capture_rate, 1)+'%' : '--';
       setT('ks-rate', rate);
       var topEl = document.getElementById('kline-top-signals');
       if (topEl) {
-        var top = s.top_signals || [];
+        var top = s.top_opportunities || s.top_signals || [];
         if (!top.length) { topEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>'; }
         else {
           topEl.innerHTML = top.slice(0, 8).map(function(t) {
-            var p = t.pnl !== undefined ? t.pnl : t.total_pnl;
+            var trend = t.trend || '';
+            var statusColor = t.status_type === 'captured' ? 'text-primary' : 'text-on-surface-variant';
             return '<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 text-xs">' +
               '<span class="text-on-surface">' + shortSym(t.symbol || '--') + '</span>' +
-              '<span class="mono ' + pCls(p) + '">' + fmtPnl(p) + '</span></div>';
+              '<span class="text-on-surface-variant">' + trend + '</span>' +
+              '<span class="mono ' + statusColor + '">' + (t.status || '--') + '</span></div>';
           }).join('');
         }
       }
       var missEl = document.getElementById('kline-missed-signals');
       if (missEl) {
-        var missed = s.missed_signals || [];
+        var missed = s.missed_opportunities || s.missed_signals || [];
         if (!missed.length) { missEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>'; }
         else {
           missEl.innerHTML = missed.slice(0, 8).map(function(m) {
+            var reasons = m.possible_reasons && m.possible_reasons.length ? m.possible_reasons[0] : (m.reason || '--');
             return '<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 text-xs">' +
               '<span class="text-on-surface">' + shortSym(m.symbol || '--') + '</span>' +
-              '<span class="text-on-surface-variant">' + (m.reason || '--') + '</span></div>';
+              '<span class="text-on-surface-variant truncate max-w-[200px]">' + reasons + '</span></div>';
           }).join('');
         }
       }
@@ -1082,32 +1112,53 @@ function loadOpportunity() {
     .then(function(r){ return r.json(); })
     .then(function(d) {
       var s = d.data || d || {};
-      var setT = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v !== undefined ? v : '--'; };
-      setT('opp-total', s.total_opportunities || s.total || '--');
-      setT('opp-captured', s.captured || '--');
-      var rate = s.capture_rate !== undefined ? fmtNum(s.capture_rate > 1 ? s.capture_rate : s.capture_rate*100, 1)+'%' : '--';
-      setT('opp-rate', rate);
-      setT('opp-avg-move', s.avg_move !== undefined ? fmtNum(s.avg_move, 2)+'%' : '--');
+      var summary = s.summary || {};
+      var tfAnalysis = s.timeframe_analysis || {};
+      var missReasonsObj = s.miss_reasons || {};
+      var symAnalysis = s.symbol_analysis || {};
+
+      // Compute derived totals
+      var totalOpps = summary.total_opportunities || 0;
+      var totalCaptured = 0;
+      for (var tf in tfAnalysis) { if (tfAnalysis.hasOwnProperty(tf)) totalCaptured += tfAnalysis[tf].captured || 0; }
+      var capRate = totalOpps > 0 ? (totalCaptured / totalOpps * 100) : 0;
+      // avg missed change
+      var avgMove = '--';
+      var missKeys = Object.keys(missReasonsObj);
+      if (missKeys.length > 0) {
+        var totalChange = 0, totalMissCount = 0;
+        missKeys.forEach(function(k){ totalChange += missReasonsObj[k].total_pct_change || (missReasonsObj[k].avg_missed_change * missReasonsObj[k].count) || 0; totalMissCount += missReasonsObj[k].count || 0; });
+        if (totalMissCount > 0) avgMove = fmtNum(totalChange / totalMissCount, 2) + '%';
+      }
+
+      var setT = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v !== undefined && v !== null ? v : '--'; };
+      setT('opp-total', totalOpps || '--');
+      setT('opp-captured', totalCaptured || '--');
+      setT('opp-rate', totalOpps > 0 ? fmtNum(capRate, 1)+'%' : '--');
+      setT('opp-avg-move', avgMove);
 
       var tfEl = document.getElementById('opp-timeframes');
       if (tfEl) {
-        var tfs = s.timeframes || s.by_timeframe || [];
-        if (!tfs.length) { tfEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>'; }
+        var tfsArr = Object.keys(tfAnalysis).map(function(k) { return Object.assign({ timeframe: k }, tfAnalysis[k]); });
+        if (!tfsArr.length) { tfEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>'; }
         else {
-          tfEl.innerHTML = tfs.map(function(t) {
+          tfEl.innerHTML = tfsArr.map(function(t) {
+            var cr = t.total_opportunities > 0 ? fmtNum(t.capture_rate, 1)+'%' : '--';
             return '<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 text-xs">' +
-              '<span class="text-on-surface-variant">' + (t.timeframe || t.tf || '--') + '</span>' +
-              '<span class="mono text-on-surface">' + (t.count || '--') + '</span></div>';
+              '<span class="text-on-surface-variant">' + (t.timeframe || '--') + '</span>' +
+              '<span class="mono text-on-surface">' + (t.total_opportunities || '--') + ' 次</span>' +
+              '<span class="mono text-primary">' + cr + '</span></div>';
           }).join('');
         }
       }
 
       var mrEl = document.getElementById('opp-miss-reasons');
       if (mrEl) {
-        var mrs = s.miss_reasons || s.missed_reasons || [];
-        if (!mrs.length) { mrEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>'; }
+        var mrsArr = Object.keys(missReasonsObj).map(function(k) { return { reason: k, count: missReasonsObj[k].count || 0 }; });
+        mrsArr.sort(function(a,b){ return b.count - a.count; });
+        if (!mrsArr.length) { mrEl.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>'; }
         else {
-          mrEl.innerHTML = mrs.map(function(m) {
+          mrEl.innerHTML = mrsArr.slice(0, 10).map(function(m) {
             return '<div class="flex justify-between items-center py-1.5 border-b border-outline-variant/10 text-xs">' +
               '<span class="text-on-surface-variant truncate max-w-[180px]">' + (m.reason || '--') + '</span>' +
               '<span class="mono text-on-surface">' + (m.count || '--') + '</span></div>';
@@ -1117,19 +1168,20 @@ function loadOpportunity() {
 
       var symBody = document.getElementById('opp-symbols-body');
       if (symBody) {
-        var syms = s.symbols || s.by_symbol || [];
-        if (!syms.length) {
+        var symsAll = symAnalysis.all_symbols || {};
+        var symsArr = Object.keys(symsAll).map(function(sym) { return Object.assign({ symbol: sym }, symsAll[sym]); });
+        symsArr.sort(function(a,b){ return b.total_opportunities - a.total_opportunities; });
+        if (!symsArr.length) {
           symBody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>';
         } else {
-          symBody.innerHTML = syms.map(function(sym) {
-            var cr = sym.capture_rate !== undefined ? fmtNum(sym.capture_rate > 1 ? sym.capture_rate : sym.capture_rate*100, 1)+'%' : '--';
-            var am = sym.avg_move !== undefined ? fmtNum(sym.avg_move, 2)+'%' : '--';
+          symBody.innerHTML = symsArr.slice(0, 50).map(function(sym) {
+            var cr = sym.total_opportunities > 0 ? fmtNum(sym.capture_rate, 1)+'%' : '--';
             return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
               '<td class="px-4 py-3 text-on-surface font-medium">' + shortSym(sym.symbol || '--') + '</td>' +
-              '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + (sym.total || '--') + '</td>' +
+              '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + (sym.total_opportunities || '--') + '</td>' +
               '<td class="px-4 py-3 text-right mono text-primary">' + (sym.captured || '--') + '</td>' +
               '<td class="px-4 py-3 text-right mono text-secondary">' + cr + '</td>' +
-              '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + am + '</td></tr>';
+              '<td class="px-4 py-3 text-right mono text-on-surface-variant">--</td></tr>';
           }).join('');
         }
       }
@@ -1164,7 +1216,8 @@ function loadDailyPnl() {
     .then(function(r){ return r.json(); })
     .then(function(d) {
       var s = d.data || d || {};
-      var tp = s.total_pnl !== undefined ? s.total_pnl : s.pnl;
+      var sum = s.summary || s;
+      var tp = sum.total_pnl !== undefined ? sum.total_pnl : s.pnl;
       var mpEl = document.getElementById('m-total-pnl');
       if (mpEl) { mpEl.textContent = fmtPnl(tp); mpEl.className = 'mono text-2xl font-medium ' + pCls(tp); }
       var setT = function(id, v, cls) {
@@ -1173,19 +1226,21 @@ function loadDailyPnl() {
         el.textContent = v !== undefined && v !== null ? v : '--';
         if (cls) el.className = 'mono text-2xl font-medium ' + cls;
       };
-      setT('m-total-trades', s.total_trades || s.trades || '--');
-      setT('m-profit-days', s.profit_days || '--', 'text-primary');
-      var pr = s.profit_ratio !== undefined ? fmtNum(s.profit_ratio > 1 ? s.profit_ratio : s.profit_ratio*100, 1)+'%' : '--';
+      setT('m-total-trades', sum.total_trades || s.total_trades || '--');
+      setT('m-profit-days', sum.profit_days || '--', 'text-primary');
+      var totalDays = sum.total_days || sum.trading_days || 0;
+      var profitDays = sum.profit_days || 0;
+      var pr = totalDays > 0 ? fmtNum(profitDays / totalDays * 100, 1)+'%' : '--';
       setT('m-profit-ratio', pr);
-      var ap = s.avg_daily_pnl !== undefined ? s.avg_daily_pnl : s.avg_pnl;
+      var ap = sum.avg_daily_pnl !== undefined ? sum.avg_daily_pnl : (s.avg_daily_pnl !== undefined ? s.avg_daily_pnl : s.avg_pnl);
       var apEl = document.getElementById('m-avg-pnl');
       if (apEl) { apEl.textContent = fmtPnl(ap); apEl.className = 'mono text-2xl font-medium ' + pCls(ap); }
-      setT('m-trading-days', s.trading_days || '--');
-      var mp = s.max_pnl !== undefined ? s.max_pnl : s.best_pnl;
+      setT('m-trading-days', sum.total_days || sum.trading_days || '--');
+      var mp = sum.max_daily_pnl !== undefined ? sum.max_daily_pnl : (s.max_pnl !== undefined ? s.max_pnl : s.best_pnl);
       var mpPnlEl = document.getElementById('m-max-pnl');
       if (mpPnlEl) { mpPnlEl.textContent = fmtPnl(mp); mpPnlEl.className = 'mono text-2xl font-medium text-primary'; }
-      setT('m-max-date', s.max_date || s.best_date || '--');
-      dpnlData = s.daily || s.days || [];
+      setT('m-max-date', sum.max_daily_pnl_date || sum.max_date || s.max_date || '--');
+      dpnlData = s.daily_data || s.daily || s.days || [];
       renderDpnlChart(dpnlData);
       renderDpnlTable();
     })
@@ -1259,10 +1314,10 @@ function renderDpnlTable() {
   tbody.innerHTML = filtered.map(function(d) {
     var tp = d.total_pnl !== undefined ? d.total_pnl : d.pnl;
     var wr = d.win_rate !== undefined ? fmtNum(d.win_rate > 1 ? d.win_rate : d.win_rate*100, 1)+'%' : '--';
-    var wins = d.wins || d.win_count || '--';
-    var losses = d.losses || d.loss_count || '--';
-    var gp = d.gross_profit || d.profit_amount;
-    var gl = d.gross_loss || d.loss_amount;
+    var wins = d.profit_trades !== undefined ? d.profit_trades : (d.wins || d.win_count || '--');
+    var losses = d.loss_trades !== undefined ? d.loss_trades : (d.losses || d.loss_count || '--');
+    var gp = d.profit_amount !== undefined ? d.profit_amount : d.gross_profit;
+    var gl = d.loss_amount !== undefined ? d.loss_amount : d.gross_loss;
     return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
       '<td class="px-4 py-3 mono text-on-surface-variant">' + (d.date || '--') + '</td>' +
       '<td class="px-4 py-3 text-right mono text-on-surface">' + (d.trade_count || d.trades || '--') + '</td>' +
