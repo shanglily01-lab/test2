@@ -1208,4 +1208,18 @@ async def get_position_history(
             elif isinstance(v, datetime):
                 row[k] = v.isoformat()
 
+        # realized_pnl 为 0 时（币安侧止损/止盈，未回写 DB），用价差 * 数量估算
+        ep = row.get('entry_price') or 0
+        cp = row.get('close_price') or 0
+        qty = row.get('quantity') or 0
+        rpnl = row.get('realized_pnl') or 0
+        row['pnl_estimated'] = False
+        if rpnl == 0 and ep > 0 and cp > 0 and qty > 0:
+            side = (row.get('position_side') or '').upper()
+            if side == 'LONG':
+                row['realized_pnl'] = round((float(cp) - float(ep)) * float(qty), 4)
+            elif side == 'SHORT':
+                row['realized_pnl'] = round((float(ep) - float(cp)) * float(qty), 4)
+            row['pnl_estimated'] = True
+
     return {"success": True, "data": rows, "count": len(rows)}

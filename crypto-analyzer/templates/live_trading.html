@@ -753,13 +753,16 @@ async function loadHistory(days) {
         tbody.innerHTML = list.map(function(h) {
             var pnl = parseFloat(h.realized_pnl || 0);
             var side = h.side || h.position_side || '';
+            var pnlTxt = fmtPnl(pnl);
+            if (h.pnl_estimated) pnlTxt += '<span class="text-[9px] text-on-surface-variant ml-1 opacity-60" title="币安侧止损，按价差估算">~</span>';
+            var lev = h.leverage ? '<span class="text-[9px] text-on-surface-variant ml-1">' + h.leverage + 'x</span>' : '';
             return '<tr class="hover:bg-white/[0.02] transition-colors">' +
                 '<td class="py-4 px-8"><div class="flex items-center gap-3">' + symbolIcon(h.symbol) +
                 '<p class="text-sm font-bold font-headline">' + h.symbol + '</p></div></td>' +
-                '<td class="py-4 px-4">' + sideHtml(side) + '</td>' +
+                '<td class="py-4 px-4">' + sideHtml(side) + lev + '</td>' +
                 '<td class="py-4 px-4 font-mono text-sm text-right text-on-surface-variant">' + fmtPrice(h.entry_price) + '</td>' +
                 '<td class="py-4 px-4 font-mono text-sm text-right">' + fmtPrice(h.exit_price || h.close_price) + '</td>' +
-                '<td class="py-4 px-4 font-mono text-sm text-right font-bold ' + pnlClass(pnl) + '">' + fmtPnl(pnl) + '</td>' +
+                '<td class="py-4 px-4 font-mono text-sm text-right font-bold ' + pnlClass(pnl) + '">' + pnlTxt + '</td>' +
                 '<td class="py-4 px-8 text-xs text-on-surface-variant">' + fmtTime(h.close_time) + '</td>' +
                 '</tr>';
         }).join('');
