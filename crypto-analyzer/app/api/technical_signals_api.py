@@ -178,8 +178,10 @@ async def get_technical_signals(symbols: Optional[str] = None):
 @router.get("/api/signals/scores")
 async def get_signal_scores(limit: int = 20):
     """
-    获取 K线评分列表（来自 coin_kline_scores），供 Dashboard 信号评分表格使用
-    返回字段: symbol, direction, total_score, updated_at
+    获取 K线评分列表（来自 coin_kline_scores）
+    返回字段: symbol, direction, total_score, h1_score, m15_score,
+              h1_bullish, h1_bearish, m15_bullish, m15_bearish,
+              m5_bullish, m5_bearish, strength_level, updated_at
     """
     try:
         conn = pymysql.connect(
@@ -194,7 +196,12 @@ async def get_signal_scores(limit: int = 20):
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT symbol, direction, total_score, updated_at
+                    SELECT symbol, direction, total_score,
+                           h1_score, m15_score,
+                           h1_bullish_count, h1_bearish_count,
+                           m15_bullish_count, m15_bearish_count,
+                           m5_bullish_count, m5_bearish_count,
+                           strength_level, updated_at
                     FROM coin_kline_scores
                     WHERE exchange = 'binance_futures'
                     ORDER BY ABS(total_score) DESC
@@ -207,10 +214,19 @@ async def get_signal_scores(limit: int = 20):
         data = []
         for r in rows:
             data.append({
-                'symbol':      r['symbol'],
-                'direction':   r['direction'] or 'NEUTRAL',
-                'total_score': float(r['total_score']) if r['total_score'] is not None else 0.0,
-                'updated_at':  r['updated_at'].isoformat() if r['updated_at'] else None,
+                'symbol':        r['symbol'],
+                'direction':     r['direction'] or 'NEUTRAL',
+                'total_score':   int(r['total_score']) if r['total_score'] is not None else 0,
+                'h1_score':      int(r['h1_score']) if r['h1_score'] is not None else 0,
+                'm15_score':     int(r['m15_score']) if r['m15_score'] is not None else 0,
+                'h1_bullish':    int(r['h1_bullish_count'] or 0),
+                'h1_bearish':    int(r['h1_bearish_count'] or 0),
+                'm15_bullish':   int(r['m15_bullish_count'] or 0),
+                'm15_bearish':   int(r['m15_bearish_count'] or 0),
+                'm5_bullish':    int(r['m5_bullish_count'] or 0),
+                'm5_bearish':    int(r['m5_bearish_count'] or 0),
+                'strength_level': r['strength_level'] or '',
+                'updated_at':    r['updated_at'].isoformat() if r['updated_at'] else None,
             })
 
         return data

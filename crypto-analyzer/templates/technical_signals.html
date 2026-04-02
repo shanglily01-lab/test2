@@ -197,15 +197,15 @@
 <table class="w-full text-left border-collapse">
 <thead>
 <tr class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold border-b border-outline-variant/5">
-<th class="px-6 py-4">交易对</th>
-<th class="px-6 py-4">信号方向</th>
-<th class="px-6 py-4">综合评分</th>
-<th class="px-4 py-4">RSI</th>
-<th class="px-4 py-4">MACD</th>
-<th class="px-4 py-4">布林带</th>
-<th class="px-4 py-4 text-right">成交量</th>
-<th class="px-4 py-4">K线形态</th>
-<th class="px-6 py-4 text-right">操作时间</th>
+<th class="px-6 py-4 whitespace-nowrap">交易对</th>
+<th class="px-6 py-4 whitespace-nowrap">信号方向</th>
+<th class="px-6 py-4 whitespace-nowrap">综合评分</th>
+<th class="px-4 py-4 whitespace-nowrap">1H评分</th>
+<th class="px-4 py-4 whitespace-nowrap">15M评分</th>
+<th class="px-4 py-4 whitespace-nowrap">1H多空</th>
+<th class="px-4 py-4 whitespace-nowrap">15M多空</th>
+<th class="px-4 py-4 whitespace-nowrap">5M多空</th>
+<th class="px-6 py-4 text-right whitespace-nowrap">更新时间</th>
 </tr>
 </thead>
 <tbody id="signals-tbody" class="divide-y divide-outline-variant/5">
@@ -565,15 +565,29 @@
                     ? '<span class="px-2 py-1 rounded bg-error/10 text-error text-[10px] font-bold tracking-widest uppercase">SHORT</span>'
                     : '<span class="px-2 py-1 rounded bg-surface-container text-on-surface-variant text-[10px] font-bold tracking-widest uppercase">' + (dir || '--') + '</span>';
 
+                var h1Score = item.h1_score != null ? item.h1_score : null;
+                var m15Score = item.m15_score != null ? item.m15_score : null;
+                var h1BullStr = item.h1_bullish != null
+                    ? '<span class="text-primary">' + item.h1_bullish + '</span>/<span class="text-error">' + item.h1_bearish + '</span>'
+                    : '--';
+                var m15BullStr = item.m15_bullish != null
+                    ? '<span class="text-primary">' + item.m15_bullish + '</span>/<span class="text-error">' + item.m15_bearish + '</span>'
+                    : '--';
+                var m5BullStr = item.m5_bullish != null
+                    ? '<span class="text-primary">' + item.m5_bullish + '</span>/<span class="text-error">' + item.m5_bearish + '</span>'
+                    : '--';
+                var h1Class = h1Score > 0 ? 'text-primary' : h1Score < 0 ? 'text-error' : 'text-on-surface-variant';
+                var m15Class = m15Score > 0 ? 'text-primary' : m15Score < 0 ? 'text-error' : 'text-on-surface-variant';
+
                 return '<tr class="hover:bg-surface-container/50 transition-colors cursor-pointer">'
-                    + '<td class="px-6 py-5">'
+                    + '<td class="px-6 py-4">'
                     +   '<div class="flex items-center gap-2">'
                     +     '<div class="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center text-[10px] font-bold text-on-surface">' + initial + '</div>'
                     +     '<span class="text-sm font-bold score-mono">' + sym + '</span>'
                     +   '</div>'
                     + '</td>'
-                    + '<td class="px-6 py-5">' + dirBadge + '</td>'
-                    + '<td class="px-6 py-5">'
+                    + '<td class="px-6 py-4">' + dirBadge + '</td>'
+                    + '<td class="px-6 py-4">'
                     +   '<div class="flex items-center gap-3">'
                     +     '<span class="text-sm font-bold ' + colorClass + ' score-mono">' + scoreDisp + '</span>'
                     +     '<div class="w-16 h-1 bg-surface-container-highest rounded-full overflow-hidden">'
@@ -581,12 +595,12 @@
                     +     '</div>'
                     +   '</div>'
                     + '</td>'
-                    + '<td class="px-4 py-5 text-xs text-on-surface-variant score-mono">--</td>'
-                    + '<td class="px-4 py-5 text-xs text-on-surface-variant">--</td>'
-                    + '<td class="px-4 py-5 text-xs text-on-surface-variant">--</td>'
-                    + '<td class="px-4 py-5 text-xs text-right text-on-surface-variant score-mono">--</td>'
-                    + '<td class="px-4 py-5 text-xs text-on-surface">--</td>'
-                    + '<td class="px-6 py-5 text-xs text-right text-on-surface-variant score-mono">' + timeDisp + '</td>'
+                    + '<td class="px-4 py-4 text-xs score-mono ' + h1Class + '">' + (h1Score != null ? h1Score : '--') + '</td>'
+                    + '<td class="px-4 py-4 text-xs score-mono ' + m15Class + '">' + (m15Score != null ? m15Score : '--') + '</td>'
+                    + '<td class="px-4 py-4 text-xs score-mono">' + h1BullStr + '</td>'
+                    + '<td class="px-4 py-4 text-xs score-mono">' + m15BullStr + '</td>'
+                    + '<td class="px-4 py-4 text-xs score-mono">' + m5BullStr + '</td>'
+                    + '<td class="px-6 py-4 text-xs text-right text-on-surface-variant score-mono">' + timeDisp + '</td>'
                     + '</tr>';
             }).join('');
         }
