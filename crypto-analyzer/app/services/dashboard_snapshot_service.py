@@ -73,25 +73,31 @@ def _fetch_signals(cursor):
 
 def _fetch_stats(cursor):
     today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    # 今日开仓总数 + 盈亏 + 胜率（来自 futures_positions）
     cursor.execute("""
         SELECT
-            COUNT(*) AS total,
-            SUM(CASE WHEN status = 'OPEN'  THEN 1 ELSE 0 END)  AS open_count,
+            COUNT(*) AS total_opened,
             SUM(CASE WHEN status <> 'OPEN' THEN COALESCE(realized_pnl, 0) ELSE 0 END) AS today_pnl,
             SUM(CASE WHEN status <> 'OPEN' AND COALESCE(realized_pnl, 0) > 0 THEN 1 ELSE 0 END) AS wins,
-            SUM(CASE WHEN status <> 'OPEN' THEN 1 ELSE 0 END)  AS closed_count
+            SUM(CASE WHEN status <> 'OPEN' THEN 1 ELSE 0 END) AS closed_count
         FROM futures_positions
         WHERE account_id = 2
           AND DATE(open_time) = %s
     """, (today,))
     r = cursor.fetchone() or {}
-    total  = int(r.get('total')        or 0)
+    # 当前有信号的交易对数（来自 coin_kline_scores，作为"今日信号数"展示）
+    cursor.execute("""
+        SELECT COUNT(*) AS sig_count
+        FROM coin_kline_scores
+        WHERE exchange = 'binance_futures'
+    """)
+    sig_r = cursor.fetchone() or {}
     closed = int(r.get('closed_count') or 0)
     wins   = int(r.get('wins')         or 0)
     return {
-        'today_signals': total,
-        'today_open':    int(r.get('open_count') or 0),
-        'today_pnl':     float(r.get('today_pnl') or 0),
+        'today_signals': int(sig_r.get('sig_count')  or 0),   # 当前有信号的交易对数
+        'today_open':    int(r.get('total_opened')    or 0),   # 今日开仓总数
+        'today_pnl':     float(r.get('today_pnl')    or 0),
         'win_rate':      round(wins / closed * 100, 1) if closed > 0 else None,
     }
 
