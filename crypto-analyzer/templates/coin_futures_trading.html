@@ -190,9 +190,9 @@
 </div>
 </div>
 <!-- Middle Section -->
-<div class="grid grid-cols-12 gap-8 mb-8">
-<!-- Left Column: Current Positions -->
-<div class="col-span-12 lg:col-span-8 bg-surface-container-low rounded-xl overflow-hidden">
+<div class="mb-8">
+<!-- Current Positions -->
+<div class="col-span-12 bg-surface-container-low rounded-xl overflow-hidden">
 <div class="px-6 py-4 flex justify-between items-center border-b border-outline-variant/10">
 <h3 class="font-headline text-lg font-bold">当前持仓</h3>
 <div class="flex gap-2">
@@ -217,40 +217,6 @@
 <tr><td colspan="6" class="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
 </tbody>
 </table>
-</div>
-</div>
-<!-- Right Column: Quick Operations & Recent Trades -->
-<div class="col-span-12 lg:col-span-4 space-y-6">
-<!-- Quick Controls -->
-<div class="bg-surface-container-low p-6 rounded-xl border border-outline-variant/10">
-<h3 class="font-headline text-lg font-bold mb-6">快速操作</h3>
-<div class="space-y-4 mb-8">
-<div class="flex items-center justify-between">
-<span class="text-sm font-medium text-on-surface">策略总开关</span>
-<button id="toggle-trading-enabled" data-state="0" onclick="handleToggle('trading-enabled')" class="w-10 h-5 bg-surface-variant rounded-full relative transition-colors duration-200">
-<span class="toggle-knob absolute left-1 top-1 bg-on-surface-variant w-3 h-3 rounded-full transition-all duration-200"></span>
-</button>
-</div>
-<div class="flex items-center justify-between">
-<span class="text-sm font-medium text-on-surface">允许做多</span>
-<button id="toggle-allow-long" data-state="0" onclick="handleToggle('allow-long')" class="w-10 h-5 bg-surface-variant rounded-full relative transition-colors duration-200">
-<span class="toggle-knob absolute left-1 top-1 bg-on-surface-variant w-3 h-3 rounded-full transition-all duration-200"></span>
-</button>
-</div>
-<div class="flex items-center justify-between">
-<span class="text-sm font-medium text-on-surface">允许做空</span>
-<button id="toggle-allow-short" data-state="0" onclick="handleToggle('allow-short')" class="w-10 h-5 bg-surface-variant rounded-full relative transition-colors duration-200">
-<span class="toggle-knob absolute left-1 top-1 bg-on-surface-variant w-3 h-3 rounded-full transition-all duration-200"></span>
-</button>
-</div>
-</div>
-<div class="space-y-4">
-<div class="text-[10px] uppercase tracking-widest font-bold text-on-surface-variant mb-2">最近成交</div>
-<div id="recent-trades-list" class="space-y-3">
-<div class="text-xs text-on-surface-variant text-center py-2">加载中...</div>
-</div>
-</div>
-<button class="w-full mt-8 py-3 rounded-lg bg-error-container text-on-error font-bold text-sm tracking-wide hover:brightness-110 active:scale-[0.98] transition-all">一键清空所有持仓</button>
 </div>
 </div>
 </div>
@@ -359,23 +325,6 @@ function showToast(msg, type) {
     el.textContent = msg;
     document.body.appendChild(el);
     setTimeout(function() { el.remove(); }, 4000);
-}
-
-// ---- Toggle 视觉状态 ----
-
-function setToggleState(btn, isOn) {
-    if (!btn) return;
-    btn.dataset.state = isOn ? '1' : '0';
-    var knob = btn.querySelector('.toggle-knob');
-    if (isOn) {
-        btn.style.background = '#49f4c8';
-        btn.style.boxShadow = '0 0 8px rgba(73,244,200,0.4)';
-        if (knob) { knob.style.left = ''; knob.style.right = '4px'; knob.style.background = '#005745'; }
-    } else {
-        btn.style.background = '';
-        btn.style.boxShadow = '';
-        if (knob) { knob.style.right = ''; knob.style.left = '4px'; knob.style.background = ''; }
-    }
 }
 
 // ---- 加载持仓 ----
@@ -538,7 +487,6 @@ function renderHistoryPage() {
 async function loadHistory(page) {
     if (page !== undefined) _historyPage = page;
     var tbody = document.getElementById('history-tbody');
-    var recentList = document.getElementById('recent-trades-list');
     var limitEl = document.getElementById('history-limit');
     _historyPageSize = limitEl ? parseInt(limitEl.value) || 30 : 30;
 
@@ -555,31 +503,6 @@ async function loadHistory(page) {
         return [];
     }
     _historyAllTrades = trades;
-
-    // 更新最近成交 panel (page 1 only)
-    if (recentList && _historyPage === 1) {
-        if (trades.length === 0) {
-            recentList.innerHTML = '<div class="py-4 text-center text-on-surface-variant text-xs">暂无记录</div>';
-        } else {
-            recentList.innerHTML = trades.slice(0, 5).map(function(t) {
-                var isLong = t.side === 'CLOSE_LONG';
-                var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
-                var sideLabel = isLong ? 'LONG' : 'SHORT';
-                var pnl = parseFloat(t.realized_pnl) || 0;
-                var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
-                return '<div class="flex justify-between items-center text-xs border-b border-outline-variant/10 pb-2">' +
-                    '<div class="flex flex-col">' +
-                        '<span class="font-bold ' + sideClass + '">' + (t.symbol || '--') + '</span>' +
-                        '<span class="text-[10px] text-on-surface-variant uppercase">' + sideLabel + '</span>' +
-                    '</div>' +
-                    '<div class="text-right">' +
-                        '<div class="font-mono ' + pnlClass + '">' + fmtPnl(pnl) + '</div>' +
-                        '<div class="text-[10px] text-on-surface-variant font-mono">' + fmtTime(t.close_time || t.trade_time) + '</div>' +
-                    '</div>' +
-                '</div>';
-            }).join('');
-        }
-    }
 
     renderHistoryPage();
     return trades;
@@ -645,70 +568,6 @@ async function loadAccountInfo() {
     } catch(e) {}
 }
 
-// ---- 加载交易开关状态 ----
-
-async function loadTradingStatus() {
-    try {
-        var [r1, r2] = await Promise.all([
-            fetch('/api/system/trading-services'),
-            fetch('/api/system/trading-direction')
-        ]);
-        var svc = (await r1.json()); svc = svc.data || svc;
-        var dir = (await r2.json()); dir = dir.data || dir;
-        var t1 = document.getElementById('toggle-trading-enabled');
-        var t2 = document.getElementById('toggle-allow-long');
-        var t3 = document.getElementById('toggle-allow-short');
-        setToggleState(t1, svc.coin_futures_enabled !== false);
-        setToggleState(t2, (dir.allow_long?.value ?? dir.allow_long) !== false);
-        setToggleState(t3, (dir.allow_short?.value ?? dir.allow_short) !== false);
-    } catch(e) {}
-}
-
-// ---- Toggle 点击处理 ----
-
-async function handleToggle(type) {
-    var idMap = {
-        'trading-enabled': 'toggle-trading-enabled',
-        'allow-long': 'toggle-allow-long',
-        'allow-short': 'toggle-allow-short'
-    };
-    var btn = document.getElementById(idMap[type]);
-    if (!btn) return;
-    var isOn = btn.dataset.state !== '1';
-    setToggleState(btn, isOn);
-
-    var url, body;
-    if (type === 'trading-enabled') {
-        url = '/api/system/trading-services';
-        body = { coin_futures_enabled: isOn };
-    } else {
-        var t2 = document.getElementById('toggle-allow-long');
-        var t3 = document.getElementById('toggle-allow-short');
-        url = '/api/system/trading-direction';
-        body = {
-            allow_long: type === 'allow-long' ? isOn : (t2 ? t2.dataset.state === '1' : true),
-            allow_short: type === 'allow-short' ? isOn : (t3 ? t3.dataset.state === '1' : true)
-        };
-    }
-
-    try {
-        var res = await fetch(url, {
-            method: 'PUT',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(body)
-        });
-        if (!res.ok) {
-            var d = await res.json();
-            throw new Error(d.message || 'HTTP ' + res.status);
-        }
-        showToast(type + ' ' + (isOn ? '已开启' : '已关闭'), 'success');
-    } catch(e) {
-        showToast('切换失败: ' + e.message, 'error');
-        // 回滚
-        setToggleState(btn, !isOn);
-    }
-}
-
 // ---- 平仓 ----
 
 async function closePosition(id, symbol) {
@@ -740,7 +599,6 @@ async function loadAll() {
     var posResult = results[0];
     var trades = results[1];
     loadStats(posResult, trades);
-    await loadTradingStatus();
 }
 
 // ---- 初始化 ----
