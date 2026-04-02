@@ -432,7 +432,7 @@ async function loadPositions() {
             if (pv > 0) curPrice = pv;
         }
 
-        // 计算浮盈 (BTC)
+        // 计算浮盈 (USDT)
         var pnl = parseFloat(pos.unrealized_pnl) || 0;
         totalPnl += pnl;
 
@@ -506,7 +506,7 @@ function renderHistoryPage() {
                 '<td class="px-6 py-4 font-mono text-on-surface">' + fmtPrice(t.entry_price) + '</td>' +
                 '<td class="px-6 py-4 font-mono text-on-surface">' + fmtPrice(t.price) + '</td>' +
                 '<td class="px-6 py-4 font-mono ' + pnlClass + '">' + fmtPnl(pnl) + '</td>' +
-                '<td class="px-6 py-4 font-mono text-on-surface-variant text-xs">' + (t.fee != null ? parseFloat(t.fee).toFixed(4) : '--') + '</td>' +
+                '<td class="px-6 py-4 font-mono text-on-surface-variant text-xs">' + (t.fee != null ? parseFloat(t.fee).toFixed(2) + ' USDT' : '--') + '</td>' +
             '</tr>';
         }).join('');
     }
