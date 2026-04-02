@@ -408,7 +408,7 @@
 <!-- Top 5 Signals -->
 <div class="bg-surface-container-low p-6 rounded-2xl border border-outline-variant/5">
 <div class="flex items-center justify-between mb-6">
-<h3 class="text-sm font-bold font-['Space_Grotesk'] text-on-surface uppercase tracking-wider">最佳信号 (Top 5)</h3>
+<h3 class="text-sm font-bold font-['Space_Grotesk'] text-on-surface uppercase tracking-wider">最佳信号 (Top 10)</h3>
 <span class="text-[10px] font-mono text-on-surface-variant">H1 TIME FRAME</span>
 </div>
 <div id="score-list" class="space-y-4">
@@ -589,7 +589,7 @@
             var sorted = allSignals.slice().sort(function(a, b) {
                 return (parseFloat(b.total_score) || 0) - (parseFloat(a.total_score) || 0);
             });
-            var top5 = sorted.slice(0, 5);
+            var top5 = sorted.slice(0, 10);
 
             if (top5.length === 0) {
                 scoreList.innerHTML = '<div class="text-xs text-on-surface-variant text-center py-4">No data</div>';
