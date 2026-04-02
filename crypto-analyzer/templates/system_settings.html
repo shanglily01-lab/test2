@@ -301,17 +301,23 @@
 <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant">最大持仓时长</label>
 <div class="relative">
 <select id="maxHoldHoursSelect" class="w-full bg-surface-container-highest border-none rounded-xl py-3 px-4 text-on-surface font-mono appearance-none focus:ring-1 focus:ring-primary/50">
+<option value="3">3H</option>
 <option value="4">4H</option>
+<option value="5">5H</option>
 <option value="6" selected="">6H</option>
+<option value="7">7H</option>
+<option value="8">8H</option>
+<option value="9">9H</option>
+<option value="10">10H</option>
+<option value="11">11H</option>
 <option value="12">12H</option>
-<option value="24">24H</option>
 </select>
 <span class="material-symbols-outlined absolute right-3 top-3 text-on-surface-variant pointer-events-none">expand_more</span>
 </div>
 </div>
 <div class="space-y-2">
 <label class="text-xs font-label uppercase tracking-widest text-on-surface-variant">最大持仓数量</label>
-<input class="w-full bg-surface-container-highest border-none rounded-xl py-3 px-4 text-on-surface font-mono focus:ring-1 focus:ring-primary/50" type="number" value="12"/>
+<input id="maxPositionsInput" class="w-full bg-surface-container-highest border-none rounded-xl py-3 px-4 text-on-surface font-mono focus:ring-1 focus:ring-primary/50" type="number" min="1" max="100" value="50"/>
 </div>
 </div>
 </section>
@@ -360,13 +366,15 @@
 <div class="space-y-2">
 <label class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant">止损比例</label>
 <div class="relative">
-<input class="w-full bg-surface-container-highest border-none rounded-xl py-4 px-4 text-on-surface font-mono text-lg focus:ring-1 focus:ring-primary/50" type="text" value="2%"/>
+<input id="stopLossInput" class="w-full bg-surface-container-highest border-none rounded-xl py-4 px-4 text-on-surface font-mono text-lg focus:ring-1 focus:ring-primary/50" type="number" min="0.1" max="20" step="0.1" value="2"/>
+<span class="absolute right-4 top-4 text-on-surface-variant font-mono text-sm">%</span>
 </div>
 </div>
 <div class="space-y-2">
 <label class="text-[10px] font-label uppercase tracking-widest text-on-surface-variant">止盈比例</label>
 <div class="relative">
-<input class="w-full bg-surface-container-highest border-none rounded-xl py-4 px-4 text-on-surface font-mono text-lg focus:ring-1 focus:ring-primary/50" type="text" value="6%"/>
+<input id="takeProfitInput" class="w-full bg-surface-container-highest border-none rounded-xl py-4 px-4 text-on-surface font-mono text-lg focus:ring-1 focus:ring-primary/50" type="number" min="0.1" max="50" step="0.1" value="6"/>
+<span class="absolute right-4 top-4 text-on-surface-variant font-mono text-sm">%</span>
 </div>
 </div>
 </div>
@@ -540,17 +548,19 @@
 
         async function loadAll() {
             try {
-                const [dirData, svcData, holdData, big4SettingData] = await Promise.all([
+                const [dirData, svcData, holdData, big4SettingData, maxPosData] = await Promise.all([
                     apiGet('/trading-direction'),
                     apiGet('/trading-services'),
                     apiGet('/max-hold-hours'),
-                    apiGet('/settings/big4_filter_enabled')
+                    apiGet('/settings/big4_filter_enabled'),
+                    apiGet('/settings/max_positions')
                 ]);
 
                 const dir  = dirData.data  || dirData;
                 const svc  = svcData.data  || svcData;
                 const hold = holdData.data || holdData;
                 const big4Setting = big4SettingData.data || big4SettingData;
+                const maxPosSetting = maxPosData.data || maxPosData;
 
                 // 总开关 - 交易方向
                 setToggle('longToggle',  dir.allow_long?.value  ?? true);
@@ -581,8 +591,18 @@
                 // 最大持仓时长
                 const sel = document.getElementById('maxHoldHoursSelect');
                 if (sel) {
-                    sel.value = String(hold.hours ?? 4);
+                    sel.value = String(hold.hours ?? 6);
                 }
+
+                // 止损/止盈
+                const slEl = document.getElementById('stopLossInput');
+                if (slEl && svc.stop_loss_pct != null) slEl.value = (parseFloat(svc.stop_loss_pct) * 100).toFixed(1);
+                const tpEl = document.getElementById('takeProfitInput');
+                if (tpEl && svc.take_profit_pct != null) tpEl.value = (parseFloat(svc.take_profit_pct) * 100).toFixed(1);
+
+                // 最大持仓数量
+                const mpEl = document.getElementById('maxPositionsInput');
+                if (mpEl && maxPosSetting.value != null) mpEl.value = maxPosSetting.value;
 
             } catch (err) {
                 console.error('loadAll 失败:', err);
@@ -755,6 +775,9 @@
                 saveBtn.disabled = true;
                 try {
                     const hours = parseInt(maxHoldSel ? maxHoldSel.value : '6', 10);
+                    const slVal = parseFloat(document.getElementById('stopLossInput')?.value || '2') / 100;
+                    const tpVal = parseFloat(document.getElementById('takeProfitInput')?.value || '6') / 100;
+                    const mpVal = parseInt(document.getElementById('maxPositionsInput')?.value || '50', 10);
 
                     await Promise.all([
                         apiPut('/trading-direction', {
@@ -769,10 +792,13 @@
                             predictor_enabled: getToggle('predictorToggle'),
                             u_coin_style_enabled: getToggle('uCoinStyleToggle'),
                             signal_confirmation_enabled: document.getElementById('signalConfirmCheckbox')?.checked ?? false,
-                            trend_following_enabled: document.getElementById('trendFollowCheckbox')?.checked ?? false
+                            trend_following_enabled: document.getElementById('trendFollowCheckbox')?.checked ?? false,
+                            stop_loss_pct: slVal,
+                            take_profit_pct: tpVal
                         }),
                         apiPut('/big4-filter', { enabled: getToggle('big4Toggle') }),
-                        apiPut('/max-hold-hours', { hours: hours })
+                        apiPut('/max-hold-hours', { hours: hours }),
+                        apiPut('/settings/max_positions', { setting_value: String(mpVal), description: '最大持仓数量' })
                     ]);
 
                     saveBtnText.textContent = '已保存';
