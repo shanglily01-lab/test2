@@ -273,6 +273,65 @@ async function loadSummary() {
     }
 }
 
+var _positionRows = [];   // cache for live price refresh
+
+function renderPositionRows(priceMap) {
+    const tbody = document.getElementById('positions-tbody');
+    if (!tbody || !_positionRows.length) return;
+    tbody.innerHTML = _positionRows.map(p => {
+        // Use live price if available, else fall back to server value
+        const liveEntry = priceMap && priceMap[p.symbol];
+        const livePrice = liveEntry
+            ? (typeof liveEntry === 'object' ? liveEntry.price : liveEntry)
+            : null;
+        const curPrice = livePrice || p.current_price;
+
+        const entry = parseFloat(p.entry_price) || 0;
+        const qty   = parseFloat(p.quantity) || 0;
+        const cost  = parseFloat(p.total_cost) || 0;
+        let pnlVal, pnlPct;
+        if (livePrice && entry > 0 && qty > 0) {
+            pnlVal = (livePrice - entry) * qty;
+            pnlPct = cost > 0 ? (pnlVal / cost * 100) : 0;
+        } else {
+            pnlVal = p.unrealized_pnl;
+            pnlPct = p.unrealized_pnl_pct;
+        }
+        const pnlStr = pnlVal != null
+            ? `${fmtPnl(pnlVal)} <span class="text-xs text-on-surface-variant">(${fmt(pnlPct)}%)</span>`
+            : '--';
+        const tpsl = (p.take_profit_price || p.stop_loss_price)
+            ? `<span class="text-[#49f4c8]">${p.take_profit_price ? fmt(p.take_profit_price) : '--'}</span> / <span class="text-[#ff716c]">${p.stop_loss_price ? fmt(p.stop_loss_price) : '--'}</span>`
+            : '--';
+        return `<tr class="border-t border-outline-variant/5 hover:bg-surface-container-highest/30 transition-colors">
+<td class="px-6 py-4 font-mono font-semibold text-on-surface">${p.symbol}</td>
+<td class="px-6 py-4 monospace text-xs">${fmt(p.quantity, 6)}</td>
+<td class="px-6 py-4 monospace text-xs">${fmt(p.entry_price)}</td>
+<td class="px-6 py-4 monospace text-xs text-primary">${curPrice ? fmt(curPrice) : '--'}</td>
+<td class="px-6 py-4 monospace text-xs">${fmt(p.total_cost)} U</td>
+<td class="px-6 py-4 monospace text-xs">${pnlStr}</td>
+<td class="px-6 py-4 monospace text-xs">${tpsl}</td>
+<td class="px-6 py-4 text-xs text-on-surface-variant">${fmtDate(p.created_at)}</td>
+</tr>`;
+    }).join('');
+}
+
+async function fetchLivePrices() {
+    if (!_positionRows.length) return;
+    const symbols = [...new Set(_positionRows.map(p => p.symbol))];
+    try {
+        const r = await fetch(API + '/prices/batch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({symbols})
+        });
+        if (r.ok) {
+            const d = await r.json();
+            renderPositionRows(d.prices || {});
+        }
+    } catch(e) { /* keep existing display */ }
+}
+
 async function loadPositions() {
     const tbody = document.getElementById('positions-tbody');
     try {
@@ -281,29 +340,13 @@ async function loadPositions() {
         const rows = Array.isArray(data) ? data : (data.data ?? data.positions ?? []);
         if (!r.ok) throw new Error(data.detail || data.message || r.status);
         if (!rows || rows.length === 0) {
+            _positionRows = [];
             tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-10 text-center text-on-surface-variant text-xs">暂无持仓</td></tr>';
             return;
         }
-        tbody.innerHTML = rows.map(p => {
-            const pnlVal = p.unrealized_pnl;
-            const pnlPct = p.unrealized_pnl_pct;
-            const pnlStr = pnlVal != null
-                ? `${fmtPnl(pnlVal)} <span class="text-xs text-on-surface-variant">(${fmt(pnlPct)}%)</span>`
-                : '--';
-            const tpsl = (p.take_profit_price || p.stop_loss_price)
-                ? `<span class="text-[#49f4c8]">${p.take_profit_price ? fmt(p.take_profit_price) : '--'}</span> / <span class="text-[#ff716c]">${p.stop_loss_price ? fmt(p.stop_loss_price) : '--'}</span>`
-                : '--';
-            return `<tr class="border-t border-outline-variant/5 hover:bg-surface-container-highest/30 transition-colors">
-<td class="px-6 py-4 font-mono font-semibold text-on-surface">${p.symbol}</td>
-<td class="px-6 py-4 monospace text-xs">${fmt(p.quantity, 6)}</td>
-<td class="px-6 py-4 monospace text-xs">${fmt(p.entry_price)}</td>
-<td class="px-6 py-4 monospace text-xs">${p.current_price ? fmt(p.current_price) : '--'}</td>
-<td class="px-6 py-4 monospace text-xs">${fmt(p.total_cost)} U</td>
-<td class="px-6 py-4 monospace text-xs">${pnlStr}</td>
-<td class="px-6 py-4 monospace text-xs">${tpsl}</td>
-<td class="px-6 py-4 text-xs text-on-surface-variant">${fmtDate(p.created_at)}</td>
-</tr>`;
-        }).join('');
+        _positionRows = rows;
+        renderPositionRows({});   // render with server prices first
+        fetchLivePrices();        // then overwrite with Binance live prices
     } catch(e) {
         tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-10 text-center text-error text-xs">加载失败: ${e.message}</td></tr>`;
     }
@@ -392,9 +435,10 @@ function updateClock() {
 updateClock();
 setInterval(updateClock, 1000);
 
-// Auto-refresh every 30s
+// Auto-refresh every 30s; live prices refresh every 10s
 loadAll();
 setInterval(loadAll, 30000);
+setInterval(fetchLivePrices, 10000);
 </script>
 </body>
 </html>

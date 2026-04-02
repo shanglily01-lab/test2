@@ -3,7 +3,7 @@
 提供现货持仓查询、交易历史等功能
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from pydantic import BaseModel
 from typing import Optional, List
 from decimal import Decimal
@@ -312,6 +312,37 @@ async def get_spot_summary():
     except Exception as e:
         logger.error(f"获取现货概览失败: {e}")
         raise HTTPException(status_code=500, detail=f"获取概览失败: {str(e)}")
+
+
+@router.post("/prices/batch")
+async def get_spot_prices_batch(symbols: List[str] = Body(..., embed=True)):
+    """批量获取现货实时价格（从 Binance Spot API），body: {"symbols": [...]}"""
+    import aiohttp
+    from aiohttp import ClientTimeout
+
+    if not symbols:
+        return {"success": True, "prices": {}}
+
+    symbol_map = {}
+    for s in symbols:
+        clean = s.replace("/", "").replace("%2F", "").upper()
+        symbol_map[clean] = s
+
+    prices = {}
+    try:
+        timeout = ClientTimeout(total=3)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get("https://api.binance.com/api/v3/ticker/price") as resp:
+                if resp.status == 200:
+                    all_prices = await resp.json()
+                    price_map = {item["symbol"]: float(item["price"]) for item in all_prices}
+                    for clean, original in symbol_map.items():
+                        if clean in price_map:
+                            prices[original] = {"price": price_map[clean], "source": "binance_spot"}
+    except Exception as e:
+        logger.warning(f"批量获取现货价格失败: {e}")
+
+    return {"success": True, "prices": prices}
 
 
 # ==================== 辅助函数 ====================
