@@ -241,6 +241,9 @@
 <th class="px-6 py-4 font-bold">类型</th>
 <th class="px-6 py-4 font-bold">开仓价</th>
 <th class="px-6 py-4 font-bold">结平价</th>
+<th class="px-6 py-4 font-bold">开仓原因</th>
+<th class="px-6 py-4 font-bold">平仓原因</th>
+<th class="px-6 py-4 font-bold">保证金</th>
 <th class="px-6 py-4 font-bold">实现盈亏 (PNL)</th>
 <th class="px-6 py-4 font-bold">手续费</th>
 </tr>
@@ -441,7 +444,7 @@ function renderHistoryPage() {
     var totalPages = Math.max(1, Math.ceil(_historyTotalCount / _historyPageSize));
 
     if (_historyAllTrades.length === 0) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
     } else {
         tbody.innerHTML = _historyAllTrades.map(function(t) {
             var isLong = t.side === 'CLOSE_LONG';
@@ -454,6 +457,9 @@ function renderHistoryPage() {
                 '<td class="px-6 py-4 text-xs ' + sideClass + '">' + (isLong ? 'BUY/LONG' : 'SELL/SHORT') + '</td>' +
                 '<td class="px-6 py-4 font-mono text-on-surface">' + fmtPrice(t.entry_price) + '</td>' +
                 '<td class="px-6 py-4 font-mono text-on-surface">' + fmtPrice(t.price) + '</td>' +
+                '<td class="px-6 py-4 text-xs text-on-surface-variant max-w-[140px] truncate" title="' + (t.entry_source || t.entry_reason || '') + '">' + (t.entry_source || t.entry_reason || '--') + '</td>' +
+                '<td class="px-6 py-4 text-xs text-on-surface-variant max-w-[140px] truncate" title="' + (t.close_reason || '') + '">' + (t.close_reason || '--') + '</td>' +
+                '<td class="px-6 py-4 font-mono text-on-surface-variant">' + (t.margin != null ? fmtUsdt(t.margin) : '--') + '</td>' +
                 '<td class="px-6 py-4 font-mono ' + pnlClass + '">' + fmtPnl(pnl) + '</td>' +
                 '<td class="px-6 py-4 font-mono text-on-surface-variant text-xs">' + (t.fee != null ? parseFloat(t.fee).toFixed(2) + ' USDT' : '--') + '</td>' +
             '</tr>';
