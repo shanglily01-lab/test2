@@ -104,7 +104,14 @@ body { background:#070b10; font-family:'Manrope',sans-serif; color:#ebeef5; -web
 </div>
 
 <!-- Stats Row -->
-<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+<div class="bg-surface-container p-5 rounded-xl border-l-2 border-primary/50">
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">账户余额</p>
+<div class="flex items-baseline gap-1">
+<p id="stat-balance" class="text-2xl font-headline font-bold monospace">--</p>
+<span class="text-xs text-on-surface-variant">USDT</span>
+</div>
+</div>
 <div class="bg-surface-container p-5 rounded-xl border-l-2 border-primary/30">
 <p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">持仓数</p>
 <p id="stat-positions" class="text-2xl font-headline font-bold monospace">--</p>
@@ -349,6 +356,7 @@ async function loadSummary() {
         if (r2.status === 'fulfilled' && r2.value.ok) {
             const d2 = await r2.value.json();
             const acct = d2.account || {};
+            if (acct.current_balance != null) document.getElementById('stat-balance').textContent = fmt(acct.current_balance, 2);
             document.getElementById('stat-realized').innerHTML = fmtPnl(acct.realized_pnl ?? null);
             document.getElementById('stat-winrate').textContent = acct.win_rate != null ? fmt(acct.win_rate) + '%' : '--';
         }
