@@ -308,13 +308,15 @@
 <th class="px-5 py-4 font-semibold whitespace-nowrap">方向</th>
 <th class="px-5 py-4 font-semibold whitespace-nowrap">开仓价</th>
 <th class="px-5 py-4 font-semibold whitespace-nowrap">结平价</th>
+<th class="px-5 py-4 font-semibold whitespace-nowrap">开仓信号</th>
+<th class="px-5 py-4 font-semibold whitespace-nowrap">平仓原因</th>
 <th class="px-5 py-4 font-semibold text-right whitespace-nowrap">保证金</th>
 <th class="px-5 py-4 font-semibold text-right whitespace-nowrap">手续费</th>
 <th class="px-5 py-4 font-semibold text-right whitespace-nowrap">实现盈亏</th>
 <th class="px-5 py-4 font-semibold text-right whitespace-nowrap">收益率</th>
 </tr>
 </thead>
-<tbody id="history-tbody" class="text-xs divide-y divide-outline-variant/5"><tr><td colspan="9" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr></tbody>
+<tbody id="history-tbody" class="text-xs divide-y divide-outline-variant/5"><tr><td colspan="11" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr></tbody>
 </table>
 </div>
 <div class="px-5 py-3 bg-surface-container border-t border-outline-variant/10 flex items-center justify-between flex-wrap gap-3">
@@ -523,7 +525,7 @@ function applyHistoryFilter(resetPage) {
     var pageRows = filtered;
 
     if (pageRows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无符合条件的记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无符合条件的记录</td></tr>';
     } else {
         tbody.innerHTML = pageRows.map(function(t) {
             var isLong = t.side === 'CLOSE_LONG';
@@ -537,6 +539,8 @@ function applyHistoryFilter(resetPage) {
                 '<td class="px-5 py-3.5 font-bold text-xs ' + sideClass + '">' + (isLong ? 'LONG' : 'SHORT') + '</td>' +
                 '<td class="px-5 py-3.5 monospace whitespace-nowrap">' + fmtPrice(t.entry_price) + '</td>' +
                 '<td class="px-5 py-3.5 monospace whitespace-nowrap">' + fmtPrice(t.price) + '</td>' +
+                '<td class="px-5 py-3.5 text-xs text-on-surface-variant max-w-[140px] truncate" title="' + (t.entry_reason || '') + '">' + (t.entry_reason || '--') + '</td>' +
+                '<td class="px-5 py-3.5 text-xs text-on-surface-variant max-w-[140px] truncate" title="' + (t.close_reason || '') + '">' + (t.close_reason || '--') + '</td>' +
                 '<td class="px-5 py-3.5 monospace text-right whitespace-nowrap text-on-surface-variant">' + (t.margin != null ? fmtUsdt(t.margin) : '--') + '</td>' +
                 '<td class="px-5 py-3.5 monospace text-right whitespace-nowrap text-on-surface-variant">' + (t.fee != null ? fmtUsdt(t.fee) : '--') + '</td>' +
                 '<td class="px-5 py-3.5 monospace text-right whitespace-nowrap ' + pnlClass + '">' + fmtPnl(pnl) + ' U</td>' +
@@ -585,7 +589,7 @@ async function loadHistory(page) {
     var pageSize = limitEl ? parseInt(limitEl.value) || 30 : 30;
     _historyPageSize = pageSize;
 
-    if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>';
 
     var trades = [];
     try {
@@ -594,7 +598,7 @@ async function loadHistory(page) {
         trades = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
         _historyTotalCount = data.total_count || 0;
     } catch(e) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败</td></tr>';
         return [];
     }
     _historyAllTrades = trades;
@@ -627,7 +631,7 @@ async function loadHistory(page) {
     // 更新历史记录表格（通过统一的过滤函数渲染）
     if (!tbody) return trades;
     if (trades.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
         var countEl = document.getElementById('history-count-label');
         if (countEl) countEl.textContent = '共 0 条';
         return trades;
