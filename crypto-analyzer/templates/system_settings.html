@@ -268,6 +268,30 @@
 <div class="toggle-thumb absolute right-0.5 top-0.5 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
 </div>
 </div>
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-xl">check_circle</span>
+<div>
+<span class="text-sm font-body font-medium text-on-surface">信号确认模式</span>
+<p class="text-[10px] text-on-surface-variant mt-0.5">net_ws&gt;50 时，分数≥60 才开仓</p>
+</div>
+</div>
+<div id="signalConfirmToggle" data-enabled="false" class="w-10 h-5 bg-primary/20 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-0.5 top-0.5 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
+</div>
+</div>
+<div class="flex items-center justify-between p-4 bg-surface-container rounded-xl hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary text-xl">trending_up</span>
+<div>
+<span class="text-sm font-body font-medium text-on-surface">趋势跟随模式</span>
+<p class="text-[10px] text-on-surface-variant mt-0.5">net_ws 20~50 时，分数 20~50 也可开仓</p>
+</div>
+</div>
+<div id="trendFollowToggle" data-enabled="false" class="w-10 h-5 bg-primary/20 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-0.5 top-0.5 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
+</div>
+</div>
 </div>
 </section>
 <!-- 持仓限制 -->
@@ -549,6 +573,8 @@
                     big4Setting.value === 'true' ||
                     big4Setting.value === 1
                 );
+                setToggle('signalConfirmToggle', !!svc.signal_confirmation_enabled);
+                setToggle('trendFollowToggle',   !!svc.trend_following_enabled);
                 // 币本位：如果后端有 coin_futures_enabled 字段则读取
                 if ('coin_futures_enabled' in svc) {
                     setToggle('coinFuturesToggle', !!svc.coin_futures_enabled);
@@ -675,6 +701,28 @@
             }
         });
 
+        // 信号确认
+        bindToggle('signalConfirmToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { signal_confirmation_enabled: enabled });
+                showToast('信号确认已' + (enabled ? '开启' : '关闭'), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
+        // 趋势跟随
+        bindToggle('trendFollowToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { trend_following_enabled: enabled });
+                showToast('趋势跟随已' + (enabled ? '开启' : '关闭'), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
         // ---------------------------------------------------------------
         // 最大持仓时长 select
         // ---------------------------------------------------------------
@@ -683,7 +731,7 @@
             maxHoldSel.addEventListener('change', async function () {
                 const hours = parseInt(this.value, 10);
                 try {
-                    await apiPut('/max-hold-hours', { max_hold_hours: hours });
+                    await apiPut('/max-hold-hours', { hours: hours });
                     showToast('最大持仓时长已设为 ' + hours + ' 小时', false);
                 } catch (err) {
                     showToast('保存失败: ' + err.message, true);
@@ -714,7 +762,9 @@
                             usdt_futures_enabled: getToggle('usdtToggle'),
                             btc_momentum_enabled: getToggle('btcMomentumToggle'),
                             predictor_enabled: getToggle('predictorToggle'),
-                            u_coin_style_enabled: getToggle('uCoinStyleToggle')
+                            u_coin_style_enabled: getToggle('uCoinStyleToggle'),
+                            signal_confirmation_enabled: getToggle('signalConfirmToggle'),
+                            trend_following_enabled: getToggle('trendFollowToggle')
                         }),
                         apiPut('/big4-filter', { enabled: getToggle('big4Toggle') }),
                         apiPut('/max-hold-hours', { hours: hours })

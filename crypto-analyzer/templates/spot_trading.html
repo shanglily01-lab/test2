@@ -193,10 +193,11 @@ body { background:#070b10; font-family:'Manrope',sans-serif; color:#ebeef5; -web
 <th class="px-6 py-4 font-semibold">浮盈 (PNL)</th>
 <th class="px-6 py-4 font-semibold">止盈/止损</th>
 <th class="px-6 py-4 font-semibold">开仓时间</th>
+<th class="px-6 py-4 font-semibold">操作</th>
 </tr>
 </thead>
 <tbody id="positions-tbody" class="text-sm">
-<tr><td colspan="8" class="px-6 py-10 text-center text-on-surface-variant text-xs">加载中...</td></tr>
+<tr><td colspan="9" class="px-6 py-10 text-center text-on-surface-variant text-xs">加载中...</td></tr>
 </tbody>
 </table>
 </div>
@@ -217,10 +218,10 @@ body { background:#070b10; font-family:'Manrope',sans-serif; color:#ebeef5; -web
 </select>
 </div>
 </div>
-<div class="overflow-x-auto">
+<div class="overflow-x-auto overflow-y-auto max-h-[480px]">
 <table class="w-full text-left border-collapse">
-<thead>
-<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant bg-surface-container-low">
+<thead class="sticky top-0 bg-surface-container-low z-10">
+<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant">
 <th class="px-6 py-4 font-semibold">交易对</th>
 <th class="px-6 py-4 font-semibold">数量</th>
 <th class="px-6 py-4 font-semibold">开仓价</th>
@@ -235,6 +236,10 @@ body { background:#070b10; font-family:'Manrope',sans-serif; color:#ebeef5; -web
 <tr><td colspan="8" class="px-6 py-10 text-center text-on-surface-variant text-xs">加载中...</td></tr>
 </tbody>
 </table>
+</div>
+<div class="h-12 border-t border-white/5 bg-surface-container flex items-center justify-between px-6 text-[10px]">
+  <span id="history-page-info" class="text-on-surface-variant font-mono uppercase tracking-widest">--</span>
+  <div id="history-pagination" class="flex items-center gap-1"></div>
 </div>
 </div>
 </div>
@@ -312,8 +317,37 @@ function renderPositionRows(priceMap) {
 <td class="px-6 py-4 monospace text-xs">${pnlStr}</td>
 <td class="px-6 py-4 monospace text-xs">${tpsl}</td>
 <td class="px-6 py-4 text-xs text-on-surface-variant">${fmtDate(p.created_at)}</td>
+<td class="px-6 py-4">
+  <button onclick="sellPosition(${p.id}, '${p.symbol}', ${fmt(p.quantity,6)}, ${curPrice || p.entry_price})"
+    class="px-3 py-1.5 bg-[#ff716c]/10 hover:bg-[#ff716c]/20 text-[#ff716c] border border-[#ff716c]/20 rounded-lg text-xs font-bold transition-all whitespace-nowrap">
+    市价卖出
+  </button>
+</td>
 </tr>`;
     }).join('');
+}
+
+async function sellPosition(posId, symbol, qty, curPrice) {
+    const confirmed = window.confirm(
+        `确认市价卖出 ${symbol}?\n数量: ${qty}\n参考价: ${curPrice}\n\n此操作将关闭该持仓。`
+    );
+    if (!confirmed) return;
+
+    try {
+        const r = await fetch(API + '/sell', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({position_id: posId, symbol})
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || r.status);
+        const pnlSign = data.realized_pnl >= 0 ? '+' : '';
+        alert(`卖出成功\n${symbol}\n成交价: ${Number(data.exit_price).toFixed(4)}\n盈亏: ${pnlSign}${Number(data.realized_pnl).toFixed(2)} USDT (${pnlSign}${Number(data.pnl_pct).toFixed(2)}%)`);
+        loadPositions();
+        loadSummary();
+    } catch(e) {
+        alert('卖出失败: ' + e.message);
+    }
 }
 
 async function fetchLivePrices() {
@@ -341,30 +375,34 @@ async function loadPositions() {
         if (!r.ok) throw new Error(data.detail || data.message || r.status);
         if (!rows || rows.length === 0) {
             _positionRows = [];
-            tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-10 text-center text-on-surface-variant text-xs">暂无持仓</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-10 text-center text-on-surface-variant text-xs">暂无持仓</td></tr>';
             return;
         }
         _positionRows = rows;
         renderPositionRows({});   // render with server prices first
         fetchLivePrices();        // then overwrite with Binance live prices
     } catch(e) {
-        tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-10 text-center text-error text-xs">加载失败: ${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="px-6 py-10 text-center text-error text-xs">加载失败: ${e.message}</td></tr>`;
     }
 }
 
-async function loadHistory() {
-    const tbody = document.getElementById('history-tbody');
-    const limit = document.getElementById('history-limit').value;
-    try {
-        const r = await fetch(`${API}/history?limit=${limit}`);
-        const data = await r.json();
-        const rows = Array.isArray(data) ? data : (data.data ?? data.history ?? []);
-        if (!r.ok) throw new Error(data.detail || data.message || r.status);
-        if (!rows || rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-10 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
-            return;
-        }
-        tbody.innerHTML = rows.map(p => `<tr class="border-t border-outline-variant/5 hover:bg-surface-container-highest/30 transition-colors">
+var _historyAllRows = [];
+var _historyPage    = 1;
+var _historyPageSize = 20;
+
+function renderHistoryPage() {
+    var tbody  = document.getElementById('history-tbody');
+    var infoEl = document.getElementById('history-page-info');
+    var pagEl  = document.getElementById('history-pagination');
+    var total      = _historyAllRows.length;
+    var totalPages = Math.max(1, Math.ceil(total / _historyPageSize));
+    _historyPage   = Math.min(Math.max(1, _historyPage), totalPages);
+    var start = (_historyPage - 1) * _historyPageSize;
+    var slice = _historyAllRows.slice(start, start + _historyPageSize);
+    if (slice.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-10 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
+    } else {
+        tbody.innerHTML = slice.map(p => `<tr class="border-t border-outline-variant/5 hover:bg-surface-container-highest/30 transition-colors">
 <td class="px-6 py-4 font-mono font-semibold text-on-surface">${p.symbol}</td>
 <td class="px-6 py-4 monospace text-xs">${fmt(p.quantity, 6)}</td>
 <td class="px-6 py-4 monospace text-xs">${fmt(p.entry_price)}</td>
@@ -374,6 +412,41 @@ async function loadHistory() {
 <td class="px-6 py-4 text-xs text-on-surface-variant">${p.close_reason || '--'}</td>
 <td class="px-6 py-4 text-xs text-on-surface-variant">${fmtDate(p.closed_at)}</td>
 </tr>`).join('');
+    }
+    if (infoEl) infoEl.textContent = '共 ' + total + ' 条  第 ' + _historyPage + ' / ' + totalPages + ' 页';
+    if (pagEl) {
+        var bc = 'px-2 py-1 rounded border text-[10px] ';
+        var html = '<button ' + (_historyPage <= 1 ? 'disabled ' : '') + 'onclick="_historyPage--;renderHistoryPage()" class="' + bc + 'border-white/10 text-on-surface-variant hover:border-primary/40 hover:text-primary disabled:opacity-30">&lsaquo;</button>';
+        var pages = [];
+        if (totalPages <= 7) { for (var pg = 1; pg <= totalPages; pg++) pages.push(pg); }
+        else {
+            pages.push(1);
+            if (_historyPage > 3) pages.push('...');
+            for (var pg = Math.max(2, _historyPage - 1); pg <= Math.min(totalPages - 1, _historyPage + 1); pg++) pages.push(pg);
+            if (_historyPage < totalPages - 2) pages.push('...');
+            pages.push(totalPages);
+        }
+        pages.forEach(function(pg) {
+            if (pg === '...') { html += '<span class="px-1 text-on-surface-variant text-[10px]">...</span>'; return; }
+            var active = pg === _historyPage;
+            html += '<button onclick="_historyPage=' + pg + ';renderHistoryPage()" class="' + bc + (active ? 'bg-primary/20 text-primary border-primary/40 font-bold' : 'border-white/10 text-on-surface-variant hover:border-primary/40 hover:text-primary') + '">' + pg + '</button>';
+        });
+        html += '<button ' + (_historyPage >= totalPages ? 'disabled ' : '') + 'onclick="_historyPage++;renderHistoryPage()" class="' + bc + 'border-white/10 text-on-surface-variant hover:border-primary/40 hover:text-primary disabled:opacity-30">&rsaquo;</button>';
+        pagEl.innerHTML = html;
+    }
+}
+
+async function loadHistory() {
+    var tbody = document.getElementById('history-tbody');
+    var limit = document.getElementById('history-limit').value;
+    tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-10 text-center text-on-surface-variant text-xs">加载中...</td></tr>';
+    try {
+        const r = await fetch(`${API}/history?limit=${limit}`);
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.detail || data.message || r.status);
+        _historyAllRows = Array.isArray(data) ? data : (data.data ?? data.history ?? []);
+        _historyPage = 1;
+        renderHistoryPage();
     } catch(e) {
         tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-10 text-center text-error text-xs">加载失败: ${e.message}</td></tr>`;
     }
