@@ -335,14 +335,23 @@ function fmtDate(s) {
 
 async function loadSummary() {
     try {
-        const r = await fetch(API + '/summary');
-        const d = await r.json();
-        document.getElementById('stat-positions').textContent = d.total_positions ?? '--';
-        document.getElementById('stat-cost').textContent = fmt(d.total_cost);
-        const up = d.total_unrealized_pnl;
-        document.getElementById('stat-unrealized').innerHTML = fmtPnl(up) + (up != null ? `<span class="text-xs text-on-surface-variant ml-1">(${fmt(d.total_unrealized_pnl_pct)}%)</span>` : '');
-        document.getElementById('stat-realized').innerHTML = fmtPnl(d.history_total_pnl);
-        document.getElementById('stat-winrate').textContent = d.history_win_rate != null ? fmt(d.history_win_rate) + '%' : '--';
+        const [r1, r2] = await Promise.allSettled([
+            fetch(API + '/summary'),
+            fetch('/api/paper-trading/account/summary')
+        ]);
+        if (r1.status === 'fulfilled' && r1.value.ok) {
+            const d = await r1.value.json();
+            document.getElementById('stat-positions').textContent = d.total_positions ?? '--';
+            document.getElementById('stat-cost').textContent = fmt(d.total_cost);
+            const up = d.total_unrealized_pnl;
+            document.getElementById('stat-unrealized').innerHTML = fmtPnl(up) + (up != null ? `<span class="text-xs text-on-surface-variant ml-1">(${fmt(d.total_unrealized_pnl_pct)}%)</span>` : '');
+        }
+        if (r2.status === 'fulfilled' && r2.value.ok) {
+            const d2 = await r2.value.json();
+            const acct = d2.account || {};
+            document.getElementById('stat-realized').innerHTML = fmtPnl(acct.realized_pnl ?? null);
+            document.getElementById('stat-winrate').textContent = acct.win_rate != null ? fmt(acct.win_rate) + '%' : '--';
+        }
     } catch(e) {
         console.error('loadSummary error', e);
     }

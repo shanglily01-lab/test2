@@ -72,8 +72,8 @@ def _fetch_signals(cursor):
 
 
 def _fetch_stats(cursor):
-    today = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     # 今日开仓总数 + 盈亏 + 胜率（来自 futures_positions）
+    # 使用 CURDATE() 与 DB 时区一致，避免 Python UTC 与 MySQL 本地时区不匹配导致统计为 0
     cursor.execute("""
         SELECT
             COUNT(*) AS total_opened,
@@ -82,8 +82,8 @@ def _fetch_stats(cursor):
             SUM(CASE WHEN status <> 'OPEN' THEN 1 ELSE 0 END) AS closed_count
         FROM futures_positions
         WHERE account_id = 2
-          AND DATE(open_time) = %s
-    """, (today,))
+          AND DATE(open_time) = CURDATE()
+    """)
     r = cursor.fetchone() or {}
     # 当前有信号的交易对数（来自 coin_kline_scores，作为"今日信号数"展示）
     cursor.execute("""
@@ -195,6 +195,41 @@ def _fetch_winrate_history(cursor):
     return result
 
 
+def _fetch_recent_trades(cursor):
+    """今日已平仓记录，最多100条，用于 Dashboard 实时成交记录面板"""
+    cursor.execute("""
+        SELECT symbol, position_side, entry_price, close_price,
+               realized_pnl, leverage, source, open_time, close_time
+        FROM futures_positions
+        WHERE account_id = 2
+          AND status <> 'OPEN'
+          AND DATE(open_time) = CURDATE()
+        ORDER BY close_time DESC
+        LIMIT 100
+    """)
+    result = []
+    for r in cursor.fetchall():
+        entry = float(r['entry_price']) if r['entry_price'] is not None else None
+        close = float(r['close_price']) if r['close_price'] is not None else None
+        pnl   = float(r['realized_pnl']) if r['realized_pnl'] is not None else None
+        pct   = round((close - entry) / entry * 100, 2) if entry and close and entry != 0 else None
+        if r['position_side'] == 'SHORT' and pct is not None:
+            pct = -pct
+        result.append({
+            'symbol':       r['symbol'],
+            'side':         r['position_side'],
+            'entry_price':  entry,
+            'close_price':  close,
+            'pnl':          pct,
+            'realized_pnl': pnl,
+            'leverage':     int(r['leverage']) if r['leverage'] is not None else None,
+            'source':       r['source'],
+            'open_time':    r['open_time'].strftime('%m-%d %H:%M')  if r['open_time']  else '',
+            'close_time':   r['close_time'].strftime('%m-%d %H:%M') if r['close_time'] else '',
+        })
+    return result
+
+
 def _fetch_news(cursor):
     cursor.execute("""
         SELECT title, source, sentiment, symbols, published_datetime, url
@@ -297,6 +332,7 @@ def update_dashboard_snapshot():
         news            = _fetch_news(cursor)
         hyperliquid     = _fetch_hyperliquid(cursor)
         winrate_history = _fetch_winrate_history(cursor)
+        recent_trades   = _fetch_recent_trades(cursor)
 
         snapshot = {
             'signals':         signals,
@@ -305,6 +341,7 @@ def update_dashboard_snapshot():
             'news':            news,
             'hyperliquid':     hyperliquid,
             'winrate_history': winrate_history,
+            'recent_trades':   recent_trades,
             'updated_at':      datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
         }
 
