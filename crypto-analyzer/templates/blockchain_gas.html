@@ -134,19 +134,19 @@
 <span class="text-slate-400 font-label text-sm uppercase">Gwei</span>
 </div>
 </div>
-<!-- Polygon Card -->
-<div class="bg-surface p-6 rounded-xl border border-slate-800/50 hover:border-polygon/30 transition-all group">
+<!-- Optimism Card -->
+<div class="bg-surface p-6 rounded-xl border border-slate-800/50 hover:border-red-500/30 transition-all group">
 <div class="flex justify-between items-start mb-4">
-<div class="bg-polygon/10 p-2 rounded-lg text-polygon">
-<span class="material-symbols-outlined">token</span>
+<div class="bg-red-500/10 p-2 rounded-lg text-red-400">
+<span class="material-symbols-outlined">rocket_launch</span>
 </div>
-<span id="card-polygon-trend" class="text-emerald-400 flex items-center font-label text-xs">
-<span class="material-symbols-outlined text-xs">trending_down</span> 21%
+<span id="card-polygon-trend" class="text-slate-400 flex items-center font-label text-xs">
+<span class="material-symbols-outlined text-xs">trending_flat</span> --
                     </span>
 </div>
-<div class="text-slate-500 font-label text-xs uppercase tracking-wider mb-1">Polygon Gas</div>
+<div class="text-slate-500 font-label text-xs uppercase tracking-wider mb-1">Optimism Gas</div>
 <div class="flex items-baseline gap-2">
-<span id="card-polygon-gas" class="text-3xl font-black font-label text-white">82</span>
+<span id="card-polygon-gas" class="text-3xl font-black font-label text-white">--</span>
 <span class="text-slate-400 font-label text-sm uppercase">Gwei</span>
 </div>
 </div>
@@ -386,36 +386,41 @@
 
   // Chain colour dots used in the summary table
   var CHAIN_DOT_CLASS = {
-    ethereum: 'bg-primary',
-    bsc:      'bg-gold',
-    polygon:  'bg-polygon',
-    arbitrum: 'bg-arbitrum',
+    ethereum:  'bg-primary',
+    bsc:       'bg-gold',
+    polygon:   'bg-polygon',
+    arbitrum:  'bg-arbitrum',
+    optimism:  'bg-red-400',
+    avalanche: 'bg-orange-400',
   };
 
   // Stat-card element IDs keyed by chain_name from API
+  // polygon card slot repurposed for optimism (polygon data is stale)
   var CARD_GAS_ID = {
     ethereum: 'card-eth-gas',
     bsc:      'card-bnb-gas',
-    polygon:  'card-polygon-gas',
+    optimism: 'card-polygon-gas',
     arbitrum: 'card-arbitrum-gas',
   };
   var CARD_TREND_ID = {
     ethereum: 'card-eth-trend',
     bsc:      'card-bnb-trend',
-    polygon:  'card-polygon-trend',
+    optimism: 'card-polygon-trend',
     arbitrum: 'card-arbitrum-trend',
   };
 
   // SVG chart line colours per chain_name
   var CHAIN_STROKE = {
-    ethereum: '#49f4c8',
-    bsc:      '#f5a623',
-    polygon:  '#8247e5',
-    arbitrum: '#28a0f0',
+    ethereum:  '#49f4c8',
+    bsc:       '#f5a623',
+    polygon:   '#8247e5',
+    arbitrum:  '#28a0f0',
+    optimism:  '#ff0420',
+    avalanche: '#e84142',
   };
 
-  // Display order for daily table columns
-  var CHAIN_ORDER = ['ethereum', 'bsc', 'polygon', 'arbitrum'];
+  // Display order for daily table columns (preferred order; dynamic filter drops stale chains)
+  var CHAIN_ORDER = ['bsc', 'arbitrum', 'optimism', 'avalanche', 'ethereum', 'polygon'];
 
   // -----------------------------------------------------------------------
   // Helpers
@@ -591,10 +596,12 @@
   // Display last 30 grouped rows (ROWS_PER_PAGE rows per page).
   // -----------------------------------------------------------------------
   var CHAIN_LABELS = {
-    ethereum: 'ETH Avg',
-    bsc:      'BNB Avg',
-    polygon:  'Polygon Avg',
-    arbitrum: 'Arbitrum Avg'
+    ethereum:  'ETH Avg',
+    bsc:       'BNB Avg',
+    polygon:   'Polygon Avg',
+    arbitrum:  'Arbitrum Avg',
+    optimism:  'Optimism Avg',
+    avalanche: 'AVAX Avg',
   };
 
   function renderDailyPage(page) {
@@ -826,9 +833,16 @@
       var grouped = groupDailyByDate(flatDaily);
       dailyAllRows = grouped.slice(0, days);
 
-      // Detect which chains have at least one non-null value
-      var knownChains = ['ethereum', 'bsc', 'polygon', 'arbitrum'];
-      dailyChains = knownChains.filter(function (chain) {
+      // Detect which chains have at least one non-null value in the displayed window
+      // Build candidate list from CHAIN_ORDER + any extra chains in the actual data
+      var allChainKeys = {};
+      flatDaily.forEach(function (r) { if (r.chain_name) allChainKeys[r.chain_name] = true; });
+      // Sort candidates: CHAIN_ORDER first (preferred display order), then any extras
+      var candidates = CHAIN_ORDER.slice();
+      Object.keys(allChainKeys).forEach(function (c) {
+        if (candidates.indexOf(c) === -1) candidates.push(c);
+      });
+      dailyChains = candidates.filter(function (chain) {
         return dailyAllRows.some(function (row) { return row[chain] != null; });
       });
 
