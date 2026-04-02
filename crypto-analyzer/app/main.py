@@ -1628,12 +1628,22 @@ async def get_signal_scores(limit: int = 100, direction: str = None):
             charset="utf8mb4",
         )
         cursor = conn.cursor()
-        sql = "SELECT symbol, total_score, direction, updated_at FROM coin_kline_scores"
+        where_clauses = ["exchange = 'binance_futures'"]
         params = []
         if direction:
-            sql += " WHERE direction = %s"
+            where_clauses.append("direction = %s")
             params.append(direction.upper())
-        sql += " ORDER BY total_score DESC LIMIT %s"
+        where_sql = " WHERE " + " AND ".join(where_clauses)
+        sql = (
+            "SELECT symbol, direction, total_score,"
+            " h1_score, m15_score,"
+            " h1_bullish_count, h1_bearish_count,"
+            " m15_bullish_count, m15_bearish_count,"
+            " m5_bullish_count, m5_bearish_count,"
+            " strength_level, updated_at"
+            " FROM coin_kline_scores" + where_sql +
+            " ORDER BY ABS(total_score) DESC LIMIT %s"
+        )
         params.append(limit)
         cursor.execute(sql, params)
         rows = cursor.fetchall()
@@ -1642,10 +1652,19 @@ async def get_signal_scores(limit: int = 100, direction: str = None):
         result = []
         for r in rows:
             result.append({
-                'symbol': r['symbol'],
-                'total_score': float(r['total_score'] or 0),
-                'direction': r['direction'] or 'NEUTRAL',
-                'updated_at': r['updated_at'].isoformat() if r['updated_at'] else None,
+                'symbol':        r['symbol'],
+                'direction':     r['direction'] or 'NEUTRAL',
+                'total_score':   int(r['total_score']) if r['total_score'] is not None else 0,
+                'h1_score':      int(r['h1_score']) if r['h1_score'] is not None else 0,
+                'm15_score':     int(r['m15_score']) if r['m15_score'] is not None else 0,
+                'h1_bullish':    int(r['h1_bullish_count'] or 0),
+                'h1_bearish':    int(r['h1_bearish_count'] or 0),
+                'm15_bullish':   int(r['m15_bullish_count'] or 0),
+                'm15_bearish':   int(r['m15_bearish_count'] or 0),
+                'm5_bullish':    int(r['m5_bullish_count'] or 0),
+                'm5_bearish':    int(r['m5_bearish_count'] or 0),
+                'strength_level': r['strength_level'] or '',
+                'updated_at':    r['updated_at'].isoformat() if r['updated_at'] else None,
             })
         return {'success': True, 'data': result, 'count': len(result)}
     except Exception as e:
