@@ -515,6 +515,106 @@ async def get_ema_signals(
 
 # ==================== Hyperliquid聪明钱交易API ====================
 
+@router.get("/api/hyperliquid/cached")
+async def get_hyperliquid_cached(
+    hours: int = 24,
+    min_usd: float = 100000,
+    limit: int = 30
+):
+    """
+    从DB缓存读取Hyperliquid聪明钱数据（dashboard专用快速接口）
+    统计来自 hyperliquid_symbol_aggregation，交易明细来自 hyperliquid_wallet_trades
+    """
+    try:
+        import pymysql
+        import os
+
+        conn = pymysql.connect(
+            host=os.getenv('DB_HOST', '13.212.252.171'),
+            user=os.getenv('DB_USER', 'admin'),
+            password=os.getenv('DB_PASSWORD', 'Tonny@1000'),
+            database=os.getenv('DB_NAME', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor,
+            connect_timeout=10
+        )
+        cursor = conn.cursor()
+
+        # 1. 聚合统计 from hyperliquid_symbol_aggregation (period='24h')
+        cursor.execute("""
+            SELECT
+                COALESCE(SUM(total_trades), 0) AS total_count,
+                COALESCE(SUM(long_trades), 0)  AS long_count,
+                COALESCE(SUM(short_trades), 0) AS short_count,
+                COALESCE(SUM(net_flow), 0)     AS net_flow_usd,
+                COUNT(DISTINCT symbol)         AS unique_coins,
+                MAX(updated_at)                AS last_updated
+            FROM hyperliquid_symbol_aggregation
+            WHERE period = '24h'
+        """)
+        agg = cursor.fetchone() or {}
+
+        long_count  = int(agg.get('long_count')  or 0)
+        short_count = int(agg.get('short_count') or 0)
+        ls_ratio = round(long_count / short_count, 2) if short_count > 0 else 0
+
+        # 2. 唯一钱包数 from wallet_trades (24h)
+        cursor.execute("""
+            SELECT COUNT(DISTINCT address) AS unique_wallets
+            FROM hyperliquid_wallet_trades
+            WHERE trade_time >= NOW() - INTERVAL %s HOUR
+        """, (hours,))
+        wallet_row = cursor.fetchone() or {}
+        unique_wallets = int(wallet_row.get('unique_wallets') or 0)
+
+        statistics = {
+            'total_count':      int(agg.get('total_count') or 0),
+            'long_count':       long_count,
+            'short_count':      short_count,
+            'net_flow_usd':     float(agg.get('net_flow_usd') or 0),
+            'unique_wallets':   unique_wallets,
+            'unique_coins':     int(agg.get('unique_coins') or 0),
+            'long_short_ratio': ls_ratio,
+        }
+
+        # 3. 近期大额交易
+        cursor.execute("""
+            SELECT coin, side, price, size, notional_usd, closed_pnl, trade_time
+            FROM hyperliquid_wallet_trades
+            WHERE trade_time >= NOW() - INTERVAL %s HOUR
+              AND notional_usd >= %s
+            ORDER BY notional_usd DESC
+            LIMIT %s
+        """, (hours, min_usd, limit))
+        trades = []
+        for t in cursor.fetchall():
+            trades.append({
+                'coin':        t['coin'],
+                'action':      t['side'],
+                'side':        t['side'],
+                'price':       float(t['price']),
+                'size':        float(t['size']),
+                'notional_usd': float(t['notional_usd']),
+                'closed_pnl':  float(t['closed_pnl']),
+                'timestamp':   t['trade_time'].isoformat() if t['trade_time'] else None,
+            })
+
+        cursor.close()
+        conn.close()
+
+        return {
+            'success': True,
+            'data': {
+                'trades':     trades,
+                'statistics': statistics
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"获取Hyperliquid缓存数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/hyperliquid/trades")
 async def get_hyperliquid_smart_money_trades(
     hours: int = 168,  # 默认7天（7*24=168小时）

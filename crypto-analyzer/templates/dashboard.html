@@ -788,7 +788,7 @@ async function loadNewsPanel() {
 async function loadHyperliquidPanel() {
     var tbody = document.getElementById('hl-tbody');
     try {
-        var resp = await fetch('/api/hyperliquid/trades?hours=24&min_usd=100000&limit=30');
+        var resp = await fetch('/api/hyperliquid/cached?hours=24&min_usd=100000&limit=30');
         if (!resp.ok) throw new Error('HTTP ' + resp.status);
         var json = await resp.json();
         var payload = json.data || {};
