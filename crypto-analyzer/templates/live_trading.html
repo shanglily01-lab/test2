@@ -226,7 +226,7 @@
 </div>
 </section>
 <!-- Right Main Panel (Trading Tables) -->
-<section class="flex-1 bg-[#0a0f14] flex flex-col">
+<section class="flex-1 bg-[#0a0f14] flex flex-col overflow-hidden min-h-0">
 <!-- Table Tabs -->
 <div class="px-8 border-b border-white/5 flex items-center h-14 space-x-12">
 <button id="tab-btn-positions" data-tab="positions" onclick="switchTab('positions')" class="tab-btn relative h-full px-2 text-sm font-bold font-headline tracking-tight text-gold border-b-2 border-gold flex items-center gap-2">
@@ -245,7 +245,7 @@
 </button>
 </div>
 <!-- Positions Panel -->
-<div id="panel-positions" class="tab-panel flex-1 overflow-auto">
+<div id="panel-positions" class="tab-panel flex-1 overflow-auto min-h-0">
 <table class="w-full text-left border-collapse">
 <thead class="sticky top-0 bg-[#0a0f14] z-10">
 <tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-white/5">
@@ -264,7 +264,7 @@
 </table>
 </div>
 <!-- Orders Panel -->
-<div id="panel-orders" class="tab-panel flex-1 overflow-auto hidden">
+<div id="panel-orders" class="tab-panel flex-1 overflow-auto hidden min-h-0">
 <table class="w-full text-left border-collapse">
 <thead class="sticky top-0 bg-[#0a0f14] z-10">
 <tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-white/5">
