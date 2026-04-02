@@ -291,11 +291,10 @@
       <option value="LONG">LONG</option>
       <option value="SHORT">SHORT</option>
     </select>
-    <select id="history-limit" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:outline-none focus:border-primary/50">
-      <option value="50">50 条</option>
-      <option value="100">100 条</option>
-      <option value="200">200 条</option>
-      <option value="500">500 条</option>
+    <select id="history-limit" onchange="loadHistory(1)" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:outline-none focus:border-primary/50">
+      <option value="30">每页 30 条</option>
+      <option value="50">每页 50 条</option>
+      <option value="100">每页 100 条</option>
     </select>
     <button id="history-refresh-btn" onclick="loadHistory()" class="px-3 py-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/20 text-primary rounded-lg text-xs font-bold transition-colors">刷新</button>
   </div>
@@ -498,6 +497,7 @@ async function loadPositions() {
 var _historyAllTrades = [];
 var _historyPage = 1;
 var _historyPageSize = 30;
+var _historyTotalCount = 0;
 
 function applyHistoryFilter(resetPage) {
     if (resetPage) _historyPage = 1;
@@ -516,10 +516,9 @@ function applyHistoryFilter(resetPage) {
         return matchSearch && matchSide;
     });
 
-    var totalPages = Math.max(1, Math.ceil(filtered.length / _historyPageSize));
-    _historyPage = Math.min(Math.max(1, _historyPage), totalPages);
-    var start = (_historyPage - 1) * _historyPageSize;
-    var pageRows = filtered.slice(start, start + _historyPageSize);
+    // Pagination based on server-side total count; page buttons trigger new API fetch
+    var totalPages = Math.max(1, Math.ceil(_historyTotalCount / _historyPageSize));
+    var pageRows = filtered;
 
     if (pageRows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无符合条件的记录</td></tr>';
@@ -543,14 +542,14 @@ function applyHistoryFilter(resetPage) {
     }
 
     if (countEl) {
-        countEl.textContent = '共 ' + filtered.length + ' 条  第 ' + _historyPage + ' / ' + totalPages + ' 页';
+        countEl.textContent = '共 ' + _historyTotalCount + ' 条  第 ' + _historyPage + ' / ' + totalPages + ' 页';
     }
 
-    // Render pagination buttons
+    // Render pagination buttons — page navigation triggers server fetch
     if (pagEl) {
         var btnClass = 'px-3 py-1 rounded text-xs font-mono border transition-colors ';
         var html = '';
-        html += '<button ' + (_historyPage <= 1 ? 'disabled ' : '') + 'onclick="_historyPage--;applyHistoryFilter()" class="' + btnClass + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&lsaquo;</button>';
+        html += '<button ' + (_historyPage <= 1 ? 'disabled ' : '') + 'onclick="loadHistory(' + (_historyPage - 1) + ')" class="' + btnClass + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&lsaquo;</button>';
         var pages = [];
         if (totalPages <= 7) {
             for (var i = 1; i <= totalPages; i++) pages.push(i);
@@ -566,25 +565,30 @@ function applyHistoryFilter(resetPage) {
                 html += '<span class="px-2 text-on-surface-variant text-xs">...</span>';
             } else {
                 var active = p === _historyPage;
-                html += '<button onclick="_historyPage=' + p + ';applyHistoryFilter()" class="' + btnClass + (active ? 'bg-primary text-background border-primary font-bold' : 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container') + '">' + p + '</button>';
+                html += '<button onclick="loadHistory(' + p + ')" class="' + btnClass + (active ? 'bg-primary text-background border-primary font-bold' : 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container') + '">' + p + '</button>';
             }
         });
-        html += '<button ' + (_historyPage >= totalPages ? 'disabled ' : '') + 'onclick="_historyPage++;applyHistoryFilter()" class="' + btnClass + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&rsaquo;</button>';
+        html += '<button ' + (_historyPage >= totalPages ? 'disabled ' : '') + 'onclick="loadHistory(' + (_historyPage + 1) + ')" class="' + btnClass + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&rsaquo;</button>';
         pagEl.innerHTML = html;
     }
 }
 
-async function loadHistory() {
+async function loadHistory(page) {
+    if (page !== undefined) _historyPage = page;
     var tbody = document.getElementById('history-tbody');
     var recentList = document.getElementById('recent-trades-list');
     var limitEl = document.getElementById('history-limit');
-    var limit = limitEl ? parseInt(limitEl.value) || 50 : 50;
+    var pageSize = limitEl ? parseInt(limitEl.value) || 30 : 30;
+    _historyPageSize = pageSize;
+
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>';
 
     var trades = [];
     try {
-        var res = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&limit=' + limit);
+        var res = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&page=' + _historyPage + '&page_size=' + _historyPageSize);
         var data = await res.json();
         trades = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+        _historyTotalCount = data.total_count || 0;
     } catch(e) {
         if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败</td></tr>';
         return [];
@@ -648,12 +652,8 @@ function loadStats(posResult, trades) {
         }
     }
 
+    // 24H 盈亏 — computed from current page's trades (most recent page)
     if (trades && trades.length > 0) {
-        var totalCount = trades.length;
-        var wins = trades.filter(function(t) { return (parseFloat(t.realized_pnl) || 0) > 0; }).length;
-        var winRate = totalCount > 0 ? Math.round(wins / totalCount * 100) : 0;
-
-        // 24H 盈亏
         var cutoff = Date.now() - 24 * 3600000;
         var pnl24h = trades
             .filter(function(t) {
@@ -668,13 +668,25 @@ function loadStats(posResult, trades) {
             el24h.textContent = fmtPnl(pnl24h);
             el24h.className = 'text-2xl font-headline font-bold monospace ' + (pnl24h >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
         }
-        if (elWin) elWin.textContent = winRate + '%';
-        if (elTotal) elTotal.textContent = totalCount;
     } else if (trades !== undefined) {
         if (el24h) el24h.textContent = '0.00';
-        if (elWin) elWin.textContent = '--';
-        if (elTotal) elTotal.textContent = '0';
     }
+    // win_rate and total_trades are loaded from account API in loadAccountInfo()
+}
+
+// ---- 加载账户统计 ----
+
+async function loadAccountInfo() {
+    try {
+        var res = await fetch('/api/futures/account/' + ACCOUNT_ID);
+        if (!res.ok) return;
+        var data = await res.json();
+        var acc = data.data || data;
+        var elWin   = document.getElementById('stat-win-rate');
+        var elTotal = document.getElementById('stat-total-trades');
+        if (elWin   && acc.win_rate    != null) elWin.textContent   = parseFloat(acc.win_rate).toFixed(1) + '%';
+        if (elTotal && acc.total_trades != null) elTotal.textContent = acc.total_trades;
+    } catch(e) {}
 }
 
 // ---- 加载交易开关状态 ----
@@ -781,7 +793,7 @@ async function closePosition(id, symbol) {
 // ---- 主加载函数 ----
 
 async function loadAll() {
-    var results = await Promise.all([loadPositions(), loadHistory()]);
+    var results = await Promise.all([loadPositions(), loadHistory(1), loadAccountInfo()]);
     var posResult = results[0];
     var trades = results[1];
     loadStats(posResult, trades);
@@ -801,7 +813,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (searchEl) searchEl.addEventListener('input', applyHistoryFilter);
     if (sideEl)   sideEl.addEventListener('change', applyHistoryFilter);
     // 切换 limit 时重新拉取
-    if (limitEl)  limitEl.addEventListener('change', loadHistory);
+    // history-limit onchange is handled inline (loadHistory(1))
 });
 </script>
 </body></html>
