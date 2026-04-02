@@ -700,29 +700,5 @@
 
             </div>
 
-</di<script>
-        // Smooth scroll for anchor links
-        document.addEventListener('DOMContentLoaded', function () {
-            document.querySelectorAll('a[href^="#"]').forEach(function (anchor) {
-                anchor.addEventListener('click', function (e) {
-                    var target = document.querySelector(this.getAttribute('href'));
-                    if (target) {
-                        e.preventDefault();
-                        target.scrollIntoView({ behavior: 'smooth' });
-                    }
-                });
-            });
-
-            // If user is already logged in, change login button to enter-system
-            var token = localStorage.getItem('auth_token') || localStorage.getItem('access_token');
-            if (token) {
-                var loginBtn = document.querySelector('a[href="/login"]');
-                if (loginBtn) {
-                    loginBtn.href = '/dashboard';
-                    loginBtn.textContent = '进入系统';
-                }
-            }
-        });
-    </script>
 
 </body></html>
