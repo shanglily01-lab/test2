@@ -588,6 +588,21 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(_periodic("update_data_management_stats_cache",2 * 3600, "数据管理统计(2h)"))
         asyncio.create_task(_periodic("update_collection_status_cache",    2 * 3600, "数据采集情况(2h)"))
 
+        # Dashboard 快照预计算（每5分钟，前端一次调用即可获取全部数据）
+        async def _dashboard_snapshot_loop():
+            await asyncio.sleep(30)  # 等待服务启动稳定
+            while True:
+                try:
+                    from app.services.dashboard_snapshot_service import update_dashboard_snapshot
+                    loop = asyncio.get_event_loop()
+                    await loop.run_in_executor(None, update_dashboard_snapshot)
+                except Exception as e:
+                    logger.error(f"[dashboard_snapshot] loop error: {e}")
+                await asyncio.sleep(5 * 60)
+
+        asyncio.create_task(_dashboard_snapshot_loop())
+        logger.info("Dashboard快照预计算任务已启动（每5分钟更新）")
+
         # ── 采集服务守护进程（fast_collector_service.py watchdog）────────────────
         _collector_script = str(project_root / "fast_collector_service.py")
 

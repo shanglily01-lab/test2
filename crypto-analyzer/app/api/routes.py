@@ -513,6 +513,53 @@ async def get_ema_signals(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ==================== Dashboard 快照 API ====================
+
+@router.get("/api/dashboard/snapshot")
+async def get_dashboard_snapshot():
+    """
+    读取预计算的 Dashboard 快照（由调度器每5分钟更新一次）。
+    响应时间通常 <10ms，无任何实时计算。
+    """
+    try:
+        import pymysql
+        import os
+        import json
+
+        conn = pymysql.connect(
+            host=os.getenv('DB_HOST', '13.212.252.171'),
+            user=os.getenv('DB_USER', 'admin'),
+            password=os.getenv('DB_PASSWORD', 'Tonny@1000'),
+            database=os.getenv('DB_NAME', 'binance-data'),
+            charset='utf8mb4',
+            cursorclass=pymysql.cursors.DictCursor,
+            connect_timeout=5
+        )
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT snapshot_json, updated_at, compute_ms
+            FROM dashboard_snapshot
+            WHERE snapshot_key = 'main'
+        """)
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if not row:
+            raise HTTPException(status_code=503, detail="Snapshot not yet generated, please retry in 30 seconds")
+
+        data = json.loads(row['snapshot_json'])
+        data['updated_at'] = row['updated_at'].isoformat() if row['updated_at'] else None
+        data['compute_ms'] = row['compute_ms']
+        return {'success': True, 'data': data}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"读取Dashboard快照失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== Hyperliquid聪明钱交易API ====================
 
 @router.get("/api/hyperliquid/cached")

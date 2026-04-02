@@ -516,7 +516,172 @@ function renderSignalRow(item) {
         + '</tr>';
 }
 
-// Load signal list from API and render EMA table
+// ===== 信号表渲染（纯渲染，不发请求）=====
+function renderSignalTable(signals) {
+    var tbody = document.getElementById('ema-tbody');
+    if (!tbody) return;
+    if (!signals || signals.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-on-surface-variant text-sm font-mono">No signals available</td></tr>';
+        return;
+    }
+    tbody.innerHTML = signals.map(renderSignalRow).join('');
+    return signals;
+}
+
+// ===== 统计卡片更新（纯渲染）=====
+function renderStats(stats) {
+    if (!stats) return;
+    var elSignals = document.getElementById('stat-signals');
+    var elOpen    = document.getElementById('stat-open');
+    var elPnl     = document.getElementById('stat-pnl');
+    var elWinrate = document.getElementById('stat-winrate');
+    if (elSignals && stats.today_signals != null) elSignals.textContent = stats.today_signals;
+    if (elOpen    && stats.today_open    != null) elOpen.textContent    = stats.today_open;
+    if (elPnl     && stats.today_pnl     != null) {
+        var pnl  = parseFloat(stats.today_pnl);
+        var sign = pnl >= 0 ? '+' : '';
+        elPnl.innerHTML = sign + pnl.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' <span class="text-sm font-normal ml-1">USDT</span>';
+        elPnl.classList.toggle('text-error',   pnl < 0);
+        elPnl.classList.toggle('text-primary',  pnl >= 0);
+    }
+    if (elWinrate && stats.win_rate != null) {
+        elWinrate.innerHTML = parseFloat(stats.win_rate).toFixed(1) + '<span class="text-sm font-normal ml-1">%</span>';
+    }
+}
+
+// ===== 合约板块渲染（接受数据数组）=====
+function renderFuturesPanel(rows) {
+    var tbody = document.getElementById('futures-tbody');
+    if (!tbody) return;
+    if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-center text-on-surface-variant text-xs font-mono">暂无合约数据</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(function(item) {
+        var sym = (item.symbol || '').replace('/USDT', '').replace('USDT', '');
+        var oi  = item.open_interest != null ? parseFloat(item.open_interest).toLocaleString('en-US', {maximumFractionDigits: 0}) : '--';
+        var lsr = item.long_short_ratio && item.long_short_ratio.ratio != null ? parseFloat(item.long_short_ratio.ratio).toFixed(3) : '--';
+        var lsrColor = item.long_short_ratio && item.long_short_ratio.ratio != null
+            ? (parseFloat(item.long_short_ratio.ratio) >= 1 ? 'text-primary' : 'text-error')
+            : 'text-on-surface-variant';
+        var lspr = item.long_short_position_ratio && item.long_short_position_ratio.ratio != null ? parseFloat(item.long_short_position_ratio.ratio).toFixed(3) : '--';
+        var lsprColor = item.long_short_position_ratio && item.long_short_position_ratio.ratio != null
+            ? (parseFloat(item.long_short_position_ratio.ratio) >= 1 ? 'text-primary' : 'text-error')
+            : 'text-on-surface-variant';
+        var ts = item.timestamp ? String(item.timestamp).slice(11, 16) : '--';
+        return '<tr class="hover:bg-surface-container transition-colors duration-150">'
+            + '<td class="py-4 font-mono font-medium text-sm">' + sym + '</td>'
+            + '<td class="py-4 font-mono text-xs text-right text-on-surface-variant">' + oi + '</td>'
+            + '<td class="py-4 font-mono text-xs text-right ' + lsrColor  + '">' + lsr  + '</td>'
+            + '<td class="py-4 font-mono text-xs text-right ' + lsprColor + '">' + lspr + '</td>'
+            + '<td class="py-4 font-mono text-xs text-right text-on-surface-variant">' + ts + '</td>'
+            + '</tr>';
+    }).join('');
+}
+
+// ===== 新闻板块渲染（接受数据数组）=====
+function renderNewsPanel(news) {
+    var container = document.getElementById('news-list');
+    if (!container) return;
+    if (!news || news.length === 0) {
+        container.innerHTML = '<div class="py-6 text-center text-on-surface-variant text-xs font-mono">暂无新闻</div>';
+        return;
+    }
+    container.innerHTML = news.map(function(n) {
+        var sentimentClass = n.sentiment === 'POSITIVE' ? 'bg-primary/10 text-primary'
+            : n.sentiment === 'NEGATIVE' ? 'bg-error/10 text-error'
+            : 'bg-outline-variant/20 text-on-surface-variant';
+        var sentimentLabel = n.sentiment === 'POSITIVE' ? '利多'
+            : n.sentiment === 'NEGATIVE' ? '利空' : '中性';
+        var titleHtml = n.url
+            ? '<a href="' + n.url + '" target="_blank" rel="noopener" class="text-sm font-medium leading-snug hover:text-primary transition-colors line-clamp-2">' + (n.title || '') + '</a>'
+            : '<p class="text-sm font-medium leading-snug line-clamp-2">' + (n.title || '') + '</p>';
+        return '<div class="bg-surface-container rounded-xl p-4 hover:bg-surface-container-high transition-colors">'
+            + '<div class="flex items-start justify-between gap-3">'
+            + '<div class="flex-1 min-w-0">'
+            + titleHtml
+            + '<div class="flex items-center gap-2 mt-2">'
+            + '<span class="text-[10px] text-on-surface-variant font-mono">' + (n.source || '') + '</span>'
+            + '<span class="text-[10px] text-on-surface-variant/50">·</span>'
+            + '<span class="text-[10px] text-on-surface-variant font-mono">' + (n.published_at ? String(n.published_at).slice(5, 16) : '') + '</span>'
+            + '</div></div>'
+            + '<span class="px-2 py-0.5 rounded text-[10px] font-bold tracking-wide shrink-0 ' + sentimentClass + '">' + sentimentLabel + '</span>'
+            + '</div></div>';
+    }).join('');
+}
+
+// ===== Hyperliquid 板块渲染（接受聚合对象）=====
+function renderHyperliquidPanel(payload) {
+    var tbody = document.getElementById('hl-tbody');
+    if (!tbody) return;
+    var stats  = (payload && payload.statistics) || {};
+    var trades = (payload && payload.trades)     || [];
+
+    var netFlow = stats.net_flow_usd != null ? parseFloat(stats.net_flow_usd) : null;
+    document.getElementById('hl-total-count').textContent = stats.total_count  != null ? stats.total_count  : '--';
+    document.getElementById('hl-long-count').textContent  = stats.long_count   != null ? stats.long_count   : '--';
+    document.getElementById('hl-short-count').textContent = stats.short_count  != null ? stats.short_count  : '--';
+    document.getElementById('hl-wallets').textContent     = stats.unique_wallets != null ? stats.unique_wallets : '--';
+    document.getElementById('hl-ls-ratio').textContent    = stats.long_short_ratio != null ? parseFloat(stats.long_short_ratio).toFixed(2) : '--';
+    var netEl = document.getElementById('hl-net-flow');
+    if (netFlow != null) {
+        var sign = netFlow >= 0 ? '+' : '';
+        netEl.textContent = sign + (netFlow / 1000).toFixed(1) + 'K';
+        netEl.className = 'text-xl font-mono font-bold ' + (netFlow >= 0 ? 'text-primary' : 'text-error');
+    }
+    if (!trades.length) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-on-surface-variant text-xs font-mono">暂无大额交易</td></tr>';
+        return;
+    }
+    tbody.innerHTML = trades.map(function(t) {
+        var coin   = t.coin || '--';
+        var action = (t.action || t.side || '').toUpperCase();
+        var isLong = action === 'LONG' || action === 'B';
+        var actionLabel = isLong ? 'LONG' : 'SHORT';
+        var actionClass = isLong ? 'bg-primary/10 text-primary' : 'bg-error/10 text-error';
+        var price    = t.price    != null ? parseFloat(t.price).toLocaleString('en-US', {maximumFractionDigits: 4}) : '--';
+        var size     = t.size     != null ? parseFloat(t.size).toFixed(4) : '--';
+        var notional = t.notional_usd != null ? '$' + (parseFloat(t.notional_usd) / 1000).toFixed(1) + 'K' : '--';
+        var pnl      = t.closed_pnl  != null ? parseFloat(t.closed_pnl) : null;
+        var pnlStr   = pnl != null ? (pnl >= 0 ? '+' : '') + pnl.toFixed(2) : '--';
+        var pnlClass = pnl != null ? (pnl >= 0 ? 'text-primary' : 'text-error') : 'text-on-surface-variant';
+        var ts       = t.timestamp ? String(t.timestamp).slice(5, 16).replace('T', ' ') : '--';
+        return '<tr class="hover:bg-surface-container transition-colors duration-150">'
+            + '<td class="py-3 font-mono font-bold text-sm text-on-surface">' + coin + '</td>'
+            + '<td class="py-3 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold ' + actionClass + '">' + actionLabel + '</span></td>'
+            + '<td class="py-3 font-mono text-xs text-right text-on-surface-variant">' + price + '</td>'
+            + '<td class="py-3 font-mono text-xs text-right text-on-surface-variant">' + size + '</td>'
+            + '<td class="py-3 font-mono text-xs text-right text-on-surface">' + notional + '</td>'
+            + '<td class="py-3 font-mono text-xs text-right ' + pnlClass + '">' + pnlStr + '</td>'
+            + '<td class="py-3 font-mono text-xs text-right text-on-surface-variant">' + ts + '</td>'
+            + '</tr>';
+    }).join('');
+}
+
+// ===== 主加载：单次请求快照，分发到各面板 =====
+async function loadSnapshot() {
+    try {
+        var resp = await fetch('/api/dashboard/snapshot');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var json = await resp.json();
+        var d = json.data || {};
+
+        var signals = d.signals || [];
+        renderSignalTable(signals);
+        renderStats(d.stats || {});
+        updateSentiment(signals);
+        renderFuturesPanel(d.futures || []);
+        renderNewsPanel(d.news || []);
+        renderHyperliquidPanel(d.hyperliquid || {});
+    } catch (e) {
+        console.error('loadSnapshot failed:', e);
+        // 快照不可用时提示，不降级到慢接口
+        var tbody = document.getElementById('ema-tbody');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-error text-sm font-mono">数据加载失败，请稍后刷新</td></tr>';
+    }
+}
+
+// ===== 以下为兼容保留（已不再主动调用）=====
 async function loadSignals() {
     var tbody = document.getElementById('ema-tbody');
     var endpoints = [
@@ -863,18 +1028,12 @@ function updateClock() {
     if (t) t.textContent = timeStr;
 }
 
-// Initial load on DOM ready, then auto-refresh every 30 seconds
+// Initial load on DOM ready, auto-refresh every 5 minutes (matches snapshot update interval)
 document.addEventListener('DOMContentLoaded', function() {
     updateClock();
     setInterval(updateClock, 1000);
-    loadAll();
-    loadFuturesPanel();
-    loadNewsPanel();
-    loadHyperliquidPanel();
-    setInterval(loadAll, 30000);
-    setInterval(loadFuturesPanel, 60000);
-    setInterval(loadNewsPanel, 120000);
-    // Hyperliquid is slow (fetches from external API), no auto-refresh
+    loadSnapshot();
+    setInterval(loadSnapshot, 5 * 60 * 1000);
 });
 </script>
 </body></html>
