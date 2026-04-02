@@ -183,6 +183,60 @@ class HyperliquidScheduler:
             import traceback
             logger.error(traceback.format_exc())
 
+    def cleanup_old_data(self, retain_days: int = 30):
+        """
+        清理超过 retain_days 天的历史数据，释放磁盘空间。
+
+        清理对象：
+          - hyperliquid_wallet_trades   (按 trade_time)
+          - hyperliquid_wallet_positions (按 snapshot_time)
+          - hyperliquid_performance_snapshots (按 snapshot_date)
+        """
+        from app.database.hyperliquid_db import HyperliquidDB
+        import pymysql, os
+
+        logger.info(f"开始清理 Hyperliquid 历史数据（保留最近 {retain_days} 天）...")
+
+        tables = [
+            ("hyperliquid_wallet_trades",        "trade_time"),
+            ("hyperliquid_wallet_positions",      "snapshot_time"),
+            ("hyperliquid_performance_snapshots", "snapshot_date"),
+        ]
+
+        try:
+            conn = pymysql.connect(
+                host=os.getenv('DB_HOST', 'localhost'),
+                port=int(os.getenv('DB_PORT', 3306)),
+                user=os.getenv('DB_USER', 'root'),
+                password=os.getenv('DB_PASSWORD', ''),
+                database=os.getenv('DB_NAME', 'binance-data'),
+                charset='utf8mb4',
+                autocommit=False,
+            )
+            cur = conn.cursor()
+            total_deleted = 0
+
+            for table, col in tables:
+                try:
+                    cur.execute(
+                        f"DELETE FROM `{table}` WHERE `{col}` < NOW() - INTERVAL %s DAY",
+                        (retain_days,)
+                    )
+                    deleted = cur.rowcount
+                    conn.commit()
+                    total_deleted += deleted
+                    logger.info(f"  {table}: 删除 {deleted} 条旧记录")
+                except Exception as e:
+                    conn.rollback()
+                    logger.warning(f"  {table} 清理失败: {e}")
+
+            cur.close()
+            conn.close()
+            logger.info(f"清理完成，共删除 {total_deleted} 条记录")
+
+        except Exception as e:
+            logger.error(f"Hyperliquid 数据清理任务异常: {e}")
+
     def schedule_tasks(self):
         """设置所有定时任务"""
         logger.info("设置 Hyperliquid 监控任务...")
@@ -208,6 +262,10 @@ class HyperliquidScheduler:
             lambda: asyncio.run(self.monitor_hyperliquid_wallets(priority='all'))
         )
         logger.info("  ✓ Hyperliquid 全量扫描 (8000+个) - 每 6 小时")
+
+        # 历史数据清理: 每天 03:00 执行，只保留 30 天
+        schedule.every().day.at("03:00").do(self.cleanup_old_data)
+        logger.info("  ✓ 历史数据清理 (保留30天) - 每天 03:00")
 
     def print_status(self):
         """打印任务状态"""
