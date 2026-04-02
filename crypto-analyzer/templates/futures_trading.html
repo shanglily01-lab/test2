@@ -173,14 +173,14 @@
 <p id="stat-position-count" class="text-2xl font-headline font-bold monospace">--</p>
 </div>
 <div class="bg-surface-container p-5 rounded-xl">
-<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">总保证金</p>
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">账户余额</p>
 <div class="flex items-baseline gap-1">
 <p id="stat-total-margin" class="text-2xl font-headline font-bold monospace">--</p>
 <span class="text-xs text-on-surface-variant font-medium">USDT</span>
 </div>
 </div>
 <div class="bg-surface-container p-5 rounded-xl border-l-2 border-primary">
-<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">总浮盈</p>
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">总已实现</p>
 <p id="stat-total-pnl" class="text-2xl font-headline font-bold monospace">--</p>
 </div>
 <div class="bg-surface-container p-5 rounded-xl">
@@ -645,11 +645,7 @@ function loadStats(posResult, trades) {
 
     if (posResult) {
         if (elCount) elCount.textContent = posResult.count;
-        if (elMargin) elMargin.textContent = fmtUsdt(posResult.totalMargin);
-        if (elPnl) {
-            elPnl.textContent = fmtPnl(posResult.totalPnl);
-            elPnl.className = 'text-2xl font-headline font-bold monospace ' + (posResult.totalPnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
-        }
+        // elMargin and elPnl are populated by loadAccountInfo() from account DB
     }
 
     // 24H 盈亏 — computed from current page's trades (most recent page)

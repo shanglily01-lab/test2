@@ -335,6 +335,105 @@
 </div>
 </div>
 </div>
+
+<!-- New Sections: 合约 / 新闻 / Hyperliquid -->
+<div class="mt-12 space-y-8">
+
+<!-- Row: 合约板块 + 新闻板块 -->
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+
+<!-- 合约板块 -->
+<div class="bg-surface-container-low rounded-2xl p-8 flex flex-col">
+<div class="flex justify-between items-center mb-6 shrink-0">
+<h4 class="text-xl font-display font-bold tracking-tight">合约板块</h4>
+<span class="px-3 py-1 bg-surface-container-highest text-[10px] font-mono text-on-surface-variant rounded-full">OI · L/S Ratio</span>
+</div>
+<div class="overflow-x-auto no-scrollbar">
+<table class="w-full text-left border-collapse text-sm">
+<thead>
+<tr class="text-on-surface-variant text-[10px] uppercase tracking-[0.15em] font-display">
+<th class="pb-4 font-medium">交易对</th>
+<th class="pb-4 font-medium text-right">持仓量</th>
+<th class="pb-4 font-medium text-right">多空比(账户)</th>
+<th class="pb-4 font-medium text-right">多空比(持仓)</th>
+<th class="pb-4 font-medium text-right">更新时间</th>
+</tr>
+</thead>
+<tbody id="futures-tbody" class="divide-y divide-outline-variant/10">
+<tr><td colspan="5" class="py-6 text-center text-on-surface-variant text-xs font-mono">Loading...</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+
+<!-- 新闻板块 -->
+<div class="bg-surface-container-low rounded-2xl p-8 flex flex-col">
+<div class="flex justify-between items-center mb-6 shrink-0">
+<h4 class="text-xl font-display font-bold tracking-tight">新闻板块</h4>
+<span class="px-3 py-1 bg-surface-container-highest text-[10px] font-mono text-on-surface-variant rounded-full">24H NEWS</span>
+</div>
+<div id="news-list" class="space-y-3 overflow-y-auto max-h-[420px] no-scrollbar pr-1">
+<div class="py-6 text-center text-on-surface-variant text-xs font-mono">Loading...</div>
+</div>
+</div>
+
+</div>
+
+<!-- Hyperliquid 聪明钱板块 -->
+<div class="bg-surface-container-low rounded-2xl p-8">
+<div class="flex justify-between items-center mb-6">
+<h4 class="text-xl font-display font-bold tracking-tight">Hyperliquid 聪明钱板块</h4>
+<span class="px-3 py-1 bg-surface-container-highest text-[10px] font-mono text-on-surface-variant rounded-full">SMART MONEY · 24H</span>
+</div>
+<!-- Stats Row -->
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+<div class="bg-surface-container rounded-xl p-4 text-center">
+<p class="text-[10px] text-on-surface-variant uppercase tracking-widest mb-2">总笔数</p>
+<p class="text-xl font-mono font-bold text-on-surface" id="hl-total-count">--</p>
+</div>
+<div class="bg-surface-container rounded-xl p-4 text-center">
+<p class="text-[10px] text-on-surface-variant uppercase tracking-widest mb-2">做多</p>
+<p class="text-xl font-mono font-bold text-primary" id="hl-long-count">--</p>
+</div>
+<div class="bg-surface-container rounded-xl p-4 text-center">
+<p class="text-[10px] text-on-surface-variant uppercase tracking-widest mb-2">做空</p>
+<p class="text-xl font-mono font-bold text-error" id="hl-short-count">--</p>
+</div>
+<div class="bg-surface-container rounded-xl p-4 text-center">
+<p class="text-[10px] text-on-surface-variant uppercase tracking-widest mb-2">净流入(USD)</p>
+<p class="text-xl font-mono font-bold" id="hl-net-flow">--</p>
+</div>
+<div class="bg-surface-container rounded-xl p-4 text-center">
+<p class="text-[10px] text-on-surface-variant uppercase tracking-widest mb-2">活跃钱包</p>
+<p class="text-xl font-mono font-bold text-secondary" id="hl-wallets">--</p>
+</div>
+<div class="bg-surface-container rounded-xl p-4 text-center">
+<p class="text-[10px] text-on-surface-variant uppercase tracking-widest mb-2">多空比</p>
+<p class="text-xl font-mono font-bold text-on-surface" id="hl-ls-ratio">--</p>
+</div>
+</div>
+<!-- Trades Table -->
+<div class="overflow-x-auto no-scrollbar">
+<table class="w-full text-left border-collapse text-sm">
+<thead>
+<tr class="text-on-surface-variant text-[10px] uppercase tracking-[0.15em] font-display">
+<th class="pb-4 font-medium">币种</th>
+<th class="pb-4 font-medium text-center">方向</th>
+<th class="pb-4 font-medium text-right">成交价</th>
+<th class="pb-4 font-medium text-right">数量</th>
+<th class="pb-4 font-medium text-right">金额(USD)</th>
+<th class="pb-4 font-medium text-right">已实现盈亏</th>
+<th class="pb-4 font-medium text-right">时间</th>
+</tr>
+</thead>
+<tbody id="hl-tbody" class="divide-y divide-outline-variant/10">
+<tr><td colspan="7" class="py-6 text-center text-on-surface-variant text-xs font-mono">Loading...</td></tr>
+</tbody>
+</table>
+</div>
+</div>
+
+</div>
 </main>
 <!-- Background Decoration -->
 <div class="fixed top-[-10%] right-[-10%] w-[50%] h-[50%] bg-primary/5 blur-[120px] rounded-full -z-10 pointer-events-none"></div>
@@ -605,6 +704,144 @@ function updateSentiment(signals) {
     }
 }
 
+// ===== 合约板块 =====
+async function loadFuturesPanel() {
+    var tbody = document.getElementById('futures-tbody');
+    try {
+        var resp = await fetch('/api/futures');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var json = await resp.json();
+        var rows = (json.data || json) || [];
+        if (!Array.isArray(rows) || rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-center text-on-surface-variant text-xs font-mono">暂无合约数据</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(function(item) {
+            var sym = formatSymbol(item.symbol || '');
+            var oi = item.open_interest != null ? parseFloat(item.open_interest).toLocaleString('en-US', {maximumFractionDigits: 0}) : '--';
+            var lsr = item.long_short_ratio && item.long_short_ratio.ratio != null ? parseFloat(item.long_short_ratio.ratio).toFixed(3) : '--';
+            var lsrColor = item.long_short_ratio && item.long_short_ratio.ratio != null
+                ? (parseFloat(item.long_short_ratio.ratio) >= 1 ? 'text-primary' : 'text-error')
+                : 'text-on-surface-variant';
+            var lspr = item.long_short_position_ratio && item.long_short_position_ratio.ratio != null ? parseFloat(item.long_short_position_ratio.ratio).toFixed(3) : '--';
+            var lsprColor = item.long_short_position_ratio && item.long_short_position_ratio.ratio != null
+                ? (parseFloat(item.long_short_position_ratio.ratio) >= 1 ? 'text-primary' : 'text-error')
+                : 'text-on-surface-variant';
+            var ts = item.timestamp ? String(item.timestamp).slice(11, 16) : '--';
+            return '<tr class="hover:bg-surface-container transition-colors duration-150">'
+                + '<td class="py-4 font-mono font-medium text-sm">' + sym + '</td>'
+                + '<td class="py-4 font-mono text-xs text-right text-on-surface-variant">' + oi + '</td>'
+                + '<td class="py-4 font-mono text-xs text-right ' + lsrColor + '">' + lsr + '</td>'
+                + '<td class="py-4 font-mono text-xs text-right ' + lsprColor + '">' + lspr + '</td>'
+                + '<td class="py-4 font-mono text-xs text-right text-on-surface-variant">' + ts + '</td>'
+                + '</tr>';
+        }).join('');
+    } catch (e) {
+        console.error('loadFuturesPanel failed:', e);
+        tbody.innerHTML = '<tr><td colspan="5" class="py-6 text-center text-error text-xs font-mono">加载失败</td></tr>';
+    }
+}
+
+// ===== 新闻板块 =====
+async function loadNewsPanel() {
+    var container = document.getElementById('news-list');
+    try {
+        var resp = await fetch('/api/news?hours=24&limit=20');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var json = await resp.json();
+        var news = json.data || [];
+        if (!Array.isArray(news) || news.length === 0) {
+            container.innerHTML = '<div class="py-6 text-center text-on-surface-variant text-xs font-mono">暂无新闻</div>';
+            return;
+        }
+        container.innerHTML = news.map(function(n) {
+            var sentimentClass = n.sentiment === 'POSITIVE' ? 'bg-primary/10 text-primary'
+                : n.sentiment === 'NEGATIVE' ? 'bg-error/10 text-error'
+                : 'bg-outline-variant/20 text-on-surface-variant';
+            var sentimentLabel = n.sentiment === 'POSITIVE' ? '利多'
+                : n.sentiment === 'NEGATIVE' ? '利空'
+                : '中性';
+            var titleHtml = n.url
+                ? '<a href="' + n.url + '" target="_blank" rel="noopener" class="text-sm font-medium leading-snug hover:text-primary transition-colors line-clamp-2">' + (n.title || '') + '</a>'
+                : '<p class="text-sm font-medium leading-snug line-clamp-2">' + (n.title || '') + '</p>';
+            return '<div class="bg-surface-container rounded-xl p-4 hover:bg-surface-container-high transition-colors">'
+                + '<div class="flex items-start justify-between gap-3">'
+                + '<div class="flex-1 min-w-0">'
+                + titleHtml
+                + '<div class="flex items-center gap-2 mt-2">'
+                + '<span class="text-[10px] text-on-surface-variant font-mono">' + (n.source || '') + '</span>'
+                + '<span class="text-[10px] text-on-surface-variant/50">·</span>'
+                + '<span class="text-[10px] text-on-surface-variant font-mono">' + (n.published_at ? String(n.published_at).slice(5, 16) : '') + '</span>'
+                + '</div>'
+                + '</div>'
+                + '<span class="px-2 py-0.5 rounded text-[10px] font-bold tracking-wide shrink-0 ' + sentimentClass + '">' + sentimentLabel + '</span>'
+                + '</div>'
+                + '</div>';
+        }).join('');
+    } catch (e) {
+        console.error('loadNewsPanel failed:', e);
+        container.innerHTML = '<div class="py-6 text-center text-error text-xs font-mono">加载失败</div>';
+    }
+}
+
+// ===== Hyperliquid 聪明钱板块 =====
+async function loadHyperliquidPanel() {
+    var tbody = document.getElementById('hl-tbody');
+    try {
+        var resp = await fetch('/api/hyperliquid/trades?hours=24&min_usd=100000&limit=30');
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var json = await resp.json();
+        var payload = json.data || {};
+        var trades = payload.trades || [];
+        var stats = payload.statistics || {};
+
+        // Update stats
+        var netFlow = stats.net_flow_usd != null ? parseFloat(stats.net_flow_usd) : null;
+        document.getElementById('hl-total-count').textContent = stats.total_count != null ? stats.total_count : '--';
+        document.getElementById('hl-long-count').textContent  = stats.long_count  != null ? stats.long_count  : '--';
+        document.getElementById('hl-short-count').textContent = stats.short_count != null ? stats.short_count : '--';
+        document.getElementById('hl-wallets').textContent     = stats.unique_wallets != null ? stats.unique_wallets : '--';
+        document.getElementById('hl-ls-ratio').textContent    = stats.long_short_ratio != null ? parseFloat(stats.long_short_ratio).toFixed(2) : '--';
+        var netEl = document.getElementById('hl-net-flow');
+        if (netFlow != null) {
+            var sign = netFlow >= 0 ? '+' : '';
+            netEl.textContent = sign + (netFlow / 1000).toFixed(1) + 'K';
+            netEl.className = 'text-xl font-mono font-bold ' + (netFlow >= 0 ? 'text-primary' : 'text-error');
+        }
+
+        if (!Array.isArray(trades) || trades.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-on-surface-variant text-xs font-mono">暂无大额交易</td></tr>';
+            return;
+        }
+        tbody.innerHTML = trades.map(function(t) {
+            var coin = t.coin || '--';
+            var action = (t.action || t.side || '').toUpperCase();
+            var isLong = action === 'LONG' || action === 'B';
+            var actionLabel = isLong ? 'LONG' : 'SHORT';
+            var actionClass = isLong ? 'bg-primary/10 text-primary' : 'bg-error/10 text-error';
+            var price = t.price != null ? parseFloat(t.price).toLocaleString('en-US', {maximumFractionDigits: 4}) : '--';
+            var size  = t.size  != null ? parseFloat(t.size).toFixed(4) : '--';
+            var notional = t.notional_usd != null ? '$' + (parseFloat(t.notional_usd) / 1000).toFixed(1) + 'K' : '--';
+            var pnl = t.closed_pnl != null ? parseFloat(t.closed_pnl) : null;
+            var pnlStr = pnl != null ? (pnl >= 0 ? '+' : '') + pnl.toFixed(2) : '--';
+            var pnlClass = pnl != null ? (pnl >= 0 ? 'text-primary' : 'text-error') : 'text-on-surface-variant';
+            var ts = t.timestamp ? String(t.timestamp).slice(5, 16).replace('T', ' ') : '--';
+            return '<tr class="hover:bg-surface-container transition-colors duration-150">'
+                + '<td class="py-3 font-mono font-bold text-sm text-on-surface">' + coin + '</td>'
+                + '<td class="py-3 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold ' + actionClass + '">' + actionLabel + '</span></td>'
+                + '<td class="py-3 font-mono text-xs text-right text-on-surface-variant">' + price + '</td>'
+                + '<td class="py-3 font-mono text-xs text-right text-on-surface-variant">' + size + '</td>'
+                + '<td class="py-3 font-mono text-xs text-right text-on-surface">' + notional + '</td>'
+                + '<td class="py-3 font-mono text-xs text-right ' + pnlClass + '">' + pnlStr + '</td>'
+                + '<td class="py-3 font-mono text-xs text-right text-on-surface-variant">' + ts + '</td>'
+                + '</tr>';
+        }).join('');
+    } catch (e) {
+        console.error('loadHyperliquidPanel failed:', e);
+        tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-error text-xs font-mono">加载失败</td></tr>';
+    }
+}
+
 // Load all data sections and refresh UI
 async function loadAll() {
     var signals = await loadSignals();
@@ -631,7 +868,13 @@ document.addEventListener('DOMContentLoaded', function() {
     updateClock();
     setInterval(updateClock, 1000);
     loadAll();
+    loadFuturesPanel();
+    loadNewsPanel();
+    loadHyperliquidPanel();
     setInterval(loadAll, 30000);
+    setInterval(loadFuturesPanel, 60000);
+    setInterval(loadNewsPanel, 120000);
+    // Hyperliquid is slow (fetches from external API), no auto-refresh
 });
 </script>
 </body></html>
