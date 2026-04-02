@@ -211,15 +211,15 @@
                         </h4>
 <button class="text-xs text-primary font-bold hover:underline">查看全部</button>
 </div>
-<div class="overflow-x-auto">
+<div class="overflow-x-auto overflow-y-auto max-h-[420px]">
 <table class="w-full text-left border-collapse">
-<thead>
+<thead class="sticky top-0 z-10">
 <tr class="text-[10px] uppercase tracking-widest text-on-surface-variant bg-surface-container-low">
-<th class="px-6 py-4 font-semibold">交易对</th>
-<th class="px-6 py-4 font-semibold text-center">方向</th>
-<th class="px-6 py-4 font-semibold">开仓/当前价</th>
-<th class="px-6 py-4 font-semibold">浮盈 (PNL)</th>
-<th class="px-6 py-4 font-semibold">操作</th>
+<th class="px-6 py-4 font-semibold whitespace-nowrap">交易对</th>
+<th class="px-6 py-4 font-semibold text-center whitespace-nowrap">方向</th>
+<th class="px-6 py-4 font-semibold whitespace-nowrap">开仓/当前价</th>
+<th class="px-6 py-4 font-semibold whitespace-nowrap">浮盈 (PNL)</th>
+<th class="px-6 py-4 font-semibold whitespace-nowrap">操作</th>
 </tr>
 </thead>
 <tbody id="positions-tbody" class="text-sm">
