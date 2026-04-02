@@ -223,35 +223,6 @@
 </div>
 </div>
 </div>
-<!-- Account Switcher Section -->
-<div class="space-y-4">
-<div class="flex justify-between items-center">
-<h3 class="text-xs font-bold font-headline uppercase tracking-widest text-on-surface-variant">Other Managed Nodes</h3>
-<span class="material-symbols-outlined text-xs text-gold cursor-pointer hover:rotate-180 transition-all duration-500">add</span>
-</div>
-<div class="space-y-3">
-<div class="flex items-center gap-4 p-3 rounded-xl hover:bg-surface-container transition-all group cursor-pointer border border-transparent hover:border-white/5">
-<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface-variant group-hover:text-gold transition-colors">
-<span class="material-symbols-outlined">query_stats</span>
-</div>
-<div class="flex-1">
-<p class="text-xs font-bold font-headline">Hedge_Alpha_6</p>
-<p class="text-[10px] font-mono text-on-surface-variant">¥204,118.00</p>
-</div>
-<span class="text-[10px] text-primary font-mono">+1.2%</span>
-</div>
-<div class="flex items-center gap-4 p-3 rounded-xl hover:bg-surface-container transition-all group cursor-pointer border border-transparent hover:border-white/5 opacity-60 hover:opacity-100">
-<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface-variant">
-<span class="material-symbols-outlined">show_chart</span>
-</div>
-<div class="flex-1">
-<p class="text-xs font-bold font-headline">Neural_Trend_Bot</p>
-<p class="text-[10px] font-mono text-on-surface-variant">¥1,440.00</p>
-</div>
-<span class="text-[10px] text-error font-mono">-0.4%</span>
-</div>
-</div>
-</div>
 </div>
 </section>
 <!-- Right Main Panel (Trading Tables) -->
@@ -312,7 +283,8 @@
 </table>
 </div>
 <!-- History Panel -->
-<div id="panel-history" class="tab-panel flex-1 overflow-auto hidden">
+<div id="panel-history" class="tab-panel flex-1 flex flex-col hidden">
+<div class="overflow-auto flex-1">
 <table class="w-full text-left border-collapse">
 <thead class="sticky top-0 bg-[#0a0f14] z-10">
 <tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-white/5">
@@ -328,6 +300,11 @@
 <tr><td colspan="6" class="py-12 text-center text-on-surface-variant text-sm">加载中...</td></tr>
 </tbody>
 </table>
+</div>
+<div class="h-12 border-t border-white/5 bg-surface-container-low flex items-center justify-between px-8 shrink-0">
+  <span id="history-page-info" class="text-[10px] text-on-surface-variant font-mono uppercase tracking-widest">--</span>
+  <div id="history-pagination" class="flex items-center gap-1"></div>
+</div>
 </div>
 <!-- Footer Status Bar -->
 <div class="h-12 bg-surface-container-low border-t border-white/5 flex items-center justify-between px-8 text-[10px] text-on-surface-variant uppercase font-bold tracking-widest">
@@ -727,7 +704,72 @@ async function loadOrders() {
     }
 }
 
-// ==================== Load history ====================
+// ==================== Load history (with pagination) ====================
+
+var _historyAllRows = [];
+var _historyPage    = 1;
+var _historyPageSize = 30;
+
+function renderHistoryPage() {
+    var tbody   = document.getElementById('history-tbody');
+    var infoEl  = document.getElementById('history-page-info');
+    var pagEl   = document.getElementById('history-pagination');
+    if (!tbody) return;
+
+    var total      = _historyAllRows.length;
+    var totalPages = Math.max(1, Math.ceil(total / _historyPageSize));
+    _historyPage   = Math.min(Math.max(1, _historyPage), totalPages);
+    var start = (_historyPage - 1) * _historyPageSize;
+    var slice = _historyAllRows.slice(start, start + _historyPageSize);
+
+    if (slice.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="py-16 text-center text-on-surface-variant text-sm">暂无历史记录</td></tr>';
+    } else {
+        tbody.innerHTML = slice.map(function(h) {
+            var pnl = parseFloat(h.realized_pnl || 0);
+            var side = h.side || h.position_side || '';
+            var pnlTxt = fmtPnl(pnl);
+            if (h.pnl_estimated) pnlTxt += '<span class="text-[9px] text-on-surface-variant ml-1 opacity-60" title="币安侧止损，按价差估算">~</span>';
+            var lev = h.leverage ? '<span class="text-[9px] text-on-surface-variant ml-1">' + h.leverage + 'x</span>' : '';
+            return '<tr class="hover:bg-white/[0.02] transition-colors">' +
+                '<td class="py-4 px-8"><div class="flex items-center gap-3">' + symbolIcon(h.symbol) +
+                '<p class="text-sm font-bold font-headline">' + h.symbol + '</p></div></td>' +
+                '<td class="py-4 px-4">' + sideHtml(side) + lev + '</td>' +
+                '<td class="py-4 px-4 font-mono text-sm text-right text-on-surface-variant">' + fmtPrice(h.entry_price) + '</td>' +
+                '<td class="py-4 px-4 font-mono text-sm text-right">' + fmtPrice(h.exit_price || h.close_price) + '</td>' +
+                '<td class="py-4 px-4 font-mono text-sm text-right font-bold ' + pnlClass(pnl) + '">' + pnlTxt + '</td>' +
+                '<td class="py-4 px-8 text-xs text-on-surface-variant">' + fmtTime(h.close_time) + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+
+    if (infoEl) infoEl.textContent = '共 ' + total + ' 条  第 ' + _historyPage + ' / ' + totalPages + ' 页';
+
+    if (pagEl) {
+        var bc = 'px-3 py-1 rounded text-xs font-mono border transition-colors ';
+        var html = '<button ' + (_historyPage <= 1 ? 'disabled ' : '') + 'onclick="_historyPage--;renderHistoryPage()" class="' + bc + 'border-white/10 text-on-surface-variant hover:border-gold/40 hover:text-gold disabled:opacity-30">&lsaquo;</button>';
+        var pages = [];
+        if (totalPages <= 7) {
+            for (var i = 1; i <= totalPages; i++) pages.push(i);
+        } else {
+            pages = [1, 2];
+            if (_historyPage > 4) pages.push('...');
+            for (var p = Math.max(3, _historyPage - 1); p <= Math.min(totalPages - 2, _historyPage + 1); p++) pages.push(p);
+            if (_historyPage < totalPages - 3) pages.push('...');
+            pages.push(totalPages - 1, totalPages);
+        }
+        pages.forEach(function(p) {
+            if (p === '...') {
+                html += '<span class="px-2 text-on-surface-variant text-xs">...</span>';
+            } else {
+                var active = p === _historyPage;
+                html += '<button onclick="_historyPage=' + p + ';renderHistoryPage()" class="' + bc + (active ? 'bg-gold/20 text-gold border-gold/40 font-bold' : 'border-white/10 text-on-surface-variant hover:border-gold/40 hover:text-gold') + '">' + p + '</button>';
+            }
+        });
+        html += '<button ' + (_historyPage >= totalPages ? 'disabled ' : '') + 'onclick="_historyPage++;renderHistoryPage()" class="' + bc + 'border-white/10 text-on-surface-variant hover:border-gold/40 hover:text-gold disabled:opacity-30">&rsaquo;</button>';
+        pagEl.innerHTML = html;
+    }
+}
 
 async function loadHistory(days) {
     days = days || _currentHistoryDays;
@@ -744,28 +786,9 @@ async function loadHistory(days) {
         var data = await resp.json();
         var list = data.data || data || [];
         if (!Array.isArray(list)) list = [];
-
-        if (list.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="py-16 text-center text-on-surface-variant text-sm">暂无历史记录</td></tr>';
-            return;
-        }
-
-        tbody.innerHTML = list.map(function(h) {
-            var pnl = parseFloat(h.realized_pnl || 0);
-            var side = h.side || h.position_side || '';
-            var pnlTxt = fmtPnl(pnl);
-            if (h.pnl_estimated) pnlTxt += '<span class="text-[9px] text-on-surface-variant ml-1 opacity-60" title="币安侧止损，按价差估算">~</span>';
-            var lev = h.leverage ? '<span class="text-[9px] text-on-surface-variant ml-1">' + h.leverage + 'x</span>' : '';
-            return '<tr class="hover:bg-white/[0.02] transition-colors">' +
-                '<td class="py-4 px-8"><div class="flex items-center gap-3">' + symbolIcon(h.symbol) +
-                '<p class="text-sm font-bold font-headline">' + h.symbol + '</p></div></td>' +
-                '<td class="py-4 px-4">' + sideHtml(side) + lev + '</td>' +
-                '<td class="py-4 px-4 font-mono text-sm text-right text-on-surface-variant">' + fmtPrice(h.entry_price) + '</td>' +
-                '<td class="py-4 px-4 font-mono text-sm text-right">' + fmtPrice(h.exit_price || h.close_price) + '</td>' +
-                '<td class="py-4 px-4 font-mono text-sm text-right font-bold ' + pnlClass(pnl) + '">' + pnlTxt + '</td>' +
-                '<td class="py-4 px-8 text-xs text-on-surface-variant">' + fmtTime(h.close_time) + '</td>' +
-                '</tr>';
-        }).join('');
+        _historyAllRows = list;
+        _historyPage = 1;
+        renderHistoryPage();
     } catch (e) {
         console.error('loadHistory failed:', e);
         tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-[#ff716c] text-sm">加载失败: ' + e.message + '</td></tr>';
