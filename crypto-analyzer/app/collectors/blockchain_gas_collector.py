@@ -21,8 +21,8 @@ CHAIN_CONFIGS = {
     'ethereum': {
         'display_name': 'Ethereum',
         'native_token': 'ETH',
-        'rpc_url': 'https://rpc.ankr.com/eth',           # ankr 公共 RPC，稳定可靠
-        'rpc_url_fallback': 'https://cloudflare-eth.com',
+        'rpc_url': 'https://eth.drpc.org',               # drpc 公共节点，无需 API Key
+        'rpc_url_fallback': 'https://ethereum.publicnode.com',
         'explorer_api': 'https://api.etherscan.io/api',
         'explorer_api_v2': 'https://api.etherscan.io/v2',
         'explorer_api_key': None,  # 从config.yaml读取
@@ -32,8 +32,8 @@ CHAIN_CONFIGS = {
     'bsc': {
         'display_name': 'BSC',
         'native_token': 'BNB',
-        'rpc_url': 'https://rpc.ankr.com/bsc',
-        'rpc_url_fallback': 'https://bsc-dataseed1.binance.org',
+        'rpc_url': 'https://bsc-dataseed1.binance.org',  # 官方节点
+        'rpc_url_fallback': 'https://bsc.drpc.org',
         'explorer_api': 'https://api.bscscan.com/api',
         'explorer_api_key': None,
         'chain_id': 56,
@@ -42,8 +42,8 @@ CHAIN_CONFIGS = {
     'polygon': {
         'display_name': 'Polygon',
         'native_token': 'MATIC',
-        'rpc_url': 'https://rpc.ankr.com/polygon',       # polygon-rpc.com 已废弃
-        'rpc_url_fallback': 'https://polygon.llamarpc.com',
+        'rpc_url': 'https://polygon.drpc.org',           # drpc 公共节点
+        'rpc_url_fallback': 'https://polygon.publicnode.com',
         'explorer_api': 'https://api.polygonscan.com/api',
         'explorer_api_key': None,
         'chain_id': 137,
@@ -52,8 +52,8 @@ CHAIN_CONFIGS = {
     'arbitrum': {
         'display_name': 'Arbitrum',
         'native_token': 'ETH',
-        'rpc_url': 'https://rpc.ankr.com/arbitrum',
-        'rpc_url_fallback': 'https://arb1.arbitrum.io/rpc',
+        'rpc_url': 'https://arb1.arbitrum.io/rpc',       # 官方节点
+        'rpc_url_fallback': 'https://arbitrum.drpc.org',
         'explorer_api': 'https://api.arbiscan.io/api',
         'explorer_api_key': None,
         'chain_id': 42161,
@@ -62,8 +62,8 @@ CHAIN_CONFIGS = {
     'optimism': {
         'display_name': 'Optimism',
         'native_token': 'ETH',
-        'rpc_url': 'https://rpc.ankr.com/optimism',
-        'rpc_url_fallback': 'https://mainnet.optimism.io',
+        'rpc_url': 'https://mainnet.optimism.io',        # 官方节点
+        'rpc_url_fallback': 'https://optimism.drpc.org',
         'explorer_api': 'https://api-optimistic.etherscan.io/api',
         'explorer_api_key': None,
         'chain_id': 10,
@@ -72,8 +72,8 @@ CHAIN_CONFIGS = {
     'avalanche': {
         'display_name': 'Avalanche',
         'native_token': 'AVAX',
-        'rpc_url': 'https://rpc.ankr.com/avalanche',
-        'rpc_url_fallback': 'https://api.avax.network/ext/bc/C/rpc',
+        'rpc_url': 'https://api.avax.network/ext/bc/C/rpc',  # 官方节点
+        'rpc_url_fallback': 'https://avalanche.drpc.org',
         'explorer_api': 'https://api.snowtrace.io/api',
         'explorer_api_key': None,
         'chain_id': 43114,

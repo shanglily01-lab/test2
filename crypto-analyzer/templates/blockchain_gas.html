@@ -39,6 +39,7 @@
         ::-webkit-scrollbar-track { background: #070b10; }
         ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
     </style>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
 </head>
 <body class="font-body selection:bg-primary/30">
 <!-- Sidebar Navigation -->
@@ -171,56 +172,19 @@
 <!-- Middle Row: Chart & Table -->
 <div class="grid grid-cols-1 lg:grid-cols-5 gap-8 mb-8">
 <!-- Line Chart Container -->
-<div class="lg:col-span-3 bg-surface border border-slate-800/50 rounded-xl p-6 relative overflow-hidden">
-<div class="flex justify-between items-center mb-8">
-<h2 class="text-white font-headline font-bold">Gas 价格趋势</h2>
-<div class="flex gap-4">
-<div class="flex items-center gap-2">
-<span class="w-2 h-2 rounded-full bg-primary"></span>
-<span class="text-xs font-label text-slate-400">ETH</span>
-</div>
-<div class="flex items-center gap-2">
-<span class="w-2 h-2 rounded-full bg-gold"></span>
-<span class="text-xs font-label text-slate-400">BNB</span>
-</div>
-<div class="flex items-center gap-2">
-<span class="w-2 h-2 rounded-full bg-polygon"></span>
-<span class="text-xs font-label text-slate-400">Polygon</span>
+<div class="lg:col-span-3 bg-surface border border-slate-800/50 rounded-xl overflow-hidden">
+<div class="flex justify-between items-center px-6 pt-5 pb-3 border-b border-slate-800/40">
+<h2 class="text-white font-headline font-bold flex items-center gap-2">Gas 价格趋势</h2>
+<div class="flex flex-wrap gap-3">
+  <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:#49f4c8"></span><span class="text-[11px] font-label text-slate-400">ETH</span></div>
+  <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:#f5a623"></span><span class="text-[11px] font-label text-slate-400">BSC</span></div>
+  <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:#8247e5"></span><span class="text-[11px] font-label text-slate-400">Polygon</span></div>
+  <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:#4f8ef7"></span><span class="text-[11px] font-label text-slate-400">Arbitrum</span></div>
+  <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:#ff6b6b"></span><span class="text-[11px] font-label text-slate-400">Optimism</span></div>
+  <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full" style="background:#e84142"></span><span class="text-[11px] font-label text-slate-400">Avalanche</span></div>
 </div>
 </div>
-</div>
-<!-- Mock Chart Visualization -->
-<div id="gas-chart-container" class="h-64 flex items-end justify-between gap-1 border-b border-slate-800/50 pb-2">
-<div class="w-full flex items-end gap-[2px] h-full relative">
-<!-- Abstract Wave Representation using SVGs -->
-<svg id="gas-chart-svg" class="absolute bottom-0 left-0 w-full h-full" preserveaspectratio="none" viewbox="0 0 100 100">
-<path d="M0,80 Q25,40 50,70 T100,50 L100,100 L0,100 Z" fill="url(#grad-eth)" stroke="#49f4c8" stroke-width="1"></path>
-<path d="M0,90 Q25,70 50,85 T100,75 L100,100 L0,100 Z" fill="url(#grad-bnb)" stroke="#f5a623" stroke-width="1"></path>
-<path d="M0,60 Q25,85 50,55 T100,65 L100,100 L0,100 Z" fill="url(#grad-polygon)" stroke="#8247e5" stroke-width="1"></path>
-<defs>
-<lineargradient id="grad-eth" x1="0%" x2="0%" y1="0%" y2="100%">
-<stop offset="0%" style="stop-color:#49f4c8;stop-opacity:0.1"></stop>
-<stop offset="100%" style="stop-color:#49f4c8;stop-opacity:0"></stop>
-</lineargradient>
-<lineargradient id="grad-bnb" x1="0%" x2="0%" y1="0%" y2="100%">
-<stop offset="0%" style="stop-color:#f5a623;stop-opacity:0.1"></stop>
-<stop offset="100%" style="stop-color:#f5a623;stop-opacity:0"></stop>
-</lineargradient>
-<lineargradient id="grad-polygon" x1="0%" x2="0%" y1="0%" y2="100%">
-<stop offset="0%" style="stop-color:#8247e5;stop-opacity:0.1"></stop>
-<stop offset="100%" style="stop-color:#8247e5;stop-opacity:0"></stop>
-</lineargradient>
-</defs>
-</svg>
-</div>
-</div>
-<div id="chart-x-labels" class="flex justify-between pt-4 font-label text-[10px] text-slate-500 uppercase">
-<span>00:00</span>
-<span>06:00</span>
-<span>12:00</span>
-<span>18:00</span>
-<span>23:59</span>
-</div>
+<div id="gas-chart-container" style="height:300px;"></div>
 </div>
 <!-- Chain Gas Summary Table -->
 <div class="lg:col-span-2 bg-surface border border-slate-800/50 rounded-xl overflow-hidden">
@@ -686,75 +650,106 @@
   }
 
   // -----------------------------------------------------------------------
-  // Render: SVG chart
-  // groupedRows: [{date, ethereum, bsc, polygon, arbitrum}] sorted descending.
-  // Chart shows chronological order (ascending), one line per chain.
+  // Render: ECharts multi-line area chart
+  // groupedRows: [{date, ethereum, bsc, polygon, ...}] sorted descending.
   // -----------------------------------------------------------------------
+  var _gasChart = null;
+
   function renderChart(groupedRows) {
-    var svg     = document.getElementById('gas-chart-svg');
-    var xLabels = document.getElementById('chart-x-labels');
-    if (!svg || !groupedRows.length) return;
+    var container = document.getElementById('gas-chart-container');
+    if (!container || !groupedRows.length) return;
 
-    // Reverse to ascending chronological order for the chart
+    // Ascending chronological order
     var rows = groupedRows.slice().reverse();
-    var n    = rows.length;
 
-    // Build series: {chain_name: [avg_gas_price, ...]}
-    var series = {};
-    CHAIN_ORDER.forEach(function (c) { series[c] = []; });
+    var dates = rows.map(function(r) { return r.date || ''; });
 
-    rows.forEach(function (row) {
-      CHAIN_ORDER.forEach(function (c) {
-        series[c].push(row[c] != null ? Number(row[c]) : 0);
+    var chainCfg = [
+      { key: 'ethereum', name: 'ETH',      color: '#49f4c8' },
+      { key: 'bsc',      name: 'BSC',      color: '#f5a623' },
+      { key: 'polygon',  name: 'Polygon',  color: '#8247e5' },
+      { key: 'arbitrum', name: 'Arbitrum', color: '#4f8ef7' },
+      { key: 'optimism', name: 'Optimism', color: '#ff6b6b' },
+      { key: 'avalanche',name: 'Avalanche',color: '#e84142' },
+    ];
+
+    var series = chainCfg.map(function(cfg) {
+      var data = rows.map(function(r) {
+        var v = r[cfg.key];
+        return (v != null && isFinite(v) && v > 0) ? parseFloat((v / 1e9).toFixed(4)) : null;
       });
+      return {
+        name: cfg.name,
+        type: 'line',
+        smooth: true,
+        symbol: 'none',
+        lineStyle: { color: cfg.color, width: 2 },
+        itemStyle: { color: cfg.color },
+        areaStyle: {
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: cfg.color.replace(')', ',0.15)').replace('rgb','rgba') },
+              { offset: 1, color: cfg.color.replace(')', ',0)').replace('rgb','rgba') }
+            ]
+          }
+        },
+        data: data,
+        connectNulls: false,
+      };
     });
 
-    // Find global max for scaling
-    var allVals = [];
-    CHAIN_ORDER.forEach(function (c) { allVals = allVals.concat(series[c]); });
-    var maxVal = Math.max.apply(null, allVals.filter(function (v) { return isFinite(v) && v > 0; })) || 1;
-
-    // Build SVG polyline paths (viewBox 0 0 100 100, y=0 is top)
-    var pathsHtml = '';
-    var defsHtml  = '';
-
-    CHAIN_ORDER.forEach(function (c) {
-      var vals   = series[c];
-      var stroke = CHAIN_STROKE[c] || '#94a3b8';
-      var gradId = 'grad-' + c;
-      var pts    = vals.map(function (v, i) {
-        var x = n > 1 ? (i / (n - 1)) * 100 : 50;
-        var y = 100 - (v / maxVal) * 85; // leave 15% margin at top
-        return x.toFixed(1) + ',' + y.toFixed(1);
-      }).join(' ');
-
-      // Area fill polygon (close to bottom)
-      var firstX  = n > 1 ? '0' : '50';
-      var lastX   = '100';
-      var firstY  = (100 - (vals[0] / maxVal) * 85).toFixed(1);
-      var lastY   = (100 - (vals[vals.length - 1] / maxVal) * 85).toFixed(1);
-      var fillPts = firstX + ',' + firstY + ' ' + pts + ' ' + lastX + ',' + lastY + ' ' + lastX + ',100 ' + firstX + ',100';
-
-      defsHtml += '<linearGradient id="' + gradId + '" x1="0%" y1="0%" x2="0%" y2="100%">'
-        + '<stop offset="0%" style="stop-color:' + stroke + ';stop-opacity:0.15"/>'
-        + '<stop offset="100%" style="stop-color:' + stroke + ';stop-opacity:0"/>'
-        + '</linearGradient>';
-
-      pathsHtml += '<polygon points="' + fillPts + '" fill="url(#' + gradId + ')" />';
-      pathsHtml += '<polyline points="' + pts + '" fill="none" stroke="' + stroke + '" stroke-width="1.2" />';
-    });
-
-    svg.innerHTML = '<defs>' + defsHtml + '</defs>' + pathsHtml;
-
-    // Update x-axis labels with actual dates
-    if (xLabels && n >= 5) {
-      var picks = [0, Math.floor(n * 0.25), Math.floor(n * 0.5), Math.floor(n * 0.75), n - 1];
-      var spans = xLabels.querySelectorAll('span');
-      picks.forEach(function (idx, i) {
-        if (spans[i] && rows[idx]) {
-          spans[i].textContent = rows[idx].date || '';
+    var option = {
+      backgroundColor: 'transparent',
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'cross', lineStyle: { color: 'rgba(73,244,200,0.3)' }, crossStyle: { color: 'rgba(73,244,200,0.15)' } },
+        backgroundColor: '#0f1520',
+        borderColor: '#1a2535',
+        borderWidth: 1,
+        textStyle: { color: '#94a3b8', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' },
+        formatter: function(params) {
+          var out = '<div style="color:#e2e8f0;font-weight:600;margin-bottom:6px;font-size:11px">' + params[0].axisValue + '</div>';
+          params.forEach(function(p) {
+            if (p.value == null) return;
+            out += '<div style="display:flex;align-items:center;gap:6px;margin:3px 0">'
+              + '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + p.color + '"></span>'
+              + '<span style="color:#94a3b8;min-width:56px">' + p.seriesName + '</span>'
+              + '<span style="color:#e2e8f0;font-weight:600">' + p.value.toFixed(2) + ' Gwei</span>'
+              + '</div>';
+          });
+          return out;
         }
-      });
+      },
+      legend: { show: false },
+      grid: { left: 52, right: 16, top: 16, bottom: 36 },
+      xAxis: {
+        type: 'category',
+        data: dates,
+        boundaryGap: false,
+        axisLine: { lineStyle: { color: '#1e293b' } },
+        axisTick: { show: false },
+        axisLabel: { color: '#475569', fontSize: 10, fontFamily: 'JetBrains Mono, monospace',
+          interval: Math.max(0, Math.floor(dates.length / 6) - 1) },
+        splitLine: { show: false }
+      },
+      yAxis: {
+        type: 'value',
+        name: 'Gwei',
+        nameTextStyle: { color: '#475569', fontSize: 10, padding: [0, 0, 0, -30] },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { color: '#475569', fontSize: 10, fontFamily: 'JetBrains Mono, monospace' },
+        splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)', type: 'dashed' } }
+      },
+      series: series
+    };
+
+    if (_gasChart) {
+      _gasChart.setOption(option, true);
+    } else {
+      _gasChart = echarts.init(container, null, { renderer: 'canvas' });
+      _gasChart.setOption(option);
+      window.addEventListener('resize', function() { _gasChart && _gasChart.resize(); });
     }
   }
 
