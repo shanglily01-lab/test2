@@ -223,9 +223,33 @@
 </button>
 </div>
 </div>
-<div class="pt-4">
-<button id="btn-submit" class="w-full bg-gradient-to-r from-primary to-primary-container text-on-primary py-4 rounded-xl font-bold tracking-widest uppercase text-sm hover:shadow-[0_4px_24px_rgba(0,212,170,0.2)] transition-all active:scale-[0.98]" type="submit">
+<!-- 风控参数 -->
+<div class="pt-2 pb-1">
+<div class="border-t border-outline-variant/20 pt-4">
+<p class="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-4">风控参数</p>
+<div class="grid grid-cols-3 gap-3">
+<div class="space-y-1.5">
+<label class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest ml-1">每笔保证金(U)</label>
+<input id="input-max-margin" type="number" min="10" step="10" value="400" class="w-full bg-surface-container-highest border-none rounded-xl px-3 py-3 text-on-surface text-sm focus:ring-1 focus:ring-primary/50 transition-all"/>
+</div>
+<div class="space-y-1.5">
+<label class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest ml-1">最大杠杆</label>
+<input id="input-max-leverage" type="number" min="1" max="125" step="1" value="10" class="w-full bg-surface-container-highest border-none rounded-xl px-3 py-3 text-on-surface text-sm focus:ring-1 focus:ring-primary/50 transition-all"/>
+</div>
+<div class="space-y-1.5">
+<label class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest ml-1">最大日亏损(U)</label>
+<input id="input-max-daily-loss" type="number" min="0" step="10" value="100" class="w-full bg-surface-container-highest border-none rounded-xl px-3 py-3 text-on-surface text-sm focus:ring-1 focus:ring-primary/50 transition-all"/>
+</div>
+</div>
+</div>
+</div>
+<input type="hidden" id="input-edit-id" value=""/>
+<div class="pt-4 flex gap-3">
+<button id="btn-submit" class="flex-1 bg-gradient-to-r from-primary to-primary-container text-on-primary py-4 rounded-xl font-bold tracking-widest uppercase text-sm hover:shadow-[0_4px_24px_rgba(0,212,170,0.2)] transition-all active:scale-[0.98]" type="submit">
                                 验证并保存
+                            </button>
+<button id="btn-cancel-edit" type="button" onclick="cancelEdit()" class="hidden px-5 py-4 rounded-xl font-bold text-sm border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container transition-all">
+                                取消
                             </button>
 </div>
 </form>
@@ -270,6 +294,7 @@
 <tr>
 <th class="px-8 py-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em]">Account</th>
 <th class="px-6 py-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em]">Exchange / Type</th>
+<th class="px-6 py-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em]">风控参数</th>
 <th class="px-6 py-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em]">API Key</th>
 <th class="px-6 py-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em]">Status</th>
 <th class="px-8 py-4 text-[10px] font-bold text-on-surface-variant uppercase tracking-[0.2em] text-right">Actions</th>
@@ -408,7 +433,7 @@
     async function loadKeys() {
         const tbody = document.getElementById('keys-list');
         const countEl = document.getElementById('keys-count');
-        tbody.innerHTML = '<tr><td colspan="5" class="px-8 py-10 text-center text-on-surface-variant text-sm">加载中...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="px-8 py-10 text-center text-on-surface-variant text-sm">加载中...</td></tr>';
 
         try {
             const resp = await fetch(API_BASE + '/list', { method: 'GET', headers: authHeaders() });
@@ -429,7 +454,7 @@
             }
 
             if (keys.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="px-8 py-10 text-center text-on-surface-variant text-sm">暂无已绑定账号，请在左侧添加</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="px-8 py-10 text-center text-on-surface-variant text-sm">暂无已绑定账号，请在左侧添加</td></tr>';
                 return;
             }
 
@@ -441,8 +466,11 @@
 
                 const displayKey = k.api_key_display ? maskKey(k.api_key_display) : maskKey(k.api_key);
                 const exchangeName = k.exchange ? String(k.exchange).toUpperCase() : '-';
-                const accountType = k.account_type || '';
+                const accountType = k.account_type || k.permissions || '';
                 const createdAt = k.created_at ? new Date(k.created_at).toLocaleDateString('zh-CN') : '-';
+                const maxMargin = k.max_position_value != null ? parseFloat(k.max_position_value).toFixed(0) + ' U' : '-';
+                const maxLev = k.max_leverage != null ? k.max_leverage + 'x' : '-';
+                const maxLoss = k.max_daily_loss != null ? parseFloat(k.max_daily_loss).toFixed(0) + ' U' : '-';
 
                 return [
                     '<tr class="hover:bg-surface-container/30 transition-colors group">',
@@ -454,6 +482,10 @@
                     '    <div class="text-sm text-on-surface">' + exchangeName + '</div>',
                     '    <div class="text-[11px] text-on-surface-variant font-medium">' + accountType + '</div>',
                     '  </td>',
+                    '  <td class="px-6 py-5">',
+                    '    <div class="text-xs text-on-surface-variant">保证金 <span class="text-primary font-mono font-bold">' + maxMargin + '</span></div>',
+                    '    <div class="text-xs text-on-surface-variant mt-0.5">杠杆 <span class="text-on-surface font-mono">' + maxLev + '</span> &nbsp; 日亏 <span class="text-on-surface font-mono">' + maxLoss + '</span></div>',
+                    '  </td>',
                     '  <td class="px-6 py-6">',
                     '    <div class="text-sm font-mono text-on-surface-variant">' + displayKey + '</div>',
                     '  </td>',
@@ -461,6 +493,9 @@
                     '  <td class="px-8 py-6 text-right">',
                     '    <div class="flex items-center justify-end gap-2">',
                     '      <button onclick="verifyKey(' + k.id + ')" title="验证连接" class="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all">验证</button>',
+                    '      <button onclick="editKey(' + JSON.stringify(k).replace(/"/g, '&quot;') + ')" title="编辑风控参数" class="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-container-highest text-on-surface-variant hover:text-primary transition-all">',
+                    '        <span class="material-symbols-outlined text-lg">edit</span>',
+                    '      </button>',
                     '      <button onclick="deleteKey(' + k.id + ',\'' + (k.account_name || '').replace(/'/g, "\\'") + '\')" title="删除" class="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-container-highest text-on-surface-variant hover:text-error transition-all">',
                     '        <span class="material-symbols-outlined text-lg">delete</span>',
                     '      </button>',
@@ -475,7 +510,7 @@
 
         } catch (err) {
             console.error('loadKeys failed:', err);
-            tbody.innerHTML = '<tr><td colspan="5" class="px-8 py-10 text-center text-error text-sm">加载失败: ' + err.message + '</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="px-8 py-10 text-center text-error text-sm">加载失败: ' + err.message + '</td></tr>';
         }
     }
 
@@ -532,15 +567,56 @@
         btn.textContent = '保存中...';
         btn.disabled = true;
 
+        const editId = (document.getElementById('input-edit-id').value || '').trim();
+        const apiKey = (document.getElementById('input-api-key').value || '').trim();
+        const secretKey = (document.getElementById('input-secret-key').value || '').trim();
+        const maxMargin = parseFloat(document.getElementById('input-max-margin').value) || 400;
+        const maxLeverage = parseInt(document.getElementById('input-max-leverage').value) || 10;
+        const maxDailyLoss = parseFloat(document.getElementById('input-max-daily-loss').value) || 100;
+
+        // 编辑模式：只更新风控参数
+        if (editId) {
+            if (!maxMargin || maxLeverage < 1) {
+                showNotification('请检查风控参数', 'error');
+                btn.textContent = originalText;
+                btn.disabled = false;
+                return;
+            }
+            try {
+                const resp = await fetch(API_BASE + '/update-risk', {
+                    method: 'PUT',
+                    headers: authHeaders(),
+                    body: JSON.stringify({ api_key_id: parseInt(editId), max_leverage: maxLeverage, max_position_value: maxMargin, max_daily_loss: maxDailyLoss }),
+                });
+                const result = await resp.json();
+                if (result.success) {
+                    showNotification('风控参数已更新', 'success');
+                    cancelEdit();
+                    loadKeys();
+                } else {
+                    showNotification('更新失败: ' + (result.detail || result.error || '未知错误'), 'error');
+                }
+            } catch (err) {
+                showNotification('请求失败: ' + err.message, 'error');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+            return;
+        }
+
         const payload = {
-            account_name: (document.getElementById('input-account-name').value || '').trim(),
-            exchange:     (document.getElementById('input-exchange').value || '').trim(),
-            account_type: (document.getElementById('input-account-type').value || '').trim(),
-            api_key:      (document.getElementById('input-api-key').value || '').trim(),
-            secret_key:   (document.getElementById('input-secret-key').value || '').trim(),
+            account_name:       (document.getElementById('input-account-name').value || '').trim(),
+            exchange:           (document.getElementById('input-exchange').value || '').trim(),
+            permissions:        (document.getElementById('input-account-type').value || '').trim(),
+            api_key:            apiKey,
+            api_secret:         secretKey,
+            max_position_value: maxMargin,
+            max_leverage:       maxLeverage,
+            max_daily_loss:     maxDailyLoss,
         };
 
-        if (!payload.account_name || !payload.api_key || !payload.secret_key) {
+        if (!payload.account_name || !payload.api_key || !payload.api_secret) {
             showNotification('请填写账户名称、API Key 和 Secret Key', 'error');
             btn.textContent = originalText;
             btn.disabled = false;
@@ -576,6 +652,36 @@
             btn.disabled = false;
         }
     });
+
+    // ---- 编辑密钥风控参数 ----
+
+    function editKey(k) {
+        document.getElementById('input-edit-id').value = k.id;
+        document.getElementById('input-account-name').value = k.account_name || '';
+        document.getElementById('input-exchange').value = k.exchange || 'binance';
+        document.getElementById('input-account-type').value = k.account_type || k.permissions || 'U本位合约';
+        document.getElementById('input-api-key').value = '';
+        document.getElementById('input-secret-key').value = '';
+        document.getElementById('input-max-margin').value = k.max_position_value != null ? parseFloat(k.max_position_value) : 400;
+        document.getElementById('input-max-leverage').value = k.max_leverage != null ? k.max_leverage : 10;
+        document.getElementById('input-max-daily-loss').value = k.max_daily_loss != null ? parseFloat(k.max_daily_loss) : 100;
+        // 编辑模式：API字段不必填，显示取消按钮
+        document.getElementById('btn-submit').textContent = '保存风控参数';
+        document.getElementById('btn-cancel-edit').classList.remove('hidden');
+        document.querySelector('#form-add-key h3') && (document.querySelector('#form-add-key').closest('.bg-surface-container-low').querySelector('h3').textContent = '编辑风控参数 — ' + (k.account_name || ''));
+        document.getElementById('form-add-key').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function cancelEdit() {
+        document.getElementById('input-edit-id').value = '';
+        document.getElementById('btn-submit').textContent = '验证并保存';
+        document.getElementById('btn-cancel-edit').classList.add('hidden');
+        var h3 = document.getElementById('form-add-key').closest('.bg-surface-container-low');
+        if (h3) {
+            var title = h3.querySelector('h3');
+            if (title) title.textContent = '添加 / 编辑密钥';
+        }
+    }
 
     // ---- 删除密钥 ----
 
