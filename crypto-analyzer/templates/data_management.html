@@ -53,6 +53,7 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #49f4c8; }
     </style>
+<script src="/static/modal.js"></script>
 </head>
 <body class="font-body selection:bg-brand-primary/30">
 <!-- SideNavBar (Authority: JSON) -->
@@ -741,23 +742,23 @@
 
     // ---- Clean action ----
 
-    function confirmClean(tableName, tableLabel) {
-        if (!confirm('确认要清理表 "' + tableLabel + '" 吗？此操作不可恢复！')) return;
-        fetch(API_PREFIX + '/table/' + encodeURIComponent(tableName) + '/cleanup', { method: 'DELETE' })
-            .then(function (res) { return res.json(); })
-            .then(function (d) {
-                const ok = d && (d.success === true || d.status === 'ok');
-                if (ok) {
-                    alert('清理成功: ' + tableLabel);
-                    loadData();
-                } else {
-                    alert('清理失败: ' + (d.message || d.error || '未知错误'));
-                }
-            })
-            .catch(function (err) {
-                console.error('clean request failed:', err);
-                alert('请求失败，请检查网络或后端服务');
-            });
+    async function confirmClean(tableName, tableLabel) {
+        if (!(await showConfirm('确认要清理表 "' + tableLabel + '" 吗？此操作不可恢复！', {title: '清理数据表', confirmText: '确认清理', type: 'warning'}))) return;
+        try {
+            const res = await fetch(API_PREFIX + '/table/' + encodeURIComponent(tableName) + '/cleanup', { method: 'DELETE' });
+            const d = await res.json();
+            const ok = d && (d.success === true || d.status === 'ok');
+            if (ok) {
+                await showAlert('清理成功: ' + tableLabel, 'success');
+                loadData();
+            } else {
+                await showAlert('清理失败: ' + (d.message || d.error || '未知错误'), 'error');
+            }
+        } catch(err) {
+            console.error('clean request failed:', err);
+            await showAlert('请求失败，请检查网络或后端服务', 'error');
+        }
+    }
     }
 
     // ---- Event delegation for dynamic table buttons ----
@@ -863,7 +864,7 @@
         });
 
         importBtn.addEventListener('click', async function () {
-            if (!fileInput.files[0]) { alert('请先选择文件'); return; }
+            if (!fileInput.files[0]) { showToast('请先选择文件'); return; }
             var assetType = document.getElementById('etf-asset-type').value;
 
             var fd = new FormData();
@@ -917,7 +918,7 @@
         });
 
         importBtn.addEventListener('click', async function () {
-            if (!fileInput.files[0]) { alert('请先选择文件'); return; }
+            if (!fileInput.files[0]) { showToast('请先选择文件'); return; }
 
             var fd = new FormData();
             fd.append('file', fileInput.files[0]);

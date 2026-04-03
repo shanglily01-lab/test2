@@ -94,6 +94,7 @@
         .bg-gold { background-color: #f5a623; }
         .scrollbar-hide::-webkit-scrollbar { display: none; }
     </style>
+<script src="/static/modal.js"></script>
 </head>
 <body class="flex h-screen overflow-hidden">
 <!-- SideNavBar Component -->
@@ -742,8 +743,8 @@ async function loadPositions() {
 
 async function closeAllPositions() {
     var cnt = parseInt(document.getElementById('tab-badge-positions').textContent || '0');
-    if (cnt === 0) { alert('当前无持仓'); return; }
-    if (!confirm('确认一键平仓？将市价关闭所有 ' + cnt + ' 笔持仓，操作不可撤销！')) return;
+    if (cnt === 0) { await showAlert('当前无持仓', 'info'); return; }
+    if (!(await showConfirm('将市价关闭所有 ' + cnt + ' 笔持仓，操作不可撤销！', {title: '确认一键平仓', confirmText: '确认平仓', type: 'warning'}))) return;
     var btn = document.querySelector('[onclick="closeAllPositions()"]');
     if (btn) { btn.disabled = true; btn.textContent = '平仓中...'; }
     try {
@@ -754,13 +755,13 @@ async function closeAllPositions() {
             body: JSON.stringify(body) });
         var data = await resp.json();
         if (resp.ok && data.success) {
-            alert(data.message || '一键平仓完成');
+            await showAlert(data.message || '一键平仓完成', 'success');
             setTimeout(function() { loadPositions(); loadBalance(); }, 800);
         } else {
-            alert('平仓失败: ' + (data.detail || data.message || '未知错误'));
+            await showAlert('平仓失败: ' + (data.detail || data.message || '未知错误'), 'error');
         }
     } catch (e) {
-        alert('请求失败: ' + e.message);
+        await showAlert('请求失败: ' + e.message, 'error');
     } finally {
         if (btn) {
             btn.disabled = false;
@@ -909,7 +910,7 @@ async function loadHistory(days) {
 // ==================== Close position ====================
 
 async function closePosition(symbol, side) {
-    var confirmed = window.confirm('确认平仓 ' + symbol + ' ' + side + '?\n\n这将执行实盘平仓操作。');
+    var confirmed = await showConfirm('确认平仓 ' + symbol + ' ' + side + '？这将执行实盘平仓操作。', {title: '确认平仓', confirmText: '确认平仓', type: 'warning'});
     if (!confirmed) return;
     try {
         var body = { symbol: symbol, side: side };

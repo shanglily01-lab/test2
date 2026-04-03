@@ -93,6 +93,7 @@
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #49f4c8; }
     </style>
+<script src="/static/modal.js"></script>
 </head>
 <body class="flex min-h-screen overflow-hidden">
 <!-- Sidebar -->
@@ -492,8 +493,8 @@ var _lastPositions = [];
 
 async function closeAllPositions() {
     var cnt = _lastPositions.length;
-    if (cnt === 0) { alert('当前无持仓'); return; }
-    if (!confirm('确认一键平仓？将市价关闭所有 ' + cnt + ' 笔持仓，操作不可撤销！')) return;
+    if (cnt === 0) { await showAlert('当前无持仓', 'info'); return; }
+    if (!(await showConfirm('将市价关闭所有 ' + cnt + ' 笔持仓，操作不可撤销！', {title: '确认一键平仓', confirmText: '确认平仓', type: 'warning'}))) return;
     var btn = document.getElementById('close-all-btn');
     if (btn) { btn.disabled = true; btn.textContent = '平仓中...'; }
     try {
@@ -504,10 +505,10 @@ async function closeAllPositions() {
             body: JSON.stringify({position_ids: ids, reason: 'manual_close_all'})
         });
         var data = await resp.json();
-        alert(data.message || '一键平仓完成');
+        await showAlert(data.message || '一键平仓完成', 'success');
         setTimeout(loadAll, 800);
     } catch(e) {
-        alert('请求失败: ' + e.message);
+        await showAlert('请求失败: ' + e.message, 'error');
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-symbols-outlined text-[14px]">close_fullscreen</span> 一键平仓'; }
     }
@@ -790,7 +791,7 @@ function onToggleAllowShort(el) {
 
 async function closePosition(id, symbol) {
     if (!id || isNaN(parseInt(id))) { showToast('持仓ID无效', 'error'); return; }
-    var ok = confirm('确定要平仓 ' + symbol + ' (ID:' + id + ') ？\n此操作不可撤销。');
+    var ok = await showConfirm('确定要平仓 ' + symbol + ' ?', {title: '确认平仓', confirmText: '确认平仓', type: 'warning'});
     if (!ok) return;
     try {
         var res = await fetch('/api/futures/close/' + id, {

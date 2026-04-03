@@ -88,6 +88,7 @@
             },
         }
     </script>
+<script src="/static/modal.js"></script>
 </head>
 <body class="bg-background text-on-surface font-body selection:bg-primary/30">
 <!-- SideNavBar -->
@@ -579,7 +580,7 @@
     // ---- 删除密钥 ----
 
     async function deleteKey(id, name) {
-        if (!confirm('确定要删除 "' + name + '" 的 API 密钥吗？\n\n此操作不可恢复！')) return;
+        if (!(await showConfirm('确定要删除 "' + name + '" 的 API 密钥？此操作不可恢复！', {title: '删除 API 密钥', confirmText: '确认删除', type: 'warning'}))) return;
 
         try {
             const resp = await fetch(API_BASE + '/delete', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ api_key_id: id }) });
