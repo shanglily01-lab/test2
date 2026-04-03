@@ -251,7 +251,8 @@
 <table class="w-full text-left border-collapse">
 <thead>
 <tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-outline-variant/10 bg-surface-container">
-<th class="px-5 py-4 font-semibold whitespace-nowrap">成交时间</th>
+<th class="px-5 py-4 font-semibold whitespace-nowrap">开仓 / 平仓时间</th>
+<th class="px-5 py-4 font-semibold whitespace-nowrap">持仓时长</th>
 <th class="px-5 py-4 font-semibold whitespace-nowrap">交易对</th>
 <th class="px-5 py-4 font-semibold whitespace-nowrap">方向</th>
 <th class="px-5 py-4 font-semibold whitespace-nowrap">开仓价</th>
@@ -321,6 +322,23 @@ function fmtTime(t) {
         var u = new Date(d.getTime() + 8 * 3600000);
         var pad = function(x) { return String(x).padStart(2, '0'); };
         return (u.getUTCMonth()+1) + '-' + pad(u.getUTCDate()) + ' ' + pad(u.getUTCHours()) + ':' + pad(u.getUTCMinutes());
+    } catch(e) { return '--'; }
+}
+function fmtDuration(openT, closeT) {
+    if (!openT || !closeT) return '--';
+    try {
+        var toMs = function(t) {
+            var ts = (typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t)) ? t + 'Z' : t;
+            return new Date(ts).getTime();
+        };
+        var ms = toMs(closeT) - toMs(openT);
+        if (isNaN(ms) || ms < 0) return '--';
+        var totalMin = Math.floor(ms / 60000);
+        var h = Math.floor(totalMin / 60);
+        var m = totalMin % 60;
+        if (h >= 24) { var d = Math.floor(h / 24); return d + 'D' + (h % 24) + 'H'; }
+        if (h > 0) return h + 'H' + m + 'M';
+        return m + 'M';
     } catch(e) { return '--'; }
 }
 
@@ -473,7 +491,7 @@ function applyHistoryFilter(resetPage) {
     var pageRows = filtered;
 
     if (pageRows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无符合条件的记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无符合条件的记录</td></tr>';
     } else {
         tbody.innerHTML = pageRows.map(function(t) {
             var isLong = t.side === 'CLOSE_LONG';
@@ -482,7 +500,11 @@ function applyHistoryFilter(resetPage) {
             var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
             var pnlPct = t.pnl_pct != null ? parseFloat(t.pnl_pct) : null;
             return '<tr class="hover:bg-surface-container/50 transition-colors">' +
-                '<td class="px-5 py-3.5 text-on-surface-variant monospace whitespace-nowrap">' + fmtTime(t.close_time || t.trade_time) + '</td>' +
+                '<td class="px-5 py-3.5 text-on-surface-variant monospace whitespace-nowrap text-xs leading-5">' +
+                    '<div>' + fmtTime(t.open_time) + '</div>' +
+                    '<div class="text-[#49f4c8]/70">' + fmtTime(t.close_time || t.trade_time) + '</div>' +
+                '</td>' +
+                '<td class="px-5 py-3.5 text-on-surface-variant monospace whitespace-nowrap text-xs">' + fmtDuration(t.open_time, t.close_time || t.trade_time) + '</td>' +
                 '<td class="px-5 py-3.5 font-bold font-headline uppercase whitespace-nowrap">' + (t.symbol || '--') + '</td>' +
                 '<td class="px-5 py-3.5 font-bold text-xs ' + sideClass + '">' + (isLong ? 'LONG' : 'SHORT') + '</td>' +
                 '<td class="px-5 py-3.5 monospace whitespace-nowrap">' + fmtPrice(t.entry_price) + '</td>' +
