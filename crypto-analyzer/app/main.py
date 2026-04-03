@@ -1330,6 +1330,15 @@ def paper_trading_page():
         raise HTTPException(status_code=404, detail=f"Paper trading page not found at {trading_path}")
 
 
+@app.get("/symbol_blacklist")
+async def symbol_blacklist_page():
+    """黑名单管理页面"""
+    p = project_root / "templates" / "symbol_blacklist.html"
+    if p.exists():
+        return FileResponse(str(p))
+    raise HTTPException(status_code=404, detail="Symbol blacklist page not found")
+
+
 @app.get("/spot_trading")
 @app.get("/spot-trading")
 async def spot_trading_page():

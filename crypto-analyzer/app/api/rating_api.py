@@ -46,6 +46,13 @@ class RatingUpdateRequest(BaseModel):
     observation_days: Optional[int] = None  # 观察天数,默认从配置读取
 
 
+class ManualRatingRequest(BaseModel):
+    """手动设置评级请求"""
+    symbol: str
+    rating_level: int  # 0=白名单, 1=黑名单1级, 2=黑名单2级, 3=永久禁止
+    reason: Optional[str] = "手动设置"
+
+
 @router.get("/api/rating/config")
 async def get_rating_config():
     """获取评级配置"""
@@ -206,6 +213,26 @@ async def trigger_rating_update(request: RatingUpdateRequest):
             "message": "评级更新完成",
             "results": formatted_results
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/rating/set")
+async def set_symbol_rating(request: ManualRatingRequest):
+    """手动设置单个交易对的评级"""
+    try:
+        if request.rating_level not in (0, 1, 2, 3):
+            raise HTTPException(status_code=400, detail="rating_level must be 0, 1, 2, or 3")
+        opt_config = OptimizationConfig(DB_CONFIG)
+        opt_config.update_symbol_rating(
+            symbol=request.symbol.upper(),
+            new_level=request.rating_level,
+            reason=request.reason or "手动设置",
+            updated_by="manual"
+        )
+        return {"success": True, "message": f"{request.symbol.upper()} 评级已设置为 {request.rating_level}"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
