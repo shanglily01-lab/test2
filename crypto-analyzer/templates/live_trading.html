@@ -637,6 +637,53 @@ async function loadBalance() {
 
 // ==================== Load positions ====================
 
+var _positionsCache = [];   // keep last known list to detect add/remove
+
+function _rowKey(pos) {
+    return (pos.symbol || '') + '|' + (pos.side || pos.position_side || '');
+}
+
+function _updatePnlHeader(list) {
+    var totalUpnl = 0, longUpnl = 0, shortUpnl = 0;
+    list.forEach(function(p) {
+        var v = parseFloat(p.unrealized_pnl || 0);
+        totalUpnl += v;
+        if ((p.side || p.position_side || '').toUpperCase() === 'LONG') longUpnl += v;
+        else shortUpnl += v;
+    });
+    var set = function(id, val) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = (val >= 0 ? '+' : '') + val.toFixed(2) + ' U';
+        el.className = 'font-mono text-sm font-bold ' + pnlClass(val);
+    };
+    set('pos-total-upnl', totalUpnl);
+    set('pos-long-upnl', longUpnl);
+    set('pos-short-upnl', shortUpnl);
+}
+
+function _buildRow(pos) {
+    var side = pos.side || pos.position_side || '';
+    var pnl  = parseFloat(pos.unrealized_pnl || 0);
+    var pct  = parseFloat(pos.percentage || 0);
+    var key  = _rowKey(pos);
+    return '<tr data-key="' + key + '" class="hover:bg-white/[0.02] transition-colors group">' +
+        '<td class="py-4 px-8"><div class="flex items-center gap-3">' + symbolIcon(pos.symbol) +
+        '<div><p class="text-sm font-bold font-headline">' + pos.symbol + '</p></div></div></td>' +
+        '<td class="py-4 px-4">' + sideHtml(side) + '</td>' +
+        '<td class="py-4 px-4 font-mono text-sm text-right">' + fmtNumber(pos.size || pos.quantity, 4) + '</td>' +
+        '<td class="py-4 px-4 font-mono text-sm text-right text-on-surface-variant">' + fmtPrice(pos.entry_price) + '</td>' +
+        '<td data-cell="price" class="py-4 px-4 font-mono text-sm text-right">' + fmtPrice(pos.mark_price) + '</td>' +
+        '<td data-cell="pnl" class="py-4 px-4 text-right">' +
+            '<p class="text-sm font-bold font-mono ' + pnlClass(pnl) + '">' + fmtPnl(pnl) + '</p>' +
+            '<p class="text-[10px] font-mono ' + pnlClass(pct) + '">' + (pct >= 0 ? '+' : '') + fmtNumber(pct) + '%</p>' +
+        '</td>' +
+        '<td class="py-4 px-8 text-center">' +
+        '<button onclick="closePosition(\'' + pos.symbol + '\',\'' + side + '\')" ' +
+        'class="gold-gradient text-[#002045] text-xs font-bold px-4 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all active:scale-95">市价平仓</button>' +
+        '</td></tr>';
+}
+
 async function loadPositions() {
     var tbody = document.getElementById('positions-tbody');
     if (!tbody) return;
@@ -652,51 +699,39 @@ async function loadPositions() {
 
         var cntEl = document.getElementById('positions-count');
         if (cntEl) cntEl.textContent = list.length;
-
         var badgeEl = document.getElementById('tab-badge-positions');
         if (badgeEl) badgeEl.textContent = list.length;
 
-        // Update sub-header PnL stats
-        var totalUpnl = 0, longUpnl = 0, shortUpnl = 0;
-        list.forEach(function(p) {
-            var v = parseFloat(p.unrealized_pnl || 0);
-            totalUpnl += v;
-            var s = (p.side || p.position_side || '').toUpperCase();
-            if (s === 'LONG') longUpnl += v; else shortUpnl += v;
-        });
-        var setUpnl = function(id, val) {
-            var el = document.getElementById(id);
-            if (!el) return;
-            el.textContent = (val >= 0 ? '+' : '') + val.toFixed(2) + ' U';
-            el.className = 'font-mono text-sm font-bold ' + pnlClass(val);
-        };
-        setUpnl('pos-total-upnl', totalUpnl);
-        setUpnl('pos-long-upnl', longUpnl);
-        setUpnl('pos-short-upnl', shortUpnl);
+        _updatePnlHeader(list);
 
         if (list.length === 0) {
+            _positionsCache = [];
             tbody.innerHTML = '<tr><td colspan="7" class="py-16 text-center text-on-surface-variant text-sm">暂无持仓</td></tr>';
             return;
         }
 
-        tbody.innerHTML = list.map(function(pos) {
-            var side = pos.side || pos.position_side || '';
-            var pnl = parseFloat(pos.unrealized_pnl || 0);
-            var pct = parseFloat(pos.percentage || 0);
-            return '<tr class="hover:bg-white/[0.02] transition-colors group">' +
-                '<td class="py-4 px-8"><div class="flex items-center gap-3">' + symbolIcon(pos.symbol) +
-                '<div><p class="text-sm font-bold font-headline">' + pos.symbol + '</p></div></div></td>' +
-                '<td class="py-4 px-4">' + sideHtml(side) + '</td>' +
-                '<td class="py-4 px-4 font-mono text-sm text-right">' + fmtNumber(pos.size || pos.quantity, 4) + '</td>' +
-                '<td class="py-4 px-4 font-mono text-sm text-right text-on-surface-variant">' + fmtPrice(pos.entry_price) + '</td>' +
-                '<td class="py-4 px-4 font-mono text-sm text-right">' + fmtPrice(pos.mark_price) + '</td>' +
-                '<td class="py-4 px-4 text-right"><p class="text-sm font-bold font-mono ' + pnlClass(pnl) + '">' + fmtPnl(pnl) + '</p>' +
-                '<p class="text-[10px] font-mono ' + pnlClass(pct) + '">' + (pct >= 0 ? '+' : '') + fmtNumber(pct) + '%</p></td>' +
-                '<td class="py-4 px-8 text-center">' +
-                '<button onclick="closePosition(\'' + pos.symbol + '\',\'' + side + '\')" ' +
-                'class="gold-gradient text-[#002045] text-xs font-bold px-4 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all active:scale-95">市价平仓</button>' +
-                '</td></tr>';
-        }).join('');
+        // Check if set of positions changed (add/remove) — full rebuild needed
+        var newKeys = list.map(_rowKey).sort().join(',');
+        var oldKeys = _positionsCache.map(_rowKey).sort().join(',');
+        if (newKeys !== oldKeys) {
+            tbody.innerHTML = list.map(_buildRow).join('');
+        } else {
+            // In-place update: only price + pnl cells
+            list.forEach(function(pos) {
+                var key = _rowKey(pos);
+                var row = tbody.querySelector('tr[data-key="' + key + '"]');
+                if (!row) return;
+                var priceCell = row.querySelector('[data-cell="price"]');
+                var pnlCell   = row.querySelector('[data-cell="pnl"]');
+                var pnl = parseFloat(pos.unrealized_pnl || 0);
+                var pct = parseFloat(pos.percentage || 0);
+                if (priceCell) priceCell.textContent = fmtPrice(pos.mark_price);
+                if (pnlCell) pnlCell.innerHTML =
+                    '<p class="text-sm font-bold font-mono ' + pnlClass(pnl) + '">' + fmtPnl(pnl) + '</p>' +
+                    '<p class="text-[10px] font-mono ' + pnlClass(pct) + '">' + (pct >= 0 ? '+' : '') + fmtNumber(pct) + '%</p>';
+            });
+        }
+        _positionsCache = list;
     } catch (e) {
         console.error('loadPositions failed:', e);
         tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-[#ff716c] text-sm">加载失败: ' + e.message + '</td></tr>';
@@ -901,11 +936,20 @@ async function loadAll() {
     await Promise.all([loadBalance(), loadPositions(), loadOrders()]);
 }
 
+var _posRefreshTimer = null;
+
 function startAutoRefresh() {
     if (_refreshTimer) clearInterval(_refreshTimer);
+    if (_posRefreshTimer) clearInterval(_posRefreshTimer);
+
+    // Positions + PnL header: every 5 seconds (real-time price update)
+    _posRefreshTimer = setInterval(function() {
+        loadPositions();
+    }, 5000);
+
+    // Balance + orders: every 30 seconds
     _refreshTimer = setInterval(function() {
         loadBalance();
-        loadPositions();
         var histPanel = document.getElementById('panel-history');
         if (histPanel && !histPanel.classList.contains('hidden')) {
             loadHistory(_currentHistoryDays);
