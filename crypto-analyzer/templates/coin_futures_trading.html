@@ -194,12 +194,21 @@
 <div class="mb-8">
 <!-- Current Positions -->
 <div class="col-span-12 bg-surface-container-low rounded-xl overflow-hidden">
-<div class="px-6 py-4 flex justify-between items-center border-b border-outline-variant/10">
-<h3 class="font-headline text-lg font-bold">当前持仓</h3>
-<div class="flex gap-2">
-<button class="text-xs text-on-surface-variant hover:text-primary flex items-center gap-1">
-<span class="material-symbols-outlined text-sm">refresh</span> 刷新
-                        </button>
+<div class="px-6 py-4 flex flex-wrap justify-between items-center gap-3 border-b border-outline-variant/10">
+<h3 class="font-headline text-lg font-bold flex items-center gap-2">
+  当前持仓
+  <span id="pos-count-badge" class="text-[10px] font-mono text-on-surface-variant">-- 笔</span>
+</h3>
+<div class="flex items-center gap-4">
+  <div class="text-right">
+    <p class="text-[10px] text-on-surface-variant uppercase tracking-widest">总浮盈</p>
+    <p id="pos-header-pnl" class="font-mono text-sm font-bold text-on-surface-variant">--</p>
+  </div>
+  <button onclick="closeAllPositions()" id="close-all-btn"
+    class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#ff716c]/10 border border-[#ff716c]/30 text-[#ff716c] text-xs font-bold hover:bg-[#ff716c]/20 transition-colors active:scale-95">
+    <span class="material-symbols-outlined text-[14px]">close_fullscreen</span>
+    一键平仓
+  </button>
 </div>
 </div>
 <div class="overflow-x-auto overflow-y-auto max-h-[420px]">
@@ -368,6 +377,7 @@ async function loadPositions() {
     } catch(e) { /* 使用 entry_price 作为回退 */ }
 
     var totalMargin = 0, totalPnl = 0;
+    _lastPositions = positions;
 
     var rows = positions.map(function(pos) {
         var isLong = pos.position_side === 'LONG';
@@ -433,7 +443,45 @@ async function loadPositions() {
     });
 
     tbody.innerHTML = rows.join('');
+    _lastPositions = positions;
+
+    // Update header stats
+    var badge = document.getElementById('pos-count-badge');
+    var pnlEl = document.getElementById('pos-header-pnl');
+    if (badge) badge.textContent = positions.length + ' 笔';
+    if (pnlEl) {
+        pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(2) + ' U';
+        pnlEl.className = 'font-mono text-sm font-bold ' + (totalPnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
+    }
+
     return {count: positions.length, totalMargin: totalMargin, totalPnl: totalPnl};
+}
+
+// ---- 一键平仓 ----
+
+var _lastPositions = [];
+
+async function closeAllPositions() {
+    var cnt = _lastPositions.length;
+    if (cnt === 0) { alert('当前无持仓'); return; }
+    if (!confirm('确认一键平仓？将市价关闭所有 ' + cnt + ' 笔持仓，操作不可撤销！')) return;
+    var btn = document.getElementById('close-all-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '平仓中...'; }
+    try {
+        var ids = _lastPositions.map(function(p) { return p.id || p.position_id; }).filter(Boolean);
+        var resp = await fetch('/api/futures/close-batch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('auth_token') || localStorage.getItem('access_token') || '')},
+            body: JSON.stringify({position_ids: ids, reason: 'manual_close_all'})
+        });
+        var data = await resp.json();
+        alert(data.message || '一键平仓完成');
+        setTimeout(loadAll, 800);
+    } catch(e) {
+        alert('请求失败: ' + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-symbols-outlined text-[14px]">close_fullscreen</span> 一键平仓'; }
+    }
 }
 
 // ---- 加载历史交易 ----
@@ -610,9 +658,14 @@ async function loadAll() {
 
 // ---- 初始化 ----
 
+var _posRefreshTimer = null;
+
 document.addEventListener('DOMContentLoaded', function() {
     loadAll();
-    _refreshTimer = setInterval(loadAll, 30000);
+    // 持仓+价格 5s 刷新
+    _posRefreshTimer = setInterval(loadPositions, 5000);
+    // 余额/历史 30s 刷新
+    _refreshTimer = setInterval(function() { loadHistory(1); loadAccountInfo(); }, 30000);
 });
 </script>
 </body></html>
