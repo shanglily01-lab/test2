@@ -187,6 +187,7 @@
   <button id="tab-opportunity" onclick="switchTab('opportunity')" class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">机会分析</button>
   <button id="tab-dailypnl"    onclick="switchTab('dailypnl')"    class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">每日盈亏</button>
   <button id="tab-retro"       onclick="switchTab('retro')"       class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">历史复盘</button>
+  <button id="tab-symbols"     onclick="switchTab('symbols')"     class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">交易对表现</button>
 </div>
 
 <!-- Tab Panels -->
@@ -603,6 +604,40 @@
     </div>
   </div>
 
+  <!-- ============ SYMBOLS PERFORMANCE ============ -->
+  <div id="pane-symbols" class="tab-pane pane-fill">
+    <div class="flex items-center justify-between mb-4 shrink-0">
+      <div>
+        <h2 class="font-['Space_Grotesk'] font-bold text-base text-on-surface">交易对表现</h2>
+        <p class="text-[11px] text-on-surface-variant mt-0.5">点击列标题排序</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-[10px] text-on-surface-variant uppercase tracking-widest">共 <span id="sym-total-count">--</span> 个交易对</span>
+      </div>
+    </div>
+    <div class="overflow-auto flex-1 rounded-xl border border-outline-variant/10">
+      <table class="w-full text-left border-collapse">
+        <thead class="sticky top-0 bg-[#0a0f14] z-10">
+          <tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-white/5">
+            <th class="py-3 px-4 font-bold cursor-pointer hover:text-on-surface" onclick="sortSymbols('symbol')">交易对 <span id="sort-symbol"></span></th>
+            <th class="py-3 px-4 font-bold text-right cursor-pointer hover:text-on-surface" onclick="sortSymbols('total_trades')">次数 <span id="sort-total_trades"></span></th>
+            <th class="py-3 px-4 font-bold text-right cursor-pointer hover:text-on-surface" onclick="sortSymbols('wins')">盈利 <span id="sort-wins"></span></th>
+            <th class="py-3 px-4 font-bold text-right cursor-pointer hover:text-on-surface" onclick="sortSymbols('losses')">亏损 <span id="sort-losses"></span></th>
+            <th class="py-3 px-4 font-bold text-right cursor-pointer hover:text-on-surface" onclick="sortSymbols('win_rate')">胜率 <span id="sort-win_rate"></span></th>
+            <th class="py-3 px-4 font-bold text-right cursor-pointer hover:text-on-surface" onclick="sortSymbols('total_pnl')">累计盈亏 <span id="sort-total_pnl">▼</span></th>
+            <th class="py-3 px-4 font-bold text-right cursor-pointer hover:text-on-surface" onclick="sortSymbols('avg_win')">均盈 <span id="sort-avg_win"></span></th>
+            <th class="py-3 px-4 font-bold text-right cursor-pointer hover:text-on-surface" onclick="sortSymbols('avg_loss')">均亏 <span id="sort-avg_loss"></span></th>
+            <th class="py-3 px-4 font-bold text-right cursor-pointer hover:text-on-surface" onclick="sortSymbols('max_win')">最大盈 <span id="sort-max_win"></span></th>
+            <th class="py-3 px-4 font-bold text-right cursor-pointer hover:text-on-surface" onclick="sortSymbols('max_loss')">最大亏 <span id="sort-max_loss"></span></th>
+          </tr>
+        </thead>
+        <tbody id="sym-tbody" class="divide-y divide-white/5">
+          <tr><td colspan="10" class="py-12 text-center text-on-surface-variant text-sm">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </div><!-- end tab panels -->
 
 <!-- Footer -->
@@ -722,6 +757,7 @@ function loadTabData(name) {
   else if (name === 'opportunity') { loadOpportunity(); }
   else if (name === 'dailypnl') { initMonthSelector(); loadDailyPnl(); }
   else if (name === 'retro') { loadRetro(); }
+  else if (name === 'symbols') { loadSymbolsPerf(); }
 }
 
 function refreshCurrentTab() {
@@ -1406,6 +1442,82 @@ function loadRetro() {
 }
 
 // ============================================================
+// ============================================================
+// SYMBOLS PERFORMANCE
+// ============================================================
+var _symData = [];
+var _symSortKey = 'total_pnl';
+var _symSortAsc = false;
+
+function loadSymbolsPerf() {
+  fetch('/api/futures/review/summary?account_id=' + accountId() + '&hours=' + currentHours)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      _symData = (d.data || d || {}).symbol_performance || [];
+      var cnt = document.getElementById('sym-total-count');
+      if (cnt) cnt.textContent = _symData.length;
+      renderSymbolsTable();
+    })
+    .catch(function(e){ console.error('loadSymbolsPerf error:', e); });
+}
+
+function sortSymbols(key) {
+  if (_symSortKey === key) {
+    _symSortAsc = !_symSortAsc;
+  } else {
+    _symSortKey = key;
+    _symSortAsc = key === 'symbol';
+  }
+  renderSymbolsTable();
+}
+
+function renderSymbolsTable() {
+  var tbody = document.getElementById('sym-tbody');
+  if (!tbody) return;
+
+  // Update sort indicators
+  ['symbol','total_trades','wins','losses','win_rate','total_pnl','avg_win','avg_loss','max_win','max_loss'].forEach(function(k) {
+    var el = document.getElementById('sort-' + k);
+    if (el) el.textContent = k === _symSortKey ? (_symSortAsc ? '▲' : '▼') : '';
+  });
+
+  var sorted = _symData.slice().sort(function(a, b) {
+    var av = a[_symSortKey], bv = b[_symSortKey];
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    if (av < bv) return _symSortAsc ? -1 : 1;
+    if (av > bv) return _symSortAsc ? 1 : -1;
+    return 0;
+  });
+
+  if (sorted.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="10" class="py-12 text-center text-on-surface-variant text-sm">暂无数据</td></tr>';
+    return;
+  }
+
+  var html = '';
+  sorted.forEach(function(s) {
+    var pnl = parseFloat(s.total_pnl || 0);
+    var wr = parseFloat(s.win_rate || 0);
+    var pnlCls = pnl > 0 ? 'text-[#49f4c8]' : pnl < 0 ? 'text-[#ff716c]' : 'text-on-surface-variant';
+    var wrCls = wr >= 60 ? 'text-[#49f4c8]' : wr >= 40 ? 'text-yellow-400' : 'text-[#ff716c]';
+    var sym = s.symbol.replace('USDT','').replace('USD','');
+    html += '<tr class="hover:bg-white/[0.02] transition-colors">';
+    html += '<td class="py-3 px-4 font-bold text-on-surface text-sm">' + sym + '<span class="text-on-surface-variant text-[10px] font-normal">/USDT</span></td>';
+    html += '<td class="py-3 px-4 text-right mono text-sm text-on-surface">' + (s.total_trades || 0) + '</td>';
+    html += '<td class="py-3 px-4 text-right mono text-sm text-[#49f4c8]">' + (s.wins || 0) + '</td>';
+    html += '<td class="py-3 px-4 text-right mono text-sm text-[#ff716c]">' + (s.losses || 0) + '</td>';
+    html += '<td class="py-3 px-4 text-right mono text-sm ' + wrCls + '">' + wr.toFixed(1) + '%</td>';
+    html += '<td class="py-3 px-4 text-right mono text-sm font-bold ' + pnlCls + '">' + (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + ' U</td>';
+    html += '<td class="py-3 px-4 text-right mono text-sm text-[#49f4c8]">+' + parseFloat(s.avg_win || 0).toFixed(2) + '</td>';
+    html += '<td class="py-3 px-4 text-right mono text-sm text-[#ff716c]">' + parseFloat(s.avg_loss || 0).toFixed(2) + '</td>';
+    html += '<td class="py-3 px-4 text-right mono text-sm text-[#49f4c8]">+' + parseFloat(s.max_win || 0).toFixed(2) + '</td>';
+    html += '<td class="py-3 px-4 text-right mono text-sm text-[#ff716c]">' + parseFloat(s.max_loss || 0).toFixed(2) + '</td>';
+    html += '</tr>';
+  });
+  tbody.innerHTML = html;
+}
+
 // INIT
 // ============================================================
 updateTimestamp();
