@@ -643,6 +643,50 @@ async def close_position_by_symbol(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class CloseAllRequest(BaseModel):
+    api_key_id: int = Field(default=0, description="API密钥ID，0表示自动选取")
+    reason: str = Field(default="manual_close_all", description="平仓原因")
+
+
+@router.post("/close-all")
+async def close_all_positions(
+    request: CloseAllRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """一键平仓 — 关闭当前账号所有持仓"""
+    try:
+        engine = get_user_engine(current_user['user_id'], request.api_key_id)
+        positions = engine.get_open_positions()
+        if not positions:
+            return {"success": True, "message": "当前无持仓", "closed": 0, "failed": 0}
+
+        closed, failed, errors = 0, 0, []
+        for pos in positions:
+            pid = pos.get('id') or pos.get('position_id')
+            try:
+                result = engine.close_position(position_id=pid, reason=request.reason)
+                if result.get('success'):
+                    closed += 1
+                else:
+                    failed += 1
+                    errors.append(f"{pos.get('symbol')}: {result.get('error')}")
+            except Exception as ex:
+                failed += 1
+                errors.append(f"{pos.get('symbol')}: {ex}")
+
+        logger.info(f"[实盘API] 一键平仓完成: closed={closed}, failed={failed}")
+        return {
+            "success": True,
+            "message": f"平仓完成：成功 {closed} 笔，失败 {failed} 笔",
+            "closed": closed,
+            "failed": failed,
+            "errors": errors
+        }
+    except Exception as e:
+        logger.error(f"一键平仓失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/set-stop-loss-take-profit")
 async def set_stop_loss_take_profit(
     request: SetStopLossTakeProfitRequest,

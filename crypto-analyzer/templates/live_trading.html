@@ -112,6 +112,7 @@
 <a href="/futures_review" data-path="/futures_review" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>复盘分析</span></a>
 <a href="/technical-signals" data-path="/technical-signals" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">sensors</span><span>信号分析</span></a>
 <a href="/market_regime" data-path="/market_regime" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">pulse_alert</span><span>行情识别</span></a>
+<a href="/symbol_blacklist" data-path="/symbol_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">block</span><span>黑名单管理</span></a>
 <a href="/spot_trading" data-path="/spot_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_exchange</span><span>现货交易</span></a>
 <a href="/etf_data" data-path="/etf_data" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">candlestick_chart</span><span>ETF 数据</span></a>
 <a href="/blockchain_gas" data-path="/blockchain_gas" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Gas 监控</span></a>
@@ -245,7 +246,29 @@
 </button>
 </div>
 <!-- Positions Panel -->
-<div id="panel-positions" class="tab-panel flex-1 overflow-auto min-h-0">
+<div id="panel-positions" class="tab-panel flex-1 flex flex-col min-h-0">
+<!-- Positions Sub-header: PnL stats + close-all -->
+<div class="flex items-center justify-between px-8 py-3 border-b border-white/5 bg-[#0a0f14] shrink-0">
+  <div class="flex items-center gap-6">
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">持仓浮盈</span>
+      <span id="pos-total-upnl" class="font-mono text-sm font-bold text-on-surface-variant">--</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">多头</span>
+      <span id="pos-long-upnl" class="font-mono text-sm text-on-surface-variant">--</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">空头</span>
+      <span id="pos-short-upnl" class="font-mono text-sm text-on-surface-variant">--</span>
+    </div>
+  </div>
+  <button onclick="closeAllPositions()" class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#ff716c]/10 border border-[#ff716c]/30 text-[#ff716c] text-xs font-bold hover:bg-[#ff716c]/20 transition-colors active:scale-95">
+    <span class="material-symbols-outlined text-[14px]">close_fullscreen</span>
+    一键平仓
+  </button>
+</div>
+<div class="overflow-auto flex-1">
 <table class="w-full text-left border-collapse">
 <thead class="sticky top-0 bg-[#0a0f14] z-10">
 <tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-white/5">
@@ -262,6 +285,7 @@
 <tr><td colspan="7" class="py-12 text-center text-on-surface-variant text-sm">加载中...</td></tr>
 </tbody>
 </table>
+</div>
 </div>
 <!-- Orders Panel -->
 <div id="panel-orders" class="tab-panel flex-1 overflow-auto hidden min-h-0">
@@ -632,6 +656,24 @@ async function loadPositions() {
         var badgeEl = document.getElementById('tab-badge-positions');
         if (badgeEl) badgeEl.textContent = list.length;
 
+        // Update sub-header PnL stats
+        var totalUpnl = 0, longUpnl = 0, shortUpnl = 0;
+        list.forEach(function(p) {
+            var v = parseFloat(p.unrealized_pnl || 0);
+            totalUpnl += v;
+            var s = (p.side || p.position_side || '').toUpperCase();
+            if (s === 'LONG') longUpnl += v; else shortUpnl += v;
+        });
+        var setUpnl = function(id, val) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = (val >= 0 ? '+' : '') + val.toFixed(2) + ' U';
+            el.className = 'font-mono text-sm font-bold ' + pnlClass(val);
+        };
+        setUpnl('pos-total-upnl', totalUpnl);
+        setUpnl('pos-long-upnl', longUpnl);
+        setUpnl('pos-short-upnl', shortUpnl);
+
         if (list.length === 0) {
             tbody.innerHTML = '<tr><td colspan="7" class="py-16 text-center text-on-surface-variant text-sm">暂无持仓</td></tr>';
             return;
@@ -658,6 +700,37 @@ async function loadPositions() {
     } catch (e) {
         console.error('loadPositions failed:', e);
         tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-[#ff716c] text-sm">加载失败: ' + e.message + '</td></tr>';
+    }
+}
+
+// ==================== Close all positions ====================
+
+async function closeAllPositions() {
+    var cnt = parseInt(document.getElementById('tab-badge-positions').textContent || '0');
+    if (cnt === 0) { alert('当前无持仓'); return; }
+    if (!confirm('确认一键平仓？将市价关闭所有 ' + cnt + ' 笔持仓，操作不可撤销！')) return;
+    var btn = document.querySelector('[onclick="closeAllPositions()"]');
+    if (btn) { btn.disabled = true; btn.textContent = '平仓中...'; }
+    try {
+        var body = { reason: 'manual_close_all' };
+        if (_activeApiKeyId > 0) body.api_key_id = _activeApiKeyId;
+        var resp = await apiFetch(apiUrl('/close-all'), { method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body) });
+        var data = await resp.json();
+        if (resp.ok && data.success) {
+            alert(data.message || '一键平仓完成');
+            setTimeout(function() { loadPositions(); loadBalance(); }, 800);
+        } else {
+            alert('平仓失败: ' + (data.detail || data.message || '未知错误'));
+        }
+    } catch (e) {
+        alert('请求失败: ' + e.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<span class="material-symbols-outlined text-[14px]">close_fullscreen</span> 一键平仓';
+        }
     }
 }
 
