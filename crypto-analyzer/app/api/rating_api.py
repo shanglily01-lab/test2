@@ -227,8 +227,7 @@ async def set_symbol_rating(request: ManualRatingRequest):
         opt_config.update_symbol_rating(
             symbol=request.symbol.upper(),
             new_level=request.rating_level,
-            reason=request.reason or "手动设置",
-            updated_by="manual"
+            reason=request.reason or "手动设置"
         )
         return {"success": True, "message": f"{request.symbol.upper()} 评级已设置为 {request.rating_level}"}
     except HTTPException:
