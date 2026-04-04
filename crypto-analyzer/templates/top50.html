@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>超级大脑 - TOP 50 高胜率交易对</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="/static/js/modal.js"></script>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { primary: "#49f4c8", bg: "#070b10", surface: "#0f1520", sidebar: "#0d1117", border: "#0f1520" },
+          status: { success: "#49f4c8", warning: "#facc15", orange: "#f97316", danger: "#ef4444" }
+        },
+        borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
+        fontFamily: {
+          headline: ["Space Grotesk", "sans-serif"],
+          body: ["Manrope", "sans-serif"],
+          label: ["Geist", "sans-serif"],
+          mono: ["JetBrains Mono", "monospace"]
+        }
+      }
+    }
+  }
+</script>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: #070b10; }
+  ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #49f4c8; }
+  .nav-active { color: #49f4c8 !important; background: rgba(73,244,200,0.1); border-right: 2px solid #49f4c8; }
+  th.sortable { cursor: pointer; user-select: none; }
+  th.sortable:hover { color: #49f4c8; }
+  th.sort-asc::after { content: ' \25B2'; color: #49f4c8; }
+  th.sort-desc::after { content: ' \25BC'; color: #49f4c8; }
+  .rank-gold   { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
+  .rank-silver { background: rgba(148,163,184,0.15); color: #94a3b8; border: 1px solid rgba(148,163,184,0.3); }
+  .rank-bronze { background: rgba(180,83,9,0.15); color: #b45309; border: 1px solid rgba(180,83,9,0.3); }
+  .rank-normal { background: rgba(255,255,255,0.05); color: #6b7280; border: 1px solid rgba(255,255,255,0.08); }
+  tr.top1 td { background: rgba(251,191,36,0.04); }
+  tr.top2 td { background: rgba(148,163,184,0.04); }
+  tr.top3 td { background: rgba(180,83,9,0.04); }
+</style>
+</head>
+<body class="bg-[#070b10] text-gray-200 font-body antialiased">
+
+<!-- Sidebar -->
+<aside class="fixed left-0 top-0 h-screen w-[240px] bg-[#0d1117] border-r border-[#0f1520] flex flex-col py-6 z-50">
+  <div class="px-6 mb-8">
+    <a href="/" class="flex items-center gap-3">
+      <div class="w-8 h-8 bg-[#49f4c8]/10 rounded flex items-center justify-center">
+        <span class="material-symbols-outlined text-[#49f4c8]">psychology</span>
+      </div>
+      <div>
+        <h1 class="text-[#49f4c8] font-bold text-xl tracking-tight font-headline">超级大脑</h1>
+        <p class="text-[10px] text-gray-500 font-mono tracking-widest uppercase">Quant Trading Platform</p>
+      </div>
+    </a>
+  </div>
+  <nav class="flex-1 overflow-y-auto space-y-0.5 px-3" id="sidebar-nav">
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/dashboard" href="/dashboard"><span class="material-symbols-outlined text-lg">dashboard</span><span>Dashboard</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/futures_trading" href="/futures_trading"><span class="material-symbols-outlined text-lg">show_chart</span><span>U本位合约</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/coin_futures_trading" href="/coin_futures_trading"><span class="material-symbols-outlined text-lg">currency_bitcoin</span><span>币本位合约</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/live_trading" href="/live_trading"><span class="material-symbols-outlined text-lg">precision_manufacturing</span><span>Live Trading</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/futures_review" href="/futures_review"><span class="material-symbols-outlined text-lg">history_edu</span><span>复盘分析</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/technical-signals" href="/technical-signals"><span class="material-symbols-outlined text-lg">sensors</span><span>信号分析</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/market_regime" href="/market_regime"><span class="material-symbols-outlined text-lg">pulse_alert</span><span>行情识别</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/top50" href="/top50"><span class="material-symbols-outlined text-lg">workspace_premium</span><span>TOP 50</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/symbol_blacklist" href="/symbol_blacklist"><span class="material-symbols-outlined text-lg">block</span><span>黑名单管理</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/spot_trading" href="/spot_trading"><span class="material-symbols-outlined text-lg">currency_exchange</span><span>现货交易</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/etf_data" href="/etf_data"><span class="material-symbols-outlined text-lg">candlestick_chart</span><span>ETF 数据</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/blockchain_gas" href="/blockchain_gas"><span class="material-symbols-outlined text-lg">local_gas_station</span><span>Gas 监控</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/corporate_treasury" href="/corporate_treasury"><span class="material-symbols-outlined text-lg">account_balance</span><span>企业金库</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/data_management" href="/data_management"><span class="material-symbols-outlined text-lg">storage</span><span>数据管理</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/api-keys" href="/api-keys"><span class="material-symbols-outlined text-lg">api</span><span>API Keys</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/system-settings" href="/system-settings"><span class="material-symbols-outlined text-lg">settings</span><span>Settings</span></a>
+  </nav>
+</aside>
+<script>
+(function(){
+  var path = window.location.pathname.replace(/\/$/, '') || '/';
+  document.querySelectorAll('#sidebar-nav .nav-item').forEach(function(a){
+    if(a.getAttribute('data-path') === path){
+      a.classList.add('nav-active');
+      a.classList.remove('text-gray-400');
+    }
+  });
+})();
+</script>
+
+<!-- Main -->
+<main class="pl-[240px]">
+  <!-- Header -->
+  <header class="fixed top-0 right-0 left-[240px] h-16 bg-[#070b10] border-b border-[#0f1520] z-40">
+    <div class="flex items-center justify-between px-6 w-full h-full font-mono">
+      <div class="flex items-center gap-4">
+        <h2 class="text-lg font-bold text-white font-headline">TOP 50 高胜率交易对</h2>
+        <span class="px-2 py-0.5 bg-[#49f4c8]/10 text-[#49f4c8] rounded text-xs border border-[#49f4c8]/20">实盘开仓白名单</span>
+        <span id="hdr-update" class="text-xs text-gray-500">--</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="relative w-48">
+          <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">search</span>
+          <input id="search-input" type="text" placeholder="搜索交易对..." oninput="filterTable()" class="w-full bg-[#0d1117] border border-gray-800 rounded-lg pl-10 pr-4 py-1.5 text-sm focus:outline-none focus:border-[#49f4c8] text-gray-200"/>
+        </div>
+        <button onclick="loadData()" class="p-2 text-gray-400 hover:text-[#49f4c8] transition-all" title="刷新"><span class="material-symbols-outlined">refresh</span></button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Page Content -->
+  <div class="pt-24 px-8 pb-12">
+
+    <!-- Stats Row -->
+    <div class="grid grid-cols-4 gap-5 mb-8">
+      <div class="bg-[#0f1520] p-5 rounded-xl border border-gray-800 relative overflow-hidden">
+        <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-[#49f4c8]">workspace_premium</span></div>
+        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">入选交易对数</p>
+        <h4 id="stat-count" class="text-3xl font-mono font-bold text-[#49f4c8]">--</h4>
+      </div>
+      <div class="bg-[#0f1520] p-5 rounded-xl border border-gray-800 relative overflow-hidden">
+        <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-[#49f4c8]">percent</span></div>
+        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">平均胜率</p>
+        <h4 id="stat-winrate" class="text-3xl font-mono font-bold text-white">--</h4>
+      </div>
+      <div class="bg-[#0f1520] p-5 rounded-xl border border-gray-800 relative overflow-hidden">
+        <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-[#49f4c8]">trending_up</span></div>
+        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">总累计盈亏</p>
+        <h4 id="stat-pnl" class="text-3xl font-mono font-bold text-[#49f4c8]">--</h4>
+      </div>
+      <div class="bg-[#0f1520] p-5 rounded-xl border border-gray-800 relative overflow-hidden">
+        <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-gray-700">schedule</span></div>
+        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">最后更新</p>
+        <h4 id="stat-updated" class="text-lg font-mono font-bold text-gray-300">--</h4>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-[#0f1520] rounded-xl border border-gray-800 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+        <h3 class="font-headline font-semibold text-white">交易对表现排行</h3>
+        <span id="table-count" class="text-xs text-gray-500 font-mono">-- / 50 条</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-[#0d1117] text-gray-500 text-xs uppercase tracking-widest">
+            <tr>
+              <th class="px-4 py-3 text-left w-14">排名</th>
+              <th class="sortable px-4 py-3 text-left" onclick="sortBy('symbol')">交易对</th>
+              <th class="sortable px-4 py-3 text-right" onclick="sortBy('total_trades')">总交易数</th>
+              <th class="sortable px-4 py-3 text-center" onclick="sortBy('winning_trades')">盈利 / 亏损</th>
+              <th class="sortable px-4 py-3 text-center" onclick="sortBy('win_rate')">胜率</th>
+              <th class="sortable px-4 py-3 text-right" onclick="sortBy('total_realized_pnl')">累计盈亏</th>
+              <th class="sortable px-4 py-3 text-right" onclick="sortBy('avg_pnl_per_trade')">均盈/均亏</th>
+              <th class="sortable px-4 py-3 text-right" onclick="sortBy('profit_factor')">盈亏比</th>
+              <th class="sortable px-4 py-3 text-right" onclick="sortBy('rank_score')">评分</th>
+              <th class="px-4 py-3 text-right">操作</th>
+            </tr>
+          </thead>
+          <tbody id="top50-tbody">
+            <tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /page content -->
+</main>
+
+<script>
+var _data = [];
+var _sortKey = 'rank_score';
+var _sortAsc = false;
+var _searchVal = '';
+
+function authHeaders() {
+  var token = localStorage.getItem('auth_token') || localStorage.getItem('access_token') || '';
+  return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+}
+
+async function loadData() {
+  document.getElementById('top50-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">加载中...</td></tr>';
+  try {
+    var resp = await fetch('/api/top50', { headers: authHeaders() });
+    var json = await resp.json();
+    if (!json.success) throw new Error(json.detail || json.error || 'API error');
+    _data = json.data || [];
+    updateStats(json.stats || {});
+    render();
+  } catch(e) {
+    document.getElementById('top50-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-red-400">' + e.message + '</td></tr>';
+  }
+}
+
+function updateStats(s) {
+  document.getElementById('stat-count').textContent = s.count || _data.length;
+  var wr = s.avg_win_rate != null ? parseFloat(s.avg_win_rate).toFixed(1) + '%' : '--';
+  document.getElementById('stat-winrate').textContent = wr;
+  var pnl = s.total_pnl != null ? (parseFloat(s.total_pnl) >= 0 ? '+' : '') + parseFloat(s.total_pnl).toFixed(2) + ' U' : '--';
+  var pnlEl = document.getElementById('stat-pnl');
+  pnlEl.textContent = pnl;
+  pnlEl.style.color = s.total_pnl >= 0 ? '#49f4c8' : '#ef4444';
+  var upEl = document.getElementById('stat-updated');
+  var hdrEl = document.getElementById('hdr-update');
+  if (s.last_updated) {
+    var dt = new Date(s.last_updated).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
+    upEl.textContent = dt;
+    hdrEl.textContent = '更新于 ' + dt;
+  }
+}
+
+function sortBy(key) {
+  if (_sortKey === key) { _sortAsc = !_sortAsc; } else { _sortKey = key; _sortAsc = false; }
+  // update header indicators
+  document.querySelectorAll('th.sortable').forEach(function(th) {
+    th.classList.remove('sort-asc', 'sort-desc');
+  });
+  var ths = document.querySelectorAll('th.sortable');
+  var keys = ['symbol','total_trades','winning_trades','win_rate','total_realized_pnl','avg_pnl_per_trade','profit_factor','rank_score'];
+  var idx = keys.indexOf(key);
+  if (idx >= 0 && ths[idx]) {
+    ths[idx].classList.add(_sortAsc ? 'sort-asc' : 'sort-desc');
+  }
+  render();
+}
+
+function filterTable() {
+  _searchVal = (document.getElementById('search-input').value || '').trim().toUpperCase();
+  render();
+}
+
+function render() {
+  var rows = _data.slice();
+
+  // filter
+  if (_searchVal) {
+    rows = rows.filter(function(r) { return r.symbol.toUpperCase().indexOf(_searchVal) >= 0; });
+  }
+
+  // sort
+  var key = _sortKey;
+  rows.sort(function(a, b) {
+    var av = a[key], bv = b[key];
+    if (typeof av === 'string') return _sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+    av = parseFloat(av) || 0;
+    bv = parseFloat(bv) || 0;
+    return _sortAsc ? av - bv : bv - av;
+  });
+
+  // count
+  document.getElementById('table-count').textContent = rows.length + ' / ' + _data.length + ' 条';
+
+  if (rows.length === 0) {
+    document.getElementById('top50-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">暂无数据</td></tr>';
+    return;
+  }
+
+  var html = rows.map(function(r, idx) {
+    var rank = r.rank_score;
+    var rankBadge, rowCls = '';
+    if (rank === _data.length) {
+      rankBadge = '<span class="rank-gold inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold">1</span>';
+      rowCls = 'top1';
+    } else if (rank === _data.length - 1) {
+      rankBadge = '<span class="rank-silver inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold">2</span>';
+      rowCls = 'top2';
+    } else if (rank === _data.length - 2) {
+      rankBadge = '<span class="rank-bronze inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold">3</span>';
+      rowCls = 'top3';
+    } else {
+      var displayRank = _data.length - rank + 1;
+      rankBadge = '<span class="rank-normal inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold">' + displayRank + '</span>';
+    }
+
+    var wr = parseFloat(r.win_rate) || 0;
+    var wrBar = '<div class="flex items-center gap-2"><div class="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden"><div class="h-full rounded-full bg-[#49f4c8]" style="width:' + Math.min(wr, 100) + '%"></div></div><span class="font-mono text-xs ' + (wr >= 60 ? 'text-[#49f4c8]' : wr >= 50 ? 'text-yellow-400' : 'text-red-400') + '">' + wr.toFixed(1) + '%</span></div>';
+
+    var pnl = parseFloat(r.total_realized_pnl) || 0;
+    var pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + ' U';
+    var pnlCls = pnl >= 0 ? 'text-[#49f4c8]' : 'text-red-400';
+
+    var avg = parseFloat(r.avg_pnl_per_trade) || 0;
+    var avgStr = (avg >= 0 ? '+' : '') + avg.toFixed(2) + ' U';
+    var avgCls = avg >= 0 ? 'text-[#49f4c8]' : 'text-red-400';
+
+    var pf = parseFloat(r.profit_factor) || 0;
+    var pfStr = pf > 0 ? pf.toFixed(2) + 'x' : '--';
+    var pfCls = pf >= 1.5 ? 'text-[#49f4c8]' : pf >= 1 ? 'text-yellow-400' : 'text-red-400';
+
+    var symShort = r.symbol.replace('/USDT', '').replace('/USD', '');
+
+    return [
+      '<tr class="border-t border-gray-800/50 hover:bg-[#151a20] transition-colors ' + rowCls + '">',
+      '  <td class="px-4 py-3">' + rankBadge + '</td>',
+      '  <td class="px-4 py-3"><div class="flex items-center gap-2"><span class="font-mono font-bold text-white">' + symShort + '</span><span class="text-[10px] text-gray-500">USDT</span></div></td>',
+      '  <td class="px-4 py-3 text-right font-mono text-gray-300">' + (r.total_trades || 0) + '</td>',
+      '  <td class="px-4 py-3 text-center font-mono text-xs"><span class="text-[#49f4c8]">' + (r.winning_trades || 0) + 'W</span> / <span class="text-red-400">' + (r.losing_trades || 0) + 'L</span></td>',
+      '  <td class="px-4 py-3" style="min-width:120px">' + wrBar + '</td>',
+      '  <td class="px-4 py-3 text-right font-mono font-bold ' + pnlCls + '">' + pnlStr + '</td>',
+      '  <td class="px-4 py-3 text-right font-mono text-xs ' + avgCls + '">' + avgStr + '</td>',
+      '  <td class="px-4 py-3 text-right font-mono text-xs ' + pfCls + '">' + pfStr + '</td>',
+      '  <td class="px-4 py-3 text-right"><span class="font-mono text-xs text-gray-400">' + (r.rank_score || 0) + '</span></td>',
+      '  <td class="px-4 py-3 text-right"><button onclick="addToBlacklist(\'' + r.symbol.replace(/'/g, "\\'") + '\')" class="text-[10px] px-2 py-1 rounded border border-gray-700 text-gray-500 hover:border-red-500 hover:text-red-400 transition-all font-mono">加入黑名单</button></td>',
+      '</tr>'
+    ].join('\n');
+  }).join('\n');
+
+  document.getElementById('top50-tbody').innerHTML = html;
+}
+
+async function addToBlacklist(symbol) {
+  var ok = await showConfirm('将 ' + symbol + ' 加入黑名单 1 级（限制保证金）？', {
+    title: '加入黑名单',
+    confirmText: '确认',
+    type: 'warning'
+  });
+  if (!ok) return;
+  try {
+    var resp = await fetch('/api/rating/update', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({ symbol: symbol, rating_level: 1, reason: 'manual from top50 page' })
+    });
+    var res = await resp.json();
+    if (res.success) {
+      showToast(symbol + ' 已加入黑名单 1 级', 'success');
+    } else {
+      showToast((res.detail || res.error || '操作失败'), 'error');
+    }
+  } catch(e) {
+    showToast('请求失败: ' + e.message, 'error');
+  }
+}
+
+document.addEventListener('DOMContentLoaded', loadData);
+</script>
+</body>
+</html>

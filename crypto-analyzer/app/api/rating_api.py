@@ -8,6 +8,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict, List
+from loguru import logger
 import sys
 import os
 import math
@@ -233,6 +234,61 @@ async def set_symbol_rating(request: ManualRatingRequest):
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/top50")
+async def get_top50():
+    """获取 TOP50 高胜率交易对列表及统计"""
+    import pymysql
+    try:
+        conn = pymysql.connect(**DB_CONFIG, cursorclass=pymysql.cursors.DictCursor)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT symbol, total_realized_pnl, total_trades, winning_trades, losing_trades,
+                   win_rate, avg_pnl_per_trade, max_single_profit, max_single_loss,
+                   profit_factor, rank_score, last_updated
+            FROM top_performing_symbols
+            ORDER BY rank_score DESC
+            LIMIT 50
+        """)
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        data = []
+        for r in rows:
+            data.append({
+                'symbol':             r['symbol'],
+                'total_realized_pnl': float(r['total_realized_pnl'] or 0),
+                'total_trades':       int(r['total_trades'] or 0),
+                'winning_trades':     int(r['winning_trades'] or 0),
+                'losing_trades':      int(r['losing_trades'] or 0),
+                'win_rate':           float(r['win_rate'] or 0),
+                'avg_pnl_per_trade':  float(r['avg_pnl_per_trade'] or 0),
+                'max_single_profit':  float(r['max_single_profit'] or 0) if r['max_single_profit'] is not None else 0,
+                'max_single_loss':    float(r['max_single_loss'] or 0) if r['max_single_loss'] is not None else 0,
+                'profit_factor':      float(r['profit_factor'] or 0) if r['profit_factor'] is not None else 0,
+                'rank_score':         int(r['rank_score'] or 0),
+                'last_updated':       r['last_updated'].isoformat() if r['last_updated'] else None,
+            })
+
+        total_pnl = sum(r['total_realized_pnl'] for r in data)
+        avg_wr = (sum(r['win_rate'] for r in data) / len(data)) if data else 0
+        last_updated = data[0]['last_updated'] if data else None
+
+        return {
+            'success': True,
+            'data': data,
+            'stats': {
+                'count':         len(data),
+                'total_pnl':     round(total_pnl, 2),
+                'avg_win_rate':  round(avg_wr, 2),
+                'last_updated':  last_updated,
+            }
+        }
+    except Exception as e:
+        logger.error(f"获取TOP50失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

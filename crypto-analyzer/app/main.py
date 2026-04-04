@@ -1330,6 +1330,15 @@ def paper_trading_page():
         raise HTTPException(status_code=404, detail=f"Paper trading page not found at {trading_path}")
 
 
+@app.get("/top50")
+async def top50_page():
+    """TOP50高胜率交易对页面"""
+    p = project_root / "templates" / "top50.html"
+    if p.exists():
+        return FileResponse(str(p))
+    raise HTTPException(status_code=404, detail="TOP50 page not found")
+
+
 @app.get("/symbol_blacklist")
 async def symbol_blacklist_page():
     """黑名单管理页面"""
