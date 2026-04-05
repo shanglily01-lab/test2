@@ -193,6 +193,12 @@ class ScoringWeightOptimizer:
         else:
             adjustment = 0
 
+        # LONG 方向只允许加分，不允许减分
+        # 原因：Big4 过滤器已负责市场方向判断，熊市期间多头表现差是市场环境问题而非信号问题
+        # 允许 optimizer 减少多头权重会导致恶性循环：熊市压低多头权重→更难开多→数据更少→继续压低
+        if side == 'LONG' and adjustment < 0:
+            adjustment = 0
+
         # 应用调整，使用组件最低保护地板（关键信号不低于保护值）
         min_floor = self.COMPONENT_MIN_WEIGHTS.get(component, 5) if side == 'SHORT' else 5
         new_weight = max(min_floor, min(30, current_weight + adjustment))
