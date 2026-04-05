@@ -924,6 +924,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 信号黑名单管理API路由
+try:
+    from app.api.signal_blacklist_api import router as signal_blacklist_router
+    app.include_router(signal_blacklist_router)
+    logger.info("✅ 信号黑名单API路由已注册（/api/signal_blacklist）")
+except Exception as e:
+    logger.warning(f"⚠️  信号黑名单API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # ==================== API路由 ====================
 
 @app.get("/")
@@ -1346,6 +1356,15 @@ async def symbol_blacklist_page():
     if p.exists():
         return FileResponse(str(p))
     raise HTTPException(status_code=404, detail="Symbol blacklist page not found")
+
+
+@app.get("/signal_blacklist")
+async def signal_blacklist_page():
+    """信号黑名单管理页面"""
+    p = project_root / "templates" / "signal_blacklist.html"
+    if p.exists():
+        return FileResponse(str(p))
+    raise HTTPException(status_code=404, detail="Signal blacklist page not found")
 
 
 @app.get("/spot_trading")

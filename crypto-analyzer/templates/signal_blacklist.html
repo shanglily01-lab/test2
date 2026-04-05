@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>超级大脑 - 信号黑名单管理</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { primary: "#49f4c8", bg: "#070b10", surface: "#0f1520", sidebar: "#0d1117", border: "#0f1520" },
+          status: { success: "#49f4c8", warning: "#facc15", orange: "#f97316", danger: "#ef4444" }
+        },
+        borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
+        fontFamily: {
+          headline: ["Space Grotesk", "sans-serif"],
+          body: ["Manrope", "sans-serif"],
+          label: ["Geist", "sans-serif"],
+          mono: ["JetBrains Mono", "monospace"]
+        }
+      }
+    }
+  }
+</script>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: #070b10; }
+  ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #49f4c8; }
+  .glass { background: rgba(15, 21, 32, 0.92); backdrop-filter: blur(16px); }
+  .nav-active { color: #49f4c8 !important; background: rgba(73,244,200,0.1); border-right: 2px solid #49f4c8; }
+  .seg-active { background: rgba(73,244,200,0.12); color: #49f4c8; border-color: rgba(73,244,200,0.4); }
+  .seg-active-warn { background: rgba(250,204,21,0.10); color: #facc15; border-color: rgba(250,204,21,0.35); }
+  .seg-active-muted { background: rgba(148,163,184,0.10); color: #94a3b8; border-color: rgba(148,163,184,0.3); }
+  tr.data-row:hover td { background: rgba(255,255,255,0.025); }
+  .action-btn { padding: 4px; border-radius: 6px; transition: background 0.15s; cursor: pointer; }
+  .action-btn:hover { background: rgba(255,255,255,0.08); }
+</style>
+</head>
+<body class="bg-[#070b10] text-gray-200 font-body antialiased">
+
+<!-- Sidebar -->
+<aside class="fixed left-0 top-0 h-screen w-[240px] bg-[#0d1117] border-r border-[#0f1520] flex flex-col py-6 z-50">
+  <div class="px-6 mb-8">
+    <a href="/" class="flex items-center gap-3">
+      <div class="w-8 h-8 bg-[#49f4c8]/10 rounded flex items-center justify-center">
+        <span class="material-symbols-outlined text-[#49f4c8]">psychology</span>
+      </div>
+      <div>
+        <h1 class="text-[#49f4c8] font-bold text-xl tracking-tight font-headline">超级大脑</h1>
+        <p class="text-[10px] text-gray-500 font-mono tracking-widest uppercase">Quant Trading Platform</p>
+      </div>
+    </a>
+  </div>
+  <nav class="flex-1 overflow-y-auto space-y-0.5 px-3" id="sidebar-nav">
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/dashboard" href="/dashboard"><span class="material-symbols-outlined text-lg">dashboard</span><span>Dashboard</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/futures_trading" href="/futures_trading"><span class="material-symbols-outlined text-lg">show_chart</span><span>U本位合约</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/coin_futures_trading" href="/coin_futures_trading"><span class="material-symbols-outlined text-lg">currency_bitcoin</span><span>币本位合约</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/live_trading" href="/live_trading"><span class="material-symbols-outlined text-lg">precision_manufacturing</span><span>Live Trading</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/futures_review" href="/futures_review"><span class="material-symbols-outlined text-lg">history_edu</span><span>复盘分析</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/technical-signals" href="/technical-signals"><span class="material-symbols-outlined text-lg">sensors</span><span>信号分析</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/market_regime" href="/market_regime"><span class="material-symbols-outlined text-lg">pulse_alert</span><span>行情识别</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/symbol_blacklist" href="/symbol_blacklist"><span class="material-symbols-outlined text-lg">block</span><span>交易对黑名单</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/signal_blacklist" href="/signal_blacklist"><span class="material-symbols-outlined text-lg">do_not_disturb_on</span><span>信号黑名单</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/spot_trading" href="/spot_trading"><span class="material-symbols-outlined text-lg">currency_exchange</span><span>现货交易</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/etf_data" href="/etf_data"><span class="material-symbols-outlined text-lg">candlestick_chart</span><span>ETF 数据</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/blockchain_gas" href="/blockchain_gas"><span class="material-symbols-outlined text-lg">local_gas_station</span><span>Gas 监控</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/corporate_treasury" href="/corporate_treasury"><span class="material-symbols-outlined text-lg">account_balance</span><span>企业金库</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/data_management" href="/data_management"><span class="material-symbols-outlined text-lg">storage</span><span>数据管理</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/api-keys" href="/api-keys"><span class="material-symbols-outlined text-lg">api</span><span>API Keys</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/system-settings" href="/system-settings"><span class="material-symbols-outlined text-lg">settings</span><span>Settings</span></a>
+  </nav>
+</aside>
+
+<!-- Main -->
+<main class="pl-[240px]">
+  <!-- Header -->
+  <header class="fixed top-0 right-0 left-[240px] h-16 bg-[#070b10] border-b border-[#0f1520] z-40">
+    <div class="flex items-center justify-between px-6 w-full h-full font-mono">
+      <div class="flex items-center gap-4">
+        <h2 class="text-lg font-bold text-white">信号黑名单管理</h2>
+        <span id="total-badge" class="px-3 py-1 bg-gray-800 text-gray-400 rounded-full text-xs">加载中...</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <button onclick="openAddModal()" class="flex items-center gap-1.5 text-[#070b10] bg-[#49f4c8] hover:bg-[#3de2b8] px-4 py-1.5 rounded text-sm font-bold transition-all active:scale-95 shadow-[0_0_16px_rgba(73,244,200,0.3)]">
+          <span class="material-symbols-outlined text-base">add</span>添加黑名单
+        </button>
+        <button onclick="loadData()" class="p-2 text-gray-400 hover:text-[#49f4c8] transition-all" title="刷新"><span class="material-symbols-outlined">refresh</span></button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Page Content -->
+  <div class="pt-24 px-8 pb-12">
+
+    <!-- Stats Row -->
+    <div class="grid grid-cols-4 gap-6 mb-8">
+      <div class="bg-brand-surface p-6 rounded-xl border border-gray-800 relative overflow-hidden">
+        <div class="absolute right-[-10px] bottom-[-10px] opacity-10"><span class="material-symbols-outlined text-6xl text-gray-400">do_not_disturb_on</span></div>
+        <p class="text-gray-500 text-sm font-medium mb-1">全部信号</p>
+        <h4 id="stat-total" class="text-3xl font-mono font-bold text-white">--</h4>
+        <p class="text-[10px] text-gray-600 mt-2 uppercase tracking-wider">黑名单条目</p>
+      </div>
+      <div class="bg-brand-surface p-6 rounded-xl border border-gray-800 relative overflow-hidden">
+        <div class="absolute right-[-10px] bottom-[-10px] opacity-10"><span class="material-symbols-outlined text-6xl text-status-success">check_circle</span></div>
+        <p class="text-gray-500 text-sm font-medium mb-1">已启用</p>
+        <h4 id="stat-active" class="text-3xl font-mono font-bold text-status-success">--</h4>
+        <p class="text-[10px] text-gray-600 mt-2 flex items-center gap-1 uppercase tracking-wider"><span class="w-1.5 h-1.5 rounded-full bg-status-success"></span>当前生效</p>
+      </div>
+      <div class="bg-brand-surface p-6 rounded-xl border border-gray-800 relative overflow-hidden">
+        <div class="absolute right-[-10px] bottom-[-10px] opacity-10"><span class="material-symbols-outlined text-6xl text-gray-500">pause_circle</span></div>
+        <p class="text-gray-500 text-sm font-medium mb-1">已停用</p>
+        <h4 id="stat-inactive" class="text-3xl font-mono font-bold text-gray-400">--</h4>
+        <p class="text-[10px] text-gray-600 mt-2 flex items-center gap-1 uppercase tracking-wider"><span class="w-1.5 h-1.5 rounded-full bg-gray-500"></span>暂时停用</p>
+      </div>
+      <div class="bg-brand-surface p-6 rounded-xl border border-gray-800 relative overflow-hidden">
+        <div class="absolute right-[-10px] bottom-[-10px] opacity-10"><span class="material-symbols-outlined text-6xl text-status-warning">schedule</span></div>
+        <p class="text-gray-500 text-sm font-medium mb-1">今日新增</p>
+        <h4 id="stat-today" class="text-3xl font-mono font-bold text-status-warning">--</h4>
+        <p class="text-[10px] text-gray-600 mt-2 uppercase tracking-wider">24 小时内</p>
+      </div>
+    </div>
+
+    <!-- Filter + Search Bar -->
+    <div class="flex items-center gap-3 mb-6">
+      <!-- Direction toggle -->
+      <div class="flex items-center bg-[#0d1117] rounded-md p-0.5 border border-gray-800 font-mono text-xs">
+        <button id="seg-all"   onclick="setSide('')"      class="px-3 py-1.5 rounded seg-active transition-all">全部</button>
+        <button id="seg-long"  onclick="setSide('LONG')"  class="px-3 py-1.5 rounded text-gray-400 hover:text-white transition-all">LONG</button>
+        <button id="seg-short" onclick="setSide('SHORT')" class="px-3 py-1.5 rounded text-gray-400 hover:text-white transition-all">SHORT</button>
+      </div>
+      <!-- Status toggle -->
+      <div class="flex items-center bg-[#0d1117] rounded-md p-0.5 border border-gray-800 font-mono text-xs">
+        <button id="seg-status-all"      onclick="setActiveFilter(null)"  class="px-3 py-1.5 rounded seg-active transition-all">全部状态</button>
+        <button id="seg-status-active"   onclick="setActiveFilter(1)"     class="px-3 py-1.5 rounded text-gray-400 hover:text-white transition-all">已启用</button>
+        <button id="seg-status-inactive" onclick="setActiveFilter(0)"     class="px-3 py-1.5 rounded text-gray-400 hover:text-white transition-all">已停用</button>
+      </div>
+      <!-- Search -->
+      <div class="relative flex-1 max-w-xs group">
+        <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg group-focus-within:text-[#49f4c8]">search</span>
+        <input id="search-input" type="text" placeholder="搜索信号类型..." oninput="onSearchInput()"
+               class="w-full bg-[#0d1117] border border-gray-800 rounded-lg pl-10 pr-4 py-1.5 text-sm focus:outline-none focus:border-[#49f4c8] text-gray-200 font-mono"/>
+      </div>
+      <div class="flex-1"></div>
+      <span id="result-count" class="text-xs text-gray-500 font-mono"></span>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-brand-surface border border-gray-800 rounded-xl overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm font-mono">
+          <thead>
+            <tr class="border-b border-gray-800 text-gray-500 text-xs uppercase tracking-wider">
+              <th class="px-4 py-3 text-left w-12">ID</th>
+              <th class="px-4 py-3 text-left">信号类型</th>
+              <th class="px-4 py-3 text-center w-20">方向</th>
+              <th class="px-4 py-3 text-center w-24">状态</th>
+              <th class="px-4 py-3 text-right w-20">胜率</th>
+              <th class="px-4 py-3 text-right w-28">累计亏损</th>
+              <th class="px-4 py-3 text-right w-20">次数</th>
+              <th class="px-4 py-3 text-left w-32">拉入时间</th>
+              <th class="px-4 py-3 text-left">备注</th>
+              <th class="px-4 py-3 text-center w-28">操作</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <tr><td colspan="10" class="text-center text-gray-500 py-16">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <!-- Pagination -->
+      <div class="flex items-center justify-between px-6 py-4 border-t border-gray-800 text-xs font-mono text-gray-500">
+        <span id="page-info"></span>
+        <div class="flex items-center gap-1" id="page-btns"></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- Add/Edit Modal -->
+<div id="modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+  <div class="glass w-full max-w-lg border border-gray-800 rounded-2xl overflow-hidden shadow-2xl">
+    <div class="p-6 border-b border-gray-800 flex justify-between items-center">
+      <h3 id="modal-title" class="text-xl font-bold font-headline">添加信号黑名单</h3>
+      <button onclick="closeModal()" class="text-gray-400 hover:text-white transition-colors"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="p-6 space-y-5">
+      <input type="hidden" id="modal-id" value=""/>
+      <!-- Signal type -->
+      <div class="space-y-2">
+        <label class="text-xs text-gray-400 font-mono tracking-wider uppercase">信号类型</label>
+        <input id="modal-signal-type" type="text" placeholder="如: breakdown_short+跌势3%+高波动"
+               class="w-full bg-[#0d1117] border border-gray-800 rounded-lg px-4 py-3 font-mono text-sm focus:border-[#49f4c8] focus:ring-0 text-white outline-none"/>
+      </div>
+      <!-- Direction -->
+      <div class="space-y-2">
+        <label class="text-xs text-gray-400 font-mono tracking-wider uppercase">交易方向</label>
+        <div class="flex gap-3">
+          <button id="dir-long"  onclick="selectDir('LONG')"
+                  class="flex-1 py-2.5 rounded-lg border border-gray-800 bg-[#0d1117] text-gray-400 text-sm font-bold transition-all">
+            LONG
+          </button>
+          <button id="dir-short" onclick="selectDir('SHORT')"
+                  class="flex-1 py-2.5 rounded-lg border border-gray-800 bg-[#0d1117] text-gray-400 text-sm font-bold transition-all">
+            SHORT
+          </button>
+        </div>
+      </div>
+      <!-- Active switch -->
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-sm text-gray-200 font-medium">启用状态</p>
+          <p class="text-xs text-gray-500">关闭后此信号不再被拦截</p>
+        </div>
+        <button id="toggle-active" onclick="toggleActive()"
+                class="relative w-12 h-6 rounded-full transition-colors duration-200 bg-[#49f4c8]" aria-pressed="true">
+          <span id="toggle-thumb" class="absolute top-0.5 left-6 w-5 h-5 bg-[#070b10] rounded-full transition-all duration-200 shadow"></span>
+        </button>
+      </div>
+      <!-- Notes -->
+      <div class="space-y-2">
+        <label class="text-xs text-gray-400 font-mono tracking-wider uppercase">备注</label>
+        <textarea id="modal-notes" placeholder="备注或原因..." rows="2"
+                  class="w-full bg-[#0d1117] border border-gray-800 rounded-lg px-4 py-3 text-sm focus:border-[#49f4c8] focus:ring-0 text-white outline-none resize-none"></textarea>
+      </div>
+      <!-- Read-only stats (edit mode only) -->
+      <div id="modal-stats" class="hidden grid grid-cols-3 gap-3 p-4 bg-[#0d1117]/60 rounded-lg border border-gray-800">
+        <div class="text-center">
+          <p class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">胜率</p>
+          <p id="stat-wr" class="text-lg font-mono font-bold text-white">--</p>
+        </div>
+        <div class="text-center">
+          <p class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">累计亏损</p>
+          <p id="stat-loss" class="text-lg font-mono font-bold text-status-danger">--</p>
+        </div>
+        <div class="text-center">
+          <p class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">开仓次数</p>
+          <p id="stat-cnt" class="text-lg font-mono font-bold text-white">--</p>
+        </div>
+      </div>
+      <!-- Error -->
+      <div id="modal-error" class="hidden text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2"></div>
+    </div>
+    <div class="p-6 bg-[#0d1117]/50 border-t border-gray-800 flex gap-3">
+      <button onclick="closeModal()" class="flex-1 px-4 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold transition-all text-sm">取消</button>
+      <button onclick="submitForm()" class="flex-[2] px-4 py-3 rounded-lg bg-[#49f4c8] hover:bg-[#3de2b8] text-[#070b10] font-bold transition-all text-sm shadow-[0_0_20px_rgba(73,244,200,0.3)]">确认保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Delete Modal -->
+<div id="del-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+  <div class="glass w-full max-w-sm border border-gray-800 rounded-2xl overflow-hidden shadow-2xl p-6 space-y-4">
+    <div class="flex items-center gap-3">
+      <span class="material-symbols-outlined text-status-danger text-2xl">warning</span>
+      <h3 class="text-lg font-bold">确认删除</h3>
+    </div>
+    <p class="text-sm text-gray-400">删除后无法恢复，确定要删除该信号黑名单条目吗？</p>
+    <p id="del-signal-type" class="text-xs font-mono text-gray-300 bg-[#0d1117] rounded px-3 py-2 break-all"></p>
+    <div class="flex gap-3 pt-2">
+      <button onclick="closeDelModal()" class="flex-1 py-2.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold text-sm transition-all">取消</button>
+      <button onclick="confirmDelete()" class="flex-1 py-2.5 rounded-lg bg-status-danger hover:bg-red-600 text-white font-bold text-sm transition-all">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="hidden fixed bottom-6 right-6 z-50 bg-[#0d1117] border border-gray-800 rounded-xl px-4 py-3 text-sm text-gray-200 shadow-xl flex items-center gap-2">
+  <span id="toast-icon" class="material-symbols-outlined text-[18px] text-[#49f4c8]">check_circle</span>
+  <span id="toast-msg"></span>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+var currentSide = '';
+var currentActiveFilter = null;
+var currentPage = 1;
+var pageSize = 30;
+var totalItems = 0;
+var searchTimer = null;
+var modalIsActive = true;
+var selectedDir = 'LONG';
+var deleteTargetId = null;
+
+// ── Filters ────────────────────────────────────────────────────────────────
+function setSide(side) {
+  currentSide = side;
+  currentPage = 1;
+  ['all','long','short'].forEach(function(k) {
+    var el = document.getElementById('seg-' + k);
+    el.className = el.className.replace(/seg-active\S*/g,'').trim() + ' text-gray-400';
+  });
+  var key = side === 'LONG' ? 'long' : side === 'SHORT' ? 'short' : 'all';
+  var el = document.getElementById('seg-' + key);
+  el.className = el.className.replace('text-gray-400','').trim() + ' seg-active';
+  loadData();
+}
+
+function setActiveFilter(val) {
+  currentActiveFilter = val;
+  currentPage = 1;
+  ['all','active','inactive'].forEach(function(k) {
+    var el = document.getElementById('seg-status-' + k);
+    el.className = el.className.replace(/seg-active\S*/g,'').trim() + ' text-gray-400';
+  });
+  var key = val === 1 ? 'active' : val === 0 ? 'inactive' : 'all';
+  var el = document.getElementById('seg-status-' + key);
+  el.className = el.className.replace('text-gray-400','').trim() + ' seg-active';
+  loadData();
+}
+
+function onSearchInput() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(function() {
+    currentPage = 1;
+    loadData();
+  }, 300);
+}
+
+// ── Load Data ──────────────────────────────────────────────────────────────
+async function loadData() {
+  var tbody = document.getElementById('table-body');
+  tbody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-16">加载中...</td></tr>';
+
+  var q = document.getElementById('search-input').value.trim();
+  var params = new URLSearchParams({ page: currentPage, page_size: pageSize });
+  if (currentSide) params.set('side', currentSide);
+  if (currentActiveFilter !== null) params.set('is_active', currentActiveFilter);
+  if (q) params.set('q', q);
+
+  try {
+    var r = await fetch('/api/signal_blacklist?' + params.toString());
+    var data = await r.json();
+    if (!data.success) throw new Error(data.detail || '加载失败');
+
+    totalItems = data.total;
+
+    // Update stats
+    document.getElementById('stat-total').textContent    = data.stats.total;
+    document.getElementById('stat-active').textContent   = data.stats.active;
+    document.getElementById('stat-inactive').textContent = data.stats.inactive;
+    document.getElementById('stat-today').textContent    = data.stats.today;
+    document.getElementById('total-badge').textContent   = '共 ' + data.stats.total + ' 条';
+    document.getElementById('result-count').textContent  = data.total > 0 ? ('筛选结果 ' + data.total + ' 条') : '';
+
+    renderTable(data.data);
+    renderPagination();
+  } catch(e) {
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-red-400 py-16">加载失败: ' + esc(e.message) + '</td></tr>';
+  }
+}
+
+// ── Render Table ───────────────────────────────────────────────────────────
+function renderTable(rows) {
+  var tbody = document.getElementById('table-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-16">暂无数据</td></tr>';
+    return;
+  }
+
+  var html = '';
+  rows.forEach(function(r) {
+    var sideBadge = r.position_side === 'LONG'
+      ? '<span class="px-2 py-0.5 text-[10px] font-bold rounded bg-red-500/15 text-red-400 border border-red-500/25">LONG</span>'
+      : '<span class="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-500/15 text-blue-400 border border-blue-500/25">SHORT</span>';
+
+    var statusDot = r.is_active
+      ? '<span class="inline-flex items-center gap-1.5 text-status-success text-xs"><span class="w-1.5 h-1.5 rounded-full bg-status-success"></span>已启用</span>'
+      : '<span class="inline-flex items-center gap-1.5 text-gray-500 text-xs"><span class="w-1.5 h-1.5 rounded-full bg-gray-600"></span>已停用</span>';
+
+    var winRate = r.win_rate > 0 ? (r.win_rate * 100).toFixed(1) + '%' : '--';
+    var totalLoss = r.total_loss < 0 ? '-$' + Math.abs(r.total_loss).toFixed(2) : (r.total_loss > 0 ? '$' + r.total_loss.toFixed(2) : '--');
+    var lossClass = r.total_loss < 0 ? 'text-status-danger' : 'text-gray-400';
+    var createdAt = r.created_at ? r.created_at.substring(0,10) : '--';
+
+    html += '<tr class="data-row border-b border-gray-800/50 transition-colors">';
+    html += '<td class="px-4 py-3 text-gray-500 text-xs">' + r.id + '</td>';
+    html += '<td class="px-4 py-3 max-w-xs"><span class="text-xs font-mono text-gray-200 break-all">' + esc(r.signal_type) + '</span></td>';
+    html += '<td class="px-4 py-3 text-center">' + sideBadge + '</td>';
+    html += '<td class="px-4 py-3 text-center">' + statusDot + '</td>';
+    html += '<td class="px-4 py-3 text-right text-xs ' + (parseFloat(winRate) < 40 ? 'text-status-danger' : 'text-gray-300') + '">' + winRate + '</td>';
+    html += '<td class="px-4 py-3 text-right text-xs ' + lossClass + '">' + totalLoss + '</td>';
+    html += '<td class="px-4 py-3 text-right text-xs text-gray-400">' + (r.order_count || '--') + '</td>';
+    html += '<td class="px-4 py-3 text-xs text-gray-500">' + createdAt + '</td>';
+    html += '<td class="px-4 py-3 text-xs text-gray-500 max-w-[140px] truncate" title="' + esc(r.notes) + '">' + esc(r.notes || '--') + '</td>';
+    html += '<td class="px-4 py-3">';
+    html += '<div class="flex items-center justify-center gap-1">';
+    html += '<button class="action-btn text-[#49f4c8]/70 hover:text-[#49f4c8]" onclick="openEditModal(' + JSON.stringify(r) + ')" title="编辑"><span class="material-symbols-outlined text-base">edit</span></button>';
+    var toggleIcon = r.is_active ? 'toggle_on' : 'toggle_off';
+    var toggleColor = r.is_active ? 'text-status-warning/70 hover:text-status-warning' : 'text-gray-500 hover:text-gray-300';
+    html += '<button class="action-btn ' + toggleColor + '" onclick="doToggle(' + r.id + ')" title="' + (r.is_active ? '停用' : '启用') + '"><span class="material-symbols-outlined text-base">' + toggleIcon + '</span></button>';
+    html += '<button class="action-btn text-gray-500 hover:text-status-danger" onclick="openDelModal(' + r.id + ', \'' + esc(r.signal_type) + '\')" title="删除"><span class="material-symbols-outlined text-base">delete</span></button>';
+    html += '</div></td>';
+    html += '</tr>';
+  });
+
+  tbody.innerHTML = html;
+}
+
+// ── Pagination ─────────────────────────────────────────────────────────────
+function renderPagination() {
+  var totalPages = Math.ceil(totalItems / pageSize) || 1;
+  document.getElementById('page-info').textContent = '共 ' + totalItems + ' 条  第 ' + currentPage + ' / ' + totalPages + ' 页';
+
+  var html = '';
+  // Prev
+  html += '<button onclick="goPage(' + (currentPage-1) + ')" ' + (currentPage <= 1 ? 'disabled' : '') + ' class="px-2 py-1 rounded border border-gray-800 text-gray-400 hover:border-[#49f4c8] hover:text-[#49f4c8] disabled:opacity-30 disabled:cursor-not-allowed transition-all">«</button>';
+
+  var start = Math.max(1, currentPage - 2);
+  var end   = Math.min(totalPages, currentPage + 2);
+  for (var p = start; p <= end; p++) {
+    var active = p === currentPage;
+    html += '<button onclick="goPage(' + p + ')" class="px-2 py-1 rounded border ' + (active ? 'border-[#49f4c8] text-[#49f4c8] bg-[#49f4c8]/10' : 'border-gray-800 text-gray-400 hover:border-[#49f4c8] hover:text-[#49f4c8]') + ' transition-all">' + p + '</button>';
+  }
+
+  // Next
+  html += '<button onclick="goPage(' + (currentPage+1) + ')" ' + (currentPage >= totalPages ? 'disabled' : '') + ' class="px-2 py-1 rounded border border-gray-800 text-gray-400 hover:border-[#49f4c8] hover:text-[#49f4c8] disabled:opacity-30 disabled:cursor-not-allowed transition-all">»</button>';
+
+  document.getElementById('page-btns').innerHTML = html;
+}
+
+function goPage(p) {
+  var totalPages = Math.ceil(totalItems / pageSize) || 1;
+  if (p < 1 || p > totalPages) return;
+  currentPage = p;
+  loadData();
+}
+
+// ── Modal (Add/Edit) ────────────────────────────────────────────────────────
+function openAddModal() {
+  document.getElementById('modal-id').value = '';
+  document.getElementById('modal-signal-type').value = '';
+  document.getElementById('modal-notes').value = '';
+  document.getElementById('modal-error').classList.add('hidden');
+  document.getElementById('modal-stats').classList.add('hidden');
+  document.getElementById('modal-title').textContent = '添加信号黑名单';
+  selectDir('LONG');
+  setModalActive(true);
+  document.getElementById('modal').classList.remove('hidden');
+  setTimeout(function(){ document.getElementById('modal-signal-type').focus(); }, 50);
+}
+
+function openEditModal(row) {
+  document.getElementById('modal-id').value = row.id;
+  document.getElementById('modal-signal-type').value = row.signal_type || '';
+  document.getElementById('modal-notes').value = row.notes || '';
+  document.getElementById('modal-error').classList.add('hidden');
+  document.getElementById('modal-title').textContent = '编辑信号黑名单';
+  selectDir(row.position_side || 'LONG');
+  setModalActive(row.is_active === 1 || row.is_active === true);
+
+  // Show stats
+  var statsEl = document.getElementById('modal-stats');
+  if (row.win_rate > 0 || row.total_loss !== 0 || row.order_count > 0) {
+    statsEl.classList.remove('hidden');
+    document.getElementById('stat-wr').textContent    = row.win_rate > 0 ? (row.win_rate * 100).toFixed(1) + '%' : '--';
+    document.getElementById('stat-loss').textContent  = row.total_loss < 0 ? '-$' + Math.abs(row.total_loss).toFixed(2) : '--';
+    document.getElementById('stat-cnt').textContent   = row.order_count || '--';
+  } else {
+    statsEl.classList.add('hidden');
+  }
+
+  document.getElementById('modal').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.add('hidden');
+}
+
+function selectDir(dir) {
+  selectedDir = dir;
+  var longBtn  = document.getElementById('dir-long');
+  var shortBtn = document.getElementById('dir-short');
+  if (dir === 'LONG') {
+    longBtn.className  = longBtn.className.replace(/border-gray-800|text-gray-400/g,'').trim()  + ' border-red-500/50 text-red-400 bg-red-500/10';
+    shortBtn.className = shortBtn.className.replace(/border-red-500\/50|text-red-400|bg-red-500\/10|border-blue-500\/50|text-blue-400|bg-blue-500\/10/g,'').trim() + ' border-gray-800 text-gray-400';
+  } else {
+    shortBtn.className = shortBtn.className.replace(/border-gray-800|text-gray-400/g,'').trim()  + ' border-blue-500/50 text-blue-400 bg-blue-500/10';
+    longBtn.className  = longBtn.className.replace(/border-red-500\/50|text-red-400|bg-red-500\/10|border-blue-500\/50|text-blue-400|bg-blue-500\/10/g,'').trim() + ' border-gray-800 text-gray-400';
+  }
+}
+
+function setModalActive(val) {
+  modalIsActive = val;
+  var btn   = document.getElementById('toggle-active');
+  var thumb = document.getElementById('toggle-thumb');
+  if (val) {
+    btn.className   = btn.className.replace('bg-gray-700','').trim() + ' bg-[#49f4c8]';
+    thumb.className = thumb.className.replace('left-0.5','').trim() + ' left-6';
+  } else {
+    btn.className   = btn.className.replace('bg-[#49f4c8]','').trim() + ' bg-gray-700';
+    thumb.className = thumb.className.replace('left-6','').trim() + ' left-0.5';
+  }
+}
+
+function toggleActive() {
+  setModalActive(!modalIsActive);
+}
+
+async function submitForm() {
+  var id         = document.getElementById('modal-id').value;
+  var signalType = document.getElementById('modal-signal-type').value.trim();
+  var notes      = document.getElementById('modal-notes').value.trim();
+  var errEl      = document.getElementById('modal-error');
+  errEl.classList.add('hidden');
+
+  if (!signalType) {
+    errEl.textContent = '请输入信号类型';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  var body = {
+    signal_type:   signalType,
+    position_side: selectedDir,
+    is_active:     modalIsActive ? 1 : 0,
+    notes:         notes || null,
+  };
+
+  try {
+    var url    = id ? '/api/signal_blacklist/' + id : '/api/signal_blacklist';
+    var method = id ? 'PUT' : 'POST';
+    var r = await fetch(url, {
+      method:  method,
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify(body),
+    });
+    var data = await r.json();
+    if (!data.success) throw new Error(data.detail || '保存失败');
+    closeModal();
+    showToast(id ? '更新成功' : '添加成功', 'check_circle', '#49f4c8');
+    loadData();
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.classList.remove('hidden');
+  }
+}
+
+// ── Toggle ─────────────────────────────────────────────────────────────────
+async function doToggle(id) {
+  try {
+    var r = await fetch('/api/signal_blacklist/' + id + '/toggle', { method: 'POST' });
+    var data = await r.json();
+    if (!data.success) throw new Error(data.detail || '切换失败');
+    showToast(data.message, 'info', '#facc15');
+    loadData();
+  } catch(e) {
+    showToast('切换失败: ' + e.message, 'error', '#ef4444');
+  }
+}
+
+// ── Delete ─────────────────────────────────────────────────────────────────
+function openDelModal(id, signalType) {
+  deleteTargetId = id;
+  document.getElementById('del-signal-type').textContent = signalType;
+  document.getElementById('del-modal').classList.remove('hidden');
+}
+
+function closeDelModal() {
+  deleteTargetId = null;
+  document.getElementById('del-modal').classList.add('hidden');
+}
+
+async function confirmDelete() {
+  if (!deleteTargetId) return;
+  try {
+    var r = await fetch('/api/signal_blacklist/' + deleteTargetId, { method: 'DELETE' });
+    var data = await r.json();
+    if (!data.success) throw new Error(data.detail || '删除失败');
+    closeDelModal();
+    showToast('删除成功', 'check_circle', '#49f4c8');
+    loadData();
+  } catch(e) {
+    showToast('删除失败: ' + e.message, 'error', '#ef4444');
+  }
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+function showToast(msg, icon, color) {
+  var toast = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent  = msg;
+  var iconEl = document.getElementById('toast-icon');
+  iconEl.textContent  = icon === 'error' ? 'error' : (icon || 'check_circle');
+  iconEl.style.color  = color || '#49f4c8';
+  toast.classList.remove('hidden');
+  setTimeout(function(){ toast.classList.add('hidden'); }, 3000);
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+document.querySelectorAll('#sidebar-nav .nav-item').forEach(function(a) {
+  if (a.dataset.path && window.location.pathname === a.dataset.path) {
+    a.classList.add('nav-active');
+  }
+});
+
+document.getElementById('modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+document.getElementById('del-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeDelModal();
+});
+
+loadData();
+</script>
+</body>
+</html>
