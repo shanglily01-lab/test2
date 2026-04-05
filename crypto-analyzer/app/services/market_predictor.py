@@ -418,11 +418,12 @@ class MarketPredictor:
         """
         取 confidence>=70 的预测，按置信度排序，开真实模拟单到 futures_positions
         - 不限制持仓数量，所有合格信号均开单
-        - 模拟盘 400U x5（1级黑名单 100U），止损2%，止盈6%
+        - 模拟盘 400U x5（1级黑名单 100U，2级黑名单 50U），止损2%，止盈6%
         - source='PREDICTOR' 标识来源
         """
         DEFAULT_MARGIN = 400
-        RESTRICTED_MARGIN = 100  # rating_level=1 限制交易对
+        RESTRICTED_MARGIN_L1 = 100  # rating_level=1 限制交易对
+        RESTRICTED_MARGIN_L2 = 50   # rating_level=2 严格限制
         LEVERAGE = 5
         ACCOUNT_ID = 2
         # 从 system_settings 读取止损止盈，默认 2%/5%
@@ -439,14 +440,14 @@ class MarketPredictor:
             SL_PCT = 0.02
             TP_PCT = 0.05
 
-        # 查询 1级黑名单（限制）交易对
+        # 查询黑名单交易对（1级和2级，分别限制保证金）
         try:
             cursor.execute(
-                "SELECT symbol FROM trading_symbol_rating WHERE rating_level=1"
+                "SELECT symbol, rating_level FROM trading_symbol_rating WHERE rating_level IN (1, 2)"
             )
-            restricted_symbols = {r['symbol'] for r in cursor.fetchall()}
+            restricted_symbols = {r['symbol']: r['rating_level'] for r in cursor.fetchall()}
         except Exception:
-            restricted_symbols = set()
+            restricted_symbols = {}
 
         # 已开过的交易对（避免重复开同向仓）
         cursor.execute(
@@ -471,8 +472,14 @@ class MarketPredictor:
             if existing.get(symbol) == direction:
                 continue
 
-            # 根据评级确定保证金：1级限制用 100U，其余用 400U
-            MARGIN = RESTRICTED_MARGIN if symbol in restricted_symbols else DEFAULT_MARGIN
+            # 根据评级确定保证金：1级=100U，2级=50U，默认=400U
+            _level = restricted_symbols.get(symbol, 0)
+            if _level == 1:
+                MARGIN = RESTRICTED_MARGIN_L1
+            elif _level == 2:
+                MARGIN = RESTRICTED_MARGIN_L2
+            else:
+                MARGIN = DEFAULT_MARGIN
 
             # 获取当前价格
             entry_price = self._get_current_price(cursor, symbol)
