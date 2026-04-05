@@ -57,7 +57,7 @@ button,a { -webkit-tap-highlight-color:transparent; }
 <!-- 确认对话框 -->
 <div id="overlay">
     <div class="dialog">
-        <h3 class="font-headline font-bold text-base mb-2">确认平仓</h3>
+        <h3 id="dialogTitle" class="font-headline font-bold text-base mb-2">确认平仓</h3>
         <p id="dialogMsg" class="text-sm text-on-surface-variant mb-6"></p>
         <div class="flex gap-3">
             <button onclick="closeDialog()" class="flex-1 h-11 rounded-xl border border-outline-variant/30 text-on-surface-variant text-sm font-semibold active:scale-95 transition-transform">取消</button>
@@ -104,21 +104,16 @@ button,a { -webkit-tap-highlight-color:transparent; }
         </div>
     </section>
 
-    <!-- 自动交易开关 -->
-    <section class="bg-[#0f1520] border border-[#1e2d45] rounded-xl p-4 flex items-center justify-between">
-        <div>
-            <h3 id="tradingLabel" class="font-bold text-sm">自动交易</h3>
-            <p class="text-[11px] text-on-surface-variant mt-0.5">AI 神经网络策略执行中</p>
+    <!-- 一键平仓 -->
+    <section class="bg-[#0f1520] border border-error/20 rounded-xl p-4 flex items-center justify-between gap-3">
+        <div class="min-w-0">
+            <h3 class="font-bold text-sm text-on-surface">一键平仓</h3>
+            <p class="text-[11px] text-on-surface-variant mt-0.5">平掉全部模拟持仓</p>
         </div>
-        <label class="relative inline-flex items-center cursor-pointer">
-            <input id="tradingToggle" type="checkbox" class="sr-only peer"
-                onchange="toggleTrading(this.checked)"/>
-            <div class="w-11 h-6 bg-surface-container-highest rounded-full peer
-                        peer-checked:after:translate-x-full
-                        after:content-[''] after:absolute after:top-[2px] after:left-[2px]
-                        after:bg-white after:rounded-full after:h-5 after:w-5
-                        after:transition-all peer-checked:bg-primary-container"></div>
-        </label>
+        <button onclick="confirmCloseAll()"
+            class="flex-shrink-0 h-10 px-5 rounded-xl bg-error/10 border border-error/40 text-error font-bold text-sm active:bg-error/20 transition-colors">
+            全部平仓
+        </button>
     </section>
 
     <!-- 持仓列表 -->
@@ -180,20 +175,7 @@ async function loadTradingStatus() {
         document.getElementById('tradingDot').className =
             'w-1.5 h-1.5 rounded-full ' + (on ? 'bg-primary animate-pulse' : 'bg-[#44484e]');
         document.getElementById('tradingText').textContent = on ? '交易中' : '已暂停';
-        document.getElementById('tradingLabel').textContent = on ? '自动交易（运行中）' : '自动交易（已暂停）';
-        document.getElementById('tradingToggle').checked = on;
     } catch(e) {}
-}
-
-async function toggleTrading(val) {
-    try {
-        const r = await fetch('/api/system/trading-services', {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ u_futures_trading_enabled: val })
-        }).then(r => r.json());
-        if (r.success) { toast(val ? '交易已启用' : '交易已暂停'); loadTradingStatus(); }
-        else toast('切换失败', 'err');
-    } catch(e) { toast('请求失败', 'err'); }
 }
 
 async function loadStats() {
@@ -297,9 +279,22 @@ async function loadPositions() {
 
 function confirmClose(id, symbol, side) {
     pendingClose = { id, symbol, side };
+    document.getElementById('dialogTitle').textContent = '确认平仓';
     document.getElementById('dialogMsg').textContent =
         `确认平掉 ${symbol} ${side === 'LONG' ? '做多' : '做空'} 仓位？`;
+    document.getElementById('dialogConfirm').textContent = '确认平仓';
     document.getElementById('dialogConfirm').onclick = doClose;
+    document.getElementById('overlay').classList.add('show');
+}
+function confirmCloseAll() {
+    const cnt = parseInt(document.getElementById('posCount').textContent) || 0;
+    if (cnt === 0) { toast('当前无持仓', 'err'); return; }
+    pendingClose = null;
+    document.getElementById('dialogTitle').textContent = '一键平仓';
+    document.getElementById('dialogMsg').textContent =
+        `确认平掉全部 ${cnt} 个持仓？此操作不可撤销。`;
+    document.getElementById('dialogConfirm').textContent = '全部平仓';
+    document.getElementById('dialogConfirm').onclick = doCloseAll;
     document.getElementById('overlay').classList.add('show');
 }
 function closeDialog() {
@@ -312,10 +307,27 @@ async function doClose() {
     try {
         const r = await fetch(`${API}/close/${pendingClose.id}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ account_id: 2, reason: 'manual_mobile' })
+            body: JSON.stringify({ reason: 'manual_mobile' })
         }).then(r => r.json());
         if (r.success) { toast('平仓成功'); setTimeout(loadPositions, 800); }
-        else toast('平仓失败: ' + (r.message || ''), 'err');
+        else toast('平仓失败: ' + (r.detail || r.message || ''), 'err');
+    } catch(e) { toast('请求失败', 'err'); }
+}
+async function doCloseAll() {
+    closeDialog();
+    try {
+        const posRes = await fetch(`${API}/positions?account_id=2&status=open`).then(r => r.json());
+        const ids = (posRes.data || []).map(p => p.id);
+        if (!ids.length) { toast('当前无持仓'); return; }
+        const r = await fetch(`${API}/close-batch`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ position_ids: ids, reason: 'manual_close_all' })
+        }).then(r => r.json());
+        if (r.success) {
+            const ok = (r.results || []).filter(x => x.success).length;
+            toast(`已平仓 ${ok}/${ids.length} 个`);
+            setTimeout(loadPositions, 800);
+        } else toast('批量平仓失败', 'err');
     } catch(e) { toast('请求失败', 'err'); }
 }
 
