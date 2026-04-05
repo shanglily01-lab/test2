@@ -193,10 +193,11 @@ class ScoringWeightOptimizer:
         else:
             adjustment = 0
 
-        # LONG 方向只允许加分，不允许减分
-        # 原因：Big4 过滤器已负责市场方向判断，熊市期间多头表现差是市场环境问题而非信号问题
-        # 允许 optimizer 减少多头权重会导致恶性循环：熊市压低多头权重→更难开多→数据更少→继续压低
-        if side == 'LONG' and adjustment < 0:
+        # 只允许加分，不允许减分（多空双向均适用）
+        # 优化目标：放大优质信号的权重，而非压制差信号
+        # 差信号应通过 signal_blacklist 手动禁用，不能依赖减权（减权会造成方向性压制）
+        # 示例：空头行情下空头信号加权，不应同时削减多头权重；反之亦然
+        if adjustment < 0:
             adjustment = 0
 
         # 应用调整，使用组件最低保护地板（关键信号不低于保护值）
