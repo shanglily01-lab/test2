@@ -32,10 +32,6 @@ class SystemSetting(BaseModel):
     description: Optional[str] = None
 
 
-class BatchEntryStrategyUpdate(BaseModel):
-    """分批建仓策略更新"""
-    strategy: str  # 'kline_pullback' or 'price_percentile'
-
 
 class Big4FilterUpdate(BaseModel):
     """Big4过滤器更新"""
@@ -147,57 +143,6 @@ async def get_setting(key: str):
         logger.error(f"获取配置项 {key} 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@router.put("/batch-entry-strategy")
-async def update_batch_entry_strategy(data: BatchEntryStrategyUpdate):
-    """
-    更新分批建仓策略
-
-    Args:
-        data: 策略更新数据
-
-    Returns:
-        更新结果
-    """
-    if data.strategy not in ['kline_pullback', 'price_percentile']:
-        raise HTTPException(
-            status_code=400,
-            detail="策略必须是 'kline_pullback' (V2) 或 'price_percentile' (V1)"
-        )
-
-    try:
-        db_config = get_db_config()
-        conn = pymysql.connect(**db_config)
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            UPDATE system_settings
-            SET setting_value = %s,
-                updated_by = 'web_ui',
-                updated_at = CURRENT_TIMESTAMP
-            WHERE setting_key = 'batch_entry_strategy'
-        """, (data.strategy,))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        strategy_name = 'V2 K线回调策略' if data.strategy == 'kline_pullback' else 'V1 价格分位数策略'
-        logger.info(f"[OK] 分批建仓策略已更新为: {strategy_name} ({data.strategy})")
-
-        return {
-            'success': True,
-            'message': f'策略已更新为 {strategy_name}',
-            'data': {
-                'strategy': data.strategy,
-                'strategy_name': strategy_name,
-                'note': '需要重启服务才能生效'
-            }
-        }
-
-    except Exception as e:
-        logger.error(f"更新分批建仓策略失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.put("/big4-filter")

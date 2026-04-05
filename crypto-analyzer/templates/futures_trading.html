@@ -441,10 +441,17 @@ async function loadPositions() {
         var abbr = sym.replace('USDT','').replace('USD','').substring(0,4);
         var lvg = pos.leverage || 1;
         var openTime = fmtTime(pos.created_at || pos.open_time);
-        var signalType = pos.entry_signal_type || pos.source || '--';
+        var sourceLabels = {
+            'signal_confirm': '信号确认', 'trend_follow': '趋势跟随',
+            'smart_trader': '趋势跟随', 'smart_trader_batch': '趋势跟随', 'smart_trader_batch_v2': '趋势跟随',
+            'BTC_MOMENTUM': 'BTC动量', 'PREDICTOR': '预测神器',
+            'u_coin_style': 'U本位破位', 'manual': '手动'
+        };
+        var srcLabel = sourceLabels[pos.source] || pos.source || '';
+        var signalType = pos.entry_signal_type || '--';
         var entryScore = pos.entry_score ? (' ' + pos.entry_score + 'pt') : '';
         // 截断过长信号名
-        var signalDisplay = signalType.length > 18 ? signalType.substring(0, 18) + '...' : signalType;
+        var signalDisplay = signalType.length > 20 ? signalType.substring(0, 20) + '...' : signalType;
 
         return '<tr class="' + rowBg + ' transition-colors">' +
             '<td class="px-6 py-4">' +
@@ -471,7 +478,8 @@ async function loadPositions() {
                 '<div class="text-[10px] monospace ' + pnlClass + '">' + fmtPnl(pnlPct) + '%</div>' +
             '</td>' +
             '<td class="px-6 py-4">' +
-                '<div class="text-[11px] text-on-surface-variant font-mono max-w-[140px] truncate" title="' + signalType + entryScore + '">' + signalDisplay + '</div>' +
+                (srcLabel ? '<div class="text-[10px] font-bold text-[#49f4c8]/80 mb-0.5">' + srcLabel + '</div>' : '') +
+                '<div class="text-[11px] text-on-surface-variant font-mono max-w-[150px] truncate" title="' + (srcLabel ? '['+srcLabel+'] ' : '') + signalType + entryScore + '">' + signalDisplay + '</div>' +
                 (pos.entry_score ? '<div class="text-[10px] text-on-surface-variant/60">' + pos.entry_score + ' pt</div>' : '') +
             '</td>' +
             '<td class="px-6 py-4">' +

@@ -24,7 +24,6 @@ from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.smart_entry_executor import SmartEntryExecutor
-from app.services.kline_pullback_entry_executor import KlinePullbackEntryExecutor
 from app.services.big4_trend_detector import Big4TrendDetector
 from app.services.breakout_signal_booster import BreakoutSignalBooster
 from app.services.signal_blacklist_checker import SignalBlacklistChecker
@@ -793,6 +792,12 @@ class SmartDecisionBrain:
                     side = 'SHORT'
                 score = long_score if side == 'LONG' else short_score
 
+                # 确定策略模式：信号确认(STRONG) vs 趋势跟随(BULLISH/BEARISH)
+                if side == 'LONG':
+                    strategy_mode = 'signal_confirm' if confirm_long_ok else 'trend_follow'
+                else:
+                    strategy_mode = 'signal_confirm' if confirm_short_ok else 'trend_follow'
+
                 # 🔥 新增：拒绝过高评分的信号（数据显示150+分的信号胜率32.8%，平均亏损-4.82U/单）
                 if score > self.max_threshold:
                     logger.warning(f"{symbol} 评分{score}过高(>{self.max_threshold})，历史数据显示高分信号易追涨杀跌，跳过")
@@ -936,7 +941,8 @@ class SmartDecisionBrain:
                     'signal_components': signal_components,  # 添加信号组成
                     'signal_type': signal_type,  # 添加信号类型，用于模式过滤
                     'signal_time': datetime.now(),  # 🔥 关键修复：记录信号产生的时间
-                    'counter_signals': counter_signal_count  # 🧠 确认偏误防御：反向信号数量
+                    'counter_signals': counter_signal_count,  # 🧠 确认偏误防御：反向信号数量
+                    'strategy_mode': strategy_mode,  # 策略模式：signal_confirm / trend_follow
                 }
 
             return None
@@ -1201,17 +1207,13 @@ class SmartTraderService:
             logger.info(f"⏱️ 最大持仓时间: {self.max_hold_minutes}分钟 ({self.max_hold_minutes//60}小时)")
 
             # 🔥 从数据库读取系统配置（优先级高于config.yaml）
-            from app.services.system_settings_loader import get_big4_filter_enabled, get_batch_entry_strategy
+            from app.services.system_settings_loader import get_big4_filter_enabled
 
             # Big4过滤器配置
             big4_enabled_from_db = get_big4_filter_enabled()
             self.big4_filter_config = {'enabled': big4_enabled_from_db}
             self.brain.big4_filter_enabled = big4_enabled_from_db  # 同步到brain，使analyze()内动态阈值感知过滤器状态
-            logger.info(f"📊 从数据库加载Big4过滤器配置: {'启用' if big4_enabled_from_db else '禁用'}")
-
-            # K线回调建仓策略配置
-            self.batch_entry_strategy = get_batch_entry_strategy()
-            logger.info(f"📊 建仓策略: {self.batch_entry_strategy} ({'V2回调' if self.batch_entry_strategy == 'kline_pullback' else 'V1采样'})")
+            logger.info(f"从数据库加载Big4过滤器配置: {'启用' if big4_enabled_from_db else '禁用'}")
 
         # 初始化 api_key_service 全局单例（供 SmartExitOptimizer._close_live_positions_on_exchange 使用）
         try:
@@ -1250,17 +1252,6 @@ class SmartTraderService:
         )
         logger.info("✅ 价格采样建仓执行器已启动 (V1: 15分钟价格采样，一次性开仓)")
 
-        # 初始化K线回调建仓执行器（V2策略：等待15M阴线回调，一次性开仓）
-        self.pullback_executor = KlinePullbackEntryExecutor(
-            db_config=self.db_config,
-            live_engine=self,
-            price_service=self.ws_service,
-            account_id=self.account_id,
-            brain=self.brain,
-            opt_config=self.opt_config,
-            max_hold_minutes=self.max_hold_minutes
-        )
-        logger.info("✅ K线回调建仓执行器已启动 (V2: 15M阴线回调，一次性开仓)")
 
         # 初始化Big4趋势检测器 (四大天王: BTC/ETH/BNB/SOL)
         self.big4_detector = Big4TrendDetector()
@@ -1951,57 +1942,8 @@ class SmartTraderService:
             logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
             return False
 
-        # ========== 第三步：根据数据库配置选择建仓策略（一次性开仓） ==========
-        # batch_entry_strategy: 'kline_pullback' (V2) or 'price_percentile' (V1)
-
-        # V2策略: K线回调建仓（等待15M阴线，一次性开仓）
-        if self.batch_entry_strategy == 'kline_pullback' and self.pullback_executor and self.event_loop:
-            try:
-                # 准备信号字典
-                signal = {
-                    'symbol': symbol,
-                    'direction': side,
-                    'leverage': self.leverage,
-                    'signal_time': datetime.now(),  # 信号触发时间
-                    'strategy_id': 'smart_trader_v2',
-                    'trade_params': {
-                        'entry_score': opp.get('score', 0),
-                        'signal_components': opp.get('signal_components', {}),
-                        'signal_combination_key': self._generate_signal_combination_key(opp.get('signal_components', {}))
-                    }
-                }
-
-                # 在事件循环中创建异步任务（后台执行）
-                self._pending_entry_count += 1
-
-                async def _run_pullback_and_release(sig):
-                    try:
-                        result = await self.pullback_executor.execute_entry(sig)
-                        if not result.get('success'):
-                            logger.warning(f"[V2-PULLBACK] {sig['symbol']} 回调建仓失败: {result.get('error', 'Unknown')}")
-                    except Exception as e:
-                        logger.error(f"[V2-PULLBACK] {sig['symbol']} 回调建仓任务异常: {e}")
-                    finally:
-                        self._pending_entry_count = max(0, self._pending_entry_count - 1)
-
-                asyncio.run_coroutine_threadsafe(
-                    _run_pullback_and_release(signal),
-                    self.event_loop
-                )
-
-                kline_desc = "阴线" if side == "LONG" else "阳线"
-                logger.info(f"🚀 [V2-PULLBACK] {symbol} {side} K线回调建仓任务已启动 (等待15M{kline_desc}，一次性开仓)")
-                logger.info(f"   📝 信号评分: {opp.get('score', 0)} | 信号组合: {signal['trade_params']['signal_combination_key']}")
-                return True
-
-            except Exception as e:
-                logger.error(f"❌ [V2-PULLBACK-ERROR] {symbol} 启动回调任务失败: {e}")
-                import traceback
-                logger.error(traceback.format_exc())
-                return False  # 避免继续执行回退策略造成重复下单
-
-        # V1策略: 价格采样建仓（15分钟价格采样找最优点，一次性开仓）
-        if self.batch_entry_strategy == 'price_percentile' and self.smart_entry_executor and self.event_loop:
+        # ========== 第三步：价格采样建仓（15分钟采样找最优点，一次性开仓） ==========
+        if self.smart_entry_executor and self.event_loop:
             try:
                 # 准备信号字典
                 signal = {
@@ -2249,6 +2191,9 @@ class SmartTraderService:
             if strategy == 'bollinger_mean_reversion':
                 entry_reason = f"[震荡市] {entry_reason}"
 
+            # 策略模式：signal_confirm / trend_follow，fallback smart_trader（兼容旧路径）
+            position_source = opp.get('strategy_mode', 'smart_trader')
+
             # 插入持仓记录 (包含动态超时字段和计划平仓时间)
             cursor.execute("""
                 INSERT INTO futures_positions
@@ -2257,13 +2202,14 @@ class SmartTraderService:
                  entry_signal_type, entry_reason, entry_score, signal_components, max_hold_minutes, timeout_at,
                  planned_close_time, source, status, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s,
-                        DATE_ADD(NOW(), INTERVAL %s MINUTE), 'smart_trader', 'open', NOW(), NOW())
+                        DATE_ADD(NOW(), INTERVAL %s MINUTE), %s, 'open', NOW(), NOW())
             """, (
                 self.account_id, symbol, side, quantity, current_price, self.leverage,
                 notional_value, margin, stop_loss, take_profit,
                 signal_combination_key, entry_reason, entry_score, signal_components_json,
                 base_timeout_minutes, timeout_at,
-                base_timeout_minutes  # planned_close_time = NOW() + max_hold_minutes
+                base_timeout_minutes,  # planned_close_time = NOW() + max_hold_minutes
+                position_source
             ))
 
             # 获取持仓ID
