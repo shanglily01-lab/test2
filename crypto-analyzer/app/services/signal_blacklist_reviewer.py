@@ -24,42 +24,37 @@ class SignalBlacklistReviewer:
         self.db_config = db_config
         self.connection = None
 
-        # 解除条件配置（降低黑名单等级）
+        # 解除条件配置（降低黑名单等级）—— 主考核：盈亏
         self.upgrade_thresholds = {
             1: {  # Level 1 → Level 0（解除黑名单）
-                'win_rate': 0.50,
-                'min_orders': 10,
-                'min_profit': 0
+                'min_orders': 5,
+                'min_profit': 0     # 3天内盈亏持平即可解除
             },
             2: {  # Level 2 → Level 1
-                'win_rate': 0.55,
-                'min_orders': 15,
-                'min_profit': 50
+                'min_orders': 5,
+                'min_profit': 20    # 3天内盈利20U以上
             },
             3: {  # Level 3 → Level 2
-                'win_rate': 0.60,
-                'min_orders': 20,
-                'min_profit': 100
+                'min_orders': 5,
+                'min_profit': 50    # 3天内盈利50U以上
             }
         }
 
-        # 降级条件配置（提高黑名单等级）
+        # 降级条件配置（提高黑名单等级）—— 主考核：亏损额
         self.downgrade_thresholds = {
             1: {  # Level 1 → Level 2
-                'win_rate': 0.35,
-                'max_loss': -100
+                'max_loss': -50     # 3天内亏损超过50U
             },
             2: {  # Level 2 → Level 3
-                'win_rate': 0.30,
-                'max_loss': -200
+                'max_loss': -100    # 3天内亏损超过100U
             }
         }
 
-        # 评估周期配置
+        # 评估周期配置 —— 全等级统一3天
         self.review_periods = {
-            1: 7,   # Level 1: 7天评估一次
-            2: 14,  # Level 2: 14天评估一次
-            3: 30   # Level 3: 30天评估一次
+            1: 3,
+            2: 3,
+            3: 3
         }
 
         # 最大重试次数
@@ -328,18 +323,17 @@ class SignalBlacklistReviewer:
         order_count = performance['order_count']
         total_pnl = performance['total_pnl']
 
-        # 检查是否应该升级（降低黑名单等级，变好）
+        # 检查是否应该升级（降低黑名单等级，变好）—— 主考核：盈亏
         if current_level > 0:
             threshold = self.upgrade_thresholds.get(current_level)
             if threshold:
-                if (win_rate >= threshold['win_rate'] and
-                    order_count >= threshold['min_orders'] and
-                    total_pnl >= threshold['min_profit']):
+                if (order_count >= threshold['min_orders'] and
+                        total_pnl >= threshold['min_profit']):
 
                     new_level = current_level - 1
                     reason = (
-                        f"表现改善: 胜率{win_rate*100:.1f}%, "
-                        f"盈利{total_pnl:.2f}U, {order_count}单"
+                        f"盈亏改善: 盈利{total_pnl:.2f}U, "
+                        f"胜率{win_rate*100:.1f}%, {order_count}单"
                     )
 
                     if new_level == 0:
@@ -347,17 +341,15 @@ class SignalBlacklistReviewer:
                     else:
                         return ('upgrade', new_level, reason)
 
-        # 检查是否应该降级（提高黑名单等级，变差）
+        # 检查是否应该降级（提高黑名单等级，变差）—— 主考核：亏损额
         if current_level < 3:
             threshold = self.downgrade_thresholds.get(current_level)
             if threshold:
-                if (win_rate < threshold['win_rate'] or
-                    total_pnl < threshold['max_loss']):
-
+                if total_pnl < threshold['max_loss']:
                     new_level = current_level + 1
                     reason = (
-                        f"表现恶化: 胜率{win_rate*100:.1f}%, "
-                        f"亏损{total_pnl:.2f}U"
+                        f"亏损扩大: 亏损{total_pnl:.2f}U, "
+                        f"胜率{win_rate*100:.1f}%, {order_count}单"
                     )
                     return ('downgrade', new_level, reason)
 
