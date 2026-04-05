@@ -1588,7 +1588,7 @@ class SmartExitOptimizer:
             if timeout_at:
                 now_utc = datetime.utcnow()
                 if now_utc >= timeout_at:
-                    max_hold_minutes = position.get('max_hold_minutes') or 180  # 3小时强制平仓
+                    max_hold_minutes = position.get('max_hold_minutes') or 240  # fallback 4小时
                     logger.warning(
                         f"⏰ 持仓{position_id} {symbol}触发动态超时 | "
                         f"超时阈值{max_hold_minutes}分钟"

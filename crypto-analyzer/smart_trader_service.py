@@ -1201,10 +1201,14 @@ class SmartTraderService:
         with open('config.yaml', 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
             self.smart_exit_config = config.get('signals', {}).get('smart_exit', {'enabled': False})
-            # 最大持仓时间（分钟），从 config.yaml signals.max_hold_hours 读取，默认3小时，范围3~8h
-            raw_hours = config.get('signals', {}).get('max_hold_hours', 3)
-            self.max_hold_minutes = max(180, min(480, int(raw_hours) * 60))
-            logger.info(f"⏱️ 最大持仓时间: {self.max_hold_minutes}分钟 ({self.max_hold_minutes//60}小时)")
+            # 最大持仓时间：优先从数据库读取，不再参考config.yaml
+            try:
+                _db_mh = self.opt_config._read_system_setting('max_hold_hours')
+                _db_hours = max(3, min(8, int(_db_mh))) if _db_mh else 4
+            except Exception:
+                _db_hours = 4  # DB读取失败默认4小时
+            self.max_hold_minutes = _db_hours * 60
+            logger.info(f"最大持仓时间(DB): {self.max_hold_minutes}分钟 ({_db_hours}小时)")
 
             # 🔥 从数据库读取系统配置（优先级高于config.yaml）
             from app.services.system_settings_loader import get_big4_filter_enabled
@@ -2178,9 +2182,9 @@ class SmartTraderService:
                 base_timeout_minutes = range_max_hold_hours * 60
                 logger.info(f"[RANGE_TIMEOUT] {symbol} 震荡市最大持仓时间: {base_timeout_minutes}分钟")
             else:
-                # 趋势模式: 实时从DB读取 max_hold_hours（无需重启即可生效）
+                # 趋势模式: 实时从DB读取 max_hold_hours（无需重启即可生效，不参考config.yaml）
                 _mh_val = self.opt_config._read_system_setting('max_hold_hours')
-                _mh_hours = max(3, min(8, int(_mh_val or self.max_hold_minutes // 60)))
+                _mh_hours = max(3, min(8, int(_mh_val))) if _mh_val else self.max_hold_minutes // 60
                 base_timeout_minutes = _mh_hours * 60
 
             # 计算超时时间点 (UTC时间)
