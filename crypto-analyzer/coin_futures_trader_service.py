@@ -3380,16 +3380,21 @@ class CoinFuturesTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 5.7. 🔥 检查Big4市场信号 - NEUTRAL时停止开仓（可配置禁用）
+                # 5.7. 检查Big4市场信号 - NEUTRAL时禁止做多，允许做空
                 if self.big4_filter_config.get('enabled', True) and big4_result:
                     try:
                         big4_market_signal = big4_result.get('overall_signal', 'NEUTRAL')
                         big4_market_strength = big4_result.get('signal_strength', 0)
 
                         if big4_market_signal == 'NEUTRAL':
-                            logger.info(f"[BIG4-NEUTRAL] 🛑 市场中性(强度{big4_market_strength:.1f}),停止开仓,等待明确趋势（币本位传统模式）")
-                            time.sleep(self.scan_interval)
-                            continue
+                            # NEUTRAL时只保留做空机会，不封杀做空
+                            short_opps = [o for o in opportunities if o['side'] == 'SHORT']
+                            if not short_opps:
+                                logger.info(f"[BIG4-NEUTRAL] 市场中性(强度{big4_market_strength:.1f}),无做空机会,跳过本轮")
+                                time.sleep(self.scan_interval)
+                                continue
+                            logger.info(f"[BIG4-NEUTRAL] 市场中性,仅保留做空机会({len(short_opps)}个,过滤掉{len(opportunities)-len(short_opps)}个做多)")
+                            opportunities = short_opps
                     except Exception as e:
                         logger.warning(f"[BIG4-CHECK] 获取Big4信号失败: {e}, 继续交易")
                 else:
