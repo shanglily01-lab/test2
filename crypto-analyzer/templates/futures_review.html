@@ -1504,7 +1504,7 @@ function renderSymbolsTable() {
     var wr = parseFloat(s.win_rate || 0);
     var pnlCls = pnl > 0 ? 'text-[#49f4c8]' : pnl < 0 ? 'text-[#ff716c]' : 'text-on-surface-variant';
     var wrCls = wr >= 60 ? 'text-[#49f4c8]' : wr >= 40 ? 'text-yellow-400' : 'text-[#ff716c]';
-    var sym = s.symbol.replace('USDT','').replace('USD','');
+    var sym = s.symbol.replace('/USDT','').replace('/USD','').replace('USDT','').replace('USD','');
     html += '<tr class="hover:bg-white/[0.02] transition-colors">';
     html += '<td class="py-3 px-4 font-bold text-on-surface text-sm">' + sym + '<span class="text-on-surface-variant text-[10px] font-normal">/USDT</span></td>';
     html += '<td class="py-3 px-4 text-right mono text-sm text-on-surface">' + (s.total_trades || 0) + '</td>';
