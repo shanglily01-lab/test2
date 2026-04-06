@@ -343,12 +343,17 @@ class MarketPredictor:
     # ──────────────────────────────────────────
 
     def _close_expired_paper_trades(self, cursor, now: datetime) -> int:
-        """平掉持仓超过5.5小时的 PREDICTOR 模拟单，计算实际P&L"""
-        cutoff = now - timedelta(hours=5, minutes=30)
+        """平掉已到计划平仓时间的 PREDICTOR 模拟单，计算实际P&L"""
+        # 优先用 planned_close_time 字段（开仓时按 max_hold_hours 写入，随系统设置变化）
+        # fallback：open_time 超过 max_hold_hours 的旧单（兼容 planned_close_time 为空的情况）
+        max_hours = self._get_max_hold_hours()
+        cutoff = now - timedelta(hours=max_hours)
         cursor.execute(
             "SELECT id, symbol, position_side, entry_price, margin, leverage "
             "FROM futures_positions "
-            "WHERE account_id=2 AND status='open' AND source='PREDICTOR' AND open_time <= %s",
+            "WHERE account_id=2 AND status='open' AND source='PREDICTOR' "
+            "AND (planned_close_time IS NOT NULL AND NOW() >= planned_close_time "
+            "     OR planned_close_time IS NULL AND open_time <= %s)",
             (cutoff,)
         )
         rows = cursor.fetchall()
