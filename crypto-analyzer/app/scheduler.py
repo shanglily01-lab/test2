@@ -76,6 +76,16 @@ class UnifiedDataScheduler:
         logger.info("初始化缓存更新服务...")
         self.cache_service = CacheUpdateService(self.config)
 
+        # 初始化 Binance 公告监控
+        try:
+            from app.services.binance_news_monitor import BinanceNewsMonitor
+            from app.services.trade_notifier import init_trade_notifier
+            _notifier = init_trade_notifier(self.config)
+            self.binance_news_monitor = BinanceNewsMonitor(db_config, notifier=_notifier)
+            logger.info("初始化 Binance 公告监控器 OK")
+        except Exception as e:
+            self.binance_news_monitor = None
+            logger.warning("Binance 公告监控器初始化失败: %s", e)
 
         # 任务统计
         self.task_stats = {
@@ -97,7 +107,8 @@ class UnifiedDataScheduler:
             'cache_analysis': {'count': 0, 'last_run': None, 'last_error': None},
             'cache_hyperliquid': {'count': 0, 'last_run': None, 'last_error': None},
             'etf_daily': {'count': 0, 'last_run': None, 'last_error': None},
-            'futures_equity_update': {'count': 0, 'last_run': None, 'last_error': None}
+            'futures_equity_update': {'count': 0, 'last_run': None, 'last_error': None},
+            'binance_news': {'count': 0, 'last_run': None, 'last_error': None}
         }
 
         logger.info(f"调度器初始化完成 - 监控币种: {len(self.symbols)} 个")
@@ -979,6 +990,10 @@ class UnifiedDataScheduler:
         )
         logger.info("  ✓ 新闻数据 - 每 15 分钟")
 
+        # 3.5 Binance 官方公告监控（新上线/下架/维护/Launchpool）
+        schedule.every(30).minutes.do(self.monitor_binance_news)
+        logger.info("  ✓ Binance 公告监控 - 每 30 分钟")
+
         # 4. 区块链Gas统计 (每天采集昨天的数据，使用线程避免阻塞主调度器)
         try:
             from app.collectors.blockchain_gas_collector import BlockchainGasCollector
@@ -1251,6 +1266,26 @@ class UnifiedDataScheduler:
             
         except Exception as e:
             logger.error(f"更新模拟合约总权益失败: {e}")
+            self.task_stats[task_name]['last_error'] = str(e)
+
+    def monitor_binance_news(self):
+        """拉取并处理 Binance 公告（新上线/下架/维护/Launchpool），每30分钟"""
+        if not self.binance_news_monitor:
+            return
+        task_name = 'binance_news'
+        try:
+            stats = self.binance_news_monitor.run()
+            self.task_stats[task_name]['count'] += 1
+            self.task_stats[task_name]['last_run'] = datetime.utcnow()
+            self.task_stats[task_name]['last_error'] = None
+            if any(v > 0 for v in stats.values() if isinstance(v, int)):
+                logger.info(
+                    "Binance 公告: 新上线=%d, 下架=%d, 维护=%d, Launchpool=%d",
+                    stats.get('new_listing', 0), stats.get('delisting', 0),
+                    stats.get('maintenance', 0), stats.get('launchpool', 0)
+                )
+        except Exception as e:
+            logger.error("Binance 公告监控任务失败: %s", e)
             self.task_stats[task_name]['last_error'] = str(e)
 
     async def update_analysis_cache(self):
