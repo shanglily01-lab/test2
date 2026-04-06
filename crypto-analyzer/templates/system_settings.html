@@ -712,7 +712,7 @@
         // Big4趋势过滤
         bindToggle('big4Toggle', async function (enabled) {
             try {
-                await apiPut('/trading-services', { big4_filter_enabled: enabled });
+                await apiPut('/big4-filter', { enabled: enabled });
                 showToast('Big4趋势过滤已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);

@@ -1167,7 +1167,7 @@ class SmartTraderService:
         self.account_id = 2
         self.position_size_usdt = 400  # 默认仓位
         self.blacklist_position_size_usdt = 100  # 黑名单交易对使用小仓位
-        self.max_positions = 50
+        self.max_positions = self._load_max_positions()
         self.leverage = 5
         self.scan_interval = 300
 
@@ -1724,6 +1724,20 @@ class SmartTraderService:
             return False, "时间框架冲突: 做空但1D看涨"
 
         return True, "时间框架一致"
+
+    def _load_max_positions(self) -> int:
+        """从 system_settings 读取 max_positions，失败时返回默认值 50"""
+        try:
+            conn = self._get_connection()
+            cur = conn.cursor(pymysql.cursors.DictCursor)
+            cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='max_positions'")
+            row = cur.fetchone()
+            cur.close()
+            if row:
+                return int(float(row['setting_value']))
+        except Exception as e:
+            logger.warning(f"[MAX-POS] 读取max_positions失败，使用默认值50: {e}")
+        return 50
 
     def _get_sl_tp_from_settings(self):
         """从 system_settings 读取止损/止盈比例，失败时返回默认值 2%/5%"""
@@ -3504,7 +3518,7 @@ class SmartTraderService:
                         _tm_cur = _tm_conn.cursor()
                         _tm_cur.execute("""
                             SELECT setting_key, setting_value FROM system_settings
-                            WHERE setting_key IN ('signal_confirmation_enabled', 'trend_following_enabled')
+                            WHERE setting_key IN ('signal_confirmation_enabled', 'trend_following_enabled', 'max_positions')
                         """)
                         _tm_rows = {r[0]: r[1] for r in _tm_cur.fetchall()}
                         _tm_cur.close(); _tm_conn.close()
@@ -3514,6 +3528,11 @@ class SmartTraderService:
                             logger.info(f"[TRADING-MODE] 模式更新: 信号确认={'ON' if new_sc else 'OFF'} 趋势跟随={'ON' if new_tf else 'OFF'}")
                             self.brain.signal_confirmation_enabled = new_sc
                             self.brain.trend_following_enabled = new_tf
+                        if 'max_positions' in _tm_rows:
+                            new_mp = int(float(_tm_rows['max_positions']))
+                            if new_mp != self.max_positions:
+                                logger.info(f"[CONFIG-RELOAD] 最大持仓数更新: {self.max_positions} -> {new_mp}")
+                                self.max_positions = new_mp
                     except Exception as e:
                         logger.warning(f"[CONFIG-RELOAD] 重新加载交易模式配置失败: {e}")
 
