@@ -931,6 +931,13 @@ try:
     logger.info("✅ 信号黑名单API路由已注册（/api/signal_blacklist）")
 except Exception as e:
     logger.warning(f"⚠️  信号黑名单API路由注册失败: {e}")
+
+try:
+    from app.api.binance_news_api import router as binance_news_router
+    app.include_router(binance_news_router)
+    logger.info("Binance 公告监控API路由已注册（/api/binance-news）")
+except Exception as e:
+    logger.warning("Binance 公告监控API路由注册失败: %s", e)
     import traceback
     traceback.print_exc()
 
@@ -1365,6 +1372,15 @@ async def signal_blacklist_page():
     if p.exists():
         return FileResponse(str(p))
     raise HTTPException(status_code=404, detail="Signal blacklist page not found")
+
+
+@app.get("/binance-news")
+async def binance_news_page():
+    """Binance 公告监控页面"""
+    p = project_root / "templates" / "binance_news.html"
+    if p.exists():
+        return FileResponse(str(p))
+    raise HTTPException(status_code=404, detail="Binance news page not found")
 
 
 @app.get("/spot_trading")

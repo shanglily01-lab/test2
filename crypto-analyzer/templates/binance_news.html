@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>超级大脑 - 公告监控</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          brand: { primary: "#49f4c8", bg: "#070b10", surface: "#0f1520", sidebar: "#0d1117", border: "#1e2633" },
+          status: { success: "#49f4c8", warning: "#facc15", orange: "#f97316", danger: "#ef4444" }
+        },
+        borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
+        fontFamily: {
+          headline: ["Space Grotesk", "sans-serif"],
+          body: ["Manrope", "sans-serif"],
+          label: ["Geist", "sans-serif"],
+          mono: ["JetBrains Mono", "monospace"]
+        }
+      }
+    }
+  }
+</script>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: #070b10; }
+  ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #49f4c8; }
+  .nav-active { color: #49f4c8 !important; background: rgba(73,244,200,0.1); border-right: 2px solid #49f4c8; }
+  .tab-active { color: #49f4c8; border-bottom: 2px solid #49f4c8; }
+</style>
+</head>
+<body class="bg-[#070b10] text-gray-200 font-body antialiased">
+
+<!-- Sidebar -->
+<aside class="fixed left-0 top-0 h-screen w-[240px] bg-[#0d1117] border-r border-[#0f1520] flex flex-col py-6 z-50">
+  <div class="px-6 mb-8">
+    <a href="/" class="flex items-center gap-3">
+      <div class="w-8 h-8 bg-[#49f4c8]/10 rounded flex items-center justify-center">
+        <span class="material-symbols-outlined text-[#49f4c8]">psychology</span>
+      </div>
+      <div>
+        <h1 class="text-[#49f4c8] font-bold text-xl tracking-tight font-headline">超级大脑</h1>
+        <p class="text-[10px] text-gray-500 font-mono tracking-widest uppercase">Quant Trading Platform</p>
+      </div>
+    </a>
+  </div>
+  <nav class="flex-1 overflow-y-auto space-y-0.5 px-3" id="sidebar-nav">
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/dashboard" href="/dashboard"><span class="material-symbols-outlined text-lg">dashboard</span><span>Dashboard</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/futures_trading" href="/futures_trading"><span class="material-symbols-outlined text-lg">show_chart</span><span>U本位合约</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/coin_futures_trading" href="/coin_futures_trading"><span class="material-symbols-outlined text-lg">currency_bitcoin</span><span>币本位合约</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/live_trading" href="/live_trading"><span class="material-symbols-outlined text-lg">precision_manufacturing</span><span>Live Trading</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/futures_review" href="/futures_review"><span class="material-symbols-outlined text-lg">history_edu</span><span>复盘分析</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/technical-signals" href="/technical-signals"><span class="material-symbols-outlined text-lg">sensors</span><span>信号分析</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/market_regime" href="/market_regime"><span class="material-symbols-outlined text-lg">pulse_alert</span><span>行情识别</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/symbol_blacklist" href="/symbol_blacklist"><span class="material-symbols-outlined text-lg">block</span><span>交易对黑名单</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/signal_blacklist" href="/signal_blacklist"><span class="material-symbols-outlined text-lg">do_not_disturb_on</span><span>信号黑名单</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/spot_trading" href="/spot_trading"><span class="material-symbols-outlined text-lg">currency_exchange</span><span>现货交易</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/etf_data" href="/etf_data"><span class="material-symbols-outlined text-lg">candlestick_chart</span><span>ETF 数据</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/blockchain_gas" href="/blockchain_gas"><span class="material-symbols-outlined text-lg">local_gas_station</span><span>Gas 监控</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/corporate_treasury" href="/corporate_treasury"><span class="material-symbols-outlined text-lg">account_balance</span><span>企业金库</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/data_management" href="/data_management"><span class="material-symbols-outlined text-lg">storage</span><span>数据管理</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/api-keys" href="/api-keys"><span class="material-symbols-outlined text-lg">api</span><span>API Keys</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/system-settings" href="/system-settings"><span class="material-symbols-outlined text-lg">settings</span><span>Settings</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/binance-news" href="/binance-news"><span class="material-symbols-outlined text-lg">campaign</span><span>公告监控</span></a>
+  </nav>
+</aside>
+
+<!-- Main -->
+<main class="ml-[240px] min-h-screen p-8">
+  <div class="flex gap-8">
+
+    <!-- Left: main content -->
+    <div class="flex-1 min-w-0">
+
+      <!-- Header -->
+      <div class="mb-8">
+        <h1 class="text-2xl font-headline font-bold text-white">公告监控</h1>
+        <p class="text-gray-400 text-sm mt-1">Binance 官方公告自动识别与处理</p>
+      </div>
+
+      <!-- Stats -->
+      <div class="grid grid-cols-3 gap-4 mb-8">
+        <div class="bg-[#0f1520] border border-[#1e2633] rounded-lg p-5 flex items-center gap-4">
+          <div class="w-10 h-10 rounded-lg bg-green-500/10 flex items-center justify-center flex-shrink-0">
+            <span class="material-symbols-outlined text-green-400">update</span>
+          </div>
+          <div>
+            <p class="text-gray-500 text-xs font-mono uppercase tracking-wider">最后检测</p>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span id="stat-last-check" class="text-base font-mono font-bold">--</span>
+              <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+            </div>
+          </div>
+        </div>
+        <div class="bg-[#0f1520] border border-[#1e2633] rounded-lg p-5 flex items-center gap-4">
+          <div class="w-10 h-10 rounded-lg bg-[#49f4c8]/10 flex items-center justify-center flex-shrink-0">
+            <span class="material-symbols-outlined text-[#49f4c8]">analytics</span>
+          </div>
+          <div>
+            <p class="text-gray-500 text-xs font-mono uppercase tracking-wider">本次抓取</p>
+            <span id="stat-today" class="text-base font-mono font-bold mt-0.5 block">--</span>
+          </div>
+        </div>
+        <div class="bg-[#0f1520] border border-[#1e2633] rounded-lg p-5 flex items-center gap-4">
+          <div class="w-10 h-10 rounded-lg bg-[#49f4c8]/10 flex items-center justify-center flex-shrink-0">
+            <span class="material-symbols-outlined text-[#49f4c8]">memory</span>
+          </div>
+          <div>
+            <p class="text-gray-500 text-xs font-mono uppercase tracking-wider">运行状态</p>
+            <span id="stat-status" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-500/10 text-green-400 mt-0.5">正常</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter Tabs -->
+      <div class="flex items-center gap-6 border-b border-[#1e2633] mb-6">
+        <button onclick="setTab('all')" id="tab-all" class="tab-btn tab-active pb-3 px-1 text-sm font-mono transition-colors">全部 (<span id="cnt-all">0</span>)</button>
+        <button onclick="setTab('new_listing')" id="tab-new_listing" class="tab-btn pb-3 px-1 text-gray-400 hover:text-gray-200 text-sm font-mono transition-colors">新上线 (<span id="cnt-new_listing">0</span>)</button>
+        <button onclick="setTab('delisting')" id="tab-delisting" class="tab-btn pb-3 px-1 text-gray-400 hover:text-gray-200 text-sm font-mono transition-colors">下架 (<span id="cnt-delisting">0</span>)</button>
+        <button onclick="setTab('maintenance')" id="tab-maintenance" class="tab-btn pb-3 px-1 text-gray-400 hover:text-gray-200 text-sm font-mono transition-colors">维护 (<span id="cnt-maintenance">0</span>)</button>
+        <button onclick="setTab('launchpool')" id="tab-launchpool" class="tab-btn pb-3 px-1 text-gray-400 hover:text-gray-200 text-sm font-mono transition-colors">Launchpool (<span id="cnt-launchpool">0</span>)</button>
+      </div>
+
+      <!-- List -->
+      <div id="news-list" class="space-y-3">
+        <div class="text-gray-500 text-sm font-mono py-8 text-center">加载中...</div>
+      </div>
+
+    </div>
+
+    <!-- Right: config panel -->
+    <div class="w-[260px] flex-shrink-0">
+      <div class="sticky top-8 bg-[#0f1520] border border-[#1e2633] rounded-lg p-6 space-y-6">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="material-symbols-outlined text-[#49f4c8] text-lg">settings_input_component</span>
+          <h2 class="font-headline font-bold text-white text-sm uppercase tracking-widest">配置中心</h2>
+        </div>
+
+        <div>
+          <p class="text-xs text-gray-500 uppercase tracking-wider mb-2 font-mono">检测频率</p>
+          <div class="flex items-center justify-between p-3 bg-[#070b10] border border-[#1e2633] rounded">
+            <span class="font-mono text-[#49f4c8] font-bold">每 30 分钟</span>
+          </div>
+        </div>
+
+        <div>
+          <p class="text-xs text-gray-500 uppercase tracking-wider mb-2 font-mono">下架处理</p>
+          <div class="p-3 bg-[#070b10] border border-[#1e2633] rounded">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white">Level3 永久禁止</span>
+              <span class="text-[10px] text-red-400 font-bold">立即封禁</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p class="text-xs text-gray-500 uppercase tracking-wider mb-2 font-mono">新上线处理</p>
+          <div class="p-3 bg-[#070b10] border border-[#1e2633] rounded">
+            <div class="flex items-center gap-2">
+              <span class="w-1.5 h-1.5 bg-[#49f4c8] rounded-full"></span>
+              <span class="text-xs font-mono text-gray-300">加入 trading_symbols (disabled)</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <p class="text-xs text-gray-500 uppercase tracking-wider mb-2 font-mono">维护 / Launchpool</p>
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs p-2 bg-[#070b10] rounded">
+              <span class="text-gray-400">维护公告</span>
+              <span class="text-[#49f4c8]/70 font-mono">仅 Telegram</span>
+            </div>
+            <div class="flex items-center justify-between text-xs p-2 bg-[#070b10] rounded">
+              <span class="text-gray-400">Launchpool</span>
+              <span class="text-[#49f4c8]/70 font-mono">仅 Telegram</span>
+            </div>
+          </div>
+        </div>
+
+        <button onclick="runNow()" id="btn-run"
+          class="w-full py-3 border border-[#49f4c8]/40 text-[#49f4c8] hover:bg-[#49f4c8]/10 transition-all font-mono font-bold rounded flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined text-lg">refresh</span>
+          立即检测
+        </button>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+const TYPE_COLOR = {
+  new_listing: 'green',
+  delisting:   'red',
+  maintenance: 'orange',
+  launchpool:  'blue',
+};
+const TYPE_BADGE = {
+  new_listing: 'LISTING',
+  delisting:   'DELISTING',
+  maintenance: 'SYSTEM',
+  launchpool:  'LAUNCHPOOL',
+};
+
+let allItems = [];
+let currentTab = 'all';
+
+// ── nav active highlight ──
+document.querySelectorAll('#sidebar-nav .nav-item').forEach(a => {
+  if (a.dataset.path === '/binance-news') a.classList.add('nav-active');
+});
+
+// ── load status ──
+async function loadStatus() {
+  try {
+    const r = await fetch('/api/binance-news/status');
+    const d = await r.json();
+    document.getElementById('stat-last-check').textContent = d.last_check;
+  } catch(e) {
+    document.getElementById('stat-last-check').textContent = '获取失败';
+  }
+}
+
+// ── load list ──
+async function loadList() {
+  try {
+    const r = await fetch('/api/binance-news/list');
+    const d = await r.json();
+    allItems = d.items || [];
+    const counts = d.counts || {};
+    ['all','new_listing','delisting','maintenance','launchpool'].forEach(k => {
+      const el = document.getElementById('cnt-' + k);
+      if (el) el.textContent = counts[k] || 0;
+    });
+    document.getElementById('stat-today').textContent = (counts.all || 0) + ' 条公告';
+    renderList();
+  } catch(e) {
+    document.getElementById('news-list').innerHTML =
+      '<div class="text-red-400 text-sm font-mono py-8 text-center">加载失败: ' + e.message + '</div>';
+  }
+}
+
+// ── render ──
+function renderList() {
+  const items = currentTab === 'all' ? allItems : allItems.filter(x => x.type === currentTab);
+  const list = document.getElementById('news-list');
+
+  if (!items.length) {
+    list.innerHTML = '<div class="text-gray-500 text-sm font-mono py-8 text-center">暂无公告</div>';
+    return;
+  }
+
+  const colorMap = {
+    green:  { strip: 'bg-green-500',  badge: 'bg-green-500/10 text-green-400',  action: 'text-green-400/80' },
+    red:    { strip: 'bg-red-500',    badge: 'bg-red-500/10 text-red-400',      action: 'text-red-400/80' },
+    orange: { strip: 'bg-orange-500', badge: 'bg-orange-500/10 text-orange-400', action: 'text-slate-400' },
+    blue:   { strip: 'bg-blue-500',   badge: 'bg-blue-500/10 text-blue-400',    action: 'text-slate-400' },
+    slate:  { strip: 'bg-slate-500',  badge: 'bg-slate-500/10 text-slate-400',  action: 'text-slate-400' },
+  };
+
+  list.innerHTML = items.map(item => {
+    const c = colorMap[item.color] || colorMap.slate;
+    const syms = (item.symbols || []).map(s =>
+      `<span class="text-[#49f4c8] font-mono text-xs">${s}</span>`
+    ).join('');
+    return `
+    <div class="bg-[#0f1520] border border-[#1e2633] rounded-lg overflow-hidden flex hover:border-[#49f4c8]/20 transition-all">
+      <div class="w-1.5 flex-shrink-0 ${c.strip}"></div>
+      <div class="flex-1 p-4 flex items-start justify-between gap-4">
+        <div class="space-y-1.5 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <h3 class="font-bold text-gray-100 text-sm leading-snug">${item.title}</h3>
+            <span class="px-1.5 py-0.5 ${c.badge} text-[10px] font-mono rounded flex-shrink-0">${item.badge}</span>
+          </div>
+          <div class="flex items-center gap-3 flex-wrap">
+            ${syms}
+            <span class="${c.action} text-xs flex items-center gap-1">
+              <span class="material-symbols-outlined text-[13px]">terminal</span>
+              ${item.action}
+            </span>
+          </div>
+        </div>
+        <p class="text-gray-500 text-xs font-mono flex-shrink-0">${item.timestamp}</p>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── tabs ──
+function setTab(t) {
+  currentTab = t;
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.remove('tab-active');
+    b.classList.add('text-gray-400');
+  });
+  const active = document.getElementById('tab-' + t);
+  if (active) { active.classList.add('tab-active'); active.classList.remove('text-gray-400'); }
+  renderList();
+}
+
+// ── run now ──
+async function runNow() {
+  const btn = document.getElementById('btn-run');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="material-symbols-outlined text-lg animate-spin">sync</span> 检测中...';
+  try {
+    const r = await fetch('/api/binance-news/run', { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) {
+      await loadStatus();
+      await loadList();
+    }
+  } catch(e) {
+    alert('检测失败: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span class="material-symbols-outlined text-lg">refresh</span> 立即检测';
+  }
+}
+
+// ── init ──
+loadStatus();
+loadList();
+</script>
+</body>
+</html>
