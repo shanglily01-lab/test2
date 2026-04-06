@@ -143,6 +143,13 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
                 <label class="custom-toggle"><input id="usdtToggle" type="checkbox" onchange="autoSave('services')"/><span class="slider"></span></label>
             </div>
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
+                <div class="flex flex-col py-3 pr-4">
+                    <span class="text-sm font-medium">币本位合约</span>
+                    <span class="text-[10px] text-on-surface-variant mt-0.5">COIN-M Auto Execution</span>
+                </div>
+                <label class="custom-toggle"><input id="coinToggle" type="checkbox" onchange="autoSave('services')"/><span class="slider"></span></label>
+            </div>
+            <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <span class="text-sm font-medium">做多</span>
                 <label class="custom-toggle"><input id="longToggle" type="checkbox" onchange="autoSave('direction')"/><span class="slider"></span></label>
             </div>
@@ -164,10 +171,6 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <span class="text-sm font-medium">预测器</span>
                 <label class="custom-toggle"><input id="predictorToggle" type="checkbox" onchange="autoSave('services')"/><span class="slider"></span></label>
-            </div>
-            <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
-                <span class="text-sm font-medium">币本位合约</span>
-                <label class="custom-toggle"><input id="coinToggle" type="checkbox" onchange="autoSave('services')"/><span class="slider"></span></label>
             </div>
             <div class="setting-row flex items-center justify-between px-4">
                 <span class="text-sm font-medium">U本位破位策略</span>

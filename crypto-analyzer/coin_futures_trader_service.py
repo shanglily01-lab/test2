@@ -3448,19 +3448,19 @@ class CoinFuturesTraderService:
                                 signal_strength = big4_result.get('signal_strength', 0)
                                 logger.info(f"[BIG4-MARKET] {symbol} 市场整体趋势: {symbol_signal} (强度: {signal_strength:.1f})")
 
-                            # 🚫 完全禁止反方向开仓（无论强度如何）
+                            # 强度>=70时才禁止反方向开仓（弱信号允许逆势）
                             # 修复：同时处理 STRONG_BULLISH / STRONG_BEARISH
                             is_bullish_signal = symbol_signal in ('BULLISH', 'STRONG_BULLISH')
                             is_bearish_signal = symbol_signal in ('BEARISH', 'STRONG_BEARISH')
 
-                            if is_bearish_signal and new_side == 'LONG':
-                                # Big4看空时，完全禁止开多
-                                logger.warning(f"🚫 [BIG4-VETO] {symbol} Big4看空{symbol_signal}(强度{signal_strength:.1f}), 完全禁止LONG信号 (原评分{new_score})")
+                            if is_bearish_signal and new_side == 'LONG' and signal_strength >= 70:
+                                # Big4强烈看空(>=70)时，禁止开多
+                                logger.warning(f"[BIG4-VETO] {symbol} Big4强烈看空{symbol_signal}(强度{signal_strength:.1f}>=70), 禁止LONG信号 (原评分{new_score})")
                                 continue
 
-                            elif is_bullish_signal and new_side == 'SHORT':
-                                # Big4看多时，完全禁止开空
-                                logger.warning(f"🚫 [BIG4-VETO] {symbol} Big4看多{symbol_signal}(强度{signal_strength:.1f}), 完全禁止SHORT信号 (原评分{new_score})")
+                            elif is_bullish_signal and new_side == 'SHORT' and signal_strength >= 70:
+                                # Big4强烈看多(>=70)时，禁止开空
+                                logger.warning(f"[BIG4-VETO] {symbol} Big4强烈看多{symbol_signal}(强度{signal_strength:.1f}>=70), 禁止SHORT信号 (原评分{new_score})")
                                 continue
 
                             # 如果信号方向一致,提升评分
