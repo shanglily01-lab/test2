@@ -43,6 +43,7 @@ class Big4TrendDetector:
         self.BOTTOM_DROP_THRESHOLD = -5.0   # 底部判断: 跌幅超过5%
         self.TOP_RISE_THRESHOLD = 5.0       # 顶部判断: 涨幅超过5%
         self.BLOCK_DURATION_HOURS = 2       # 触发后阻止交易的时长
+        self.MAX_BLOCK_TOTAL_HOURS = 6      # 同类型封锁最长累计时间（超过后不再续期）
 
         # 🔥 15M深V反转检测配置（方案4：综合放宽）
         self.LOWER_SHADOW_THRESHOLD = 2.0   # 1H长下影线阈值: 2%（从3%降低）
@@ -1481,13 +1482,80 @@ class Big4TrendDetector:
         cursor.close()
 
         # 4. 如果检测到新的反转，保存到数据库
+        # 🔥 冲突解除: 触底和触顶同时检测到说明4H窗口内先跌后涨，两者互相矛盾，不应同时封锁
+        if bottom_detected and top_detected:
+            logger.warning(
+                f"[EMERGENCY-CONFLICT] 触底反弹 + 触顶回调同时检测到（同一4H窗口剧烈震荡），"
+                f"双重封锁自动解除，恢复正常交易 | 触发币种: {trigger_symbols}"
+            )
+            return {
+                'bottom_detected': True,
+                'top_detected': True,
+                'block_long': False,
+                'block_short': False,
+                'details': '触底+触顶同时检测（4H窗口震荡），冲突自动解除',
+                'expires_at': None,
+                'bounce_opportunity': bounce_opportunity,
+                'bounce_symbols': bounce_symbols,
+                'bounce_window_end': bounce_window_end
+            }
+
         # 🔥 修复: 触底和触顶分开处理，分别插入记录
         if bottom_detected or top_detected:
             expires_at = datetime.now() + timedelta(hours=self.BLOCK_DURATION_HOURS)
+            cutoff_time = datetime.now() - timedelta(hours=self.MAX_BLOCK_TOTAL_HOURS)
 
             try:
                 with self.db_pool.get_connection() as conn_write:
                     cursor_write = conn_write.cursor()
+
+                    # 检查同类型首次触发时间，超过最大累计时长则不再续期
+                    if bottom_detected:
+                        cursor_write.execute("""
+                            SELECT MIN(created_at) FROM emergency_intervention
+                            WHERE trading_type = 'usdt_futures'
+                            AND intervention_type = 'BOTTOM_BOUNCE'
+                            AND created_at >= %s
+                        """, (cutoff_time,))
+                        row = cursor_write.fetchone()
+                        first_bottom_time = row[0] if row and row[0] else None
+                        if first_bottom_time and (datetime.now() - first_bottom_time).total_seconds() / 3600 >= self.MAX_BLOCK_TOTAL_HOURS:
+                            logger.warning(
+                                f"[EMERGENCY-EXPIRED] BOTTOM_BOUNCE 已持续 {self.MAX_BLOCK_TOTAL_HOURS}h，"
+                                f"不再续期，自动解除做空封锁"
+                            )
+                            bottom_detected = False
+
+                    if top_detected:
+                        cursor_write.execute("""
+                            SELECT MIN(created_at) FROM emergency_intervention
+                            WHERE trading_type = 'usdt_futures'
+                            AND intervention_type = 'TOP_REVERSAL'
+                            AND created_at >= %s
+                        """, (cutoff_time,))
+                        row = cursor_write.fetchone()
+                        first_top_time = row[0] if row and row[0] else None
+                        if first_top_time and (datetime.now() - first_top_time).total_seconds() / 3600 >= self.MAX_BLOCK_TOTAL_HOURS:
+                            logger.warning(
+                                f"[EMERGENCY-EXPIRED] TOP_REVERSAL 已持续 {self.MAX_BLOCK_TOTAL_HOURS}h，"
+                                f"不再续期，自动解除做多封锁"
+                            )
+                            top_detected = False
+
+                    # 超时后两者都解除，直接返回
+                    if not bottom_detected and not top_detected:
+                        cursor_write.close()
+                        return {
+                            'bottom_detected': False,
+                            'top_detected': False,
+                            'block_long': False,
+                            'block_short': False,
+                            'details': f'紧急干预已超过{self.MAX_BLOCK_TOTAL_HOURS}h上限，自动解除',
+                            'expires_at': None,
+                            'bounce_opportunity': bounce_opportunity,
+                            'bounce_symbols': bounce_symbols,
+                            'bounce_window_end': bounce_window_end
+                        }
 
                     # 处理触底反弹 (优先级更高，先插入)
                 if bottom_detected:
