@@ -4,17 +4,29 @@
 Binance 公告监控 API
 GET  /api/binance-news/status    - 状态信息（最后检测时间、今日处理数）
 GET  /api/binance-news/list      - 公告列表（最近50条已处理记录）
+GET  /api/binance-news/detail    - 单条公告正文（HTML）
 POST /api/binance-news/run       - 立即触发一次检测
 """
 
 from fastapi import APIRouter, HTTPException
 from typing import Optional
+import re
 import os
 import pymysql
 from loguru import logger
 from datetime import datetime, timezone
 
 router = APIRouter(prefix="/api/binance-news", tags=["binance-news"])
+
+
+def _sanitize_announcement_html(html: str) -> str:
+    """去掉 script/iframe，避免前端 innerHTML 执行脚本。"""
+    if not html:
+        return ""
+    s = re.sub(r"(?is)<script[^>]*>.*?</script>", "", html)
+    s = re.sub(r"(?is)<\s*iframe[^>]*>.*?</iframe>", "", s)
+    return s
+
 
 # ──────────────────────────────────────────────
 # DB helpers
@@ -140,6 +152,10 @@ def get_news_list(ann_type: Optional[str] = None, limit: int = 50):
                 action_text = "Telegram 已通知"
                 action_color = "slate"
 
+            cid = art.get("catalogId")
+            aid = art.get("id")
+            code = art.get("code") or ""
+
             items.append({
                 "title": title,
                 "type": ann_type_detected,
@@ -150,6 +166,10 @@ def get_news_list(ann_type: Optional[str] = None, limit: int = 50):
                 "action_color": action_color,
                 "timestamp": ts_str,
                 "release_ms": release_ms,
+                "catalog_id": cid,
+                "article_id": aid,
+                "code": code,
+                "announcement_url": BinanceNewsMonitor.announcement_url(code),
             })
 
         # 按时间倒序
@@ -167,6 +187,62 @@ def get_news_list(ann_type: Optional[str] = None, limit: int = 50):
 
     except Exception as e:
         logger.error("binance-news list error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/detail")
+def get_article_detail(
+    catalog_id: int,
+    article_id: int,
+    code: Optional[str] = None,
+):
+    """
+    拉取币安单条公告 HTML 正文；失败时仍返回官网链接供浏览器打开。
+    前端应传入列表中的 code，用于拼接官网 URL（币安路径为无斜杠的 article code）。
+    """
+    try:
+        from app.services.binance_news_monitor import BinanceNewsMonitor
+        from dotenv import load_dotenv
+        load_dotenv()
+
+        db_config = {
+            "host": os.getenv("DB_HOST", "localhost"),
+            "port": int(os.getenv("DB_PORT", 3306)),
+            "user": os.getenv("DB_USER", "root"),
+            "password": os.getenv("DB_PASSWORD", ""),
+            "database": os.getenv("DB_NAME", "binance-data"),
+        }
+
+        official = BinanceNewsMonitor.announcement_url((code or "").strip())
+
+        monitor = BinanceNewsMonitor(db_config)
+        try:
+            detail = monitor.fetch_article_detail(catalog_id, article_id)
+        finally:
+            monitor.close()
+
+        if detail:
+            body = _sanitize_announcement_html(detail.get("body_html") or "")
+            return {
+                "ok": True,
+                "title": detail.get("title"),
+                "body_html": body,
+                "catalog_id": detail.get("catalog_id") or catalog_id,
+                "article_id": detail.get("article_id") or article_id,
+                "announcement_url": official,
+            }
+
+        return {
+            "ok": False,
+            "title": None,
+            "body_html": "",
+            "catalog_id": catalog_id,
+            "article_id": article_id,
+            "announcement_url": official,
+            "message": "未能从币安接口获取正文，请使用下方链接在官网查看",
+        }
+    except Exception as e:
+        logger.error("binance-news detail error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

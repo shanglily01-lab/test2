@@ -134,6 +134,31 @@
         <div class="text-gray-500 text-sm font-mono py-8 text-center">加载中...</div>
       </div>
 
+      <!-- Detail modal -->
+      <div id="news-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4" aria-modal="true" role="dialog">
+        <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" onclick="closeNewsModal()"></div>
+        <div class="relative w-full max-w-3xl max-h-[90vh] bg-[#0f1520] border border-[#1e2633] rounded-xl shadow-2xl flex flex-col overflow-hidden">
+          <div class="flex items-start justify-between gap-4 px-5 py-4 border-b border-[#1e2633] flex-shrink-0">
+            <h2 id="modal-title" class="text-lg font-headline font-bold text-white leading-snug pr-2"></h2>
+            <button type="button" onclick="closeNewsModal()" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-white/5 flex-shrink-0" aria-label="关闭">
+              <span class="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <div id="modal-body-wrap" class="flex-1 overflow-y-auto px-5 py-4 min-h-0">
+            <div id="modal-loading" class="text-gray-400 text-sm font-mono py-12 text-center">加载正文…</div>
+            <div id="modal-body" class="hidden text-gray-300 text-sm leading-relaxed space-y-3 [&_a]:text-[#49f4c8] [&_a]:underline [&_p]:mb-3 [&_ul]:list-disc [&_ul]:pl-5 [&_table]:border-collapse [&_th]:border [&_td]:border [&_th]:p-2 [&_td]:p-2 [&_th]:border-[#1e2633] [&_td]:border-[#1e2633]"></div>
+            <p id="modal-fallback" class="hidden text-amber-400/90 text-sm font-mono"></p>
+          </div>
+          <div class="px-5 py-3 border-t border-[#1e2633] flex flex-wrap items-center justify-between gap-3 flex-shrink-0 bg-[#0a0e14]">
+            <a id="modal-official" href="#" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 text-[#49f4c8] hover:underline text-sm font-mono">
+              <span class="material-symbols-outlined text-[18px]">open_in_new</span>
+              在币安官网查看
+            </a>
+            <button type="button" onclick="closeNewsModal()" class="text-xs text-gray-500 hover:text-gray-300 font-mono">Esc 关闭</button>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- Right: config panel -->
@@ -249,6 +274,10 @@ async function loadList() {
 }
 
 // ── render ──
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function renderList() {
   const items = currentTab === 'all' ? allItems : allItems.filter(x => x.type === currentTab);
   const list = document.getElementById('news-list');
@@ -271,14 +300,17 @@ function renderList() {
     const syms = (item.symbols || []).map(s =>
       `<span class="text-[#49f4c8] font-mono text-xs">${s}</span>`
     ).join('');
+    const aid = item.article_id != null ? item.article_id : '';
     return `
-    <div class="bg-[#0f1520] border border-[#1e2633] rounded-lg overflow-hidden flex hover:border-[#49f4c8]/20 transition-all">
+    <div class="bg-[#0f1520] border border-[#1e2633] rounded-lg overflow-hidden flex hover:border-[#49f4c8]/30 transition-all cursor-pointer group"
+         onclick="openNewsDetail(${aid})">
       <div class="w-1.5 flex-shrink-0 ${c.strip}"></div>
       <div class="flex-1 p-4 flex items-start justify-between gap-4">
         <div class="space-y-1.5 min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
-            <h3 class="font-bold text-gray-100 text-sm leading-snug">${item.title}</h3>
+            <h3 class="font-bold text-gray-100 text-sm leading-snug group-hover:text-[#49f4c8]/90 transition-colors">${escHtml(item.title)}</h3>
             <span class="px-1.5 py-0.5 ${c.badge} text-[10px] font-mono rounded flex-shrink-0">${item.badge}</span>
+            <span class="text-[10px] text-gray-500 font-mono opacity-0 group-hover:opacity-100 transition-opacity">点击查看详情</span>
           </div>
           <div class="flex items-center gap-3 flex-wrap">
             ${syms}
@@ -293,6 +325,64 @@ function renderList() {
     </div>`;
   }).join('');
 }
+
+function openNewsDetail(articleId) {
+  const item = allItems.find(x => x.article_id === articleId);
+  if (!item) return;
+  const modal = document.getElementById('news-modal');
+  const titleEl = document.getElementById('modal-title');
+  const bodyEl = document.getElementById('modal-body');
+  const loadEl = document.getElementById('modal-loading');
+  const fallEl = document.getElementById('modal-fallback');
+  const linkEl = document.getElementById('modal-official');
+  modal.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  titleEl.textContent = item.title || '';
+  bodyEl.classList.add('hidden');
+  bodyEl.innerHTML = '';
+  fallEl.classList.add('hidden');
+  fallEl.textContent = '';
+  loadEl.classList.remove('hidden');
+  linkEl.href = item.announcement_url || '#';
+
+  const params = new URLSearchParams({
+    catalog_id: String(item.catalog_id ?? ''),
+    article_id: String(item.article_id ?? ''),
+    code: item.code || '',
+  });
+  fetch('/api/binance-news/detail?' + params.toString())
+    .then(r => r.json())
+    .then(d => {
+      loadEl.classList.add('hidden');
+      if (d.title) titleEl.textContent = d.title;
+      if (d.announcement_url) linkEl.href = d.announcement_url;
+      const hasBody = d.body_html && String(d.body_html).trim().length > 0;
+      if (hasBody) {
+        bodyEl.innerHTML = d.body_html;
+        bodyEl.classList.remove('hidden');
+        fallEl.classList.add('hidden');
+      } else {
+        bodyEl.classList.add('hidden');
+        bodyEl.innerHTML = '';
+        fallEl.textContent = d.message || '正文未加载，请使用下方链接在币安官网阅读全文。';
+        fallEl.classList.remove('hidden');
+      }
+    })
+    .catch(e => {
+      loadEl.classList.add('hidden');
+      fallEl.textContent = '加载失败: ' + e.message;
+      fallEl.classList.remove('hidden');
+    });
+}
+
+function closeNewsModal() {
+  document.getElementById('news-modal').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeNewsModal();
+});
 
 // ── tabs ──
 function setTab(t) {

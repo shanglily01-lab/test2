@@ -24,6 +24,12 @@ SETTINGS_KEY_LAST_TS = 'news_monitor_last_article_ts'
 ANNOUNCEMENT_URL = (
     'https://www.binance.com/bapi/composite/v1/public/cms/article/list/query'
 )
+# 公告正文（HTML）；需 POST JSON，与官网 support 一致
+ANNOUNCEMENT_DETAIL_URL = (
+    'https://www.binance.com/bapi/composite/v1/public/cms/article/detail/query'
+)
+# 官网公告页（用 article code 拼接，无斜杠）
+ANNOUNCEMENT_PAGE_BASE = 'https://www.binance.com/en/support/announcement/'
 
 # 关键词 → 公告类型（优先级从上到下）
 KEYWORD_MAP = [
@@ -70,6 +76,8 @@ class BinanceNewsMonitor:
                 'Chrome/122.0.0.0 Safari/537.36'
             ),
             'Lang': 'en',
+            'clienttype': 'web',
+            'Accept': 'application/json',
         })
 
     # ------------------------------------------------------------------
@@ -138,15 +146,24 @@ class BinanceNewsMonitor:
                 logger.warning("Binance 公告接口返回异常: code={}", code)
                 return []
 
-            # 返回结构: data.catalogs[].articles 或 data.articles
+            # 返回结构: data.catalogs[].articles 或 data.articles；为每条带上 catalogId 供详情接口使用
             articles = []
             catalogs = data['data'].get('catalogs', [])
             for cat in catalogs:
-                articles.extend(cat.get('articles', []))
+                cid = cat.get('catalogId')
+                for art in cat.get('articles', []) or []:
+                    if not isinstance(art, dict):
+                        continue
+                    row = dict(art)
+                    if cid is not None:
+                        row['catalogId'] = row.get('catalogId') or cid
+                    articles.append(row)
 
             # 兜底：直接在 data 层的 articles
             if not articles:
-                articles = data['data'].get('articles', [])
+                for art in data['data'].get('articles', []) or []:
+                    if isinstance(art, dict):
+                        articles.append(dict(art))
 
             logger.info("Binance 公告拉取成功: {} 条", len(articles))
             return articles
@@ -157,6 +174,105 @@ class BinanceNewsMonitor:
         except Exception as e:
             logger.error("Binance 公告解析异常: {}", e)
             return []
+
+    def fetch_article_detail(self, catalog_id: int, article_id: int) -> Optional[Dict]:
+        """
+        拉取单条公告正文（HTML）。币安返回字段多为无斜杠 id/code，与列表一致。
+        失败时返回 None，前端可改用官网链接打开。
+        """
+        if not catalog_id or not article_id:
+            return None
+        headers = {
+            'Content-Type': 'application/json',
+            'Origin': 'https://www.binance.com',
+            'Referer': f'https://www.binance.com/en/support/announcement/c-{catalog_id}',
+        }
+        payloads = (
+            {'catalogId': int(catalog_id), 'articleId': int(article_id)},
+            {'articleId': int(article_id)},
+        )
+        for body in payloads:
+            try:
+                r = self.session.post(
+                    ANNOUNCEMENT_DETAIL_URL,
+                    json=body,
+                    headers=headers,
+                    timeout=20,
+                )
+                if r.status_code != 200:
+                    logger.debug(
+                        "Binance 公告详情 HTTP {} body={}",
+                        r.status_code,
+                        (r.text or '')[:200],
+                    )
+                    continue
+                data = r.json()
+                if str(data.get('code')) not in ('000000', '0'):
+                    continue
+                payload = data.get('data')
+                if not isinstance(payload, dict):
+                    continue
+                art = payload.get('article') if isinstance(payload.get('article'), dict) else {}
+                # 常见字段名（币安返回无额外路径前缀，body 多为 HTML 字符串）
+                body_html = (
+                    payload.get('body')
+                    or payload.get('content')
+                    or art.get('body')
+                    or art.get('content')
+                )
+                title = (
+                    payload.get('title')
+                    or payload.get('articleTitle')
+                    or art.get('title')
+                )
+                if body_html or title:
+                    return {
+                        'title': title,
+                        'body_html': body_html,
+                        'catalog_id': payload.get('catalogId') or art.get('catalogId') or catalog_id,
+                        'article_id': payload.get('id') or art.get('id') or article_id,
+                        'raw': payload,
+                    }
+            except Exception as e:
+                logger.warning("Binance 公告详情请求失败: {}", e)
+        # 部分环境仅允许 GET 缓存请求
+        try:
+            r = self.session.get(
+                ANNOUNCEMENT_DETAIL_URL,
+                params={'catalogId': catalog_id, 'articleId': article_id},
+                headers=headers,
+                timeout=20,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                if str(data.get('code')) in ('000000', '0') and isinstance(data.get('data'), dict):
+                    payload = data['data']
+                    art = payload.get('article') if isinstance(payload.get('article'), dict) else {}
+                    body_html = (
+                        payload.get('body')
+                        or payload.get('content')
+                        or art.get('body')
+                    )
+                    title = payload.get('title') or art.get('title')
+                    if body_html or title:
+                        return {
+                            'title': title,
+                            'body_html': body_html,
+                            'catalog_id': payload.get('catalogId') or catalog_id,
+                            'article_id': payload.get('id') or article_id,
+                            'raw': payload,
+                        }
+        except Exception as e:
+            logger.debug("Binance 公告详情 GET 回退失败: {}", e)
+        return None
+
+    @staticmethod
+    def announcement_url(code: str) -> str:
+        """官网单条公告 URL（路径为 article code）；无 code 时回到公告列表页。"""
+        c = (code or '').strip()
+        if not c:
+            return 'https://www.binance.com/en/support/announcement'
+        return ANNOUNCEMENT_PAGE_BASE + c
 
     # ------------------------------------------------------------------
     # 分类 & 解析
