@@ -397,8 +397,8 @@ async def get_trading_services():
             'predictor_enabled': True,
             'btc_momentum_enabled': True,
             'u_coin_style_enabled': False,
-            'signal_confirmation_enabled': True,
-            'trend_following_enabled': True,
+            'signal_confirmation_enabled': False,
+            'trend_following_enabled': False,
             'stop_loss_pct': 0.02,
             'take_profit_pct': 0.05,
         }

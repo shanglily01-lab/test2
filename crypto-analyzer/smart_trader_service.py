@@ -63,8 +63,9 @@ class SmartDecisionBrain:
         self._load_config()
 
         self.threshold = 55  # 开仓阈值 (信号确认模式基础阈值)
-        self.signal_confirmation_enabled = True   # 信号确认模式: net_ws>50 时, 分数>=threshold 开仓
-        self.trend_following_enabled = True        # 趋势跟随模式: net_ws 20~50 时, 分数 20~50 开仓
+        # 主策略两路均为 opt-in：默认关，仅当 system_settings 为 1 且服务启动加载后才启用
+        self.signal_confirmation_enabled = False
+        self.trend_following_enabled = False
         self.max_threshold = 150  # 🔥 评分上限：拒绝150+分信号(数据显示高分=追涨杀跌=亏损)
 
         # 初始化信号黑名单检查器（动态加载，5分钟缓存）
@@ -1174,6 +1175,7 @@ class SmartTraderService:
 
         self.brain = SmartDecisionBrain(self.db_config)
         self.connection = None
+        self._load_trading_mode_flags_from_db()
         self.running = True
         self.event_loop = None  # 事件循环引用，在async_main中设置
         self._pending_entry_count = 0  # 正在后台采样中（尚未写入DB）的任务数
@@ -1323,6 +1325,36 @@ class SmartTraderService:
                 with self.connection.cursor() as cursor:
                     cursor.execute("SET SESSION innodb_lock_wait_timeout = 5")
         return self.connection
+
+    def _load_trading_mode_flags_from_db(self):
+        """启动时从 DB 同步主策略复选框：仅 setting_value=1 时启用，缺省关（与 UI 勾选一致）。"""
+        try:
+            conn = pymysql.connect(
+                **self.db_config,
+                autocommit=True,
+                connect_timeout=10,
+                read_timeout=30,
+                write_timeout=30,
+            )
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT setting_key, setting_value FROM system_settings
+                        WHERE setting_key IN ('signal_confirmation_enabled', 'trend_following_enabled')
+                    """)
+                    rows = {r[0]: r[1] for r in cur.fetchall()}
+            finally:
+                conn.close()
+            new_sc = int(float(rows.get('signal_confirmation_enabled', '0'))) == 1
+            new_tf = int(float(rows.get('trend_following_enabled', '0'))) == 1
+            self.brain.signal_confirmation_enabled = new_sc
+            self.brain.trend_following_enabled = new_tf
+            logger.info(
+                f"[TRADING-MODE] 主策略(启动): 信号确认={'ON' if new_sc else 'OFF'} "
+                f"趋势跟随={'ON' if new_tf else 'OFF'}"
+            )
+        except Exception as e:
+            logger.warning(f"[TRADING-MODE] 启动时读取主策略开关失败，保持默认关: {e}")
 
     def check_trading_enabled(self) -> bool:
         """
@@ -3513,8 +3545,8 @@ class SmartTraderService:
                         """)
                         _tm_rows = {r[0]: r[1] for r in _tm_cur.fetchall()}
                         _tm_cur.close(); _tm_conn.close()
-                        new_sc = int(float(_tm_rows.get('signal_confirmation_enabled', '1'))) == 1
-                        new_tf = int(float(_tm_rows.get('trend_following_enabled', '1'))) == 1
+                        new_sc = int(float(_tm_rows.get('signal_confirmation_enabled', '0'))) == 1
+                        new_tf = int(float(_tm_rows.get('trend_following_enabled', '0'))) == 1
                         if new_sc != self.brain.signal_confirmation_enabled or new_tf != self.brain.trend_following_enabled:
                             logger.info(f"[TRADING-MODE] 模式更新: 信号确认={'ON' if new_sc else 'OFF'} 趋势跟随={'ON' if new_tf else 'OFF'}")
                             self.brain.signal_confirmation_enabled = new_sc
