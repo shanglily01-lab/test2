@@ -221,9 +221,9 @@
 <tr class="text-[10px] uppercase tracking-[0.15em] text-on-surface-variant border-b border-outline-variant/5 bg-surface-container-low">
 <th class="px-6 py-4 font-bold whitespace-nowrap">交易对</th>
 <th class="px-6 py-4 font-bold whitespace-nowrap">方向</th>
-<th class="px-6 py-4 font-bold whitespace-nowrap">保证金 / 时间</th>
+<th class="px-6 py-4 font-bold whitespace-nowrap">保证金 / 开仓时间</th>
 <th class="px-6 py-4 font-bold whitespace-nowrap">开仓 → 当前价</th>
-<th class="px-6 py-4 font-bold whitespace-nowrap">浮盈 / 涨跌</th>
+<th class="px-6 py-4 font-bold whitespace-nowrap">浮盈 (USDT)</th>
 <th class="px-6 py-4 font-bold whitespace-nowrap">止损 / 止盈</th>
 <th class="px-6 py-4 font-bold whitespace-nowrap">操作</th>
 </tr>
@@ -415,12 +415,6 @@ async function loadPositions() {
         var sl = pos.stop_loss_price ? fmtPrice(pos.stop_loss_price) : '--';
         var tp = pos.take_profit_price ? fmtPrice(pos.take_profit_price) : '--';
         var openTime = fmtTime(pos.created_at || pos.open_time);
-        // 价格变化百分比
-        var pricePct = (entry > 0 && curPrice > 0) ? ((curPrice - entry) / entry * 100) : 0;
-        var pricePctStr = (pricePct >= 0 ? '+' : '') + pricePct.toFixed(2) + '%';
-        var pricePctClass = pricePct >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
-        // 浮盈百分比（相对保证金）
-        var pnlPct = margin > 0 ? (pnl / margin * 100) : 0;
         var curPriceClass = curPrice > entry ? 'text-[#49f4c8]' : (curPrice < entry ? 'text-[#ff716c]' : 'text-on-surface-variant');
 
         return '<tr class="' + rowBg + ' transition-colors border-b border-outline-variant/5">' +
@@ -437,18 +431,14 @@ async function loadPositions() {
                 '<span class="px-2 py-0.5 rounded text-[10px] ' + dirBg + ' uppercase">' + dirLabel + '</span>' +
             '</td>' +
             '<td class="px-6 py-4 font-mono">' +
-                '<div class="text-on-surface text-xs">' + (margin > 0 ? margin.toFixed(0) + ' U' : '--') + '</div>' +
+                '<div class="text-on-surface text-xs font-medium">' + (margin > 0 ? margin.toFixed(0) + ' U' : '--') + '</div>' +
                 '<div class="text-on-surface-variant text-[10px]">' + openTime + '</div>' +
             '</td>' +
             '<td class="px-6 py-4 font-mono">' +
                 '<div class="text-on-surface-variant text-xs">' + fmtPrice(entry) + '</div>' +
                 '<div class="' + curPriceClass + ' font-medium text-xs">' + fmtPrice(curPrice) + '</div>' +
-                '<div class="' + pricePctClass + ' text-[10px]">' + pricePctStr + '</div>' +
             '</td>' +
-            '<td class="px-6 py-4 font-mono">' +
-                '<div class="' + pnlClass + ' font-bold text-sm">' + fmtPnl(pnl) + ' U</div>' +
-                '<div class="' + pnlClass + ' text-[10px]">' + (pnlPct >= 0 ? '+' : '') + pnlPct.toFixed(1) + '%</div>' +
-            '</td>' +
+            '<td class="px-6 py-4 font-mono ' + pnlClass + '">' + fmtPnl(pnl) + '</td>' +
             '<td class="px-6 py-4">' +
                 '<div class="text-xs font-mono text-[#ff716c]">SL ' + sl + '</div>' +
                 '<div class="text-xs font-mono text-[#49f4c8]">TP ' + tp + '</div>' +
