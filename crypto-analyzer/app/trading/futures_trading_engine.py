@@ -217,10 +217,12 @@ class FuturesTradingEngine:
         币本位永续 ADA/USD 等：必须用 dapi（U本位 fapi/现货用 ADAUSD 会失败）。
         顺序：premiumIndex 标记价 → ticker 最新价。
         """
-        if not symbol.endswith('/USD'):
+        from app.trading.dapi_coin_margined_price import to_dapi_perp_symbol
+
+        api_sym = to_dapi_perp_symbol(symbol)
+        if not api_sym:
             return None
         import requests
-        api_sym = symbol.replace('/', '') + '_PERP'
         endpoints = (
             ('https://dapi.binance.com/dapi/v1/premiumIndex', ('markPrice', 'indexPrice')),
             ('https://dapi.binance.com/dapi/v1/ticker/price', ('price',)),
@@ -249,6 +251,17 @@ class FuturesTradingEngine:
                         return p
             except Exception as e:
                 logger.debug(f"币本位 dapi {api_sym} 请求失败: {e}")
+        # 与「curl 无参 ticker/price」一致：全量列表里按 symbol 匹配（单参请求偶发失败时仍可用）
+        try:
+            from app.trading.dapi_coin_margined_price import find_perp_price, get_all_dapi_ticker_prices
+
+            rows = get_all_dapi_ticker_prices()
+            p = find_perp_price(rows, api_sym)
+            if p is not None:
+                logger.debug(f"[PRICE] 币本位 dapi 全量 ticker {symbol} ({api_sym}) = {p}")
+                return p
+        except Exception as e:
+            logger.debug(f"币本位 dapi 全量 ticker 回退失败: {e}")
         return None
 
     @staticmethod
@@ -256,11 +269,16 @@ class FuturesTradingEngine:
         """
         dapi 不可用时，用 BASE/USDT 现货作近似（与币本位标记价有偏差，仅优于无价格）。
         """
-        if not symbol.endswith('/USD'):
+        from app.trading.dapi_coin_margined_price import to_dapi_perp_symbol
+
+        api_sym = to_dapi_perp_symbol(symbol)
+        if not api_sym:
             return None
         import requests
-        base = symbol.split('/')[0].upper()
-        spot = f'{base}USDT'
+        base = api_sym[:-8] if api_sym.endswith("USD_PERP") else ""
+        if not base:
+            return None
+        spot = f"{base}USDT"
         try:
             r = requests.get(
                 'https://api.binance.com/api/v3/ticker/price',
@@ -399,7 +417,11 @@ class FuturesTradingEngine:
 
             raise ValueError(f"无法获取{symbol}的价格")
         except Exception as e:
-            logger.error(f"获取价格失败: {e}")
+            # 无行情/K线时由调用方降级为 mark/entry，此处仅记 warning 避免与外层重复 ERROR
+            if isinstance(e, ValueError) and "无法获取" in str(e):
+                logger.warning(f"获取价格失败: {e}")
+            else:
+                logger.error(f"获取价格失败: {e}")
             raise
         finally:
             connection.close()
@@ -1533,15 +1555,21 @@ class FuturesTradingEngine:
                     if symbol in price_cache:
                         current_price = price_cache[symbol]
                     else:
-                        # 回退到数据库价格
-                        current_price = self.get_current_price(symbol, use_realtime=False)
+                        try:
+                            current_price = self.get_current_price(symbol, use_realtime=False)
+                        except Exception:
+                            current_price = None
 
-                    # 如果无法获取价格，使用数据库中的mark_price
+                    # 如果无法获取价格，使用数据库中的mark_price，再回退开仓价
                     if current_price is None:
                         current_price = pos.get('mark_price')
-                        if current_price is None:
-                            # 如果mark_price也是None，跳过此持仓的盈亏计算
-                            raise ValueError(f"无法获取{symbol}的价格")
+                    if current_price is None:
+                        ep = pos.get('avg_entry_price') or pos.get('entry_price')
+                        if ep is not None:
+                            current_price = Decimal(str(ep))
+                            logger.debug(f"持仓 {symbol} 无行情，暂用开仓价展示")
+                    if current_price is None:
+                        raise ValueError(f"无法获取{symbol}的价格")
 
                     # 对于分批建仓的持仓，使用avg_entry_price，否则使用entry_price
                     entry_price = Decimal(str(pos.get('avg_entry_price') or pos['entry_price']))

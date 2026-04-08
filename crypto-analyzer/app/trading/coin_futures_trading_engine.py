@@ -257,10 +257,11 @@ class CoinFuturesTradingEngine:
                 
                 # 优先从Binance币本位合约API获取实时价格
                 try:
-                    # 币本位合约需要使用 dapi，并且符号格式为 BTCUSD_PERP
-                    if symbol.endswith('/USD'):
-                        # 币本位: BTC/USD -> BTCUSD_PERP
-                        symbol_for_api = symbol.replace('/', '') + '_PERP'
+                    from app.trading.dapi_coin_margined_price import to_dapi_perp_symbol
+
+                    perp = to_dapi_perp_symbol(symbol)
+                    if perp:
+                        symbol_for_api = perp
                     else:
                         symbol_for_api = symbol_clean
 
@@ -302,30 +303,47 @@ class CoinFuturesTradingEngine:
                                         return price
                     except Exception as e:
                         logger.debug(f"Binance币本位 premiumIndex 获取失败: {e}")
+                    # 与无参 GET /dapi/v1/ticker/price 全量列表一致（单 symbol 失败时兜底）
+                    try:
+                        from app.trading.dapi_coin_margined_price import find_perp_price, get_all_dapi_ticker_prices
+
+                        rows = get_all_dapi_ticker_prices()
+                        p_full = find_perp_price(rows, symbol_for_api)
+                        if p_full is not None:
+                            logger.debug(
+                                f"从Binance币本位全量 ticker 获取价格: {symbol} = {p_full}"
+                            )
+                            return p_full
+                    except Exception as e:
+                        logger.debug(f"Binance币本位全量 ticker 回退失败: {e}")
                 except Exception as e:
                     logger.debug(f"Binance币本位合约API获取失败: {e}")
                 
                 # 注意：币本位(/USD)品种不能回退到现货API，现货价≠币本位合约价
-                # 直接回退到数据库K线缓存
-                if symbol.endswith('/USD'):
+                # 直接回退到数据库K线缓存（支持 TRX/USD、TRXUSD 等写法）
+                from app.trading.dapi_coin_margined_price import to_dapi_perp_symbol as _perp_sym
+
+                _ps = _perp_sym(symbol)
+                if _ps:
                     # 最后尝试：USDT 现货近似（仅当 dapi 不可用时）
                     try:
-                        base = symbol.split('/')[0].upper()
-                        spot_sym = f'{base}USDT'
-                        r = session.get(
-                            'https://api.binance.com/api/v3/ticker/price',
-                            params={'symbol': spot_sym},
-                            timeout=2,
-                        )
-                        if r.status_code == 200:
-                            j = r.json()
-                            if j and 'price' in j:
-                                price = Decimal(str(j['price']))
-                                if price > 0:
-                                    logger.warning(
-                                        f"[PRICE] {symbol} dapi 不可用，使用现货 {spot_sym} 近似价 {price}"
-                                    )
-                                    return price
+                        base = _ps[:-8] if _ps.endswith("USD_PERP") else ""
+                        if base:
+                            spot_sym = f"{base}USDT"
+                            r = session.get(
+                                'https://api.binance.com/api/v3/ticker/price',
+                                params={'symbol': spot_sym},
+                                timeout=2,
+                            )
+                            if r.status_code == 200:
+                                j = r.json()
+                                if j and 'price' in j:
+                                    price = Decimal(str(j['price']))
+                                    if price > 0:
+                                        logger.warning(
+                                            f"[PRICE] {symbol} dapi 不可用，使用现货 {spot_sym} 近似价 {price}"
+                                        )
+                                        return price
                     except Exception as e:
                         logger.debug(f"币本位现货近似失败: {e}")
                     logger.warning(f"币本位dapi获取失败，回退到K线缓存: {symbol}")
@@ -389,7 +407,10 @@ class CoinFuturesTradingEngine:
             cursor.close()
             raise ValueError(f"无法获取{symbol}的有效价格（K线数据均已超过30分钟）")
         except Exception as e:
-            logger.error(f"获取价格失败: {e}")
+            if isinstance(e, ValueError) and ("无法获取" in str(e) or "有效价格" in str(e)):
+                logger.warning(f"获取价格失败: {e}")
+            else:
+                logger.error(f"获取价格失败: {e}")
             raise
         finally:
             connection.close()
@@ -1693,15 +1714,20 @@ class CoinFuturesTradingEngine:
                     if symbol in price_cache:
                         current_price = price_cache[symbol]
                     else:
-                        # 回退到实时API价格（批量请求失败时，逐个尝试dapi）
-                        current_price = self.get_current_price(symbol, use_realtime=True)
+                        try:
+                            current_price = self.get_current_price(symbol, use_realtime=True)
+                        except Exception:
+                            current_price = None
 
-                    # 如果无法获取价格，使用数据库中的mark_price
                     if current_price is None:
                         current_price = pos.get('mark_price')
-                        if current_price is None:
-                            # 如果mark_price也是None，跳过此持仓的盈亏计算
-                            raise ValueError(f"无法获取{symbol}的价格")
+                    if current_price is None:
+                        ep = pos.get('avg_entry_price') or pos.get('entry_price')
+                        if ep is not None:
+                            current_price = Decimal(str(ep))
+                            logger.debug(f"持仓 {symbol} 无行情，暂用开仓价展示")
+                    if current_price is None:
+                        raise ValueError(f"无法获取{symbol}的价格")
 
                     # 对于分批建仓的持仓，使用avg_entry_price，否则使用entry_price
                     entry_price = Decimal(str(pos.get('avg_entry_price') or pos['entry_price']))

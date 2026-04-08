@@ -1313,8 +1313,10 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
     except Exception as e:
         logger.debug(f"批量获取Binance价格失败: {e}")
 
-    # 1b. 币本位 /USD：U本位 fapi 无 ADAUSD 等符号，从 dapi 一次拉全量
-    need_dapi = [s for s in symbols if s.endswith('/USD') and s not in prices]
+    # 1b. 币本位：dapi 返回 symbol/ps 均无斜杠（如 TRXUSD_PERP / ps=TRXUSD），映射为 BASE/USD 再回填请求里的任意写法
+    from app.trading.dapi_coin_margined_price import canonical_coin_usd_display
+
+    need_dapi = [s for s in symbols if s not in prices and canonical_coin_usd_display(s)]
     if need_dapi:
         try:
             async with aiohttp.ClientSession(timeout=quick_timeout) as session:
@@ -1327,8 +1329,9 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
                             if sym.endswith('USD_PERP'):
                                 fmt_map[sym.replace('USD_PERP', '/USD')] = float(item['price'])
                         for s in need_dapi:
-                            if s in fmt_map:
-                                prices[s] = {'price': fmt_map[s], 'source': 'binance_dapi'}
+                            canon = canonical_coin_usd_display(s)
+                            if canon and canon in fmt_map:
+                                prices[s] = {'price': fmt_map[canon], 'source': 'binance_dapi'}
         except Exception as e:
             logger.debug(f"批量获取币本位 dapi 价格失败: {e}")
 

@@ -21,9 +21,18 @@ class SignalAnalysisService:
         self.connection = None
 
     def _get_connection(self):
-        """获取数据库连接"""
+        """获取数据库连接（长任务中 MySQL 可能断开，需 ping 重连）"""
         if self.connection is None or not self.connection.open:
             self.connection = pymysql.connect(**self.db_config)
+        else:
+            try:
+                self.connection.ping(reconnect=True)
+            except Exception:
+                try:
+                    self.connection.close()
+                except Exception:
+                    pass
+                self.connection = pymysql.connect(**self.db_config)
         return self.connection
 
     def analyze_kline_strength(self, symbol: str, timeframe: str, hours: int = 24) -> Optional[Dict]:

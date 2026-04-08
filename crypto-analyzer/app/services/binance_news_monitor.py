@@ -135,7 +135,7 @@ class BinanceNewsMonitor:
 
             code = data.get("code")
             if str(code) not in ("000000", "0") or not data.get("data"):
-                logger.warning("Binance 公告接口返回异常: code=%s", code)
+                logger.warning("Binance 公告接口返回异常: code={}", code)
                 return []
 
             # 返回结构: data.catalogs[].articles 或 data.articles
@@ -152,10 +152,10 @@ class BinanceNewsMonitor:
             return articles
 
         except requests.RequestException as e:
-            logger.error("Binance 公告请求失败: %s", e)
+            logger.error("Binance 公告请求失败: {}", e)
             return []
         except Exception as e:
-            logger.error("Binance 公告解析异常: %s", e)
+            logger.error("Binance 公告解析异常: {}", e)
             return []
 
     # ------------------------------------------------------------------
