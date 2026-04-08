@@ -7,6 +7,7 @@
 
 ## 目录
 
+0. [开关层级（总开关与子开关）](#0-开关层级总开关与子开关)
 1. [系统全貌](#1-系统全貌)
 2. [主循环时序](#2-主循环时序)
 3. [全局过滤器（开仓前置条件）](#3-全局过滤器)
@@ -23,16 +24,33 @@
 
 ---
 
+## 0. 开关层级（总开关与子开关）
+
+**总开关** `u_futures_trading_enabled`：关了 → 下面全部不能新开仓；开了 → 再看各自子开关。
+
+**子开关**（总开关打开后才看）：
+
+- `predictor_enabled` → 预测神器  
+- `btc_momentum_enabled` → BTC 动量  
+- `u_coin_style_enabled` → U本位破位  
+- `signal_confirmation_enabled` / `trend_following_enabled` → 主策略里的信号确认 / 趋势跟随（可只开其一）
+
+实盘下单另看 `live_trading_enabled`。
+
+---
+
 ## 1. 系统全貌
 
 ### 四种策略并行运行，共享 account_id=2
 
-| 策略 | 文件 | source字段 | 扫描间隔 | 开关 |
-|------|------|-----------|---------|------|
-| 主策略（信号确认/趋势跟随） | `smart_trader_service.py` | `signal_confirm` / `trend_follow` | 300秒 | `u_futures_trading_enabled` |
-| BTC动量跟随 | `app/services/btc_momentum_trader.py` | `BTC_MOMENTUM` | 每分钟检测 | `btc_momentum_enabled` |
-| 市场预测器 | `app/services/market_predictor.py` | `PREDICTOR` | 每6小时 | `predictor_enabled` |
-| U本位破位 | `u_coin_style_trader_service.py` | `u_coin_style` | 300秒 | `u_coin_style_enabled` |
+| 策略 | 文件 | source字段 | 扫描间隔 | 子开关 | Big4过滤 |
+|------|------|-----------|---------|--------|----------|
+| 主策略（信号确认/趋势跟随） | `smart_trader_service.py` | `signal_confirm` / `trend_follow` | 300秒 | 见 §0 | **是** |
+| BTC动量跟随 | `app/services/btc_momentum_trader.py` | `BTC_MOMENTUM` | 每分钟 | `btc_momentum_enabled` | **否** |
+| 市场预测器（预测神器） | `app/services/market_predictor.py` | `PREDICTOR` | 每6小时 | `predictor_enabled` | **否** |
+| U本位破位 | `u_coin_style_trader_service.py` | `u_coin_style` | 300秒 | `u_coin_style_enabled` | **否** |
+
+支线（预测/动量/破位）不走主策略的 Big4 门控；主策略 Big4=NEUTRAL 时本身不开仓，不等于支线停。U 破位扫描池同主策略 `config.yaml` 的 `symbols`。
 
 ### 核心账户参数
 
@@ -69,13 +87,15 @@ rating_level=3     → 永久禁止，不扫描
 
 ## 3. 全局过滤器
 
+> **适用范围：** 本节及后文「`analyze()` 内过滤」「执行层 Big4 强度」等，主要针对 **主策略** `smart_trader_service.py`。**预测神器**、**BTC 动量**、**U本位破位**不走本节所述 Big4 门控（见第 8、9、10 节）。
+
 以下条件任一不满足，**整轮或单个币种**直接跳过：
 
 ### 3.1 交易开关（整轮级别）
 
 | 开关 | 说明 | 触发禁止的条件 |
 |------|------|-------------|
-| `u_futures_trading_enabled` | 总开关 | 手动或熔断后自动设为 0 |
+| `u_futures_trading_enabled` | **U本位总开关**（预测/动量/破位/主策略共通，见 [§0](#0-开关层级总开关与子开关)） | 手动或熔断后自动设为 0 → 上述全部停新开仓 |
 | `allow_long` | 允许做多 | 手动关闭 |
 | `allow_short` | 允许做空 | 手动关闭 |
 
@@ -322,6 +342,8 @@ open_position(opp) 被调用
 
 **文件：** `app/services/btc_momentum_trader.py`
 
+**Big4：** 本策略**不经过**主策略的 Big4 过滤（无 `overall_signal`/强度门控、无 `analyze()`）。触发与下单仅依赖 BTC 涨跌幅窗口、冷却、`btc_momentum_enabled` 与 `u_futures_trading_enabled` 等。
+
 ### 触发条件
 
 ```
@@ -364,6 +386,8 @@ AND 当前该API账号实盘仓位 < 5
 
 **文件：** `app/services/market_predictor.py`
 
+**Big4：** 预测神器**不经过**主策略的 Big4 过滤；`run_all()` 仅检查 `predictor_enabled`、`u_futures_trading_enabled` 及评级黑名单等，按 K 线模型算置信度并下单，与 Big4 `NEUTRAL`/强度无关。
+
 ### 两类单子
 
 | 类型 | 存储位置 | confidence 要求 | 保证金 | 最大单数 |
@@ -390,6 +414,8 @@ planned_close_time = 开仓后 6H（由 max_hold_hours 控制）
 ## 10. U本位破位策略
 
 **文件：** `u_coin_style_trader_service.py`
+
+**Big4：** 与主策略独立，**不**做 Big4 `NEUTRAL` 整轮跳过、紧急干预拦截、方向过滤或 Big4 动态保证金；评分仅用 K 线组件 + `BreakoutSystem` 破位加权。
 
 ### 核心参数
 
@@ -418,8 +444,8 @@ rating_level = 3 → 禁止
 ### 特殊机制
 
 ```
-BreakoutSystem：检测Big4破位，对信号加权评分，强平反向持仓
-实盘条件：live_trading_enabled=1 AND TOP50内 AND 当前实盘仓位 < 5
+BreakoutSystem：价格/结构破位检测，对信号加权评分，强平反向持仓（非 Big4 市场门控）
+扫描池：`config.yaml` 的 `symbols`（排除 rating≥3）；实盘条件：live_trading_enabled=1 AND 当前 API 实盘仓位 < 5
 熔断：3小时亏损 > 300U → 自动停止
 持仓池与主策略/BTC动量/预测器共享：has_position 不过滤 source（防重复+防对冲）
 source = 'u_coin_style'
@@ -490,18 +516,20 @@ max_hold_hours（从 system_settings 读取，范围 3~8H）× 60 = max_hold_min
 
 ## 13. 开关一览
 
-所有开关在 `system_settings` 表，列名 `setting_key` / `setting_value`。
+所有开关在 `system_settings` 表。先看总开关 `u_futures_trading_enabled`，再看 §0 各子项。
 
 | setting_key | 说明 | 值格式 |
 |-------------|------|-------|
-| `u_futures_trading_enabled` | U本位主策略总开关 | '1'/'0' |
+| `u_futures_trading_enabled` | **U本位总开关**（关则预测/动量/破位/主策略均不新开仓） | '1'/'0' |
+| `signal_confirmation_enabled` | 主策略·信号确认路径（STRONG Big4） | '1'/'0' |
+| `trend_following_enabled` | 主策略·趋势跟随路径（BULLISH/BEARISH Big4） | '1'/'0' |
 | `live_trading_enabled` | 实盘同步总开关 | '1'/'0' |
 | `allow_long` | 允许做多 | '1'/'0' |
 | `allow_short` | 允许做空 | '1'/'0' |
 | `big4_filter_enabled` | Big4过滤器开关 | 'true'/'false' |
-| `btc_momentum_enabled` | BTC动量策略开关 | '1'/'0' |
-| `predictor_enabled` | 预测器策略开关 | '1'/'0' |
-| `u_coin_style_enabled` | U本位破位策略开关 | '1'/'0' |
+| `btc_momentum_enabled` | BTC动量（须总开关同开） | '1'/'0' |
+| `predictor_enabled` | 预测神器（须总开关同开） | '1'/'0' |
+| `u_coin_style_enabled` | U本位破位（须总开关同开） | '1'/'0' |
 | `max_positions` | 最大持仓数 | 数字字符串 |
 | `max_hold_hours` | 最大持仓时长（小时） | 数字字符串 |
 | `stop_loss_pct` | 全局止损% | 数字字符串 |

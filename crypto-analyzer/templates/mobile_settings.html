@@ -26,7 +26,8 @@ tailwind.config = {
 .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
 body { background:#070b10; color:#ebeef5; font-family:'Manrope',sans-serif;
     -webkit-font-smoothing:antialiased; -webkit-tap-highlight-color:transparent;
-    min-height:100dvh; min-height:100vh; overscroll-behavior-y:contain; }
+    min-height:100dvh; min-height:100vh; overscroll-behavior-y:contain;
+    overflow-x:hidden; touch-action:pan-y; }
 .settings-card { background:#0f1520; }
 .mono-data { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
 .custom-toggle { position:relative;display:inline-block;width:44px;height:24px;flex-shrink:0; }
@@ -38,6 +39,10 @@ body { background:#070b10; color:#ebeef5; font-family:'Manrope',sans-serif;
 input:checked + .slider { background:#00d4aa; }
 input:checked + .slider:before { transform:translateX(20px); }
 .setting-row { min-height:56px; }
+.setting-row label.custom-toggle {
+    display:inline-flex; align-items:center; justify-content:center;
+    min-width:48px; min-height:48px; margin:-8px -4px -8px 0; touch-action:manipulation;
+}
 .bottom-nav { padding-bottom:max(env(safe-area-inset-bottom),8px); }
 main { padding-bottom:calc(76px + max(env(safe-area-inset-bottom),8px)); }
 button,a,label,select { -webkit-tap-highlight-color:transparent; }
@@ -49,15 +54,17 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
 .hero-banner::after { content:'';position:absolute;bottom:-30%;left:10%;width:150px;height:150px;
     background:radial-gradient(circle,rgba(91,158,255,.08) 0%,transparent 70%);border-radius:50%; }
 /* Toast */
-#toast { position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:500;
-    background:#1a2235;color:#ebeef5;padding:8px 18px;border-radius:20px;
+#toast { position:fixed;top:max(72px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:500;
+    background:#1a2235;color:#ebeef5;padding:10px 16px;border-radius:20px;
     font-size:13px;font-weight:600;opacity:0;transition:opacity .2s;
-    border:1px solid #44484e;white-space:nowrap;pointer-events:none; }
+    border:1px solid #44484e;pointer-events:none;max-width:min(92vw,360px);text-align:center;
+    line-height:1.35;word-break:break-word; }
 #toast.show { opacity:1; }
 #toast.err { border-color:rgba(255,113,108,.3);color:#ff716c; }
 /* Lock overlay */
 #lockOverlay { display:none;position:fixed;inset:0;background:rgba(7,11,16,.95);z-index:300;
-    flex-direction:column;align-items:center;justify-content:center;padding:32px; }
+    flex-direction:column;align-items:center;justify-content:center;
+    padding:32px;padding-bottom:max(32px,env(safe-area-inset-bottom)); }
 #lockOverlay.show { display:flex; }
 .lock-card { background:#0f1520;border:1px solid #1e2d45;border-radius:20px;
     padding:32px 24px;width:100%;max-width:320px; }
@@ -101,18 +108,18 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
         style="padding-top:env(safe-area-inset-top);">
     <div class="flex items-center justify-between px-5 h-14 w-full">
         <div class="flex items-center gap-3">
-            <button class="w-10 h-10 flex items-center justify-center active:scale-95 duration-150" onclick="lockPage()" aria-label="锁定">
+            <button type="button" class="w-10 h-10 flex items-center justify-center active:scale-95 duration-150 touch-manipulation rounded-xl" onclick="lockPage()" aria-label="锁定">
                 <span class="material-symbols-outlined text-[#49f4c8]">lock</span>
             </button>
             <h1 class="font-['Space_Grotesk'] text-[#49f4c8] text-base font-bold tracking-tight">系统设置</h1>
         </div>
-        <button class="w-10 h-10 flex items-center justify-center active:scale-95 duration-150" onclick="loadAll()" aria-label="刷新">
+        <button type="button" class="w-10 h-10 flex items-center justify-center active:scale-95 duration-150 touch-manipulation rounded-xl" onclick="loadAll()" aria-label="刷新">
             <span class="material-symbols-outlined text-[#49f4c8]">refresh</span>
         </button>
     </div>
 </header>
 
-<main class="pt-14 pb-28 px-4 max-w-lg mx-auto space-y-6">
+<main class="pt-14 pb-28 px-4 sm:px-5 max-w-lg mx-auto w-full min-w-0 space-y-6">
 
     <!-- 版本横幅 -->
     <section class="mt-4">
@@ -187,18 +194,19 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
                 <span class="text-sm font-medium">Big4趋势过滤</span>
                 <label class="custom-toggle"><input id="big4Toggle" type="checkbox" onchange="autoSave('big4')"/><span class="slider"></span></label>
             </div>
-            <div class="setting-row flex items-center justify-between px-4">
-                <div class="flex flex-col py-3">
+            <div class="setting-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-1">
+                <div class="flex flex-col py-2 min-w-0 pr-2">
                     <span class="text-sm font-medium">最大持仓时间</span>
-                    <span class="text-[10px] text-on-surface-variant mt-0.5">Auto-liquidation threshold</span>
+                    <span class="text-[10px] text-on-surface-variant mt-0.5 leading-snug">与桌面系统配置一致，范围 3～8 小时</span>
                 </div>
-                <select id="holdHours" onchange="autoSave('holdHours')"
-                    class="bg-surface-container-highest text-on-surface text-sm rounded-xl border-none focus:ring-1 focus:ring-primary h-10 px-3 font-body mono-data ml-4 flex-shrink-0">
-                    <option value="4">4H</option>
-                    <option value="6">6H</option>
-                    <option value="8">8H</option>
-                    <option value="12">12H</option>
-                    <option value="24">24H</option>
+                <select id="holdHours" onchange="autoSave('holdHours')" aria-label="最大持仓小时数"
+                    class="bg-surface-container-highest text-on-surface text-sm rounded-xl border-none focus:ring-2 focus:ring-primary/50 h-11 min-h-[44px] px-4 font-body mono-data w-full sm:w-auto sm:min-w-[100px] sm:ml-4 flex-shrink-0 touch-manipulation">
+                    <option value="3">3 小时</option>
+                    <option value="4">4 小时</option>
+                    <option value="5">5 小时</option>
+                    <option value="6">6 小时</option>
+                    <option value="7">7 小时</option>
+                    <option value="8">8 小时</option>
                 </select>
             </div>
         </div>
@@ -386,7 +394,9 @@ async function loadAll() {
             setPill('predictorStatus', d.predictor_enabled);
         }
         if (holdR.success) {
-            document.getElementById('holdHours').value = String(holdR.data.hours);
+            const h = Math.max(3, Math.min(8, parseInt(holdR.data.hours, 10) || 4));
+            const sel = document.getElementById('holdHours');
+            sel.value = String(h);
         }
     } catch(e) { toast('加载失败: ' + e.message, 'err'); }
 }
@@ -435,11 +445,11 @@ async function save(type) {
         if (r.success) toast('Big4设置已保存');
         else toast('保存失败', 'err');
     } else if (type === 'holdHours') {
-        const hours = parseInt(document.getElementById('holdHours').value);
+        const hours = Math.max(3, Math.min(8, parseInt(document.getElementById('holdHours').value, 10) || 4));
         const r = await fetch(`${SYS}/max-hold-hours`, {
             method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ hours })
         }).then(r => r.json());
-        if (r.success) toast(`持仓时间设为 ${hours}H`);
+        if (r.success) toast(`持仓时间已设为 ${hours} 小时`);
         else toast('保存失败', 'err');
     }
 }

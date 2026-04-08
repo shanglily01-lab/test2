@@ -1297,22 +1297,48 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
     quick_timeout = ClientTimeout(total=3)  # 3秒超时
 
     try:
-        # 1. 从Binance批量获取所有合约价格（单次请求）
+        # 1. U 本位：优先 premiumIndex.markPrice（与交易所未实现盈亏、markPrice WS 一致）；失败再回退 ticker 最新价
+        used_mark = False
         async with aiohttp.ClientSession(timeout=quick_timeout) as session:
-            async with session.get('https://fapi.binance.com/fapi/v1/ticker/price') as response:
+            async with session.get(
+                "https://fapi.binance.com/fapi/v1/premiumIndex"
+            ) as response:
                 if response.status == 200:
                     all_prices = await response.json()
-                    # 构建价格映射（供 1c 同基底 USDT 参考）
-                    price_map = {item['symbol']: float(item['price']) for item in all_prices}
+                    price_map = {}
+                    for item in all_prices:
+                        sym = item.get("symbol")
+                        mp = item.get("markPrice")
+                        if sym and mp is not None:
+                            try:
+                                price_map[sym] = float(mp)
+                            except (TypeError, ValueError):
+                                pass
+                    used_mark = len(price_map) > 0
 
-                    for clean_symbol, original_symbol in symbol_map.items():
-                        if clean_symbol in price_map:
-                            prices[original_symbol] = {
-                                'price': price_map[clean_symbol],
-                                'source': 'binance_futures'
-                            }
+            if not price_map:
+                async with session.get(
+                    "https://fapi.binance.com/fapi/v1/ticker/price"
+                ) as response:
+                    if response.status == 200:
+                        all_prices = await response.json()
+                        price_map = {
+                            item["symbol"]: float(item["price"]) for item in all_prices
+                        }
+                        used_mark = False
+
+            for clean_symbol, original_symbol in symbol_map.items():
+                if clean_symbol in price_map:
+                    prices[original_symbol] = {
+                        "price": price_map[clean_symbol],
+                        "source": (
+                            "binance_futures_mark"
+                            if used_mark
+                            else "binance_futures_last_fallback"
+                        ),
+                    }
     except Exception as e:
-        logger.debug(f"批量获取Binance价格失败: {e}")
+        logger.debug(f"批量获取Binance U 本位价格失败: {e}")
 
     # 1b. 币本位：dapi 返回 symbol/ps 均无斜杠（如 TRXUSD_PERP / ps=TRXUSD），映射为 BASE/USD 再回填请求里的任意写法
     from app.trading.dapi_coin_margined_price import (

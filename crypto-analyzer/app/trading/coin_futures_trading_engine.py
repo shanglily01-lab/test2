@@ -1713,14 +1713,28 @@ class CoinFuturesTradingEngine:
                     )
 
                     dpr = requests.get(
-                        "https://fapi.binance.com/fapi/v1/ticker/price", timeout=3
+                        "https://fapi.binance.com/fapi/v1/premiumIndex", timeout=3
                     )
                     price_map_fapi = {}
                     if dpr.status_code == 200:
-                        price_map_fapi = {
-                            item["symbol"]: float(item["price"])
-                            for item in dpr.json()
-                        }
+                        for item in dpr.json():
+                            sym = item.get("symbol")
+                            mp = item.get("markPrice")
+                            if sym and mp is not None:
+                                try:
+                                    price_map_fapi[sym] = float(mp)
+                                except (TypeError, ValueError):
+                                    pass
+                    if not price_map_fapi:
+                        dpr = requests.get(
+                            "https://fapi.binance.com/fapi/v1/ticker/price",
+                            timeout=3,
+                        )
+                        if dpr.status_code == 200:
+                            price_map_fapi = {
+                                item["symbol"]: float(item["price"])
+                                for item in dpr.json()
+                            }
 
                     rows_all = get_all_dapi_ticker_prices()
                     dapi_fmt_map = build_dapi_usd_perp_fmt_map(rows_all)

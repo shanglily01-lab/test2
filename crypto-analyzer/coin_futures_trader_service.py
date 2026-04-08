@@ -2021,10 +2021,16 @@ class CoinFuturesTraderService:
                 big4_strength = opp.get('big4_strength', 0)
                 logger.info(f"[BIG4-APPLIED] {symbol} Big4趋势: {big4_signal} (强度: {big4_strength})")
 
-            # 问题1优化: 计算动态超时时间
-            base_timeout_minutes = self.opt_config.get_timeout_by_score(entry_score)
-            # 计算超时时间点 (UTC时间)
-            from datetime import datetime, timedelta
+            # 最大持仓时间：与系统配置一致，实时从 max_hold_hours 读取（3~8 小时，与 U 本位相同）
+            try:
+                _mh_val = self.opt_config._read_system_setting('max_hold_hours')
+                _mh_hours = max(3, min(8, int(_mh_val))) if _mh_val else 4
+            except Exception:
+                _mh_hours = 4
+            base_timeout_minutes = _mh_hours * 60
+            logger.info(
+                f"[COIN_HOLD] {symbol} 最大持仓: {base_timeout_minutes} 分钟（{_mh_hours} 小时，system_settings）"
+            )
             timeout_at = datetime.utcnow() + timedelta(minutes=base_timeout_minutes)
 
             # 插入持仓记录 (包含动态超时字段)

@@ -7,6 +7,7 @@ U本位「破位策略」服务 - 复刻币本位策略逻辑到 USDT 标的
 - 平仓：SmartExitOptimizer（止损/止盈/移动止盈/K线止盈）
 - 实盘同步：BinanceFuturesEngine（live_trading_enabled=1 时）
 - 开关：system_settings.u_coin_style_enabled
+- 不做 Big4 市场门控（与主策略 smart_trader 的 NEUTRAL/方向过滤无关）
 - 账户：account_id=2（U本位模拟），source='U_COIN_STYLE'
 """
 
@@ -28,7 +29,6 @@ from app.services.optimization_config import OptimizationConfig
 from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_exit_optimizer import SmartExitOptimizer
-from app.services.big4_trend_detector import Big4TrendDetector
 from app.services.signal_blacklist_checker import SignalBlacklistChecker
 from app.services.breakout_system import BreakoutSystem
 
@@ -126,8 +126,9 @@ class DatabaseExchangeAdapter:
 # ──────────────────────────────────────────────────────────
 
 class UCoinStyleBrain:
-    """信号评分 + 破位系统，逻辑与币本位 CoinFuturesDecisionBrain 完全一致，
-    仅 strategy_type、账号和 symbol 格式不同"""
+    """信号评分 + 破位系统，与币本位 CoinFuturesDecisionBrain 同构。
+    扫描池与主策略一致：`config.yaml` 的 `symbols`（U 本位 /USDT），排除 rating_level>=3；
+    权重优先 `strategy_type=u_coin_style`，缺省时回退为 `default`（与币本位一致）。"""
 
     THRESHOLD = 60   # 开仓基础阈值
 
@@ -190,21 +191,17 @@ class UCoinStyleBrain:
             with open('config.yaml', 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)
 
+            all_symbols = config.get('symbols', [])
+
             conn   = self._get_connection()
             cursor = conn.cursor()
 
-            # 交易对白名单：TOP50 盈利榜
-            cursor.execute(
-                "SELECT symbol FROM top_performing_symbols ORDER BY rank_score DESC LIMIT 50"
-            )
-            top50 = [r['symbol'] for r in cursor.fetchall()]
-
-            # Level3 永久禁止
+            # 交易对白名单：与 smart_trader 相同 — config.yaml 全量 U 本位池，勿用 TOP50（否则大量币种根本不扫描）
             cursor.execute(
                 "SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3"
             )
             banned = {r['symbol'] for r in cursor.fetchall()}
-            self.whitelist = [s for s in top50 if s not in banned]
+            self.whitelist = [s for s in all_symbols if s not in banned]
 
             # 黑名单（小仓位）
             cursor.execute(
@@ -242,13 +239,35 @@ class UCoinStyleBrain:
                 }
                 for r in rows
             }
+            if not self.scoring_weights:
+                cursor.execute(
+                    "SELECT signal_component, weight_long, weight_short "
+                    "FROM signal_scoring_weights "
+                    "WHERE is_active=1 AND strategy_type='default'"
+                )
+                rows = cursor.fetchall()
+                self.scoring_weights = {
+                    r['signal_component']: {
+                        'long':  float(r['weight_long']),
+                        'short': float(r['weight_short'])
+                    }
+                    for r in rows
+                }
+                if self.scoring_weights:
+                    logger.info("[U破位] u_coin_style 权重为空，已回退为 strategy_type=default（与币本位一致）")
+
             cursor.close()
 
             logger.info(f"[U破位] 白名单: {len(self.whitelist)}个 | 评分组件: {len(self.scoring_weights)}个")
 
         except Exception as e:
             logger.error(f"[U破位] 配置加载失败: {e}，使用内置默认值")
-            self.whitelist  = []
+            try:
+                import yaml
+                with open('config.yaml', 'r', encoding='utf-8') as f:
+                    self.whitelist = yaml.safe_load(f).get('symbols', [])
+            except Exception:
+                self.whitelist = []
             self.blacklist  = []
             self.scoring_weights = {}
             self.adaptive_long  = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02}
@@ -284,7 +303,7 @@ class UCoinStyleBrain:
 
     # ── 信号分析 ──────────────────────────────────────────
 
-    def analyze(self, symbol: str, big4_result: dict = None):
+    def analyze(self, symbol: str):
         """对单个交易对评分，返回 {'symbol','side','score','current_price','signal_components','breakout_boost'} 或 None"""
         if symbol not in self.whitelist:
             return None
@@ -323,13 +342,10 @@ class UCoinStyleBrain:
                     long_score += wt['long']
                     if wt['long']: comps['position_low'] = wt['long']
             elif position_pct > 70:
-                big4_bullish = (big4_result and
-                                big4_result.get('overall_signal') in ('BULLISH', 'STRONG_BULLISH') and
-                                big4_result.get('signal_strength', 0) >= 50)
-                if not big4_bullish:
-                    wt = W('position_high', 0, 20)
-                    short_score += wt['short']
-                    if wt['short']: comps['position_high'] = wt['short']
+                wt = W('position_high', 0, 20)
+                short_score += wt['short']
+                if wt['short']:
+                    comps['position_high'] = wt['short']
             else:
                 wt = W('position_mid', 5, 5)
                 long_score  += wt['long']
@@ -429,15 +445,8 @@ class UCoinStyleBrain:
                 short_score += wt['short']
                 if wt['short']: comps['breakdown_short'] = wt['short']
 
-            # ── 动态阈值 ──────────────────────────────────
-            big4_bullish = (big4_result and
-                            big4_result.get('overall_signal') in ('BULLISH', 'STRONG_BULLISH') and
-                            big4_result.get('signal_strength', 0) >= 50)
-            if big4_bullish:
-                long_threshold = 50
-            else:
-                nb = big4_result.get('neutral_bias', 'FLAT') if big4_result else 'FLAT'
-                long_threshold = self.THRESHOLD + 8 if nb == 'DOWN' else self.THRESHOLD
+            # ── 阈值（与主策略 Big4 无关，多头与空头统一基准） ──
+            long_threshold = self.THRESHOLD
 
             # ── 方向决策 ──────────────────────────────────
             long_ok  = long_score  >= long_threshold
@@ -478,14 +487,6 @@ class UCoinStyleBrain:
                 logger.info(f"[U破位] {symbol} 信号黑名单阻止: {reason}")
                 return None
 
-            # Big4 紧急干预
-            if big4_result:
-                emg = big4_result.get('emergency_intervention', {})
-                if emg.get('block_long') and side == 'LONG':
-                    return None
-                if emg.get('block_short') and side == 'SHORT':
-                    return None
-
             # 破位系统加权
             breakout_boost = 0
             if self.breakout_system:
@@ -515,10 +516,10 @@ class UCoinStyleBrain:
             logger.error(f"[U破位] {symbol} 分析失败: {e}")
             return None
 
-    def scan_all(self, big4_result: dict = None):
+    def scan_all(self):
         logger.info(f"\n{'='*70}")
         logger.info(f"[U破位] 扫描 {len(self.whitelist)} 个交易对 | 阈值: {self.THRESHOLD}分")
-        opps = [r for sym in self.whitelist if (r := self.analyze(sym, big4_result))]
+        opps = [r for sym in self.whitelist if (r := self.analyze(sym))]
         logger.info(f"[U破位] 合格信号: {len(opps)} 个")
         logger.info(f"{'='*70}\n")
         return opps
@@ -554,8 +555,6 @@ class UCoinStyleTraderService:
         self.brain         = UCoinStyleBrain(self.db_config, trader_service=self)
         self.ws_service    = get_ws_price_service(market_type='futures')
         self.opt_config    = OptimizationConfig(self.db_config)
-        self.big4_detector = Big4TrendDetector()
-        self.big4_symbols  = ['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT']
 
         import yaml
         with open('config.yaml', 'r', encoding='utf-8') as f:
@@ -629,15 +628,6 @@ class UCoinStyleTraderService:
     def is_live_trading_enabled(self) -> bool:
         val = self._read_setting('live_trading_enabled', '0')
         return str(val).strip() in ('1', 'true', 'True', 'yes')
-
-    # ── Big4 ──────────────────────────────────────────────
-
-    def get_big4_result(self) -> dict:
-        try:
-            return self.big4_detector.detect_market_trend()
-        except Exception as e:
-            logger.error(f"[U破位] Big4检测失败: {e}")
-            return {'overall_signal': 'NEUTRAL', 'signal_strength': 0, 'details': {}, 'timestamp': datetime.now()}
 
     # ── 持仓查询 ──────────────────────────────────────────
 
@@ -885,16 +875,6 @@ class UCoinStyleTraderService:
         if margin == 0:
             return False
 
-        # Big4 动态保证金
-        try:
-            b4 = self.get_big4_result()
-            sig = b4.get('overall_signal', 'NEUTRAL')
-            if (sig in ('BULLISH', 'STRONG_BULLISH') and side == 'LONG') or \
-               (sig in ('BEARISH', 'STRONG_BEARISH') and side == 'SHORT'):
-                margin *= 1.2
-        except Exception:
-            pass
-
         # 从 system_settings 读取止损止盈
         sl_pct, tp_pct = self._get_sl_tp_from_settings()
 
@@ -1023,21 +1003,8 @@ class UCoinStyleTraderService:
                     time.sleep(self.SCAN_INTERVAL)
                     continue
 
-                # Big4
-                big4_result = self.get_big4_result()
-
-                # Big4 NEUTRAL 时停止开仓（与币本位保持一致）
-                try:
-                    from app.services.system_settings_loader import get_big4_filter_enabled
-                    if get_big4_filter_enabled() and big4_result.get('overall_signal') == 'NEUTRAL':
-                        logger.info(f"[U破位] Big4 NEUTRAL，跳过开仓")
-                        time.sleep(self.SCAN_INTERVAL)
-                        continue
-                except Exception:
-                    pass
-
                 # 扫描
-                opps = self.brain.scan_all(big4_result=big4_result)
+                opps = self.brain.scan_all()
                 if not opps:
                     time.sleep(self.SCAN_INTERVAL)
                     continue
@@ -1050,31 +1017,6 @@ class UCoinStyleTraderService:
                     sym      = opp['symbol']
                     new_side = opp['side']
                     opp_side = 'SHORT' if new_side == 'LONG' else 'LONG'
-
-                    # Big4 方向过滤
-                    try:
-                        sym_sig = big4_result.get('overall_signal', 'NEUTRAL')
-                        sym_str = big4_result.get('signal_strength', 0)
-                        if sym in self.big4_symbols:
-                            detail  = big4_result.get('details', {}).get(sym, {})
-                            sym_sig = detail.get('signal', 'NEUTRAL')
-                            sym_str = detail.get('strength', 0)
-
-                        is_bull = sym_sig in ('BULLISH', 'STRONG_BULLISH')
-                        is_bear = sym_sig in ('BEARISH', 'STRONG_BEARISH')
-
-                        if is_bear and new_side == 'LONG':
-                            logger.debug(f"[U破位] {sym} Big4看空，禁止LONG")
-                            continue
-                        if is_bull and new_side == 'SHORT':
-                            logger.debug(f"[U破位] {sym} Big4看多，禁止SHORT")
-                            continue
-
-                        # 同向加分
-                        if (is_bull and new_side == 'LONG') or (is_bear and new_side == 'SHORT'):
-                            opp['score'] += min(20, int(sym_str * 0.3))
-                    except Exception:
-                        pass
 
                     # 同方向持仓去重
                     if self.has_position(sym, new_side):
