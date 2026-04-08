@@ -490,3 +490,32 @@ async def get_recent_activities(
     finally:
         cursor.close()
         conn.close()
+
+
+@router.post("/api/corporate-treasury/sync-bitcointreasuries")
+async def post_sync_bitcointreasuries():
+    """
+    立即从 https://bitcointreasuries.net/ 抓取「Top 100 Public Bitcoin Treasury Companies」表格，
+    写入企业金库持仓（与数据管理页面上传 .txt 逻辑一致，data_source=bitcointreasuries.net）。
+    """
+    try:
+        from app.services.bitcointreasuries_sync import sync_bitcointreasuries_holdings
+
+        config = load_config(config_path)
+        mysql_config = config.get("database", {}).get("mysql", {})
+        if not mysql_config:
+            raise HTTPException(
+                status_code=500, detail="config.yaml 中未配置 database.mysql"
+            )
+        url = config.get("bitcointreasuries", {}).get(
+            "url", "https://bitcointreasuries.net/"
+        )
+        result = sync_bitcointreasuries_holdings(mysql_config, page_url=url)
+        return {"success": True, "data": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")

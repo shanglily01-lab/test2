@@ -90,6 +90,17 @@ database:
   sqlite:
     path: ./data/crypto.db
   type: mysql
+# Farside Investors：美国现货 BTC / ETH ETF 日度资金流（页面数值均为 M$，入库换算为美元）
+farside_etf:
+  enabled: true
+  btc_url: "https://farside.co.uk/btc/"
+  eth_url: "https://farside.co.uk/eth/"
+  daily_at: "06:45" # 调度器本地时间，美收盘后数据多已更新；BTC 与 ETH 同一时刻各跑一次
+# BitcoinTreasuries.NET 上市公司 BTC 持仓表 → corporate_treasury_*
+bitcointreasuries:
+  enabled: true
+  url: "https://bitcointreasuries.net/"
+  daily_at: "07:30" # 本地时间；网站更新频率非整点，一天一次即可
 demo_mode: false
 ema_signal:
   enabled: true

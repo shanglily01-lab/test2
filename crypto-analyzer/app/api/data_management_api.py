@@ -1294,97 +1294,23 @@ async def import_corporate_treasury_data(
             if not companies:
                 raise HTTPException(status_code=400, detail="无法解析文本格式，请检查文件格式是否正确。确保文件格式为：排名数字、公司名、国旗+股票代码+持仓量（用制表符分隔）")
             
-            # 导入持仓数据（参考 batch_import.py 的 import_companies 逻辑）
-            for company_name, ticker, holdings in companies:
-                try:
-                    # 1. 查找或创建公司
-                    cursor.execute("""
-                        SELECT id FROM corporate_treasury_companies
-                        WHERE company_name = %s OR ticker_symbol = %s
-                        LIMIT 1
-                    """, (company_name, ticker))
-                    company_result = cursor.fetchone()
-                    
-                    if not company_result:
-                        # 创建新公司
-                        cursor.execute("""
-                            INSERT INTO corporate_treasury_companies
-                            (company_name, ticker_symbol, category, is_active)
-                            VALUES (%s, %s, %s, 1)
-                        """, (company_name, ticker, 'holding'))
-                        company_id = cursor.lastrowid
-                        logger.info(f"新增公司: {company_name} ({ticker})")
-                    else:
-                        # 使用字典游标，通过键访问
-                        company_id = company_result['id'] if isinstance(company_result, dict) else company_result[0]
-                    
-                    # 2. 检查是否已有该日期的记录
-                    cursor.execute("""
-                        SELECT id, cumulative_holdings FROM corporate_treasury_purchases
-                        WHERE company_id = %s AND purchase_date = %s AND asset_type = %s
-                    """, (company_id, purchase_date, asset_type))
-                    existing = cursor.fetchone()
-                    
-                    if existing:
-                        # 使用字典游标，通过键访问
-                        existing_id = existing['id'] if isinstance(existing, dict) else existing[0]
-                        existing_holdings = existing['cumulative_holdings'] if isinstance(existing, dict) else existing[1]
-                        # 如果持仓量相同，跳过
-                        if existing_holdings and float(existing_holdings) == holdings:
-                            logger.debug(f"跳过（已存在）: {company_name} - {holdings:,.0f} {asset_type}")
-                            skipped += 1
-                            continue
-                        
-                        # 更新记录
-                        cursor.execute("""
-                            UPDATE corporate_treasury_purchases
-                            SET cumulative_holdings = %s, updated_at = CURRENT_TIMESTAMP
-                            WHERE id = %s
-                        """, (holdings, existing_id))
-                        logger.info(f"更新: {company_name} ({ticker}) - {holdings:,.0f} {asset_type}")
-                        updated += 1
-                    else:
-                        # 3. 获取上一次的持仓量（计算购买数量）
-                        cursor.execute("""
-                            SELECT cumulative_holdings FROM corporate_treasury_purchases
-                            WHERE company_id = %s AND asset_type = %s
-                            ORDER BY purchase_date DESC
-                            LIMIT 1
-                        """, (company_id, asset_type))
-                        last_record = cursor.fetchone()
-                        # 使用字典游标，通过键访问
-                        if last_record:
-                            if isinstance(last_record, dict):
-                                last_holdings = float(last_record.get('cumulative_holdings', 0) or 0)
-                            else:
-                                last_holdings = float(last_record[0] or 0)
-                        else:
-                            last_holdings = 0
-                        
-                        # 计算购买数量
-                        quantity = holdings - last_holdings
-                        
-                        # 插入新记录
-                        cursor.execute("""
-                            INSERT INTO corporate_treasury_purchases
-                            (company_id, purchase_date, asset_type, quantity, cumulative_holdings, data_source)
-                            VALUES (%s, %s, %s, %s, %s, %s)
-                        """, (company_id, purchase_date, asset_type, quantity, holdings, 'manual'))
-                        logger.info(f"新增: {company_name} ({ticker}) - {quantity:+,.0f} {asset_type} → {holdings:,.0f}")
-                    imported += 1
-                    
-                except Exception as e:
-                    error_msg = f"{company_name} ({ticker}): {str(e)}"
-                    errors.append(error_msg)
-                    logger.error(f"导入企业金库持仓数据失败: {error_msg}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-            
-            # 构建详细的消息
-            total_processed = imported + updated + skipped
+            # 导入持仓数据（与 bitcointreasuries.net 自动同步共用同一写入逻辑）
+            from app.services.corporate_treasury_holdings import upsert_corporate_holdings_batch
+
+            batch = upsert_corporate_holdings_batch(
+                cursor, companies, purchase_date, asset_type, "manual"
+            )
+            imported = batch["imported"]
+            updated = batch["updated"]
+            skipped = batch["skipped"]
+            errors.extend(batch["errors"])
+            inserted_only = imported - updated
+
+            # 构建详细的消息（imported = 成功写入条数，含新增+更新）
+            total_processed = imported + skipped
             message_parts = []
-            if imported > 0:
-                message_parts.append(f"新增 {imported} 条")
+            if inserted_only > 0:
+                message_parts.append(f"新增 {inserted_only} 条")
             if updated > 0:
                 message_parts.append(f"更新 {updated} 条")
             if skipped > 0:

@@ -107,6 +107,7 @@ class UnifiedDataScheduler:
             'cache_analysis': {'count': 0, 'last_run': None, 'last_error': None},
             'cache_hyperliquid': {'count': 0, 'last_run': None, 'last_error': None},
             'etf_daily': {'count': 0, 'last_run': None, 'last_error': None},
+            'bitcointreasuries_daily': {'count': 0, 'last_run': None, 'last_error': None},
             'futures_equity_update': {'count': 0, 'last_run': None, 'last_error': None},
             'binance_news': {'count': 0, 'last_run': None, 'last_error': None}
         }
@@ -1029,6 +1030,106 @@ class UnifiedDataScheduler:
             logger.info(f"  ✓ 区块链Gas统计 - 每天 01:00 本地时间 ({local_tz}) (后台线程执行，不阻塞主调度器)")
         except Exception as e:
             logger.warning(f"  ⚠️  区块链Gas统计任务注册失败: {e}")
+
+        # Farside BTC / ETH ETF 日度资金流（/btc/、/eth/）
+        try:
+            fe = self.config.get("farside_etf", {})
+            if fe.get("enabled", True):
+
+                def run_farside_etf_in_thread():
+                    def job():
+                        try:
+                            from app.services.farside_etf_sync import (
+                                sync_farside_btc_flows,
+                                sync_farside_eth_flows,
+                            )
+
+                            mysql_config = self.config.get("database", {}).get("mysql", {})
+                            btc_url = fe.get("btc_url", "https://farside.co.uk/btc/")
+                            eth_url = fe.get("eth_url", "https://farside.co.uk/eth/")
+
+                            logger.info("开始 Farside BTC ETF 同步（后台线程）...")
+                            r_btc = sync_farside_btc_flows(mysql_config, page_url=btc_url)
+                            logger.info(
+                                "Farside BTC ETF 同步完成: imported={}, tickers={}, errors={}",
+                                r_btc.get("imported_rows"),
+                                len(r_btc.get("tickers") or []),
+                                r_btc.get("error_count", 0),
+                            )
+
+                            logger.info("开始 Farside ETH ETF 同步（后台线程）...")
+                            r_eth = sync_farside_eth_flows(mysql_config, page_url=eth_url)
+                            logger.info(
+                                "Farside ETH ETF 同步完成: imported={}, tickers={}, errors={}",
+                                r_eth.get("imported_rows"),
+                                len(r_eth.get("tickers") or []),
+                                r_eth.get("error_count", 0),
+                            )
+
+                            self.task_stats["etf_daily"]["count"] += 1
+                            self.task_stats["etf_daily"]["last_run"] = datetime.utcnow()
+                            self.task_stats["etf_daily"]["last_error"] = None
+                        except Exception as ex:
+                            logger.error("Farside ETF 同步失败: {}", ex, exc_info=True)
+                            self.task_stats["etf_daily"]["last_error"] = str(ex)
+
+                    threading.Thread(target=job, daemon=True, name="FarsideEtfSync").start()
+
+                daily_at = fe.get("daily_at", "06:45")
+                schedule.every().day.at(daily_at).do(run_farside_etf_in_thread)
+                logger.info(f"  ✓ Farside BTC/ETH ETF 同步 - 每天 {daily_at} 本地时间 (后台线程)")
+        except Exception as e:
+            logger.warning(f"  ⚠️  Farside ETF 任务注册失败: {e}")
+
+        # BitcoinTreasuries.NET 上市公司 BTC 金库持仓（首页表格）
+        try:
+            bt = self.config.get("bitcointreasuries", {})
+            if bt.get("enabled", True):
+
+                def run_bt_in_thread():
+                    def job():
+                        try:
+                            logger.info("开始 bitcointreasuries.net 企业金库同步（后台线程）...")
+                            from app.services.bitcointreasuries_sync import (
+                                sync_bitcointreasuries_holdings,
+                            )
+
+                            mysql_config = self.config.get("database", {}).get("mysql", {})
+                            url = bt.get("url", "https://bitcointreasuries.net/")
+                            r = sync_bitcointreasuries_holdings(
+                                mysql_config, page_url=url
+                            )
+                            logger.info(
+                                "企业金库同步完成: companies={}, imported={}, updated={}, skipped={}",
+                                r.get("company_count"),
+                                r.get("imported"),
+                                r.get("updated"),
+                                r.get("skipped"),
+                            )
+                            self.task_stats["bitcointreasuries_daily"]["count"] += 1
+                            self.task_stats["bitcointreasuries_daily"][
+                                "last_run"
+                            ] = datetime.utcnow()
+                            self.task_stats["bitcointreasuries_daily"][
+                                "last_error"
+                            ] = None
+                        except Exception as ex:
+                            logger.error("bitcointreasuries.net 同步失败: {}", ex, exc_info=True)
+                            self.task_stats["bitcointreasuries_daily"][
+                                "last_error"
+                            ] = str(ex)
+
+                    threading.Thread(
+                        target=job, daemon=True, name="BitcoinTreasuriesSync"
+                    ).start()
+
+                daily_bt = bt.get("daily_at", "07:30")
+                schedule.every().day.at(daily_bt).do(run_bt_in_thread)
+                logger.info(
+                    f"  ✓ BitcoinTreasuries 企业金库 - 每天 {daily_bt} 本地时间 (后台线程)"
+                )
+        except Exception as e:
+            logger.warning(f"  ⚠️  BitcoinTreasuries 任务注册失败: {e}")
 
         # 5. Hyperliquid 排行榜
         if self.hyperliquid_collector:

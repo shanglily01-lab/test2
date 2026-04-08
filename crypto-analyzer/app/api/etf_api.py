@@ -316,3 +316,53 @@ async def get_etf_flows(
     finally:
         cursor.close()
         conn.close()
+
+
+@router.post("/api/etf/sync-farside-btc")
+async def post_sync_farside_btc():
+    """
+    手动触发：从 https://farside.co.uk/btc/ 抓取 BTC 现货 ETF 日度净流入并写入数据库。
+    与调度器每日任务相同逻辑；Farside 表内单位为 M$（百万美元），入库为美元。
+    """
+    try:
+        from app.services.farside_etf_sync import sync_farside_btc_flows
+
+        config = load_config(config_path)
+        mysql_config = config.get("database", {}).get("mysql", {})
+        if not mysql_config:
+            raise HTTPException(status_code=500, detail="config.yaml 中未配置 database.mysql")
+
+        fu = config.get("farside_etf", {}).get("btc_url", "https://farside.co.uk/btc/")
+        result = sync_farside_btc_flows(mysql_config, page_url=fu)
+        return {"success": True, "data": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Farside 同步失败: {str(e)}")
+
+
+@router.post("/api/etf/sync-farside-eth")
+async def post_sync_farside_eth():
+    """
+    手动触发：从 https://farside.co.uk/eth/ 抓取 ETH 现货 ETF 日度净流入并写入数据库。
+    与调度器每日任务相同逻辑；Farside 表内单位为 M$（百万美元），入库为美元。
+    """
+    try:
+        from app.services.farside_etf_sync import sync_farside_eth_flows
+
+        config = load_config(config_path)
+        mysql_config = config.get("database", {}).get("mysql", {})
+        if not mysql_config:
+            raise HTTPException(status_code=500, detail="config.yaml 中未配置 database.mysql")
+
+        fu = config.get("farside_etf", {}).get("eth_url", "https://farside.co.uk/eth/")
+        result = sync_farside_eth_flows(mysql_config, page_url=fu)
+        return {"success": True, "data": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Farside ETH 同步失败: {str(e)}")
