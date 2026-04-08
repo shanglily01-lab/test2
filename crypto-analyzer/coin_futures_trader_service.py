@@ -1814,9 +1814,16 @@ class CoinFuturesTraderService:
             if recent_volume > 0 and earlier_volume > 0:
                 volume_ratio = recent_volume / earlier_volume
 
-                # 如果最近5根K线成交量 > 之前5根的1.2倍,说明成交量在放大,不是顶部
+                # 如果最近5根K线成交量 > 之前5根的1.2倍，需要判断量能性质
                 if volume_ratio > 1.2:
-                    return False, f"position_high但成交量放大{volume_ratio:.2f}倍,非顶部特征"
+                    # 区分放大的量是买方还是卖方主导
+                    bear_candles = sum(1 for k in recent_5 if k['close'] < k['open'])
+                    if bear_candles >= 3:
+                        # 放大的量由阴线主导 → 恐慌性抛售/破位，是做空信号，允许
+                        logger.info(f"[VOLUME_CHECK] {symbol} 成交量放大{volume_ratio:.2f}倍，但空头K线{bear_candles}/5，判断为抛售放量，允许做空")
+                    else:
+                        # 放大的量由阳线主导 → 上涨动能仍强，不适合做空
+                        return False, f"position_high但成交量放大{volume_ratio:.2f}倍(多头主导),非顶部特征"
 
                 logger.info(f"[VOLUME_CHECK] {symbol} 成交量比例{volume_ratio:.2f},符合顶部萎缩特征")
 
