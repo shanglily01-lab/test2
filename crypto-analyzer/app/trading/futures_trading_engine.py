@@ -211,6 +211,75 @@ class FuturesTradingEngine:
             except:
                 raise
 
+    @staticmethod
+    def _dapi_coin_margined_price(symbol: str) -> Optional[Decimal]:
+        """
+        币本位永续 ADA/USD 等：必须用 dapi（U本位 fapi/现货用 ADAUSD 会失败）。
+        顺序：premiumIndex 标记价 → ticker 最新价。
+        """
+        if not symbol.endswith('/USD'):
+            return None
+        import requests
+        api_sym = symbol.replace('/', '') + '_PERP'
+        endpoints = (
+            ('https://dapi.binance.com/dapi/v1/premiumIndex', ('markPrice', 'indexPrice')),
+            ('https://dapi.binance.com/dapi/v1/ticker/price', ('price',)),
+        )
+        for url, keys in endpoints:
+            try:
+                r = requests.get(url, params={'symbol': api_sym}, timeout=4)
+                if r.status_code != 200:
+                    continue
+                data = r.json()
+                if isinstance(data, list) and len(data) > 0:
+                    data = data[0]
+                if not isinstance(data, dict):
+                    continue
+                raw = None
+                for k in keys:
+                    if k in data and data[k] is not None:
+                        raw = data[k]
+                        break
+                if raw is None:
+                    raw = data.get('price')
+                if raw is not None:
+                    p = Decimal(str(raw))
+                    if p > 0:
+                        logger.debug(f"[PRICE] 币本位 dapi {symbol} ({api_sym}) = {p}")
+                        return p
+            except Exception as e:
+                logger.debug(f"币本位 dapi {api_sym} 请求失败: {e}")
+        return None
+
+    @staticmethod
+    def _spot_usdt_proxy_for_coin_margined(symbol: str) -> Optional[Decimal]:
+        """
+        dapi 不可用时，用 BASE/USDT 现货作近似（与币本位标记价有偏差，仅优于无价格）。
+        """
+        if not symbol.endswith('/USD'):
+            return None
+        import requests
+        base = symbol.split('/')[0].upper()
+        spot = f'{base}USDT'
+        try:
+            r = requests.get(
+                'https://api.binance.com/api/v3/ticker/price',
+                params={'symbol': spot},
+                timeout=3,
+            )
+            if r.status_code == 200:
+                data = r.json()
+                if data and 'price' in data:
+                    p = Decimal(str(data['price']))
+                    if p > 0:
+                        logger.warning(
+                            f"[PRICE] {symbol} 使用现货 {spot} 近似价 {p}（非币本位精确标记价）"
+                        )
+                        return p
+        except Exception as e:
+            logger.debug(f"现货近似价 {spot} 失败: {e}")
+        return None
+
     def get_current_price(self, symbol: str, use_realtime: bool = False) -> Decimal:
         """
         获取当前市场价格
@@ -222,6 +291,14 @@ class FuturesTradingEngine:
         Returns:
             当前价格
         """
+        # 币本位 /USD：优先 dapi，避免误用 U本位 API（ADAUSD 无效）
+        cm = self._dapi_coin_margined_price(symbol)
+        if cm is not None:
+            return cm
+        cm_spot = self._spot_usdt_proxy_for_coin_margined(symbol)
+        if cm_spot is not None:
+            return cm_spot
+
         # 如果要求使用实时价格，尝试从交易所API获取
         if use_realtime:
             try:
@@ -294,18 +371,19 @@ class FuturesTradingEngine:
         
         try:
             cursor = connection.cursor()
-            # 尝试从1分钟K线获取最新价格
-            cursor.execute(
-                """SELECT close_price FROM kline_data
-                WHERE symbol = %s AND timeframe = '1m'
-                ORDER BY timestamp DESC LIMIT 1""",
-                (symbol,)
-            )
-            result = cursor.fetchone()
-            if result and result['close_price']:
-                price = Decimal(str(result['close_price']))
-                cursor.close()
-                return price
+            # 多周期 K 线回退（与币本位引擎一致；1m 可能已停采）
+            for tf in ('5m', '15m', '1h', '1m'):
+                cursor.execute(
+                    """SELECT close_price FROM kline_data
+                    WHERE symbol = %s AND timeframe = %s
+                    ORDER BY open_time DESC LIMIT 1""",
+                    (symbol, tf),
+                )
+                result = cursor.fetchone()
+                if result and result['close_price']:
+                    price = Decimal(str(result['close_price']))
+                    cursor.close()
+                    return price
 
             # 回退到价格表
             cursor.execute(

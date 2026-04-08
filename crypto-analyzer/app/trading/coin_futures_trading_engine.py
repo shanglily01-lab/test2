@@ -280,12 +280,54 @@ class CoinFuturesTradingEngine:
                             price = Decimal(str(data['price']))
                             logger.debug(f"从Binance币本位合约API获取实时价格: {symbol} = {price}")
                             return price
+                    # ticker 失败时再试 premiumIndex（标记价）
+                    try:
+                        pi = session.get(
+                            'https://dapi.binance.com/dapi/v1/premiumIndex',
+                            params={'symbol': symbol_for_api},
+                            timeout=2,
+                        )
+                        if pi.status_code == 200:
+                            pdata = pi.json()
+                            if isinstance(pdata, list) and len(pdata) > 0:
+                                pdata = pdata[0]
+                            if isinstance(pdata, dict):
+                                mp = pdata.get('markPrice') or pdata.get('indexPrice')
+                                if mp is not None:
+                                    price = Decimal(str(mp))
+                                    if price > 0:
+                                        logger.debug(
+                                            f"从Binance币本位 premiumIndex 获取价格: {symbol} = {price}"
+                                        )
+                                        return price
+                    except Exception as e:
+                        logger.debug(f"Binance币本位 premiumIndex 获取失败: {e}")
                 except Exception as e:
                     logger.debug(f"Binance币本位合约API获取失败: {e}")
                 
                 # 注意：币本位(/USD)品种不能回退到现货API，现货价≠币本位合约价
                 # 直接回退到数据库K线缓存
                 if symbol.endswith('/USD'):
+                    # 最后尝试：USDT 现货近似（仅当 dapi 不可用时）
+                    try:
+                        base = symbol.split('/')[0].upper()
+                        spot_sym = f'{base}USDT'
+                        r = session.get(
+                            'https://api.binance.com/api/v3/ticker/price',
+                            params={'symbol': spot_sym},
+                            timeout=2,
+                        )
+                        if r.status_code == 200:
+                            j = r.json()
+                            if j and 'price' in j:
+                                price = Decimal(str(j['price']))
+                                if price > 0:
+                                    logger.warning(
+                                        f"[PRICE] {symbol} dapi 不可用，使用现货 {spot_sym} 近似价 {price}"
+                                    )
+                                    return price
+                    except Exception as e:
+                        logger.debug(f"币本位现货近似失败: {e}")
                     logger.warning(f"币本位dapi获取失败，回退到K线缓存: {symbol}")
                 else:
                     # U本位/其他：可以用现货API作参考价格

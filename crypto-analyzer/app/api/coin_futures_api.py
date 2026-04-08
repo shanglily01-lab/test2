@@ -1313,6 +1313,25 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
     except Exception as e:
         logger.debug(f"批量获取Binance价格失败: {e}")
 
+    # 1b. 币本位 /USD：U本位 fapi 无 ADAUSD 等符号，从 dapi 一次拉全量
+    need_dapi = [s for s in symbols if s.endswith('/USD') and s not in prices]
+    if need_dapi:
+        try:
+            async with aiohttp.ClientSession(timeout=quick_timeout) as session:
+                async with session.get('https://dapi.binance.com/dapi/v1/ticker/price') as response:
+                    if response.status == 200:
+                        all_dp = await response.json()
+                        fmt_map = {}
+                        for item in all_dp:
+                            sym = item.get('symbol') or ''
+                            if sym.endswith('USD_PERP'):
+                                fmt_map[sym.replace('USD_PERP', '/USD')] = float(item['price'])
+                        for s in need_dapi:
+                            if s in fmt_map:
+                                prices[s] = {'price': fmt_map[s], 'source': 'binance_dapi'}
+        except Exception as e:
+            logger.debug(f"批量获取币本位 dapi 价格失败: {e}")
+
     # 2. 对于没有获取到的symbol，尝试其他来源
     missing_symbols = [s for s in symbols if s not in prices]
     if missing_symbols:

@@ -291,6 +291,8 @@
 // ==========================================
 
 var ACCOUNT_ID = 3;
+/** 币本位合约 API（勿用 /api/futures，那是 U 本位引擎） */
+var API_BASE = '/api/coin-futures';
 var _refreshTimer = null;
 var _historyAllTrades = [];
 var _historyPage = 1;
@@ -335,6 +337,19 @@ function fmtTime(t) {
     } catch(e) { return '--'; }
 }
 
+/** 安全解析 JSON，避免空 body 时 response.json() 抛 Unexpected end of JSON input */
+async function parseJsonResponse(res) {
+    var text = await res.text();
+    if (text == null || String(text).trim() === '') {
+        throw new Error('HTTP ' + res.status + ' 空响应，无法解析 JSON');
+    }
+    try {
+        return JSON.parse(text);
+    } catch (e) {
+        throw new Error('HTTP ' + res.status + ' 非 JSON: ' + String(text).slice(0, 240));
+    }
+}
+
 function showToast(msg, type) {
     var el = document.createElement('div');
     var colors = {success: '#49f4c8', error: '#ff716c', info: '#5b9eff', warning: '#f59e0b'};
@@ -353,8 +368,8 @@ async function loadPositions() {
 
     var positions = [];
     try {
-        var res = await fetch('/api/futures/positions?account_id=' + ACCOUNT_ID + '&status=open');
-        var data = await res.json();
+        var res = await fetch(API_BASE + '/positions?account_id=' + ACCOUNT_ID + '&status=open');
+        var data = await parseJsonResponse(res);
         positions = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
     } catch(e) {
         tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败: ' + e.message + '</td></tr>';
@@ -370,13 +385,13 @@ async function loadPositions() {
     var symbols = positions.map(function(p) { return p.symbol; }).filter(function(v, i, a) { return a.indexOf(v) === i; });
     var priceMap = {};
     try {
-        var pr = await fetch('/api/futures/prices/batch', {
+        var pr = await fetch(API_BASE + '/prices/batch', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({symbols: symbols})
         });
         if (pr.ok) {
-            var pd = await pr.json();
+            var pd = await parseJsonResponse(pr);
             priceMap = pd.prices || pd || {};
         }
     } catch(e) { /* 使用 entry_price 作为回退 */ }
@@ -477,12 +492,12 @@ async function closeAllPositions() {
     if (btn) { btn.disabled = true; btn.textContent = '平仓中...'; }
     try {
         var ids = _lastPositions.map(function(p) { return p.id || p.position_id; }).filter(Boolean);
-        var resp = await fetch('/api/futures/close-batch', {
+        var resp = await fetch(API_BASE + '/close-batch', {
             method: 'POST',
             headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('auth_token') || localStorage.getItem('access_token') || '')},
             body: JSON.stringify({position_ids: ids, reason: 'manual_close_all'})
         });
-        var data = await resp.json();
+        var data = await parseJsonResponse(resp);
         await showAlert(data.message || '一键平仓完成', 'success');
         setTimeout(loadAll, 800);
     } catch(e) {
@@ -557,8 +572,8 @@ async function loadHistory(page) {
 
     var trades = [];
     try {
-        var res = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&page=' + _historyPage + '&page_size=' + _historyPageSize);
-        var data = await res.json();
+        var res = await fetch(API_BASE + '/trades?account_id=' + ACCOUNT_ID + '&page=' + _historyPage + '&page_size=' + _historyPageSize);
+        var data = await parseJsonResponse(res);
         trades = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
         _historyTotalCount = data.total_count || 0;
     } catch(e) {
@@ -612,9 +627,9 @@ function loadStats(posResult, trades) {
 
 async function loadAccountInfo() {
     try {
-        var res = await fetch('/api/futures/account/' + ACCOUNT_ID);
+        var res = await fetch(API_BASE + '/account/' + ACCOUNT_ID);
         if (!res.ok) return;
-        var data = await res.json();
+        var data = await parseJsonResponse(res);
         var acc = data.data || data;
         var elWin    = document.getElementById('stat-win-rate');
         var elTotal  = document.getElementById('stat-total-trades');
@@ -638,12 +653,12 @@ async function closePosition(id, symbol) {
     var ok = await showConfirm('确定要平仓 ' + symbol + ' ?', {title: '确认平仓', confirmText: '确认平仓', type: 'warning'});
     if (!ok) return;
     try {
-        var res = await fetch('/api/futures/close/' + id, {
+        var res = await fetch(API_BASE + '/close/' + id, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({})
         });
-        var data = await res.json();
+        var data = await parseJsonResponse(res);
         if (data.success || res.ok) {
             showToast(symbol + ' 平仓成功', 'success');
             setTimeout(loadAll, 500);
