@@ -14,8 +14,8 @@ from loguru import logger
 import pymysql
 
 
-# 拉取最近多少条公告
-FETCH_PAGE_SIZE = 30
+# 拉取每页条数。注意：币安该接口在 pageSize=30 时会返回 HTTP 400（无正文），20/50 正常。
+FETCH_PAGE_SIZE = 50
 
 # 存储"已处理到的最新文章时间戳"的 system_settings key
 SETTINGS_KEY_LAST_TS = 'news_monitor_last_article_ts'
@@ -120,11 +120,22 @@ class BinanceNewsMonitor:
         }
         try:
             resp = self.session.get(ANNOUNCEMENT_URL, params=params, timeout=15)
+            if resp.status_code != 200:
+                logger.warning(
+                    "Binance 公告 HTTP %s，将尝试减小 pageSize。body前200字: %s",
+                    resp.status_code,
+                    (resp.text or "")[:200],
+                )
+                # 部分环境/参数组合会 400，改用 20 重试一次
+                params_retry = dict(params)
+                params_retry["pageSize"] = 20
+                resp = self.session.get(ANNOUNCEMENT_URL, params=params_retry, timeout=15)
             resp.raise_for_status()
             data = resp.json()
 
-            if data.get('code') != '000000' or not data.get('data'):
-                logger.warning("Binance 公告接口返回异常: code=%s", data.get('code'))
+            code = data.get("code")
+            if str(code) not in ("000000", "0") or not data.get("data"):
+                logger.warning("Binance 公告接口返回异常: code=%s", code)
                 return []
 
             # 返回结构: data.catalogs[].articles 或 data.articles
@@ -137,7 +148,7 @@ class BinanceNewsMonitor:
             if not articles:
                 articles = data['data'].get('articles', [])
 
-            logger.info("Binance 公告拉取成功: %d 条", len(articles))
+            logger.info("Binance 公告拉取成功: {} 条", len(articles))
             return articles
 
         except requests.RequestException as e:
