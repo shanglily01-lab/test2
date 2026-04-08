@@ -95,6 +95,51 @@ def spot_usdt_pair_slash_for_coin_usd(symbol: str) -> Optional[str]:
     return f"{base}/USDT"
 
 
+def build_dapi_usd_perp_fmt_map(rows: Optional[List[Any]]) -> dict:
+    """
+    与 /prices/batch 一致：仅无参全量 dapi ticker 中出现的 USD_PERP 才映射为 BASE/USD。
+    若某币种不在全量列表中，不得用单 symbol dapi 顶替（单请求价可能与 U 本位严重偏离）。
+    """
+    out: dict = {}
+    if not rows:
+        return out
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        sym = item.get("symbol") or ""
+        if sym.endswith("USD_PERP"):
+            key = sym.replace("USD_PERP", "/USD")
+            p = item.get("price")
+            if p is not None:
+                try:
+                    out[key] = Decimal(str(p))
+                except Exception:
+                    pass
+    return out
+
+
+def resolve_coin_usd_price_like_batch(
+    symbol: str,
+    *,
+    dapi_fmt_map: dict,
+    fapi_price_map: dict,
+) -> Optional[Decimal]:
+    """
+    与 coin_futures_api.get_futures_prices_batch 一致：先全量 dapi 表，再 fapi BASEUSDT。
+    symbol 为内部写法如 APT/USD。
+    """
+    canon = canonical_coin_usd_display(symbol)
+    if not canon:
+        return None
+    if canon in dapi_fmt_map:
+        v = dapi_fmt_map[canon]
+        return v if isinstance(v, Decimal) else Decimal(str(v))
+    usdt = fapi_usdt_perp_symbol_for_coin_usd(symbol)
+    if usdt and usdt in fapi_price_map:
+        return Decimal(str(fapi_price_map[usdt]))
+    return None
+
+
 def _row_price(item: dict) -> Optional[Decimal]:
     p = item.get("price")
     if p is None:

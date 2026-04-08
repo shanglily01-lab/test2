@@ -444,8 +444,11 @@ async function loadPositions() {
             if (pv > 0) curPrice = pv;
         }
 
-        // 计算浮盈 (USDT)
+        // 浮盈：始终用本行展示的 entry / 现价 / 数量重算，与「开仓→当前价」一致（OP/APT 等币种单 symbol dapi 与 USDT 价差大时后端可能仍存旧值）
         var pnl = parseFloat(pos.unrealized_pnl) || 0;
+        if (curPrice > 0 && entry > 0 && qty > 0) {
+            pnl = isLong ? (curPrice - entry) * qty : (entry - curPrice) * qty;
+        }
         totalPnl += pnl;
 
         var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
@@ -461,7 +464,7 @@ async function loadPositions() {
         var openTime = fmtTime(pos.created_at || pos.open_time);
         var curPriceClass = curPrice > entry ? 'text-[#49f4c8]' : (curPrice < entry ? 'text-[#ff716c]' : 'text-on-surface-variant');
 
-        return '<tr class="' + rowBg + ' transition-colors border-b border-outline-variant/5">' +
+        return '<tr data-pos-id="' + posId + '" class="' + rowBg + ' transition-colors border-b border-outline-variant/5">' +
             '<td class="px-6 py-4">' +
                 '<div class="flex items-center gap-2">' +
                     '<div class="w-6 h-6 rounded-full bg-surface-bright flex items-center justify-center text-[10px] font-bold text-on-surface-variant">' + abbr + '</div>' +
@@ -480,9 +483,9 @@ async function loadPositions() {
             '</td>' +
             '<td class="px-6 py-4 font-mono">' +
                 '<div class="text-on-surface-variant text-xs">' + fmtPrice(entry) + '</div>' +
-                '<div class="' + curPriceClass + ' font-medium text-xs">' + fmtPrice(curPrice) + '</div>' +
+                '<div class="pos-ws-price ' + curPriceClass + ' font-medium text-xs">' + fmtPrice(curPrice) + '</div>' +
             '</td>' +
-            '<td class="px-6 py-4 font-mono ' + pnlClass + '">' + fmtPnl(pnl) + '</td>' +
+            '<td class="pos-ws-pnl px-6 py-4 font-mono ' + pnlClass + '">' + fmtPnl(pnl) + '</td>' +
             '<td class="px-6 py-4">' +
                 '<div class="text-xs font-mono text-[#ff716c]">SL ' + sl + '</div>' +
                 '<div class="text-xs font-mono text-[#49f4c8]">TP ' + tp + '</div>' +
@@ -504,6 +507,12 @@ async function loadPositions() {
     if (pnlEl) {
         pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(2) + ' U';
         pnlEl.className = 'font-mono text-sm font-bold ' + (totalPnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
+    }
+
+    if (positions.length > 0) {
+        setTimeout(connectCoinFuturesPnlWs, 300);
+    } else if (_coinFuturesWs && _coinFuturesWs.readyState === WebSocket.OPEN) {
+        try { _coinFuturesWs.close(); } catch (e) {}
     }
 
     return {count: positions.length, totalMargin: totalMargin, totalPnl: totalPnl};
@@ -714,12 +723,70 @@ async function loadAll() {
 // ---- 初始化 ----
 
 var _posRefreshTimer = null;
+var _coinFuturesWs = null;
+
+function applyCoinFuturesWsTick(payload) {
+    if (!payload || payload.type !== 'tick') return;
+    var items = payload.items || [];
+    var total = payload.total_unrealized_pnl;
+    for (var i = 0; i < items.length; i++) {
+        var it = items[i];
+        var row = document.querySelector('tr[data-pos-id="' + it.position_id + '"]');
+        if (!row) continue;
+        var priceEl = row.querySelector('.pos-ws-price');
+        var pnlEl = row.querySelector('.pos-ws-pnl');
+        if (priceEl) priceEl.textContent = fmtPrice(it.current_price);
+        if (pnlEl) {
+            pnlEl.textContent = fmtPnl(it.unrealized_pnl);
+            pnlEl.className = 'pos-ws-pnl px-6 py-4 font-mono ' + (it.unrealized_pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
+        }
+    }
+    var pnlHdr = document.getElementById('pos-header-pnl');
+    if (pnlHdr && total != null && !isNaN(parseFloat(total))) {
+        var tv = parseFloat(total);
+        pnlHdr.textContent = (tv >= 0 ? '+' : '') + tv.toFixed(2) + ' U';
+        pnlHdr.className = 'font-mono text-sm font-bold ' + (tv >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
+    }
+}
+
+function connectCoinFuturesPnlWs() {
+    try {
+        if (_coinFuturesWs && (_coinFuturesWs.readyState === WebSocket.OPEN || _coinFuturesWs.readyState === WebSocket.CONNECTING)) {
+            return;
+        }
+        var wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        var wsUrl = wsProto + '//' + location.host + API_BASE + '/ws/positions-pnl?account_id=' + ACCOUNT_ID;
+        var ws = new WebSocket(wsUrl);
+        _coinFuturesWs = ws;
+        ws.onopen = function() {
+            if (_posRefreshTimer) { clearInterval(_posRefreshTimer); _posRefreshTimer = null; }
+            _posRefreshTimer = setInterval(loadPositions, 30000);
+        };
+        ws.onmessage = function(ev) {
+            try {
+                var data = JSON.parse(ev.data);
+                if (data.type === 'empty') return;
+                if (data.type === 'ready') return;
+                applyCoinFuturesWsTick(data);
+            } catch (e) { /* ignore */ }
+        };
+        ws.onerror = function() { /* 回退由 onclose 处理 */ };
+        ws.onclose = function() {
+            _coinFuturesWs = null;
+            if (_posRefreshTimer) { clearInterval(_posRefreshTimer); _posRefreshTimer = null; }
+            _posRefreshTimer = setInterval(loadPositions, 5000);
+            if (_lastPositions && _lastPositions.length > 0) {
+                setTimeout(connectCoinFuturesPnlWs, 3000);
+            }
+        };
+    } catch (e) {
+        console.warn('WS 盈亏连接失败', e);
+    }
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     loadAll();
-    // 持仓+价格 5s 刷新
     _posRefreshTimer = setInterval(loadPositions, 5000);
-    // 余额/历史 30s 刷新
     _refreshTimer = setInterval(function() { loadHistory(1); loadAccountInfo(); }, 300000);
 });
 </script>

@@ -255,9 +255,13 @@ class CoinFuturesTradingEngine:
                 adapter = HTTPAdapter(max_retries=retry_strategy)
                 session.mount("https://", adapter)
                 
-                # 优先从Binance币本位合约API获取实时价格
+                # 币本位：与 /prices/batch 一致 — 先全量 dapi 集合，再 U 本位 USDT；避免「全量无该合约但单 symbol dapi 返回异常价」与建仓参考不一致
                 try:
-                    from app.trading.dapi_coin_margined_price import to_dapi_perp_symbol
+                    from app.trading.dapi_coin_margined_price import (
+                        find_perp_price,
+                        get_all_dapi_ticker_prices,
+                        to_dapi_perp_symbol,
+                    )
 
                     perp = to_dapi_perp_symbol(symbol)
                     if perp:
@@ -265,88 +269,104 @@ class CoinFuturesTradingEngine:
                     else:
                         symbol_for_api = symbol_clean
 
-                    response = session.get(
-                        'https://dapi.binance.com/dapi/v1/ticker/price',
-                        params={'symbol': symbol_for_api},
-                        timeout=2
-                    )
-                    if response.status_code == 200:
-                        data = response.json()
-                        # 币本位API返回数组格式
-                        if isinstance(data, list) and len(data) > 0 and 'price' in data[0]:
-                            price = Decimal(str(data[0]['price']))
-                            logger.debug(f"从Binance币本位合约API获取实时价格: {symbol} = {price}")
-                            return price
-                        elif isinstance(data, dict) and 'price' in data:
-                            price = Decimal(str(data['price']))
-                            logger.debug(f"从Binance币本位合约API获取实时价格: {symbol} = {price}")
-                            return price
-                    # ticker 失败时再试 premiumIndex（标记价）
-                    try:
-                        pi = session.get(
-                            'https://dapi.binance.com/dapi/v1/premiumIndex',
-                            params={'symbol': symbol_for_api},
+                    if perp:
+                        try:
+                            rows = get_all_dapi_ticker_prices()
+                            p_full = find_perp_price(rows, symbol_for_api)
+                            if p_full is not None:
+                                logger.debug(
+                                    f"从Binance币本位全量 ticker 获取价格: {symbol} = {p_full}"
+                                )
+                                return p_full
+                        except Exception as e:
+                            logger.debug(f"Binance币本位全量 ticker 失败: {e}")
+
+                        base = symbol_for_api[:-8] if symbol_for_api.endswith("USD_PERP") else ""
+                        if base:
+                            try:
+                                r = session.get(
+                                    "https://fapi.binance.com/fapi/v1/ticker/price",
+                                    params={"symbol": f"{base}USDT"},
+                                    timeout=2,
+                                )
+                                if r.status_code == 200:
+                                    j = r.json()
+                                    if isinstance(j, dict) and j.get("price"):
+                                        price = Decimal(str(j["price"]))
+                                        if price > 0:
+                                            logger.warning(
+                                                f"[PRICE] {symbol} 不在 dapi 全量表或需与 U 本位对齐，使用 {base}USDT 参考价 {price}"
+                                            )
+                                            return price
+                            except Exception as e:
+                                logger.debug(f"U本位永续参考价失败: {e}")
+                            try:
+                                spot_sym = f"{base}USDT"
+                                r = session.get(
+                                    "https://api.binance.com/api/v3/ticker/price",
+                                    params={"symbol": spot_sym},
+                                    timeout=2,
+                                )
+                                if r.status_code == 200:
+                                    j = r.json()
+                                    if j and "price" in j:
+                                        price = Decimal(str(j["price"]))
+                                        if price > 0:
+                                            logger.warning(
+                                                f"[PRICE] {symbol} 使用现货 {spot_sym} 近似价 {price}"
+                                            )
+                                            return price
+                            except Exception as e:
+                                logger.debug(f"币本位现货近似失败: {e}")
+
+                        response = session.get(
+                            "https://dapi.binance.com/dapi/v1/ticker/price",
+                            params={"symbol": symbol_for_api},
                             timeout=2,
                         )
-                        if pi.status_code == 200:
-                            pdata = pi.json()
-                            if isinstance(pdata, list) and len(pdata) > 0:
-                                pdata = pdata[0]
-                            if isinstance(pdata, dict):
-                                mp = pdata.get('markPrice') or pdata.get('indexPrice')
-                                if mp is not None:
-                                    price = Decimal(str(mp))
-                                    if price > 0:
-                                        logger.debug(
-                                            f"从Binance币本位 premiumIndex 获取价格: {symbol} = {price}"
-                                        )
-                                        return price
-                    except Exception as e:
-                        logger.debug(f"Binance币本位 premiumIndex 获取失败: {e}")
-                    # 与无参 GET /dapi/v1/ticker/price 全量列表一致（单 symbol 失败时兜底）
-                    try:
-                        from app.trading.dapi_coin_margined_price import find_perp_price, get_all_dapi_ticker_prices
-
-                        rows = get_all_dapi_ticker_prices()
-                        p_full = find_perp_price(rows, symbol_for_api)
-                        if p_full is not None:
-                            logger.debug(
-                                f"从Binance币本位全量 ticker 获取价格: {symbol} = {p_full}"
+                        if response.status_code == 200:
+                            data = response.json()
+                            if isinstance(data, list) and len(data) > 0 and "price" in data[0]:
+                                price = Decimal(str(data[0]["price"]))
+                                logger.debug(
+                                    f"从Binance币本位单 symbol ticker 获取价格: {symbol} = {price}"
+                                )
+                                return price
+                            if isinstance(data, dict) and "price" in data:
+                                price = Decimal(str(data["price"]))
+                                logger.debug(
+                                    f"从Binance币本位单 symbol ticker 获取价格: {symbol} = {price}"
+                                )
+                                return price
+                        try:
+                            pi = session.get(
+                                "https://dapi.binance.com/dapi/v1/premiumIndex",
+                                params={"symbol": symbol_for_api},
+                                timeout=2,
                             )
-                            return p_full
-                    except Exception as e:
-                        logger.debug(f"Binance币本位全量 ticker 回退失败: {e}")
+                            if pi.status_code == 200:
+                                pdata = pi.json()
+                                if isinstance(pdata, list) and len(pdata) > 0:
+                                    pdata = pdata[0]
+                                if isinstance(pdata, dict):
+                                    mp = pdata.get("markPrice") or pdata.get("indexPrice")
+                                    if mp is not None:
+                                        price = Decimal(str(mp))
+                                        if price > 0:
+                                            logger.debug(
+                                                f"从Binance币本位 premiumIndex 获取价格: {symbol} = {price}"
+                                            )
+                                            return price
+                        except Exception as e:
+                            logger.debug(f"Binance币本位 premiumIndex 获取失败: {e}")
                 except Exception as e:
                     logger.debug(f"Binance币本位合约API获取失败: {e}")
-                
-                # 注意：币本位(/USD)品种不能回退到现货API，现货价≠币本位合约价
-                # 直接回退到数据库K线缓存（支持 TRX/USD、TRXUSD 等写法）
+
                 from app.trading.dapi_coin_margined_price import to_dapi_perp_symbol as _perp_sym
 
                 _ps = _perp_sym(symbol)
                 if _ps:
-                    # 最后尝试：USDT 现货近似（仅当 dapi 不可用时）
-                    try:
-                        base = _ps[:-8] if _ps.endswith("USD_PERP") else ""
-                        if base:
-                            spot_sym = f"{base}USDT"
-                            r = session.get(
-                                'https://api.binance.com/api/v3/ticker/price',
-                                params={'symbol': spot_sym},
-                                timeout=2,
-                            )
-                            if r.status_code == 200:
-                                j = r.json()
-                                if j and 'price' in j:
-                                    price = Decimal(str(j['price']))
-                                    if price > 0:
-                                        logger.warning(
-                                            f"[PRICE] {symbol} dapi 不可用，使用现货 {spot_sym} 近似价 {price}"
-                                        )
-                                        return price
-                    except Exception as e:
-                        logger.debug(f"币本位现货近似失败: {e}")
-                    logger.warning(f"币本位dapi获取失败，回退到K线缓存: {symbol}")
+                    logger.warning(f"币本位价格 API 未取到有效价，回退到K线缓存: {symbol}")
                 else:
                     # U本位/其他：可以用现货API作参考价格
                     try:
@@ -1681,27 +1701,56 @@ class CoinFuturesTradingEngine:
         try:
             cursor_update = connection_update.cursor()
 
-            # 批量获取所有持仓的实时价格（一次API调用获取所有价格）
+            # 批量获取价格：与 /prices/batch 一致（全量 dapi → U 本位 USDT），避免 APT 等全量无、单 symbol dapi 价与建仓参考偏离
             price_cache = {}
             if positions:
                 try:
                     import requests
-                    # 币本位合约使用 dapi API
-                    response = requests.get(
-                        'https://dapi.binance.com/dapi/v1/ticker/price',
-                        timeout=3
+                    from app.trading.dapi_coin_margined_price import (
+                        build_dapi_usd_perp_fmt_map,
+                        get_all_dapi_ticker_prices,
+                        resolve_coin_usd_price_like_batch,
                     )
-                    if response.status_code == 200:
-                        all_prices = response.json()
-                        for item in all_prices:
-                            # 将 BTCUSD_PERP 格式转换为 BTC/USD 格式
-                            symbol = item['symbol']
-                            if symbol.endswith('USD_PERP'):
-                                formatted_symbol = symbol.replace('USD_PERP', '/USD')
-                                price_cache[formatted_symbol] = Decimal(str(item['price']))
-                        logger.debug(f"批量获取币本位价格成功，共 {len(price_cache)} 个交易对")
+
+                    dpr = requests.get(
+                        "https://fapi.binance.com/fapi/v1/ticker/price", timeout=3
+                    )
+                    price_map_fapi = {}
+                    if dpr.status_code == 200:
+                        price_map_fapi = {
+                            item["symbol"]: float(item["price"])
+                            for item in dpr.json()
+                        }
+
+                    rows_all = get_all_dapi_ticker_prices()
+                    dapi_fmt_map = build_dapi_usd_perp_fmt_map(rows_all)
+
+                    seen = set()
+                    for pos in positions:
+                        sym = pos.get("symbol") or ""
+                        if not sym or sym in seen:
+                            continue
+                        seen.add(sym)
+                        resolved = resolve_coin_usd_price_like_batch(
+                            sym,
+                            dapi_fmt_map=dapi_fmt_map,
+                            fapi_price_map=price_map_fapi,
+                        )
+                        if resolved is not None:
+                            price_cache[sym] = resolved
+                        else:
+                            clean = (
+                                sym.replace("/", "")
+                                .replace("%2F", "")
+                                .upper()
+                            )
+                            if clean in price_map_fapi:
+                                price_cache[sym] = Decimal(str(price_map_fapi[clean]))
+                    logger.debug(
+                        f"批量获取持仓参考价成功，共 {len(price_cache)} 个交易对"
+                    )
                 except Exception as e:
-                    logger.warning(f"批量获取价格失败，将回退到数据库: {e}")
+                    logger.warning(f"批量获取价格失败，将回退到 get_current_price: {e}")
 
             for pos in positions:
                 # 将 id 映射为 position_id，保持与API一致

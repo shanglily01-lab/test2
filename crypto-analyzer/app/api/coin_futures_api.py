@@ -1965,3 +1965,8 @@ async def delete_pending_position(position_id: int):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+from app.api.coin_futures_pnl_ws import attach_coin_futures_pnl_ws
+
+attach_coin_futures_pnl_ws(router, db_config)
