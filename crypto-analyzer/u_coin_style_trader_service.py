@@ -619,6 +619,10 @@ class UCoinStyleTraderService:
     # ── 系统开关 ──────────────────────────────────────────
 
     def is_enabled(self) -> bool:
+        # 策略自身开关 + U本位总开关，任一关闭则不运行
+        u_main = self._read_setting('u_futures_trading_enabled', '1')
+        if str(u_main).strip() not in ('1', 'true', 'True', 'yes'):
+            return False
         val = self._read_setting(SWITCH_KEY, '0')
         return str(val).strip() in ('1', 'true', 'True', 'yes')
 

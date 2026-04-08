@@ -417,16 +417,21 @@ class BTCMomentumTrader:
             return 4
 
     def _is_momentum_enabled(self) -> bool:
-        """从 system_settings 读取 btc_momentum_enabled 开关，默认启用"""
+        """从 system_settings 读取 btc_momentum_enabled + u_futures_trading_enabled，任一关闭则停止"""
         try:
             conn = self._get_conn()
             cur = conn.cursor()
-            cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='btc_momentum_enabled'")
-            row = cur.fetchone()
+            cur.execute(
+                "SELECT setting_key, setting_value FROM system_settings "
+                "WHERE setting_key IN ('btc_momentum_enabled', 'u_futures_trading_enabled')"
+            )
+            rows = {r['setting_key']: str(r['setting_value']).strip() for r in cur.fetchall()}
             cur.close(); conn.close()
-            if row is None:
+            if rows.get('u_futures_trading_enabled') not in ('1', 'true', 'True', None):
+                return False
+            if 'btc_momentum_enabled' not in rows:
                 return True  # 未配置时默认启用
-            return str(row['setting_value']).strip() in ('1', 'true', 'True')
+            return rows['btc_momentum_enabled'] in ('1', 'true', 'True')
         except Exception:
             return True  # 查询失败时默认启用
 
