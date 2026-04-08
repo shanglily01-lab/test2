@@ -68,6 +68,33 @@ def canonical_coin_usd_display(symbol: str) -> Optional[str]:
     return f"{base}/USD" if base else None
 
 
+def fapi_usdt_perp_symbol_for_coin_usd(symbol: str) -> Optional[str]:
+    """
+    内部展示为币本位 BASE/USD 时，对应 U 本位永续在 fapi 上的符号（如 APT/USD → APTUSDT）。
+
+    Binance 币本位 dapi 仅部分币种有 USD_PERP；未挂牌时批量行情需用同基底 USDT 永续作参考价，
+    与 coin_futures_trading_engine 中 dapi 失败后的现货回退一致（U 本位与现货同量级）。
+    """
+    canon = canonical_coin_usd_display(symbol)
+    if not canon:
+        return None
+    base = canon.split("/")[0].strip()
+    if not base or not re.match(r"^[A-Z0-9]+$", base):
+        return None
+    return f"{base}USDT"
+
+
+def spot_usdt_pair_slash_for_coin_usd(symbol: str) -> Optional[str]:
+    """K 线库中常见写法 BASE/USDT，供币本位无行情时回退查询。"""
+    canon = canonical_coin_usd_display(symbol)
+    if not canon:
+        return None
+    base = canon.split("/")[0].strip()
+    if not base:
+        return None
+    return f"{base}/USDT"
+
+
 def _row_price(item: dict) -> Optional[Decimal]:
     p = item.get("price")
     if p is None:

@@ -1293,6 +1293,7 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
         symbol_map[clean] = s
 
     prices = {}
+    price_map = {}
     quick_timeout = ClientTimeout(total=3)  # 3秒超时
 
     try:
@@ -1301,7 +1302,7 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
             async with session.get('https://fapi.binance.com/fapi/v1/ticker/price') as response:
                 if response.status == 200:
                     all_prices = await response.json()
-                    # 构建价格映射
+                    # 构建价格映射（供 1c 同基底 USDT 参考）
                     price_map = {item['symbol']: float(item['price']) for item in all_prices}
 
                     for clean_symbol, original_symbol in symbol_map.items():
@@ -1314,7 +1315,11 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
         logger.debug(f"批量获取Binance价格失败: {e}")
 
     # 1b. 币本位：dapi 返回 symbol/ps 均无斜杠（如 TRXUSD_PERP / ps=TRXUSD），映射为 BASE/USD 再回填请求里的任意写法
-    from app.trading.dapi_coin_margined_price import canonical_coin_usd_display
+    from app.trading.dapi_coin_margined_price import (
+        canonical_coin_usd_display,
+        fapi_usdt_perp_symbol_for_coin_usd,
+        spot_usdt_pair_slash_for_coin_usd,
+    )
 
     need_dapi = [s for s in symbols if s not in prices and canonical_coin_usd_display(s)]
     if need_dapi:
@@ -1335,7 +1340,18 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
         except Exception as e:
             logger.debug(f"批量获取币本位 dapi 价格失败: {e}")
 
-    # 2. 对于没有获取到的symbol，尝试其他来源
+    # 1c. 币本位 BASE/USD 在 dapi 无合约（如 APT、OP 未上币本位）时，用同基底 U 本位永续价参考（与引擎逻辑一致）
+    for s in symbols:
+        if s in prices:
+            continue
+        usdt_sym = fapi_usdt_perp_symbol_for_coin_usd(s)
+        if usdt_sym and usdt_sym in price_map:
+            prices[s] = {
+                'price': price_map[usdt_sym],
+                'source': 'binance_futures_usdt_ref',
+            }
+
+    # 2. 对于没有获取到的symbol，尝试 K 线库（优先 5m，与采集一致；1m 可能已停采）
     missing_symbols = [s for s in symbols if s not in prices]
     if missing_symbols:
         try:
@@ -1344,12 +1360,25 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
 
             for symbol in missing_symbols:
                 try:
-                    latest_kline = db_service.get_latest_kline(symbol, '1m')
-                    if latest_kline:
-                        prices[symbol] = {
-                            'price': float(latest_kline.close_price),
-                            'source': 'database_spot'
-                        }
+                    for tf in ('5m', '15m', '1m', '1h'):
+                        latest_kline = db_service.get_latest_kline(symbol, tf)
+                        if latest_kline:
+                            prices[symbol] = {
+                                'price': float(latest_kline.close_price),
+                                'source': f'database_kline_{tf}',
+                            }
+                            break
+                    if symbol not in prices:
+                        alt = spot_usdt_pair_slash_for_coin_usd(symbol)
+                        if alt:
+                            for tf in ('5m', '15m', '1m', '1h'):
+                                latest_kline = db_service.get_latest_kline(alt, tf)
+                                if latest_kline:
+                                    prices[symbol] = {
+                                        'price': float(latest_kline.close_price),
+                                        'source': f'database_kline_{tf}_usdt_pair',
+                                    }
+                                    break
                 except Exception:
                     pass
         except Exception as e:

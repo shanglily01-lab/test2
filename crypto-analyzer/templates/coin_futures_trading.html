@@ -251,7 +251,9 @@
 <table class="w-full text-left border-collapse">
 <thead>
 <tr class="text-[10px] uppercase tracking-[0.15em] text-on-surface-variant border-b border-outline-variant/5">
-<th class="px-6 py-4 font-bold">成交时间</th>
+<th class="px-6 py-4 font-bold whitespace-nowrap">开仓时间</th>
+<th class="px-6 py-4 font-bold whitespace-nowrap">平仓时间</th>
+<th class="px-6 py-4 font-bold whitespace-nowrap">持仓时长</th>
 <th class="px-6 py-4 font-bold">交易对</th>
 <th class="px-6 py-4 font-bold">类型</th>
 <th class="px-6 py-4 font-bold">开仓价</th>
@@ -264,7 +266,7 @@
 </tr>
 </thead>
 <tbody id="history-tbody" class="text-sm font-medium">
-<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
+<tr><td colspan="12" class="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
 </tbody>
 </table>
 </div>
@@ -335,6 +337,33 @@ function fmtTime(t) {
         var pad = function(x) { return String(x).padStart(2, '0'); };
         return (u.getUTCMonth()+1) + '-' + pad(u.getUTCDate()) + ' ' + pad(u.getUTCHours()) + ':' + pad(u.getUTCMinutes());
     } catch(e) { return '--'; }
+}
+
+/** 与 fmtTime 一致解析 API 返回的本地时间字符串，用于计算持仓时长 */
+function parseDbTimeMs(t) {
+    if (!t) return NaN;
+    try {
+        var ts = (typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t)) ? t + 'Z' : t;
+        var d = new Date(ts);
+        return isNaN(d.getTime()) ? NaN : d.getTime();
+    } catch (e) { return NaN; }
+}
+
+function fmtHoldDuration(openTime, closeTime) {
+    var o = parseDbTimeMs(openTime);
+    var c = parseDbTimeMs(closeTime);
+    if (isNaN(o) || isNaN(c)) return '--';
+    var ms = Math.max(0, c - o);
+    var sec = Math.floor(ms / 1000);
+    var days = Math.floor(sec / 86400);
+    sec %= 86400;
+    var hours = Math.floor(sec / 3600);
+    sec %= 3600;
+    var minutes = Math.floor(sec / 60);
+    if (days > 0) return days + ' 天 ' + hours + ' 小时';
+    if (hours > 0) return hours + ' 小时 ' + minutes + ' 分';
+    if (minutes > 0) return minutes + ' 分钟';
+    return '<1 分钟';
 }
 
 /** 安全解析 JSON，避免空 body 时 response.json() 抛 Unexpected end of JSON input */
@@ -516,15 +545,18 @@ function renderHistoryPage() {
     var totalPages = Math.max(1, Math.ceil(_historyTotalCount / _historyPageSize));
 
     if (_historyAllTrades.length === 0) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
     } else {
         tbody.innerHTML = _historyAllTrades.map(function(t) {
             var isLong = t.side === 'CLOSE_LONG';
             var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
             var pnl = parseFloat(t.realized_pnl) || 0;
             var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+            var closeAt = t.close_time || t.trade_time;
             return '<tr class="hover:bg-surface-container/50 border-b border-outline-variant/5 transition-colors">' +
-                '<td class="px-6 py-4 font-mono text-xs text-on-surface-variant">' + fmtTime(t.close_time || t.trade_time) + '</td>' +
+                '<td class="px-6 py-4 font-mono text-xs text-on-surface-variant whitespace-nowrap">' + fmtTime(t.open_time) + '</td>' +
+                '<td class="px-6 py-4 font-mono text-xs text-on-surface-variant whitespace-nowrap">' + fmtTime(closeAt) + '</td>' +
+                '<td class="px-6 py-4 font-mono text-xs text-on-surface-variant whitespace-nowrap">' + fmtHoldDuration(t.open_time, closeAt) + '</td>' +
                 '<td class="px-6 py-4 font-bold font-headline">' + (t.symbol || '--') + '</td>' +
                 '<td class="px-6 py-4 text-xs ' + sideClass + '">' + (isLong ? 'BUY/LONG' : 'SELL/SHORT') + '</td>' +
                 '<td class="px-6 py-4 font-mono text-on-surface">' + fmtPrice(t.entry_price) + '</td>' +
@@ -568,7 +600,7 @@ async function loadHistory(page) {
     var limitEl = document.getElementById('history-limit');
     _historyPageSize = limitEl ? parseInt(limitEl.value) || 30 : 30;
 
-    if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>';
 
     var trades = [];
     try {
@@ -577,7 +609,7 @@ async function loadHistory(page) {
         trades = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
         _historyTotalCount = data.total_count || 0;
     } catch(e) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败</td></tr>';
         return [];
     }
     _historyAllTrades = trades;
