@@ -1614,6 +1614,9 @@ class CoinFuturesTraderService:
             resp = requests.get(url, params={'symbol': api_symbol}, timeout=5)
             if resp.status_code == 200:
                 data = resp.json()
+                # DAPI 不带symbol参数时返回列表，带symbol时返回字典或列表
+                if isinstance(data, list):
+                    data = data[0] if data else {}
                 mark_price = float(data.get('markPrice', 0))
                 if mark_price > 0:
                     logger.debug(f"[PRICE] {symbol} DAPI实时标记价: {mark_price}")
@@ -1715,9 +1718,18 @@ class CoinFuturesTraderService:
         if side == 'LONG' and has_1h_bear:
             return False, "时间框架冲突: 做多但1H看跌"
 
-        # 规则2: 做空时,1小时必须不能看涨
+        # 规则2: 做空时,若仅有trend_1h_bull无更强空头信号，才拒绝
+        # 修复：position_high + trend_1h_bull 是"反弹高位做空"的正常形态，不应拒绝
+        # 只有在完全没有空头信号支撑（breakdown/bear量能/连续阴线/momentum_down）时才拒绝
         if side == 'SHORT' and has_1h_bull:
-            return False, "时间框架冲突: 做空但1H看涨"
+            bearish_support = {
+                'breakdown_short', 'volume_power_bear', 'volume_power_1h_bear',
+                'consecutive_bear', 'momentum_down_3pct', 'volume_power_12x_bear',
+                'position_24h_high'
+            }
+            has_any_bearish = any(sig in signal_components for sig in bearish_support)
+            if not has_any_bearish:
+                return False, "时间框架冲突: 做空但1H看涨且无任何空头支撑信号"
 
         # 规则3: 已移除1D趋势检查 (4小时持仓不需要1D趋势)
 
