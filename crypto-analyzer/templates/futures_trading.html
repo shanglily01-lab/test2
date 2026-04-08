@@ -232,6 +232,7 @@
 <th class="px-6 py-4 font-semibold whitespace-nowrap">保证金</th>
 <th class="px-6 py-4 font-semibold whitespace-nowrap">开仓/当前价</th>
 <th class="px-6 py-4 font-semibold whitespace-nowrap">浮盈 (PNL)</th>
+<th class="px-6 py-4 font-semibold whitespace-nowrap">止损 / 止盈</th>
 <th class="px-6 py-4 font-semibold whitespace-nowrap">开仓信号</th>
 <th class="px-6 py-4 font-semibold whitespace-nowrap">操作</th>
 </tr>
@@ -381,12 +382,12 @@ async function loadPositions() {
         var data = await res.json();
         positions = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
     } catch(e) {
-        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败: ' + e.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败: ' + e.message + '</td></tr>';
         return null;
     }
 
     if (positions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无持仓</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无持仓</td></tr>';
         return {count: 0, totalMargin: 0, totalPnl: 0};
     }
 
@@ -454,6 +455,8 @@ async function loadPositions() {
         var entryScore = pos.entry_score ? (' ' + pos.entry_score + 'pt') : '';
         // 截断过长信号名
         var signalDisplay = signalType.length > 20 ? signalType.substring(0, 20) + '...' : signalType;
+        var sl = pos.stop_loss_price ? fmtPrice(pos.stop_loss_price) : '--';
+        var tp = pos.take_profit_price ? fmtPrice(pos.take_profit_price) : '--';
 
         return '<tr class="' + rowBg + ' transition-colors">' +
             '<td class="px-6 py-4">' +
@@ -478,6 +481,10 @@ async function loadPositions() {
             '<td class="px-6 py-4">' +
                 '<div class="' + pnlClass + ' font-bold monospace">' + fmtPnl(pnl) + '</div>' +
                 '<div class="text-[10px] monospace ' + pnlClass + '">' + fmtPnl(pnlPct) + '%</div>' +
+            '</td>' +
+            '<td class="px-6 py-4">' +
+                '<div class="text-xs font-mono text-[#ff716c]">SL ' + sl + '</div>' +
+                '<div class="text-xs font-mono text-[#49f4c8]">TP ' + tp + '</div>' +
             '</td>' +
             '<td class="px-6 py-4">' +
                 (srcLabel ? '<div class="text-[10px] font-bold text-[#49f4c8]/80 mb-0.5">' + srcLabel + '</div>' : '') +
@@ -862,8 +869,8 @@ document.addEventListener('DOMContentLoaded', function() {
     loadAll();
     // 持仓+价格 5s 刷新
     _posRefreshTimer = setInterval(loadPositions, 5000);
-    // 余额/历史 30s 刷新
-    _refreshTimer = setInterval(function() { loadHistory(1); loadAccountInfo(); }, 30000);
+    // 余额/历史 5分钟刷新
+    _refreshTimer = setInterval(function() { loadHistory(1); loadAccountInfo(); }, 300000);
 
     // 搜索 / 筛选实时过滤（不重新请求接口）
     var searchEl = document.getElementById('history-search');

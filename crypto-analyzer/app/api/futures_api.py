@@ -134,6 +134,34 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
         # 获取持仓
         if status == 'open':
             positions = engine.get_open_positions(account_id)
+            # 补充 DB 中的止损/止盈价、id、source、开仓时间等字段
+            try:
+                connection = get_db_connection()
+                cursor = connection.cursor(pymysql.cursors.DictCursor)
+                cursor.execute("""
+                    SELECT id, symbol, position_side,
+                           stop_loss_price, take_profit_price,
+                           source, entry_signal_type, entry_score,
+                           created_at, margin
+                    FROM futures_positions
+                    WHERE account_id = %s AND status = 'open'
+                """, (account_id,))
+                db_rows = {(r['symbol'], r['position_side']): r for r in cursor.fetchall()}
+                cursor.close()
+                for pos in positions:
+                    key = (pos.get('symbol', ''), pos.get('position_side', ''))
+                    db = db_rows.get(key, {})
+                    pos['id'] = db.get('id')
+                    pos['stop_loss_price'] = float(db['stop_loss_price']) if db.get('stop_loss_price') else None
+                    pos['take_profit_price'] = float(db['take_profit_price']) if db.get('take_profit_price') else None
+                    pos['source'] = db.get('source')
+                    pos['entry_signal_type'] = db.get('entry_signal_type')
+                    pos['entry_score'] = db.get('entry_score')
+                    pos['created_at'] = str(db['created_at']) if db.get('created_at') else None
+                    if db.get('margin') and not pos.get('margin'):
+                        pos['margin'] = float(db['margin'])
+            except Exception as e:
+                logger.warning(f"补充持仓DB字段失败: {e}")
         else:
             # 查询所有持仓（包括已平仓）
             connection = get_db_connection()
