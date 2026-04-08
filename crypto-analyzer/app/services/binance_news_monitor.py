@@ -38,13 +38,16 @@ KEYWORD_MAP = [
     ('维护',          'maintenance'),
     ('system upgrade', 'maintenance'),
     ('will list',    'new_listing'),
+    ('will launch',  'new_listing'),   # Binance Futures Will Launch XXXUSDT
     ('新上线',        'new_listing'),
     ('listing',      'new_listing'),
 ]
 
 # 从标题提取交易对 symbol 的正则
-# 匹配 "(XYZ)" 或 "(XYZ/USDT)" 格式
+# 匹配 "(XYZ)" 或 "(XYZ/USDT)" 格式（旧格式）
 SYMBOL_RE = re.compile(r'\(([A-Z0-9]+)(?:/[A-Z]+)?\)')
+# 直接出现在标题中的 XXXUSDT / XXXUSDC 格式（新格式，如 "Will Launch MUUSDT and SNDKUSDT"）
+SYMBOL_INLINE_RE = re.compile(r'\b([A-Z]{2,10}(?:USDT|USDC|BTC|ETH|BNB))\b')
 
 
 class BinanceNewsMonitor:
@@ -163,19 +166,37 @@ class BinanceNewsMonitor:
     @staticmethod
     def extract_symbols(title: str) -> List[str]:
         """
-        从标题提取币种代码，转为 USDT 永续合约格式
-        例: "Binance Will List XYZ (XYZ) and ABC (ABC)" -> ["XYZUSDT", "ABCUSDT"]
+        从标题提取币种代码，转为 USDT 永续合约格式。
+        支持两种格式：
+          旧格式: "Binance Will List XYZ (XYZ)" -> ["XYZUSDT"]
+          新格式: "Binance Futures Will Launch MUUSDT and SNDKUSDT..." -> ["MUUSDT", "SNDKUSDT"]
         """
-        matches = SYMBOL_RE.findall(title)
+        NOISE_TOKENS = {'USD', 'USDT', 'BTC', 'ETH', 'BNB', 'USDC'}
+
         symbols = []
-        for m in matches:
+
+        # 优先尝试括号格式（旧格式）
+        bracket_matches = SYMBOL_RE.findall(title)
+        for m in bracket_matches:
             sym = m.upper()
-            # 过滤常见非币种括号内容
-            if sym in ('USD', 'USDT', 'BTC', 'ETH', 'BNB') and len(matches) > 1:
+            if sym in NOISE_TOKENS and len(bracket_matches) > 1:
+                continue
+            # 过滤纯数字（如日期 "2026"）
+            if sym.isdigit():
                 continue
             if not sym.endswith('USDT'):
                 sym = sym + 'USDT'
             symbols.append(sym)
+
+        # 括号格式没有找到（或只找到日期），尝试内联格式（新格式）
+        if not symbols:
+            inline_matches = SYMBOL_INLINE_RE.findall(title)
+            for sym in inline_matches:
+                sym = sym.upper()
+                if sym in NOISE_TOKENS:
+                    continue
+                symbols.append(sym)
+
         return list(dict.fromkeys(symbols))  # 去重保序
 
     # ------------------------------------------------------------------
