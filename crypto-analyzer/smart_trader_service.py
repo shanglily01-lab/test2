@@ -890,7 +890,8 @@ class SmartDecisionBrain:
                     if not v2_result['passed']:
                         # 🔥 修复：软阻断（原硬阻断在趋势转折点误杀高置信信号）
                         # V2方向冲突时要求V1分数高出当前阈值25分才允许通过（趋势转折期V2滞后5-15分钟）
-                        current_threshold = long_threshold if side == 'LONG' else short_threshold_adj
+                        # signal_confirm模式阈值=self.threshold(55)，trend_follow模式阈值=20
+                        current_threshold = self.threshold if strategy_mode == 'signal_confirm' else 20
                         v2_conflict_threshold = current_threshold + 25
                         # 仅方向冲突时允许软阻断，强度不足仍然拒绝
                         is_direction_conflict = v2_result.get('details', {}).get('direction_mismatch', False)
@@ -1701,11 +1702,9 @@ class SmartTraderService:
         if not signal_components:
             return True, "无信号组件"
 
-        # 提取趋势信号
+        # 提取趋势信号（trend_1d_bull/bear已移除，不再生成，无需检查）
         has_1h_bull = 'trend_1h_bull' in signal_components
         has_1h_bear = 'trend_1h_bear' in signal_components
-        has_1d_bull = 'trend_1d_bull' in signal_components
-        has_1d_bear = 'trend_1d_bear' in signal_components
 
         # 规则1: 做多时,1小时必须不能看跌
         if side == 'LONG' and has_1h_bear:
@@ -1714,14 +1713,6 @@ class SmartTraderService:
         # 规则2: 做空时,1小时必须不能看涨
         if side == 'SHORT' and has_1h_bull:
             return False, "时间框架冲突: 做空但1H看涨"
-
-        # 规则3: 多空方向的日线趋势不能相反
-        # 注意: 允许日线中性(既没有bull也没有bear)
-        if side == 'LONG' and has_1d_bear:
-            return False, "时间框架冲突: 做多但1D看跌"
-
-        if side == 'SHORT' and has_1d_bull:
-            return False, "时间框架冲突: 做空但1D看涨"
 
         return True, "时间框架一致"
 
