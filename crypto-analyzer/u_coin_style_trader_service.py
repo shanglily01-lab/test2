@@ -775,7 +775,7 @@ class UCoinStyleTraderService:
             logger.error(f"[U破位] 获取实盘账号失败: {e}")
             return
 
-        MAX_LIVE = 5
+        MAX_LIVE = 20
         for ak in keys:
             try:
                 # 检查实盘持仓上限

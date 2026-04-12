@@ -289,7 +289,7 @@ class BTCMomentumTrader:
             logger.error(f"[BTC动量] 获取实盘账号失败: {e}")
             return
 
-        MAX_LIVE_POSITIONS = 5
+        MAX_LIVE_POSITIONS = 20
         sl_pct, tp_pct = self._get_sl_tp_from_settings()
 
         for ak in active_keys:

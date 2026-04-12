@@ -557,8 +557,8 @@ class BinanceFuturesEngine:
         position_side = position_side.upper()
 
         try:
-            # 0. 每账号最多 5 个实盘持仓
-            MAX_LIVE_POSITIONS = 5
+            # 0. 每账号最多 20 个实盘持仓
+            MAX_LIVE_POSITIONS = 20
             try:
                 _chk_cur = self._get_cursor()
                 _chk_cur.execute(
