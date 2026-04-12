@@ -22,6 +22,12 @@ from bs4 import BeautifulSoup
 from dateutil import parser as date_parser
 from loguru import logger
 
+try:
+    from curl_cffi import requests as cf_requests
+    _CURL_CFFI_AVAILABLE = True
+except ImportError:
+    _CURL_CFFI_AVAILABLE = False
+
 # 页面列名中需跳过的非单只 ETF 代码列
 _SKIP_COLUMNS = frozenset(
     {
@@ -241,8 +247,19 @@ def parse_farside_eth_table(html: str) -> Tuple[List[str], List[Dict[str, Any]]]
 
 def fetch_farside_html(url: str, timeout: int = 30) -> str:
     """
-    抓取 Farside 页面。部分网络环境返回 403，可尝试改用 https://www.farside.co.uk/...
+    抓取 Farside 页面。网站由 Cloudflare 保护，优先使用 curl_cffi 模拟浏览器 TLS
+    指纹绕过 403；curl_cffi 不可用时回退 requests（可能被拒）。
     """
+    if _CURL_CFFI_AVAILABLE:
+        try:
+            r = cf_requests.get(url, impersonate="chrome110", timeout=timeout)
+            if r.status_code == 200:
+                return r.text
+            logger.warning("curl_cffi 请求 {} 返回 {}, 尝试 requests 回退", url, r.status_code)
+        except Exception as e:
+            logger.warning("curl_cffi 请求失败: {}, 回退 requests", e)
+
+    # fallback: plain requests (may hit 403 on Cloudflare-protected sites)
     session = requests.Session()
     session.headers.update(_DEFAULT_HEADERS)
     r = session.get(url, timeout=timeout, allow_redirects=True)
@@ -287,8 +304,8 @@ def ensure_farside_etf_product(
         cursor.execute(
             """
             INSERT INTO crypto_etf_products
-                (ticker, full_name, provider, asset_type, is_active)
-            VALUES (%s, %s, %s, %s, 1)
+                (ticker, full_name, provider, asset_type, etf_type, is_active)
+            VALUES (%s, %s, %s, %s, 'spot', 1)
             """,
             (ticker, f"{ticker} ({label} ETF)", "Farside", label),
         )
