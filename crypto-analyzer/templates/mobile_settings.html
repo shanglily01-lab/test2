@@ -32,20 +32,20 @@ body { background:#070b10; color:#ebeef5; font-family:'Manrope',sans-serif;
 .mono-data { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
 /* ── Toggle switch ──────────────────────────────────────────────────── */
 .custom-toggle { position:relative;display:inline-block;
-    width:51px;height:31px;flex-shrink:0;cursor:pointer; }
+    width:48px;height:28px;flex-shrink:0;cursor:pointer; }
 .custom-toggle input { opacity:0;width:0;height:0;position:absolute; }
 .slider {
-    position:absolute;inset:0;border-radius:15.5px;
+    position:absolute;inset:0;border-radius:14px;
     background:#48484a;
     transition:background .2s;
 }
 .slider:before {
     content:"";position:absolute;
-    width:27px;height:27px;
-    left:2px;top:2px;
+    width:20px;height:20px;
+    left:4px;top:4px;
     background:#fff;
     border-radius:50%;
-    box-shadow:0 2px 6px rgba(0,0,0,.3),0 1px 2px rgba(0,0,0,.2);
+    box-shadow:0 1px 3px rgba(0,0,0,.3);
     transition:transform .2s cubic-bezier(.25,.46,.45,.94);
 }
 input:checked + .slider { background:#49f4c8; }
