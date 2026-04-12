@@ -31,38 +31,36 @@ body { background:#070b10; color:#ebeef5; font-family:'Manrope',sans-serif;
 .settings-card { background:#0f1520; }
 .mono-data { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
 /* ── Toggle switch ──────────────────────────────────────────────────── */
-.custom-toggle { position:relative;display:inline-flex;align-items:center;
-    width:52px;height:30px;flex-shrink:0;cursor:pointer; }
+.custom-toggle { position:relative;display:inline-block;
+    width:42px;height:24px;flex-shrink:0;cursor:pointer; }
 .custom-toggle input { opacity:0;width:0;height:0;position:absolute; }
 .slider {
-    position:absolute;inset:0;border-radius:15px;
-    background:#1e2d3d;
-    border:1.5px solid #2a3d55;
-    transition:background .25s,border-color .25s,box-shadow .25s;
+    position:absolute;inset:0;border-radius:12px;
+    background:#243040;
+    transition:background .18s ease,box-shadow .18s ease;
 }
 .slider:before {
     content:"";position:absolute;
-    width:22px;height:22px;
-    top:2.5px;left:3px;
-    background:#4a5568;
+    width:18px;height:18px;
+    left:3px;top:3px;
+    background:#fff;
     border-radius:50%;
-    transition:transform .25s cubic-bezier(.34,1.56,.64,1),background .25s,box-shadow .25s;
-    box-shadow:0 1px 4px rgba(0,0,0,.4);
+    box-shadow:0 1px 3px rgba(0,0,0,.5);
+    transition:transform .18s cubic-bezier(.25,.46,.45,.94);
 }
 input:checked + .slider {
-    background:rgba(73,244,200,.18);
-    border-color:rgba(73,244,200,.5);
-    box-shadow:0 0 10px rgba(73,244,200,.2);
+    background:#49f4c8;
+    box-shadow:0 0 0 2px rgba(73,244,200,.2);
 }
 input:checked + .slider:before {
-    transform:translateX(22px);
-    background:#49f4c8;
-    box-shadow:0 1px 6px rgba(73,244,200,.5);
+    transform:translateX(18px);
+    background:#071512;
+    box-shadow:0 1px 3px rgba(0,0,0,.3);
 }
-.setting-row { min-height:60px; }
+.setting-row { min-height:56px; }
 .setting-row label.custom-toggle {
     display:inline-flex; align-items:center; justify-content:center;
-    min-width:52px; min-height:52px; margin:-11px -4px -11px 0; touch-action:manipulation;
+    min-width:44px; min-height:44px; margin:-10px -4px -10px 0; touch-action:manipulation;
 }
 .bottom-nav { padding-bottom:max(env(safe-area-inset-bottom),8px); }
 main { padding-bottom:calc(76px + max(env(safe-area-inset-bottom),8px)); }
