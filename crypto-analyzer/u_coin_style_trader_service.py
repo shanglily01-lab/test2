@@ -632,10 +632,14 @@ class UCoinStyleTraderService:
     # ── 持仓查询 ──────────────────────────────────────────
 
     def get_open_count(self) -> int:
+        """只统计本策略开仓数（source=U_COIN_STYLE），避免被 smart_trader 共享仓位撑满"""
         try:
             conn = self._get_connection()
             cur  = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM futures_positions WHERE status='open' AND account_id=%s", (self.account_id,))
+            cur.execute(
+                "SELECT COUNT(*) FROM futures_positions WHERE status='open' AND account_id=%s AND source=%s",
+                (self.account_id, SOURCE_TAG)
+            )
             r = cur.fetchone()
             cur.close()
             return r[0] if r else 0
