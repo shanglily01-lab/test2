@@ -145,23 +145,15 @@ class SignalBlacklistChecker:
         pattern_count = len(pattern_components)
 
         # 情况A: 单一信号黑名单（pattern只有1个组件）
+        # 只要信号组合中包含该组件，无论组合里有几个信号，一律拦截。
+        # 设计意图：差信号（如 position_low 胜率18.8%）不论与哪些信号搭档都应禁止开仓。
         if pattern_count == 1:
-            # 只匹配单一信号，不匹配多信号组合
-            # 避免误伤：volatility_high 不应该匹配 "breakdown_short + volatility_high + volume_power_bear"
-            if signal_count == 1 and pattern_components == signal_components:
-                return True
-            else:
-                return False  # 单一信号黑名单不匹配多信号组合
+            return pattern_components.issubset(signal_components)
 
         # 情况B: 多信号黑名单（pattern有多个组件）
+        # 完全匹配：所有组件都相同（顺序无关）
         else:
-            # 完全匹配：所有组件都相同（顺序无关）
-            if pattern_components == signal_components:
-                return True
-            else:
-                return False  # 不完全匹配则不拦截
-
-        return False
+            return pattern_components == signal_components
 
     def get_margin_multiplier(self, signal_combination: str, direction: str, historical_win_rate: Optional[float] = None) -> float:
         """

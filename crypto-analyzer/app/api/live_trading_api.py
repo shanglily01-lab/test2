@@ -1198,6 +1198,54 @@ async def sync_from_binance(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/stats")
+async def get_trading_stats(
+    days: int = Query(30, ge=1, le=365),
+    api_key_id: int = Depends(resolve_api_key_id),
+    current_user: dict = Depends(get_current_user)
+):
+    """获取账户交易统计：胜率、总交易数、今日已实现盈亏"""
+    from datetime import datetime, timedelta
+    service = get_api_key_service()
+    try:
+        db_config = service.db_config
+        conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor)
+        cur = conn.cursor()
+        since = (datetime.utcnow() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        cur.execute("""
+            SELECT
+                COUNT(*)                                              AS total_trades,
+                SUM(realized_pnl > 0)                                AS win_count,
+                SUM(realized_pnl)                                    AS total_pnl,
+                SUM(CASE WHEN DATE(close_time) = %s THEN realized_pnl ELSE 0 END) AS today_pnl
+            FROM live_futures_positions
+            WHERE account_id = %s
+              AND status IN ('CLOSED','LIQUIDATED')
+              AND close_time >= %s
+        """, (today, api_key_id, since))
+        row = cur.fetchone() or {}
+        cur.close()
+        conn.close()
+        total = int(row.get('total_trades') or 0)
+        wins  = int(row.get('win_count') or 0)
+        win_rate = round(wins / total * 100, 1) if total > 0 else 0.0
+        return {
+            'success': True,
+            'data': {
+                'win_rate': win_rate,
+                'win_count': wins,
+                'total_trades': total,
+                'total_pnl': float(row.get('total_pnl') or 0),
+                'today_pnl': float(row.get('today_pnl') or 0),
+                'days': days,
+            }
+        }
+    except Exception as e:
+        logger.error(f"获取交易统计失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/history")
 async def get_position_history(
     days: int = Query(30, ge=1, le=365),

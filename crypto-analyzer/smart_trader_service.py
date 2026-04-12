@@ -3499,6 +3499,7 @@ class SmartTraderService:
         last_smart_exit_check = datetime.now()
         last_blacklist_reload = datetime.now()
         last_config_reload = datetime.now()
+        last_trading_mode_reload = datetime.now() - timedelta(seconds=60)  # 启动后立即触发首次读取
         last_regime_check = datetime.now()  # 市场状态机检测（每小时一次）
         last_reconcile = datetime.now()     # 实盘持仓对账（每5分钟）
 
@@ -3522,7 +3523,7 @@ class SmartTraderService:
                         logger.warning(f"⚠️ [BIG4-REGIME] 市场状态检测失败: {e}")
                     last_regime_check = now
 
-                # 0.6. 定期重新加载Big4配置 + 交易模式开关 (每5分钟检查数据库)
+                # 0.6. 定期重新加载Big4配置 (每5分钟)
                 if (now - last_config_reload).total_seconds() >= 300:
                     try:
                         from app.services.system_settings_loader import get_big4_filter_enabled
@@ -3536,15 +3537,27 @@ class SmartTraderService:
                     except Exception as e:
                         logger.warning(f"[CONFIG-RELOAD] 重新加载Big4配置失败: {e}")
 
+                    last_config_reload = now
+
+                # 0.65. 定期重新加载交易模式开关 (每60秒，使复选框变化快速生效，独立连接避免影响主连接)
+                if (now - last_trading_mode_reload).total_seconds() >= 60:
                     try:
-                        _tm_conn = self._get_connection()
-                        _tm_cur = _tm_conn.cursor()
-                        _tm_cur.execute("""
-                            SELECT setting_key, setting_value FROM system_settings
-                            WHERE setting_key IN ('signal_confirmation_enabled', 'trend_following_enabled', 'max_positions')
-                        """)
-                        _tm_rows = {r[0]: r[1] for r in _tm_cur.fetchall()}
-                        _tm_cur.close(); _tm_conn.close()
+                        _tm_conn = pymysql.connect(
+                            **self.db_config,
+                            autocommit=True,
+                            connect_timeout=10,
+                            read_timeout=10,
+                            write_timeout=10,
+                        )
+                        try:
+                            with _tm_conn.cursor() as _tm_cur:
+                                _tm_cur.execute("""
+                                    SELECT setting_key, setting_value FROM system_settings
+                                    WHERE setting_key IN ('signal_confirmation_enabled', 'trend_following_enabled', 'max_positions')
+                                """)
+                                _tm_rows = {r[0]: r[1] for r in _tm_cur.fetchall()}
+                        finally:
+                            _tm_conn.close()
                         new_sc = int(float(_tm_rows.get('signal_confirmation_enabled', '0'))) == 1
                         new_tf = int(float(_tm_rows.get('trend_following_enabled', '0'))) == 1
                         if new_sc != self.brain.signal_confirmation_enabled or new_tf != self.brain.trend_following_enabled:
@@ -3557,9 +3570,9 @@ class SmartTraderService:
                                 logger.info(f"[CONFIG-RELOAD] 最大持仓数更新: {self.max_positions} -> {new_mp}")
                                 self.max_positions = new_mp
                     except Exception as e:
-                        logger.warning(f"[CONFIG-RELOAD] 重新加载交易模式配置失败: {e}")
+                        logger.warning(f"[TRADING-MODE] 重新加载交易模式配置失败: {e}")
 
-                    last_config_reload = now
+                    last_trading_mode_reload = now
 
                 # 0.6. 实盘持仓对账（每5分钟，检测交易所已平但DB未更新的仓位）
                 if (now - last_reconcile).total_seconds() >= 300:

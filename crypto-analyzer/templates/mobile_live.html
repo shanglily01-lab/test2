@@ -108,8 +108,8 @@ tailwind.config = {
             <p id="totalPnl" class="mono text-base font-bold text-[#00d4aa]">--</p>
         </div>
         <div class="bg-surface-container p-3 rounded-xl border border-outline-variant/10">
-            <p class="text-[10px] text-on-surface-variant uppercase font-bold mb-1">保证金</p>
-            <p id="totalMargin" class="mono text-lg font-bold text-[#ffb800]">--</p>
+            <p class="text-[10px] text-on-surface-variant uppercase font-bold mb-1">30D 胜率</p>
+            <p id="winRate" class="mono text-lg font-bold text-[#49f4c8]">--</p>
         </div>
     </div>
 
@@ -460,8 +460,20 @@ async function doCancelOrder() {
     } catch(e) { toast('请求失败', 'err'); }
 }
 
+async function loadStats() {
+    try {
+        const r = await authFetch(`${API}/stats?days=30`).then(r => r.json());
+        if (r.success && r.data) {
+            const wr = r.data.win_rate;
+            const el = document.getElementById('winRate');
+            el.textContent = wr.toFixed(1) + '%';
+            el.className = 'mono text-lg font-bold ' + (wr >= 50 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
+        }
+    } catch(e) {}
+}
+
 async function loadAll() {
-    await Promise.all([loadBalance(), loadPositions(), loadOrders()]);
+    await Promise.all([loadBalance(), loadPositions(), loadOrders(), loadStats()]);
 }
 
 // 初始化

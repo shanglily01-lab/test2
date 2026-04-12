@@ -86,12 +86,11 @@ main { padding-bottom:max(env(safe-area-inset-bottom),24px); }
         <div class="flex items-center justify-between pt-1">
             <label class="flex items-center gap-2 cursor-pointer min-h-[44px]">
                 <div class="relative flex items-center">
-                    <input class="peer appearance-none w-4 h-4 rounded border border-[#1e2d45] bg-[#1a2235] checked:bg-primary checked:border-primary focus:ring-0 transition-all cursor-pointer" type="checkbox"/>
+                    <input id="rememberMe" class="peer appearance-none w-4 h-4 rounded border border-[#1e2d45] bg-[#1a2235] checked:bg-primary checked:border-primary focus:ring-0 transition-all cursor-pointer" type="checkbox"/>
                     <span class="material-symbols-outlined absolute text-[12px] text-[#070b10] opacity-0 peer-checked:opacity-100 left-0.5">check</span>
                 </div>
                 <span class="text-[12px] text-[#6b7fa3]">记住登录</span>
             </label>
-            <a class="text-[12px] text-[#6b7fa3] hover:text-primary transition-colors min-h-[44px] flex items-center px-1" href="#">忘记密码？</a>
         </div>
     </form>
     <div class="mt-10 w-full">
@@ -123,13 +122,32 @@ function showErr(msg) {
     document.getElementById('err').style.display = 'flex';
 }
 
-async function login() {
+const CRED_KEY = 'mobile_saved_creds';
+
+function loadSavedCreds() {
+    try {
+        const raw = localStorage.getItem(CRED_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch(e) { return null; }
+}
+
+function saveCreds(username, password) {
+    localStorage.setItem(CRED_KEY, JSON.stringify({ username, password }));
+}
+
+function clearCreds() {
+    localStorage.removeItem(CRED_KEY);
+}
+
+async function login(silent) {
     const username = document.getElementById('uname').value.trim();
     const password = document.getElementById('pwd').value;
+    const remember = document.getElementById('rememberMe').checked;
     const btn = document.getElementById('btn');
-    document.getElementById('err').style.display = 'none';
-    if (!username || !password) { showErr('请输入用户名和密码'); return; }
-    btn.textContent = '验证中…'; btn.disabled = true;
+    if (!silent) document.getElementById('err').style.display = 'none';
+    if (!username || !password) { if (!silent) showErr('请输入用户名和密码'); return false; }
+    if (!silent) { btn.textContent = '验证中…'; btn.disabled = true; }
     try {
         const r = await fetch(`${SYS}/mobile/login`, {
             method: 'POST', credentials: 'include',
@@ -138,17 +156,42 @@ async function login() {
         }).then(r => r.json());
         if (r.success) {
             if (r.access_token) localStorage.setItem('auth_token', r.access_token);
+            if (remember) saveCreds(username, password);
+            else clearCreds();
             location.href = nextUrl;
+            return true;
         } else {
+            if (silent) return false;
             showErr(r.error || '登录失败');
+            clearCreds();
             document.getElementById('pwd').value = '';
             document.getElementById('pwd').focus();
         }
-    } catch(e) { showErr('网络错误: ' + e.message); }
-    btn.textContent = '登 录'; btn.disabled = false;
+    } catch(e) { if (!silent) showErr('网络错误: ' + e.message); }
+    if (!silent) { btn.textContent = '登 录'; btn.disabled = false; }
+    return false;
 }
 
-document.getElementById('pwd').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+document.getElementById('pwd').addEventListener('keydown', e => { if (e.key === 'Enter') login(false); });
+
+// 页面加载：若有保存的凭据，自动填充并登录
+(async () => {
+    const creds = loadSavedCreds();
+    if (creds) {
+        document.getElementById('uname').value = creds.username;
+        document.getElementById('pwd').value = creds.password;
+        document.getElementById('rememberMe').checked = true;
+        // 静默自动登录
+        const ok = await login(true);
+        if (!ok) {
+            // 凭据失效，清除并显示表单
+            clearCreds();
+            document.getElementById('pwd').value = '';
+            document.getElementById('btn').textContent = '登 录';
+            document.getElementById('btn').disabled = false;
+        }
+    }
+})();
 </script>
 </body>
 </html>
