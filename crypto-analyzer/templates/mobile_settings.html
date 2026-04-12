@@ -30,34 +30,9 @@ body { background:#070b10; color:#ebeef5; font-family:'Manrope',sans-serif;
     overflow-x:hidden; touch-action:pan-y; }
 .settings-card { background:#0f1520; }
 .mono-data { font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
-/* ── Toggle switch ──────────────────────────────────────────────────── */
-.custom-toggle { position:relative;display:inline-block;
-    width:48px;height:24px;flex-shrink:0;cursor:pointer; }
-.custom-toggle input { opacity:0;width:0;height:0;position:absolute; }
-.slider {
-    position:absolute;inset:0;border-radius:12px;
-    background:rgba(73,244,200,.08);
-    transition:background .2s;
-}
-.slider:before {
-    content:"";position:absolute;
-    width:16px;height:16px;
-    left:2px;top:4px;
-    background:#72767c;
-    border-radius:50%;
-    transition:transform .2s ease,background .2s,box-shadow .2s;
-}
-input:checked + .slider { background:rgba(73,244,200,.35); }
-input:checked + .slider:before {
-    transform:translateX(28px);
-    background:#49f4c8;
-    box-shadow:0 0 8px rgba(73,244,200,.7);
-}
 .setting-row { min-height:56px; }
-.setting-row label.custom-toggle {
-    display:inline-flex; align-items:center; justify-content:center;
-    min-width:48px; min-height:44px; margin:0 -4px 0 0; touch-action:manipulation;
-}
+.toggle-wrap { display:inline-flex;align-items:center;justify-content:center;
+    min-width:48px;min-height:44px;margin:0 -4px 0 0; }
 .bottom-nav { padding-bottom:max(env(safe-area-inset-bottom),8px); }
 main { padding-bottom:calc(76px + max(env(safe-area-inset-bottom),8px)); }
 button,a,label,select { -webkit-tap-highlight-color:transparent; }
@@ -155,29 +130,29 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
                     <span class="text-sm font-medium">实盘交易</span>
                     <span class="text-[10px] text-on-surface-variant mt-0.5">Live Trading execution engine</span>
                 </div>
-                <label class="custom-toggle"><input id="liveToggle" type="checkbox" onchange="autoSave('services')"/><span class="slider"></span></label>
+                <div class="toggle-wrap"><div id="liveToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <div class="flex flex-col py-3 pr-4">
                     <span class="text-sm font-medium">U本位自动交易</span>
                     <span class="text-[10px] text-on-surface-variant mt-0.5">USDT-M Auto Execution</span>
                 </div>
-                <label class="custom-toggle"><input id="usdtToggle" type="checkbox" onchange="autoSave('services')"/><span class="slider"></span></label>
+                <div class="toggle-wrap"><div id="usdtToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <div class="flex flex-col py-3 pr-4">
                     <span class="text-sm font-medium">币本位合约</span>
                     <span class="text-[10px] text-on-surface-variant mt-0.5">COIN-M Auto Execution</span>
                 </div>
-                <label class="custom-toggle"><input id="coinToggle" type="checkbox" onchange="autoSave('services')"/><span class="slider"></span></label>
+                <div class="toggle-wrap"><div id="coinToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <span class="text-sm font-medium">做多</span>
-                <label class="custom-toggle"><input id="longToggle" type="checkbox" onchange="autoSave('direction')"/><span class="slider"></span></label>
+                <div class="toggle-wrap"><div id="longToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
             <div class="setting-row flex items-center justify-between px-4">
                 <span class="text-sm font-medium">做空</span>
-                <label class="custom-toggle"><input id="shortToggle" type="checkbox" onchange="autoSave('direction')"/><span class="slider"></span></label>
+                <div class="toggle-wrap"><div id="shortToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
         </div>
     </section>
@@ -188,15 +163,15 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
         <div class="settings-card rounded-2xl overflow-hidden">
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <span class="text-sm font-medium">BTC动量跟随</span>
-                <label class="custom-toggle"><input id="btcMomentumToggle" type="checkbox" onchange="autoSave('services')"/><span class="slider"></span></label>
+                <div class="toggle-wrap"><div id="btcMomentumToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <span class="text-sm font-medium">预测器</span>
-                <label class="custom-toggle"><input id="predictorToggle" type="checkbox" onchange="autoSave('services')"/><span class="slider"></span></label>
+                <div class="toggle-wrap"><div id="predictorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
             <div class="setting-row flex items-center justify-between px-4">
                 <span class="text-sm font-medium">U本位破位策略</span>
-                <label class="custom-toggle"><input id="uCoinStyleToggle" type="checkbox" onchange="autoSave('services')"/><span class="slider"></span></label>
+                <div class="toggle-wrap"><div id="uCoinStyleToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
         </div>
     </section>
@@ -207,7 +182,7 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
         <div class="settings-card rounded-2xl overflow-hidden">
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <span class="text-sm font-medium">Big4趋势过滤</span>
-                <label class="custom-toggle"><input id="big4Toggle" type="checkbox" onchange="autoSave('big4')"/><span class="slider"></span></label>
+                <div class="toggle-wrap"><div id="big4Toggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
             <div class="setting-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-1">
                 <div class="flex flex-col py-2 min-w-0 pr-2">
@@ -369,9 +344,43 @@ function setPill(id, on) {
     else     { el.className = 'px-3 py-1.5 text-[10px] font-bold uppercase tracking-tight rounded-full border bg-error/10 text-error border-error/20'; el.textContent = '已停止'; }
 }
 
+// ── Toggle helpers（与 PC 端 system_settings.html 完全一致）─────────────
+function applyToggleVisual(el, enabled) {
+    const thumb = el.querySelector('.toggle-thumb');
+    if (enabled) {
+        el.style.background = 'rgba(73,244,200,0.35)';
+        if (thumb) { thumb.style.left=''; thumb.style.right='2px'; thumb.style.background='#49f4c8'; thumb.style.boxShadow='0 0 8px rgba(73,244,200,0.7)'; }
+    } else {
+        el.style.background = 'rgba(73,244,200,0.08)';
+        if (thumb) { thumb.style.right=''; thumb.style.left='2px'; thumb.style.background='#72767c'; thumb.style.boxShadow='none'; }
+    }
+}
+function setToggle(id, enabled) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.dataset.enabled = enabled ? 'true' : 'false';
+    applyToggleVisual(el, enabled);
+}
+function getToggle(id) {
+    const el = document.getElementById(id);
+    return el ? el.dataset.enabled === 'true' : false;
+}
+function bindToggle(id, saveType, extra) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('click', function() {
+        if (!requireUnlock()) { loadAll(); return; }
+        const next = el.dataset.enabled !== 'true';
+        setToggle(id, next);
+        if (extra) extra();
+        clearTimeout(_saving[saveType]);
+        _saving[saveType] = setTimeout(() => save(saveType), 500);
+    });
+}
+
 function updateDirectionSummary() {
-    const l = document.getElementById('longToggle').checked;
-    const s = document.getElementById('shortToggle').checked;
+    const l = getToggle('longToggle');
+    const s = getToggle('shortToggle');
     const map = {'tt':'多空双向','tf':'仅做多','ft':'仅做空','ff':'停止交易'};
     document.getElementById('directionSummary').textContent = map[(l?'t':'f')+(s?'t':'f')];
 }
@@ -386,43 +395,37 @@ async function loadAll() {
             fetch(`${SYS}/max-hold-hours`).then(r => r.json()),
         ]);
         if (sysR.success) {
-            const b4 = sysR.data.big4_filter_enabled?.value === 'true';
-            document.getElementById('big4Toggle').checked = b4;
+            setToggle('big4Toggle', sysR.data.big4_filter_enabled?.value === 'true');
         }
         if (dirR.success) {
             const l = dirR.data.allow_long.value === true || dirR.data.allow_long.value === 'true';
             const s = dirR.data.allow_short.value === true || dirR.data.allow_short.value === 'true';
-            document.getElementById('longToggle').checked = l;
-            document.getElementById('shortToggle').checked = s;
+            setToggle('longToggle', l);
+            setToggle('shortToggle', s);
             updateDirectionSummary();
         }
         if (svcR.success) {
             const d = svcR.data;
-            document.getElementById('usdtToggle').checked = d.usdt_futures_enabled;
-            document.getElementById('coinToggle').checked = d.coin_futures_enabled;
-            document.getElementById('liveToggle').checked = d.live_trading_enabled;
-            document.getElementById('predictorToggle').checked = d.predictor_enabled;
-            document.getElementById('btcMomentumToggle').checked = d.btc_momentum_enabled;
-            document.getElementById('uCoinStyleToggle').checked = d.u_coin_style_enabled || false;
+            setToggle('usdtToggle', d.usdt_futures_enabled);
+            setToggle('coinToggle', d.coin_futures_enabled);
+            setToggle('liveToggle', d.live_trading_enabled);
+            setToggle('predictorToggle', d.predictor_enabled);
+            setToggle('btcMomentumToggle', d.btc_momentum_enabled);
+            setToggle('uCoinStyleToggle', d.u_coin_style_enabled || false);
             setPill('usdtStatus', d.usdt_futures_enabled);
             setPill('liveStatus', d.live_trading_enabled);
             setPill('predictorStatus', d.predictor_enabled);
         }
         if (holdR.success) {
             const h = Math.max(3, Math.min(8, parseInt(holdR.data.hours, 10) || 4));
-            const sel = document.getElementById('holdHours');
-            sel.value = String(h);
+            document.getElementById('holdHours').value = String(h);
         }
     } catch(e) { toast('加载失败: ' + e.message, 'err'); }
 }
 
-// ── Auto-save on toggle (debounced 500ms) ─────────────────────────────
+// ── Save ──────────────────────────────────────────────────────────────
 function autoSave(type) {
-    if (!requireUnlock()) {
-        // 回滚 toggle（因为没解锁）—— 需要重新读取状态
-        setTimeout(loadAll, 50);
-        return;
-    }
+    if (!requireUnlock()) { setTimeout(loadAll, 50); return; }
     clearTimeout(_saving[type]);
     _saving[type] = setTimeout(() => save(type), 500);
 }
@@ -430,12 +433,12 @@ function autoSave(type) {
 async function save(type) {
     if (type === 'services') {
         const body = {
-            usdt_futures_enabled: document.getElementById('usdtToggle').checked,
-            coin_futures_enabled: document.getElementById('coinToggle').checked,
-            live_trading_enabled: document.getElementById('liveToggle').checked,
-            predictor_enabled: document.getElementById('predictorToggle').checked,
-            btc_momentum_enabled: document.getElementById('btcMomentumToggle').checked,
-            u_coin_style_enabled: document.getElementById('uCoinStyleToggle').checked,
+            usdt_futures_enabled: getToggle('usdtToggle'),
+            coin_futures_enabled: getToggle('coinToggle'),
+            live_trading_enabled: getToggle('liveToggle'),
+            predictor_enabled:    getToggle('predictorToggle'),
+            btc_momentum_enabled: getToggle('btcMomentumToggle'),
+            u_coin_style_enabled: getToggle('uCoinStyleToggle'),
         };
         const r = await fetch(`${SYS}/trading-services`, {
             method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
@@ -443,19 +446,15 @@ async function save(type) {
         if (r.success) { toast('服务设置已保存'); loadAll(); }
         else toast('保存失败', 'err');
     } else if (type === 'direction') {
-        const body = {
-            allow_long: document.getElementById('longToggle').checked,
-            allow_short: document.getElementById('shortToggle').checked,
-        };
+        const body = { allow_long: getToggle('longToggle'), allow_short: getToggle('shortToggle') };
         const r = await fetch(`${SYS}/trading-direction`, {
             method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)
         }).then(r => r.json());
         if (r.success) { toast('方向设置已保存'); updateDirectionSummary(); }
         else toast('保存失败', 'err');
     } else if (type === 'big4') {
-        const enabled = document.getElementById('big4Toggle').checked;
         const r = await fetch(`${SYS}/big4-filter`, {
-            method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ enabled })
+            method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ enabled: getToggle('big4Toggle') })
         }).then(r => r.json());
         if (r.success) toast('Big4设置已保存');
         else toast('保存失败', 'err');
@@ -484,6 +483,11 @@ async function initLock() {
     document.getElementById('lockOverlay').classList.add('show');
     setTimeout(() => document.getElementById('lockInput').focus(), 100);
 }
+
+// 绑定所有 toggle 点击事件
+['usdtToggle','coinToggle','liveToggle','btcMomentumToggle','predictorToggle','uCoinStyleToggle'].forEach(id => bindToggle(id, 'services'));
+['longToggle','shortToggle'].forEach(id => bindToggle(id, 'direction', updateDirectionSummary));
+bindToggle('big4Toggle', 'big4');
 
 initLock();
 loadAll();
