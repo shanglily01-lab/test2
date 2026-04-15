@@ -81,7 +81,8 @@ class UnifiedDataScheduler:
             from app.services.binance_news_monitor import BinanceNewsMonitor
             from app.services.trade_notifier import init_trade_notifier
             _notifier = init_trade_notifier(self.config)
-            self.binance_news_monitor = BinanceNewsMonitor(db_config, notifier=_notifier)
+            _mysql_cfg = self.config.get("database", {}).get("mysql", {})
+            self.binance_news_monitor = BinanceNewsMonitor(_mysql_cfg, notifier=_notifier)
             logger.info("初始化 Binance 公告监控器 OK")
         except Exception as e:
             self.binance_news_monitor = None
