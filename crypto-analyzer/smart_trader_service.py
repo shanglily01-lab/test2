@@ -63,9 +63,8 @@ class SmartDecisionBrain:
         self._load_config()
 
         self.threshold = 55  # 开仓阈值 (信号确认模式基础阈值)
-        # 主策略两路均为 opt-in：默认关，仅当 system_settings 为 1 且服务启动加载后才启用
+        # 主策略仅保留信号确认模式，趋势跟随已移除
         self.signal_confirmation_enabled = False
-        self.trend_following_enabled = False
         self.max_threshold = 150  # 🔥 评分上限：拒绝150+分信号(数据显示高分=追涨杀跌=亏损)
 
         # 初始化信号黑名单检查器（动态加载，5分钟缓存）
@@ -741,14 +740,10 @@ class SmartDecisionBrain:
             # NEUTRAL                    : 不满足上述条件
             _b4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
 
-            # ========== 开仓资格判断：由 Big4 overall_signal 驱动 ==========
+            # ========== 开仓资格判断：仅信号确认模式 ==========
             # STRONG_BULLISH : 信号确认多头，long_score >= threshold
-            # BULLISH        : 趋势跟随多头，long_score >= 20
             # STRONG_BEARISH : 信号确认空头，short_score >= threshold
-            # BEARISH        : 趋势跟随空头，short_score >= 20
-            # NEUTRAL        : 不开仓
-            trend_long_ok    = False
-            trend_short_ok   = False
+            # BULLISH/BEARISH/NEUTRAL : 不开仓（趋势跟随已移除）
             confirm_long_ok  = False
             confirm_short_ok = False
 
@@ -758,33 +753,18 @@ class SmartDecisionBrain:
                     logger.debug(f"[SC-LONG] {symbol} Big4=STRONG_BULLISH long_score={long_score} threshold={self.threshold}")
                 else:
                     logger.debug(f"[SC-SKIP] {symbol} Big4=STRONG_BULLISH 信号确认已禁用")
-            elif _b4_signal == 'BULLISH':
-                if self.trend_following_enabled:
-                    trend_long_ok = (long_score >= 20)
-                    logger.debug(f"[TF-LONG] {symbol} Big4=BULLISH long_score={long_score} 趋势跟随LONG")
-                else:
-                    logger.debug(f"[TF-SKIP] {symbol} Big4=BULLISH 趋势跟随已禁用")
             elif _b4_signal == 'STRONG_BEARISH':
                 if self.signal_confirmation_enabled:
                     confirm_short_ok = (short_score >= self.threshold)
                     logger.debug(f"[SC-SHORT] {symbol} Big4=STRONG_BEARISH short_score={short_score} threshold={self.threshold}")
                 else:
                     logger.debug(f"[SC-SKIP] {symbol} Big4=STRONG_BEARISH 信号确认已禁用")
-            elif _b4_signal == 'BEARISH':
-                if self.trend_following_enabled:
-                    trend_short_ok = (short_score >= 20)
-                    logger.debug(f"[TF-SHORT] {symbol} Big4=BEARISH short_score={short_score} 趋势跟随SHORT")
-                else:
-                    logger.debug(f"[TF-SKIP] {symbol} Big4=BEARISH 趋势跟随已禁用")
             else:
-                logger.debug(f"[NEUTRAL] {symbol} Big4=NEUTRAL，不开仓")
+                logger.debug(f"[SKIP] {symbol} Big4={_b4_signal}，仅 STRONG_BULLISH/STRONG_BEARISH 触发开仓")
 
-            # 两种策略取并集：趋势跟随 OR 信号确认，任一满足即可开仓
-            long_qualified  = trend_long_ok  or confirm_long_ok
-            short_qualified = trend_short_ok or confirm_short_ok
+            long_qualified  = confirm_long_ok
+            short_qualified = confirm_short_ok
             if long_qualified or short_qualified:
-                # 优先选择两个方向都满足各自阈值时评分更高的方向
-                # 若只有一个方向满足，选该方向；两个都满足，选分更高的
                 if long_qualified and short_qualified:
                     side = 'LONG' if long_score >= short_score else 'SHORT'
                 elif long_qualified:
@@ -792,12 +772,7 @@ class SmartDecisionBrain:
                 else:
                     side = 'SHORT'
                 score = long_score if side == 'LONG' else short_score
-
-                # 确定策略模式：信号确认(STRONG) vs 趋势跟随(BULLISH/BEARISH)
-                if side == 'LONG':
-                    strategy_mode = 'signal_confirm' if confirm_long_ok else 'trend_follow'
-                else:
-                    strategy_mode = 'signal_confirm' if confirm_short_ok else 'trend_follow'
+                strategy_mode = 'signal_confirm'
 
                 # 🔥 新增：拒绝过高评分的信号（数据显示150+分的信号胜率32.8%，平均亏损-4.82U/单）
                 if score > self.max_threshold:
@@ -891,8 +866,7 @@ class SmartDecisionBrain:
                     if not v2_result['passed']:
                         # 🔥 修复：软阻断（原硬阻断在趋势转折点误杀高置信信号）
                         # V2方向冲突时要求V1分数高出当前阈值25分才允许通过（趋势转折期V2滞后5-15分钟）
-                        # signal_confirm模式阈值=self.threshold(55)，trend_follow模式阈值=20
-                        current_threshold = self.threshold if strategy_mode == 'signal_confirm' else 20
+                        current_threshold = self.threshold  # 信号确认模式固定阈值
                         v2_conflict_threshold = current_threshold + 25
                         # 仅方向冲突时允许软阻断，强度不足仍然拒绝
                         is_direction_conflict = v2_result.get('details', {}).get('direction_mismatch', False)
@@ -1327,7 +1301,7 @@ class SmartTraderService:
         return self.connection
 
     def _load_trading_mode_flags_from_db(self):
-        """启动时从 DB 同步主策略复选框：仅 setting_value=1 时启用，缺省关（与 UI 勾选一致）。"""
+        """启动时从 DB 同步信号确认开关（趋势跟随已移除）。"""
         try:
             conn = pymysql.connect(
                 **self.db_config,
@@ -1340,19 +1314,14 @@ class SmartTraderService:
                 with conn.cursor() as cur:
                     cur.execute("""
                         SELECT setting_key, setting_value FROM system_settings
-                        WHERE setting_key IN ('signal_confirmation_enabled', 'trend_following_enabled')
+                        WHERE setting_key = 'signal_confirmation_enabled'
                     """)
                     rows = {r[0]: r[1] for r in cur.fetchall()}
             finally:
                 conn.close()
             new_sc = int(float(rows.get('signal_confirmation_enabled', '0'))) == 1
-            new_tf = int(float(rows.get('trend_following_enabled', '0'))) == 1
             self.brain.signal_confirmation_enabled = new_sc
-            self.brain.trend_following_enabled = new_tf
-            logger.info(
-                f"[TRADING-MODE] 主策略(启动): 信号确认={'ON' if new_sc else 'OFF'} "
-                f"趋势跟随={'ON' if new_tf else 'OFF'}"
-            )
+            logger.info(f"[TRADING-MODE] 主策略(启动): 信号确认={'ON' if new_sc else 'OFF'}")
         except Exception as e:
             logger.warning(f"[TRADING-MODE] 启动时读取主策略开关失败，保持默认关: {e}")
 
@@ -3553,17 +3522,15 @@ class SmartTraderService:
                             with _tm_conn.cursor() as _tm_cur:
                                 _tm_cur.execute("""
                                     SELECT setting_key, setting_value FROM system_settings
-                                    WHERE setting_key IN ('signal_confirmation_enabled', 'trend_following_enabled', 'max_positions')
+                                    WHERE setting_key IN ('signal_confirmation_enabled', 'max_positions')
                                 """)
                                 _tm_rows = {r[0]: r[1] for r in _tm_cur.fetchall()}
                         finally:
                             _tm_conn.close()
                         new_sc = int(float(_tm_rows.get('signal_confirmation_enabled', '0'))) == 1
-                        new_tf = int(float(_tm_rows.get('trend_following_enabled', '0'))) == 1
-                        if new_sc != self.brain.signal_confirmation_enabled or new_tf != self.brain.trend_following_enabled:
-                            logger.info(f"[TRADING-MODE] 模式更新: 信号确认={'ON' if new_sc else 'OFF'} 趋势跟随={'ON' if new_tf else 'OFF'}")
+                        if new_sc != self.brain.signal_confirmation_enabled:
+                            logger.info(f"[TRADING-MODE] 模式更新: 信号确认={'ON' if new_sc else 'OFF'}")
                             self.brain.signal_confirmation_enabled = new_sc
-                            self.brain.trend_following_enabled = new_tf
                         if 'max_positions' in _tm_rows:
                             new_mp = int(float(_tm_rows['max_positions']))
                             if new_mp != self.max_positions:
