@@ -4,12 +4,25 @@ FastAPI后端服务
 """
 
 import sys
+import os
 from pathlib import Path
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
+
+# 同服务器多版本部署时，系统环境变量可能被另一个版本污染（如 DB_NAME=dimesion）。
+# 只针对 DB 相关 key，从本项目 .env 显式覆盖，其他变量不动。
+try:
+    from dotenv import dotenv_values as _dv
+    _local = _dv(project_root / '.env')
+    for _k in ('DB_HOST', 'DB_PORT', 'DB_USER', 'DB_PASSWORD', 'DB_NAME'):
+        if _local.get(_k):
+            os.environ[_k] = _local[_k]
+    del _dv, _local, _k
+except Exception:
+    pass
 
 import asyncio
 import subprocess
