@@ -13,7 +13,7 @@ from datetime import datetime, time as dt_time, timezone, timedelta
 from decimal import Decimal
 from loguru import logger
 import pymysql
-from dotenv import load_dotenv
+from dotenv import load_dotenv, dotenv_values
 
 # 导入 WebSocket 价格服务
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -33,8 +33,8 @@ from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrate
 from app.strategies.mode_switcher import TradingModeSwitcher
 from app.services.big4_regime_monitor import Big4RegimeMonitor
 
-# 加载环境变量（override=True 确保 .env 优先于系统已有环境变量）
-load_dotenv(override=True)
+# 加载环境变量
+load_dotenv()
 
 # 配置日志
 logger.remove()
@@ -1132,12 +1132,14 @@ class SmartTraderService:
     """智能交易服务"""
 
     def __init__(self):
+        # 直接读本项目 .env 文件，避免同服务器另一个版本的系统环境变量污染
+        _env = dotenv_values(os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env'))
         self.db_config = {
-            'host': os.getenv('DB_HOST', 'localhost'),
-            'port': int(os.getenv('DB_PORT', '3306')),
-            'user': os.getenv('DB_USER', 'root'),
-            'password': os.getenv('DB_PASSWORD', ''),
-            'database': os.getenv('DB_NAME', 'binance-data')
+            'host':     _env.get('DB_HOST')     or os.getenv('DB_HOST', 'localhost'),
+            'port':     int(_env.get('DB_PORT') or os.getenv('DB_PORT', '3306')),
+            'user':     _env.get('DB_USER')     or os.getenv('DB_USER', 'root'),
+            'password': _env.get('DB_PASSWORD') or os.getenv('DB_PASSWORD', ''),
+            'database': _env.get('DB_NAME')     or os.getenv('DB_NAME', 'binance-data'),
         }
 
         self.account_id = 2
