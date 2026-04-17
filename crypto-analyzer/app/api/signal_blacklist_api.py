@@ -5,20 +5,22 @@
 提供 CRUD 接口，供前端管理页面调用
 """
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 import pymysql
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from loguru import logger
+from app.utils.config_loader import load_config
 
 router = APIRouter()
 
+_cfg = load_config().get('database', {}).get('mysql', {})
 DB_CONFIG = {
-    'host': '13.212.252.171',
-    'port': 3306,
-    'user': 'admin',
-    'password': 'Tonny@1000',
-    'database': 'binance-data',
+    **_cfg,
     'charset': 'utf8mb4',
     'cursorclass': pymysql.cursors.DictCursor,
 }

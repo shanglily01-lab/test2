@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.optimization_config import OptimizationConfig
+from app.utils.config_loader import load_config
 
 
 def safe_float(value, default=0.0):
@@ -32,14 +33,8 @@ def safe_float(value, default=0.0):
 
 router = APIRouter()
 
-# 数据库配置
-DB_CONFIG = {
-    'host': '13.212.252.171',
-    'port': 3306,
-    'user': 'admin',
-    'password': 'Tonny@1000',
-    'database': 'binance-data'
-}
+# 从 config.yaml 读取数据库配置，避免硬编码外网 IP 导致连接失败
+DB_CONFIG = load_config().get('database', {}).get('mysql', {})
 
 
 class RatingUpdateRequest(BaseModel):
@@ -153,6 +148,7 @@ async def get_current_ratings(trading_type: Optional[str] = None):
             "total_count": total_count
         }
     except Exception as e:
+        logger.error(f"[评级API] get_current_ratings 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
