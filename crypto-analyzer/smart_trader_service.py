@@ -33,8 +33,8 @@ from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrate
 from app.strategies.mode_switcher import TradingModeSwitcher
 from app.services.big4_regime_monitor import Big4RegimeMonitor
 
-# 加载环境变量
-load_dotenv()
+# 加载环境变量（override=True 确保 .env 优先于系统已有环境变量）
+load_dotenv(override=True)
 
 # 配置日志
 logger.remove()
@@ -1141,6 +1141,7 @@ class SmartTraderService:
         }
 
         self.account_id = 2
+        self.connection = None  # 必须在 _load_max_positions() 之前初始化，否则 _get_connection() 报 AttributeError
         self.position_size_usdt = 400  # 默认仓位
         self.blacklist_position_size_usdt = 100  # 黑名单交易对使用小仓位
         self.max_positions = self._load_max_positions()
@@ -1148,7 +1149,6 @@ class SmartTraderService:
         self.scan_interval = 300
 
         self.brain = SmartDecisionBrain(self.db_config)
-        self.connection = None
         self._load_trading_mode_flags_from_db()
         self.running = True
         self.event_loop = None  # 事件循环引用，在async_main中设置
