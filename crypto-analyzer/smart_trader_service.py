@@ -1226,6 +1226,15 @@ class SmartTraderService:
         )
         logger.info("✅ BTC动量跟随策略已初始化")
 
+        # 初始化四策略服务（S1早期做多/S2无量回调/S3顶部做空/S4反弹做空）
+        try:
+            from app.services.multi_strategy_service import MultiStrategyService
+            self.multi_strategy_svc = MultiStrategyService(db_config=self.db_config)
+            logger.info("✅ 四策略服务已初始化 (S1/S2/S3/S4)")
+        except Exception as _e:
+            self.multi_strategy_svc = None
+            logger.warning(f"四策略服务初始化失败: {_e}")
+
         # 初始化价格采样建仓执行器（V1策略：15分钟价格采样找最优点，一次性开仓）
         self.smart_entry_executor = SmartEntryExecutor(
             db_config=self.db_config,
@@ -3556,6 +3565,17 @@ class SmartTraderService:
                     self.btc_momentum_trader.check_and_execute()
                 except Exception as _e:
                     logger.warning(f"[BTC动量] 检测异常: {_e}")
+
+                # 0.66. 四策略服务（S2/S4每轮跑；S1/S3内部限速每30分钟跑一次）
+                if self.multi_strategy_svc:
+                    try:
+                        self.multi_strategy_svc.run_fast()
+                    except Exception as _e:
+                        logger.warning(f"[多策略-快] 异常: {_e}")
+                    try:
+                        self.multi_strategy_svc.run_slow()
+                    except Exception as _e:
+                        logger.warning(f"[多策略-慢] 异常: {_e}")
 
                 # 0.7. 🔒 提前检查交易开关（最高优先级）
                 # 如果U本位交易已关闭，直接跳过本轮所有扫描和开仓逻辑
