@@ -27,8 +27,10 @@ SYMBOLS = [
     'JST/USDT',  'FIO/USDT', 'FIGHT/USDT', 'LIT/USDT',
 ]
 LARGE_CAP_SYMBOLS = {'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT'}
+S6_EXCLUDE = {'FIO/USDT'}  # 极低价格币量能信号失真
 SMALL_CAP_SYMBOLS = set(SYMBOLS) - LARGE_CAP_SYMBOLS
-DAYS = 7           # 回测天数
+S6_SYMBOLS = SMALL_CAP_SYMBOLS - S6_EXCLUDE
+DAYS = 10          # 回测天数
 TIMEFRAME = '1h'   # 基础 K 线粒度
 
 TI = TechnicalIndicators()
@@ -483,7 +485,7 @@ STRATEGIES = [
          sym_filter=LARGE_CAP_SYMBOLS),
     dict(name='S6-量能异动', check=check_s6, side='LONG',
          tp=0.08, sl=0.03,  hold_bars=8,         margin=200, leverage=5,
-         sym_filter=SMALL_CAP_SYMBOLS),
+         sym_filter=S6_SYMBOLS),
     dict(name='S7-均线支撑', check=check_s7, side='LONG',
          tp=0.06, sl=0.025, hold_bars=8,         margin=200, leverage=5,
          sym_filter=SMALL_CAP_SYMBOLS),

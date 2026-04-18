@@ -91,6 +91,7 @@ class MultiStrategyService:
         'DOGE/USDT', 'ADA/USDT', 'AVAX/USDT', 'TRX/USDT', 'LINK/USDT',
         'TON/USDT', 'DOT/USDT', 'MATIC/USDT', 'SHIB/USDT', 'LTC/USDT',
         'UNI/USDT', 'ATOM/USDT', 'ETC/USDT', 'BCH/USDT', 'FIL/USDT',
+        'FIO/USDT',  # 回测验证: 量能信号对极低价格币失真，10天8%胜率
     }
 
     # 策略7: 小币均线支撑反弹做多 (MA20下方82-95%区间反弹)
