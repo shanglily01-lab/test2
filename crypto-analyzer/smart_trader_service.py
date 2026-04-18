@@ -1229,8 +1229,11 @@ class SmartTraderService:
         # 初始化四策略服务（S1早期做多/S2无量回调/S3顶部做空/S4反弹做空）
         try:
             from app.services.multi_strategy_service import MultiStrategyService
-            self.multi_strategy_svc = MultiStrategyService(db_config=self.db_config)
-            logger.info("✅ 四策略服务已初始化 (S1/S2/S3/S4)")
+            self.multi_strategy_svc = MultiStrategyService(
+                db_config=self.db_config,
+                ws_price_service=self.ws_service,
+            )
+            logger.info("✅ 多策略服务已初始化 (S1-S7)")
         except Exception as _e:
             self.multi_strategy_svc = None
             logger.warning(f"四策略服务初始化失败: {_e}")

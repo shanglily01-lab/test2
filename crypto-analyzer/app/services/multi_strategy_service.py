@@ -105,8 +105,9 @@ class MultiStrategyService:
     ALL_SOURCES = (S1_SOURCE, S2_SOURCE, S3_SOURCE, S4_SOURCE, S5_SOURCE, S6_SOURCE, S7_SOURCE)
     SLOW_SCAN_INTERVAL_SEC = 1800  # 30 分钟
 
-    def __init__(self, db_config: dict):
+    def __init__(self, db_config: dict, ws_price_service=None):
         self.db_config = db_config
+        self.ws_service = ws_price_service
         self.ti = TechnicalIndicators()
         self._last_slow_scan: Optional[datetime] = None
 
@@ -122,8 +123,13 @@ class MultiStrategyService:
             autocommit=True,
         )
 
+    # 各时间框架允许的最大数据延迟（小时），超过则视为过时数据不开仓
+    _TF_MAX_LAG_HOURS = {'1h': 2.0, '15m': 0.5, '4h': 5.0, '1d': 26.0}
+
     def _get_klines(self, symbol: str, timeframe: str, limit: int) -> Optional[pd.DataFrame]:
-        """查询K线，返回标准化 DataFrame (columns: open/high/low/close/volume)"""
+        """查询K线，返回标准化 DataFrame (columns: open/high/low/close/volume)
+        若最新一根K线超过允许延迟则返回 None，防止以历史信号在当前价格开仓。
+        """
         try:
             conn = self._get_conn()
             cur = conn.cursor()
@@ -147,24 +153,31 @@ class MultiStrategyService:
             for col in ('open', 'high', 'low', 'close', 'volume'):
                 df[col] = pd.to_numeric(df[col], errors='coerce')
             df = df.sort_values('open_time').reset_index(drop=True)
+
+            # 新鲜度检查：最新K线不能太旧，否则信号已失效
+            max_lag = self._TF_MAX_LAG_HOURS.get(timeframe, 3.0)
+            last_ts_sec = int(df['open_time'].iloc[-1]) / 1000
+            age_hours = (datetime.utcnow().timestamp() - last_ts_sec) / 3600
+            if age_hours > max_lag:
+                logger.debug(f"[多策略] {symbol}/{timeframe} 数据过旧 {age_hours:.1f}H，跳过")
+                return None
+
             return df
         except Exception as e:
             logger.warning(f"[多策略] K线查询失败 {symbol}/{timeframe}: {e}")
             return None
 
     def _get_current_price(self, symbol: str) -> Optional[float]:
-        try:
-            conn = self._get_conn()
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT current_price FROM price_stats_24h WHERE symbol=%s LIMIT 1", (symbol,)
-            )
-            row = cur.fetchone()
-            cur.close(); conn.close()
-            return float(row['current_price']) if row else None
-        except Exception as e:
-            logger.warning(f"[多策略] 获取价格失败 {symbol}: {e}")
-            return None
+        """只从 WS 实时数据取价格；WS 不可用时返回 None（宁可不开仓）"""
+        if self.ws_service:
+            try:
+                p = self.ws_service.get_price(symbol)
+                if p:
+                    return float(p)
+            except Exception as e:
+                logger.warning(f"[多策略] WS取价失败 {symbol}: {e}")
+        return None  # WS不可用，拒绝开仓
+
 
     def _get_big4_signal(self) -> str:
         try:
