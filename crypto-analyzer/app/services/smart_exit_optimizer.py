@@ -194,8 +194,14 @@ class SmartExitOptimizer:
                     break
 
                 # === K线强度衰减检测 (新增 - 每15分钟检查一次) ===
+                # 多策略持仓（S1-S7）依赖计划平仓时间和固定止损止盈，跳过K线衰减检测
+                _MULTI_STRATEGY_SOURCES = (
+                    's1_early_long', 's2_pullback_long', 's3_top_short',
+                    's4_rebound_short', 's5_large_oversold', 's6_vol_spike', 's7_ma_support',
+                )
+                _is_multi_strategy = position.get('source') in _MULTI_STRATEGY_SOURCES
                 should_check_kline = await self._should_check_kline_strength(position_id)
-                if should_check_kline and self.enable_kline_monitoring:
+                if should_check_kline and self.enable_kline_monitoring and not _is_multi_strategy:
                     kline_exit_signal = await self._check_kline_strength_decay(
                         position, current_price, profit_info
                     )
@@ -258,7 +264,8 @@ class SmartExitOptimizer:
                     close_extended, extended_close_time,
                     max_profit_pct, max_profit_price, max_profit_time,
                     stop_loss_price, take_profit_price, leverage,
-                    margin, entry_price, max_hold_minutes, timeout_at, created_at
+                    margin, entry_price, max_hold_minutes, timeout_at, created_at,
+                    source
                 FROM futures_positions
                 WHERE id = %s
             """, (position_id,))
@@ -499,6 +506,14 @@ class SmartExitOptimizer:
         # 改为基于ROI判断，ROI亏损≥10%立即止损
         if roi_pct <= -10.0:
             return True, f"极端亏损止损(ROI{roi_pct:.2f}%≤-10%, 价格变化{profit_pct:.2f}%)"
+
+        # 多策略持仓（S1-S7）跳过动态趋势反转，依赖固定止损止盈和planned_close_time
+        _MULTI_STRATEGY_SOURCES = (
+            's1_early_long', 's2_pullback_long', 's3_top_short',
+            's4_rebound_short', 's5_large_oversold', 's6_vol_spike', 's7_ma_support',
+        )
+        if position.get('source') in _MULTI_STRATEGY_SOURCES:
+            return False, ""
 
         # === 开仓60分钟后启动智能监控 ===
         if hold_minutes >= MIN_HOLD_MINUTES:
