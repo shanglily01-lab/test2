@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-四策略历史回测脚本
+六策略历史回测脚本
 用法: python backtest_multi_strategy.py
 """
 
@@ -25,7 +25,9 @@ SYMBOLS = [
     'ORDI/USDT', 'ENJ/USDT', 'PNUT/USDT',
     'BTC/USDT',  'ETH/USDT', 'SOL/USDT',
 ]
-DAYS = 60          # 回测天数
+LARGE_CAP_SYMBOLS = {'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT'}
+SMALL_CAP_SYMBOLS = set(SYMBOLS) - LARGE_CAP_SYMBOLS
+DAYS = 7           # 回测天数
 TIMEFRAME = '1h'   # 基础 K 线粒度
 
 TI = TechnicalIndicators()
@@ -357,19 +359,99 @@ def check_s4(df_1h: pd.DataFrame, i: int) -> bool:
     return sum([macd_bearish, rsi_bearish, vol_shrink]) >= 2
 
 
+def check_s5(df_1h: pd.DataFrame, i: int) -> bool:
+    """S5 大币超卖反弹: 4H RSI<32 + RSI从低点回升(不再下降) + 价格低于日MA20"""
+    if i < 96:
+        return False
+
+    # 4H RSI < 32 且最近一根RSI开始回升（反转确认，不是继续下坠）
+    window_4h_raw = df_1h.iloc[max(0, i - 159): i + 1].copy().reset_index(drop=True)
+    df_4h = resample_to(window_4h_raw, '4h')
+    if len(df_4h) < 20:
+        return False
+    rsi_4h = TI.calculate_rsi(df_4h)
+    if len(rsi_4h) < 4:
+        return False
+    r1 = float(rsi_4h.iloc[-2])
+    r2 = float(rsi_4h.iloc[-1])
+    if r2 >= 32:
+        return False
+    if r2 <= r1:  # RSI仍在下降，不开仓
+        return False
+
+    # 价格低于日线MA20
+    window_1d_raw = df_1h.iloc[max(0, i - 24 * 25): i + 1].copy().reset_index(drop=True)
+    df_1d = resample_to(window_1d_raw, '1D')
+    if len(df_1d) < 21:
+        return False
+    ma20_1d = float(df_1d['close'].rolling(20).mean().iloc[-1])
+    cur_price = float(df_1h['close'].iloc[i])
+    return cur_price < ma20_1d
+
+
+def check_s6(df_1h: pd.DataFrame, i: int) -> bool:
+    """S6 小币量能异动: 12H量峰>3.5x均量 + 当前量1.2-5x + RSI 28-55 + 价格在MA20 75-108% + 3H涨<5%"""
+    if i < 35:
+        return False
+
+    vol_base = float(df_1h['volume'].iloc[max(0, i - 48):i].mean())
+    if vol_base <= 0:
+        return False
+
+    cur_vol = float(df_1h['volume'].iloc[i])
+    vol_ratio_cur = cur_vol / vol_base
+    if not (1.2 <= vol_ratio_cur <= 5.0):
+        return False
+
+    max_vol_12h = float(df_1h['volume'].iloc[max(0, i - 11):i + 1].max())
+    if max_vol_12h / vol_base < 3.5:
+        return False
+
+    window = df_1h.iloc[max(0, i - 29):i + 1].copy().reset_index(drop=True)
+    rsi_s = TI.calculate_rsi(window)
+    if len(rsi_s) < 3:
+        return False
+    last_rsi = float(rsi_s.iloc[-1])
+    if not (28 <= last_rsi <= 55):
+        return False
+
+    ma20 = float(df_1h['close'].iloc[max(0, i - 19):i + 1].mean())
+    if ma20 <= 0:
+        return False
+    close_v = float(df_1h['close'].iloc[i])
+    if not (0.75 <= close_v / ma20 <= 1.08):
+        return False
+
+    prev_close = float(df_1h['close'].iloc[max(0, i - 3)])
+    if prev_close > 0 and (close_v - prev_close) / prev_close > 0.05:
+        return False
+
+    return True
+
+
 # ─────────────────────────────────────────
 # 策略定义
 # ─────────────────────────────────────────
 
 STRATEGIES = [
     dict(name='S1-早期做多', check=check_s1, side='LONG',
-         tp=0.20, sl=None,  hold_bars=24 * 7),
+         tp=0.20, sl=None,  hold_bars=24 * 7,  margin=300, leverage=5,
+         sym_filter=None),
     dict(name='S2-无量回调', check=check_s2, side='LONG',
-         tp=0.05, sl=0.02,  hold_bars=4),
+         tp=0.05, sl=0.02,  hold_bars=4,         margin=300, leverage=10,
+         sym_filter=None),
     dict(name='S3-顶部做空', check=check_s3, side='SHORT',
-         tp=0.15, sl=None,  hold_bars=24 * 3),
+         tp=0.15, sl=None,  hold_bars=24 * 3,   margin=300, leverage=5,
+         sym_filter=None),
     dict(name='S4-反弹做空', check=check_s4, side='SHORT',
-         tp=0.10, sl=0.03,  hold_bars=5),
+         tp=0.10, sl=0.03,  hold_bars=5,         margin=300, leverage=5,
+         sym_filter=None),
+    dict(name='S5-大币超卖', check=check_s5, side='LONG',
+         tp=0.05, sl=0.02,  hold_bars=48,        margin=200, leverage=5,
+         sym_filter=LARGE_CAP_SYMBOLS),
+    dict(name='S6-量能异动', check=check_s6, side='LONG',
+         tp=0.08, sl=0.03,  hold_bars=8,         margin=200, leverage=5,
+         sym_filter=SMALL_CAP_SYMBOLS),
 ]
 
 
@@ -392,9 +474,11 @@ def backtest_symbol(symbol: str) -> List[Dict]:
     all_trades = []
 
     for strat in STRATEGIES:
+        # 过滤不适用于该 symbol 的策略
+        if strat.get('sym_filter') is not None and symbol not in strat['sym_filter']:
+            continue
+
         trades = []
-        in_position = False
-        entry_idx = -1
 
         next_open_bar = 55  # 真正的冷却期控制
         for i in range(55, len(df) - 1):
@@ -408,8 +492,8 @@ def backtest_symbol(symbol: str) -> List[Dict]:
                         df, i, strat['side'], entry_price,
                         strat['tp'], strat['sl'], strat['hold_bars'],
                     )
-                    margin = 300
-                    leverage = 10 if strat['name'].startswith('S2') else 5
+                    margin = strat['margin']
+                    leverage = strat['leverage']
                     pnl_u = result['pnl_pct'] * margin * leverage
 
                     trade = {
@@ -452,7 +536,7 @@ def backtest_symbol(symbol: str) -> List[Dict]:
 
 
 def main():
-    print("\n四策略历史回测")
+    print("\n六策略历史回测")
     print(f"标的: {SYMBOLS}")
     print(f"区间: 近 {DAYS} 天  |  粒度: 1H")
 

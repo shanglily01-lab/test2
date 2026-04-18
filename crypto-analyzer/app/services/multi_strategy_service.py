@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-四策略量化交易服务
+六策略量化交易服务
 - S1: 早期做多  (未启动行情, 7天, 20%止盈, 无止损, 5x, 300U, 最多3单)
 - S2: 无量回调做多 (4小时, 5%止盈, 2%止损, 10x, 300U, 最多3单)
 - S3: 顶部做空  (3天, 15%止盈, 无止损, 5x, 300U, 最多3单)
 - S4: 反弹动能衰竭做空 (5小时, 10%止盈, 3%止损, 5x, 300U, 最多3单)
+- S5: 大币超卖反弹做多 (48小时, 5%止盈, 2%止损, 5x, 200U, 最多3单, 仅BTC/ETH/SOL/BNB/XRP)
+- S6: 小币量能异动做多 (8小时, 8%止盈, 3%止损, 5x, 200U, 最多5单, 排除大市值)
 
 调度方式: 在 smart_trader_service.py 主循环中调用
 - run_fast(): 每5分钟, 负责 S2+S4
-- run_slow(): 每30分钟, 负责 S1+S3 (内部限速)
+- run_slow(): 每30分钟, 负责 S1+S3+S5+S6 (内部限速)
 """
 
 import sys
@@ -64,7 +66,33 @@ class MultiStrategyService:
     S4_HOLD_HOURS = 5
     S4_SOURCE = 's4_rebound_short'
 
-    ALL_SOURCES = (S1_SOURCE, S2_SOURCE, S3_SOURCE, S4_SOURCE)
+    # 策略5: 大币4H超卖反弹做多 (BTC/ETH/SOL/BNB/XRP)
+    S5_LEVERAGE = 5
+    S5_MARGIN = 200
+    S5_MAX_POSITIONS = 3
+    S5_TP_PCT = 0.05
+    S5_SL_PCT = 0.02
+    S5_HOLD_HOURS = 48
+    S5_SOURCE = 's5_large_oversold'
+    S5_SYMBOLS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT']
+
+    # 策略6: 小币量能异动做多 (排除大市值)
+    S6_LEVERAGE = 5
+    S6_MARGIN = 200
+    S6_MAX_POSITIONS = 5
+    S6_TP_PCT = 0.08
+    S6_SL_PCT = 0.03
+    S6_HOLD_HOURS = 8
+    S6_SOURCE = 's6_vol_spike'
+    # 排除大市值币种（它们的量能信号无效）
+    S6_EXCLUDE_SYMBOLS = {
+        'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'XRP/USDT',
+        'DOGE/USDT', 'ADA/USDT', 'AVAX/USDT', 'TRX/USDT', 'LINK/USDT',
+        'TON/USDT', 'DOT/USDT', 'MATIC/USDT', 'SHIB/USDT', 'LTC/USDT',
+        'UNI/USDT', 'ATOM/USDT', 'ETC/USDT', 'BCH/USDT', 'FIL/USDT',
+    }
+
+    ALL_SOURCES = (S1_SOURCE, S2_SOURCE, S3_SOURCE, S4_SOURCE, S5_SOURCE, S6_SOURCE)
     SLOW_SCAN_INTERVAL_SEC = 1800  # 30 分钟
 
     def __init__(self, db_config: dict):
@@ -679,6 +707,172 @@ class MultiStrategyService:
             logger.info(f"[S4] 本轮新开 {opened} 单")
 
     # ─────────────────────────────────────────
+    # 策略5: 大币4H超卖反弹做多
+    # ─────────────────────────────────────────
+
+    def scan_s5_large_oversold(self):
+        """S5: BTC/ETH/SOL/BNB/XRP 的 4H RSI<32 + 价格低于日MA20 做多"""
+        if self._strategy_position_count(self.S5_SOURCE) >= self.S5_MAX_POSITIONS:
+            return
+
+        big4 = self._get_big4_signal()
+        if big4 in ('STRONG_BEARISH',):
+            logger.info("[S5] Big4强熊市，跳过大币超卖")
+            return
+
+        opened = 0
+        for symbol in self.S5_SYMBOLS:
+            if self._strategy_position_count(self.S5_SOURCE) + opened >= self.S5_MAX_POSITIONS:
+                break
+            if self._has_multi_strategy_position(symbol):
+                continue
+
+            try:
+                # 4H RSI < 32（深度超卖）
+                df_4h = self._get_klines(symbol, '4h', 40)
+                if df_4h is None or len(df_4h) < 20:
+                    continue
+                rsi_4h = self.ti.calculate_rsi(df_4h)
+                if len(rsi_4h) < 4:
+                    continue
+                prev_rsi_4h = float(rsi_4h.iloc[-2])
+                last_rsi_4h = float(rsi_4h.iloc[-1])
+                if last_rsi_4h >= 32:
+                    continue
+                if last_rsi_4h <= prev_rsi_4h:  # RSI仍在下降，不开仓
+                    continue
+
+                # 价格低于日线MA20（处于均线下方，有均值回归空间）
+                df_1d = self._get_klines(symbol, '1d', 25)
+                if df_1d is None or len(df_1d) < 21:
+                    continue
+                ma20_1d = float(df_1d['close'].rolling(20).mean().iloc[-1])
+                cur_price = float(df_1d['close'].iloc[-1])
+                if cur_price >= ma20_1d:
+                    continue
+
+                price_vs_ma = cur_price / ma20_1d
+
+                reason = (
+                    f"S5:4H_RSI={prev_rsi_4h:.1f}->{last_rsi_4h:.1f}(超卖回升),"
+                    f"价格={cur_price:.4g},日MA20={ma20_1d:.4g}({price_vs_ma * 100:.1f}%)"
+                )
+                if self._open_position(
+                    symbol, 'LONG', self.S5_MARGIN, self.S5_LEVERAGE,
+                    self.S5_TP_PCT, self.S5_SL_PCT, self.S5_HOLD_HOURS, self.S5_SOURCE, reason
+                ):
+                    opened += 1
+
+            except Exception as e:
+                logger.warning(f"[S5] 扫描 {symbol} 异常: {e}")
+
+        if opened:
+            logger.info(f"[S5] 本轮新开 {opened} 单")
+
+    # ─────────────────────────────────────────
+    # 策略6: 小币量能异动做多
+    # ─────────────────────────────────────────
+
+    def _get_small_cap_symbols(self) -> List[str]:
+        """从 price_stats_24h 获取小中市值 USDT 交易对（排除大市值）"""
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT symbol FROM price_stats_24h WHERE symbol LIKE '%/USDT'"
+            )
+            rows = cur.fetchall()
+            cur.close(); conn.close()
+            return [
+                r['symbol'] for r in rows
+                if r['symbol'] not in self.S6_EXCLUDE_SYMBOLS
+            ]
+        except Exception as e:
+            logger.warning(f"[S6] 获取小币列表失败: {e}")
+            return []
+
+    def scan_s6_vol_spike(self):
+        """S6: 12H量峰>3.5x均量 + 当前量1.2-5x + RSI 28-55 + 价格在MA20 75-108% + 3H涨<5%"""
+        if self._strategy_position_count(self.S6_SOURCE) >= self.S6_MAX_POSITIONS:
+            return
+
+        big4 = self._get_big4_signal()
+        if big4 in ('BEARISH', 'STRONG_BEARISH'):
+            logger.info("[S6] Big4熊市，跳过量能异动做多")
+            return
+
+        symbols = self._get_small_cap_symbols()
+        opened = 0
+
+        for symbol in symbols:
+            if self._strategy_position_count(self.S6_SOURCE) + opened >= self.S6_MAX_POSITIONS:
+                break
+            if self._has_multi_strategy_position(symbol):
+                continue
+
+            try:
+                df_1h = self._get_klines(symbol, '1h', 50)
+                if df_1h is None or len(df_1h) < 35:
+                    continue
+
+                # 量能基准：过去48根的均量（约48H均量）
+                vol_base = float(df_1h['volume'].iloc[-49:-1].mean()) if len(df_1h) >= 49 else float(df_1h['volume'].iloc[:-1].mean())
+                if vol_base <= 0:
+                    continue
+
+                # 当前量比 1.2-5x
+                cur_vol = float(df_1h['volume'].iloc[-1])
+                vol_ratio_cur = cur_vol / vol_base
+                if not (1.2 <= vol_ratio_cur <= 5.0):
+                    continue
+
+                # 12H内量峰 > 3.5x（先有异动）
+                max_vol_12h = float(df_1h['volume'].iloc[-12:].max())
+                peak_ratio = max_vol_12h / vol_base
+                if peak_ratio < 3.5:
+                    continue
+
+                # 1H RSI 28-55
+                rsi_1h = self.ti.calculate_rsi(df_1h)
+                if len(rsi_1h) < 3:
+                    continue
+                last_rsi = float(rsi_1h.iloc[-1])
+                if not (28 <= last_rsi <= 55):
+                    continue
+
+                # 价格在MA20的75-108%（量能异动时价格仍在合理区间）
+                ma20 = float(df_1h['close'].rolling(20).mean().iloc[-1])
+                if ma20 <= 0:
+                    continue
+                close_v = float(df_1h['close'].iloc[-1])
+                price_ratio = close_v / ma20
+                if not (0.75 <= price_ratio <= 1.08):
+                    continue
+
+                # 过去3H涨幅 < 5%（避免追高）
+                prev_3h = float(df_1h['close'].iloc[-4]) if len(df_1h) >= 4 else close_v
+                gain_3h = (close_v - prev_3h) / prev_3h if prev_3h > 0 else 0
+                if gain_3h > 0.05:
+                    continue
+
+                reason = (
+                    f"S6:量峰={peak_ratio:.1f}x,当前量={vol_ratio_cur:.1f}x,"
+                    f"1H_RSI={last_rsi:.1f},价格/MA20={price_ratio * 100:.1f}%,"
+                    f"3H涨={gain_3h * 100:.1f}%"
+                )
+                if self._open_position(
+                    symbol, 'LONG', self.S6_MARGIN, self.S6_LEVERAGE,
+                    self.S6_TP_PCT, self.S6_SL_PCT, self.S6_HOLD_HOURS, self.S6_SOURCE, reason
+                ):
+                    opened += 1
+
+            except Exception as e:
+                logger.warning(f"[S6] 扫描 {symbol} 异常: {e}")
+
+        if opened:
+            logger.info(f"[S6] 本轮新开 {opened} 单")
+
+    # ─────────────────────────────────────────
     # 调度入口
     # ─────────────────────────────────────────
 
@@ -694,13 +888,13 @@ class MultiStrategyService:
             logger.error(f"[S4] 扫描异常: {e}")
 
     def run_slow(self):
-        """每30分钟调度：S1（早期做多）+ S3（顶部做空）; 内部限速防重复"""
+        """每30分钟调度：S1+S3+S5+S6；内部限速防重复"""
         now = datetime.utcnow()
         if (self._last_slow_scan and
                 (now - self._last_slow_scan).total_seconds() < self.SLOW_SCAN_INTERVAL_SEC):
             return
         self._last_slow_scan = now
-        logger.info("[多策略] S1+S3 慢速扫描开始")
+        logger.info("[多策略] S1+S3+S5+S6 慢速扫描开始")
         try:
             self.scan_s1_early_long()
         except Exception as e:
@@ -709,3 +903,11 @@ class MultiStrategyService:
             self.scan_s3_top_short()
         except Exception as e:
             logger.error(f"[S3] 扫描异常: {e}")
+        try:
+            self.scan_s5_large_oversold()
+        except Exception as e:
+            logger.error(f"[S5] 扫描异常: {e}")
+        try:
+            self.scan_s6_vol_spike()
+        except Exception as e:
+            logger.error(f"[S6] 扫描异常: {e}")
