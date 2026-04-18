@@ -33,7 +33,7 @@ class MultiStrategyService:
     # 策略1: 早期做多
     S1_LEVERAGE = 5
     S1_MARGIN = 300
-    S1_MAX_POSITIONS = 3
+    S1_MAX_POSITIONS = 999  # 测试阶段不限制，上线后改回 3
     S1_TP_PCT = 0.20
     S1_HOLD_HOURS = 7 * 24
     S1_SOURCE = 's1_early_long'
@@ -41,7 +41,7 @@ class MultiStrategyService:
     # 策略2: 无量回调做多
     S2_LEVERAGE = 10
     S2_MARGIN = 300
-    S2_MAX_POSITIONS = 3
+    S2_MAX_POSITIONS = 999  # 测试阶段不限制，上线后改回 3
     S2_TP_PCT = 0.05
     S2_SL_PCT = 0.02
     S2_HOLD_HOURS = 4
@@ -50,7 +50,7 @@ class MultiStrategyService:
     # 策略3: 顶部做空
     S3_LEVERAGE = 5
     S3_MARGIN = 300
-    S3_MAX_POSITIONS = 3
+    S3_MAX_POSITIONS = 999  # 测试阶段不限制，上线后改回 3
     S3_TP_PCT = 0.15
     S3_HOLD_HOURS = 3 * 24
     S3_SOURCE = 's3_top_short'
@@ -58,7 +58,7 @@ class MultiStrategyService:
     # 策略4: 反弹动能衰竭做空
     S4_LEVERAGE = 5
     S4_MARGIN = 300
-    S4_MAX_POSITIONS = 3
+    S4_MAX_POSITIONS = 999  # 测试阶段不限制，上线后改回 3
     S4_TP_PCT = 0.10
     S4_SL_PCT = 0.03
     S4_HOLD_HOURS = 5
