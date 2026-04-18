@@ -338,7 +338,7 @@ class MultiStrategyService:
     # ─────────────────────────────────────────
 
     def scan_s1_early_long(self):
-        """S1: 发现未启动的做多信号 — 1H RSI超卖回升 + 4H MACD金叉 + 价格在20日MA下方"""
+        """S1: RSI 25-52 上升 + 4H MACD连续向上(仍在低位) + 价格在MA20 80-105% + 量能回升"""
         if self._strategy_position_count(self.S1_SOURCE) >= self.S1_MAX_POSITIONS:
             return
 
@@ -357,43 +357,50 @@ class MultiStrategyService:
                 continue
 
             try:
-                # 1H RSI 28-45：超卖区刚回升，行情尚未启动
+                # 1H RSI 25-52，且最近2根在上升
                 df_1h = self._get_klines(symbol, '1h', 30)
                 if df_1h is None or len(df_1h) < 20:
                     continue
                 rsi_series = self.ti.calculate_rsi(df_1h)
+                if len(rsi_series) < 3:
+                    continue
                 last_rsi = float(rsi_series.iloc[-1])
-                if not (28 <= last_rsi <= 45):
+                if not (25 <= last_rsi <= 52):
+                    continue
+                if float(rsi_series.iloc[-2]) >= last_rsi:
                     continue
 
-                # 4H MACD histogram 由负转正（金叉初期）
+                # 4H MACD histogram 连续2根向上，且前一根 < 0.002（还在低位）
                 df_4h = self._get_klines(symbol, '4h', 40)
-                if df_4h is None or len(df_4h) < 35:
+                if df_4h is None or len(df_4h) < 30:
                     continue
                 _, _, hist_4h = self.ti.calculate_macd(df_4h)
-                prev_hist = float(hist_4h.iloc[-2])
-                last_hist = float(hist_4h.iloc[-1])
-                if not (prev_hist < 0 and last_hist > -0.000001):
+                if len(hist_4h) < 3:
+                    continue
+                h1 = float(hist_4h.iloc[-3])
+                h2 = float(hist_4h.iloc[-2])
+                h3 = float(hist_4h.iloc[-1])
+                if not (h2 > h1 and h3 > h2 and h1 < 0.002):
                     continue
 
-                # 价格在20日均线下方 0-5% 之间（未突破但接近）
+                # 价格在MA20的80-105%（放宽区间）
                 df_1d = self._get_klines(symbol, '1d', 25)
                 if df_1d is None or len(df_1d) < 21:
                     continue
                 ma20 = float(df_1d['close'].rolling(20).mean().iloc[-1])
                 cur_price_d = float(df_1d['close'].iloc[-1])
-                if not (ma20 * 0.95 <= cur_price_d <= ma20 * 1.01):
+                if not (ma20 * 0.80 <= cur_price_d <= ma20 * 1.05):
                     continue
 
-                # 量能开始回升：今日量 > 近7日均量 × 1.1
+                # 量能回升：今日量 > 近7日均量 × 0.9（放宽）
                 vol_today = float(df_1d['volume'].iloc[-1])
                 vol_avg7 = float(df_1d['volume'].iloc[-8:-1].mean()) if len(df_1d) >= 8 else vol_today
-                if vol_avg7 > 0 and vol_today < vol_avg7 * 1.1:
+                if vol_avg7 > 0 and vol_today < vol_avg7 * 0.9:
                     continue
 
                 reason = (
-                    f"S1:1H_RSI={last_rsi:.1f},"
-                    f"4H_MACD_hist={prev_hist:.4f}->{last_hist:.4f},"
+                    f"S1:1H_RSI={last_rsi:.1f}(上升),"
+                    f"4H_MACD_hist={h1:.4f}->{h2:.4f}->{h3:.4f},"
                     f"价格={cur_price_d:.4g},MA20={ma20:.4g},"
                     f"量比={vol_today / vol_avg7:.2f}"
                 )
@@ -414,7 +421,7 @@ class MultiStrategyService:
     # ─────────────────────────────────────────
 
     def scan_s2_pullback_long(self):
-        """S2: 无量上涨后回调 25-40%，15m RSI企稳回升时做多"""
+        """S2: 48H涨>12%后回调15-38%，15m RSI 30-58企稳做多（去掉无量条件）"""
         if self._strategy_position_count(self.S2_SOURCE) >= self.S2_MAX_POSITIONS:
             return
 
@@ -432,52 +439,35 @@ class MultiStrategyService:
                 continue
 
             try:
-                # 48根1H K线（覆盖48小时）
                 df_1h = self._get_klines(symbol, '1h', 52)
                 if df_1h is None or len(df_1h) < 48:
                     continue
 
                 closes = df_1h['close'].values
-                volumes = df_1h['volume'].values
                 recent_high = float(closes[-48:].max())
                 recent_low = float(closes[-48:].min())
                 current_close = float(closes[-1])
 
-                # 48小时曾有 >15% 涨幅
+                # 48H价格区间 > 12%
                 price_range_pct = (recent_high - recent_low) / recent_low if recent_low > 0 else 0
-                if price_range_pct < 0.15:
+                if price_range_pct < 0.12:
                     continue
 
-                # 当前已从高点回调 25-40%
+                # 从48H高点回调15-38%
                 drawdown_pct = (recent_high - current_close) / recent_high if recent_high > 0 else 0
-                if not (0.25 <= drawdown_pct <= 0.40):
+                if not (0.15 <= drawdown_pct <= 0.38):
                     continue
 
-                # 上涨期间成交量 < 7日均量/24×1.2（无量特征）
-                df_1d = self._get_klines(symbol, '1d', 10)
-                if df_1d is None or len(df_1d) < 7:
-                    continue
-                vol_avg7d_daily = float(df_1d['volume'].iloc[-8:-1].mean()) if len(df_1d) >= 8 else float(df_1d['volume'].mean())
-                vol_avg7d_hourly = vol_avg7d_daily / 24
-
-                # 上涨阶段：高点前12根1H的平均量
-                high_idx = int(df_1h['close'].iloc[-48:].values.argmax())
-                start_idx = max(0, high_idx - 12)
-                rise_vols = volumes[-48 + start_idx: -48 + high_idx] if high_idx > 0 else volumes[-24:-12]
-                avg_rise_vol = float(rise_vols.mean()) if len(rise_vols) > 0 else vol_avg7d_hourly
-                if vol_avg7d_hourly > 0 and avg_rise_vol > vol_avg7d_hourly * 1.2:
-                    continue  # 上涨放量，不符合无量特征
-
-                # 15m RSI 35-52 且最近3根上升
+                # 15m RSI 30-58 且最近2根上升
                 df_15m = self._get_klines(symbol, '15m', 30)
-                if df_15m is None or len(df_15m) < 20:
+                if df_15m is None or len(df_15m) < 15:
                     continue
                 rsi_15m = self.ti.calculate_rsi(df_15m)
-                last_rsi = float(rsi_15m.iloc[-1])
-                if not (35 <= last_rsi <= 52):
+                if len(rsi_15m) < 3:
                     continue
-                r1, r2, r3 = float(rsi_15m.iloc[-3]), float(rsi_15m.iloc[-2]), float(rsi_15m.iloc[-1])
-                if not (r1 < r2 < r3):
+                last_rsi = float(rsi_15m.iloc[-1])
+                prev_rsi = float(rsi_15m.iloc[-2])
+                if not (30 <= last_rsi <= 58 and last_rsi > prev_rsi):
                     continue
 
                 reason = (
@@ -502,7 +492,7 @@ class MultiStrategyService:
     # ─────────────────────────────────────────
 
     def scan_s3_top_short(self):
-        """S3: 1H RSI>75 + 价格破布林上轨 + 48H涨幅>25% → 顶部做空"""
+        """S3: RSI>=70顶背离 + 从高点回落3-15% + 4H MACD下行 + 近3根2根阴线 + 48H涨>20%"""
         if self._strategy_position_count(self.S3_SOURCE) >= self.S3_MAX_POSITIONS:
             return
 
@@ -511,7 +501,6 @@ class MultiStrategyService:
             logger.info("[S3] Big4 强牛市，跳过顶部做空")
             return
 
-        # 只扫描24h大涨的币
         symbols = self._get_candidate_symbols(min_abs_change=15.0)
         opened = 0
 
@@ -526,29 +515,57 @@ class MultiStrategyService:
                 if df_1h is None or len(df_1h) < 40:
                     continue
 
-                # 1H RSI > 75
+                # 1H RSI > 70
                 rsi_series = self.ti.calculate_rsi(df_1h)
+                if len(rsi_series) < 6:
+                    continue
                 last_rsi = float(rsi_series.iloc[-1])
-                if last_rsi <= 75:
+                if last_rsi <= 70:
                     continue
 
-                # 价格在布林带上轨以上
-                upper, _, _ = self.ti.calculate_bollinger_bands(df_1h)
+                # RSI顶背离：当前RSI不是最近6根的最高点
+                recent_rsi_max = float(rsi_series.iloc[-6:].max())
+                if last_rsi >= recent_rsi_max:
+                    continue
+
+                # 价格已从48H最高点回落3-15%（明显见顶迹象）
                 current_price = float(df_1h['close'].iloc[-1])
-                last_upper = float(upper.iloc[-1])
-                if current_price <= last_upper:
+                high_48h = float(df_1h['high'].iloc[-48:].max()) if len(df_1h) >= 48 else float(df_1h['high'].max())
+                retreat_pct = (high_48h - current_price) / high_48h if high_48h > 0 else 0
+                if not (0.03 <= retreat_pct <= 0.15):
                     continue
 
-                # 48小时涨幅 > 25%
+                # 48H涨幅 > 20%
                 price_48h_ago = float(df_1h['close'].iloc[-48]) if len(df_1h) >= 48 else float(df_1h['close'].iloc[0])
-                gain_48h = (current_price - price_48h_ago) / price_48h_ago if price_48h_ago > 0 else 0
-                if gain_48h <= 0.25:
+                gain_48h = (high_48h - price_48h_ago) / price_48h_ago if price_48h_ago > 0 else 0
+                if gain_48h <= 0.20:
+                    continue
+
+                # 4H MACD histogram 已经开始下行（多时间框架确认弱势）
+                df_4h = self._get_klines(symbol, '4h', 40)
+                if df_4h is None or len(df_4h) < 30:
+                    continue
+                _, _, hist_4h = self.ti.calculate_macd(df_4h)
+                if len(hist_4h) < 3:
+                    continue
+                h4_1 = float(hist_4h.iloc[-3])
+                h4_2 = float(hist_4h.iloc[-2])
+                h4_3 = float(hist_4h.iloc[-1])
+                if not (h4_3 < h4_2 or h4_2 < h4_1):
+                    continue
+
+                # 近3根1H K线至少2根阴线（顶部压力确认）
+                bearish_count = sum(
+                    1 for k in range(-3, 0)
+                    if float(df_1h['close'].iloc[k]) < float(df_1h['open'].iloc[k])
+                )
+                if bearish_count < 2:
                     continue
 
                 reason = (
-                    f"S3:1H_RSI={last_rsi:.1f},"
-                    f"价格={current_price:.4g},布林上轨={last_upper:.4g},"
-                    f"48H涨={gain_48h * 100:.1f}%"
+                    f"S3:1H_RSI={last_rsi:.1f}(顶背离,max={recent_rsi_max:.1f}),"
+                    f"从高点回落={retreat_pct * 100:.1f}%,"
+                    f"4H_MACD下行,48H涨={gain_48h * 100:.1f}%"
                 )
                 if self._open_position(
                     symbol, 'SHORT', self.S3_MARGIN, self.S3_LEVERAGE,
@@ -567,7 +584,7 @@ class MultiStrategyService:
     # ─────────────────────────────────────────
 
     def scan_s4_rebound_short(self):
-        """S4: 反弹到7日高点62-82%，MACD+RSI顶背离，量能萎缩 → 做空"""
+        """S4: 14日高点50-85%反弹+曾下跌15%+从低点反弹5%，MACD/RSI/量能三选二"""
         if self._strategy_position_count(self.S4_SOURCE) >= self.S4_MAX_POSITIONS:
             return
 
@@ -581,54 +598,73 @@ class MultiStrategyService:
                 continue
 
             try:
-                # 7日高点
-                df_1d = self._get_klines(symbol, '1d', 10)
-                if df_1d is None or len(df_1d) < 7:
-                    continue
-                week_high = float(df_1d['high'].iloc[-7:].max())
-                current_price = float(df_1d['close'].iloc[-1])
-
-                # 当前价在7日高点的 62-82%
-                rebound_pct = current_price / week_high if week_high > 0 else 0
-                if not (0.62 <= rebound_pct <= 0.82):
+                # 取14日1H K线计算14日高点
+                df_1h_14d = self._get_klines(symbol, '1h', 14 * 24 + 2)
+                if df_1h_14d is None or len(df_1h_14d) < 52:
                     continue
 
-                # 1H K线：MACD + RSI + 量能
-                df_1h = self._get_klines(symbol, '1h', 52)
-                if df_1h is None or len(df_1h) < 30:
+                two_week_high = float(df_1h_14d['high'].max())
+                current_price = float(df_1h_14d['close'].iloc[-1])
+
+                # 当前价格在14日高点的50-85%
+                rebound_pct = current_price / two_week_high if two_week_high > 0 else 0
+                if not (0.50 <= rebound_pct <= 0.85):
                     continue
 
-                # MACD histogram 最近3根下降
+                # 曾经从14日高点下跌超过15%（有实质性回落，不是横盘）
+                low_7d = float(df_1h_14d['low'].iloc[-7 * 24:].min())
+                max_drop = (two_week_high - low_7d) / two_week_high if two_week_high > 0 else 0
+                if max_drop < 0.15:
+                    continue
+
+                # 当前价格高于7日最低点×1.05（从低点已反弹5%+，有真正反弹）
+                if current_price < low_7d * 1.05:
+                    continue
+
+                # 取最近52根K线做指标分析
+                df_1h = df_1h_14d.iloc[-52:].reset_index(drop=True)
+
+                # 条件1: MACD histogram 任意一段下降
                 _, _, hist_1h = self.ti.calculate_macd(df_1h)
-                h1 = float(hist_1h.iloc[-3])
-                h2 = float(hist_1h.iloc[-2])
-                h3 = float(hist_1h.iloc[-1])
-                if not (h1 > h2 > h3):
-                    continue
+                macd_bearish = False
+                if len(hist_1h) >= 3:
+                    h1 = float(hist_1h.iloc[-3])
+                    h2 = float(hist_1h.iloc[-2])
+                    h3 = float(hist_1h.iloc[-1])
+                    if h3 < h2 or h2 < h1:
+                        macd_bearish = True
 
-                # RSI < 62 且下降
+                # 条件2: RSI < 65 且最后一根在下降
                 rsi_1h = self.ti.calculate_rsi(df_1h)
-                r1 = float(rsi_1h.iloc[-3])
-                r2 = float(rsi_1h.iloc[-2])
-                r3 = float(rsi_1h.iloc[-1])
-                if r3 >= 62 or not (r1 > r2 > r3):
-                    continue
+                rsi_bearish = False
+                r3 = 50.0
+                if len(rsi_1h) >= 3:
+                    r2 = float(rsi_1h.iloc[-2])
+                    r3 = float(rsi_1h.iloc[-1])
+                    if r3 < 65 and r3 < r2:
+                        rsi_bearish = True
 
-                # 反弹量能萎缩：近期上涨K均量 < 近期下跌K均量 × 0.75
+                # 条件3: 上涨K均量 < 下跌K均量（量能萎缩）
+                vol_shrink = False
                 closes = df_1h['close'].values
                 vols = df_1h['volume'].values
-                up_vols = [vols[i] for i in range(-9, -1) if closes[i] > closes[i - 1]]
-                dn_vols = [vols[i] for i in range(-9, -1) if closes[i] < closes[i - 1]]
+                up_vols = [vols[j] for j in range(-10, -1) if closes[j] > closes[j - 1]]
+                dn_vols = [vols[j] for j in range(-10, -1) if closes[j] < closes[j - 1]]
                 if len(up_vols) >= 2 and len(dn_vols) >= 2:
-                    avg_up = sum(up_vols[-3:]) / len(up_vols[-3:])
-                    avg_dn = sum(dn_vols[-3:]) / len(dn_vols[-3:])
-                    if avg_dn > 0 and avg_up >= avg_dn * 0.75:
-                        continue
+                    avg_up = sum(up_vols) / len(up_vols)
+                    avg_dn = sum(dn_vols) / len(dn_vols)
+                    if avg_dn > 0 and avg_up < avg_dn:
+                        vol_shrink = True
+
+                # 三选二
+                if sum([macd_bearish, rsi_bearish, vol_shrink]) < 2:
+                    continue
 
                 reason = (
-                    f"S4:7日高={week_high:.4g},当前={current_price:.4g},"
-                    f"反弹={rebound_pct * 100:.1f}%,"
-                    f"1H_RSI={r3:.1f}(下降),MACD_hist衰竭"
+                    f"S4:14日高={two_week_high:.4g},反弹={rebound_pct * 100:.1f}%,"
+                    f"1H_RSI={r3:.1f},"
+                    f"MACD={'空' if macd_bearish else '-'},"
+                    f"量萎缩={'是' if vol_shrink else '-'}"
                 )
                 if self._open_position(
                     symbol, 'SHORT', self.S4_MARGIN, self.S4_LEVERAGE,

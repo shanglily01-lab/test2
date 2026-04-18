@@ -148,53 +148,59 @@ def simulate_exit(df: pd.DataFrame, entry_idx: int, side: str,
 # ─────────────────────────────────────────
 
 def check_s1(df_1h: pd.DataFrame, i: int) -> bool:
-    """S1 早期做多: 1H RSI 28-45 + 4H MACD金叉 + 价格在20日MA下方"""
+    """S1 早期做多: RSI 25-52 + 4H MACD连续向上 + 价格在MA20 80-105% + 量能回升"""
     if i < 50:
         return False
+
+    # 1H RSI 25-52，且最近2根在上升
     window_1h = df_1h.iloc[max(0, i - 29): i + 1].copy().reset_index(drop=True)
     rsi = TI.calculate_rsi(window_1h)
+    if len(rsi) < 3:
+        return False
     last_rsi = float(rsi.iloc[-1])
-    if not (28 <= last_rsi <= 45):
+    if not (25 <= last_rsi <= 52):
+        return False
+    if float(rsi.iloc[-2]) >= last_rsi:  # RSI必须在上升
         return False
 
-    # 4H MACD（从1H重采样）
+    # 4H MACD histogram 连续2根向上，且前一根 < 0.002（还在低位）
     window_4h_raw = df_1h.iloc[max(0, i - 159): i + 1].copy().reset_index(drop=True)
     df_4h = resample_to(window_4h_raw, '4h')
-    if len(df_4h) < 35:
+    if len(df_4h) < 30:
         return False
     _, _, hist = TI.calculate_macd(df_4h)
-    if len(hist) < 2:
+    if len(hist) < 3:
         return False
-    if not (float(hist.iloc[-2]) < 0 and float(hist.iloc[-1]) > -0.000001):
+    h1, h2, h3 = float(hist.iloc[-3]), float(hist.iloc[-2]), float(hist.iloc[-1])
+    if not (h2 > h1 and h3 > h2 and h1 < 0.002):
         return False
 
-    # 20日MA（从1H重采样）
+    # 价格在MA20的 80-105% 区间（放宽，不再要求紧贴）
     window_1d_raw = df_1h.iloc[max(0, i - 24 * 25): i + 1].copy().reset_index(drop=True)
     df_1d = resample_to(window_1d_raw, '1D')
     if len(df_1d) < 21:
         return False
     ma20 = float(df_1d['close'].rolling(20).mean().iloc[-1])
     cur_price = float(df_1d['close'].iloc[-1])
-    if not (ma20 * 0.95 <= cur_price <= ma20 * 1.01):
+    if not (ma20 * 0.80 <= cur_price <= ma20 * 1.05):
         return False
 
-    # 量能回升
+    # 量能回升（放宽到 0.9 倍均量即可）
     if len(df_1d) >= 8:
         vol_today = float(df_1d['volume'].iloc[-1])
         vol_avg7 = float(df_1d['volume'].iloc[-8:-1].mean())
-        if vol_avg7 > 0 and vol_today < vol_avg7 * 1.1:
+        if vol_avg7 > 0 and vol_today < vol_avg7 * 0.9:
             return False
 
     return True
 
 
 def check_s2(df_1h: pd.DataFrame, i: int) -> bool:
-    """S2 无量回调做多: 48H涨>15% + 无量 + 回调25-40% + 企稳"""
+    """S2 回调做多: 48H涨>12% + 回调15-38% + RSI 30-58企稳（去掉无量条件）"""
     if i < 52:
         return False
     window = df_1h.iloc[i - 51: i + 1].copy().reset_index(drop=True)
     closes = window['close'].values
-    volumes = window['volume'].values
 
     recent_high = float(closes[-48:].max())
     recent_low = float(closes[-48:].min())
@@ -202,106 +208,153 @@ def check_s2(df_1h: pd.DataFrame, i: int) -> bool:
 
     if recent_low <= 0:
         return False
+    # 48H内曾有超过12%的价格区间
     price_range = (recent_high - recent_low) / recent_low
-    if price_range < 0.15:
+    if price_range < 0.12:
         return False
 
+    # 从48H高点回调15-38%
     drawdown = (recent_high - cur) / recent_high if recent_high > 0 else 0
-    if not (0.25 <= drawdown <= 0.40):
+    if not (0.15 <= drawdown <= 0.38):
         return False
 
-    # 1D 均量估算（7日）
-    window_1d = resample_to(window, '1D')
-    if len(window_1d) < 3:
-        return False
-    vol_avg_daily = float(window_1d['volume'].mean())
-    vol_avg_hourly = vol_avg_daily / 24
-
-    high_idx = int(window['close'].iloc[-48:].values.argmax())
-    start = max(0, high_idx - 12)
-    rise_vols = volumes[start: high_idx] if high_idx > 0 else volumes[:12]
-    avg_rise_vol = float(rise_vols.mean()) if len(rise_vols) > 0 else vol_avg_hourly
-    if vol_avg_hourly > 0 and avg_rise_vol > vol_avg_hourly * 1.2:
-        return False
-
-    # RSI 15m 近似（用1H RSI 35-52 上升）
+    # RSI 30-58 且最后2根上升（企稳迹象）
     rsi = TI.calculate_rsi(window.iloc[-20:].reset_index(drop=True))
     if len(rsi) < 3:
         return False
-    r1, r2, r3 = float(rsi.iloc[-3]), float(rsi.iloc[-2]), float(rsi.iloc[-1])
-    if not (35 <= r3 <= 52 and r1 < r2 < r3):
+    r2, r3 = float(rsi.iloc[-2]), float(rsi.iloc[-1])
+    if not (30 <= r3 <= 58 and r3 > r2):
         return False
 
     return True
 
 
 def check_s3(df_1h: pd.DataFrame, i: int) -> bool:
-    """S3 顶部做空: 1H RSI>75 + 布林上轨 + 48H涨>25%"""
-    if i < 50:
+    """S3 顶部做空: RSI>=72顶背离 + 价格从高点回落3-15% + 4H MACD开始下行 + 阴线确认"""
+    if i < 96:  # 需要更多历史数据做4H分析
         return False
     window = df_1h.iloc[max(0, i - 51): i + 1].copy().reset_index(drop=True)
 
     rsi = TI.calculate_rsi(window)
-    if float(rsi.iloc[-1]) <= 75:
+    if len(rsi) < 6:
+        return False
+    last_rsi = float(rsi.iloc[-1])
+    if last_rsi <= 70:  # 稍微放宽RSI下限
         return False
 
-    upper, _, _ = TI.calculate_bollinger_bands(window)
+    # RSI顶背离：当前RSI不是最近6根的最高点
+    recent_rsi_max = float(rsi.iloc[-6:].max())
+    if last_rsi >= recent_rsi_max:
+        return False
+
+    # 价格已从48H内最高点回落3-15%（更大回落才更可信）
     cur_price = float(window['close'].iloc[-1])
-    if cur_price <= float(upper.iloc[-1]):
+    high_48h = float(window['high'].iloc[-48:].max()) if len(window) >= 48 else float(window['high'].max())
+    retreat_pct = (high_48h - cur_price) / high_48h if high_48h > 0 else 0
+    if not (0.03 <= retreat_pct <= 0.15):
         return False
 
+    # 48H最高点相对48H前的涨幅 > 20%
     price_48h_ago = float(window['close'].iloc[-48]) if len(window) >= 48 else float(window['close'].iloc[0])
-    gain_48h = (cur_price - price_48h_ago) / price_48h_ago if price_48h_ago > 0 else 0
-    if gain_48h <= 0.25:
+    gain_48h = (high_48h - price_48h_ago) / price_48h_ago if price_48h_ago > 0 else 0
+    if gain_48h <= 0.20:
+        return False
+
+    # 4H MACD histogram 已经开始下行（多时间框架确认弱势）
+    window_4h_raw = df_1h.iloc[max(0, i - 159): i + 1].copy().reset_index(drop=True)
+    df_4h = resample_to(window_4h_raw, '4h')
+    if len(df_4h) < 30:
+        return False
+    _, _, hist_4h = TI.calculate_macd(df_4h)
+    if len(hist_4h) < 3:
+        return False
+    h4_1 = float(hist_4h.iloc[-3])
+    h4_2 = float(hist_4h.iloc[-2])
+    h4_3 = float(hist_4h.iloc[-1])
+    # 4H MACD histogram 最近两段至少一段在下降
+    if not (h4_3 < h4_2 or h4_2 < h4_1):
+        return False
+
+    # 近3根1H K线至少2根阴线（确认顶部压力）
+    bearish_count = sum(
+        1 for k in range(-3, 0)
+        if float(window['close'].iloc[k]) < float(window['open'].iloc[k])
+    )
+    if bearish_count < 2:
         return False
 
     return True
 
 
 def check_s4(df_1h: pd.DataFrame, i: int) -> bool:
-    """S4 反弹做空: 反弹到7日高点62-82% + MACD/RSI顶背离 + 量能萎缩"""
+    """S4 反弹做空: 反弹到14日高点40-90% + 且曾下跌>12% + MACD/RSI/量能三选二"""
     if i < 52:
         return False
-    window_1h = df_1h.iloc[max(0, i - 51): i + 1].copy().reset_index(drop=True)
+    # 用更长的窗口捕捉14日高点
+    window_1h = df_1h.iloc[max(0, i - 24 * 14 - 1): i + 1].copy().reset_index(drop=True)
+    if len(window_1h) < 52:
+        return False
 
-    # 7日高点
+    # 14日高点
     df_1d_w = resample_to(window_1h, '1D')
-    if len(df_1d_w) < 7:
+    if len(df_1d_w) < 5:
         return False
-    week_high = float(df_1d_w['high'].iloc[-7:].max())
+    two_week_high = float(df_1d_w['high'].max())
     cur_price = float(window_1h['close'].iloc[-1])
-    rebound_pct = cur_price / week_high if week_high > 0 else 0
-    if not (0.62 <= rebound_pct <= 0.82):
+
+    # 当前价格在14日高点的40-90%（必须曾经有明显回落）
+    rebound_pct = cur_price / two_week_high if two_week_high > 0 else 0
+    if not (0.40 <= rebound_pct <= 0.90):
         return False
 
-    # 1H MACD 下降
+    # 当前价格在14日高点的50-85%（更合理区间）
+    if not (0.50 <= rebound_pct <= 0.85):
+        return False
+
+    # 从14日高点到当前至少曾经下跌15%（有实质回落，不是一直跌）
+    min_since_high = float(window_1h['low'].iloc[-24 * 7:].min())
+    max_drop = (two_week_high - min_since_high) / two_week_high if two_week_high > 0 else 0
+    if max_drop < 0.15:
+        return False
+
+    # 当前价格必须高于7日内最低点×1.05（即从低点已反弹5%以上，有真正反弹）
+    low_7d = float(window_1h['low'].iloc[-24 * 7:].min())
+    if cur_price < low_7d * 1.05:
+        return False
+
+    # 以最近52根1H K线做指标分析
+    window_1h = window_1h.iloc[-52:].reset_index(drop=True)
+
+    # 条件1: MACD histogram 最近任意一段在下降
     _, _, hist = TI.calculate_macd(window_1h)
-    if len(hist) < 3:
-        return False
-    h1, h2, h3 = float(hist.iloc[-3]), float(hist.iloc[-2]), float(hist.iloc[-1])
-    if not (h1 > h2 > h3):
-        return False
+    macd_bearish = False
+    if len(hist) >= 3:
+        h1, h2, h3 = float(hist.iloc[-3]), float(hist.iloc[-2]), float(hist.iloc[-1])
+        if h3 < h2 or h2 < h1:
+            macd_bearish = True
 
-    # 1H RSI < 62 且下降
+    # 条件2: RSI < 65 且最后一根在下降
     rsi = TI.calculate_rsi(window_1h)
-    if len(rsi) < 3:
-        return False
-    r1, r2, r3 = float(rsi.iloc[-3]), float(rsi.iloc[-2]), float(rsi.iloc[-1])
-    if r3 >= 62 or not (r1 > r2 > r3):
-        return False
+    rsi_bearish = False
+    if len(rsi) >= 3:
+        r2, r3 = float(rsi.iloc[-2]), float(rsi.iloc[-1])
+        if r3 < 65 and r3 < r2:
+            rsi_bearish = True
 
-    # 量能萎缩
+    # 条件3: 上涨K均量 < 下跌K均量（量能萎缩）
+    vol_shrink = False
     closes = window_1h['close'].values
     vols = window_1h['volume'].values
-    up_vols = [vols[j] for j in range(-9, -1) if closes[j] > closes[j - 1]]
-    dn_vols = [vols[j] for j in range(-9, -1) if closes[j] < closes[j - 1]]
+    up_vols = [vols[j] for j in range(-10, -1) if closes[j] > closes[j - 1]]
+    dn_vols = [vols[j] for j in range(-10, -1) if closes[j] < closes[j - 1]]
     if len(up_vols) >= 2 and len(dn_vols) >= 2:
-        avg_up = sum(up_vols[-3:]) / len(up_vols[-3:])
-        avg_dn = sum(dn_vols[-3:]) / len(dn_vols[-3:])
-        if avg_dn > 0 and avg_up >= avg_dn * 0.75:
-            return False
+        avg_up = sum(up_vols) / len(up_vols)
+        avg_dn = sum(dn_vols) / len(dn_vols)
+        if avg_dn > 0 and avg_up < avg_dn:
+            vol_shrink = True
 
-    return True
+    # 三选二
+    return sum([macd_bearish, rsi_bearish, vol_shrink]) >= 2
 
 
 # ─────────────────────────────────────────
@@ -343,9 +396,10 @@ def backtest_symbol(symbol: str) -> List[Dict]:
         in_position = False
         entry_idx = -1
 
+        next_open_bar = 55  # 真正的冷却期控制
         for i in range(55, len(df) - 1):
-            if in_position:
-                continue  # 每策略同时只持1仓（回测简化）
+            if i < next_open_bar:
+                continue  # 持仓冷却中
 
             try:
                 if strat['check'](df, i):
@@ -372,11 +426,8 @@ def backtest_symbol(symbol: str) -> List[Dict]:
                     }
                     trades.append(trade)
                     all_trades.append(trade)
-                    in_position = True
-                    entry_idx = i
-                    # 冷却期：跳过持仓期后再允许下一单
-                    i += result['bars_held']
-                    in_position = False
+                    # 平仓后跳过整个持仓期（真正有效的冷却）
+                    next_open_bar = i + result['bars_held'] + 1
             except Exception:
                 pass
 
