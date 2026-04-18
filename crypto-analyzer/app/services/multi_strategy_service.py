@@ -8,9 +8,10 @@
 - S4: 反弹动能衰竭做空 (5小时, 10%止盈, 3%止损, 5x, 300U, 最多3单)
 - S5: 大币超卖反弹做多 (48小时, 5%止盈, 2%止损, 5x, 200U, 最多3单, 仅BTC/ETH/SOL/BNB/XRP)
 - S6: 小币量能异动做多 (8小时, 8%止盈, 3%止损, 5x, 200U, 最多5单, 排除大市值)
+- S7: 小币均线支撑反弹做多 (8小时, 6%止盈, 2.5%止损, 5x, 200U, 最多5单, 排除大市值)
 
 调度方式: 在 smart_trader_service.py 主循环中调用
-- run_fast(): 每5分钟, 负责 S2+S4
+- run_fast(): 每5分钟, 负责 S2+S4+S7
 - run_slow(): 每30分钟, 负责 S1+S3+S5+S6 (内部限速)
 """
 
@@ -92,7 +93,16 @@ class MultiStrategyService:
         'UNI/USDT', 'ATOM/USDT', 'ETC/USDT', 'BCH/USDT', 'FIL/USDT',
     }
 
-    ALL_SOURCES = (S1_SOURCE, S2_SOURCE, S3_SOURCE, S4_SOURCE, S5_SOURCE, S6_SOURCE)
+    # 策略7: 小币均线支撑反弹做多 (MA20下方82-95%区间反弹)
+    S7_LEVERAGE = 5
+    S7_MARGIN = 200
+    S7_MAX_POSITIONS = 5
+    S7_TP_PCT = 0.06
+    S7_SL_PCT = 0.025
+    S7_HOLD_HOURS = 8
+    S7_SOURCE = 's7_ma_support'
+
+    ALL_SOURCES = (S1_SOURCE, S2_SOURCE, S3_SOURCE, S4_SOURCE, S5_SOURCE, S6_SOURCE, S7_SOURCE)
     SLOW_SCAN_INTERVAL_SEC = 1800  # 30 分钟
 
     def __init__(self, db_config: dict):
@@ -873,11 +883,80 @@ class MultiStrategyService:
             logger.info(f"[S6] 本轮新开 {opened} 单")
 
     # ─────────────────────────────────────────
+    # 策略7: 小币均线支撑反弹做多
+    # ─────────────────────────────────────────
+
+    def scan_s7_ma_support(self):
+        """S7: 价格跌至20H均线82-95%区间 + 反弹阳线 + 量能确认"""
+        if self._strategy_position_count(self.S7_SOURCE) >= self.S7_MAX_POSITIONS:
+            return
+
+        big4 = self._get_big4_signal()
+        if big4 in ('BEARISH', 'STRONG_BEARISH'):
+            logger.info("[S7] Big4熊市，跳过均线支撑反弹")
+            return
+
+        symbols = self._get_small_cap_symbols()
+        opened = 0
+
+        for symbol in symbols:
+            if self._strategy_position_count(self.S7_SOURCE) + opened >= self.S7_MAX_POSITIONS:
+                break
+            if self._has_multi_strategy_position(symbol):
+                continue
+
+            try:
+                df_1h = self._get_klines(symbol, '1h', 30)
+                if df_1h is None or len(df_1h) < 22:
+                    continue
+
+                # 20H简单均线
+                ma20 = float(df_1h['close'].iloc[-21:-1].mean())
+                if ma20 <= 0:
+                    continue
+
+                close_v = float(df_1h['close'].iloc[-1])
+                open_v = float(df_1h['open'].iloc[-1])
+                prev_close = float(df_1h['close'].iloc[-2])
+
+                # 价格在MA20的82-95%区间
+                ratio = close_v / ma20
+                if not (0.82 <= ratio <= 0.95):
+                    continue
+
+                # 当前是阳线且高于前一根收盘（反弹确认）
+                if not (close_v > open_v and close_v > prev_close):
+                    continue
+
+                # 量能确认：当前量 > 近10根均量×1.2
+                vol_base = float(df_1h['volume'].iloc[-11:-1].mean())
+                cur_vol = float(df_1h['volume'].iloc[-1])
+                if vol_base > 0 and cur_vol < vol_base * 1.2:
+                    continue
+
+                vol_ratio = cur_vol / vol_base if vol_base > 0 else 1.0
+                reason = (
+                    f"S7:价格/20H_MA={ratio * 100:.1f}%,"
+                    f"阳线反弹,量比={vol_ratio:.2f}x"
+                )
+                if self._open_position(
+                    symbol, 'LONG', self.S7_MARGIN, self.S7_LEVERAGE,
+                    self.S7_TP_PCT, self.S7_SL_PCT, self.S7_HOLD_HOURS, self.S7_SOURCE, reason
+                ):
+                    opened += 1
+
+            except Exception as e:
+                logger.warning(f"[S7] 扫描 {symbol} 异常: {e}")
+
+        if opened:
+            logger.info(f"[S7] 本轮新开 {opened} 单")
+
+    # ─────────────────────────────────────────
     # 调度入口
     # ─────────────────────────────────────────
 
     def run_fast(self):
-        """每5分钟调度：S2（无量回调做多）+ S4（反弹做空）"""
+        """每5分钟调度：S2 + S4 + S7"""
         try:
             self.scan_s2_pullback_long()
         except Exception as e:
@@ -886,6 +965,10 @@ class MultiStrategyService:
             self.scan_s4_rebound_short()
         except Exception as e:
             logger.error(f"[S4] 扫描异常: {e}")
+        try:
+            self.scan_s7_ma_support()
+        except Exception as e:
+            logger.error(f"[S7] 扫描异常: {e}")
 
     def run_slow(self):
         """每30分钟调度：S1+S3+S5+S6；内部限速防重复"""

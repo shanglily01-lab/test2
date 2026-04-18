@@ -24,6 +24,7 @@ from app.utils.config_loader import load_config
 SYMBOLS = [
     'ORDI/USDT', 'ENJ/USDT', 'PNUT/USDT',
     'BTC/USDT',  'ETH/USDT', 'SOL/USDT',
+    'JST/USDT',  'FIO/USDT', 'FIGHT/USDT', 'LIT/USDT',
 ]
 LARGE_CAP_SYMBOLS = {'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT'}
 SMALL_CAP_SYMBOLS = set(SYMBOLS) - LARGE_CAP_SYMBOLS
@@ -359,6 +360,37 @@ def check_s4(df_1h: pd.DataFrame, i: int) -> bool:
     return sum([macd_bearish, rsi_bearish, vol_shrink]) >= 2
 
 
+def check_s7(df_1h: pd.DataFrame, i: int) -> bool:
+    """S7 均线支撑反弹: 价格在20H均线82-95%区间 + 反弹阳线 + 量能确认"""
+    if i < 22:
+        return False
+
+    # 20H简单均线
+    ma20 = float(df_1h['close'].iloc[i - 20:i].mean())
+    if ma20 <= 0:
+        return False
+
+    close_v = float(df_1h['close'].iloc[i])
+    open_v = float(df_1h['open'].iloc[i])
+    prev_close = float(df_1h['close'].iloc[i - 1])
+
+    # 价格在MA20的82-95%区间（均线支撑下方但不要过度偏离）
+    ratio = close_v / ma20
+    if not (0.82 <= ratio <= 0.95):
+        return False
+
+    # 当前K线是阳线且高于前一根收盘价（反弹确认）
+    if not (close_v > open_v and close_v > prev_close):
+        return False
+
+    # 量能确认: 当前量 > 近10根均量×1.2（反弹有量）
+    vol_base = float(df_1h['volume'].iloc[i - 10:i].mean())
+    if vol_base > 0 and float(df_1h['volume'].iloc[i]) < vol_base * 1.2:
+        return False
+
+    return True
+
+
 def check_s5(df_1h: pd.DataFrame, i: int) -> bool:
     """S5 大币超卖反弹: 4H RSI<32 + RSI从低点回升(不再下降) + 价格低于日MA20"""
     if i < 96:
@@ -451,6 +483,9 @@ STRATEGIES = [
          sym_filter=LARGE_CAP_SYMBOLS),
     dict(name='S6-量能异动', check=check_s6, side='LONG',
          tp=0.08, sl=0.03,  hold_bars=8,         margin=200, leverage=5,
+         sym_filter=SMALL_CAP_SYMBOLS),
+    dict(name='S7-均线支撑', check=check_s7, side='LONG',
+         tp=0.06, sl=0.025, hold_bars=8,         margin=200, leverage=5,
          sym_filter=SMALL_CAP_SYMBOLS),
 ]
 
