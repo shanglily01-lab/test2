@@ -16,17 +16,19 @@
 注意：实时价格由 WebSocket 服务提供，不在此采集
 """
 
+import os
 import sys
 import asyncio
 from pathlib import Path
 from datetime import datetime
 from loguru import logger
+from dotenv import dotenv_values
 
 # 添加项目路径
-sys.path.insert(0, str(Path(__file__).parent))
+_project_root = Path(__file__).parent
+sys.path.insert(0, str(_project_root))
 
 from app.collectors.smart_futures_collector import SmartFuturesCollector
-from app.utils.config_loader import load_config
 
 
 class SmartCollectorService:
@@ -49,9 +51,15 @@ class SmartCollectorService:
             level="INFO"
         )
 
-        # 加载配置
-        config = load_config()
-        db_config = config['database']['mysql']
+        # 直接读本项目 .env，避免同服务器另一版本的系统环境变量污染
+        _env = dotenv_values(_project_root / '.env')
+        db_config = {
+            'host':     _env.get('DB_HOST', 'localhost'),
+            'port':     int(_env.get('DB_PORT', 3306)),
+            'user':     _env.get('DB_USER', 'root'),
+            'password': _env.get('DB_PASSWORD', ''),
+            'database': _env.get('DB_NAME', 'binance-data'),
+        }
 
         # 初始化智能采集器
         self.collector = SmartFuturesCollector(db_config)
