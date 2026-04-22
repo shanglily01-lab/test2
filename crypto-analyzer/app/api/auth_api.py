@@ -3,6 +3,7 @@
 提供用户注册、登录、令牌刷新等接口
 """
 
+from app.utils.config_loader import get_db_config
 from typing import Optional
 from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel, EmailStr, Field
@@ -269,11 +270,7 @@ async def admin_list_users(current_user: dict = Depends(get_current_user)):
     from datetime import datetime
     try:
         conn = pymysql.connect(
-            host=os.getenv('DB_HOST', 'localhost'),
-            port=int(os.getenv('DB_PORT', 3306)),
-            user=os.getenv('DB_USER', 'root'),
-            password=os.getenv('DB_PASSWORD', ''),
-            database=os.getenv('DB_NAME', 'binance-data'),
+            **get_db_config(),
             cursorclass=pymysql.cursors.DictCursor
         )
         with conn.cursor() as cur:
@@ -335,11 +332,7 @@ async def admin_toggle_user_status(
     import pymysql, os
     try:
         conn = pymysql.connect(
-            host=os.getenv('DB_HOST', 'localhost'),
-            port=int(os.getenv('DB_PORT', 3306)),
-            user=os.getenv('DB_USER', 'root'),
-            password=os.getenv('DB_PASSWORD', ''),
-            database=os.getenv('DB_NAME', 'binance-data'),
+            **get_db_config(),
             cursorclass=pymysql.cursors.DictCursor
         )
         with conn.cursor() as cur:

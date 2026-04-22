@@ -4,6 +4,7 @@
 交易方向设置管理工具
 快速启用/禁止做多或做空
 """
+from app.utils.config_loader import get_db_config
 import pymysql
 import os
 import sys
@@ -18,11 +19,7 @@ load_dotenv()
 
 # 数据库配置
 db_config = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': int(os.getenv('DB_PORT', 3306)),
-    'user': os.getenv('DB_USER', 'trading_user'),
-    'password': os.getenv('DB_PASSWORD', ''),
-    'database': os.getenv('DB_NAME', 'binance-data'),
+    **get_db_config(),
     'charset': 'utf8mb4'
 }
 

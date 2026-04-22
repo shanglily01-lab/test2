@@ -2,6 +2,7 @@
 系统配置加载器
 从数据库读取系统配置，避免Linux权限问题
 """
+from app.utils.config_loader import get_db_config
 import pymysql
 from loguru import logger
 from typing import Dict, Any
@@ -18,10 +19,7 @@ def get_system_settings() -> Dict[str, Any]:
         # 直接读取数据库配置
         import os
         db_config = {
-            'host': os.getenv('DB_HOST', '13.212.252.171'),
-            'user': os.getenv('DB_USER', 'admin'),
-            'password': os.getenv('DB_PASSWORD', 'Tonny@1000'),
-            'database': os.getenv('DB_NAME', 'binance-data'),
+            **get_db_config(),
             'charset': 'utf8mb4'
         }
 

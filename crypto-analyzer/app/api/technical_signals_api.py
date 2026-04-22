@@ -12,6 +12,7 @@
 部署：服务器上执行一次 sql/create_technical_signals_cache.sql 即可
 """
 
+from app.utils.config_loader import get_db_config
 from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Optional
 from datetime import datetime
@@ -45,11 +46,7 @@ def _get_config_symbols() -> List[str]:
 def get_db_connection():
     """获取数据库连接"""
     return pymysql.connect(
-        host=os.getenv('DB_HOST'),
-        port=int(os.getenv('DB_PORT', 3306)),
-        user=os.getenv('DB_USER'),
-        password=os.getenv('DB_PASSWORD'),
-        database=os.getenv('DB_NAME'),
+        **get_db_config(),
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=True,
         connect_timeout=10,
@@ -185,11 +182,7 @@ async def get_signal_scores(limit: int = 20):
     """
     try:
         conn = pymysql.connect(
-            host=os.getenv('DB_HOST', 'localhost'),
-            port=int(os.getenv('DB_PORT', 3306)),
-            user=os.getenv('DB_USER', 'root'),
-            password=os.getenv('DB_PASSWORD', ''),
-            database=os.getenv('DB_NAME', 'binance-data'),
+            **get_db_config(),
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor
         )

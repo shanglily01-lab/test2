@@ -8,6 +8,7 @@
 2. 15M (30根K线): 趋势确认 (阳阴线数量 + 力度)
 3. 5M (3根K线): 买卖时机判断 (突破检测)
 """
+from app.utils.config_loader import get_db_config
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
@@ -29,11 +30,7 @@ class Big4TrendDetector:
 
     def __init__(self):
         self.db_config = {
-            'host': os.getenv('DB_HOST', '13.212.252.171'),
-            'port': int(os.getenv('DB_PORT', 3306)),
-            'user': os.getenv('DB_USER', 'admin'),
-            'password': os.getenv('DB_PASSWORD', 'Tonny@1000'),
-            'database': os.getenv('DB_NAME', 'binance-data'),
+            **get_db_config(),
             'charset': 'utf8mb4'
         }
         self.db_pool = get_global_pool(self.db_config, pool_size=5)

@@ -3,6 +3,7 @@ Dashboard 快照服务
 每5分钟预计算所有 Dashboard 所需数据并存入 dashboard_snapshot 表，
 前端调用 GET /api/dashboard/snapshot 可在毫秒内获取完整数据。
 """
+from app.utils.config_loader import get_db_config
 import json
 import time
 import pymysql
@@ -13,10 +14,7 @@ from loguru import logger
 
 def _get_conn():
     return pymysql.connect(
-        host=os.getenv('DB_HOST', '13.212.252.171'),
-        user=os.getenv('DB_USER', 'admin'),
-        password=os.getenv('DB_PASSWORD', 'Tonny@1000'),
-        database=os.getenv('DB_NAME', 'binance-data'),
+        **get_db_config(),
         charset='utf8mb4',
         cursorclass=pymysql.cursors.DictCursor,
         connect_timeout=10

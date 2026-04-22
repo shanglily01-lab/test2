@@ -4,6 +4,7 @@
 U本位开仓将只在这30个交易对中进行
 """
 
+from app.utils.config_loader import get_db_config
 import pymysql
 from loguru import logger
 from datetime import datetime
@@ -19,11 +20,7 @@ load_dotenv()
 
 # 数据库配置（从环境变量读取）
 MYSQL_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': int(os.getenv('DB_PORT', '3306')),
-    'user': os.getenv('DB_USER', 'root'),
-    'password': os.getenv('DB_PASSWORD', ''),
-    'database': os.getenv('DB_NAME', 'binance-data')
+    **get_db_config()
 }
 
 

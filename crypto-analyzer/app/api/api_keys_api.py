@@ -3,6 +3,7 @@
 API密钥管理接口
 """
 
+from app.utils.config_loader import get_db_config
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -163,11 +164,7 @@ async def verify_api_key(
     import pymysql, os
     try:
         conn = pymysql.connect(
-            host=os.getenv('DB_HOST', 'localhost'),
-            port=int(os.getenv('DB_PORT', 3306)),
-            user=os.getenv('DB_USER', 'root'),
-            password=os.getenv('DB_PASSWORD', ''),
-            database=os.getenv('DB_NAME', 'binance-data'),
+            **get_db_config(),
             cursorclass=pymysql.cursors.DictCursor
         )
         cur = conn.cursor()
@@ -260,11 +257,7 @@ async def get_api_key_balance(api_key_id: int):
     import pymysql, os
     try:
         conn = pymysql.connect(
-            host=os.getenv('DB_HOST', 'localhost'),
-            port=int(os.getenv('DB_PORT', 3306)),
-            user=os.getenv('DB_USER', 'root'),
-            password=os.getenv('DB_PASSWORD', ''),
-            database=os.getenv('DB_NAME', 'binance-data'),
+            **get_db_config(),
             cursorclass=pymysql.cursors.DictCursor
         )
         cur = conn.cursor()
@@ -348,9 +341,7 @@ async def update_risk(request: UpdateRiskRequest):
     import pymysql, os
     try:
         conn = pymysql.connect(
-            host=os.getenv('DB_HOST', 'localhost'), port=int(os.getenv('DB_PORT', 3306)),
-            user=os.getenv('DB_USER', 'root'), password=os.getenv('DB_PASSWORD', ''),
-            database=os.getenv('DB_NAME', 'binance-data'), cursorclass=pymysql.cursors.DictCursor
+            **get_db_config(), cursorclass=pymysql.cursors.DictCursor
         )
         cur = conn.cursor()
         cur.execute("SELECT id FROM user_api_keys WHERE id=%s AND user_id=%s",

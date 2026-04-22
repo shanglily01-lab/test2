@@ -7,6 +7,7 @@ Author: Claude
 Date: 2026-01-27
 """
 
+from app.utils.config_loader import get_db_config
 import asyncio
 from datetime import datetime
 from loguru import logger
@@ -33,11 +34,7 @@ class SignalAnalysisBackgroundService:
 
         # 数据库配置
         self.db_config = {
-            'host': os.getenv('DB_HOST'),
-            'port': int(os.getenv('DB_PORT', 3306)),
-            'user': os.getenv('DB_USER'),
-            'password': os.getenv('DB_PASSWORD'),
-            'database': os.getenv('DB_NAME'),
+            **get_db_config(),
             'charset': 'utf8mb4',
             'cursorclass': None
         }

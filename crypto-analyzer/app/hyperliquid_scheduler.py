@@ -8,6 +8,7 @@ Hyperliquid 聪明钱包监控调度器
 - 全量扫描: 每6小时监控所有活跃钱包 (8000+个)
 """
 
+from app.utils.config_loader import get_db_config
 import sys
 from pathlib import Path
 
@@ -205,11 +206,7 @@ class HyperliquidScheduler:
 
         try:
             conn = pymysql.connect(
-                host=os.getenv('DB_HOST', 'localhost'),
-                port=int(os.getenv('DB_PORT', 3306)),
-                user=os.getenv('DB_USER', 'root'),
-                password=os.getenv('DB_PASSWORD', ''),
-                database=os.getenv('DB_NAME', 'binance-data'),
+                **get_db_config(),
                 charset='utf8mb4',
                 autocommit=False,
             )

@@ -2,6 +2,7 @@
 系统配置管理API
 提供V1/V2策略切换、Big4过滤器等系统配置的读取和更新
 """
+from app.utils.config_loader import get_db_config
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -13,16 +14,6 @@ from loguru import logger
 
 router = APIRouter(prefix="/api/system", tags=["System Settings"])
 
-
-def get_db_config():
-    """获取数据库配置"""
-    return {
-        'host': os.getenv('DB_HOST', '13.212.252.171'),
-        'user': os.getenv('DB_USER', 'admin'),
-        'password': os.getenv('DB_PASSWORD', 'Tonny@1000'),
-        'database': os.getenv('DB_NAME', 'binance-data'),
-        'charset': 'utf8mb4'
-    }
 
 
 class SystemSetting(BaseModel):

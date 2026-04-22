@@ -4,6 +4,7 @@
 信号黑名单定期评估器 - 自动解除表现改善的信号
 """
 
+from app.utils.config_loader import get_db_config
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime, timedelta
 from loguru import logger
@@ -465,11 +466,7 @@ def main():
     load_dotenv()
 
     db_config = {
-        'host': os.getenv('DB_HOST', 'localhost'),
-        'port': int(os.getenv('DB_PORT', 3306)),
-        'user': os.getenv('DB_USER', 'root'),
-        'password': os.getenv('DB_PASSWORD', ''),
-        'database': os.getenv('DB_NAME', 'binance-data')
+        **get_db_config()
     }
 
     reviewer = SignalBlacklistReviewer(db_config)

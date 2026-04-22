@@ -5,6 +5,7 @@
 根据历史交易表现，动态调整各评分组件的权重
 """
 
+from app.utils.config_loader import get_db_config
 import pymysql
 import json
 from datetime import datetime, timedelta
@@ -394,11 +395,7 @@ if __name__ == '__main__':
     load_dotenv()
 
     db_config = {
-        'host': os.getenv('DB_HOST', 'localhost'),
-        'port': int(os.getenv('DB_PORT', '3306')),
-        'user': os.getenv('DB_USER', 'root'),
-        'password': os.getenv('DB_PASSWORD', ''),
-        'database': os.getenv('DB_NAME', 'binance-data')
+        **get_db_config()
     }
 
     optimizer = ScoringWeightOptimizer(db_config)

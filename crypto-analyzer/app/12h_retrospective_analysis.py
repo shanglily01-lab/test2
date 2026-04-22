@@ -5,6 +5,7 @@
 每12小时对市场走势、信号捕捉、交易表现进行全面评估
 """
 
+from app.utils.config_loader import get_db_config
 import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -22,11 +23,7 @@ class RetrospectiveAnalyzer:
 
     def __init__(self):
         self.db_config = {
-            'host': os.getenv('DB_HOST', 'localhost'),
-            'port': int(os.getenv('DB_PORT', 3306)),
-            'user': os.getenv('DB_USER', 'root'),
-            'password': os.getenv('DB_PASSWORD', ''),
-            'database': os.getenv('DB_NAME', 'binance-data')
+            **get_db_config()
         }
 
     def _get_connection(self):

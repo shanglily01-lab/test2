@@ -5,6 +5,7 @@
 为超级大脑自我优化提供数据支持
 """
 
+from app.utils.config_loader import get_db_config
 import pymysql
 import sys
 import io
@@ -19,11 +20,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 load_dotenv()
 
 conn = pymysql.connect(
-    host=os.getenv('DB_HOST'),
-    port=int(os.getenv('DB_PORT', 3306)),
-    user=os.getenv('DB_USER'),
-    password=os.getenv('DB_PASSWORD'),
-    database=os.getenv('DB_NAME'),
+    **get_db_config(),
     cursorclass=pymysql.cursors.DictCursor,
     charset='utf8mb4'
 )

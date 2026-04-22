@@ -4,6 +4,7 @@
 MySQL 连接池管理器
 解决长时间运行的服务中连接断开的问题
 """
+from app.utils.config_loader import get_db_config
 import pymysql
 from pymysql.cursors import DictCursor
 from typing import Optional, Dict, Any
@@ -361,11 +362,7 @@ if __name__ == '__main__':
     load_dotenv()
 
     db_config = {
-        'host': os.getenv('DB_HOST', 'localhost'),
-        'port': int(os.getenv('DB_PORT', 3306)),
-        'user': os.getenv('DB_USER', 'root'),
-        'password': os.getenv('DB_PASSWORD', ''),
-        'database': os.getenv('DB_NAME', 'test')
+        **get_db_config()
     }
 
     print("测试连接池...")

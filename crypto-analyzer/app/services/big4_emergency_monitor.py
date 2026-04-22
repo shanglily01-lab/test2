@@ -5,6 +5,7 @@ Big4紧急干预监控器
 核心功能: 检测Big4重大事件反转，触发紧急平仓
 """
 
+from app.utils.config_loader import get_db_config
 import asyncio
 import pymysql
 from datetime import datetime, timedelta
@@ -380,10 +381,7 @@ async def test_big4_emergency_monitor():
     load_dotenv()
 
     db_config = {
-        'host': os.getenv('DB_HOST'),
-        'user': os.getenv('DB_USER'),
-        'password': os.getenv('DB_PASSWORD'),
-        'database': os.getenv('DB_NAME')
+        **get_db_config()
     }
 
     monitor = Big4EmergencyMonitor(db_config)

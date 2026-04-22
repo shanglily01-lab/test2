@@ -11,6 +11,7 @@
   4. 策略诊断（近7日参数问题建议）
 """
 
+from app.utils.config_loader import get_db_config
 import sys
 import os
 import json
@@ -30,11 +31,7 @@ from typing import Dict, List, Optional, Tuple
 # ─── DB 配置（复用 12h_retrospective_analysis 同一模式） ───────────────────────
 def _db_config() -> dict:
     return {
-        'host':     os.getenv('DB_HOST', 'localhost'),
-        'port':     int(os.getenv('DB_PORT', 3306)),
-        'user':     os.getenv('DB_USER', 'root'),
-        'password': os.getenv('DB_PASSWORD', ''),
-        'database': os.getenv('DB_NAME', 'binance-data'),
+        **get_db_config(),
         'charset':  'utf8mb4',
     }
 

@@ -2,6 +2,7 @@
 API路由定义
 """
 
+from app.utils.config_loader import get_db_config
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -527,10 +528,7 @@ async def get_dashboard_snapshot():
         import json
 
         conn = pymysql.connect(
-            host=os.getenv('DB_HOST', '13.212.252.171'),
-            user=os.getenv('DB_USER', 'admin'),
-            password=os.getenv('DB_PASSWORD', 'Tonny@1000'),
-            database=os.getenv('DB_NAME', 'binance-data'),
+            **get_db_config(),
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor,
             connect_timeout=5
@@ -581,10 +579,7 @@ async def get_hyperliquid_cached(
         import os
 
         conn = pymysql.connect(
-            host=os.getenv('DB_HOST', '13.212.252.171'),
-            user=os.getenv('DB_USER', 'admin'),
-            password=os.getenv('DB_PASSWORD', 'Tonny@1000'),
-            database=os.getenv('DB_NAME', 'binance-data'),
+            **get_db_config(),
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor,
             connect_timeout=10

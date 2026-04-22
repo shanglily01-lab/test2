@@ -3,6 +3,7 @@
 提供现货持仓查询、交易历史等功能
 """
 
+from app.utils.config_loader import get_db_config
 from fastapi import APIRouter, HTTPException, Depends, Query, Body
 from pydantic import BaseModel
 from typing import Optional, List
@@ -22,11 +23,7 @@ def get_db_connection():
     load_dotenv()
 
     return pymysql.connect(
-        host=os.getenv('DB_HOST', 'localhost'),
-        port=int(os.getenv('DB_PORT', 3306)),
-        user=os.getenv('DB_USER', 'root'),
-        password=os.getenv('DB_PASSWORD', ''),
-        database=os.getenv('DB_NAME', 'binance-data'),
+        **get_db_config(),
         charset='utf8mb4',
         cursorclass=pymysql.cursors.DictCursor
     )
