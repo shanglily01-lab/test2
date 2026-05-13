@@ -59,13 +59,14 @@ class BTCMomentumTrader:
     # ──────────────────────────────────────────
 
     def _preload_btc_history(self):
-        """启动时从kline_data预加载最近90分钟BTC价格，避免重启后等待积累"""
+        """启动时从kline_data预加载最近90分钟BTC价格，避免重启后等待积累。
+        注: 1m K线已于2026-01-22停采，改用5m。90分钟窗口对应18根5m K线，足够check_trigger使用。"""
         try:
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute(
                 "SELECT open_time, close_price FROM kline_data "
-                "WHERE symbol='BTC/USDT' AND timeframe='1m' AND exchange='binance_futures' "
+                "WHERE symbol='BTC/USDT' AND timeframe='5m' AND exchange='binance_futures' "
                 "AND open_time >= (UNIX_TIMESTAMP(DATE_SUB(NOW(), INTERVAL 90 MINUTE)) * 1000) "
                 "ORDER BY open_time ASC"
             )
@@ -74,7 +75,7 @@ class BTCMomentumTrader:
             for row in rows:
                 ts = datetime.utcfromtimestamp(row['open_time'] / 1000)
                 self._btc_history.append((ts, float(row['close_price'])))
-            logger.info(f"[BTC动量] 预加载 {len(self._btc_history)} 条BTC价格历史（最近90分钟）")
+            logger.info(f"[BTC动量] 预加载 {len(self._btc_history)} 条BTC价格历史（最近90分钟5m K线）")
         except Exception as e:
             logger.warning(f"[BTC动量] 预加载历史失败: {e}")
 
@@ -150,7 +151,8 @@ class BTCMomentumTrader:
         return []
 
     def _get_symbol_price(self, symbol: str) -> Optional[float]:
-        """获取交易对当前价格（WS优先，fallback DB）"""
+        """获取交易对当前价格（WS优先，fallback DB 5m K线，超15分钟拒绝）。
+        注: 1m K线已于2026-01-22停采，改用5m并加新鲜度检查防止用过期价格开仓。"""
         if self.ws_service:
             p = self.ws_service.get_price(symbol)
             if p:
@@ -159,14 +161,21 @@ class BTCMomentumTrader:
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute(
-                "SELECT close_price FROM kline_data "
-                "WHERE symbol=%s AND timeframe='1m' AND exchange='binance_futures' "
+                "SELECT close_price, open_time FROM kline_data "
+                "WHERE symbol=%s AND timeframe='5m' AND exchange='binance_futures' "
                 "ORDER BY open_time DESC LIMIT 1", (symbol,)
             )
             row = cur.fetchone()
             cur.close(); conn.close()
-            return float(row['close_price']) if row else None
-        except:
+            if not row:
+                return None
+            age_min = (datetime.utcnow().timestamp() - row['open_time'] / 1000) / 60
+            if age_min > 15:
+                logger.warning(f"[BTC动量] {symbol} 5m K线数据 {age_min:.0f} 分钟旧，拒绝使用")
+                return None
+            return float(row['close_price'])
+        except Exception as e:
+            logger.warning(f"[BTC动量] _get_symbol_price 异常 {symbol}: {e}")
             return None
 
     def _get_open_positions(self) -> Dict[str, dict]:

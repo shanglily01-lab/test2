@@ -3061,8 +3061,28 @@ class SmartTraderService:
                                 pass
                             if not close_p:
                                 close_p = exchange_price_map.get(row['symbol'])
+                            # 第三层兜底: 即使陈旧的 5m K 线也比 0 强(防止低流动性币PnL写0)
+                            if not close_p:
+                                try:
+                                    cur.execute(
+                                        "SELECT close_price, open_time FROM kline_data "
+                                        "WHERE symbol=%s AND timeframe='5m' AND exchange='binance_futures' "
+                                        "ORDER BY open_time DESC LIMIT 1",
+                                        (row['symbol'],)
+                                    )
+                                    kr = cur.fetchone()
+                                    if kr and kr['close_price']:
+                                        close_p = float(kr['close_price'])
+                                        age_min = (datetime.utcnow().timestamp() - kr['open_time'] / 1000) / 60
+                                        logger.warning(
+                                            f"[对账] {row['symbol']} 用陈旧5m K线兜底 "
+                                            f"(age={age_min:.0f}min, close={close_p}),仍记录PnL避免0值"
+                                        )
+                                except Exception as _e:
+                                    logger.warning(f"[对账] K线兜底失败 {row['symbol']}: {_e}")
                             # 计算已实现 PnL
                             live_pnl = 0.0
+                            pnl_calculated = False
                             try:
                                 if close_p and row.get('entry_price') and row.get('quantity'):
                                     ep = float(row['entry_price'])
@@ -3071,8 +3091,16 @@ class SmartTraderService:
                                         live_pnl = (float(close_p) - ep) * qty
                                     else:
                                         live_pnl = (ep - float(close_p)) * qty
+                                    pnl_calculated = True
                             except Exception:
                                 pass
+                            # 明确告警: 三层兜底都失败时 PnL 落到 0 是错误数据
+                            if not pnl_calculated:
+                                logger.error(
+                                    f"[对账] {row['symbol']} {row['position_side']} "
+                                    f"PnL 计算失败,realized_pnl 将写 0,**这是错误数据** "
+                                    f"(close_p={close_p}, entry={row.get('entry_price')}, qty={row.get('quantity')})"
+                                )
                             cur.execute(
                                 "UPDATE live_futures_positions SET status='CLOSED', close_time=NOW(), "
                                 "close_price=%s, realized_pnl=%s, close_reason='reconcile_closed', "
