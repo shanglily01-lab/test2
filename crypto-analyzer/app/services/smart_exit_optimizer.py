@@ -883,11 +883,39 @@ class SmartExitOptimizer:
     ):
         """
         查找与模拟单关联的实盘仓位，调用 BinanceFuturesEngine 真实平仓
+
+        安全门禁 (2026-05-14):
+        1. live_trading_enabled=0 时直接返回,绝不动实盘
+        2. 仅平 paper_position_id 关联的实盘单,删除旧的"按 symbol+direction 模糊匹配"fallback
+           (该 fallback 会误平用户手动开仓的同 symbol 单,如 binance_sync 来源)
         """
         try:
-            from app.trading.binance_futures_engine import BinanceFuturesEngine
             import pymysql
             import pymysql.cursors
+
+            # ===== 安全门禁 1: live_trading_enabled 硬门 =====
+            try:
+                _gconn = pymysql.connect(
+                    **self.db_config, charset='utf8mb4',
+                    cursorclass=pymysql.cursors.DictCursor, autocommit=True
+                )
+                _gcur = _gconn.cursor()
+                _gcur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
+                _grow = _gcur.fetchone()
+                _gcur.close(); _gconn.close()
+                _live_enabled = _grow and str(_grow.get('setting_value', '0')).lower() in ('1', 'true', 'yes')
+            except Exception as _ge:
+                logger.warning(f"[实盘平仓] 读 live_trading_enabled 失败,保守跳过: {_ge}")
+                return
+
+            if not _live_enabled:
+                logger.info(
+                    f"[实盘平仓] live_trading_enabled=0,跳过 {symbol} {direction} "
+                    f"(paper_position_id={paper_position_id}, reason={reason})"
+                )
+                return
+
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
 
             conn = pymysql.connect(
                 **self.db_config, charset='utf8mb4',
@@ -957,40 +985,15 @@ class SmartExitOptimizer:
                     except Exception as e:
                         logger.error(f"[实盘平仓] account_id={account_id} 平仓异常: {e}")
             else:
-                # fallback：无 paper_position_id 关联，对所有账号按 symbol+direction 平仓
-                logger.info(f"[实盘平仓] 无 paper_position_id 关联，fallback 对所有账号平 {symbol} {direction}")
-                for key_info in all_keys_list:
-                    try:
-                        engine = BinanceFuturesEngine(self.db_config, key_info['api_key'], key_info['api_secret'])
-                        result = engine.close_position_by_symbol(symbol, direction, reason=reason)
-                        if result.get('success'):
-                            logger.info(f"[实盘平仓] {key_info.get('account_name','')} {symbol} {direction} 平仓成功")
-                            # 按 account_id+symbol+side 更新
-                            try:
-                                _uc = pymysql.connect(**self.db_config, autocommit=True)
-                                _ucur = _uc.cursor()
-                                close_p = result.get('close_price', 0)
-                                live_pnl = result.get('realized_pnl', 0)
-                                _ucur.execute("""
-                                    UPDATE live_futures_positions
-                                    SET status='CLOSED', close_time=NOW(),
-                                        close_price=%s, close_reason=%s,
-                                        realized_pnl=%s,
-                                        notes=CONCAT(IFNULL(notes,''), '|exit_sync_fallback:', %s)
-                                    WHERE account_id=%s AND symbol=%s
-                                      AND position_side=%s AND status='OPEN'
-                                """, (close_p, reason, live_pnl, reason, key_info['id'], symbol, direction))
-                                _ucur.close(); _uc.close()
-                            except Exception as _dbe:
-                                logger.error(f"[实盘平仓] fallback更新live_futures_positions失败: {_dbe}")
-                        else:
-                            err = result.get('error', '')
-                            if '未找到' in err:
-                                logger.debug(f"[实盘平仓] {key_info.get('account_name','')} {symbol} 交易所无此仓位，跳过")
-                            else:
-                                logger.error(f"[实盘平仓] {key_info.get('account_name','')} {symbol} 平仓失败: {err}")
-                    except Exception as e:
-                        logger.error(f"[实盘平仓] {key_info.get('account_name','')} {symbol} 平仓异常: {e}")
+                # ===== 安全门禁 2 (2026-05-14): 删除危险的 symbol+direction 模糊 fallback =====
+                # 旧 fallback 会按 symbol+direction 平所有账号匹配的实盘单,
+                # 这会误平用户手动在 Binance app 开的同 symbol+direction 仓位
+                # (例如 source='binance_sync' 的单,paper_position_id 为 NULL,本应保留)
+                # 现在: 找不到 paper_position_id 关联 = 该模拟单未对应任何系统下的实盘单 = 跳过实盘平仓
+                logger.warning(
+                    f"[实盘平仓] {symbol} {direction} 无 paper_position_id={paper_position_id} 关联的实盘单,"
+                    f"跳过实盘平仓 (旧 fallback 已删除,防止误平用户手动开仓)"
+                )
 
         except Exception as e:
             logger.error(f"[实盘平仓] _close_live_positions_on_exchange 异常: {e}")

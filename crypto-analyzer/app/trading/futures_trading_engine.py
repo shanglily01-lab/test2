@@ -1380,21 +1380,41 @@ class FuturesTradingEngine:
                         logger.info(f"[同步实盘] {symbol} {position_side} 无策略ID，默认同步实盘平仓")
 
                     if should_sync:
-                        # 同步实盘平仓（全部平仓，不传数量，避免因精度差异导致残留）
-                        logger.info(f"[同步实盘] {symbol} {position_side} 开始平仓同步 (原因: {reason})")
+                        # ===== 安全门禁 (2026-05-14): live_trading_enabled 硬门 =====
+                        # 即使策略配置 syncLive=true,全局 live_trading_enabled=0 时也禁止动实盘
+                        try:
+                            _gcur = connection.cursor()
+                            _gcur.execute(
+                                "SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'"
+                            )
+                            _grow = _gcur.fetchone()
+                            _gcur.close()
+                            _live_enabled = _grow and str(_grow.get('setting_value', '0')).lower() in ('1', 'true', 'yes')
+                        except Exception as _ge:
+                            logger.warning(f"[同步实盘] 读 live_trading_enabled 失败,保守跳过: {_ge}")
+                            _live_enabled = False
 
-                        live_result = self.live_engine.close_position_by_symbol(
-                            symbol=symbol,
-                            position_side=position_side,
-                            close_quantity=None,  # 全部平仓，避免残留
-                            reason=f'paper_sync_{reason}'
-                        )
-
-                        if live_result.get('success'):
-                            logger.info(f"[同步实盘] ✅ {symbol} {position_side} 平仓成功")
+                        if not _live_enabled:
+                            logger.info(
+                                f"[同步实盘] live_trading_enabled=0,跳过 {symbol} {position_side} 实盘平仓 "
+                                f"(reason={reason})"
+                            )
                         else:
-                            live_error = live_result.get('error', live_result.get('message', '未知错误'))
-                            logger.error(f"[同步实盘] ❌ {symbol} {position_side} 平仓失败: {live_error}")
+                            # 同步实盘平仓（全部平仓，不传数量，避免因精度差异导致残留）
+                            logger.info(f"[同步实盘] {symbol} {position_side} 开始平仓同步 (原因: {reason})")
+
+                            live_result = self.live_engine.close_position_by_symbol(
+                                symbol=symbol,
+                                position_side=position_side,
+                                close_quantity=None,  # 全部平仓，避免残留
+                                reason=f'paper_sync_{reason}'
+                            )
+
+                            if live_result.get('success'):
+                                logger.info(f"[同步实盘] ✅ {symbol} {position_side} 平仓成功")
+                            else:
+                                live_error = live_result.get('error', live_result.get('message', '未知错误'))
+                                logger.error(f"[同步实盘] ❌ {symbol} {position_side} 平仓失败: {live_error}")
                     else:
                         logger.debug(f"[同步实盘] {symbol} {position_side} 策略未启用实盘同步，跳过")
             except Exception as live_ex:
