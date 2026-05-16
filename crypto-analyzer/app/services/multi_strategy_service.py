@@ -103,7 +103,51 @@ class MultiStrategyService:
     S7_HOLD_HOURS = 8
     S7_SOURCE = 's7_ma_support'
 
-    ALL_SOURCES = (S1_SOURCE, S2_SOURCE, S3_SOURCE, S4_SOURCE, S5_SOURCE, S6_SOURCE, S7_SOURCE)
+    # ═════════════════════════════════════════════════════════════════
+    # 策略8: 顶部反转做空 (S8) — 自 strategy_live.py topshort 迁入 2026-05-15
+    #   原 strategy_live.py 用 HTTP /api/futures/open + 限价单, 此处简化为市价
+    #   入场条件: 48h 涨幅 >= 80% + 6 根 1h 无新高 + 12 天上市历史
+    #             + 24h 未跌过 15% + 3h 入场位置 > 10% (不在低点接刀)
+    # ═════════════════════════════════════════════════════════════════
+    S8_LEVERAGE = 5
+    S8_MARGIN = 500
+    S8_MAX_POSITIONS = 3
+    S8_TP_PCT = 0.20         # 硬 TP 20%
+    S8_SL_PCT = 0.12         # 硬 SL 12%
+    S8_HOLD_HOURS = 6
+    S8_SOURCE = 's8_topshort'
+    S8_PUMP_THRESH = 0.80    # 48h 涨 >= 80%
+    S8_NO_NEW_H = 6          # 之后 6 根 1h 无新高
+    S8_LOOKBACK_H = 48       # pump 检测窗口
+    S8_MIN_HISTORY_DAYS = 12 # 上市最低天数
+    S8_MAX_24H_DROP = -15.0  # 24h 跌幅 < -15% 跳过
+    S8_MAX_PEAK_DRAWDOWN = 0.50  # 从峰值已跌 50%+ 跳过
+    S8_SIGNAL_AGE_HOURS = 6  # 信号最长生效时间
+    S8_ENTRY_POS_MIN = 10.0  # 3h 15m 区间位置 >= 10%
+
+    # ═════════════════════════════════════════════════════════════════
+    # 策略9: Gemini AI 抄底反转做多 (S9) — 自 strategy_bigmid.py 迁入
+    #   每 6h 调用 Google Gemini API,对 top30 大币(按 24h 成交额)判 long/skip
+    #   抄底反转专项: 仅做 LONG, Gemini 返回 short 也降级 skip
+    # ═════════════════════════════════════════════════════════════════
+    S9_LEVERAGE = 5
+    S9_MARGIN = 300
+    S9_MAX_POSITIONS = 5
+    S9_TP_PCT = 0.05         # 硬 TP 5%
+    S9_SL_PCT = 0.02         # 硬 SL 2%
+    S9_HOLD_HOURS = 12
+    S9_SOURCE = 's9_gemini_ai'
+    S9_INTERVAL_HOURS = 6    # 每 6h 调一次 Gemini
+    S9_TOP_N = 30            # 取 24h 成交额 top30
+    S9_MIN_PNL_PCT = 0.01    # Gemini 预期 PnL >= 1% 才下单
+    S9_MIN_QUOTE_VOLUME = 10_000_000  # 24h 成交额下限 1000 万 USDT
+    S9_EXCLUDE_BASES = {"BTC", "ETH", "BNB", "SOL", "XRP"}  # top30 排除头部
+    S9_PER_SYMBOL_DELAY_S = 1.0  # 每个 symbol 调 Gemini 间隔, 防 rate limit
+
+    ALL_SOURCES = (
+        S1_SOURCE, S2_SOURCE, S3_SOURCE, S4_SOURCE, S5_SOURCE, S6_SOURCE, S7_SOURCE,
+        S8_SOURCE, S9_SOURCE,
+    )
     SLOW_SCAN_INTERVAL_SEC = 1800  # 30 分钟
 
     def __init__(self, db_config: dict, ws_price_service=None):
@@ -111,6 +155,12 @@ class MultiStrategyService:
         self.ws_service = ws_price_service
         self.ti = TechnicalIndicators()
         self._last_slow_scan: Optional[datetime] = None
+        # S8 上市历史缓存 (sym -> (ok, ts)),15 分钟 TTL
+        self._s8_history_cache: dict = {}
+        # S9 限速器: 上次跑 Gemini 的时间
+        self._last_s9_run: Optional[datetime] = None
+        # S9 Gemini client (lazy init)
+        self._gemini_client = None
 
     # ─────────────────────────────────────────
     # DB 工具
@@ -965,6 +1015,507 @@ class MultiStrategyService:
         if opened:
             logger.info(f"[S7] 本轮新开 {opened} 单")
 
+    # ═════════════════════════════════════════════════════════════════
+    # 策略8: 顶部反转做空 (topshort) - 自 strategy_live.py 迁入 2026-05-15
+    # ═════════════════════════════════════════════════════════════════
+
+    def _s8_has_min_listed_history(self, symbol: str) -> bool:
+        """检查上市历史 >= S8_MIN_HISTORY_DAYS 天 (15 分钟缓存)"""
+        import time as _t
+        now = _t.time()
+        ent = self._s8_history_cache.get(symbol)
+        if ent and (now - ent[1]) < 15 * 60:
+            return ent[0]
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT MIN(open_time) AS tmin FROM kline_data "
+                "WHERE timeframe='1h' AND symbol=%s",
+                (symbol,)
+            )
+            r = cur.fetchone() or {}
+            cur.close(); conn.close()
+            tmin = r.get('tmin')
+            if tmin is None:
+                self._s8_history_cache[symbol] = (False, now)
+                return False
+            min_ms = self.S8_MIN_HISTORY_DAYS * 24 * 60 * 60 * 1000
+            now_ms = int(now * 1000)
+            ok = (now_ms - int(tmin)) >= min_ms
+            self._s8_history_cache[symbol] = (ok, now)
+            return ok
+        except Exception as e:
+            logger.warning(f"[S8] 上市历史检查失败 {symbol}: {e}")
+            return False
+
+    def _s8_entry_position_check(self, symbol: str, cur_price: float) -> bool:
+        """3h 内 15m K 线的位置检查: 价格百分位 >= S8_ENTRY_POS_MIN (不在低位接刀)"""
+        try:
+            df = self._get_klines(symbol, '15m', 12)
+            if df is None or len(df) < 12:
+                return True  # 数据不足放行
+            hi = float(df['high'].max())
+            lo = float(df['low'].min())
+            if hi <= lo:
+                return True
+            pos_pct = (cur_price - lo) / (hi - lo) * 100
+            return pos_pct >= self.S8_ENTRY_POS_MIN
+        except Exception as e:
+            logger.warning(f"[S8] 入场位置检查失败 {symbol}: {e}")
+            return True
+
+    def scan_s8_topshort(self):
+        """S8: 48h涨>=80% + 6根1h无新高 + 12天上市 + 24h未跌过15% 做空"""
+        if self._strategy_position_count(self.S8_SOURCE) >= self.S8_MAX_POSITIONS:
+            return
+
+        big4 = self._get_big4_signal()
+        if big4 == 'STRONG_BULLISH':
+            logger.info("[S8] Big4 强牛市,跳过顶部反转做空")
+            return
+
+        # 24h 涨幅 >= 50% 的高波动币种 (实际 pump >= 80% 在 1h 数据里再精筛)
+        symbols = self._get_candidate_symbols(min_abs_change=50.0)
+        opened = 0
+        now_ms = int(datetime.utcnow().timestamp() * 1000)
+        signal_age_max_ms = self.S8_SIGNAL_AGE_HOURS * 3600 * 1000
+
+        for symbol in symbols:
+            if self._strategy_position_count(self.S8_SOURCE) + opened >= self.S8_MAX_POSITIONS:
+                break
+            if self._has_multi_strategy_position(symbol):
+                continue
+            if not self._s8_has_min_listed_history(symbol):
+                continue
+
+            try:
+                # 1h K 线: 含 48h 窗口 + 6 根观察期 + 余量
+                df = self._get_klines(symbol, '1h', self.S8_LOOKBACK_H + self.S8_NO_NEW_H + 20)
+                if df is None or len(df) < self.S8_LOOKBACK_H + self.S8_NO_NEW_H + 2:
+                    continue
+
+                highs = df['high'].astype(float).tolist()
+                lows = df['low'].astype(float).tolist()
+                opens_ts = [int(t) for t in df['open_time'].tolist()]
+                n = len(df)
+
+                # 倒序找最近一个满足 pump 条件的 i
+                for i in range(n - self.S8_NO_NEW_H - 2,
+                               max(0, n - self.S8_LOOKBACK_H - self.S8_NO_NEW_H - 10) - 1, -1):
+                    lo_window = lows[max(0, i - self.S8_LOOKBACK_H):i]
+                    if not lo_window:
+                        continue
+                    lo_win = min(lo_window)
+                    if lo_win == 0:
+                        continue
+                    pump = (highs[i] - lo_win) / lo_win
+                    if pump < self.S8_PUMP_THRESH:
+                        continue
+                    peak = highs[i]
+                    if i + self.S8_NO_NEW_H >= n:
+                        continue
+                    if not all(highs[i + j] < peak for j in range(1, self.S8_NO_NEW_H + 1)):
+                        continue
+                    # 信号年龄检查
+                    entry_ts = opens_ts[i + self.S8_NO_NEW_H]
+                    if now_ms - entry_ts > signal_age_max_ms:
+                        continue
+
+                    cur_price = self._get_current_price(symbol)
+                    if not cur_price:
+                        continue
+
+                    # 现价 > pump 启动低 (信号未失效)
+                    if cur_price <= lo_win:
+                        continue
+                    # 从峰值回落 < 50%
+                    drawdown = (peak - cur_price) / peak
+                    if drawdown > self.S8_MAX_PEAK_DRAWDOWN:
+                        continue
+
+                    # 24h 已跌过 15% 跳过
+                    ch24_val = None
+                    try:
+                        conn = self._get_conn()
+                        cur = conn.cursor()
+                        cur.execute(
+                            "SELECT change_24h FROM price_stats_24h WHERE symbol=%s LIMIT 1",
+                            (symbol,)
+                        )
+                        r24 = cur.fetchone()
+                        cur.close(); conn.close()
+                        if r24 and r24.get('change_24h') is not None:
+                            ch24_val = float(r24['change_24h'])
+                    except Exception:
+                        pass
+                    if ch24_val is not None and ch24_val < self.S8_MAX_24H_DROP:
+                        continue
+
+                    # 入场位置检查
+                    if not self._s8_entry_position_check(symbol, cur_price):
+                        continue
+
+                    ch24_str = f"{ch24_val:.1f}%" if ch24_val is not None else "NA"
+                    reason = (
+                        f"S8:48h_pump={pump * 100:.0f}%,peak={peak:.5g},"
+                        f"cur={cur_price:.5g},dd={drawdown * 100:.0f}%,"
+                        f"24h={ch24_str}"
+                    )
+                    if self._open_position(
+                        symbol, 'SHORT', self.S8_MARGIN, self.S8_LEVERAGE,
+                        self.S8_TP_PCT, self.S8_SL_PCT, self.S8_HOLD_HOURS,
+                        self.S8_SOURCE, reason
+                    ):
+                        opened += 1
+                    break  # 该 symbol 找到信号即结束
+
+            except Exception as e:
+                logger.warning(f"[S8] 扫描 {symbol} 异常: {e}")
+
+        if opened:
+            logger.info(f"[S8] 本轮新开 {opened} 单")
+
+    # ═════════════════════════════════════════════════════════════════
+    # 策略9: Gemini AI 抄底反转做多 - 自 strategy_bigmid.py 迁入
+    # ═════════════════════════════════════════════════════════════════
+
+    def _init_gemini_client(self):
+        """Lazy init Gemini client (失败返回 None)"""
+        if self._gemini_client is not None:
+            return self._gemini_client
+        import os
+        api_key = os.getenv('GEMINI_API_KEY', '')
+        if not api_key:
+            logger.warning("[S9] GEMINI_API_KEY 未配置,S9 不工作")
+            return None
+        try:
+            from google import genai
+            self._gemini_client = genai.Client(api_key=api_key)
+            logger.info("[S9] Gemini client 已就绪")
+            return self._gemini_client
+        except ImportError:
+            logger.warning("[S9] google-genai 未安装: pip install google-genai")
+            return None
+        except Exception as e:
+            logger.error(f"[S9] Gemini client 初始化失败: {e}")
+            return None
+
+    def _s9_get_top30_symbols(self) -> List[str]:
+        """按 24h 成交额 + 涨跌幅排序取 top30 (排除头部 5 大币 + 证券类)"""
+        try:
+            from app.services.securities_filter import is_security
+        except ImportError:
+            def is_security(_s):
+                return False
+
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT symbol, volume_24h FROM price_stats_24h
+                WHERE symbol LIKE '%%/USDT'
+                  AND volume_24h >= %s
+                ORDER BY volume_24h DESC
+                LIMIT 100
+            """, (self.S9_MIN_QUOTE_VOLUME,))
+            rows = cur.fetchall()
+            cur.close(); conn.close()
+        except Exception as e:
+            logger.warning(f"[S9] 取 top30 失败: {e}")
+            return []
+
+        result = []
+        for r in rows:
+            sym = r['symbol']
+            base = sym.split('/')[0] if '/' in sym else sym
+            if base in self.S9_EXCLUDE_BASES:
+                continue
+            if is_security(sym):
+                continue
+            result.append(sym)
+            if len(result) >= self.S9_TOP_N:
+                break
+        return result
+
+    @staticmethod
+    def _s9_calc_rsi(closes: list, period: int = 14) -> Optional[float]:
+        """Wilder 14-period RSI"""
+        if len(closes) < period + 1:
+            return None
+        gains, losses = [], []
+        for i in range(1, len(closes)):
+            diff = closes[i] - closes[i - 1]
+            gains.append(max(diff, 0))
+            losses.append(max(-diff, 0))
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+        for i in range(period, len(gains)):
+            avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+        if avg_loss == 0:
+            return 100.0
+        rs = avg_gain / avg_loss
+        return round(100 - 100 / (1 + rs), 2)
+
+    def _s9_fetch_market_data(self, symbol: str) -> Optional[dict]:
+        """准备喂给 Gemini 的市场数据 (15d 日线 + 7d 1h + 8h 15m + RSI + 7d 区间位置)"""
+        df_1d = self._get_klines(symbol, '1d', 15)
+        df_1h = self._get_klines(symbol, '1h', 168)
+        df_15m = self._get_klines(symbol, '15m', 32)
+        if df_1d is None or df_1h is None or df_15m is None:
+            return None
+        if len(df_1d) < 14 or len(df_1h) < 140 or len(df_15m) < 24:
+            return None
+
+        cur_price = self._get_current_price(symbol)
+        if not cur_price:
+            return None
+
+        change_24h = 0.0
+        vol_24h = 0.0
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT change_24h, volume_24h FROM price_stats_24h WHERE symbol=%s LIMIT 1",
+                (symbol,)
+            )
+            r = cur.fetchone()
+            cur.close(); conn.close()
+            if r:
+                if r.get('change_24h') is not None:
+                    change_24h = float(r['change_24h'])
+                if r.get('volume_24h') is not None:
+                    vol_24h = float(r['volume_24h'])
+        except Exception:
+            pass
+
+        # 7d 高低 + 区间位置
+        lows_7d = df_1h['low'].astype(float).tolist()
+        highs_7d = df_1h['high'].astype(float).tolist()
+        low_7d, high_7d = min(lows_7d), max(highs_7d)
+        band = high_7d - low_7d
+        pos_in_band = (cur_price - low_7d) / band if band > 0 else 0.0
+        dist_from_low_pct = (cur_price - low_7d) / low_7d * 100 if low_7d > 0 else 0.0
+
+        rsi_1h = self._s9_calc_rsi(df_1h['close'].astype(float).tolist(), 14)
+        rsi_15m = self._s9_calc_rsi(df_15m['close'].astype(float).tolist(), 14)
+        rsi_1d = self._s9_calc_rsi(df_1d['close'].astype(float).tolist(), 14)
+
+        def _bars_to_dicts(df, tf):
+            out = []
+            for _, b in df.iterrows():
+                t = datetime.utcfromtimestamp(int(b['open_time']) / 1000)
+                tstr = t.strftime('%Y-%m-%d %H:%M') if tf != '1d' else t.strftime('%Y-%m-%d')
+                out.append({
+                    't': tstr, 'o': round(float(b['open']), 8),
+                    'h': round(float(b['high']), 8), 'l': round(float(b['low']), 8),
+                    'c': round(float(b['close']), 8), 'v': round(float(b['volume'] or 0), 2),
+                })
+            return out
+
+        return {
+            'symbol': symbol,
+            'current_price': round(cur_price, 8),
+            'change_24h_pct': round(change_24h, 2),
+            'volume_24h': round(vol_24h, 2),
+            'rsi_1h': rsi_1h,
+            'rsi_15m': rsi_15m,
+            'rsi_daily': rsi_1d,
+            'low_7d': round(low_7d, 8),
+            'high_7d': round(high_7d, 8),
+            'pos_in_7d_band': round(pos_in_band, 3),
+            'dist_from_low_7d_pct': round(dist_from_low_pct, 2),
+            'daily_15d': _bars_to_dicts(df_1d, '1d'),
+            'h1_7d': _bars_to_dicts(df_1h, '1h'),
+            'm15_8h': _bars_to_dicts(df_15m, '15m'),
+        }
+
+    @staticmethod
+    def _s9_build_prompt(data: dict) -> str:
+        """构造 Gemini prompt — 抄底反转 LONG-only (原 strategy_bigmid 2026-05-04 版本)"""
+        sym = data['symbol']
+
+        def _fmt_klines(klines, header):
+            lines = [header]
+            lines.append(f"{'time':<17} {'open':>14} {'high':>14} {'low':>14} {'close':>14} {'vol':>14}")
+            for k in klines:
+                lines.append(f"{k['t']:<17} {k['o']:>14} {k['h']:>14} {k['l']:>14} {k['c']:>14} {k['v']:>14}")
+            return "\n".join(lines)
+
+        return f"""You are a quantitative crypto futures trading analyst.
+Your job is to find **bottom-reversal LONG entries** for {sym} on a 12-hour swing trade.
+SHORT positions are NOT allowed in this task.
+
+CURRENT STATE
+  current_price:           {data['current_price']}
+  24h change:              {data['change_24h_pct']}%
+  24h volume:              {data['volume_24h']}
+  RSI(14, daily):          {data['rsi_daily']}
+  RSI(14, 1h):             {data['rsi_1h']}
+  RSI(14, 15m):            {data['rsi_15m']}
+
+7-DAY RANGE (key reference for bottom-reversal)
+  7d_low:                  {data['low_7d']}
+  7d_high:                 {data['high_7d']}
+  pos_in_7d_band:          {data['pos_in_7d_band']}  (0.0 = at 7d_low, 1.0 = at 7d_high)
+  distance_above_7d_low:   {data['dist_from_low_7d_pct']}%
+
+{_fmt_klines(data['daily_15d'], "DAILY (15 days, oldest -> newest):")}
+
+{_fmt_klines(data['h1_7d'], "1H KLINES (last 7 days, oldest -> newest):")}
+
+{_fmt_klines(data['m15_8h'], "15M KLINES (last 8h, oldest -> newest):")}
+
+DECISION RULES — return direction="long" ONLY when MOST of the following hold:
+  1. distance_above_7d_low <= 8%  (price is near the 7-day low, not after a big rebound)
+  2. Recent 1h/15m bars show stabilization or reversal:
+       - declining selling volume vs the drop leg
+       - long lower wicks / hammer / engulfing / divergence
+  3. RSI confirms oversold or upturning:
+       - RSI(1h) <= 35 OR RSI(15m) <= 30 OR bullish RSI divergence visible
+  4. Current price is NOT in clear free-fall (no fresh 7d low in last 1-2 hours
+     with expanding volume)
+
+If price is mid-range (pos_in_7d_band > 0.5), or still breaking down, or stuck in
+chop without a clear bottom signal, return direction="skip".
+Returning skip is encouraged when in doubt — false negatives cost 0, false positives lose money.
+
+POSITION CONSTRAINTS (do NOT propose changes)
+  - Side: LONG only
+  - Hold: 12 hours
+  - Take profit: +5% from entry
+  - Stop loss: -2% from entry
+
+Output ONLY a single valid JSON object, no markdown fence, no extra text:
+{{
+  "direction": "long" | "skip",
+  "expected_pnl_pct": <float, 0 to 0.05>,
+  "confidence": <float between 0 and 1>,
+  "reason": "<brief 1-sentence reason in Chinese>"
+}}
+"""
+
+    def _s9_call_gemini(self, client, prompt: str) -> Optional[dict]:
+        """调 Gemini API,解析 JSON. 任何错误返回 None."""
+        import json
+        text = ''
+        try:
+            from google.genai import types
+            config = types.GenerateContentConfig(
+                response_mime_type='application/json',
+                http_options=types.HttpOptions(timeout=180_000),
+            )
+            import os
+            model_name = os.getenv('GEMINI_MODEL', 'gemini-3-flash-preview')
+            resp = client.models.generate_content(
+                model=model_name, contents=prompt, config=config,
+            )
+            text = (resp.text or '').strip()
+            if text.startswith('```'):
+                text = text.strip('`').lstrip('json').strip()
+            sig = json.loads(text)
+            d = str(sig.get('direction', '')).lower()
+            # 抄底反转: 拒绝 short
+            if d == 'short':
+                logger.info(f"[S9] Gemini 违反 prompt 返回 short,降级 skip")
+                d = 'skip'
+            if d not in ('long', 'skip'):
+                logger.warning(f"[S9] Gemini 非法 direction={d} text={text[:200]}")
+                return None
+            sig['direction'] = d
+            sig['expected_pnl_pct'] = float(sig.get('expected_pnl_pct', 0) or 0)
+            sig['confidence'] = float(sig.get('confidence', 0) or 0)
+            sig['reason'] = str(sig.get('reason', ''))[:200]
+            return sig
+        except json.JSONDecodeError:
+            logger.warning(f"[S9] Gemini 返回非 JSON: {text[:200]}")
+            return None
+        except Exception as e:
+            logger.warning(f"[S9] Gemini API 错误: {e}")
+            return None
+
+    def scan_s9_gemini_ai(self):
+        """S9: 每 6h 调 Gemini AI 抄底反转 LONG 决策"""
+        import time as _t
+        now = datetime.utcnow()
+        # 6h 限速
+        if self._last_s9_run and (now - self._last_s9_run).total_seconds() < self.S9_INTERVAL_HOURS * 3600:
+            return
+        self._last_s9_run = now
+
+        if self._strategy_position_count(self.S9_SOURCE) >= self.S9_MAX_POSITIONS:
+            logger.info(f"[S9] 已达 max_positions={self.S9_MAX_POSITIONS},跳过")
+            return
+
+        client = self._init_gemini_client()
+        if not client:
+            return
+
+        symbols = self._s9_get_top30_symbols()
+        if not symbols:
+            logger.warning("[S9] top30 symbols 为空")
+            return
+
+        logger.info(f"[S9] === Gemini 一轮开始, top={len(symbols)} 候选 ===")
+        opened, skipped, errs = 0, 0, 0
+
+        for symbol in symbols:
+            if self._strategy_position_count(self.S9_SOURCE) + opened >= self.S9_MAX_POSITIONS:
+                logger.info(f"[S9] 达 max_positions,提前结束")
+                break
+            if self._has_multi_strategy_position(symbol):
+                continue
+
+            try:
+                data = self._s9_fetch_market_data(symbol)
+                if not data:
+                    continue
+
+                prompt = self._s9_build_prompt(data)
+                signal = self._s9_call_gemini(client, prompt)
+                if self.S9_PER_SYMBOL_DELAY_S > 0:
+                    _t.sleep(self.S9_PER_SYMBOL_DELAY_S)
+
+                if not signal:
+                    errs += 1
+                    continue
+
+                if signal['direction'] == 'skip':
+                    logger.info(
+                        f"[S9] SKIP {symbol:14s} exp={signal['expected_pnl_pct']*100:.2f}% "
+                        f"conf={signal['confidence']:.2f} reason={signal['reason'][:80]}"
+                    )
+                    skipped += 1
+                    continue
+
+                if signal['expected_pnl_pct'] < self.S9_MIN_PNL_PCT:
+                    logger.info(
+                        f"[S9] 预期 PnL 不足 {symbol:14s} exp={signal['expected_pnl_pct']*100:.2f}% "
+                        f"< {self.S9_MIN_PNL_PCT*100:.0f}%"
+                    )
+                    skipped += 1
+                    continue
+
+                # direction='long' 已通过 _s9_call_gemini 强制
+                reason = (
+                    f"S9_Gemini: exp={signal['expected_pnl_pct']*100:.2f}% "
+                    f"conf={signal['confidence']:.2f} {signal['reason'][:80]}"
+                )
+                if self._open_position(
+                    symbol, 'LONG', self.S9_MARGIN, self.S9_LEVERAGE,
+                    self.S9_TP_PCT, self.S9_SL_PCT, self.S9_HOLD_HOURS,
+                    self.S9_SOURCE, reason
+                ):
+                    opened += 1
+
+            except Exception as e:
+                logger.warning(f"[S9] {symbol} 异常: {e}")
+                errs += 1
+
+        logger.info(f"[S9] === 一轮结束 opened={opened} skipped={skipped} errs={errs} ===")
+
     # ─────────────────────────────────────────
     # 调度入口
     # ─────────────────────────────────────────
@@ -985,13 +1536,13 @@ class MultiStrategyService:
             logger.error(f"[S7] 扫描异常: {e}")
 
     def run_slow(self):
-        """每30分钟调度：S1+S3+S5+S6；内部限速防重复"""
+        """每30分钟调度：S1+S3+S5+S6+S8+S9；内部限速防重复"""
         now = datetime.utcnow()
         if (self._last_slow_scan and
                 (now - self._last_slow_scan).total_seconds() < self.SLOW_SCAN_INTERVAL_SEC):
             return
         self._last_slow_scan = now
-        logger.info("[多策略] S1+S3+S5+S6 慢速扫描开始")
+        logger.info("[多策略] S1+S3+S5+S6+S8+S9 慢速扫描开始")
         try:
             self.scan_s1_early_long()
         except Exception as e:
@@ -1008,3 +1559,11 @@ class MultiStrategyService:
             self.scan_s6_vol_spike()
         except Exception as e:
             logger.error(f"[S6] 扫描异常: {e}")
+        try:
+            self.scan_s8_topshort()
+        except Exception as e:
+            logger.error(f"[S8] 扫描异常: {e}")
+        try:
+            self.scan_s9_gemini_ai()
+        except Exception as e:
+            logger.error(f"[S9] 扫描异常: {e}")

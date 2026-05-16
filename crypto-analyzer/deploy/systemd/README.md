@@ -1,6 +1,6 @@
 # systemd 部署指南
 
-把这 6 个 .service 文件部署到 Linux 服务器,实现:
+把 .service 文件部署到 Linux 服务器,实现:
 - 进程崩溃自动重启
 - 启动顺序管理 (app/main.py 必须先起)
 - 资源限制 (内存上限,防泄漏)
@@ -9,16 +9,33 @@
 
 ---
 
-## 6 个服务
+## 🔄 S8/S9 集成后的部署变化 (2026-05-16)
 
-| 单元名 | 入口 | 依赖 |
-|--------|------|------|
-| crypto-app-main | uvicorn app.main:app --port 9020 | mysql |
-| crypto-smart-trader | smart_trader_service.py | crypto-app-main |
-| crypto-coin-futures | coin_futures_trader_service.py | crypto-app-main |
-| crypto-fast-collector | fast_collector_service.py | mysql |
-| crypto-strategy-live | strategy_live.py | crypto-app-main |
-| crypto-strategy-bigmid | strategy_bigmid.py | crypto-app-main |
+`strategy_live` 和 `strategy_bigmid` 已集成进 `smart_trader_service` 当 S8/S9:
+- **S8 = topshort** (顶部反转做空) - 由 multi_strategy_service.scan_s8_topshort 调度
+- **S9 = Gemini AI** (抄底反转 LONG) - 由 multi_strategy_service.scan_s9_gemini_ai 调度
+
+**正常部署只需启动 4 个服务**:
+1. crypto-app-main
+2. crypto-smart-trader  (内含 S1-S9 多策略 + BTC动量 + 主策略)
+3. crypto-coin-futures
+4. crypto-fast-collector
+
+`crypto-strategy-live` 和 `crypto-strategy-bigmid` 仅作 **rollback fallback** 保留,
+**正常情况不应 enable**。如 S8/S9 出 bug,临时启用方法见这两个 .py 文件顶部注释。
+
+---
+
+## 6 个服务 (含 fallback)
+
+| 单元名 | 入口 | 状态 | 依赖 |
+|--------|------|------|------|
+| crypto-app-main | uvicorn app.main:app --port 9020 | **运行** | mysql |
+| crypto-smart-trader | smart_trader_service.py | **运行** (含 S8/S9) | crypto-app-main |
+| crypto-coin-futures | coin_futures_trader_service.py | **运行** | crypto-app-main |
+| crypto-fast-collector | fast_collector_service.py | **运行** | mysql |
+| crypto-strategy-live | strategy_live.py (DEPRECATED) | **fallback** 不启用 | crypto-app-main |
+| crypto-strategy-bigmid | strategy_bigmid.py (DEPRECATED) | **fallback** 不启用 | crypto-app-main |
 
 ---
 
@@ -57,15 +74,18 @@ sudo systemctl daemon-reload
 ### 4. 启用 + 启动
 
 ```bash
-# 启用开机自启
-sudo systemctl enable crypto-app-main crypto-smart-trader crypto-coin-futures \
-                     crypto-fast-collector crypto-strategy-live crypto-strategy-bigmid
+# 启用开机自启 (4 个核心服务, S8/S9 不要启动)
+sudo systemctl enable crypto-app-main crypto-smart-trader \
+                     crypto-coin-futures crypto-fast-collector
 
 # 首次启动 (按依赖顺序)
 sudo systemctl start crypto-app-main
 sleep 10
-sudo systemctl start crypto-smart-trader crypto-coin-futures \
-                    crypto-fast-collector crypto-strategy-live crypto-strategy-bigmid
+sudo systemctl start crypto-smart-trader crypto-coin-futures crypto-fast-collector
+
+# ⚠️ S8/S9 已集成在 crypto-smart-trader 内,不要再启动这两个 fallback:
+# sudo systemctl start crypto-strategy-live    # ← DON'T
+# sudo systemctl start crypto-strategy-bigmid  # ← DON'T
 ```
 
 ### 5. 验证

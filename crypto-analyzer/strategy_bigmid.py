@@ -1,6 +1,23 @@
 """
 strategy_bigmid - Gemini AI 决策策略 (2026-04-30 重写)
 
+═══════════════════════════════════════════════════════════════════════
+⚠️  DEPRECATED (2026-05-16):
+    本文件的 Gemini AI 抄底反转策略已迁入 multi_strategy_service.py 当 S9
+    (scan_s9_gemini_ai), source 改为 's9_gemini_ai', 由 smart_trader_service
+    主循环调度 (run_slow 每 30 min, 内部 6h 限速)
+
+    本文件保留作为 rollback fallback,正常情况不应启动:
+    - systemctl stop crypto-strategy-bigmid
+    - systemctl disable crypto-strategy-bigmid
+
+    如发现 S9 有 bug,可临时启动本文件回滚:
+    - 临时禁用 S9: 注释掉 multi_strategy_service.py run_slow 里的 scan_s9_gemini_ai
+    - systemctl start crypto-strategy-bigmid
+
+    最终删除时机: S9 稳定运行 30 天后,移到 deprecated/ 目录或删除
+═══════════════════════════════════════════════════════════════════════
+
 每 6 小时一轮, 给 top-30 大币种发送结构化市场数据 (15 天日线 / 4 天 1h /
 最近 8h 15m+1h K 线, RSI, 成交量), 让 Google Gemini 给 long/short/skip
 + 预期 PnL 建议. 满足 expected_pnl >= 1% 即下限价单 cur ± 0.5%, 持仓 6h,

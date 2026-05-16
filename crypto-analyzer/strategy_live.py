@@ -1,5 +1,23 @@
 """
-strategy_live - 实盘/paper 策略运行器, 真实下单到 localhost:9021
+strategy_live - 实盘/paper 策略运行器, 真实下单到 localhost:9020
+
+═══════════════════════════════════════════════════════════════════════
+⚠️  DEPRECATED (2026-05-16):
+    本文件的 topshort 策略已迁入 multi_strategy_service.py 当 S8 (scan_s8_topshort)
+    源 source 改为 's8_topshort', 由 smart_trader_service 主循环调度 (run_slow 每 30 min)
+
+    本文件保留作为 rollback fallback,正常情况不应启动:
+    - systemctl stop crypto-strategy-live
+    - systemctl disable crypto-strategy-live
+
+    如发现 S8 有 bug,可临时启动本文件回滚:
+    - 临时禁用 S8: sed -i 's/self.scan_s8_topshort()/pass # disabled/'
+                    app/services/multi_strategy_service.py 的 run_slow
+    - systemctl start crypto-strategy-live
+
+    最终删除时机: S8 稳定运行 30 天后,移到 deprecated/ 目录或删除
+═══════════════════════════════════════════════════════════════════════
+
 2026-05-15 极简化重构: 仅保留 topshort 子策略 (顶部反转做空).
   - 信号: 1H K 线, 48h 涨 >= 80% + N 根无新高 -> 限价开 SHORT
   - 主循环每 60s 调一次, topshort_tick 每 5 轮调一次
