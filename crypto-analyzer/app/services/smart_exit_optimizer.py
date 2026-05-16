@@ -325,20 +325,68 @@ class SmartExitOptimizer:
                     data = await response.json()
                     # 币本位API返回数组，U本位返回对象
                     if isinstance(data, list) and len(data) > 0:
-                        rest_price = float(data[0]['price'])
+                        target = data[0]
                     else:
-                        rest_price = float(data['price'])
+                        target = data
 
-                    if rest_price > 0:
-                        logger.debug(f"{symbol} 降级到REST API价格: {rest_price}")
-                        return Decimal(str(rest_price))
+                    # 2026-05-16 修复: 校验 'price' 字段存在 (delisted 币会返回
+                    # {"code": -1121, "msg": "Invalid symbol."} 没有 price 字段)
+                    if 'price' in target:
+                        rest_price = float(target['price'])
+                        if rest_price > 0:
+                            logger.debug(f"{symbol} 降级到REST API价格: {rest_price}")
+                            return Decimal(str(rest_price))
+                    else:
+                        err_code = target.get('code', '')
+                        err_msg = target.get('msg', target.get('error', '无 price 字段'))
+                        logger.warning(
+                            f"{symbol} REST API 异常响应 (币种可能 delisted): "
+                            f"code={err_code} msg={err_msg}"
+                        )
         except Exception as e:
             logger.warning(f"{symbol} REST API获取失败: {e}")
 
-        # 第3级: 使用持仓的最后已知价格（entry_price或mark_price）作为最后保底
-        # 绝对不能返回0，否则会误触发止盈止损
-        logger.error(f"{symbol} WebSocket和REST API都失败，这不应该发生！请检查网络连接")
-        return None  # 返回None表示无法获取价格，让调用方决定如何处理
+        # 第3级 (2026-05-16 新增): DB kline_data 5m 兜底
+        # 适用场景: WebSocket 没订阅该 symbol + REST API 返回 delisted 错误,但 DB 仍有最新 K 线
+        try:
+            import pymysql
+            import pymysql.cursors
+            conn = pymysql.connect(
+                **self.db_config, charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor, autocommit=True
+            )
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT close_price, open_time FROM kline_data "
+                "WHERE symbol=%s AND timeframe='5m' AND exchange='binance_futures' "
+                "ORDER BY open_time DESC LIMIT 1",
+                (symbol,)
+            )
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if row and row.get('close_price'):
+                age_min = (datetime.utcnow().timestamp() - row['open_time'] / 1000) / 60
+                # 15 分钟内的 K 线数据可信
+                if age_min <= 15:
+                    kline_price = float(row['close_price'])
+                    logger.warning(
+                        f"{symbol} 用 DB 5m K 线兜底取价 "
+                        f"(age={age_min:.1f}min, price={kline_price})"
+                    )
+                    return Decimal(str(kline_price))
+                else:
+                    logger.error(
+                        f"{symbol} 5m K 线数据过旧 ({age_min:.1f}min > 15min),拒绝使用"
+                    )
+        except Exception as e:
+            logger.warning(f"{symbol} DB 兜底取价失败: {e}")
+
+        # 全部失败,返回 None 让调用方跳过本轮检查 (不平仓,等下次重试)
+        logger.error(
+            f"{symbol} WebSocket/REST/DB 全部取价失败,本次平仓检查跳过 "
+            f"(可能 delisted 或 K 线采集断了)"
+        )
+        return None
 
     def _calculate_profit(self, position: Dict, current_price: Decimal) -> Dict:
         """
