@@ -257,6 +257,30 @@ class MultiStrategyService:
         except Exception:
             return False
 
+    def _read_setting_bool(self, key: str, default: bool = False) -> bool:
+        """读 system_settings 布尔开关,失败返回 default. 用于 S8/S9 等策略独立 kill switch.
+        '1' / 'true' / 'yes' / 'on' (大小写不敏感) → True, 其余 → False
+        """
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT setting_value FROM system_settings WHERE setting_key=%s LIMIT 1",
+                (key,)
+            )
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if not row:
+                return default
+            val = str(row.get('setting_value', '')).strip().lower()
+            if val in ('1', 'true', 'yes', 'on'):
+                return True
+            if val in ('0', 'false', 'no', 'off', ''):
+                return False
+            return default
+        except Exception:
+            return default
+
     def _get_candidate_symbols(self, min_abs_change: float = 5.0) -> List[str]:
         """从 price_stats_24h 过滤出有明显波动的 USDT 交易对"""
         try:
@@ -1067,6 +1091,10 @@ class MultiStrategyService:
 
     def scan_s8_topshort(self):
         """S8: 48h涨>=80% + 6根1h无新高 + 12天上市 + 24h未跌过15% 做空"""
+        # 独立 kill switch (default OFF, 需 system_settings 显式开启)
+        if not self._read_setting_bool('s8_topshort_enabled', default=False):
+            return
+
         if self._strategy_position_count(self.S8_SOURCE) >= self.S8_MAX_POSITIONS:
             return
 
@@ -1438,6 +1466,10 @@ Output ONLY a single valid JSON object, no markdown fence, no extra text:
 
     def scan_s9_gemini_ai(self):
         """S9: 每 6h 调 Gemini AI 抄底反转 LONG 决策"""
+        # 独立 kill switch (default OFF, 需 system_settings 显式开启,Gemini API 收费)
+        if not self._read_setting_bool('s9_gemini_ai_enabled', default=False):
+            return
+
         import time as _t
         now = datetime.utcnow()
         # 6h 限速
