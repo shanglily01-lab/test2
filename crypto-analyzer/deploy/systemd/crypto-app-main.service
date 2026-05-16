@@ -1,0 +1,24 @@
+[Unit]
+Description=Crypto Analyzer - FastAPI Web Server (app/main.py, port 9020)
+Documentation=file:///opt/crypto-analyzer/design/MIGRATION_test3_to_test2.md
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/crypto-analyzer
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/opt/crypto-analyzer/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 9020
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/opt/crypto-analyzer/logs/main_systemd.log
+StandardError=append:/opt/crypto-analyzer/logs/main_systemd.log
+
+# 资源限制 (防止内存泄漏拖死服务器)
+MemoryMax=2G
+TasksMax=512
+
+[Install]
+WantedBy=multi-user.target

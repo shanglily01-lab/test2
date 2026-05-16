@@ -1,0 +1,24 @@
+[Unit]
+Description=Crypto Analyzer - U本位主策略 (smart_trader_service.py)
+Documentation=file:///opt/crypto-analyzer/design/系统设计文档.md
+After=network-online.target mysql.service crypto-app-main.service
+Wants=network-online.target
+Requires=crypto-app-main.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/crypto-analyzer
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/opt/crypto-analyzer/venv/bin/python smart_trader_service.py
+Restart=on-failure
+RestartSec=15
+StandardOutput=append:/opt/crypto-analyzer/logs/smart_trader_systemd.log
+StandardError=append:/opt/crypto-analyzer/logs/smart_trader_systemd.log
+
+MemoryMax=2G
+TasksMax=512
+
+[Install]
+WantedBy=multi-user.target

@@ -116,4 +116,8 @@ def main():
 
 
 if __name__ == '__main__':
+    # PID 文件锁 — 防止重复启动 (2026-05-15)
+    # 历史教训: 两个 fast_collector 同跑 -> Binance IP 被 ban (-1003)
+    from app.utils.pid_lock import acquire_pid_lock
+    acquire_pid_lock('fast_collector_service')
     main()

@@ -1,0 +1,24 @@
+[Unit]
+Description=Crypto Analyzer - 快速 K 线采集器 (fast_collector_service.py)
+# 此服务承担 Binance K 线 REST 请求,务必只跑一份 (有 PID 锁兜底,但 systemd 也能防)
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/crypto-analyzer
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/opt/crypto-analyzer/venv/bin/python fast_collector_service.py
+Restart=on-failure
+RestartSec=20
+StandardOutput=append:/opt/crypto-analyzer/logs/fast_collector_systemd.log
+StandardError=append:/opt/crypto-analyzer/logs/fast_collector_systemd.log
+
+# 严防内存泄漏导致系统卡死
+MemoryMax=1G
+TasksMax=256
+
+[Install]
+WantedBy=multi-user.target

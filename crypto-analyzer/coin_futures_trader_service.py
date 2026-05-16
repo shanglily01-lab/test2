@@ -3587,6 +3587,9 @@ async def async_main():
 
 
 if __name__ == '__main__':
+    # PID 文件锁 — 防止重复启动 (2026-05-15)
+    from app.utils.pid_lock import acquire_pid_lock
+    acquire_pid_lock('coin_futures_trader_service')
     try:
         # 运行异步主函数
         asyncio.run(async_main())
