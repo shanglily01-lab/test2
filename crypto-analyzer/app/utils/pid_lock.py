@@ -25,21 +25,30 @@ def _process_alive(pid: int) -> bool:
     """跨平台判断 PID 是否对应活进程。"""
     if pid <= 0:
         return False
-    try:
-        if sys.platform == "win32":
-            # Windows: tasklist 检查
+    if sys.platform == "win32":
+        # Windows: tasklist 检查
+        try:
             import subprocess
             result = subprocess.run(
                 ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
                 capture_output=True, text=True, timeout=3
             )
             return str(pid) in result.stdout
-        else:
-            # Unix: signal 0 不会发任何信号,但会触发权限/存在检查
+        except Exception:
+            return False
+    else:
+        # Unix: signal 0 不会发任何信号,但会触发权限/存在检查
+        # ProcessLookupError → 进程死了
+        # PermissionError → 进程活着但属于其他用户 (按活着算)
+        try:
             os.kill(pid, 0)
             return True
-    except (OSError, subprocess.TimeoutExpired, Exception):
-        return False
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        except Exception:
+            return False
 
 
 def acquire_pid_lock(service_name: str, pid_dir: str | None = None) -> None:
