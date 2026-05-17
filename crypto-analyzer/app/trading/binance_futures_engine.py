@@ -1220,6 +1220,25 @@ class BinanceFuturesEngine:
             else:
                 pnl = (entry_price - avg_price) * executed_qty
 
+            roi = (pnl / (entry_price * executed_qty)) * 100 if entry_price > 0 and executed_qty > 0 else Decimal('0')
+
+            # 发送 Telegram 平仓通知 (修复: 之前缺这段, SmartExitOptimizer 走此路径平仓无 TG)
+            try:
+                notifier = get_trade_notifier() if get_trade_notifier else None
+                if notifier:
+                    notifier.notify_close_position(
+                        symbol=symbol,
+                        direction=position_side,
+                        quantity=float(executed_qty),
+                        entry_price=float(entry_price),
+                        exit_price=float(avg_price),
+                        pnl=float(pnl),
+                        pnl_pct=float(roi),
+                        reason=reason,
+                    )
+            except Exception as notify_err:
+                logger.warning(f"[实盘直接平仓] 发送TG通知失败: {notify_err}")
+
             return {
                 'success': True,
                 'order_id': str(result.get('orderId', '')),
