@@ -598,12 +598,17 @@ class SmartExitOptimizer:
                         f"持仓{position_id} {position_side} 趋势不明朗({against_count}/16逆向)，继续等待"
                     )
 
-            # === 优先级3: 移动止盈（暂时关闭，0.5%阈值过于敏感被插针频繁触发）===
-            # 固定止损2% + 固定止盈6% 已足够兜底，暂不启用追踪回撤
-            # TRAILING_STOP_ROI_THRESHOLD = 10.0
-            # TRAILING_STOP_DRAWDOWN_PCT = 0.5
-            # if roi_pct >= TRAILING_STOP_ROI_THRESHOLD:
-            #     ...（已关闭）
+            # === 优先级3: 移动止盈（价格百分比，不含杠杆）===
+            # 激活: 峰值价格收益 >= 6%
+            # 平仓: 从峰值回撤 >= 1% 价格
+            # 与固定 TP=8% 同单位; 5x 杠杆下激活 ROI 30%，回撤触发 ROI 5%
+            TRAILING_TP_PRICE_ACTIVATE = 6.0  # 价格 %
+            TRAILING_TP_PRICE_DRAWDOWN = 1.0  # 价格 %
+            if max_profit_pct >= TRAILING_TP_PRICE_ACTIVATE and drawback >= TRAILING_TP_PRICE_DRAWDOWN:
+                return True, (
+                    f"移动止盈(峰值价格收益{max_profit_pct:.2f}% 回撤{drawback:.2f}%, "
+                    f"当前{profit_pct:.2f}%, ROI{roi_pct:.2f}%)"
+                )
 
         # ========== 智能平仓逻辑（计划平仓前30分钟）==========
         planned_close_time = position['planned_close_time']
