@@ -3513,6 +3513,7 @@ class SmartTraderService:
         last_trading_mode_reload = datetime.now() - timedelta(seconds=60)  # 启动后立即触发首次读取
         last_regime_check = datetime.now()  # 市场状态机检测（每小时一次）
         last_reconcile = datetime.now()     # 实盘持仓对账（每5分钟）
+        last_gemini_advisor = datetime.now() - timedelta(minutes=15)  # 启动后立即触发首次 Gemini 顾问
 
         while self.running:
             try:
@@ -3590,6 +3591,16 @@ class SmartTraderService:
                     except Exception as _re:
                         logger.warning(f"[对账] 异常: {_re}")
                     last_reconcile = now
+
+                # 0.61. Gemini 实盘持仓顾问 (每 15 min,内部 per-position 1h 节流)
+                # 默认 OFF (system_settings.gemini_position_advisor_enabled),用户开启后才动作
+                if (now - last_gemini_advisor).total_seconds() >= 900:
+                    try:
+                        if self.smart_exit_optimizer:
+                            self.smart_exit_optimizer.gemini_advisor_tick()
+                    except Exception as _ge:
+                        logger.warning(f"[Gemini顾问] tick 异常: {_ge}")
+                    last_gemini_advisor = now
 
                 # 0.65. BTC动量跟随策略检测（每轮都跑，内部自带冷却控制）
                 try:

@@ -360,6 +360,15 @@
 </div>
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-[#ff9500] text-xl shrink-0">visibility</span>
+<div><div class="text-sm font-medium text-slate-200">Gemini 持仓顾问</div><p class="text-[11px] text-slate-500">实盘持仓 ≥4h 每 1h 让 Gemini 判 持有/观察/卖掉 (可触发实盘平仓!)</p></div>
+</div>
+<div id="geminiAdvisorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
+</div>
+</div>
+<div class="cfg-row">
+<div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#49f4c8] text-xl shrink-0">filter_alt</span>
 <div><div class="text-sm font-medium text-slate-200">Big4 趋势过滤</div><p class="text-[11px] text-slate-500">主策略等</p></div>
 </div>
@@ -655,6 +664,7 @@
                 setToggle('predictorToggle',   !!svc.predictor_enabled);
                 setToggle('s8TopshortToggle',  !!svc.s8_topshort_enabled);
                 setToggle('s9GeminiToggle',    !!svc.s9_gemini_ai_enabled);
+                setToggle('geminiAdvisorToggle', !!svc.gemini_position_advisor_enabled);
                 setToggle('big4Toggle',
                     big4Setting.value === '1' ||
                     big4Setting.value === 'true' ||
@@ -781,6 +791,17 @@
             try {
                 await apiPut('/trading-services', { s9_gemini_ai_enabled: enabled });
                 showToast('S9 Gemini AI 已' + (enabled ? '开启' : '关闭') + (enabled ? '(注意 API 收费)' : ''), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
+        // Gemini 持仓顾问
+        bindToggle('geminiAdvisorToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { gemini_position_advisor_enabled: enabled });
+                showToast('Gemini 持仓顾问已' + (enabled ? '开启 (可能触发实盘平仓!)' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;

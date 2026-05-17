@@ -78,6 +78,18 @@ class SmartExitOptimizer:
         # key: "position_id:hour_checkpoint"，value: 首次触发该档位亏损的时间
         self._loss_onset_times: Dict[str, datetime] = {}
 
+        # === Gemini 实盘持仓顾问 (2026-05-17) ===
+        # 实盘 OPEN >= 4h 的单,每 1h 调 Gemini 决策 hold/observe/sell
+        # 外部 (smart_trader 主循环) 每 15 min 调 gemini_advisor_tick()
+        # 默认 OFF (system_settings.gemini_position_advisor_enabled)
+        try:
+            from app.services.gemini_position_advisor import GeminiPositionAdvisor
+            self.gemini_advisor = GeminiPositionAdvisor(db_config)
+            logger.info("[SmartExit] Gemini 持仓顾问已初始化 (默认 OFF,需 system_settings 开启)")
+        except Exception as e:
+            self.gemini_advisor = None
+            logger.warning(f"[SmartExit] Gemini 持仓顾问初始化失败: {e}")
+
     def _get_pool_connection(self):
         """从连接池获取连接，并设置InnoDB锁等待超时"""
         conn = self.db_pool.get_connection()
@@ -1830,4 +1842,20 @@ class SmartExitOptimizer:
         except Exception as e:
             logger.error(f"检查K线强度衰减失败: {e}")
             return None
+
+    # ════════════════════════════════════════════════════════════════
+    # Gemini 实盘持仓顾问 入口 (2026-05-17)
+    # 外部 (smart_trader_service 主循环) 每 15 min 调一次
+    # 内部 GeminiPositionAdvisor.tick() 自带 per-position 1h 节流
+    # ════════════════════════════════════════════════════════════════
+
+    def gemini_advisor_tick(self) -> dict:
+        """触发 Gemini 持仓顾问扫描一次,返回统计 dict。失败不抛异常。"""
+        if not self.gemini_advisor:
+            return {'evaluated': 0, 'skipped': 0, 'note': 'advisor not initialized'}
+        try:
+            return self.gemini_advisor.tick()
+        except Exception as e:
+            logger.error(f"[SmartExit] gemini_advisor_tick 异常: {e}")
+            return {'evaluated': 0, 'errors': 1, 'note': str(e)}
 

@@ -47,6 +47,7 @@ class TradingServicesUpdate(BaseModel):
     trend_following_enabled: Optional[bool] = None
     s8_topshort_enabled: Optional[bool] = None       # 2026-05-16 S8 顶部反转做空
     s9_gemini_ai_enabled: Optional[bool] = None      # 2026-05-16 S9 Gemini AI 抄底反转
+    gemini_position_advisor_enabled: Optional[bool] = None  # 2026-05-17 Gemini 实盘持仓顾问
     stop_loss_pct: Optional[float] = None
     take_profit_pct: Optional[float] = None
 
@@ -366,6 +367,7 @@ async def get_trading_services():
                                   'btc_momentum_enabled', 'u_coin_style_enabled',
                                   'signal_confirmation_enabled', 'trend_following_enabled',
                                   's8_topshort_enabled', 's9_gemini_ai_enabled',
+                                  'gemini_position_advisor_enabled',
                                   'stop_loss_pct', 'take_profit_pct')
         """)
 
@@ -384,6 +386,7 @@ async def get_trading_services():
             'trend_following_enabled': 'trend_following_enabled',
             's8_topshort_enabled': 's8_topshort_enabled',
             's9_gemini_ai_enabled': 's9_gemini_ai_enabled',
+            'gemini_position_advisor_enabled': 'gemini_position_advisor_enabled',
         }
 
         result = {
@@ -397,6 +400,7 @@ async def get_trading_services():
             'trend_following_enabled': False,
             's8_topshort_enabled': False,
             's9_gemini_ai_enabled': False,
+            'gemini_position_advisor_enabled': False,
             'stop_loss_pct': 0.02,
             'take_profit_pct': 0.05,
         }
@@ -565,6 +569,20 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (value,))
             updates.append(f"S9_Gemini: {'启用' if data.s9_gemini_ai_enabled else '禁用'}")
+
+        if data.gemini_position_advisor_enabled is not None:
+            value = '1' if data.gemini_position_advisor_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('gemini_position_advisor_enabled', %s,
+                        'Gemini 实盘持仓顾问 (1=启用, 0=禁用). 实盘 OPEN >= 4h 单每 1h 调 Gemini 决策 hold/observe/sell',
+                        'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"Gemini持仓顾问: {'启用' if data.gemini_position_advisor_enabled else '禁用'}")
 
         if data.stop_loss_pct is not None:
             cursor.execute("""
