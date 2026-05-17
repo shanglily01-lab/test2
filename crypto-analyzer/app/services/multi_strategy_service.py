@@ -238,6 +238,25 @@ class MultiStrategyService:
         except Exception:
             return False
 
+    def _is_symbol_in_top50(self, symbol: str) -> bool:
+        """检查 symbol 是否在 top_performing_symbols 表中 (TOP50)
+        与 smart_trader_service.is_symbol_in_top_performers 行为一致
+        实盘开仓前过滤,模拟盘不调用此方法
+        """
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1",
+                (symbol,)
+            )
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            return row is not None
+        except Exception as e:
+            logger.warning(f"[多策略] TOP50 查询失败 {symbol}: {e}, 默认允许")
+            return True
+
     def _get_runtime_sl_tp_hold(self) -> tuple:
         """从 system_settings 读 (sl_pct, tp_pct, hold_hours). 2026-05-17 起 S1-S9 统一用此值,
         不再用策略硬编码常量。SQL UPDATE setting_value 后 60 秒内动态生效。
@@ -418,6 +437,10 @@ class MultiStrategyService:
         source: str,
     ):
         """同步实盘下单"""
+        # TOP50 实盘过滤: 与主策略保持一致, 模拟单已开但实盘不下
+        if not self._is_symbol_in_top50(symbol):
+            logger.info(f"[{source}] {symbol} 不在 TOP50, 跳过实盘 (模拟单已开)")
+            return
         try:
             from app.services.api_key_service import APIKeyService
             from app.trading.binance_futures_engine import BinanceFuturesEngine
