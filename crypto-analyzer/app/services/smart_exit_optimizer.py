@@ -562,10 +562,11 @@ class SmartExitOptimizer:
         leverage = float(position.get('leverage', 1))
         roi_pct = profit_pct * leverage
 
-        # === 优先级1: 极端亏损兜底止损（无需等待60分钟）===
-        # 改为基于ROI判断，ROI亏损≥10%立即止损
-        if roi_pct <= -10.0:
-            return True, f"极端亏损止损(ROI{roi_pct:.2f}%≤-10%, 价格变化{profit_pct:.2f}%)"
+        # === 优先级1: 极端亏损兜底止损 ===
+        # 阈值 ROI <= -15%（原 -10% 在 5x 杠杆下容易被山寨币 2% 日常波动触发）
+        # 豁免: 开仓 30 分钟内豁免，避免开仓初期插针误杀
+        if hold_minutes >= 30 and roi_pct <= -15.0:
+            return True, f"极端亏损止损(ROI{roi_pct:.2f}%<=-15%, 价格变化{profit_pct:.2f}%, 持仓{hold_minutes:.0f}min)"
 
         # 多策略持仓（S1-S7）跳过动态趋势反转，依赖固定止损止盈和planned_close_time
         _MULTI_STRATEGY_SOURCES = (
@@ -627,8 +628,8 @@ class SmartExitOptimizer:
         if roi_pct >= 25.0:
             return True, f"超高盈利全部平仓(ROI {roi_pct:.2f}%, 价格变化{profit_pct:.2f}%)"
 
-        # 兜底逻辑2: 巨额亏损立即全部平仓（改为基于ROI）
-        if roi_pct <= -10.0:
+        # 兜底逻辑2: 巨额亏损立即全部平仓 (ROI <= -15%)
+        if roi_pct <= -15.0:
             return True, f"巨额亏损全部平仓(ROI {roi_pct:.2f}%, 价格变化{profit_pct:.2f}%)"
 
         # 默认：不平仓（由智能平仓处理）
@@ -1583,21 +1584,23 @@ class SmartExitOptimizer:
             MIN_HOLD_MINUTES = 60  # 60分钟最小持仓时间（原30分钟，延长以减少假突破割肉）
 
             # ============================================================
-            # === 优先级1: 极端亏损兜底止损（风控底线，无需等待最小持仓时间） ===
+            # === 优先级1: 极端亏损兜底止损（风控底线） ===
             # ============================================================
-            # 只在极端情况下立即止损，正常亏损由智能监控策略处理
+            # 阈值: ROI <= -15%（原 -10% 在 5x 杠杆下容易被山寨币 2% 日常波动触发）
+            # 豁免: 开仓 30 分钟内豁免，避免开仓初期插针误杀
+            EXTREME_STOP_ROI = -15.0
+            EXTREME_STOP_GRACE_MIN = 30
 
             pnl_pct = profit_info.get('profit_pct', 0)
             roi_pct = pnl_pct * leverage  # 计算ROI（考虑杠杆）
 
-            # 极端亏损立即止损（兜底保护）- 改为基于ROI
-            if roi_pct <= -10.0:
-                # ROI亏损>=10%，立即止损（防止继续扩大）
+            if hold_minutes >= EXTREME_STOP_GRACE_MIN and roi_pct <= EXTREME_STOP_ROI:
+                # 过 30 分钟豁免期 + ROI 亏损 >= 15%，立即止损
                 logger.warning(
-                    f"🛑 持仓{position_id} {symbol} {position_side} 触发极端亏损止损 | "
-                    f"ROI亏损{roi_pct:.2f}% ≤ -10% (价格变化{pnl_pct:.2f}%)，立即止损"
+                    f"持仓{position_id} {symbol} {position_side} 触发极端亏损止损 | "
+                    f"ROI亏损{roi_pct:.2f}% <= {EXTREME_STOP_ROI}% (价格变化{pnl_pct:.2f}%, 持仓{hold_minutes:.0f}min)，立即止损"
                 )
-                return ('极端亏损止损(ROI≤-10%)', 1.0)
+                return (f'极端亏损止损(ROI<={EXTREME_STOP_ROI}%)', 1.0)
 
             # ============================================================
             # === 优先级2: 固定止盈检查（兜底） ===
