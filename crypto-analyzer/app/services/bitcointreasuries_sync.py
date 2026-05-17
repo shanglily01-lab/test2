@@ -20,6 +20,14 @@ from loguru import logger
 
 from app.services.corporate_treasury_holdings import upsert_corporate_holdings_batch
 
+# 2026-05-17 修复: AWS / 数据中心 IP 常被 Cloudflare 拦,优先用 curl_cffi 模拟浏览器 TLS
+# 指纹绕过 403。本地开发环境 curl_cffi 可能未装,允许 fallback 到 requests。
+try:
+    from curl_cffi import requests as cf_requests
+    _CURL_CFFI_AVAILABLE = True
+except ImportError:
+    _CURL_CFFI_AVAILABLE = False
+
 DEFAULT_URL = "https://bitcointreasuries.net/"
 
 _HEADERS = {
@@ -34,6 +42,30 @@ _HEADERS = {
 
 
 def fetch_homepage_html(url: str = DEFAULT_URL, timeout: int = 45) -> str:
+    """
+    抓取 bitcointreasuries.net 首页 HTML。
+    网站由 Cloudflare 保护,普通 requests 在 AWS / 数据中心 IP 上几乎肯定被 403。
+    优先用 curl_cffi 模拟 Chrome TLS 指纹绕过,失败再回退到 requests。
+    """
+    # 优先 curl_cffi (绕 Cloudflare)
+    if _CURL_CFFI_AVAILABLE:
+        try:
+            r = cf_requests.get(url, impersonate="chrome110", timeout=timeout)
+            if r.status_code == 200:
+                return r.text
+            logger.warning(
+                "[curl_cffi] {} 返回 {},尝试 requests 回退",
+                url, r.status_code
+            )
+        except Exception as e:
+            logger.warning("[curl_cffi] 请求失败: {},回退 requests", e)
+    else:
+        logger.warning(
+            "[bitcointreasuries] curl_cffi 未安装,直连可能被 Cloudflare 拦 403. "
+            "建议: pip install curl_cffi"
+        )
+
+    # Fallback: 普通 requests (AWS IP 可能被 403)
     session = requests.Session()
     session.headers.update(_HEADERS)
     r = session.get(url, timeout=timeout, allow_redirects=True)
