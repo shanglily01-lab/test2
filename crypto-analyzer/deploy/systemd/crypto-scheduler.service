@@ -1,0 +1,26 @@
+[Unit]
+Description=Crypto Analyzer - 统一数据采集调度器 (app/scheduler.py)
+Documentation=file:///opt/crypto-analyzer/design/系统设计文档.md
+# 负责: K线采集 / 新闻 / Farside ETF (06:45) / BitcoinTreasuries (07:30) /
+#       Hyperliquid 排行 / 区块链 Gas 等定时任务
+# 此服务独立于 app/main.py 跑,如缺失 ETF / 企业金库不会自动更新
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/crypto-analyzer
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/opt/crypto-analyzer/venv/bin/python app/scheduler.py
+Restart=on-failure
+RestartSec=20
+StandardOutput=append:/opt/crypto-analyzer/logs/scheduler_systemd.log
+StandardError=append:/opt/crypto-analyzer/logs/scheduler_systemd.log
+
+MemoryMax=2G
+TasksMax=512
+
+[Install]
+WantedBy=multi-user.target

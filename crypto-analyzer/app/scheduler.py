@@ -1466,4 +1466,11 @@ def main():
 
 
 if __name__ == '__main__':
+    # PID 文件锁 — 防止重复启动 (2026-05-17)
+    # scheduler 重复跑会导致 Farside / BitcoinTreasuries 一天调 2 次,触发 Cloudflare 限流
+    try:
+        from app.utils.pid_lock import acquire_pid_lock
+        acquire_pid_lock('scheduler')
+    except ImportError:
+        pass  # 老环境无 pid_lock 模块,不强制
     main()

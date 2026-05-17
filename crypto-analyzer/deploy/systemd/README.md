@@ -26,7 +26,7 @@
 
 ---
 
-## 6 个服务 (含 fallback)
+## 7 个服务 (含 fallback)
 
 | 单元名 | 入口 | 状态 | 依赖 |
 |--------|------|------|------|
@@ -34,8 +34,19 @@
 | crypto-smart-trader | smart_trader_service.py | **运行** (含 S8/S9) | crypto-app-main |
 | crypto-coin-futures | coin_futures_trader_service.py | **运行** | crypto-app-main |
 | crypto-fast-collector | fast_collector_service.py | **运行** | mysql |
+| **crypto-scheduler** | **app/scheduler.py** | **运行** (ETF / 金库 / 新闻 / K线采集) | **mysql** |
 | crypto-strategy-live | strategy_live.py (DEPRECATED) | **fallback** 不启用 | crypto-app-main |
 | crypto-strategy-bigmid | strategy_bigmid.py (DEPRECATED) | **fallback** 不启用 | crypto-app-main |
+
+**关键**: `crypto-scheduler` 单独跑一个进程,负责:
+- Farside BTC/ETH ETF 同步 (每天 06:45 本地时间)
+- BitcoinTreasuries 企业金库 (每天 07:30 本地时间)
+- Binance K 线采集 (5m/15m/1h/1d)
+- 新闻聚合
+- Hyperliquid 排行
+- 区块链 Gas 统计
+
+**之前漏了这个 service 导致 ETF / 企业金库不自动更新**。
 
 ---
 
@@ -74,14 +85,16 @@ sudo systemctl daemon-reload
 ### 4. 启用 + 启动
 
 ```bash
-# 启用开机自启 (4 个核心服务, S8/S9 不要启动)
+# 启用开机自启 (5 个核心服务, S8/S9 不要启动)
 sudo systemctl enable crypto-app-main crypto-smart-trader \
-                     crypto-coin-futures crypto-fast-collector
+                     crypto-coin-futures crypto-fast-collector \
+                     crypto-scheduler
 
 # 首次启动 (按依赖顺序)
 sudo systemctl start crypto-app-main
 sleep 10
-sudo systemctl start crypto-smart-trader crypto-coin-futures crypto-fast-collector
+sudo systemctl start crypto-smart-trader crypto-coin-futures \
+                     crypto-fast-collector crypto-scheduler
 
 # ⚠️ S8/S9 已集成在 crypto-smart-trader 内,不要再启动这两个 fallback:
 # sudo systemctl start crypto-strategy-live    # ← DON'T
