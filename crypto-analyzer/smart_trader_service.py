@@ -1882,9 +1882,10 @@ class SmartTraderService:
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - {reason}")
             return False
 
-        # 新增验证: 检查是否在平仓后冷却期内(1小时)
-        if self.check_recent_close(symbol, side, cooldown_minutes=15):
-            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 平仓后15分钟冷却期内")
+        # 同币种平仓冷却期 30 min: 避免高频反复开平吃手续费
+        # (5月数据 221/346=64% 同币重复开仓发生在 30 min 内,实测命中冷却)
+        if self.check_recent_close(symbol, side, cooldown_minutes=30):
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 平仓后30分钟冷却期内")
             return False
 
         # 🧠 生物学优化: 动作电位不应期（开仓后2小时内不再同向开仓）
@@ -3608,12 +3609,9 @@ class SmartTraderService:
                 except Exception as _e:
                     logger.warning(f"[BTC动量] 检测异常: {_e}")
 
-                # 0.66. 四策略服务（S2/S4每轮跑；S1/S3内部限速每30分钟跑一次）
+                # 0.66. 多策略服务: 仅 run_slow (S1/S3/S5/S6/S8/S9, 内部限速 30 min/次)
+                # run_fast 已取消(5月数据 S1-S9 一笔未开,且高频扫描浪费 CPU + 易触发误开仓)
                 if self.multi_strategy_svc:
-                    try:
-                        self.multi_strategy_svc.run_fast()
-                    except Exception as _e:
-                        logger.warning(f"[多策略-快] 异常: {_e}")
                     try:
                         self.multi_strategy_svc.run_slow()
                     except Exception as _e:
