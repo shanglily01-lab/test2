@@ -33,57 +33,47 @@ from app.analyzers.technical_indicators import TechnicalIndicators
 class MultiStrategyService:
     ACCOUNT_ID = 2  # 模拟 U 本位账号
 
+    # ════════════════════════════════════════════════════════════════
+    # 2026-05-17 统一: 全部 5x 杠杆, paper 500U,
+    # SL/TP/持仓时间从 system_settings 动态读 (stop_loss_pct / take_profit_pct / max_hold_hours)
+    # 实盘 margin 由 user_api_keys.max_position_value 控制 (每 API key 独立)
+    # ════════════════════════════════════════════════════════════════
+
     # 策略1: 早期做多
     S1_LEVERAGE = 5
-    S1_MARGIN = 300
+    S1_MARGIN = 500
     S1_MAX_POSITIONS = 999  # 测试阶段不限制，上线后改回 3
-    S1_TP_PCT = 0.20
-    S1_HOLD_HOURS = 7 * 24
     S1_SOURCE = 's1_early_long'
 
     # 策略2: 无量回调做多
-    S2_LEVERAGE = 10
-    S2_MARGIN = 300
+    S2_LEVERAGE = 5  # 2026-05-17 从 10x 统一为 5x
+    S2_MARGIN = 500
     S2_MAX_POSITIONS = 999  # 测试阶段不限制，上线后改回 3
-    S2_TP_PCT = 0.05
-    S2_SL_PCT = 0.02
-    S2_HOLD_HOURS = 4
     S2_SOURCE = 's2_pullback_long'
 
     # 策略3: 顶部做空
     S3_LEVERAGE = 5
-    S3_MARGIN = 300
+    S3_MARGIN = 500
     S3_MAX_POSITIONS = 999  # 测试阶段不限制，上线后改回 3
-    S3_TP_PCT = 0.15
-    S3_HOLD_HOURS = 3 * 24
     S3_SOURCE = 's3_top_short'
 
     # 策略4: 反弹动能衰竭做空
     S4_LEVERAGE = 5
-    S4_MARGIN = 300
+    S4_MARGIN = 500
     S4_MAX_POSITIONS = 999  # 测试阶段不限制，上线后改回 3
-    S4_TP_PCT = 0.10
-    S4_SL_PCT = 0.03
-    S4_HOLD_HOURS = 5
     S4_SOURCE = 's4_rebound_short'
 
     # 策略5: 大币4H超卖反弹做多 (BTC/ETH/SOL/BNB/XRP)
     S5_LEVERAGE = 5
-    S5_MARGIN = 200
+    S5_MARGIN = 500
     S5_MAX_POSITIONS = 3
-    S5_TP_PCT = 0.05
-    S5_SL_PCT = 0.02
-    S5_HOLD_HOURS = 48
     S5_SOURCE = 's5_large_oversold'
     S5_SYMBOLS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT']
 
     # 策略6: 小币量能异动做多 (排除大市值)
     S6_LEVERAGE = 5
-    S6_MARGIN = 200
+    S6_MARGIN = 500
     S6_MAX_POSITIONS = 5
-    S6_TP_PCT = 0.08
-    S6_SL_PCT = 0.03
-    S6_HOLD_HOURS = 8
     S6_SOURCE = 's6_vol_spike'
     # 排除大市值币种（它们的量能信号无效）
     S6_EXCLUDE_SYMBOLS = {
@@ -96,11 +86,8 @@ class MultiStrategyService:
 
     # 策略7: 小币均线支撑反弹做多 (MA20下方82-95%区间反弹)
     S7_LEVERAGE = 5
-    S7_MARGIN = 200
+    S7_MARGIN = 500
     S7_MAX_POSITIONS = 5
-    S7_TP_PCT = 0.06
-    S7_SL_PCT = 0.025
-    S7_HOLD_HOURS = 8
     S7_SOURCE = 's7_ma_support'
 
     # ═════════════════════════════════════════════════════════════════
@@ -112,9 +99,6 @@ class MultiStrategyService:
     S8_LEVERAGE = 5
     S8_MARGIN = 500
     S8_MAX_POSITIONS = 3
-    S8_TP_PCT = 0.20         # 硬 TP 20%
-    S8_SL_PCT = 0.12         # 硬 SL 12%
-    S8_HOLD_HOURS = 6
     S8_SOURCE = 's8_topshort'
     S8_PUMP_THRESH = 0.80    # 48h 涨 >= 80%
     S8_NO_NEW_H = 6          # 之后 6 根 1h 无新高
@@ -131,11 +115,8 @@ class MultiStrategyService:
     #   抄底反转专项: 仅做 LONG, Gemini 返回 short 也降级 skip
     # ═════════════════════════════════════════════════════════════════
     S9_LEVERAGE = 5
-    S9_MARGIN = 300
+    S9_MARGIN = 500
     S9_MAX_POSITIONS = 5
-    S9_TP_PCT = 0.05         # 硬 TP 5%
-    S9_SL_PCT = 0.02         # 硬 SL 2%
-    S9_HOLD_HOURS = 12
     S9_SOURCE = 's9_gemini_ai'
     S9_INTERVAL_HOURS = 6    # 每 6h 调一次 Gemini
     S9_TOP_N = 30            # 取 24h 成交额 top30
@@ -256,6 +237,30 @@ class MultiStrategyService:
             return str((row or {}).get('setting_value', '0')) in ('1', 'true')
         except Exception:
             return False
+
+    def _get_runtime_sl_tp_hold(self) -> tuple:
+        """从 system_settings 读 (sl_pct, tp_pct, hold_hours). 2026-05-17 起 S1-S9 统一用此值,
+        不再用策略硬编码常量。SQL UPDATE setting_value 后 60 秒内动态生效。
+
+        Returns:
+            (sl_pct, tp_pct, hold_hours) - 默认 (0.02, 0.05, 6)
+        """
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT setting_key, setting_value FROM system_settings
+                WHERE setting_key IN ('stop_loss_pct', 'take_profit_pct', 'max_hold_hours')
+            """)
+            rows = {r['setting_key']: r['setting_value'] for r in cur.fetchall()}
+            cur.close(); conn.close()
+            sl = float(rows.get('stop_loss_pct', 0.02))
+            tp = float(rows.get('take_profit_pct', 0.05))
+            hold = max(1, int(float(rows.get('max_hold_hours', 6))))
+            return sl, tp, hold
+        except Exception as e:
+            logger.warning(f"[多策略] 读 system_settings SL/TP/hold 失败,用默认 (0.02/0.05/6h): {e}")
+            return 0.02, 0.05, 6
 
     def _read_setting_bool(self, key: str, default: bool = False) -> bool:
         """读 system_settings 布尔开关,失败返回 default. 用于 S8/S9 等策略独立 kill switch.
@@ -530,9 +535,10 @@ class MultiStrategyService:
                     f"价格={cur_price_d:.4g},MA20={ma20:.4g},"
                     f"量比={vol_today / vol_avg7:.2f}"
                 )
+                _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
                 if self._open_position(
                     symbol, 'LONG', self.S1_MARGIN, self.S1_LEVERAGE,
-                    self.S1_TP_PCT, None, self.S1_HOLD_HOURS, self.S1_SOURCE, reason
+                    _tp, _sl, _hold, self.S1_SOURCE, reason
                 ):
                     opened += 1
 
@@ -601,9 +607,10 @@ class MultiStrategyService:
                     f"回调={drawdown_pct * 100:.1f}%,"
                     f"15m_RSI={last_rsi:.1f}(上升中)"
                 )
+                _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
                 if self._open_position(
                     symbol, 'LONG', self.S2_MARGIN, self.S2_LEVERAGE,
-                    self.S2_TP_PCT, self.S2_SL_PCT, self.S2_HOLD_HOURS, self.S2_SOURCE, reason
+                    _tp, _sl, _hold, self.S2_SOURCE, reason
                 ):
                     opened += 1
 
@@ -693,9 +700,10 @@ class MultiStrategyService:
                     f"从高点回落={retreat_pct * 100:.1f}%,"
                     f"4H_MACD下行,48H涨={gain_48h * 100:.1f}%"
                 )
+                _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
                 if self._open_position(
                     symbol, 'SHORT', self.S3_MARGIN, self.S3_LEVERAGE,
-                    self.S3_TP_PCT, None, self.S3_HOLD_HOURS, self.S3_SOURCE, reason
+                    _tp, _sl, _hold, self.S3_SOURCE, reason
                 ):
                     opened += 1
 
@@ -792,9 +800,10 @@ class MultiStrategyService:
                     f"MACD={'空' if macd_bearish else '-'},"
                     f"量萎缩={'是' if vol_shrink else '-'}"
                 )
+                _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
                 if self._open_position(
                     symbol, 'SHORT', self.S4_MARGIN, self.S4_LEVERAGE,
-                    self.S4_TP_PCT, self.S4_SL_PCT, self.S4_HOLD_HOURS, self.S4_SOURCE, reason
+                    _tp, _sl, _hold, self.S4_SOURCE, reason
                 ):
                     opened += 1
 
@@ -855,9 +864,10 @@ class MultiStrategyService:
                     f"S5:4H_RSI={prev_rsi_4h:.1f}->{last_rsi_4h:.1f}(超卖回升),"
                     f"价格={cur_price:.4g},日MA20={ma20_1d:.4g}({price_vs_ma * 100:.1f}%)"
                 )
+                _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
                 if self._open_position(
                     symbol, 'LONG', self.S5_MARGIN, self.S5_LEVERAGE,
-                    self.S5_TP_PCT, self.S5_SL_PCT, self.S5_HOLD_HOURS, self.S5_SOURCE, reason
+                    _tp, _sl, _hold, self.S5_SOURCE, reason
                 ):
                     opened += 1
 
@@ -958,9 +968,10 @@ class MultiStrategyService:
                     f"1H_RSI={last_rsi:.1f},价格/MA20={price_ratio * 100:.1f}%,"
                     f"3H涨={gain_3h * 100:.1f}%"
                 )
+                _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
                 if self._open_position(
                     symbol, 'LONG', self.S6_MARGIN, self.S6_LEVERAGE,
-                    self.S6_TP_PCT, self.S6_SL_PCT, self.S6_HOLD_HOURS, self.S6_SOURCE, reason
+                    _tp, _sl, _hold, self.S6_SOURCE, reason
                 ):
                     opened += 1
 
@@ -1027,9 +1038,10 @@ class MultiStrategyService:
                     f"S7:价格/20H_MA={ratio * 100:.1f}%,"
                     f"阳线反弹,量比={vol_ratio:.2f}x"
                 )
+                _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
                 if self._open_position(
                     symbol, 'LONG', self.S7_MARGIN, self.S7_LEVERAGE,
-                    self.S7_TP_PCT, self.S7_SL_PCT, self.S7_HOLD_HOURS, self.S7_SOURCE, reason
+                    _tp, _sl, _hold, self.S7_SOURCE, reason
                 ):
                     opened += 1
 
@@ -1190,9 +1202,10 @@ class MultiStrategyService:
                         f"cur={cur_price:.5g},dd={drawdown * 100:.0f}%,"
                         f"24h={ch24_str}"
                     )
+                    _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
                     if self._open_position(
                         symbol, 'SHORT', self.S8_MARGIN, self.S8_LEVERAGE,
-                        self.S8_TP_PCT, self.S8_SL_PCT, self.S8_HOLD_HOURS,
+                        _tp, _sl, _hold,
                         self.S8_SOURCE, reason
                     ):
                         opened += 1
@@ -1535,9 +1548,10 @@ Output ONLY a single valid JSON object, no markdown fence, no extra text:
                     f"S9_Gemini: exp={signal['expected_pnl_pct']*100:.2f}% "
                     f"conf={signal['confidence']:.2f} {signal['reason'][:80]}"
                 )
+                _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
                 if self._open_position(
                     symbol, 'LONG', self.S9_MARGIN, self.S9_LEVERAGE,
-                    self.S9_TP_PCT, self.S9_SL_PCT, self.S9_HOLD_HOURS,
+                    _tp, _sl, _hold,
                     self.S9_SOURCE, reason
                 ):
                     opened += 1
