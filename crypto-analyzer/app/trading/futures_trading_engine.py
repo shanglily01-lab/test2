@@ -1543,40 +1543,11 @@ class FuturesTradingEngine:
         try:
             cursor_update = connection_update.cursor()
 
-            # 批量获取所有持仓的实时价格 (REST 直调 Binance, 前置熔断检查)
-            # 历史 bug: 这里之前直接 requests.get 绕过 rate_guard, 每次前端调 /positions
-            # (5s/次) 都打一次 ticker/price, 是 -1003 主因之一. 现已接入熔断.
+            # 完全不打 Binance REST. 价格走 DB (kline_data 5m, 由 ws_kline_collector
+            # 实时写入) → DB mark_price (上次值) → entry_price 三层兜底.
+            # 历史 bug: 之前每次 /positions HTTP 请求都打 ticker/price REST, 是 -1003
+            # 死循环主因 (ban 解封 30s 内立刻又被打到触发新 ban). 彻底移除.
             price_cache = {}
-            if positions:
-                try:
-                    from app.utils.binance_rate_guard import rate_guard, parse_ban_msg
-                    if rate_guard.is_banned():
-                        logger.debug(f"IP 被 ban, 跳过 ticker REST 直调 (剩余 {rate_guard.seconds_until_unban():.0f}s)")
-                    else:
-                        import requests
-                        response = requests.get(
-                            'https://fapi.binance.com/fapi/v1/ticker/price',
-                            timeout=3
-                        )
-                        if response.status_code == 200:
-                            all_prices = response.json()
-                            for item in all_prices:
-                                symbol = item['symbol']
-                                if symbol.endswith('USDT'):
-                                    formatted_symbol = symbol[:-4] + '/USDT'
-                                    price_cache[formatted_symbol] = Decimal(str(item['price']))
-                            logger.debug(f"REST 取价成功 {len(price_cache)} 个")
-                        elif response.status_code in (418, 429):
-                            try:
-                                body = response.text
-                                until_ms = parse_ban_msg(body)
-                                if until_ms:
-                                    rate_guard.set_banned_until(until_ms, source='futures_trading_engine')
-                                    logger.error(f"FuturesTradingEngine 收到 IP ban: {body[:200]}")
-                            except Exception:
-                                pass
-                except Exception as e:
-                    logger.warning(f"批量获取价格失败，将回退到数据库: {e}")
 
             for pos in positions:
                 # 将 id 映射为 position_id，保持与API一致
