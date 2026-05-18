@@ -65,9 +65,10 @@ class SmartCollectorService:
         self.collector = SmartFuturesCollector(db_config)
 
         # 检查间隔 (秒)
-        # 2026-05-18: 主采集源已迁到 ws_kline_collector_service.py (WS 推送)
-        # 这里降频为 1 小时, 作为 WS 漏数据的兜底/校准, 同时保留 1h/1d 周期的 REST 采集
-        self.interval = 3600  # 1 小时 (原 300 秒)
+        # 2026-05-18: WS 暂时被 Binance 暗惩罚 (multi-stream 不推), 改回 5 分钟做 WS 兜底主力.
+        # 已有 IP 熔断保护, smart_futures_collector.should_collect_interval 智能判断只采到点的周期,
+        # 250 req/5min ≈ 50 req/min, 远低于 2400 weight/min 限制, 安全.
+        self.interval = 300  # 5 分钟
 
         logger.info("🧠 智能数据采集服务初始化完成")
         logger.info(f"检查间隔: {self.interval}秒 (5分钟)")
