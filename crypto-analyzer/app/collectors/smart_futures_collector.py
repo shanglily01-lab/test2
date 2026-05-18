@@ -408,17 +408,13 @@ class SmartFuturesCollector:
             高风险 symbol 集合, symbol 格式跟 DB 里一致 (一般是 'BTC/USDT')
         """
         try:
-            conn = self.db_pool.get_connection()
-            try:
+            with self.db_pool.get_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute(
                         "SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 2"
                     )
                     rows = cursor.fetchall()
-                    # pymysql cursor 默认返回 tuple, 取第 0 个元素
                     return {row[0] if not isinstance(row, dict) else row['symbol'] for row in rows}
-            finally:
-                conn.close()
         except Exception as e:
             logger.warning(f"查询高风险 symbol 失败 (跳过过滤): {e}")
             return set()
