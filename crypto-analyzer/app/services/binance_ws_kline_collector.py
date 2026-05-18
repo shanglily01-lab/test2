@@ -30,7 +30,8 @@ from loguru import logger
 WS_BASE_USDT = "wss://fstream.binance.com/stream"
 WS_BASE_COIN = "wss://dstream.binance.com/stream"
 
-MAX_STREAMS_PER_CONN = 100          # 单连接上限 (原 200 降到 100 更稳, 防 Binance 静默丢弃)
+MAX_STREAMS_PER_CONN = 50           # 单连接上限. 200/100 实测都被 Binance 静默不推, 50 试水
+                                    # 5m+15m × 249 symbols / 50 = 10 个连接, 在 300/IP 上限内安全
 SUBSCRIBE_RATE_PER_SEC = 5          # 币安建连速率限制
 PING_INTERVAL = 20                  # 主动 ping 间隔
 PING_TIMEOUT = 10                   # ping 超时
