@@ -399,9 +399,33 @@ class SmartFuturesCollector:
             finally:
                 cursor.close()
 
+    def _get_high_risk_symbols(self) -> set:
+        """
+        从 trading_symbol_rating 表查 rating_level >= 2 的交易对 (严格限制 + 永久禁止)
+        这些交易对系统基本不会开新仓 (level 2 仅 50U/笔, level 3 完全禁), 不必采 K 线浪费 weight.
+
+        Returns:
+            高风险 symbol 集合, symbol 格式跟 DB 里一致 (一般是 'BTC/USDT')
+        """
+        try:
+            conn = self.db_pool.get_connection()
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 2"
+                    )
+                    rows = cursor.fetchall()
+                    # pymysql cursor 默认返回 tuple, 取第 0 个元素
+                    return {row[0] if not isinstance(row, dict) else row['symbol'] for row in rows}
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.warning(f"查询高风险 symbol 失败 (跳过过滤): {e}")
+            return set()
+
     def get_trading_symbols(self) -> List[str]:
         """
-        从config.yaml获取需要监控的U本位合约交易对列表
+        从config.yaml获取需要监控的U本位合约交易对列表, 自动剔除 rating_level >= 2 的
 
         Returns:
             交易对列表（币安格式，如 ['BTCUSDT', 'ETHUSDT']）
@@ -423,6 +447,15 @@ class SmartFuturesCollector:
             if not symbols_list:
                 logger.warning("配置文件中没有找到交易对列表")
                 return []
+
+            # 剔除 rating_level >= 2 的 symbol (严格限制 + 永久禁止)
+            # symbols_list 里是 'BTC/USDT' 格式, 跟 trading_symbol_rating 表里的格式一致
+            high_risk = self._get_high_risk_symbols()
+            before = len(symbols_list)
+            symbols_list = [s for s in symbols_list if s not in high_risk]
+            after = len(symbols_list)
+            if before > after:
+                logger.info(f"按 rating_level >= 2 过滤: {before} -> {after} symbols (剔除 {before - after} 个高风险)")
 
             # 转换为币安格式: BTC/USDT -> BTCUSDT
             symbols = [s.replace('/', '') for s in symbols_list]
