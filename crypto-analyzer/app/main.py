@@ -653,6 +653,120 @@ async def lifespan(app: FastAPI):
         ))
         logger.info("WS K线采集守护进程已启动 (每5分钟检查 ws_kline_collector_service.py)")
 
+        # ── WS K线数据新鲜度监控 ─────────────────────────────────────────────
+        # 每 5 分钟检查 kline_data 中 5m/15m 最新 timestamp.
+        # 超过阈值未更新 -> WS 可能卡死, TG 告警.
+        # 阈值: 5m K线 close + 落盘 ~1-2s, 留 2 分钟缓冲 = 7 分钟.
+        # 告警去重: 同 timeframe 30 分钟内只告警一次.
+        async def _ws_kline_health_check_loop():
+            import pymysql as _pymysql
+            from app.services.trade_notifier import get_trade_notifier as _get_notifier
+
+            _STALE_THRESHOLD_MIN = {'5m': 7, '15m': 17}  # 周期 + 2min 缓冲
+            _CHECK_INTERVAL_S = 5 * 60
+            _ALERT_COOLDOWN_S = 30 * 60
+
+            last_alert_at: dict = {}
+            in_alert_state: dict = {}
+
+            mysql_cfg = config.get('database', {}).get('mysql', {})
+            db_cfg = {
+                'host': mysql_cfg.get('host'),
+                'port': int(mysql_cfg.get('port', 3306)),
+                'user': mysql_cfg.get('user'),
+                'password': mysql_cfg.get('password'),
+                'database': mysql_cfg.get('database'),
+                'charset': 'utf8mb4',
+            }
+
+            await asyncio.sleep(120)  # 启动延迟, 等 ws_kline_collector 完成 hydration
+
+            import time as _time
+            while True:
+                try:
+                    conn = _pymysql.connect(**db_cfg)
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                """
+                                SELECT timeframe, MAX(`timestamp`) AS latest,
+                                       TIMESTAMPDIFF(SECOND, MAX(`timestamp`), NOW()) AS stale_sec
+                                FROM kline_data
+                                WHERE exchange = 'binance_futures'
+                                  AND timeframe IN ('5m', '15m')
+                                  AND `timestamp` > NOW() - INTERVAL 2 HOUR
+                                GROUP BY timeframe
+                                """
+                            )
+                            rows = cur.fetchall()
+                    finally:
+                        conn.close()
+
+                    now = _time.time()
+                    seen_tfs = set()
+                    for row in rows:
+                        tf, latest, stale_sec = row[0], row[1], int(row[2] or 0)
+                        seen_tfs.add(tf)
+                        threshold_sec = _STALE_THRESHOLD_MIN.get(tf, 7) * 60
+                        is_stale = stale_sec > threshold_sec
+                        stale_min = stale_sec / 60.0
+
+                        if is_stale:
+                            last_at = last_alert_at.get(tf, 0)
+                            if now - last_at > _ALERT_COOLDOWN_S:
+                                last_alert_at[tf] = now
+                                msg = (
+                                    f"[WS 告警] kline_data {tf} 数据 {stale_min:.1f} 分钟未更新\n"
+                                    f"最新时间: {latest}\n"
+                                    f"可能 WS 卡死, 请检查 ws_kline_collector_service 日志"
+                                )
+                                logger.warning(msg)
+                                try:
+                                    notifier = _get_notifier()
+                                    if notifier:
+                                        notifier.send_message(msg)
+                                except Exception as e:
+                                    logger.error(f"[WS HEALTH] TG 告警发送失败: {e}")
+                            in_alert_state[tf] = True
+                        else:
+                            if in_alert_state.get(tf):
+                                msg = f"[WS 恢复] kline_data {tf} 数据已恢复 (stale={stale_min:.1f}min)"
+                                logger.info(msg)
+                                try:
+                                    notifier = _get_notifier()
+                                    if notifier:
+                                        notifier.send_message(msg)
+                                except Exception as e:
+                                    logger.error(f"[WS HEALTH] TG 恢复通知失败: {e}")
+                                in_alert_state[tf] = False
+
+                    # 完全没查到记录的 timeframe (2 小时内零数据) 也算告警
+                    for tf in _STALE_THRESHOLD_MIN.keys():
+                        if tf not in seen_tfs:
+                            last_at = last_alert_at.get(tf, 0)
+                            if now - last_at > _ALERT_COOLDOWN_S:
+                                last_alert_at[tf] = now
+                                msg = (
+                                    f"[WS 告警] kline_data {tf} 2 小时内零数据\n"
+                                    f"WS 可能完全未连接, 请检查 ws_kline_collector_service"
+                                )
+                                logger.warning(msg)
+                                try:
+                                    notifier = _get_notifier()
+                                    if notifier:
+                                        notifier.send_message(msg)
+                                except Exception as e:
+                                    logger.error(f"[WS HEALTH] TG 告警发送失败: {e}")
+                            in_alert_state[tf] = True
+
+                except Exception as e:
+                    logger.error(f"[WS HEALTH] 健康检查异常: {e}")
+
+                await asyncio.sleep(_CHECK_INTERVAL_S)
+
+        asyncio.create_task(_ws_kline_health_check_loop())
+        logger.info("WS K线数据新鲜度监控已启动 (每 5 分钟检查 5m/15m, 阈值 7/17 min)")
+
         # schedule 仅保留用于定时点任务（每天00:00和12:00的复盘分析）
         async def schedule_runner():
             """运行 schedule 中的定时点任务（复盘分析），在线程池执行避免阻塞"""

@@ -1299,25 +1299,32 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
     prices = {}
     quick_timeout = ClientTimeout(total=3)  # 3秒超时
 
-    try:
-        # 1. 从Binance批量获取所有合约价格（单次请求）
-        async with aiohttp.ClientSession(timeout=quick_timeout) as session:
-            async with session.get('https://fapi.binance.com/fapi/v1/ticker/price') as response:
-                if response.status == 200:
-                    all_prices = await response.json()
-                    # 构建价格映射
-                    price_map = {item['symbol']: float(item['price']) for item in all_prices}
+    # IP级熔断: 处于封禁期则跳过 Binance 直调, 直接走 fallback
+    from app.utils.binance_rate_guard import rate_guard as _rate_guard
+    skip_binance = _rate_guard.is_banned()
 
-                    for clean_symbol, original_symbol in symbol_map.items():
-                        if clean_symbol in price_map:
-                            prices[original_symbol] = {
-                                'price': price_map[clean_symbol],
-                                'source': 'binance_futures'
-                            }
-    except Exception as e:
-        logger.debug(f"批量获取Binance价格失败: {e}")
+    if not skip_binance:
+        try:
+            # 1. 从Binance批量获取所有合约价格（单次请求）
+            async with aiohttp.ClientSession(timeout=quick_timeout) as session:
+                async with session.get('https://fapi.binance.com/fapi/v1/ticker/price') as response:
+                    if response.status == 200:
+                        all_prices = await response.json()
+                        # 构建价格映射
+                        price_map = {item['symbol']: float(item['price']) for item in all_prices}
 
-    # 2. 对于没有获取到的symbol，尝试其他来源
+                        for clean_symbol, original_symbol in symbol_map.items():
+                            if clean_symbol in price_map:
+                                prices[original_symbol] = {
+                                    'price': price_map[clean_symbol],
+                                    'source': 'binance_futures'
+                                }
+        except Exception as e:
+            logger.debug(f"批量获取Binance价格失败: {e}")
+
+    # 2. 对于没有获取到的symbol, fallback 取 5m K 线 close
+    # 历史 bug: 原来用 1m K 线, 但 1m 已停采 (2026-01-22), 拿到的是 4 个月前的老价格
+    # 改用 5m K 线: 最多 5 分钟陈旧, 由 ws_kline_collector 实时写入
     missing_symbols = [s for s in symbols if s not in prices]
     if missing_symbols:
         try:
@@ -1326,11 +1333,11 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
 
             for symbol in missing_symbols:
                 try:
-                    latest_kline = db_service.get_latest_kline(symbol, '1m')
+                    latest_kline = db_service.get_latest_kline(symbol, '5m')
                     if latest_kline:
                         prices[symbol] = {
                             'price': float(latest_kline.close_price),
-                            'source': 'database_spot'
+                            'source': 'db_kline_5m'
                         }
                 except Exception:
                     pass
