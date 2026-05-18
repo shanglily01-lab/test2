@@ -50,8 +50,10 @@ class SmartFuturesCollector:
         # 超时设置（秒）
         self.timeout = aiohttp.ClientTimeout(total=5, connect=2)
 
-        # 并发限制
-        self.max_concurrent = 10
+        # 并发限制 (10 在启动时雪崩触发 -1003, 降到 3)
+        self.max_concurrent = 3
+        # 启动首轮间隔之间的额外间隔 (秒), 防止 5 个周期同时打 Binance 雪崩
+        self.inter_interval_sleep = 2.0
 
         # 上次采集时间记录（用于判断是否需要采集）
         self.last_collection_time = {}
@@ -494,8 +496,18 @@ class SmartFuturesCollector:
         all_klines = []
         collected_intervals = []  # 记录本次采集的时间周期
 
+        # 首轮启动雪崩防护: last_collection_time 为空时, 只采 5m, 其它周期标记为已采,
+        # 让后续 should_collect_interval 按整点自然触发, 不在启动时一次性扫 5 个周期
+        first_run = not self.last_collection_time
+        if first_run:
+            logger.info("🛡️  首轮启动: 只采 5m, 其它周期等下次整点自然触发")
+            now_utc = datetime.utcnow()
+            for itv, _ in intervals:
+                if itv != '5m':
+                    self.last_collection_time[itv] = now_utc
+
         # 智能判断并采集各个时间周期
-        for interval, limit in intervals:
+        for idx, (interval, limit) in enumerate(intervals):
             if self.should_collect_interval(interval):
                 logger.info(f"✅ 采集 {interval} K线 (每个交易对{limit}条，距上次 {self._get_elapsed_time(interval)})...")
 
@@ -514,6 +526,10 @@ class SmartFuturesCollector:
 
                 # 更新采集时间
                 self.last_collection_time[interval] = datetime.utcnow()
+
+                # 周期之间加间隔, 防止多个周期一起打 Binance 触发 weight 雪崩
+                if idx < len(intervals) - 1:
+                    await asyncio.sleep(self.inter_interval_sleep)
             else:
                 elapsed = self._get_elapsed_time(interval)
                 logger.info(f"⏭️  跳过 {interval} K线 (距上次仅 {elapsed}，无需采集)")
