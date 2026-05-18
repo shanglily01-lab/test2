@@ -630,42 +630,9 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(_dashboard_snapshot_loop())
         logger.info("Dashboard快照预计算任务已启动（每5分钟更新）")
 
-        # ── 采集服务守护进程 (跨平台, 用 pid_lock.is_running 替代 pgrep) ────────
-        # 改用 pid_lock 后 Windows/Linux 通用; 原来 pgrep 仅 Linux 可用
-        from app.utils.pid_lock import is_running as _is_service_running
-
-        async def _watchdog_for_service(service_name: str, script_filename: str):
-            """通用 watchdog: 每 5 分钟检查指定服务是否运行, 不运行就重启"""
-            script_path = str(project_root / script_filename)
-            await asyncio.sleep(30)  # 启动延迟, 等主服务稳定
-            while True:
-                try:
-                    alive, pid = _is_service_running(service_name)
-                    if not alive:
-                        logger.warning(f"[WATCHDOG] {service_name} 未运行, 重启 {script_filename}")
-                        restart_proc = await asyncio.create_subprocess_exec(
-                            sys.executable, script_path,
-                            stdout=asyncio.subprocess.DEVNULL,
-                            stderr=asyncio.subprocess.DEVNULL,
-                            cwd=str(project_root),
-                            start_new_session=True,
-                        )
-                        logger.info(f"[WATCHDOG] {service_name} 已重启, PID={restart_proc.pid}")
-                    else:
-                        logger.debug(f"[WATCHDOG] {service_name} 运行正常 (PID={pid})")
-                except Exception as e:
-                    logger.error(f"[WATCHDOG] {service_name} 检查失败: {e}")
-                await asyncio.sleep(5 * 60)
-
-        asyncio.create_task(_watchdog_for_service(
-            'fast_collector_service', 'fast_collector_service.py'
-        ))
-        logger.info("采集服务守护进程已启动 (每5分钟检查 fast_collector_service.py)")
-
-        asyncio.create_task(_watchdog_for_service(
-            'ws_kline_collector_service', 'ws_kline_collector_service.py'
-        ))
-        logger.info("WS K线采集守护进程已启动 (每5分钟检查 ws_kline_collector_service.py)")
+        # watchdog 已移除 — fast_collector_service 和 ws_kline_collector_service
+        # 改由 systemd 管理 (见 deploy/*.service)
+        # 进程自愈逻辑已在 binance_ws_kline_collector.py 内置 (recv timeout 重连)
 
         # ── WS K线数据新鲜度监控 ─────────────────────────────────────────────
         # 每 5 分钟检查 kline_data 中 5m/15m 最新 timestamp.

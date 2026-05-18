@@ -30,7 +30,7 @@ from loguru import logger
 WS_BASE_USDT = "wss://fstream.binance.com/stream"
 WS_BASE_COIN = "wss://dstream.binance.com/stream"
 
-MAX_STREAMS_PER_CONN = 200          # 安全余量, 远低于币安 1024 上限
+MAX_STREAMS_PER_CONN = 100          # 单连接上限 (原 200 降到 100 更稳, 防 Binance 静默丢弃)
 SUBSCRIBE_RATE_PER_SEC = 5          # 币安建连速率限制
 PING_INTERVAL = 20                  # 主动 ping 间隔
 PING_TIMEOUT = 10                   # ping 超时
@@ -38,7 +38,10 @@ RECONNECT_BACKOFF_BASE_S = 5        # 重连基础退避
 RECONNECT_BACKOFF_MAX_S = 60        # 重连退避上限
 BUFFER_MAX_SIZE = 5000              # WS buffer 上限, 防内存爆炸
 DB_FLUSH_INTERVAL_S = 1.0           # batch flush 间隔
-HEALTH_STALE_THRESHOLD_S = 120      # 超过此秒数没收消息视为不健康
+HEALTH_STALE_THRESHOLD_S = 120      # 健康检查阈值 (报告用)
+WS_RECV_TIMEOUT_S = 90              # 单次 recv 超时 — 90s 无消息视为僵尸, 主动断开重连
+                                    # markPrice@1s 正常每秒推一条, 90s 一条都没有必有问题
+STALE_FATAL_COUNT = 5               # 连续 N 次僵尸重连仍无数据 → 严重错误日志
 
 
 # WS 消息回调签名: (symbol: str, interval: str, kline_dict: dict, market: str) -> Awaitable[None]
@@ -71,8 +74,9 @@ class WSKlineConnection:
         return (time.time() - self.last_msg_at) < HEALTH_STALE_THRESHOLD_S
 
     async def run_forever(self) -> None:
-        """长跑, 断线自动重连 (指数退避)"""
+        """长跑, 自愈重连 (指数退避 + recv 超时检测僵尸连接)"""
         backoff = RECONNECT_BACKOFF_BASE_S
+        consecutive_stale = 0
         while True:
             try:
                 url = f"{self.ws_url}?streams={'/'.join(self.streams)}"
@@ -86,8 +90,24 @@ class WSKlineConnection:
                     self.last_msg_at = time.time()
                     backoff = RECONNECT_BACKOFF_BASE_S
                     logger.info(f"[{self.name}] WS 已连接")
-                    async for msg in ws:
+                    # 关键改动: 不用 async for, 改用 wait_for + recv, 90s 无消息主动断开
+                    # 原因: 之前 async for 在"连接存活但 Binance 不推数据"时永远阻塞
+                    while True:
+                        try:
+                            msg = await asyncio.wait_for(ws.recv(), timeout=WS_RECV_TIMEOUT_S)
+                        except asyncio.TimeoutError:
+                            consecutive_stale += 1
+                            logger.warning(
+                                f"[{self.name}] WS {WS_RECV_TIMEOUT_S}s 无数据 (僵尸连接 #{consecutive_stale}), 主动断开重连"
+                            )
+                            if consecutive_stale >= STALE_FATAL_COUNT:
+                                logger.error(
+                                    f"[{self.name}] 连续 {consecutive_stale} 次僵尸重连仍无数据 — "
+                                    f"可能 streams 数量/订阅有问题, 检查 MAX_STREAMS_PER_CONN={MAX_STREAMS_PER_CONN}"
+                                )
+                            break  # 跳出 inner loop, async with 退出, ws 自动关闭, 外层循环重连
                         self.last_msg_at = time.time()
+                        consecutive_stale = 0
                         await self._handle_msg(msg)
             except (websockets.ConnectionClosed, OSError) as e:
                 logger.warning(f"[{self.name}] WS 断开: {e}, {backoff}s 后重连")
