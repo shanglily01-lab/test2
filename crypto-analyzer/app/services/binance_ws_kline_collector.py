@@ -75,24 +75,37 @@ class WSKlineConnection:
         return (time.time() - self.last_msg_at) < HEALTH_STALE_THRESHOLD_S
 
     async def run_forever(self) -> None:
-        """长跑, 自愈重连 (指数退避 + recv 超时检测僵尸连接)"""
+        """长跑, 自愈重连 (建空连接 + SUBSCRIBE 帧订阅 + recv 超时检测僵尸)
+
+        2026-05-18: 实测 combined URL ?streams=... 在多 streams 时 Binance 静默不推 (200/100/50 都不行),
+        改用官方推荐的 SUBSCRIBE 帧方式:
+        1. 连 /stream 空 URL
+        2. send {"method":"SUBSCRIBE","params":[...],"id":1}
+        3. 接收订阅确认后开始拉数据
+        """
         backoff = RECONNECT_BACKOFF_BASE_S
         consecutive_stale = 0
         while True:
             try:
-                url = f"{self.ws_url}?streams={'/'.join(self.streams)}"
-                logger.info(f"[{self.name}] 连接 WS: {len(self.streams)} streams")
+                logger.info(f"[{self.name}] 连接 WS (SUBSCRIBE 模式): {len(self.streams)} streams")
+                # 用空 URL + SUBSCRIBE 帧, 避免 combined URL ?streams=... 被静默不推
                 async with websockets.connect(
-                    url,
+                    self.ws_url,  # 不带 ?streams=
                     ping_interval=PING_INTERVAL,
                     ping_timeout=PING_TIMEOUT,
                 ) as ws:
+                    # 发送 SUBSCRIBE 帧
+                    sub_msg = json.dumps({
+                        "method": "SUBSCRIBE",
+                        "params": self.streams,
+                        "id": int(time.time()),
+                    })
+                    await ws.send(sub_msg)
                     self.connected_at = time.time()
                     self.last_msg_at = time.time()
                     backoff = RECONNECT_BACKOFF_BASE_S
-                    logger.info(f"[{self.name}] WS 已连接")
-                    # 关键改动: 不用 async for, 改用 wait_for + recv, 90s 无消息主动断开
-                    # 原因: 之前 async for 在"连接存活但 Binance 不推数据"时永远阻塞
+                    logger.info(f"[{self.name}] WS 已连接, SUBSCRIBE 已发送")
+
                     while True:
                         try:
                             msg = await asyncio.wait_for(ws.recv(), timeout=WS_RECV_TIMEOUT_S)
@@ -106,7 +119,7 @@ class WSKlineConnection:
                                     f"[{self.name}] 连续 {consecutive_stale} 次僵尸重连仍无数据 — "
                                     f"可能 streams 数量/订阅有问题, 检查 MAX_STREAMS_PER_CONN={MAX_STREAMS_PER_CONN}"
                                 )
-                            break  # 跳出 inner loop, async with 退出, ws 自动关闭, 外层循环重连
+                            break
                         self.last_msg_at = time.time()
                         consecutive_stale = 0
                         await self._handle_msg(msg)
@@ -123,7 +136,11 @@ class WSKlineConnection:
         """解析 WS 消息, 只对 k.x == true (closed) 的回调"""
         try:
             data = json.loads(msg)
-            k = data.get('data', {}).get('k')
+            # 忽略 SUBSCRIBE 帧的确认消息: {"result": null, "id": N}
+            if 'result' in data and 'id' in data:
+                return
+            # combined stream 格式: {"stream":..., "data":{...}}; 也兼容 raw 格式直接 {...}
+            k = data.get('data', {}).get('k') if 'data' in data else data.get('k')
             if not k or not k.get('x'):
                 # 不是 closed K 线, 直接丢弃 (99% 消息走这里)
                 return
