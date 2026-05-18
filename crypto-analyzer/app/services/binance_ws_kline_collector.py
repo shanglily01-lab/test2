@@ -285,7 +285,7 @@ class WSKlineCollector:
             'timeframe': item['interval'],
             'open_time': kline['open_time'],
             'close_time': kline['close_time'],
-            'timestamp': datetime.fromtimestamp(kline['open_time'] / 1000),
+            'timestamp': datetime.utcfromtimestamp(kline['open_time'] / 1000),
             'open_price': Decimal(kline['open']),
             'high_price': Decimal(kline['high']),
             'low_price': Decimal(kline['low']),
