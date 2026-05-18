@@ -8,15 +8,15 @@ Hyperliquid 聪明钱包监控调度器
 - 全量扫描: 每6小时监控所有活跃钱包 (8000+个)
 """
 
-from app.utils.config_loader import get_db_config
 import sys
 from pathlib import Path
 
-# 添加项目根目录到Python路径
+# 添加项目根目录到Python路径 (必须在 import app.* 之前)
 project_root = Path(__file__).parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
+from app.utils.config_loader import get_db_config
 import asyncio
 import schedule
 import time
