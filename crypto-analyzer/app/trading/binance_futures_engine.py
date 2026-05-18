@@ -16,6 +16,7 @@ import pymysql
 import yaml
 
 from app.utils.indicators import get_single_ema
+from app.utils.binance_rate_guard import rate_guard, parse_ban_msg
 
 # 导入交易通知器
 try:
@@ -222,6 +223,14 @@ class BinanceFuturesEngine:
         url = f"{self.BASE_URL}{endpoint}"
         params = params or {}
 
+        # IP级熔断: 处于封禁期则直接拒绝, 不发请求 (避免封禁被自己延长)
+        if rate_guard.is_banned():
+            return {
+                'success': False,
+                'error': f'IP banned, skip request ({rate_guard.seconds_until_unban():.0f}s remaining)',
+                'code': -1003
+            }
+
         if signed:
             params['timestamp'] = int(time.time() * 1000)
             params['recvWindow'] = 5000
@@ -260,6 +269,25 @@ class BinanceFuturesEngine:
                     logger.warning(f"币安API提示 [{error_code}]: {error_msg}")
                 else:
                     logger.error(f"币安API错误 [{error_code}]: {error_msg}")
+
+                # -1003 IP被ban: 解析banned until并激活熔断, 防止封禁被自己延长
+                if error_code == -1003:
+                    until_ms = parse_ban_msg(error_msg)
+                    if until_ms and rate_guard.set_banned_until(until_ms, source='engine'):
+                        # 新封禁事件 → TG告警一次
+                        try:
+                            if get_trade_notifier:
+                                notifier = get_trade_notifier()
+                                if notifier:
+                                    sec = (until_ms - int(time.time() * 1000)) / 1000
+                                    notifier.send_message(
+                                        f"[告警] Binance IP 被封禁约 {sec:.0f}s\n"
+                                        f"已启用熔断, 所有 API 请求暂停直到解封\n"
+                                        f"消息: {error_msg[:200]}"
+                                    )
+                        except Exception as notify_err:
+                            logger.error(f"IP ban TG 告警失败: {notify_err}")
+
                 return {'success': False, 'error': error_msg, 'code': error_code}
 
             return result

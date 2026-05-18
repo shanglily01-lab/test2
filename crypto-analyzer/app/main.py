@@ -616,38 +616,42 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(_dashboard_snapshot_loop())
         logger.info("Dashboard快照预计算任务已启动（每5分钟更新）")
 
-        # ── 采集服务守护进程（fast_collector_service.py watchdog）────────────────
-        _collector_script = str(project_root / "fast_collector_service.py")
+        # ── 采集服务守护进程 (跨平台, 用 pid_lock.is_running 替代 pgrep) ────────
+        # 改用 pid_lock 后 Windows/Linux 通用; 原来 pgrep 仅 Linux 可用
+        from app.utils.pid_lock import is_running as _is_service_running
 
-        async def _collector_watchdog():
-            """每5分钟检查 fast_collector_service.py 是否运行，崩溃时自动重启"""
-            await asyncio.sleep(30)  # 启动延迟，等待主服务稳定
+        async def _watchdog_for_service(service_name: str, script_filename: str):
+            """通用 watchdog: 每 5 分钟检查指定服务是否运行, 不运行就重启"""
+            script_path = str(project_root / script_filename)
+            await asyncio.sleep(30)  # 启动延迟, 等主服务稳定
             while True:
                 try:
-                    check = await asyncio.create_subprocess_exec(
-                        "pgrep", "-f", "fast_collector_service.py",
-                        stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.DEVNULL,
-                    )
-                    await check.wait()
-                    if check.returncode != 0:
-                        logger.warning("⚠️ [WATCHDOG] fast_collector_service.py 未运行，正在重启...")
+                    alive, pid = _is_service_running(service_name)
+                    if not alive:
+                        logger.warning(f"[WATCHDOG] {service_name} 未运行, 重启 {script_filename}")
                         restart_proc = await asyncio.create_subprocess_exec(
-                            sys.executable, _collector_script,
+                            sys.executable, script_path,
                             stdout=asyncio.subprocess.DEVNULL,
                             stderr=asyncio.subprocess.DEVNULL,
                             cwd=str(project_root),
                             start_new_session=True,
                         )
-                        logger.info(f"✅ [WATCHDOG] fast_collector_service.py 已重启，PID={restart_proc.pid}")
+                        logger.info(f"[WATCHDOG] {service_name} 已重启, PID={restart_proc.pid}")
                     else:
-                        logger.debug("✅ [WATCHDOG] fast_collector_service.py 运行正常")
+                        logger.debug(f"[WATCHDOG] {service_name} 运行正常 (PID={pid})")
                 except Exception as e:
-                    logger.error(f"❌ [WATCHDOG] 检查采集服务失败: {e}")
+                    logger.error(f"[WATCHDOG] {service_name} 检查失败: {e}")
                 await asyncio.sleep(5 * 60)
 
-        asyncio.create_task(_collector_watchdog())
-        logger.info("✅ 采集服务守护进程已启动（每5分钟检查 fast_collector_service.py）")
+        asyncio.create_task(_watchdog_for_service(
+            'fast_collector_service', 'fast_collector_service.py'
+        ))
+        logger.info("采集服务守护进程已启动 (每5分钟检查 fast_collector_service.py)")
+
+        asyncio.create_task(_watchdog_for_service(
+            'ws_kline_collector_service', 'ws_kline_collector_service.py'
+        ))
+        logger.info("WS K线采集守护进程已启动 (每5分钟检查 ws_kline_collector_service.py)")
 
         # schedule 仅保留用于定时点任务（每天00:00和12:00的复盘分析）
         async def schedule_runner():

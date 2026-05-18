@@ -64,8 +64,10 @@ class SmartCollectorService:
         # 初始化智能采集器
         self.collector = SmartFuturesCollector(db_config)
 
-        # 检查间隔（秒）- 每5分钟检查一次，智能判断是否采集
-        self.interval = 300  # 5分钟
+        # 检查间隔 (秒)
+        # 2026-05-18: 主采集源已迁到 ws_kline_collector_service.py (WS 推送)
+        # 这里降频为 1 小时, 作为 WS 漏数据的兜底/校准, 同时保留 1h/1d 周期的 REST 采集
+        self.interval = 3600  # 1 小时 (原 300 秒)
 
         logger.info("🧠 智能数据采集服务初始化完成")
         logger.info(f"检查间隔: {self.interval}秒 (5分钟)")

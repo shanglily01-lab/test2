@@ -23,6 +23,7 @@ from loguru import logger
 import pymysql
 from decimal import Decimal
 from app.database.connection_pool import get_global_pool
+from app.utils.binance_rate_guard import rate_guard, parse_ban_msg
 
 
 class SmartFuturesCollector:
@@ -140,6 +141,10 @@ class SmartFuturesCollector:
             'limit': limit
         }
 
+        # IP级熔断: 处于封禁期则直接跳过, 不发请求
+        if rate_guard.is_banned():
+            return None
+
         try:
             async with session.get(url, params=params, timeout=self.timeout) as response:
                 if response.status == 200:
@@ -170,6 +175,15 @@ class SmartFuturesCollector:
                             })
                         return klines
                 else:
+                    # 418/429 可能是 IP ban, 尝试解析 banned until 并激活熔断
+                    if response.status in (418, 429):
+                        try:
+                            body = await response.text()
+                            until_ms = parse_ban_msg(body)
+                            if until_ms and rate_guard.set_banned_until(until_ms, source='fast_collector_usdt'):
+                                logger.error(f"fast_collector U本位收到 IP ban: {body[:200]}")
+                        except Exception:
+                            pass
                     return None
         except asyncio.TimeoutError:
             return None
@@ -196,6 +210,10 @@ class SmartFuturesCollector:
             'interval': interval,
             'limit': limit
         }
+
+        # IP级熔断: 处于封禁期则直接跳过, 不发请求
+        if rate_guard.is_banned():
+            return None
 
         try:
             async with session.get(url, params=params, timeout=self.timeout) as response:
@@ -228,6 +246,14 @@ class SmartFuturesCollector:
                             })
                         return klines
                 else:
+                    if response.status in (418, 429):
+                        try:
+                            body = await response.text()
+                            until_ms = parse_ban_msg(body)
+                            if until_ms and rate_guard.set_banned_until(until_ms, source='fast_collector_coin'):
+                                logger.error(f"fast_collector 币本位收到 IP ban: {body[:200]}")
+                        except Exception:
+                            pass
                     return None
         except asyncio.TimeoutError:
             return None
