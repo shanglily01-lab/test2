@@ -160,6 +160,10 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
                     pos['created_at'] = str(db['created_at']) if db.get('created_at') else None
                     if db.get('margin') and not pos.get('margin'):
                         pos['margin'] = float(db['margin'])
+                    # 前端期望 current_price 字段, engine 返回的叫 mark_price (Binance 实时 markPrice)
+                    # 不映射的话前端永远 fallback 到 entry_price (开仓价), 价格"不动"
+                    if pos.get('mark_price') and not pos.get('current_price'):
+                        pos['current_price'] = float(pos['mark_price'])
             except Exception as e:
                 logger.warning(f"补充持仓DB字段失败: {e}")
         else:
