@@ -344,60 +344,62 @@ class SmartFuturesCollector:
         if not klines:
             return 0
 
-        # 使用连接池获取连接
-        with self.db_pool.get_connection() as conn:
-            cursor = conn.cursor()
+        sql = """
+            INSERT INTO kline_data (
+                symbol, exchange, timeframe, open_time, close_time, timestamp,
+                open_price, high_price, low_price, close_price,
+                volume, quote_volume, number_of_trades,
+                taker_buy_base_volume, taker_buy_quote_volume,
+                created_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s,
+                %s, %s, %s,
+                %s, %s,
+                NOW()
+            )
+            ON DUPLICATE KEY UPDATE
+                open_price = VALUES(open_price),
+                high_price = VALUES(high_price),
+                low_price = VALUES(low_price),
+                close_price = VALUES(close_price),
+                volume = VALUES(volume),
+                quote_volume = VALUES(quote_volume),
+                number_of_trades = VALUES(number_of_trades),
+                taker_buy_base_volume = VALUES(taker_buy_base_volume),
+                taker_buy_quote_volume = VALUES(taker_buy_quote_volume)
+        """
 
+        all_values = []
+        for k in klines:
+            exchange = 'binance_coin_futures' if k.get('contract_type') == 'coin_futures' else 'binance_futures'
+            all_values.append((
+                k['symbol'], exchange, k['timeframe'], k['open_time'], k['close_time'], k['timestamp'],
+                float(k['open_price']), float(k['high_price']), float(k['low_price']), float(k['close_price']),
+                float(k['volume']), float(k['quote_volume']), k['number_of_trades'],
+                float(k['taker_buy_base_volume']), float(k['taker_buy_quote_volume'])
+            ))
+
+        # 分批写, 防止远程 MySQL 连接 timeout 被切 (本地跑 + 大批量时尤其重要)
+        BATCH_SIZE = 500
+        total_inserted = 0
+        for i in range(0, len(all_values), BATCH_SIZE):
+            batch = all_values[i:i + BATCH_SIZE]
             try:
-                sql = """
-                    INSERT INTO kline_data (
-                        symbol, exchange, timeframe, open_time, close_time, timestamp,
-                        open_price, high_price, low_price, close_price,
-                        volume, quote_volume, number_of_trades,
-                        taker_buy_base_volume, taker_buy_quote_volume,
-                        created_at
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s,
-                        %s, %s, %s,
-                        %s, %s,
-                        NOW()
-                    )
-                    ON DUPLICATE KEY UPDATE
-                        open_price = VALUES(open_price),
-                        high_price = VALUES(high_price),
-                        low_price = VALUES(low_price),
-                        close_price = VALUES(close_price),
-                        volume = VALUES(volume),
-                        quote_volume = VALUES(quote_volume),
-                        number_of_trades = VALUES(number_of_trades),
-                        taker_buy_base_volume = VALUES(taker_buy_base_volume),
-                        taker_buy_quote_volume = VALUES(taker_buy_quote_volume)
-                """
-
-                values = []
-                for k in klines:
-                    # 确定exchange类型: U本位或币本位
-                    exchange = 'binance_coin_futures' if k.get('contract_type') == 'coin_futures' else 'binance_futures'
-                    values.append((
-                        k['symbol'], exchange, k['timeframe'], k['open_time'], k['close_time'], k['timestamp'],
-                        float(k['open_price']), float(k['high_price']), float(k['low_price']), float(k['close_price']),
-                        float(k['volume']), float(k['quote_volume']), k['number_of_trades'],
-                        float(k['taker_buy_base_volume']), float(k['taker_buy_quote_volume'])
-                    ))
-
-                cursor.executemany(sql, values)
-                conn.commit()
-
-                inserted = cursor.rowcount
-                return inserted
-
+                with self.db_pool.get_connection() as conn:
+                    cursor = conn.cursor()
+                    try:
+                        cursor.executemany(sql, batch)
+                        conn.commit()
+                        total_inserted += cursor.rowcount
+                    finally:
+                        cursor.close()
             except Exception as e:
-                conn.rollback()
-                logger.error(f"保存K线数据失败: {e}")
-                return 0
-            finally:
-                cursor.close()
+                logger.error(f"保存K线数据失败 (batch {i}-{i+len(batch)}): {e}")
+                # 单批失败不影响其它批
+                continue
+
+        return total_inserted
 
     def _get_high_risk_symbols(self) -> set:
         """
