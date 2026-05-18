@@ -241,20 +241,9 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"⚠️  Telegram通知服务初始化失败: {e}")
             trade_notifier = None
-
-        # 初始化 WS markPrice 服务 (供 futures_api /prices/batch 等 Web API 用)
-        # 用单例, 避免本进程内重复连接; 1 个 WS 连接订阅全部 U本位 markPrice@1s
-        try:
-            from app.services.binance_ws_price import get_ws_price_service as _get_ws_svc
-
-            _ws_symbols = config.get('symbols', [])
-            if _ws_symbols:
-                _ws_svc = _get_ws_svc('futures')
-                if not _ws_svc.is_running():
-                    asyncio.create_task(_ws_svc.start(_ws_symbols))
-                    logger.info(f"WS markPrice 服务已启动, 订阅 {len(_ws_symbols)} 个 U本位 (供 Web API 实时取价)")
-        except Exception as e:
-            logger.warning(f"WS markPrice 服务启动失败 (Web API 将走 5m K线 fallback): {e}")
+        # 移除 main 进程内的 WS markPrice 服务: 单连接 249 streams 同样有僵尸 bug,
+        # 影响 web 进程稳定性. Web API 的实时价格走 futures_api 直调 Binance, 失败
+        # fallback 5m K 线 (由 ws_kline_collector_service 写入).
 
         # 合约限价单自动执行器已移除（archived）
         futures_limit_order_executor = None
@@ -824,16 +813,6 @@ async def lifespan(app: FastAPI):
             stop_global_price_cache()
         except Exception as e:
             logger.warning(f"停止价格缓存服务失败: {e}")
-
-    # 停止 WS markPrice 服务
-    try:
-        from app.services.binance_ws_price import get_ws_price_service as _get_ws_svc
-        _ws_svc = _get_ws_svc('futures')
-        if _ws_svc and _ws_svc.is_running():
-            await _ws_svc.stop()
-            logger.info("WS markPrice 服务已停止")
-    except Exception as e:
-        logger.warning(f"停止 WS markPrice 服务失败: {e}")
 
     # Windows兼容性：简化关闭逻辑，不调用可能阻塞的close()方法
     # 让Python的垃圾回收机制自动清理资源

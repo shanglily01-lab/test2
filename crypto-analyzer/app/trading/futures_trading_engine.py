@@ -1543,62 +1543,40 @@ class FuturesTradingEngine:
         try:
             cursor_update = connection_update.cursor()
 
-            # 批量获取所有持仓的实时价格（优先 WS markPrice 内存 → REST → DB 兜底）
-            # 历史 bug: 这里之前直接 requests.get Binance ticker, 绕过 IP 熔断,
-            # 每次前端调 /positions (5s/次) 都打一次 ticker/price, 是 -1003 主因之一
+            # 批量获取所有持仓的实时价格 (REST 直调 Binance, 前置熔断检查)
+            # 历史 bug: 这里之前直接 requests.get 绕过 rate_guard, 每次前端调 /positions
+            # (5s/次) 都打一次 ticker/price, 是 -1003 主因之一. 现已接入熔断.
             price_cache = {}
             if positions:
-                # 1. 优先用 main.py 启动的 WS markPrice 单例 (1s 实时, 不打 REST)
                 try:
-                    from app.services.binance_ws_price import get_ws_price_service
-                    ws_svc = get_ws_price_service('futures')
-                    if ws_svc and ws_svc.is_running():
-                        for pos in positions:
-                            sym = pos.get('symbol')
-                            if not sym:
-                                continue
-                            px = ws_svc.get_price(sym, max_age_seconds=10)
-                            if px is not None and px > 0:
-                                price_cache[sym] = Decimal(str(px))
-                        if price_cache:
-                            logger.debug(f"WS markPrice 命中 {len(price_cache)}/{len(positions)} 个持仓")
+                    from app.utils.binance_rate_guard import rate_guard, parse_ban_msg
+                    if rate_guard.is_banned():
+                        logger.debug(f"IP 被 ban, 跳过 ticker REST 直调 (剩余 {rate_guard.seconds_until_unban():.0f}s)")
+                    else:
+                        import requests
+                        response = requests.get(
+                            'https://fapi.binance.com/fapi/v1/ticker/price',
+                            timeout=3
+                        )
+                        if response.status_code == 200:
+                            all_prices = response.json()
+                            for item in all_prices:
+                                symbol = item['symbol']
+                                if symbol.endswith('USDT'):
+                                    formatted_symbol = symbol[:-4] + '/USDT'
+                                    price_cache[formatted_symbol] = Decimal(str(item['price']))
+                            logger.debug(f"REST 取价成功 {len(price_cache)} 个")
+                        elif response.status_code in (418, 429):
+                            try:
+                                body = response.text
+                                until_ms = parse_ban_msg(body)
+                                if until_ms:
+                                    rate_guard.set_banned_until(until_ms, source='futures_trading_engine')
+                                    logger.error(f"FuturesTradingEngine 收到 IP ban: {body[:200]}")
+                            except Exception:
+                                pass
                 except Exception as e:
-                    logger.debug(f"WS markPrice 取价失败: {e}")
-
-                # 2. WS 没拿到全部, 再尝试 REST 直调 (前置熔断检查, 防止再次延长 ban)
-                missing_count = sum(1 for p in positions if p.get('symbol') not in price_cache)
-                if missing_count > 0:
-                    try:
-                        from app.utils.binance_rate_guard import rate_guard, parse_ban_msg
-                        if rate_guard.is_banned():
-                            logger.debug(f"IP 被 ban, 跳过 ticker REST 直调 (剩余 {rate_guard.seconds_until_unban():.0f}s)")
-                        else:
-                            import requests
-                            response = requests.get(
-                                'https://fapi.binance.com/fapi/v1/ticker/price',
-                                timeout=3
-                            )
-                            if response.status_code == 200:
-                                all_prices = response.json()
-                                for item in all_prices:
-                                    symbol = item['symbol']
-                                    if symbol.endswith('USDT'):
-                                        formatted_symbol = symbol[:-4] + '/USDT'
-                                        if formatted_symbol not in price_cache:
-                                            price_cache[formatted_symbol] = Decimal(str(item['price']))
-                                logger.debug(f"REST 补全 {len(price_cache)} 个价格")
-                            elif response.status_code in (418, 429):
-                                # 解析 -1003 banned until 写熔断
-                                try:
-                                    body = response.text
-                                    until_ms = parse_ban_msg(body)
-                                    if until_ms:
-                                        rate_guard.set_banned_until(until_ms, source='futures_trading_engine')
-                                        logger.error(f"FuturesTradingEngine 收到 IP ban: {body[:200]}")
-                                except Exception:
-                                    pass
-                    except Exception as e:
-                        logger.warning(f"批量获取价格失败，将回退到数据库: {e}")
+                    logger.warning(f"批量获取价格失败，将回退到数据库: {e}")
 
             for pos in positions:
                 # 将 id 映射为 position_id，保持与API一致

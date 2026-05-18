@@ -1326,27 +1326,9 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
         except Exception as e:
             logger.debug(f"批量获取Binance价格失败: {e}")
 
-    # 2. 没获取到的 symbol, 先尝试 WS markPrice (内存, ~1s 实时)
-    missing_symbols = [s for s in symbols if s not in prices]
-    if missing_symbols:
-        try:
-            from app.services.binance_ws_price import get_ws_price_service as _get_ws_svc
-            ws_svc = _get_ws_svc('futures')
-            if ws_svc and ws_svc.is_running():
-                for original_symbol in missing_symbols:
-                    # WS 单例内部 key 用 BTC/USDT 格式, 与 config.yaml 一致
-                    norm = original_symbol if '/' in original_symbol else f"{original_symbol[:-4]}/USDT"
-                    px = ws_svc.get_price(norm, max_age_seconds=10)
-                    if px is not None and px > 0:
-                        prices[original_symbol] = {
-                            'price': float(px),
-                            'source': 'ws_markPrice'
-                        }
-        except Exception as e:
-            logger.debug(f"WS markPrice 取价失败: {e}")
-
-    # 3. WS 没拿到的, 最后 fallback 取 5m K 线 close (最多 5 分钟陈旧)
+    # 2. Binance 直调失败的 symbol, fallback 取 5m K 线 close (最多 5 分钟陈旧)
     # 历史 bug: 原来用 1m K 线, 但 1m 已停采 (2026-01-22), 拿到 4 个月前的老价格
+    # 5m 数据由 ws_kline_collector_service 写入
     missing_symbols = [s for s in symbols if s not in prices]
     if missing_symbols:
         try:
