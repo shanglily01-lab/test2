@@ -95,9 +95,12 @@ class CacheUpdateService:
                 except Exception as e:
                     logger.debug(f"从ticker API获取{symbol}数据失败，将使用K线数据: {e}")
                 
-                # 获取当前价格（优先 1m K线，回退到 5m K线，因为 1m 采集已停用）
-                latest_kline = (self.db_service.get_latest_kline(symbol, '1m') or
-                                self.db_service.get_latest_kline(symbol, '5m'))
+                # 获取当前价格 — 只用 5m K线
+                # 历史 bug (修于 2026-05-20): 之前 "优先 1m 回退 5m" 会用 2026-01-14/22 停采前
+                # 的 1m 残留数据作为 current_price, 导致 price_stats_24h.current_price 长期被
+                # 冰冻在停采时刻 (HYPE/USDT 21.86 vs 真实 48.42 偏 56%). 5m K 线由 ws_kline_collector
+                # 实时更新, 是当前唯一可靠源.
+                latest_kline = self.db_service.get_latest_kline(symbol, '5m')
                 if not latest_kline:
                     continue
 

@@ -1240,16 +1240,16 @@ async def get_futures_price(symbol: str):
             except Exception as e:
                 logger.debug(f"Gate.io合约API获取失败: {e}")
         
-        # 3. 快速回退：从数据库获取最新价格（现货价格作为fallback，更快）
+        # 3. 快速回退：从数据库获取最新价格 (5m K 线, 1m 已停采)
         if not price:
             try:
                 from app.database.db_service import DatabaseService
                 db_service = DatabaseService(config.get('database', {}))
-                latest_kline = db_service.get_latest_kline(symbol, '1m')
+                latest_kline = db_service.get_latest_kline(symbol, '5m')
                 if latest_kline:
                     price = float(latest_kline.close_price)
                     source = 'database_spot'
-                    logger.debug(f"从数据库获取 {symbol} 价格（现货）: {price}")
+                    logger.debug(f"从数据库获取 {symbol} 价格 (5m close): {price}")
             except Exception as e:
                 logger.debug(f"从数据库获取价格失败: {e}")
         
