@@ -603,6 +603,20 @@ async def lifespan(app: FastAPI):
         schedule.every().day.at("02:00").do(run_top50_update)
         logger.info("[OK] TOP 50 更新任务已注册 (每天 02:00 本地)")
 
+        # Gemini 探索 - 每 6h 调一轮 Gemini 检测红黑天鹅, 模拟单开仓
+        # kill switch system_settings.gemini_explore_enabled 默认 0,
+        # worker 内部自己读, 关时早返回, 不调 Gemini 不开仓
+        def run_gemini_explore():
+            try:
+                from app.services.gemini_explore_worker import run_explore_round
+                run_explore_round(triggered_by='scheduler')
+            except Exception as e:
+                logger.error(f"[Gemini探索] 调度异常: {e}")
+                import traceback
+                traceback.print_exc()
+        schedule.every(6).hours.do(run_gemini_explore)
+        logger.info("[Gemini探索] 调度已注册, 每 6h 跑一次 (kill switch 默认 OFF)")
+
 
         # ── 独立子进程周期任务（与 FastAPI 主进程完全隔离）──────────────────────────
         # 每个存储过程调用都在独立 OS 子进程中运行；
@@ -993,6 +1007,16 @@ try:
     logger.info("✅ 复盘合约API路由已注册")
 except Exception as e:
     logger.warning(f"⚠️  复盘合约API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
+# 注册 Gemini 探索 API 路由
+try:
+    from app.api.gemini_explore_api import router as gemini_explore_router
+    app.include_router(gemini_explore_router)
+    logger.info("[Gemini探索] API路由已注册")
+except Exception as e:
+    logger.warning(f"[Gemini探索] API路由注册失败: {e}")
     import traceback
     traceback.print_exc()
 
@@ -1622,6 +1646,18 @@ async def futures_review_page():
         return FileResponse(str(review_path))
     else:
         raise HTTPException(status_code=404, detail="Futures review page not found")
+
+
+@app.get("/gemini_explore")
+async def gemini_explore_page():
+    """
+    Gemini 探索页面 (红黑天鹅 + 模拟单)
+    """
+    page_path = project_root / "templates" / "gemini_explore.html"
+    if page_path.exists():
+        return FileResponse(str(page_path))
+    else:
+        raise HTTPException(status_code=404, detail="Gemini explore page not found")
 
 
 @app.get("/market_regime")
