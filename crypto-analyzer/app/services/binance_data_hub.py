@@ -991,27 +991,294 @@ class BinanceDataHub:
 
 
 # ---------------------------------------------------------------------------
-# 全局单例
+# HubHttpProxy - 跨进程 hub 访问代理
+# ---------------------------------------------------------------------------
+#
+# 设计动机:
+#   BinanceDataHub 是进程内单例, 但项目有多个独立 Python 进程
+#   (app/main.py / smart_trader_service / coin_futures_trader_service / 等).
+#   如果每个进程各 init 一个 hub, 会出现:
+#     - 多个 hub 并发打币安 (违背 "单源" 原则)
+#     - token bucket 跨进程无法共享
+#     - 60s 全市场拉取被重复 N 次, 浪费配额
+#
+# 解决方案:
+#   只有 app/main.py 进程 init 真正的 BinanceDataHub.
+#   其他进程调用 get_global_data_hub() 自动返回 HubHttpProxy 实例,
+#   接口与 BinanceDataHub 一致 (duck typing), 内部通过 HTTP 跳到 main 进程
+#   暴露的 /api/datahub/* 端点拿数据. 业务代码完全无感知.
+#
+# 失败策略:
+#   HTTP 请求异常 / 5xx / hub 未初始化 -> 返回 None (业务侧已有 DB 兜底).
+#
+# 性能:
+#   一次 HTTP 跳转 (localhost:9020) 约 1-5ms, 比直接打币安 (50-200ms) 快.
+#   高频热点路径建议优先 WS, REST 路径走代理可接受.
+
+class HubHttpProxy:
+    """跨进程访问 main.py 进程的 hub. 接口与 BinanceDataHub 鸭子类型一致."""
+
+    DEFAULT_API_BASE = "http://localhost:9020"
+    SYNC_TIMEOUT = 3.0
+    ASYNC_TIMEOUT = 5.0
+
+    def __init__(self, api_base: Optional[str] = None) -> None:
+        self.api_base = (api_base or self.DEFAULT_API_BASE).rstrip("/")
+        self._aio_session: Optional[aiohttp.ClientSession] = None
+        self._sync_session: Optional[requests.Session] = None
+
+    async def _get_aio(self) -> aiohttp.ClientSession:
+        if self._aio_session is None or self._aio_session.closed:
+            self._aio_session = aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(limit=10)
+            )
+        return self._aio_session
+
+    def _get_sync(self) -> requests.Session:
+        if self._sync_session is None:
+            self._sync_session = requests.Session()
+        return self._sync_session
+
+    async def _aget(self, path: str, params: Optional[dict] = None) -> Optional[dict]:
+        sess = await self._get_aio()
+        try:
+            async with sess.get(
+                self.api_base + path, params=params,
+                timeout=aiohttp.ClientTimeout(total=self.ASYNC_TIMEOUT),
+            ) as r:
+                if r.status != 200:
+                    return None
+                return await r.json()
+        except Exception as e:
+            logger.debug(f"[HubProxy] aget {path} 异常: {type(e).__name__}: {e}")
+            return None
+
+    async def _apost(self, path: str, body: dict) -> Optional[dict]:
+        sess = await self._get_aio()
+        try:
+            async with sess.post(
+                self.api_base + path, json=body,
+                timeout=aiohttp.ClientTimeout(total=self.ASYNC_TIMEOUT),
+            ) as r:
+                if r.status != 200:
+                    return None
+                return await r.json()
+        except Exception as e:
+            logger.debug(f"[HubProxy] apost {path} 异常: {type(e).__name__}: {e}")
+            return None
+
+    def _sget(self, path: str, params: Optional[dict] = None) -> Optional[dict]:
+        sess = self._get_sync()
+        try:
+            r = sess.get(self.api_base + path, params=params, timeout=self.SYNC_TIMEOUT)
+            if r.status_code != 200:
+                return None
+            return r.json()
+        except Exception as e:
+            logger.debug(f"[HubProxy] sget {path} 异常: {type(e).__name__}: {e}")
+            return None
+
+    def _spost(self, path: str, body: dict) -> Optional[dict]:
+        sess = self._get_sync()
+        try:
+            r = sess.post(self.api_base + path, json=body, timeout=self.SYNC_TIMEOUT)
+            if r.status_code != 200:
+                return None
+            return r.json()
+        except Exception as e:
+            logger.debug(f"[HubProxy] spost {path} 异常: {type(e).__name__}: {e}")
+            return None
+
+    # ── 接口 (与 BinanceDataHub 同名) ────────────────────────────
+
+    async def get_price(
+        self, symbol: str, max_age_seconds: int = 90, allow_rest_fallback: bool = True
+    ) -> Optional[Decimal]:
+        sym = symbol.replace("/", "%2F")
+        data = await self._aget(
+            f"/api/datahub/price/{sym}",
+            {"max_age_seconds": max_age_seconds, "allow_rest": "true" if allow_rest_fallback else "false"},
+        )
+        if not data:
+            return None
+        p = data.get("price")
+        return Decimal(p) if p else None
+
+    def get_price_sync(
+        self, symbol: str, max_age_seconds: int = 90, allow_rest_fallback: bool = True
+    ) -> Optional[Decimal]:
+        sym = symbol.replace("/", "%2F")
+        data = self._sget(
+            f"/api/datahub/price/{sym}",
+            {"max_age_seconds": max_age_seconds, "allow_rest": "true" if allow_rest_fallback else "false"},
+        )
+        if not data:
+            return None
+        p = data.get("price")
+        return Decimal(p) if p else None
+
+    async def get_prices_batch(
+        self, symbols: List[str], max_age_seconds: int = 90
+    ) -> Dict[str, Decimal]:
+        data = await self._apost(
+            "/api/datahub/prices/batch",
+            {"symbols": symbols, "max_age_seconds": max_age_seconds},
+        )
+        if not data:
+            return {}
+        out: Dict[str, Decimal] = {}
+        for k, v in (data.get("prices") or {}).items():
+            try:
+                out[k] = Decimal(v)
+            except Exception:
+                continue
+        return out
+
+    async def get_klines(
+        self,
+        symbol: str,
+        interval: str = "5m",
+        limit: int = 1,
+        allow_rest_fallback: bool = True,
+    ) -> List[Dict[str, Any]]:
+        sym = symbol.replace("/", "%2F")
+        data = await self._aget(
+            f"/api/datahub/klines/{sym}",
+            {"interval": interval, "limit": limit,
+             "allow_rest": "true" if allow_rest_fallback else "false"},
+        )
+        if not data:
+            return []
+        rows = data.get("klines") or []
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            try:
+                out.append({
+                    "open": float(r["open"]),
+                    "high": float(r["high"]),
+                    "low": float(r["low"]),
+                    "close": float(r["close"]),
+                    "volume": float(r.get("volume", 0)),
+                    "open_time": datetime.fromisoformat(r["open_time"]) if r.get("open_time") else None,
+                    "close_time": datetime.fromisoformat(r["close_time"]) if r.get("close_time") else None,
+                })
+            except Exception as e:
+                logger.debug(f"[HubProxy] K 线行解析失败: {e}")
+                continue
+        return out
+
+    def get_full_ticker_map(self, market: str = "futures") -> Dict[str, Decimal]:
+        data = self._sget("/api/datahub/ticker_map", {"market": market})
+        if not data:
+            return {}
+        return {k: Decimal(v) for k, v in (data.get("prices") or {}).items()}
+
+    def get_premium_index_map(self, market: str = "futures") -> Dict[str, Decimal]:
+        data = self._sget("/api/datahub/premium_map", {"market": market})
+        if not data:
+            return {}
+        return {k: Decimal(v) for k, v in (data.get("mark_prices") or {}).items()}
+
+    def get_funding_rate_sync(self, symbol: str) -> Optional[Decimal]:
+        sym = symbol.replace("/", "%2F")
+        data = self._sget(f"/api/datahub/funding_rate/{sym}")
+        if not data:
+            return None
+        fr = data.get("funding_rate")
+        return Decimal(fr) if fr else None
+
+    async def fapi_request_get(
+        self, path: str, params: Optional[dict] = None, timeout: float = 8.0
+    ) -> Optional[Any]:
+        data = await self._apost(
+            "/api/datahub/rest/fapi/get",
+            {"path": path, "params": params, "timeout": timeout},
+        )
+        return data.get("data") if data else None
+
+    async def dapi_request_get(
+        self, path: str, params: Optional[dict] = None, timeout: float = 8.0
+    ) -> Optional[Any]:
+        data = await self._apost(
+            "/api/datahub/rest/dapi/get",
+            {"path": path, "params": params, "timeout": timeout},
+        )
+        return data.get("data") if data else None
+
+    async def spot_request_get(
+        self, path: str, params: Optional[dict] = None, timeout: float = 8.0
+    ) -> Optional[Any]:
+        data = await self._apost(
+            "/api/datahub/rest/spot/get",
+            {"path": path, "params": params, "timeout": timeout},
+        )
+        return data.get("data") if data else None
+
+    def fapi_request_get_sync(
+        self, path: str, params: Optional[dict] = None, timeout: float = 8.0
+    ) -> Optional[Any]:
+        data = self._spost(
+            "/api/datahub/rest/fapi/get",
+            {"path": path, "params": params, "timeout": timeout},
+        )
+        return data.get("data") if data else None
+
+    def dapi_request_get_sync(
+        self, path: str, params: Optional[dict] = None, timeout: float = 8.0
+    ) -> Optional[Any]:
+        data = self._spost(
+            "/api/datahub/rest/dapi/get",
+            {"path": path, "params": params, "timeout": timeout},
+        )
+        return data.get("data") if data else None
+
+    def spot_request_get_sync(
+        self, path: str, params: Optional[dict] = None, timeout: float = 8.0
+    ) -> Optional[Any]:
+        data = self._spost(
+            "/api/datahub/rest/spot/get",
+            {"path": path, "params": params, "timeout": timeout},
+        )
+        return data.get("data") if data else None
+
+
+# ---------------------------------------------------------------------------
+# 全局单例 + 跨进程代理
 # ---------------------------------------------------------------------------
 
 _global_hub: Optional[BinanceDataHub] = None
+_global_proxy: Optional[HubHttpProxy] = None
 
 
-def get_global_data_hub() -> Optional[BinanceDataHub]:
-    """获取全局 hub 单例 (没初始化返回 None)."""
-    return _global_hub
+def get_global_data_hub():
+    """
+    获取 hub 访问器.
+
+    - 本进程已 init hub: 返回真正的 BinanceDataHub 实例 (in-process, 零开销)
+    - 本进程未 init hub: 返回 HubHttpProxy (跨进程, 走 HTTP 到 main.py)
+
+    业务代码可统一调用 hub.get_price() 等方法, 自动适配两种场景.
+    """
+    if _global_hub is not None:
+        return _global_hub
+    global _global_proxy
+    if _global_proxy is None:
+        _global_proxy = HubHttpProxy()
+        logger.info("[DataHub] 本进程无 hub 实例, 自动启用 HubHttpProxy (跨进程访问 main)")
+    return _global_proxy
 
 
 def init_global_data_hub(db_config: Optional[dict] = None) -> BinanceDataHub:
     """
     初始化全局 hub. 多次调用安全 (返回已存在实例).
 
-    main.py lifespan 启动时调用一次, 调用后 await hub.start() 开后台任务.
+    仅在 app/main.py lifespan 启动时调用一次. 其他独立进程不应调用此函数,
+    它们应通过 get_global_data_hub() 自动获得 HubHttpProxy.
     """
     global _global_hub
     if _global_hub is None:
         _global_hub = BinanceDataHub(db_config=db_config)
-        logger.info("[DataHub] 全局单例已初始化")
+        logger.info("[DataHub] 全局单例已初始化 (本进程为 hub 宿主)")
     return _global_hub
 
 

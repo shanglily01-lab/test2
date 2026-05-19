@@ -931,6 +931,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册 BinanceDataHub HTTP 接口 (供独立进程跨进程访问 hub)
+try:
+    from app.api.datahub_api import router as datahub_router
+    app.include_router(datahub_router)
+    logger.info("[OK] BinanceDataHub HTTP 接口已注册 (/api/datahub/*)")
+except Exception as e:
+    logger.warning(f"BinanceDataHub HTTP 接口注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册U本位合约交易API路由
 try:
     from app.api.futures_api import router as futures_router
