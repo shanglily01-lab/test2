@@ -212,10 +212,39 @@ async def lifespan(app: FastAPI):
         try:
             db_config = config.get('database', {})
             price_cache_service = init_global_price_cache(db_config, update_interval=3)
-            logger.info("✅ 价格缓存服务初始化成功（每3秒更新）")
+            logger.info("[OK] 价格缓存服务初始化成功（每3秒更新）")
         except Exception as e:
-            logger.warning(f"⚠️  价格缓存服务初始化失败: {e}")
+            logger.warning(f"[WARN] 价格缓存服务初始化失败: {e}")
             price_cache_service = None
+
+        # 初始化 BinanceDataHub - 统一币安数据网关 (60s 后台拉取全市场 ticker + premiumIndex)
+        # 所有业务代码必须通过 hub 取价/K线/资金费率, 禁止直连 binance REST
+        try:
+            from app.services.binance_data_hub import init_global_data_hub
+            db_cfg_for_hub = {
+                'host':     db_config.get('host', 'localhost'),
+                'port':     int(db_config.get('port', 3306)),
+                'user':     db_config.get('user', 'root'),
+                'password': db_config.get('password', ''),
+                'database': db_config.get('database', 'binance-data'),
+            }
+            data_hub = init_global_data_hub(db_config=db_cfg_for_hub)
+            await data_hub.start()
+            logger.info("[OK] BinanceDataHub 已启动 (60s 拉一次全市场, 200 req/min 令牌桶)")
+        except Exception as e:
+            logger.error(f"[FAIL] BinanceDataHub 启动失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+        # 反 import 扫描: 仅告警, 不阻塞启动 (防止后续代码偷偷直连 Binance REST)
+        try:
+            from pathlib import Path
+            from scripts.check_no_direct_binance import run_check
+            n = run_check(project_root=Path(project_root), fail_hard=False)
+            if n == 0:
+                logger.info("[OK] 反直连扫描通过 - 无业务代码直连 Binance REST")
+        except Exception as e:
+            logger.debug(f"反直连扫描执行异常 (不影响启动): {e}")
 
         # 待成交订单自动执行器已停用（现货交易，系统使用合约交易）
         # 当前系统使用 smart_trader_service.py 进行合约自动交易，不需要现货限价单服务
@@ -813,6 +842,14 @@ async def lifespan(app: FastAPI):
             stop_global_price_cache()
         except Exception as e:
             logger.warning(f"停止价格缓存服务失败: {e}")
+
+    # 停止 BinanceDataHub
+    try:
+        from app.services.binance_data_hub import stop_global_data_hub
+        await stop_global_data_hub()
+        logger.info("[OK] BinanceDataHub 已停止")
+    except Exception as e:
+        logger.warning(f"停止 BinanceDataHub 失败: {e}")
 
     # Windows兼容性：简化关闭逻辑，不调用可能阻塞的close()方法
     # 让Python的垃圾回收机制自动清理资源

@@ -17,24 +17,42 @@ TTL_SEC = 2.0
 
 
 def get_all_dapi_ticker_prices() -> Optional[List[Any]]:
+    """
+    返回 dapi 全市场价格快照, 形式 [{"symbol":"BTCUSD_PERP","price":"...","ps":"BTCUSD"}, ...].
+
+    重写: 改为从 BinanceDataHub 进程内缓存读取, 不再直接打 dapi.binance.com.
+    Hub 的 60s 后台任务会刷新整张缓存表, 调用方语义不变.
+    """
     global _CACHE_TS, _CACHE_ROWS
     now = time.time()
     if _CACHE_ROWS is not None and (now - _CACHE_TS) < TTL_SEC:
         return _CACHE_ROWS
-    import requests
 
     try:
-        r = requests.get("https://dapi.binance.com/dapi/v1/ticker/price", timeout=4)
-        if r.status_code != 200:
-            return None
-        data = r.json()
-        if not isinstance(data, list):
-            return None
-        _CACHE_TS = now
-        _CACHE_ROWS = data
-        return data
+        from app.services.binance_data_hub import get_global_data_hub
     except Exception:
         return None
+
+    hub = get_global_data_hub()
+    if hub is None:
+        return None
+
+    # hub 缓存的 key 是无斜杠的 symbol (例如 BTCUSD_PERP), value 是 Decimal 价格
+    # 需要还原成 dapi 原始返回的 [{symbol, price, ps}, ...] 格式, 方便 find_perp_price /
+    # build_dapi_usd_perp_fmt_map 等已有逻辑零改动复用.
+    full_map = hub.get_full_ticker_map(market="coin_futures")
+    if not full_map:
+        return None
+
+    rows: List[Any] = []
+    for sym, price in full_map.items():
+        # 还原 ps 字段 (币本位 perp 的 ps 通常是去掉 _PERP 后的部分)
+        ps = sym.replace("_PERP", "") if sym.endswith("_PERP") else sym
+        rows.append({"symbol": sym, "price": str(price), "ps": ps})
+
+    _CACHE_TS = now
+    _CACHE_ROWS = rows
+    return rows
 
 
 def to_dapi_perp_symbol(symbol: str) -> Optional[str]:

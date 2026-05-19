@@ -1190,30 +1190,21 @@ async def get_futures_price(symbol: str):
         # 使用较短的超时时间，快速失败并回退
         quick_timeout = ClientTimeout(total=2)  # 2秒快速超时
         
-        # 1. 优先从Binance合约API获取（快速）
+        # 1. 优先从 BinanceDataHub 取价 (WS / 60s ticker 缓存 / DB / 限速 REST)
         try:
-            async with aiohttp.ClientSession(timeout=quick_timeout) as session:
-                async with session.get(
-                    'https://fapi.binance.com/fapi/v1/ticker/price',
-                    params={'symbol': symbol_clean}
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        if data and 'price' in data:
-                            price = float(data['price'])
-                            source = 'binance_futures'
-                            logger.debug(f"从Binance合约API获取 {symbol} 价格: {price}")
-                            # 成功获取，直接返回
-                            return {
-                                'success': True,
-                                'symbol': symbol,
-                                'price': price,
-                                'source': source
-                            }
-        except (aiohttp.ClientError, aiohttp.ServerTimeoutError, TimeoutError) as e:
-            logger.debug(f"Binance合约API超时或失败: {symbol}, {e}")
+            from app.services.binance_data_hub import get_global_data_hub
+            hub = get_global_data_hub()
+            if hub is not None:
+                hub_price = await hub.get_price(symbol)
+                if hub_price is not None and hub_price > 0:
+                    return {
+                        'success': True,
+                        'symbol': symbol,
+                        'price': float(hub_price),
+                        'source': 'binance_futures'
+                    }
         except Exception as e:
-            logger.debug(f"Binance合约API获取失败: {e}")
+            logger.debug(f"DataHub 取价失败: {symbol}, {e}")
         
         # 2. 如果Binance失败，尝试从Gate.io合约API获取（仅对HYPE/USDT）
         if not price and symbol.upper() == 'HYPE/USDT':
@@ -1297,35 +1288,19 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
     quick_timeout = ClientTimeout(total=3)  # 3秒超时
 
     try:
-        # 1. U 本位：优先 premiumIndex.markPrice（与交易所未实现盈亏、markPrice WS 一致）；失败再回退 ticker 最新价
+        # 1. U 本位: 从 BinanceDataHub 进程内缓存读取
+        # premium_index (markPrice) 优先; 没有再退回 ticker 最新价
+        from app.services.binance_data_hub import get_global_data_hub
+        hub = get_global_data_hub()
         used_mark = False
-        async with aiohttp.ClientSession(timeout=quick_timeout) as session:
-            async with session.get(
-                "https://fapi.binance.com/fapi/v1/premiumIndex"
-            ) as response:
-                if response.status == 200:
-                    all_prices = await response.json()
-                    price_map = {}
-                    for item in all_prices:
-                        sym = item.get("symbol")
-                        mp = item.get("markPrice")
-                        if sym and mp is not None:
-                            try:
-                                price_map[sym] = float(mp)
-                            except (TypeError, ValueError):
-                                pass
-                    used_mark = len(price_map) > 0
-
-            if not price_map:
-                async with session.get(
-                    "https://fapi.binance.com/fapi/v1/ticker/price"
-                ) as response:
-                    if response.status == 200:
-                        all_prices = await response.json()
-                        price_map = {
-                            item["symbol"]: float(item["price"]) for item in all_prices
-                        }
-                        used_mark = False
+        if hub is not None:
+            premium_map = hub.get_premium_index_map(market="futures")
+            if premium_map:
+                price_map = {sym: float(mp) for sym, mp in premium_map.items()}
+                used_mark = True
+            else:
+                ticker_map = hub.get_full_ticker_map(market="futures")
+                price_map = {sym: float(p) for sym, p in ticker_map.items()}
 
             for clean_symbol, original_symbol in symbol_map.items():
                 if clean_symbol in price_map:
@@ -1338,7 +1313,7 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
                         ),
                     }
     except Exception as e:
-        logger.debug(f"批量获取Binance U 本位价格失败: {e}")
+        logger.debug(f"批量获取 U 本位价格失败 (via DataHub): {e}")
 
     # 1b. 币本位：dapi 返回 symbol/ps 均无斜杠（如 TRXUSD_PERP / ps=TRXUSD），映射为 BASE/USD 再回填请求里的任意写法
     from app.trading.dapi_coin_margined_price import (
@@ -1350,19 +1325,19 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
     need_dapi = [s for s in symbols if s not in prices and canonical_coin_usd_display(s)]
     if need_dapi:
         try:
-            async with aiohttp.ClientSession(timeout=quick_timeout) as session:
-                async with session.get('https://dapi.binance.com/dapi/v1/ticker/price') as response:
-                    if response.status == 200:
-                        all_dp = await response.json()
-                        fmt_map = {}
-                        for item in all_dp:
-                            sym = item.get('symbol') or ''
-                            if sym.endswith('USD_PERP'):
-                                fmt_map[sym.replace('USD_PERP', '/USD')] = float(item['price'])
-                        for s in need_dapi:
-                            canon = canonical_coin_usd_display(s)
-                            if canon and canon in fmt_map:
-                                prices[s] = {'price': fmt_map[canon], 'source': 'binance_dapi'}
+            # 走 DataHub 进程内缓存, 不直打 dapi 端点
+            from app.services.binance_data_hub import get_global_data_hub as _ghub
+            _hub = _ghub()
+            fmt_map = {}
+            if _hub is not None:
+                coin_map = _hub.get_full_ticker_map(market="coin_futures")
+                for sym, _price in coin_map.items():
+                    if sym.endswith('USD_PERP'):
+                        fmt_map[sym.replace('USD_PERP', '/USD')] = float(_price)
+            for s in need_dapi:
+                canon = canonical_coin_usd_display(s)
+                if canon and canon in fmt_map:
+                    prices[s] = {'price': fmt_map[canon], 'source': 'binance_dapi'}
         except Exception as e:
             logger.debug(f"批量获取币本位 dapi 价格失败: {e}")
 

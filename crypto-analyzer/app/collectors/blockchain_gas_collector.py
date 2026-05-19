@@ -265,23 +265,17 @@ class BlockchainGasCollector:
             
             binance_symbol = binance_symbol_map.get(native_token)
             if binance_symbol:
-                binance_url = f'https://api.binance.com/api/v3/ticker/price'
-                params = {'symbol': binance_symbol}
-                
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(
-                        binance_url,
-                        params=params,
-                        timeout=aiohttp.ClientTimeout(total=10)
-                    ) as resp:
-                        if resp.status == 200:
-                            data = await resp.json()
-                            price = data.get('price')
-                            if price:
-                                logger.info(f"从 Binance 获取 {native_token} 价格: ${price}")
-                                return float(price)
+                # 从 DataHub 取价 (gas 数据用合约同 symbol 参考价, 误差 < 0.1%)
+                from app.services.binance_data_hub import get_global_data_hub
+                hub = get_global_data_hub()
+                if hub is not None:
+                    sym_slash = f"{native_token}/USDT"
+                    p = await hub.get_price(sym_slash)
+                    if p is not None and p > 0:
+                        logger.info(f"从 DataHub 获取 {native_token} 价格: ${p}")
+                        return float(p)
         except Exception as e:
-            logger.debug(f"从 Binance 获取 {native_token} 价格失败: {e}")
+            logger.debug(f"从 DataHub 获取 {native_token} 价格失败: {e}")
         
         return None
     

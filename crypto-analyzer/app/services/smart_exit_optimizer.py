@@ -9,12 +9,12 @@ from decimal import Decimal
 from loguru import logger
 import mysql.connector
 from mysql.connector import pooling
-import aiohttp
 
 from app.services.price_sampler import PriceSampler
 from app.services.signal_analysis_service import SignalAnalysisService
 from app.analyzers.kline_strength_scorer import KlineStrengthScorer
 from app.services.api_key_service import get_api_key_service
+from app.services.binance_data_hub import get_global_data_hub
 
 
 class SmartExitOptimizer:
@@ -70,9 +70,6 @@ class SmartExitOptimizer:
 
         # 价格采样器（用于150分钟后的最优价格评估）
         self.price_samples: Dict[int, List[float]] = {}  # position_id -> 价格采样列表
-
-        # === HTTP Session 复用（性能优化）===
-        self._http_session: Optional[aiohttp.ClientSession] = None
 
         # 分阶段超时 - 亏损持续时间追踪（生物学负反馈：需持续亏损才平仓，非瞬时亏损）
         # key: "position_id:hour_checkpoint"，value: 首次触发该档位亏损的时间
@@ -295,110 +292,18 @@ class SmartExitOptimizer:
                 try: conn.close()
                 except Exception: pass
 
-    async def _get_realtime_price(self, symbol: str) -> Decimal:
+    async def _get_realtime_price(self, symbol: str) -> Optional[Decimal]:
         """
-        获取实时价格（多级降级策略）
+        获取实时价格 - 全部委托 BinanceDataHub.
 
-        Args:
-            symbol: 交易对
-
-        Returns:
-            当前价格
+        Hub 内部已实现: WS -> 60s 全市场 ticker 缓存 -> DB 5m 兜底 -> REST 单拉.
+        所有 REST 流量受 rate_guard 熔断 + 令牌桶限速保护.
         """
-        # 第1级: WebSocket价格
-        try:
-            price = self.price_service.get_price(symbol)
-            if price and price > 0:
-                return Decimal(str(price))
-        except Exception as e:
-            logger.warning(f"{symbol} WebSocket获取失败: {e}")
-
-        # 第2级: REST API实时价格（异步，复用session）
-        try:
-            symbol_clean = symbol.replace('/', '').upper()
-
-            # 根据交易对类型选择API
-            if symbol.endswith('/USD'):
-                # 币本位合约使用dapi
-                api_url = 'https://dapi.binance.com/dapi/v1/ticker/price'
-                symbol_for_api = symbol_clean + '_PERP'
-            else:
-                # U本位合约使用fapi
-                api_url = 'https://fapi.binance.com/fapi/v1/ticker/price'
-                symbol_for_api = symbol_clean
-
-            session = await self._get_http_session()
-            async with session.get(
-                api_url,
-                params={'symbol': symbol_for_api},
-                timeout=aiohttp.ClientTimeout(total=3)
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    # 币本位API返回数组，U本位返回对象
-                    if isinstance(data, list) and len(data) > 0:
-                        target = data[0]
-                    else:
-                        target = data
-
-                    # 2026-05-16 修复: 校验 'price' 字段存在 (delisted 币会返回
-                    # {"code": -1121, "msg": "Invalid symbol."} 没有 price 字段)
-                    if 'price' in target:
-                        rest_price = float(target['price'])
-                        if rest_price > 0:
-                            logger.debug(f"{symbol} 降级到REST API价格: {rest_price}")
-                            return Decimal(str(rest_price))
-                    else:
-                        err_code = target.get('code', '')
-                        err_msg = target.get('msg', target.get('error', '无 price 字段'))
-                        logger.warning(
-                            f"{symbol} REST API 异常响应 (币种可能 delisted): "
-                            f"code={err_code} msg={err_msg}"
-                        )
-        except Exception as e:
-            logger.warning(f"{symbol} REST API获取失败: {e}")
-
-        # 第3级 (2026-05-16 新增): DB kline_data 5m 兜底
-        # 适用场景: WebSocket 没订阅该 symbol + REST API 返回 delisted 错误,但 DB 仍有最新 K 线
-        try:
-            import pymysql
-            import pymysql.cursors
-            conn = pymysql.connect(
-                **self.db_config, charset='utf8mb4',
-                cursorclass=pymysql.cursors.DictCursor, autocommit=True
-            )
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT close_price, open_time FROM kline_data "
-                "WHERE symbol=%s AND timeframe='5m' AND exchange='binance_futures' "
-                "ORDER BY open_time DESC LIMIT 1",
-                (symbol,)
-            )
-            row = cur.fetchone()
-            cur.close(); conn.close()
-            if row and row.get('close_price'):
-                age_min = (datetime.utcnow().timestamp() - row['open_time'] / 1000) / 60
-                # 15 分钟内的 K 线数据可信
-                if age_min <= 15:
-                    kline_price = float(row['close_price'])
-                    logger.warning(
-                        f"{symbol} 用 DB 5m K 线兜底取价 "
-                        f"(age={age_min:.1f}min, price={kline_price})"
-                    )
-                    return Decimal(str(kline_price))
-                else:
-                    logger.error(
-                        f"{symbol} 5m K 线数据过旧 ({age_min:.1f}min > 15min),拒绝使用"
-                    )
-        except Exception as e:
-            logger.warning(f"{symbol} DB 兜底取价失败: {e}")
-
-        # 全部失败,返回 None 让调用方跳过本轮检查 (不平仓,等下次重试)
-        logger.error(
-            f"{symbol} WebSocket/REST/DB 全部取价失败,本次平仓检查跳过 "
-            f"(可能 delisted 或 K 线采集断了)"
-        )
-        return None
+        hub = get_global_data_hub()
+        if hub is None:
+            logger.error(f"{symbol} DataHub 未初始化, 无法取价")
+            return None
+        return await hub.get_price(symbol)
 
     def _calculate_profit(self, position: Dict, current_price: Decimal) -> Dict:
         """
@@ -1204,68 +1109,18 @@ class SmartExitOptimizer:
         except Exception as e:
             logger.error(f"更新K线缓冲区失败: {e}")
 
-    async def _get_http_session(self):
-        """获取或创建HTTP session（复用以提升性能）"""
-        if self._http_session is None or self._http_session.closed:
-            # 创建连接器，限制并发连接数避免过载
-            connector = aiohttp.TCPConnector(limit=50, limit_per_host=10)
-            self._http_session = aiohttp.ClientSession(connector=connector)
-        return self._http_session
-
     async def _fetch_latest_kline(self, symbol: str, interval: str, limit: int = 1):
         """
-        获取最新K线数据（异步，复用session）
+        获取最新 K 线 - 全部委托 BinanceDataHub.
 
-        Args:
-            symbol: 交易对
-            interval: 时间间隔（5m/15m）
-            limit: 获取K线数量（默认1根，初始化时可获取多根）
-
-        Returns:
-            K线字典列表 [{open, high, low, close, close_time, open_time}]
+        Hub 优先 DB kline_data, 滞后超阈值才走 REST (受 rate_guard + 令牌桶).
         """
-        try:
-            symbol_clean = symbol.replace('/', '').upper()
-
-            # 根据交易对类型选择API
-            if symbol.endswith('/USD'):
-                api_url = 'https://dapi.binance.com/dapi/v1/klines'
-                symbol_for_api = symbol_clean + '_PERP'
-            else:
-                api_url = 'https://fapi.binance.com/fapi/v1/klines'
-                symbol_for_api = symbol_clean
-
-            session = await self._get_http_session()
-            async with session.get(
-                api_url,
-                params={'symbol': symbol_for_api, 'interval': interval, 'limit': limit},
-                timeout=aiohttp.ClientTimeout(total=10)  # 增加超时时间到10秒
-            ) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if data and len(data) > 0:
-                        # 返回K线列表
-                        klines = []
-                        for kline in data:
-                            klines.append({
-                                'open': float(kline[1]),
-                                'high': float(kline[2]),
-                                'low': float(kline[3]),
-                                'close': float(kline[4]),
-                                'open_time': datetime.fromtimestamp(kline[0] / 1000),
-                                'close_time': datetime.fromtimestamp(kline[6] / 1000)
-                            })
-                        return klines
-                else:
-                    # 记录非200状态码
-                    logger.warning(f"获取{symbol} {interval} K线失败: HTTP {response.status}")
-                    return None
-        except asyncio.TimeoutError:
-            logger.warning(f"获取{symbol} {interval} K线超时（10秒）")
+        hub = get_global_data_hub()
+        if hub is None:
+            logger.warning(f"{symbol} {interval} DataHub 未初始化, K 线取不到")
             return None
-        except Exception as e:
-            logger.warning(f"获取{symbol} {interval} K线失败: {type(e).__name__}: {e}")
-            return None
+        rows = await hub.get_klines(symbol, interval=interval, limit=limit)
+        return rows if rows else None
 
     async def _count_against_direction_5m(self, position_id: int, position_side: str) -> int:
         """

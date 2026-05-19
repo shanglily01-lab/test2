@@ -88,57 +88,21 @@ class PriceSampler:
 
     async def _get_realtime_price(self) -> Decimal:
         """
-        获取实时价格（多级降级策略）
+        获取实时价格 - 全部委托 BinanceDataHub.
 
-        Returns:
-            当前价格
+        Hub 内部按 WS -> 缓存 -> DB -> REST 多级降级, 所有 REST 流量受
+        rate_guard 熔断 + 令牌桶限速保护.
         """
-        # 第1级: WebSocket价格
-        try:
-            price = self.price_service.get_price(self.symbol)
-            if price and price > 0:
-                return Decimal(str(price))
-        except Exception as e:
-            logger.warning(f"{self.symbol} WebSocket获取失败: {e}")
-
-        # 第2级: REST API实时价格
-        try:
-            import requests
-            symbol_clean = self.symbol.replace('/', '').upper()
-
-            # 判断是币本位还是U本位合约
-            if self.symbol.endswith('/USD'):
-                # 币本位合约使用 dapi
-                api_url = 'https://dapi.binance.com/dapi/v1/ticker/price'
-                # 币本位API期望格式: BTCUSD_PERP
-                symbol_clean = symbol_clean + '_PERP'
-            else:
-                # U本位合约使用 fapi
-                api_url = 'https://fapi.binance.com/fapi/v1/ticker/price'
-
-            response = requests.get(
-                api_url,
-                params={'symbol': symbol_clean},
-                timeout=3
-            )
-
-            if response.status_code == 200:
-                data = response.json()
-                # 币本位API返回数组，U本位API返回对象
-                if isinstance(data, list) and len(data) > 0:
-                    rest_price = float(data[0]['price'])
-                else:
-                    rest_price = float(data['price'])
-
-                if rest_price > 0:
-                    logger.debug(f"{self.symbol} 使用REST API价格: {rest_price} (from {api_url})")
-                    return Decimal(str(rest_price))
-        except Exception as e:
-            logger.warning(f"{self.symbol} REST API获取失败: {e}")
-
-        # 所有方法都失败
-        logger.error(f"{self.symbol} 所有价格获取方法均失败")
-        return Decimal('0')
+        from app.services.binance_data_hub import get_global_data_hub
+        hub = get_global_data_hub()
+        if hub is None:
+            logger.error(f"{self.symbol} DataHub 未初始化, 价格采样失败")
+            return Decimal('0')
+        price = await hub.get_price(self.symbol)
+        if price is None:
+            logger.warning(f"{self.symbol} 全部取价方法均失败, 本轮采样跳过")
+            return Decimal('0')
+        return price
 
     def _build_baseline(self) -> Optional[Dict]:
         """

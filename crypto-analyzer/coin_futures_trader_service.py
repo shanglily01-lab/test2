@@ -1603,22 +1603,18 @@ class CoinFuturesTraderService:
             }
 
     def get_current_price(self, symbol: str):
-        """获取当前价格 - 直接调用 Binance DAPI REST 接口获取实时标记价格"""
+        """获取当前价格 - 通过 BinanceDataHub 取价 (WS / dapi 缓存 / DB / REST 限速)"""
         try:
-            # BTC/USD -> BTCUSD_PERP
-            api_symbol = symbol.replace('/', '') + '_PERP'
-            url = 'https://dapi.binance.com/dapi/v1/premiumIndex'
-            resp = requests.get(url, params={'symbol': api_symbol}, timeout=5)
-            if resp.status_code == 200:
-                data = resp.json()
-                # DAPI 不带symbol参数时返回列表，带symbol时返回字典或列表
-                if isinstance(data, list):
-                    data = data[0] if data else {}
-                mark_price = float(data.get('markPrice', 0))
-                if mark_price > 0:
-                    logger.debug(f"[PRICE] {symbol} DAPI实时标记价: {mark_price}")
-                    return mark_price
-            logger.warning(f"[PRICE] {symbol} DAPI返回异常: status={resp.status_code}")
+            from app.services.binance_data_hub import get_global_data_hub
+            hub = get_global_data_hub()
+            if hub is None:
+                logger.warning(f"[PRICE] DataHub 未初始化, {symbol} 取不到价")
+                return None
+            p = hub.get_price_sync(symbol)
+            if p is not None and p > 0:
+                logger.debug(f"[PRICE] {symbol} 从 DataHub 取价: {p}")
+                return float(p)
+            logger.warning(f"[PRICE] {symbol} DataHub 未取到")
             return None
         except Exception as e:
             logger.error(f"[ERROR] 获取{symbol}实时价格失败: {e}")

@@ -214,88 +214,27 @@ class FuturesTradingEngine:
     @staticmethod
     def _dapi_coin_margined_price(symbol: str) -> Optional[Decimal]:
         """
-        币本位永续 ADA/USD 等：必须用 dapi（U本位 fapi/现货用 ADAUSD 会失败）。
-        顺序：premiumIndex 标记价 → ticker 最新价。
+        币本位永续 ADA/USD 等取价 - 委托 BinanceDataHub.
+
+        Hub 内部按 WS -> dapi ticker 缓存 -> dapi REST 单拉 (受熔断) 多级降级.
         """
-        from app.trading.dapi_coin_margined_price import to_dapi_perp_symbol
-
-        api_sym = to_dapi_perp_symbol(symbol)
-        if not api_sym:
-            return None
-        import requests
-        endpoints = (
-            ('https://dapi.binance.com/dapi/v1/premiumIndex', ('markPrice', 'indexPrice')),
-            ('https://dapi.binance.com/dapi/v1/ticker/price', ('price',)),
-        )
-        for url, keys in endpoints:
-            try:
-                r = requests.get(url, params={'symbol': api_sym}, timeout=4)
-                if r.status_code != 200:
-                    continue
-                data = r.json()
-                if isinstance(data, list) and len(data) > 0:
-                    data = data[0]
-                if not isinstance(data, dict):
-                    continue
-                raw = None
-                for k in keys:
-                    if k in data and data[k] is not None:
-                        raw = data[k]
-                        break
-                if raw is None:
-                    raw = data.get('price')
-                if raw is not None:
-                    p = Decimal(str(raw))
-                    if p > 0:
-                        logger.debug(f"[PRICE] 币本位 dapi {symbol} ({api_sym}) = {p}")
-                        return p
-            except Exception as e:
-                logger.debug(f"币本位 dapi {api_sym} 请求失败: {e}")
-        # 与「curl 无参 ticker/price」一致：全量列表里按 symbol 匹配（单参请求偶发失败时仍可用）
         try:
-            from app.trading.dapi_coin_margined_price import find_perp_price, get_all_dapi_ticker_prices
-
-            rows = get_all_dapi_ticker_prices()
-            p = find_perp_price(rows, api_sym)
-            if p is not None:
-                logger.debug(f"[PRICE] 币本位 dapi 全量 ticker {symbol} ({api_sym}) = {p}")
-                return p
-        except Exception as e:
-            logger.debug(f"币本位 dapi 全量 ticker 回退失败: {e}")
-        return None
+            from app.services.binance_data_hub import get_global_data_hub
+        except Exception:
+            return None
+        hub = get_global_data_hub()
+        if hub is None:
+            return None
+        return hub.get_price_sync(symbol)
 
     @staticmethod
     def _spot_usdt_proxy_for_coin_margined(symbol: str) -> Optional[Decimal]:
         """
-        dapi 不可用时，用 BASE/USDT 现货作近似（与币本位标记价有偏差，仅优于无价格）。
+        现货近似价 fallback. hub 已经在 get_price_sync 内做了 /USD -> BASEUSDT
+        参考价 fallback (见 binance_data_hub._coin_to_usdt_ref_cached),
+        所以本方法在 _dapi_coin_margined_price 失败后通常也不会再有命中.
+        保留接口兼容旧调用方.
         """
-        from app.trading.dapi_coin_margined_price import to_dapi_perp_symbol
-
-        api_sym = to_dapi_perp_symbol(symbol)
-        if not api_sym:
-            return None
-        import requests
-        base = api_sym[:-8] if api_sym.endswith("USD_PERP") else ""
-        if not base:
-            return None
-        spot = f"{base}USDT"
-        try:
-            r = requests.get(
-                'https://api.binance.com/api/v3/ticker/price',
-                params={'symbol': spot},
-                timeout=3,
-            )
-            if r.status_code == 200:
-                data = r.json()
-                if data and 'price' in data:
-                    p = Decimal(str(data['price']))
-                    if p > 0:
-                        logger.warning(
-                            f"[PRICE] {symbol} 使用现货 {spot} 近似价 {p}（非币本位精确标记价）"
-                        )
-                        return p
-        except Exception as e:
-            logger.debug(f"现货近似价 {spot} 失败: {e}")
         return None
 
     def get_current_price(self, symbol: str, use_realtime: bool = False) -> Decimal:
@@ -317,62 +256,18 @@ class FuturesTradingEngine:
         if cm_spot is not None:
             return cm_spot
 
-        # 如果要求使用实时价格，尝试从交易所API获取
+        # 如果要求使用实时价格, 走 BinanceDataHub (WS / 60s ticker 缓存 / DB / 限速 REST)
         if use_realtime:
             try:
-                import requests
-                from requests.adapters import HTTPAdapter
-                from urllib3.util.retry import Retry
-                
-                # 标准化交易对格式
-                symbol_clean = symbol.replace('/', '').upper()
-                
-                # 配置重试策略
-                session = requests.Session()
-                retry_strategy = Retry(
-                    total=2,
-                    backoff_factor=0.1,
-                    status_forcelist=[429, 500, 502, 503, 504],
-                )
-                adapter = HTTPAdapter(max_retries=retry_strategy)
-                session.mount("https://", adapter)
-                
-                # 优先从Binance合约API获取实时价格
-                try:
-                    response = session.get(
-                        'https://fapi.binance.com/fapi/v1/ticker/price',
-                        params={'symbol': symbol_clean},
-                        timeout=2
-                    )
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data and 'price' in data:
-                            price = Decimal(str(data['price']))
-                            logger.debug(f"从Binance合约API获取实时价格: {symbol} = {price}")
-                            return price
-                except Exception as e:
-                    logger.debug(f"Binance合约API获取失败: {e}")
-                
-                # 如果Binance失败，尝试从Binance现货API获取
-                try:
-                    response = session.get(
-                        'https://api.binance.com/api/v3/ticker/price',
-                        params={'symbol': symbol_clean},
-                        timeout=2
-                    )
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data and 'price' in data:
-                            price = Decimal(str(data['price']))
-                            logger.debug(f"从Binance现货API获取实时价格: {symbol} = {price}")
-                            return price
-                except Exception as e:
-                    logger.debug(f"Binance现货API获取失败: {e}")
-                
-                # 如果实时API都失败，回退到数据库缓存
-                logger.warning(f"实时API获取失败，回退到数据库缓存: {symbol}")
+                from app.services.binance_data_hub import get_global_data_hub
+                hub = get_global_data_hub()
+                if hub is not None:
+                    p = hub.get_price_sync(symbol)
+                    if p is not None and p > 0:
+                        return p
+                logger.warning(f"DataHub 未取到 {symbol} 实时价, 回退到数据库 K 线缓存")
             except Exception as e:
-                logger.warning(f"获取实时价格异常，回退到数据库缓存: {symbol}, {e}")
+                logger.warning(f"DataHub 取价异常, 回退到数据库缓存: {symbol}, {e}")
         
         # 从数据库获取缓存价格（默认行为）
         # 每次查询都创建新连接，确保获取最新数据

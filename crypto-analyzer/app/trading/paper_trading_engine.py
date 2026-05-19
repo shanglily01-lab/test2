@@ -151,21 +151,16 @@ class PaperTradingEngine:
                 adapter = HTTPAdapter(max_retries=retry_strategy)
                 session.mount("https://", adapter)
                 
-                # 优先从Binance现货API获取实时价格
+                # 优先从 BinanceDataHub 取价 (paper 用合约同 symbol 参考价)
                 try:
-                    response = session.get(
-                        'https://api.binance.com/api/v3/ticker/price',
-                        params={'symbol': symbol_clean},
-                        timeout=2
-                    )
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data and 'price' in data:
-                            price = Decimal(str(data['price']))
-                            logger.debug(f"从Binance现货API获取实时价格: {symbol} = {price}")
-                            return price
+                    from app.services.binance_data_hub import get_global_data_hub
+                    hub = get_global_data_hub()
+                    if hub is not None:
+                        p = hub.get_price_sync(symbol)
+                        if p is not None and p > 0:
+                            return p
                 except Exception as e:
-                    logger.debug(f"Binance现货API获取失败: {e}")
+                    logger.debug(f"DataHub 取价失败: {e}")
                 
                 # 如果Binance失败，尝试从Gate.io获取
                 try:
@@ -237,21 +232,15 @@ class PaperTradingEngine:
                     logger.info(f"数据库无价格数据，尝试从API获取: {symbol}")
                     self._warned_symbols.add(symbol)
 
-                # Fallback到实时API
+                # Fallback 到 DataHub (含 REST 限速 + 熔断)
                 try:
-                    import requests
-                    symbol_clean = symbol.replace('/', '').upper()
-                    response = requests.get(
-                        'https://api.binance.com/api/v3/ticker/price',
-                        params={'symbol': symbol_clean},
-                        timeout=3
-                    )
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data and 'price' in data:
-                            price = Decimal(str(data['price']))
-                            logger.info(f"从Binance API获取价格成功: {symbol} = {price}")
-                            return price
+                    from app.services.binance_data_hub import get_global_data_hub
+                    hub = get_global_data_hub()
+                    if hub is not None:
+                        p = hub.get_price_sync(symbol)
+                        if p is not None and p > 0:
+                            logger.info(f"从 DataHub 获取价格成功: {symbol} = {p}")
+                            return p
                 except Exception as e:
                     logger.warning(f"从API获取 {symbol} 价格失败: {e}")
 

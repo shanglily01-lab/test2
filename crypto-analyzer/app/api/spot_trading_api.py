@@ -330,18 +330,17 @@ async def sell_spot_position(req: SellRequest):
     from datetime import datetime as dt
     import uuid
 
-    # 1. 获取实时价格
+    # 1. 获取实时价格 - paper trading 用合约同 symbol 参考价 (DataHub 进程内缓存)
     exit_price = None
     try:
-        timeout = ClientTimeout(total=3)
-        clean = req.symbol.replace("/", "").upper()
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(f"https://api.binance.com/api/v3/ticker/price?symbol={clean}") as resp:
-                if resp.status == 200:
-                    d = await resp.json()
-                    exit_price = float(d["price"])
+        from app.services.binance_data_hub import get_global_data_hub
+        hub = get_global_data_hub()
+        if hub is not None:
+            p = await hub.get_price(req.symbol)
+            if p is not None and p > 0:
+                exit_price = float(p)
     except Exception as e:
-        logger.warning(f"获取Binance现货价格失败: {e}")
+        logger.warning(f"DataHub 取价失败 (paper exit): {e}")
 
     conn = None
     try:
@@ -431,19 +430,18 @@ async def get_spot_prices_batch(symbols: List[str] = Body(..., embed=True)):
         clean = s.replace("/", "").replace("%2F", "").upper()
         symbol_map[clean] = s
 
+    # paper 现货价格 = DataHub 合约同 symbol 参考价 (现货/合约价差 < 0.1%, 不影响 paper 仿真)
     prices = {}
     try:
-        timeout = ClientTimeout(total=3)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get("https://api.binance.com/api/v3/ticker/price") as resp:
-                if resp.status == 200:
-                    all_prices = await resp.json()
-                    price_map = {item["symbol"]: float(item["price"]) for item in all_prices}
-                    for clean, original in symbol_map.items():
-                        if clean in price_map:
-                            prices[original] = {"price": price_map[clean], "source": "binance_spot"}
+        from app.services.binance_data_hub import get_global_data_hub
+        hub = get_global_data_hub()
+        if hub is not None:
+            price_map = hub.get_full_ticker_map(market="futures")
+            for clean, original in symbol_map.items():
+                if clean in price_map:
+                    prices[original] = {"price": float(price_map[clean]), "source": "binance_futures_ref"}
     except Exception as e:
-        logger.warning(f"批量获取现货价格失败: {e}")
+        logger.warning(f"DataHub 批量取价失败 (paper batch): {e}")
 
     return {"success": True, "prices": prices}
 

@@ -13,6 +13,8 @@ from typing import Dict, List, Optional, Tuple
 from loguru import logger
 import pymysql
 
+from app.utils.binance_rate_guard import rate_guard as _rate_guard
+
 
 # 拉取每页条数。注意：币安该接口在 pageSize=30 时会返回 HTTP 400（无正文），20/50 正常。
 FETCH_PAGE_SIZE = 50
@@ -121,6 +123,11 @@ class BinanceNewsMonitor:
 
     def fetch_announcements(self) -> List[Dict]:
         """拉取最新公告列表，返回文章列表（按时间倒序）"""
+        # IP 级熔断中跳过, 公告 CMS 与交易 fapi/dapi 同 IP, 避让以免延长封禁
+        if _rate_guard.is_banned():
+            remaining = _rate_guard.seconds_until_unban()
+            logger.warning(f"币安 IP 熔断中, 跳过公告拉取 (剩余 {remaining:.0f}s)")
+            return []
         params = {
             'type': 1,
             'pageNo': 1,
@@ -181,6 +188,10 @@ class BinanceNewsMonitor:
         失败时返回 None，前端可改用官网链接打开。
         """
         if not catalog_id or not article_id:
+            return None
+        # IP 熔断守卫: 与 fetch_announcements 同
+        if _rate_guard.is_banned():
+            logger.debug("币安 IP 熔断中, 跳过公告详情拉取")
             return None
         headers = {
             'Content-Type': 'application/json',

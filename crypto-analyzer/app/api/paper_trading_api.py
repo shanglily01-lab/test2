@@ -611,21 +611,17 @@ async def get_current_price(symbol: str, force_refresh: bool = False, engine: Pa
             price = None
             timeout = ClientTimeout(total=3)  # 3秒超时，更快响应
             
-            # 尝试从Binance现货API获取
+            # 通过 BinanceDataHub 取价 (paper 用合约同 symbol 参考价)
             try:
-                symbol_clean = symbol.replace('/', '').upper()
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.get(
-                        'https://api.binance.com/api/v3/ticker/price',
-                        params={'symbol': symbol_clean}
-                    ) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            if data and 'price' in data:
-                                price = float(data['price'])
-                                logger.debug(f"从Binance实时API获取 {symbol} 价格: {price}")
+                from app.services.binance_data_hub import get_global_data_hub
+                hub = get_global_data_hub()
+                if hub is not None:
+                    p = await hub.get_price(symbol)
+                    if p is not None and p > 0:
+                        price = float(p)
+                        logger.debug(f"从 DataHub 取 {symbol} 价格: {price}")
             except Exception as e:
-                logger.debug(f"Binance实时API获取失败: {e}")
+                logger.debug(f"DataHub 取价失败: {e}")
             
             # 如果Binance失败，尝试从Gate.io获取
             if not price:

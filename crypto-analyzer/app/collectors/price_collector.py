@@ -1,10 +1,11 @@
 """
 价格数据采集器
-使用 python-binance 库从币安获取数据
-支持实时价格、K线数据、订单簿、交易记录
+全部通过 BinanceDataHub 取数据 (统一币安数据网关).
+
+历史: 早期持有 python-binance SDK Client 直接打 fapi/api 端点,
+多个并发调用会让 IP 走向 -1003. 现已收敛到 hub 统一限速 + 熔断.
 """
 
-from binance.client import Client
 import asyncio
 from typing import List, Dict, Optional
 from datetime import datetime, timedelta
@@ -13,31 +14,19 @@ import pandas as pd
 
 
 class PriceCollector:
-    """价格数据采集器基类"""
+    """价格数据采集器基类 - 全部走 BinanceDataHub."""
 
     def __init__(self, exchange_id: str = 'binance', config: dict = None):
         """
-        初始化采集器
+        初始化采集器.
 
         Args:
             exchange_id: 交易所ID (目前仅支持binance)
-            config: 配置字典，包含API密钥等
+            config: 配置字典. api_key/api_secret 已不需要 (公开接口走 hub).
         """
         self.exchange_id = exchange_id
         self.config = config or {}
-
-        # 获取API密钥
-        api_key = self.config.get('api_key', '').strip()
-        api_secret = self.config.get('api_secret', '').strip()
-
-        # 初始化币安客户端
-        if api_key and api_secret:
-            self.client = Client(api_key, api_secret)
-            logger.info(f"初始化 {exchange_id} 采集器 (使用API密钥)")
-        else:
-            # 公开接口模式，不需要API密钥也能获取市场数据
-            self.client = Client("", "")
-            logger.info(f"初始化 {exchange_id} 采集器 (公开接口模式)")
+        logger.info(f"初始化 {exchange_id} 采集器 (通过 BinanceDataHub)")
 
     async def fetch_ticker(self, symbol: str) -> Optional[Dict]:
         """
@@ -53,12 +42,15 @@ class PriceCollector:
             # 转换交易对格式: BTC/USDT -> BTCUSDT
             binance_symbol = symbol.replace('/', '')
 
-            # 获取24小时ticker数据（使用合约API）
-            ticker = await asyncio.to_thread(self.client.futures_ticker, symbol=binance_symbol)
-
-            # futures_ticker API可能不返回bidPrice/askPrice,使用.get()安全访问
+            # 通过 DataHub 取 24h ticker (合约端点, 受熔断 + 令牌桶)
+            from app.services.binance_data_hub import get_global_data_hub
+            hub = get_global_data_hub()
+            if hub is None:
+                return None
+            ticker = await hub.fapi_request_get('/fapi/v1/ticker/24hr', {'symbol': binance_symbol})
+            if not ticker or not isinstance(ticker, dict) or 'lastPrice' not in ticker:
+                return None
             last_price = float(ticker['lastPrice'])
-
             return {
                 'exchange': self.exchange_id,
                 'symbol': symbol,
@@ -70,8 +62,8 @@ class PriceCollector:
                 'close': last_price,
                 'volume': float(ticker['volume']),
                 'quote_volume': float(ticker['quoteVolume']),
-                'bid': float(ticker.get('bidPrice', last_price)),  # 如果没有bid,使用lastPrice
-                'ask': float(ticker.get('askPrice', last_price)),  # 如果没有ask,使用lastPrice
+                'bid': float(ticker.get('bidPrice', last_price)),
+                'ask': float(ticker.get('askPrice', last_price)),
                 'change_24h': float(ticker['priceChangePercent']),
             }
 
@@ -99,35 +91,27 @@ class PriceCollector:
             DataFrame包含 [timestamp, open, high, low, close, volume]
         """
         try:
-            import requests
-
-            # 转换交易对格式
-            binance_symbol = symbol.replace('/', '')
-
-            # 使用合约API获取K线数据
-            url = "https://fapi.binance.com/fapi/v1/klines"
-            params = {
-                'symbol': binance_symbol,
-                'interval': timeframe,
-                'limit': min(limit, 1500)  # 币安合约API限制最大1500
-            }
-
-            if since:
-                params['startTime'] = since
-
-            # 获取K线数据
-            response = await asyncio.to_thread(requests.get, url, params=params, timeout=10)
-
-            if response.status_code != 200:
-                logger.error(f"获取合约K线失败: HTTP {response.status_code}")
+            # 走 BinanceDataHub - 优先 DB kline 命中, 滞后才走 REST (受熔断 + 令牌桶)
+            from app.services.binance_data_hub import get_global_data_hub
+            hub = get_global_data_hub()
+            if hub is None:
+                logger.warning(f"DataHub 未初始化, {symbol} K线取不到")
+                return None
+            rows = await hub.get_klines(symbol, interval=timeframe, limit=min(limit, 1500))
+            if not rows:
                 return None
 
-            klines = response.json()
+            # hub 已经把 K 线转成结构化字典 (open/high/low/close/volume/open_time/close_time),
+            # 这里再转回 DataFrame, 保持原方法返回结构兼容下游 (analyzers/data_management_api).
+            klines = []
+            for r in rows:
+                klines.append([
+                    int(r['open_time'].timestamp() * 1000),
+                    r['open'], r['high'], r['low'], r['close'], r['volume'],
+                    int(r['close_time'].timestamp() * 1000),
+                    0, 0, 0, 0, 0,
+                ])
 
-            if not klines:
-                return None
-
-            # 转换为DataFrame
             df = pd.DataFrame(klines, columns=[
                 'timestamp', 'open', 'high', 'low', 'close', 'volume',
                 'close_time', 'quote_volume', 'trades', 'taker_buy_base',
@@ -176,16 +160,20 @@ class PriceCollector:
             # 转换交易对格式
             binance_symbol = symbol.replace('/', '')
 
-            # 获取订单簿
-            orderbook = await asyncio.to_thread(
-                self.client.get_order_book,
-                symbol=binance_symbol,
-                limit=limit
+            # 通过 DataHub 取订单簿 (现货端点, 受熔断 + 令牌桶)
+            from app.services.binance_data_hub import get_global_data_hub
+            hub = get_global_data_hub()
+            if hub is None:
+                return None
+            orderbook = await hub.spot_request_get(
+                '/api/v3/depth', {'symbol': binance_symbol, 'limit': limit}
             )
+            if not orderbook or not isinstance(orderbook, dict):
+                return None
 
             # 转换格式
-            bids = [[float(price), float(qty)] for price, qty in orderbook['bids'][:limit]]
-            asks = [[float(price), float(qty)] for price, qty in orderbook['asks'][:limit]]
+            bids = [[float(price), float(qty)] for price, qty in orderbook.get('bids', [])[:limit]]
+            asks = [[float(price), float(qty)] for price, qty in orderbook.get('asks', [])[:limit]]
 
             return {
                 'exchange': self.exchange_id,
@@ -216,12 +204,16 @@ class PriceCollector:
             # 转换交易对格式
             binance_symbol = symbol.replace('/', '')
 
-            # 获取最近成交
-            trades = await asyncio.to_thread(
-                self.client.get_recent_trades,
-                symbol=binance_symbol,
-                limit=limit
+            # 通过 DataHub 取成交记录 (现货端点, 受熔断 + 令牌桶)
+            from app.services.binance_data_hub import get_global_data_hub
+            hub = get_global_data_hub()
+            if hub is None:
+                return None
+            trades = await hub.spot_request_get(
+                '/api/v3/trades', {'symbol': binance_symbol, 'limit': limit}
             )
+            if not trades or not isinstance(trades, list):
+                return None
 
             return [{
                 'exchange': self.exchange_id,
@@ -251,33 +243,30 @@ class PriceCollector:
             # 转换交易对格式: BTC/USDT -> BTCUSDT
             binance_symbol = symbol.replace('/', '')
 
-            # 币安期货API获取资金费率
-            # 注意: 需要使用期货API,这里使用现货client会报错
-            # 我们尝试从公开数据获取
-            import requests
-
-            # 使用币安期货公开API
-            url = "https://fapi.binance.com/fapi/v1/premiumIndex"
-            params = {'symbol': binance_symbol}
-
-            response = await asyncio.to_thread(requests.get, url, params=params)
-
-            if response.status_code == 200:
-                data = response.json()
-
-                return {
-                    'exchange': self.exchange_id,
-                    'symbol': symbol,
-                    'funding_rate': float(data.get('lastFundingRate', 0)),
-                    'funding_time': int(data.get('time', 0)),
-                    'timestamp': datetime.fromtimestamp(int(data.get('time', 0)) / 1000) if data.get('time') else datetime.utcnow(),
-                    'mark_price': float(data.get('markPrice', 0)),
-                    'index_price': float(data.get('indexPrice', 0)),
-                    'next_funding_time': int(data.get('nextFundingTime', 0))
-                }
-            else:
-                logger.warning(f"获取 {symbol} 资金费率失败: HTTP {response.status_code}")
+            # 走 BinanceDataHub 缓存 (hub 60s 后台拉一次全市场 premiumIndex)
+            from app.services.binance_data_hub import get_global_data_hub
+            hub = get_global_data_hub()
+            if hub is None:
+                logger.warning(f"DataHub 未初始化, {symbol} 资金费率取不到")
                 return None
+
+            premium_map = hub.get_premium_index_map(market="futures")
+            mark = premium_map.get(binance_symbol)
+            funding = hub.get_funding_rate_sync(symbol)
+            if mark is None and funding is None:
+                logger.debug(f"DataHub 缓存暂无 {symbol} 资金费率")
+                return None
+
+            return {
+                'exchange': self.exchange_id,
+                'symbol': symbol,
+                'funding_rate': float(funding) if funding is not None else 0.0,
+                'funding_time': 0,
+                'timestamp': datetime.utcnow(),
+                'mark_price': float(mark) if mark is not None else 0.0,
+                'index_price': 0.0,
+                'next_funding_time': 0,
+            }
 
         except Exception as e:
             logger.error(f"{self.exchange_id} 获取 {symbol} 资金费率失败: {e}")
@@ -598,16 +587,21 @@ class MultiExchangeCollector:
             return []
 
         try:
-            # 获取所有交易信息
-            exchange_info = collector.client.get_exchange_info()
+            # 通过 DataHub 同步取交易所信息 (现货端点, 一次性元数据, 受熔断保护)
+            from app.services.binance_data_hub import get_global_data_hub
+            hub = get_global_data_hub()
+            if hub is None:
+                return []
+            exchange_info = hub.spot_request_get_sync('/api/v3/exchangeInfo', None, timeout=15)
+            if not exchange_info or not isinstance(exchange_info, dict):
+                return []
             symbols = []
-
-            for symbol_info in exchange_info['symbols']:
-                if symbol_info['status'] == 'TRADING':
-                    # 转换格式: BTCUSDT -> BTC/USDT
-                    base = symbol_info['baseAsset']
-                    quote = symbol_info['quoteAsset']
-                    symbols.append(f"{base}/{quote}")
+            for symbol_info in exchange_info.get('symbols', []) or []:
+                if symbol_info.get('status') == 'TRADING':
+                    base = symbol_info.get('baseAsset')
+                    quote = symbol_info.get('quoteAsset')
+                    if base and quote:
+                        symbols.append(f"{base}/{quote}")
 
             return symbols
         except Exception as e:

@@ -1198,30 +1198,21 @@ async def get_futures_price(symbol: str):
         # 使用较短的超时时间，快速失败并回退
         quick_timeout = ClientTimeout(total=2)  # 2秒快速超时
         
-        # 1. 优先从Binance合约API获取（快速）
+        # 1. 优先从 BinanceDataHub 取价 (WS / 60s ticker 缓存 / DB / 限速 REST)
         try:
-            async with aiohttp.ClientSession(timeout=quick_timeout) as session:
-                async with session.get(
-                    'https://fapi.binance.com/fapi/v1/ticker/price',
-                    params={'symbol': symbol_clean}
-                ) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        if data and 'price' in data:
-                            price = float(data['price'])
-                            source = 'binance_futures'
-                            logger.debug(f"从Binance合约API获取 {symbol} 价格: {price}")
-                            # 成功获取，直接返回
-                            return {
-                                'success': True,
-                                'symbol': symbol,
-                                'price': price,
-                                'source': source
-                            }
-        except (aiohttp.ClientError, aiohttp.ServerTimeoutError, TimeoutError) as e:
-            logger.debug(f"Binance合约API超时或失败: {symbol}, {e}")
+            from app.services.binance_data_hub import get_global_data_hub
+            hub = get_global_data_hub()
+            if hub is not None:
+                hub_price = await hub.get_price(symbol)
+                if hub_price is not None and hub_price > 0:
+                    return {
+                        'success': True,
+                        'symbol': symbol,
+                        'price': float(hub_price),
+                        'source': 'binance_futures'
+                    }
         except Exception as e:
-            logger.debug(f"Binance合约API获取失败: {e}")
+            logger.debug(f"DataHub 取价失败: {symbol}, {e}")
         
         # 2. 如果Binance失败，尝试从Gate.io合约API获取（仅对HYPE/USDT）
         if not price and symbol.upper() == 'HYPE/USDT':
@@ -1303,28 +1294,21 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
     prices = {}
     quick_timeout = ClientTimeout(total=3)  # 3秒超时
 
-    # IP级熔断: 处于封禁期则跳过 Binance 直调, 直接走 fallback
-    from app.utils.binance_rate_guard import rate_guard as _rate_guard
-    skip_binance = _rate_guard.is_banned()
-
-    if not skip_binance:
-        try:
-            # 1. 从Binance批量获取所有合约价格（单次请求）
-            async with aiohttp.ClientSession(timeout=quick_timeout) as session:
-                async with session.get('https://fapi.binance.com/fapi/v1/ticker/price') as response:
-                    if response.status == 200:
-                        all_prices = await response.json()
-                        # 构建价格映射
-                        price_map = {item['symbol']: float(item['price']) for item in all_prices}
-
-                        for clean_symbol, original_symbol in symbol_map.items():
-                            if clean_symbol in price_map:
-                                prices[original_symbol] = {
-                                    'price': price_map[clean_symbol],
-                                    'source': 'binance_futures'
-                                }
-        except Exception as e:
-            logger.debug(f"批量获取Binance价格失败: {e}")
+    # 走 BinanceDataHub 进程内缓存 (后台 60s 拉一次全市场)
+    # 进入这里完全不打 REST, 实盘高频访问也不会触发币安限额.
+    try:
+        from app.services.binance_data_hub import get_global_data_hub
+        hub = get_global_data_hub()
+        if hub is not None:
+            price_map = hub.get_full_ticker_map(market="futures")
+            for clean_symbol, original_symbol in symbol_map.items():
+                if clean_symbol in price_map:
+                    prices[original_symbol] = {
+                        'price': float(price_map[clean_symbol]),
+                        'source': 'binance_futures'
+                    }
+    except Exception as e:
+        logger.debug(f"DataHub 批量取价失败: {e}")
 
     # 2. Binance 直调失败的 symbol, fallback 取 5m K 线 close (最多 5 分钟陈旧)
     # 历史 bug: 原来用 1m K 线, 但 1m 已停采 (2026-01-22), 拿到 4 个月前的老价格
