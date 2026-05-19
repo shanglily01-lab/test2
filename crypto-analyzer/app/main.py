@@ -401,18 +401,9 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  启动实盘订单监控任务失败: {e}")
             live_order_monitor = None
 
-    # 启动信号分析后台服务（每6小时执行一次）
+    # 信号分析后台服务已从 main 移除 (2026-05-19)
+    # 改为每天 02:00 本地调度 update_top_performing_symbols 更新 TOP 50, 见下方 schedule.every().day.at("02:00")
     signal_analysis_service = None
-    try:
-        from app.services.signal_analysis_background_service import SignalAnalysisBackgroundService
-        signal_analysis_service = SignalAnalysisBackgroundService()
-        asyncio.create_task(signal_analysis_service.run_loop(interval_hours=6))
-        logger.info("✅ 信号分析后台服务已启动（每6小时执行一次）")
-    except Exception as e:
-        logger.warning(f"⚠️  启动信号分析后台服务失败: {e}")
-        import traceback
-        traceback.print_exc()
-        signal_analysis_service = None
 
     # 启动每日优化服务（每天凌晨1点执行）
     daily_optimizer_task = None
@@ -590,10 +581,27 @@ async def lifespan(app: FastAPI):
                 from app.services.binance_ws_price import get_ws_price_service
                 predictor = MarketPredictor(db_config, ws_price_service=get_ws_price_service())
                 count = predictor.run_all(_prediction_symbols)
-                logger.info(f"✅ 市场预测分析完成，共{count}个交易对")
+                logger.info(f"[OK] 市场预测分析完成，共{count}个交易对")
             except Exception as e:
-                logger.error(f"❌ 市场预测分析失败: {e}")
+                logger.error(f"[FAIL] 市场预测分析失败: {e}")
         schedule.every(4).hours.do(run_market_prediction)
+
+        # TOP 50 盈利交易对更新 (每天 02:00 本地, 仅 U 本位 account_id=2)
+        # 实盘 live_trading_enabled=1 时, 所有开仓必须在 top_performing_symbols 内,
+        # 该列表每天根据 futures_positions 历史持仓表现重新统计.
+        def run_top50_update():
+            """每天更新 top_performing_symbols 表的 Top 50 盈利交易对."""
+            try:
+                logger.info("[TOP50] 开始更新 U 本位 TOP 50 交易对...")
+                from update_top_performers import update_top_performing_symbols
+                update_top_performing_symbols(account_id=2, top_n=50)
+                logger.info("[TOP50] 完成更新")
+            except Exception as e:
+                logger.error(f"[TOP50] 更新失败: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+        schedule.every().day.at("02:00").do(run_top50_update)
+        logger.info("[OK] TOP 50 更新任务已注册 (每天 02:00 本地)")
 
 
         # ── 独立子进程周期任务（与 FastAPI 主进程完全隔离）──────────────────────────
@@ -828,13 +836,13 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"⚠️  停止超级大脑优化服务失败: {e}")
 
-    # 停止信号分析后台服务
+    # 信号分析后台服务已不在 main 启动 (2026-05-19), 此处保留兼容 lifespan 关闭流程
     if signal_analysis_service:
         try:
             signal_analysis_service.stop()
-            logger.info("✅ 信号分析后台服务已停止")
+            logger.info("[OK] 信号分析后台服务已停止")
         except Exception as e:
-            logger.warning(f"⚠️  停止信号分析后台服务失败: {e}")
+            logger.warning(f"停止信号分析后台服务失败: {e}")
 
     # 停止价格缓存服务
     if price_cache_service:
