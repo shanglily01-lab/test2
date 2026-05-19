@@ -129,16 +129,18 @@ ON DUPLICATE KEY UPDATE
 
 def save_klines(symbol: str, interval: str, raw_klines: List[List]) -> int:
     """
-    写入 kline_data 表. 与 smart_futures_collector.save_klines 行为一致:
-    - 排除最后一根未完成的 K 线
+    写入 kline_data 表.
     - exchange 固定 'binance_futures'
     - ON DUPLICATE KEY UPDATE 安全重跑
+    - 全部写入, 包括最新一根 (即使未完成). 对回填场景这是关键 - 否则永远缺最新那根,
+      尤其是 1d 这种长周期 K 线, 排除最后一根等于"补了 4-20 到 5-18, 缺 5-19".
+      与 fast_collector 不同的是: 它是定时增量, 不想写半成品; 回填是补缺,
+      宁可写半成品 (close 价是当前价, 仍然可用; 下次定时采集会覆盖).
     """
     if not raw_klines:
         return 0
-    completed = raw_klines[:-1] if len(raw_klines) > 1 else raw_klines
     rows = []
-    for k in completed:
+    for k in raw_klines:
         rows.append(
             (
                 symbol, "binance_futures", interval,
