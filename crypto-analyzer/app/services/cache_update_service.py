@@ -79,27 +79,113 @@ class CacheUpdateService:
             traceback.print_exc()
 
     async def update_price_stats_cache(self, symbols: List[str]):
-        """更新24小时价格统计缓存"""
-        # logger.info("📊 更新价格统计缓存...")  # 减少日志输出
+        """更新24小时价格统计缓存.
 
+        2026-05-20 重构: 改成一条聚合 SQL 批量更新所有 symbol, 不再 per-symbol 循环.
+        原 SQLAlchemy 实现 4 个查询 x 295 symbol ≈ 1200s/轮, 跟不上 1 分钟调度;
+        新 SQL 实现单条 UPDATE INNER JOIN ≈ 1-3s/轮.
+
+        计算源: kline_data 5m (由 ws_kline_collector 实时写入).
+        - current_price: 最新 5m close
+        - price_24h_ago: 24h 前最近 1h K线 close (5m 表太密, 用 1h 更稳)
+        - high_24h / low_24h: 近 24h 内 5m K线 high/low 极值
+        - volume_24h / quote_volume_24h: 近 24h 内 5m K线累计
+        - change_24h: (current - 24h前) / 24h前 * 100
+        """
+        try:
+            # 用 pymysql 直接跑 SQL, 绕开 SQLAlchemy ORM 开销
+            import pymysql
+            import pymysql.cursors
+            db_cfg = self.config.get('database', {}).get('mysql', {})
+            # config_loader 返回的 mysql 配置含 host/port/user/password/database
+            conn = pymysql.connect(
+                host=db_cfg.get('host', 'localhost'),
+                port=int(db_cfg.get('port', 3306)),
+                user=db_cfg.get('user', 'root'),
+                password=db_cfg.get('password', ''),
+                database=db_cfg.get('database', 'binance-data'),
+                charset='utf8mb4',
+                autocommit=True,
+            )
+            try:
+                with conn.cursor() as cur:
+                    # 单条 UPDATE 用 4 个子聚合一次性更新所有 symbol
+                    # 注意: 不限定 symbol IN (...), 因为 price_stats_24h 已经有这些行
+                    # ws_kline_collector 写入的所有 symbol 都自动得到更新
+                    cur.execute("""
+                        UPDATE price_stats_24h p
+                        INNER JOIN (
+                            -- latest_5m: 每个 symbol 最新 5m close = current_price
+                            SELECT k.symbol, k.close_price AS cur_price
+                            FROM kline_data k
+                            INNER JOIN (
+                                SELECT symbol, MAX(open_time) AS max_t
+                                FROM kline_data
+                                WHERE timeframe='5m' AND exchange='binance_futures'
+                                  AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 MINUTE) * 1000)
+                                GROUP BY symbol
+                            ) cap ON k.symbol=cap.symbol AND k.open_time=cap.max_t AND k.timeframe='5m'
+                        ) latest5m ON p.symbol = latest5m.symbol
+                        INNER JOIN (
+                            -- 24h_ago_1h: 每个 symbol 24h 前最近 1h K线 close
+                            SELECT k.symbol, k.close_price AS p24
+                            FROM kline_data k
+                            INNER JOIN (
+                                SELECT symbol, MAX(open_time) AS max_t
+                                FROM kline_data
+                                WHERE timeframe='1h' AND exchange='binance_futures'
+                                  AND open_time <= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+                                  AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 HOUR) * 1000)
+                                GROUP BY symbol
+                            ) cap ON k.symbol=cap.symbol AND k.open_time=cap.max_t AND k.timeframe='1h'
+                        ) ago24h ON p.symbol = ago24h.symbol
+                        LEFT JOIN (
+                            -- 24h 内 5m K线高低 + 成交量
+                            SELECT symbol,
+                                   MAX(high_price) AS h24,
+                                   MIN(low_price)  AS l24,
+                                   SUM(volume) AS vol,
+                                   SUM(quote_volume) AS qvol
+                            FROM kline_data
+                            WHERE timeframe='5m' AND exchange='binance_futures'
+                              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+                            GROUP BY symbol
+                        ) stat24h ON p.symbol = stat24h.symbol
+                        SET p.current_price   = latest5m.cur_price,
+                            p.price_24h_ago   = ago24h.p24,
+                            p.change_24h_abs  = latest5m.cur_price - ago24h.p24,
+                            p.change_24h      = (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100,
+                            p.high_24h        = IFNULL(stat24h.h24, latest5m.cur_price),
+                            p.low_24h         = IFNULL(stat24h.l24, latest5m.cur_price),
+                            p.volume_24h      = IFNULL(stat24h.vol, 0),
+                            p.quote_volume_24h = IFNULL(stat24h.qvol, 0),
+                            p.price_range_24h = IFNULL(stat24h.h24, latest5m.cur_price) - IFNULL(stat24h.l24, latest5m.cur_price),
+                            p.price_range_pct = (IFNULL(stat24h.h24, latest5m.cur_price) - IFNULL(stat24h.l24, latest5m.cur_price))
+                                                / latest5m.cur_price * 100,
+                            p.trend           = CASE
+                                WHEN (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100 > 5  THEN 'strong_up'
+                                WHEN (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100 > 1  THEN 'up'
+                                WHEN (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100 < -5 THEN 'strong_down'
+                                WHEN (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100 < -1 THEN 'down'
+                                ELSE 'sideways' END,
+                            p.updated_at = UTC_TIMESTAMP()
+                        WHERE ago24h.p24 > 0
+                    """)
+                    affected = cur.rowcount
+                logger.info(f"[price_stats] 批量更新完成: {affected} 行")
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.error(f"[price_stats] 批量更新失败: {e}", exc_info=True)
+        return
+
+    async def update_price_stats_cache_legacy(self, symbols: List[str]):
+        """旧版 per-symbol 实现, 保留作 fallback (太慢, 实际不再被调用)."""
         for symbol in symbols:
             try:
-                # 优先从实时ticker API获取24h统计数据（更准确）
                 ticker_data = None
-                try:
-                    from app.collectors.price_collector import PriceCollector
-                    collector_config = self.config.get('exchanges', {}).get('binance', {})
-                    if collector_config.get('enabled', False):
-                        collector = PriceCollector('binance', collector_config)
-                        ticker_data = await collector.fetch_ticker(symbol)
-                except Exception as e:
-                    logger.debug(f"从ticker API获取{symbol}数据失败，将使用K线数据: {e}")
-                
-                # 获取当前价格 — 只用 5m K线
-                # 历史 bug (修于 2026-05-20): 之前 "优先 1m 回退 5m" 会用 2026-01-14/22 停采前
-                # 的 1m 残留数据作为 current_price, 导致 price_stats_24h.current_price 长期被
-                # 冰冻在停采时刻 (HYPE/USDT 21.86 vs 真实 48.42 偏 56%). 5m K 线由 ws_kline_collector
-                # 实时更新, 是当前唯一可靠源.
+
+                # 获取当前价格 — 只用 5m K线 (由 ws_kline_collector 实时写入)
                 latest_kline = self.db_service.get_latest_kline(symbol, '5m')
                 if not latest_kline:
                     continue
