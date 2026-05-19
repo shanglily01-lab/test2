@@ -199,7 +199,7 @@ async def list_verdicts(run_id: int = Query(..., ge=1)):
 # ============================================================
 @router.get("/positions")
 async def list_positions(
-    status: str = Query('open', regex='^(open|closed)$'),
+    status: str = Query('open', pattern='^(open|closed)$'),
     limit: int = Query(50, ge=1, le=500),
 ):
     """gemini_explore source 的当前 OPEN / 历史 CLOSED 仓位."""
