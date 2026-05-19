@@ -197,32 +197,65 @@ def _count_open_positions(conn) -> int:
 
 # ---------------- 价格获取 ----------------
 def _get_current_price(conn, symbol: str) -> Optional[float]:
-    """从 price_stats_24h 取当前价 (该表每分钟更新). 不新鲜则返回 None."""
+    """实时取当前价, 用于开仓.
+
+    优先级 (高 -> 低):
+      L1. BinanceDataHub.get_price_sync — WS markPrice (秒级实时, 主路径)
+          Hub 内部已经 4 级降级 (WS -> 60s ticker -> coin ref -> REST), 用 90s
+          新鲜度门槛, 拿到的就算实时.
+      L2. kline_data 5m close 兜底 — 单独脚本测试 / Hub 未启时用, 延迟 <= 6 分钟
+          5m K 线 open 超过 15 分钟则视为停采, 返回 None 跳过开仓.
+
+    历史教训 (2026-05-20):
+      - 旧实现走 price_stats_24h.current_price, 那列由 cache_update_service 维护,
+        但内部"优先 1m 回退 5m" 用了 2026-01 停采前的残留 1m 数据, 整整 4 个月
+        没更新真实价. HYPE 真价 48 但 column 一直显示 21.
+      - 现在主路径走 Hub WS markPrice, 跟 SmartExitOptimizer 用的是同一个价格源,
+        开仓价跟 SL/TP 检查价 同步, 避免立刻被打 SL.
+    """
+    # L1: Hub (主路径)
+    try:
+        from app.services.binance_data_hub import get_global_data_hub
+        hub = get_global_data_hub()
+        if hub is not None:
+            p = hub.get_price_sync(symbol, max_age_seconds=90)
+            if p is not None and p > 0:
+                return float(p)
+    except Exception as e:
+        logger.debug(f"[Gemini探索] Hub 取价失败 {symbol}, 走 L2 兜底: {e}")
+
+    # L2: 5m kline close 兜底
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT current_price, updated_at FROM price_stats_24h "
-                "WHERE symbol=%s LIMIT 1",
+                "SELECT close_price, FROM_UNIXTIME(open_time/1000) AS open_dt "
+                "FROM kline_data "
+                "WHERE symbol=%s AND timeframe='5m' "
+                "ORDER BY open_time DESC LIMIT 1",
                 (symbol,),
             )
             row = cur.fetchone()
-            if not row or row.get('current_price') is None:
+            if not row or row.get('close_price') is None:
                 return None
-            updated_at = row.get('updated_at')
-            if updated_at is None:
+            open_dt = row.get('open_dt')
+            if open_dt is None:
                 return None
-            if isinstance(updated_at, str):
+            if isinstance(open_dt, str):
                 try:
-                    updated_at = datetime.strptime(updated_at, '%Y-%m-%d %H:%M:%S')
+                    open_dt = datetime.strptime(open_dt, '%Y-%m-%d %H:%M:%S')
                 except Exception:
                     return None
-            age = (datetime.utcnow() - updated_at).total_seconds()
-            if age > 600:  # 超过 10 分钟视为过时
-                logger.warning(f"[Gemini探索] {symbol} 价格过时 ({age:.0f}s),跳过")
+            age = (datetime.utcnow() - open_dt).total_seconds()
+            if age > 900:  # K 线 open 时间超过 15 分钟视为停采
+                logger.warning(
+                    f"[Gemini探索] {symbol} L1 失败 L2 兜底 5m K线也过时 "
+                    f"({age:.0f}s, open={open_dt}), 跳过"
+                )
                 return None
-            return float(row['current_price'])
+            logger.info(f"[Gemini探索] {symbol} L1 失败 L2 兜底 5m close={row['close_price']}")
+            return float(row['close_price'])
     except Exception as e:
-        logger.warning(f"[Gemini探索] 取价失败 {symbol}: {e}")
+        logger.warning(f"[Gemini探索] L2 兜底取价失败 {symbol}: {e}")
         return None
 
 
