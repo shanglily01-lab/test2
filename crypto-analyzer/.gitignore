@@ -75,3 +75,7 @@ ema_alerts.txt
 心理学手册/
 心理学深度解析手册.md
 .mcp.json
+
+# 编辑器 / Agent 本地配置（个人偏好, 不入库）
+.cursor/
+.claude/settings.local.json
