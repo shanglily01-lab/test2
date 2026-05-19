@@ -421,12 +421,65 @@ class SmartFuturesCollector:
             logger.warning(f"查询高风险 symbol 失败 (跳过过滤): {e}")
             return set()
 
+    # 币安在交易 symbol 列表的内存缓存
+    _active_symbols_cache: Dict[str, tuple] = {}  # {market_type: (symbols_set, ts)}
+    _active_symbols_ttl_sec = 3600  # 缓存 1 小时
+
+    @classmethod
+    def _fetch_active_binance_symbols(cls, market_type: str = 'futures') -> Optional[set]:
+        """从币安 exchangeInfo 拿当前在交易 (status='TRADING') 的 symbols 集合.
+
+        Args:
+            market_type: 'futures' (U本位) 或 'coin_futures' (币本位)
+        Returns:
+            set of symbols (币安格式, 如 {'BTCUSDT', 'ETHUSDT'}); 失败返回 None
+        """
+        import time as _t
+        cached = cls._active_symbols_cache.get(market_type)
+        if cached and (_t.time() - cached[1]) < cls._active_symbols_ttl_sec:
+            return cached[0]
+
+        try:
+            import requests
+            if market_type == 'futures':
+                url = 'https://fapi.binance.com/fapi/v1/exchangeInfo'
+            elif market_type == 'coin_futures':
+                url = 'https://dapi.binance.com/dapi/v1/exchangeInfo'
+            else:
+                logger.error(f"未知 market_type: {market_type}")
+                return None
+
+            resp = requests.get(url, timeout=10)
+            if resp.status_code != 200:
+                logger.warning(f"币安 exchangeInfo HTTP {resp.status_code}, 跳过过滤")
+                return None
+            data = resp.json()
+            symbols_raw = data.get('symbols', [])
+            # fapi 用 'status' 字段, dapi 用 'contractStatus' 字段, 都支持
+            active = {
+                s['symbol']
+                for s in symbols_raw
+                if (s.get('status') == 'TRADING' or s.get('contractStatus') == 'TRADING')
+                and (s.get('contractType') == 'PERPETUAL' or s.get('contractType') is None)
+            }
+            cls._active_symbols_cache[market_type] = (active, _t.time())
+            logger.info(f"[symbols 同步] 币安 {market_type} active 列表: {len(active)} 个 (缓存 1h)")
+            return active
+        except Exception as e:
+            logger.warning(f"[symbols 同步] 拉币安 exchangeInfo 失败 (跳过过滤,用 config 原始列表): {e}")
+            return None
+
     def get_trading_symbols(self) -> List[str]:
         """
-        从config.yaml获取需要监控的U本位合约交易对列表, 自动剔除 rating_level >= 2 的
+        获取需要监控的 U 本位合约交易对.
+
+        来源:
+          1. config.yaml 的 symbols 列表 (硬编码基线)
+          2. 实际币安在交易的 symbols (动态过滤, 防止 config 里有已下架的 ARIA/USDT 等)
+          3. trading_symbol_rating 高风险剔除 (rating_level >= 2)
 
         Returns:
-            交易对列表（币安格式，如 ['BTCUSDT', 'ETHUSDT']）
+            交易对列表 (币安格式, 如 ['BTCUSDT', 'ETHUSDT'])
         """
         try:
             import yaml
@@ -446,8 +499,7 @@ class SmartFuturesCollector:
                 logger.warning("配置文件中没有找到交易对列表")
                 return []
 
-            # 剔除 rating_level >= 2 的 symbol (严格限制 + 永久禁止)
-            # symbols_list 里是 'BTC/USDT' 格式, 跟 trading_symbol_rating 表里的格式一致
+            # 剔除 rating_level >= 2 的 symbol
             high_risk = self._get_high_risk_symbols()
             before = len(symbols_list)
             symbols_list = [s for s in symbols_list if s not in high_risk]
@@ -456,8 +508,25 @@ class SmartFuturesCollector:
                 logger.info(f"按 rating_level >= 2 过滤: {before} -> {after} symbols (剔除 {before - after} 个高风险)")
 
             # 转换为币安格式: BTC/USDT -> BTCUSDT
-            symbols = [s.replace('/', '') for s in symbols_list]
-            return symbols
+            binance_format = [s.replace('/', '') for s in symbols_list]
+
+            # 与币安实际在交易的 symbols 求交集 (剔 ARIA 这种已下架的)
+            active = self._fetch_active_binance_symbols('futures')
+            if active is not None:
+                before2 = len(binance_format)
+                filtered = [s for s in binance_format if s in active]
+                dropped = set(binance_format) - active
+                after2 = len(filtered)
+                if dropped:
+                    sample = sorted(list(dropped))[:10]
+                    logger.warning(
+                        f"[symbols 同步] config.yaml 里 {len(dropped)} 个 symbol 已不在币安活跃列表, 剔除: "
+                        f"{sample}{' ...' if len(dropped) > 10 else ''}"
+                    )
+                logger.info(f"[symbols 同步] 与币安 active 求交后: {before2} -> {after2} symbols")
+                binance_format = filtered
+
+            return binance_format
 
         except Exception as e:
             logger.error(f"获取交易对列表失败: {e}")
@@ -465,10 +534,12 @@ class SmartFuturesCollector:
 
     def get_coin_futures_symbols(self) -> List[str]:
         """
-        从config.yaml获取需要监控的币本位合约交易对列表
+        获取需要监控的币本位合约交易对.
+
+        来源: config.yaml coin_futures_symbols + 币安 dapi active 交集.
 
         Returns:
-            币本位合约交易对列表（币安格式，如 ['BTCUSD_PERP', 'ETHUSD_PERP']）
+            币本位合约交易对列表 (币安格式, 如 ['BTCUSD_PERP', 'ETHUSD_PERP'])
         """
         try:
             import yaml
@@ -487,6 +558,22 @@ class SmartFuturesCollector:
             if not coin_symbols_list:
                 logger.info("配置文件中没有币本位合约交易对")
                 return []
+
+            # 与币安 dapi 活跃列表求交集
+            active = self._fetch_active_binance_symbols('coin_futures')
+            if active is not None:
+                before = len(coin_symbols_list)
+                filtered = [s for s in coin_symbols_list if s in active]
+                dropped = set(coin_symbols_list) - active
+                after = len(filtered)
+                if dropped:
+                    sample = sorted(list(dropped))[:10]
+                    logger.warning(
+                        f"[symbols 同步 dapi] config 里 {len(dropped)} 个币本位 symbol 不在币安活跃列表, 剔除: "
+                        f"{sample}{' ...' if len(dropped) > 10 else ''}"
+                    )
+                logger.info(f"[symbols 同步 dapi] 与币安 active 求交后: {before} -> {after} symbols")
+                coin_symbols_list = filtered
 
             return coin_symbols_list
 
