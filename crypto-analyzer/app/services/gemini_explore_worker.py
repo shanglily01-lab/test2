@@ -255,13 +255,70 @@ def _enrich_symbol(cur, sym_data: dict) -> None:
 
 
 def _enrich_universe(conn, universe: dict) -> None:
-    """对 universe 里每个 symbol 加 K 线 + 指标."""
+    """对 universe 里每个 symbol 加 K 线 + 指标. 同时剔除 K 线断采的 symbol.
+
+    sanity: 如果 1h K 线最新 < UTC_now - 2h 或 1d K 线最新 < UTC_now - 2d,
+    认为采集器漏了这个 symbol (例: ARIA/USDT, 5m/15m/1h/1d 全周期停在 4-05),
+    给 Gemini 看陈旧 K 线会算出错位置判断 (above_7d_low_pct=104% 实际已在低位).
+    直接从 universe 剔除, 让 Gemini 不到看这种污染数据.
+    """
+    stale_syms = []
     with conn.cursor() as cur:
-        for sym_data in universe.values():
+        for sym, sym_data in universe.items():
             try:
                 _enrich_symbol(cur, sym_data)
+
+                # K 线新鲜度门槛
+                k_1h = sym_data.get('k_1h_ohlc') or []
+                k_1d = sym_data.get('k_1d_ohlc') or []
+                if not k_1h or not k_1d:
+                    stale_syms.append((sym, 'missing_1h_or_1d_kline'))
+                    continue
+
+                # 1h 门槛 4 小时: fast_collector 每 1h 采一次 1h K 线 (smart 策略),
+                # 加上调度抖动 + 网络延迟, 正常情况 1h K 线延迟 1-2 小时.
+                # 4 小时是合理的"已经断采"门槛
+                cur.execute(
+                    "SELECT MAX(open_time) AS m FROM kline_data "
+                    "WHERE symbol=%s AND timeframe='1h' AND exchange='binance_futures'",
+                    (sym,)
+                )
+                row = cur.fetchone()
+                if row and row.get('m'):
+                    from datetime import datetime as _dt
+                    latest_1h = _dt.utcfromtimestamp(int(row['m']) / 1000)
+                    age_h = (_dt.utcnow() - latest_1h).total_seconds() / 3600
+                    if age_h > 4.0:
+                        stale_syms.append((sym, f'1h_kline_stale_{age_h:.1f}h'))
+                        continue
+
+                # 1d 门槛 2 天: fast_collector 每天采一次, 1 天延迟是常态
+                cur.execute(
+                    "SELECT MAX(open_time) AS m FROM kline_data "
+                    "WHERE symbol=%s AND timeframe='1d' AND exchange='binance_futures'",
+                    (sym,)
+                )
+                row = cur.fetchone()
+                if row and row.get('m'):
+                    from datetime import datetime as _dt
+                    latest_1d = _dt.utcfromtimestamp(int(row['m']) / 1000)
+                    age_d = (_dt.utcnow() - latest_1d).total_seconds() / 86400
+                    if age_d > 2.0:
+                        stale_syms.append((sym, f'1d_kline_stale_{age_d:.1f}d'))
+                        continue
             except Exception as e:
-                logger.debug(f"[Gemini探索] enrich {sym_data.get('symbol')} 失败: {e}")
+                logger.debug(f"[Gemini探索] enrich {sym} 失败: {e}")
+                stale_syms.append((sym, f'enrich_exception:{e}'))
+
+    # 剔除 stale
+    if stale_syms:
+        logger.warning(
+            f"[Gemini探索] 剔除 {len(stale_syms)} 个 K 线断采的 symbol: "
+            f"{[(s[0], s[1]) for s in stale_syms[:10]]}"
+            f"{'...' if len(stale_syms) > 10 else ''}"
+        )
+        for sym, _reason in stale_syms:
+            universe.pop(sym, None)
 
 
 def _build_global_context(conn) -> dict:

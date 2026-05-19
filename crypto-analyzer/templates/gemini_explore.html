@@ -329,11 +329,32 @@ function onToggle(checked) {
 // POSITIONS
 // ============================================================
 function loadOpenPositions() {
-  fetch('/api/gemini-explore/positions?status=open')
+  // 走实时端点: 后端用 Hub WS markPrice 拿当下价 + 现场算 PnL
+  fetch('/api/gemini-explore/positions/live')
     .then(function(r){ return r.json(); })
     .then(function(d){
       var rows = d.data || [];
+      var summary = d.summary || {};
       var tbody = document.getElementById('open-tbody');
+
+      // 更新顶部统计卡 (浮盈总计)
+      var openEl = document.getElementById('stat-open');
+      if (openEl) openEl.innerHTML = summary.open_count !== undefined
+          ? (summary.open_count + ' <span class="text-xs text-on-surface-variant">仓</span>')
+          : '--';
+
+      // 在统计行后加一个"浮盈"显示 (复用 stat-trades 那张卡)
+      var statTrades = document.getElementById('stat-trades');
+      if (statTrades && summary.total_unrealized_pnl !== undefined) {
+        var t = summary.total_unrealized_pnl;
+        var tPct = summary.total_unrealized_pnl_pct;
+        var cls = t >= 0 ? 'pp' : 'pn';
+        statTrades.innerHTML = '<span class="' + cls + '">' + fmtSigned(t) + ' U</span> <span class="text-xs ' + cls + '">(' + fmtSigned(tPct, 2) + '%)</span>';
+        // 同时改一下这张卡的标题
+        var lbl = statTrades.parentElement.querySelector('p');
+        if (lbl) lbl.textContent = '当前浮盈合计';
+      }
+
       if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无 OPEN 持仓</td></tr>';
         return;
@@ -341,11 +362,18 @@ function loadOpenPositions() {
       tbody.innerHTML = rows.map(function(p){
         var pnl = p.unrealized_pnl;
         var pnlPct = p.unrealized_pnl_pct;
+        var markCls = '';
+        // 实时价跟 entry 比较的色彩 (LONG 涨绿, SHORT 跌绿)
+        if (p.mark_price != null && p.entry_price > 0) {
+          var d = p.mark_price - p.entry_price;
+          var favorable = (p.position_side === 'LONG' && d >= 0) || (p.position_side === 'SHORT' && d <= 0);
+          markCls = favorable ? 'pp' : 'pn';
+        }
         return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container/40 transition-colors">' +
           '<td class="px-4 py-3 mono">' + escapeHtml(p.symbol) + '</td>' +
           '<td class="px-4 py-3">' + dirBadge(p.position_side) + '</td>' +
           '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.entry_price, 6) + '</td>' +
-          '<td class="px-4 py-3 text-right mono">' + fmt(p.mark_price, 6) + '</td>' +
+          '<td class="px-4 py-3 text-right mono ' + markCls + '">' + fmt(p.mark_price, 6) + '</td>' +
           '<td class="px-4 py-3 text-right mono ' + pCls(pnl) + '">' + fmtSigned(pnl) + ' <span class="text-[10px] opacity-70">(' + fmtSigned(pnlPct, 2) + '%)</span></td>' +
           '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.stop_loss_price, 6) + '</td>' +
           '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.take_profit_price, 6) + '</td>' +
@@ -493,9 +521,10 @@ function loadAll() {
   loadClosedPositions();
 }
 loadAll();
-// auto refresh every 60s
-setInterval(loadStatus, 60000);
-setInterval(loadOpenPositions, 60000);
+// 持仓 + 实时盈亏: 每 3 秒刷 (Hub WS markPrice 秒级实时)
+setInterval(loadOpenPositions, 3000);
+// status + 顶部统计卡 (除 open_count/总盈亏外): 每 30 秒刷
+setInterval(loadStatus, 30000);
 </script>
 
 </body>

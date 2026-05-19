@@ -258,6 +258,135 @@ async def list_positions(
 
 
 # ============================================================
+# 实时价格 + 实时盈亏 (前端高频轮询用)
+# ============================================================
+@router.get("/positions/live")
+async def list_positions_live():
+    """返回所有 OPEN 仓位的实时盈亏.
+
+    与 /positions?status=open 不同, 这里每个仓位的 mark_price 是
+    **实时从 BinanceDataHub WS markPrice 拿** (秒级), 然后用最新价
+    现场算 unrealized_pnl / pnl_pct.
+
+    适合前端 3-5 秒轮询, 不要更高频 (Hub 内部 WS 推送频率本身就 1-2s).
+    """
+    try:
+        conn = _connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, symbol, position_side, leverage, quantity, "
+                    "       entry_price, margin, "
+                    "       stop_loss_price, take_profit_price, "
+                    "       open_time, planned_close_time, entry_reason "
+                    "FROM futures_positions "
+                    "WHERE source='gemini_explore' AND status='open' AND account_id=2 "
+                    "ORDER BY open_time DESC"
+                )
+                positions = cur.fetchall()
+        finally:
+            conn.close()
+
+        if not positions:
+            return {"success": True, "data": [], "count": 0}
+
+        # 拿 Hub 实时价
+        try:
+            from app.services.binance_data_hub import get_global_data_hub
+            hub = get_global_data_hub()
+        except Exception as e:
+            logger.warning(f"[Gemini探索 API] /positions/live Hub 获取失败: {e}")
+            hub = None
+
+        from decimal import Decimal
+        result = []
+        for p in positions:
+            symbol = p['symbol']
+            side = p['position_side']
+            entry = float(p['entry_price'])
+            qty = float(p['quantity'])
+            margin = float(p['margin'])
+
+            # 实时价
+            live_price = None
+            if hub is not None:
+                try:
+                    lp = hub.get_price_sync(symbol, max_age_seconds=90)
+                    if lp is not None and lp > 0:
+                        live_price = float(lp)
+                except Exception as e:
+                    logger.debug(f"[Gemini探索 API] hub 取 {symbol} 实时价失败: {e}")
+
+            # 兜底: 5m close
+            if live_price is None:
+                try:
+                    conn2 = _connect()
+                    with conn2.cursor() as cur2:
+                        cur2.execute(
+                            "SELECT close_price FROM kline_data "
+                            "WHERE symbol=%s AND timeframe='5m' AND exchange='binance_futures' "
+                            "ORDER BY open_time DESC LIMIT 1",
+                            (symbol,)
+                        )
+                        row = cur2.fetchone()
+                        if row and row.get('close_price'):
+                            live_price = float(row['close_price'])
+                    conn2.close()
+                except Exception:
+                    pass
+
+            # 算实时盈亏
+            unrealized_pnl = None
+            unrealized_pnl_pct = None
+            if live_price is not None and live_price > 0:
+                if side == 'LONG':
+                    unrealized_pnl = (live_price - entry) * qty
+                else:
+                    unrealized_pnl = (entry - live_price) * qty
+                # ROI on margin (跟 UI 显示一致, 含杠杆)
+                unrealized_pnl_pct = (unrealized_pnl / margin * 100) if margin > 0 else 0
+
+            row = {
+                'id': p['id'],
+                'symbol': symbol,
+                'position_side': side,
+                'leverage': p['leverage'],
+                'quantity': qty,
+                'entry_price': entry,
+                'mark_price': live_price,
+                'margin': margin,
+                'stop_loss_price': float(p['stop_loss_price']) if p['stop_loss_price'] else None,
+                'take_profit_price': float(p['take_profit_price']) if p['take_profit_price'] else None,
+                'unrealized_pnl': round(unrealized_pnl, 4) if unrealized_pnl is not None else None,
+                'unrealized_pnl_pct': round(unrealized_pnl_pct, 2) if unrealized_pnl_pct is not None else None,
+                'open_time': p['open_time'].isoformat() if p['open_time'] else None,
+                'planned_close_time': p['planned_close_time'].isoformat() if p['planned_close_time'] else None,
+                'entry_reason': p['entry_reason'],
+            }
+            result.append(row)
+
+        # 汇总
+        total_pnl = sum((r['unrealized_pnl'] or 0) for r in result)
+        total_margin = sum(r['margin'] for r in result)
+        total_pnl_pct = (total_pnl / total_margin * 100) if total_margin > 0 else 0
+
+        return {
+            "success": True,
+            "data": result,
+            "count": len(result),
+            "summary": {
+                "total_unrealized_pnl": round(total_pnl, 2),
+                "total_margin_used": round(total_margin, 2),
+                "total_unrealized_pnl_pct": round(total_pnl_pct, 2),
+                "open_count": len(result),
+            },
+        }
+    except Exception as e:
+        logger.error(f"[Gemini探索 API] /positions/live 失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
 # 手动触发 (调试用)
 # ============================================================
 _run_lock = threading.Lock()
