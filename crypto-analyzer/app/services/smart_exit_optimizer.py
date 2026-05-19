@@ -961,9 +961,32 @@ class SmartExitOptimizer:
                 # 这会误平用户手动在 Binance app 开的同 symbol+direction 仓位
                 # (例如 source='binance_sync' 的单,paper_position_id 为 NULL,本应保留)
                 # 现在: 找不到 paper_position_id 关联 = 该模拟单未对应任何系统下的实盘单 = 跳过实盘平仓
+
+                # 诊断日志: 列出同 symbol+direction 下当前 OPEN 的实盘单,
+                # 方便定位是 paper_position_id 没写入,还是被错写成别的值
+                diag_rows = []
+                try:
+                    _diag_conn = pymysql.connect(
+                        **self.db_config, charset='utf8mb4',
+                        cursorclass=pymysql.cursors.DictCursor, autocommit=True
+                    )
+                    _diag_cur = _diag_conn.cursor()
+                    _diag_cur.execute(
+                        "SELECT id, account_id, paper_position_id, source, open_time "
+                        "FROM live_futures_positions "
+                        "WHERE symbol=%s AND position_side=%s AND status='OPEN' "
+                        "ORDER BY open_time DESC LIMIT 5",
+                        (symbol, direction)
+                    )
+                    diag_rows = _diag_cur.fetchall()
+                    _diag_cur.close(); _diag_conn.close()
+                except Exception as _de:
+                    logger.debug(f"[实盘平仓] 诊断查询失败: {_de}")
+
                 logger.warning(
                     f"[实盘平仓] {symbol} {direction} 无 paper_position_id={paper_position_id} 关联的实盘单,"
-                    f"跳过实盘平仓 (旧 fallback 已删除,防止误平用户手动开仓)"
+                    f"跳过实盘平仓 (旧 fallback 已删除,防止误平用户手动开仓). "
+                    f"同 symbol+side 下其它 OPEN 实盘单 (最多 5 条): {diag_rows or '无'}"
                 )
 
         except Exception as e:

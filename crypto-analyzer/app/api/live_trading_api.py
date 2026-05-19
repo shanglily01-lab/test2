@@ -660,19 +660,32 @@ async def close_all_positions(
         if not positions:
             return {"success": True, "message": "当前无持仓", "closed": 0, "failed": 0}
 
+        # get_open_positions 返回的币安持仓 dict 没有本地 DB 的 id 字段,
+        # 所以改用 close_position_by_symbol (按 symbol+position_side 平仓,
+        # 以币安实际持仓为准, 不依赖 live_futures_positions 的本地记录)
         closed, failed, errors = 0, 0, []
         for pos in positions:
-            pid = pos.get('id') or pos.get('position_id')
+            sym = pos.get('symbol')
+            side = pos.get('position_side')
+            if not sym or not side:
+                failed += 1
+                errors.append(f"持仓数据缺 symbol/position_side: {pos}")
+                continue
             try:
-                result = engine.close_position(position_id=pid, reason=request.reason)
+                result = engine.close_position_by_symbol(
+                    symbol=sym,
+                    position_side=side,
+                    close_quantity=None,
+                    reason=request.reason
+                )
                 if result.get('success'):
                     closed += 1
                 else:
                     failed += 1
-                    errors.append(f"{pos.get('symbol')}: {result.get('error')}")
+                    errors.append(f"{sym} {side}: {result.get('error')}")
             except Exception as ex:
                 failed += 1
-                errors.append(f"{pos.get('symbol')}: {ex}")
+                errors.append(f"{sym} {side}: {ex}")
 
         logger.info(f"[实盘API] 一键平仓完成: closed={closed}, failed={failed}")
         return {
