@@ -22,6 +22,11 @@ Gemini 探索 worker
 - Big4 趋势: BEARISH/STRONG_BEARISH 禁 LONG, BULLISH/STRONG_BULLISH 禁 SHORT
 - 同 symbol+side 已有 OPEN gemini_explore 仓位 -> 跳过
 
+**显式规则 (用户 2026-05-20 确认)**: Gemini 探索下单**不依赖 TOP50**.
+- TOP50 是为实盘开仓质量保证设计的, Gemini 探索是全模拟盘
+- universe 选取本就独立于 TOP50 (swan 异动逻辑 vs 盈利稳健逻辑)
+- 后续不要加 top_performing_symbols 过滤进闸门
+
 复用 gemini_swan_worker 模块的:
 - _fetch_movers_24h / _fetch_extreme_funding / _merge_universe (candidate pool 选取)
 - SWAN_PROMPT_TEMPLATE + _call_gemini (Gemini 调用)
