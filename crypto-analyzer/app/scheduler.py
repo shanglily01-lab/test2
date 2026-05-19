@@ -1211,66 +1211,41 @@ class UnifiedDataScheduler:
         logger.info("所有定时任务设置完成")
 
     async def run_initial_collection(self):
-        """首次启动时执行一次所有采集任务"""
+        """首次启动时执行一次缓存更新.
+
+        2026-05-20 重构: 删掉重复的 K 线/funding/新闻初次采集 (已经被
+        fast_collector_service / ws_kline_collector_service 独立进程跑了),
+        改成只跑缓存更新 (price_stats / 分析缓存 / hyperliquid 缓存).
+
+        原版每个 await 串行跑, 任何一步慢 (collect_funding_rates 295 symbol
+        × 0.2s sleep + API = 2-5 分钟) 会把 update_price_cache 拖死,
+        进而阻塞 start() 进入 schedule 主循环.
+
+        现在: initial 仅做缓存, 1-3 秒即可跑完, 立即进入 schedule 主循环,
+        所有 every(N).minutes 任务都能按时触发.
+        """
         logger.info("\n" + "=" * 80)
-        logger.info("首次数据采集开始...")
+        logger.info("首次缓存更新开始 (K线/funding 采集由独立 collector 进程负责, 此处不再重复)")
         logger.info("=" * 80 + "\n")
 
-        # 1. Binance 现货数据 (从5分钟数据开始，不再采集1m)
-        # await self.collect_binance_data('1m')
-        # await asyncio.sleep(2)
+        # 缓存更新 (各自有内部 timeout 保护)
+        try:
+            await asyncio.wait_for(self.update_price_cache(), timeout=30)
+        except asyncio.TimeoutError:
+            logger.warning("  ⊗ update_price_cache 超时 (>30s), 将在定时任务中重试")
+        except Exception as e:
+            logger.warning(f"  ⊗ update_price_cache 失败: {e}")
 
-        await self.collect_binance_data('5m')
-        await asyncio.sleep(2)
-
-        await self.collect_binance_data('15m')
-        await asyncio.sleep(2)
-
-        # 1.5 Binance 合约数据 - 已移至 fast_collector_service.py
-        # if self.futures_collector:
-        #     await self.collect_binance_futures_data()
-        #     await asyncio.sleep(2)
-
-        # 2. 资金费率
-        await self.collect_funding_rates()
-        await asyncio.sleep(2)
-
-        # 3. 新闻数据
-        await self.collect_news()
-        await asyncio.sleep(2)
-
-        # 4. Ethereum 数据
-        if self.smart_money_collector:
-            await self.collect_ethereum_data('1h')
-            await asyncio.sleep(2)
-
-        # 5. Hyperliquid 数据（添加错误处理，允许失败）
-        if self.hyperliquid_collector:
-            try:
-                logger.info("\n5. 采集 Hyperliquid 数据...")
-                await asyncio.wait_for(
-                    self.collect_hyperliquid_leaderboard(),
-                    timeout=60  # 60秒超时
-                )
-            except asyncio.TimeoutError:
-                logger.warning("  ⊗ Hyperliquid 采集超时（将在定时任务中重试）")
-            except Exception as e:
-                logger.warning(f"  ⊗ Hyperliquid 采集失败: {e}（将在定时任务中重试）")
-
-        # 6. 首次缓存更新
-        logger.info("\n🚀 性能优化：首次缓存更新...")
-        await self.update_price_cache()
-        await asyncio.sleep(2)
-
-        await self.update_analysis_cache()
-        await asyncio.sleep(2)
+        try:
+            await asyncio.wait_for(self.update_analysis_cache(), timeout=60)
+        except asyncio.TimeoutError:
+            logger.warning("  ⊗ update_analysis_cache 超时 (>60s)")
+        except Exception as e:
+            logger.warning(f"  ⊗ update_analysis_cache 失败: {e}")
 
         if self.hyperliquid_collector:
             try:
-                await asyncio.wait_for(
-                    self.update_hyperliquid_cache(),
-                    timeout=30  # 30秒超时
-                )
+                await asyncio.wait_for(self.update_hyperliquid_cache(), timeout=30)
             except asyncio.TimeoutError:
                 logger.warning("  ⊗ Hyperliquid 缓存更新超时")
             except Exception as e:
