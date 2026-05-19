@@ -203,10 +203,11 @@ class SmartExitOptimizer:
                     break
 
                 # === K线强度衰减检测 (新增 - 每15分钟检查一次) ===
-                # 多策略持仓（S1-S7）依赖计划平仓时间和固定止损止盈，跳过K线衰减检测
+                # 多策略持仓 (S1-S7 + Gemini 探索) 依赖计划平仓时间和固定止损止盈, 跳过K线衰减检测
                 _MULTI_STRATEGY_SOURCES = (
                     's1_early_long', 's2_pullback_long', 's3_top_short',
                     's4_rebound_short', 's5_large_oversold', 's6_vol_spike', 's7_ma_support',
+                    'gemini_explore',  # Gemini 探索: 用户指定只走 SL/TP/6h
                 )
                 _is_multi_strategy = position.get('source') in _MULTI_STRATEGY_SOURCES
                 should_check_kline = await self._should_check_kline_strength(position_id)
