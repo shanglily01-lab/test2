@@ -111,18 +111,18 @@ class MultiStrategyService:
 
     # ═════════════════════════════════════════════════════════════════
     # 策略9: Gemini AI 抄底反转做多 (S9) — 自 strategy_bigmid.py 迁入
-    #   每 6h 调用 Google Gemini API,对 top30 大币(按 24h 成交额)判 long/skip
+    #   每 6h 调用 Google Gemini API, 对成交额达标的 USDT 交易对判 long/skip
     #   抄底反转专项: 仅做 LONG, Gemini 返回 short 也降级 skip
+    #   候选池: SQL LIMIT 100 (按成交额降序) - 头部 5 大币 - 证券类
     # ═════════════════════════════════════════════════════════════════
     S9_LEVERAGE = 5
     S9_MARGIN = 500
     S9_MAX_POSITIONS = 5
     S9_SOURCE = 's9_gemini_ai'
     S9_INTERVAL_HOURS = 6    # 每 6h 调一次 Gemini
-    S9_TOP_N = 30            # 取 24h 成交额 top30
     S9_MIN_PNL_PCT = 0.01    # Gemini 预期 PnL >= 1% 才下单
     S9_MIN_QUOTE_VOLUME = 10_000_000  # 24h 成交额下限 1000 万 USDT
-    S9_EXCLUDE_BASES = {"BTC", "ETH", "BNB", "SOL", "XRP"}  # top30 排除头部
+    S9_EXCLUDE_BASES = {"BTC", "ETH", "BNB", "SOL", "XRP"}  # 排除头部
     S9_PER_SYMBOL_DELAY_S = 1.0  # 每个 symbol 调 Gemini 间隔, 防 rate limit
 
     ALL_SOURCES = (
@@ -1266,7 +1266,10 @@ class MultiStrategyService:
             return None
 
     def _s9_get_top30_symbols(self) -> List[str]:
-        """按 24h 成交额 + 涨跌幅排序取 top30 (排除头部 5 大币 + 证券类)"""
+        """S9 候选池: 24h 成交额降序 LIMIT 100,排除头部 5 大币 + 证券类。
+
+        历史名字保留是为了向下兼容(其它地方都按这个名字调),实际不再硬性截断到 30。
+        """
         try:
             from app.services.securities_filter import is_security
         except ImportError:
@@ -1286,7 +1289,7 @@ class MultiStrategyService:
             rows = cur.fetchall()
             cur.close(); conn.close()
         except Exception as e:
-            logger.warning(f"[S9] 取 top30 失败: {e}")
+            logger.warning(f"[S9] 取候选池失败: {e}")
             return []
 
         result = []
@@ -1298,8 +1301,6 @@ class MultiStrategyService:
             if is_security(sym):
                 continue
             result.append(sym)
-            if len(result) >= self.S9_TOP_N:
-                break
         return result
 
     @staticmethod
@@ -1523,10 +1524,10 @@ Output ONLY a single valid JSON object, no markdown fence, no extra text:
 
         symbols = self._s9_get_top30_symbols()
         if not symbols:
-            logger.warning("[S9] top30 symbols 为空")
+            logger.warning("[S9] 候选池 symbols 为空")
             return
 
-        logger.info(f"[S9] === Gemini 一轮开始, top={len(symbols)} 候选 ===")
+        logger.info(f"[S9] === Gemini 一轮开始, 候选数={len(symbols)} ===")
         opened, skipped, errs = 0, 0, 0
 
         for symbol in symbols:
