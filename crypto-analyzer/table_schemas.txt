@@ -1,5 +1,7 @@
 ================================================================================
 数据库表结构文档
+数据库: binance-data  主机: 13.212.252.171
+更新时间: 2026-04-23  表数量: 118
 ================================================================================
 
 
@@ -19,7 +21,7 @@ CREATE TABLE `adaptive_params` (
   KEY `idx_param_key` (`param_key`),
   KEY `idx_param_type` (`param_type`),
   KEY `idx_updated_at` (`updated_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=86 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='自适应参数表'
+) ENGINE=InnoDB AUTO_INCREMENT=104 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='自适应参数表'
 
 
 ================================================================================
@@ -64,7 +66,7 @@ CREATE TABLE `big4_trend_history` (
   PRIMARY KEY (`id`),
   KEY `idx_created_at` (`created_at`),
   KEY `idx_overall_signal` (`overall_signal`,`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=51959 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+) ENGINE=InnoDB AUTO_INCREMENT=785311 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 
 
 ================================================================================
@@ -96,13 +98,136 @@ CREATE TABLE `blockchain_gas_daily` (
   KEY `idx_date` (`date`),
   KEY `idx_chain_name` (`chain_name`),
   KEY `idx_created_at` (`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=358 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='区块链Gas消耗日统计表'
+) ENGINE=InnoDB AUTO_INCREMENT=710 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='区块链Gas消耗日统计表'
 
 
 ================================================================================
 表名: blockchain_gas_daily_summary
 ================================================================================
 CREATE ALGORITHM=UNDEFINED DEFINER=`admin`@`%` SQL SECURITY DEFINER VIEW `blockchain_gas_daily_summary` AS select `blockchain_gas_daily`.`date` AS `date`,count(distinct `blockchain_gas_daily`.`chain_name`) AS `chain_count`,sum(`blockchain_gas_daily`.`total_gas_used`) AS `total_gas_used_all_chains`,sum(`blockchain_gas_daily`.`total_transactions`) AS `total_transactions_all_chains`,sum(`blockchain_gas_daily`.`total_gas_value_usd`) AS `total_gas_value_usd_all_chains`,avg(`blockchain_gas_daily`.`avg_gas_value_usd`) AS `avg_gas_value_usd_per_tx`,sum(`blockchain_gas_daily`.`active_addresses`) AS `total_active_addresses` from `blockchain_gas_daily` group by `blockchain_gas_daily`.`date` order by `blockchain_gas_daily`.`date` desc
+
+
+================================================================================
+表名: bounce_window
+================================================================================
+CREATE TABLE `bounce_window` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `account_id` int(11) NOT NULL COMMENT '账户ID',
+  `trading_type` varchar(50) NOT NULL COMMENT '交易类型: usdt_futures/coin_futures',
+  `symbol` varchar(20) NOT NULL COMMENT '币种: BTC/USDT',
+  `trigger_time` datetime NOT NULL COMMENT '触发时间: 检测到1H长下影线的时间',
+  `window_start` datetime NOT NULL COMMENT '窗口开始时间',
+  `window_end` datetime NOT NULL COMMENT '窗口结束时间: 45分钟后',
+  `lower_shadow_pct` decimal(10,2) NOT NULL COMMENT '1H下影线百分比',
+  `trigger_price` decimal(20,8) NOT NULL COMMENT '触发价格: 1H K线收盘价',
+  `bounce_entered` tinyint(1) DEFAULT 0 COMMENT '是否已开仓',
+  `entry_time` datetime DEFAULT NULL COMMENT '开仓时间',
+  `entry_price` decimal(20,8) DEFAULT NULL COMMENT '开仓价格',
+  `position_id` int(11) DEFAULT NULL COMMENT '关联的持仓ID',
+  `notes` text DEFAULT NULL COMMENT '备注信息',
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_account_symbol` (`account_id`,`symbol`),
+  KEY `idx_window_end` (`window_end`),
+  KEY `idx_trading_type` (`trading_type`),
+  KEY `idx_trigger_time` (`trigger_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='反弹窗口追踪表'
+
+
+================================================================================
+表名: breakout_sessions
+================================================================================
+CREATE TABLE `breakout_sessions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `session_id` varchar(100) NOT NULL COMMENT '会话ID (格式: DOWN_timestamp 或 UP_timestamp)',
+  `direction` enum('UP','DOWN') NOT NULL COMMENT '破位方向',
+  `strength` decimal(10,2) NOT NULL COMMENT 'Big4强度 (0-100)',
+  `breakout_price` decimal(20,8) NOT NULL COMMENT '破位价格 (BTC价格作为参考)',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp() COMMENT '会话创建时间',
+  `expires_at` timestamp NOT NULL DEFAULT '0000-00-00 00:00:00' COMMENT '会话失效时间 (创建时间 + 4小时)',
+  `opening_window_end` timestamp NOT NULL DEFAULT '0000-00-00 00:00:00' COMMENT '开仓窗口结束时间 (创建时间 + 30分钟)',
+  `total_openings` int(11) DEFAULT 0 COMMENT '总开仓次数',
+  `opened_symbols` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '已开仓币种及次数' CHECK (json_valid(`opened_symbols`)),
+  `is_active` tinyint(1) DEFAULT 1 COMMENT '是否活跃',
+  `convergence_reason` varchar(500) DEFAULT NULL COMMENT '收敛原因',
+  `converged_at` timestamp NULL DEFAULT NULL COMMENT '收敛时间',
+  `total_pnl` decimal(20,8) DEFAULT 0.00000000 COMMENT '会话总盈亏',
+  `win_count` int(11) DEFAULT 0 COMMENT '盈利订单数',
+  `loss_count` int(11) DEFAULT 0 COMMENT '亏损订单数',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_session_id` (`session_id`),
+  KEY `idx_direction` (`direction`),
+  KEY `idx_created_at` (`created_at`),
+  KEY `idx_expires_at` (`expires_at`),
+  KEY `idx_is_active` (`is_active`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='破位会话管理表'
+
+
+================================================================================
+表名: coin_kline_scores
+================================================================================
+CREATE TABLE `coin_kline_scores` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `symbol` varchar(20) NOT NULL,
+  `exchange` varchar(20) DEFAULT 'binance_futures',
+  `total_score` int(11) NOT NULL DEFAULT 0 COMMENT '总分（1H + 15M + 5M加分）',
+  `main_score` int(11) NOT NULL DEFAULT 0 COMMENT '主分（1H + 15M）',
+  `five_m_bonus` int(11) NOT NULL DEFAULT 0 COMMENT '5M反向加分',
+  `h1_score` int(11) NOT NULL DEFAULT 0 COMMENT '1H评分',
+  `h1_bullish_count` int(11) NOT NULL DEFAULT 0 COMMENT '1H阳线数',
+  `h1_bearish_count` int(11) NOT NULL DEFAULT 0 COMMENT '1H阴线数',
+  `h1_level` varchar(10) DEFAULT NULL COMMENT '1H级别（强多/中多/弱多/中性/弱空/中空/强空）',
+  `m15_score` int(11) NOT NULL DEFAULT 0 COMMENT '15M评分',
+  `m15_bullish_count` int(11) NOT NULL DEFAULT 0 COMMENT '15M阳线数',
+  `m15_bearish_count` int(11) NOT NULL DEFAULT 0 COMMENT '15M阴线数',
+  `m15_level` varchar(10) DEFAULT NULL COMMENT '15M级别',
+  `m5_bullish_count` int(11) NOT NULL DEFAULT 0 COMMENT '5M阳线数',
+  `m5_bearish_count` int(11) NOT NULL DEFAULT 0 COMMENT '5M阴线数',
+  `direction` varchar(10) NOT NULL COMMENT '方向（LONG/SHORT/NEUTRAL）',
+  `strength_level` varchar(10) NOT NULL COMMENT '强度（strong/medium/weak）',
+  `reason` text DEFAULT NULL COMMENT '评分原因',
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp() COMMENT '更新时间',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp() COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_symbol_exchange` (`symbol`,`exchange`),
+  KEY `idx_total_score` (`total_score`),
+  KEY `idx_direction` (`direction`),
+  KEY `idx_strength` (`strength_level`),
+  KEY `idx_updated_at` (`updated_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=13226993 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='代币K线评分表'
+
+
+================================================================================
+表名: collection_status_cache
+================================================================================
+CREATE TABLE `collection_status_cache` (
+  `type_key` varchar(50) NOT NULL,
+  `total_count` bigint(20) DEFAULT 0,
+  `latest_time` datetime DEFAULT NULL,
+  `oldest_time` datetime DEFAULT NULL,
+  `symbol_count` int(11) DEFAULT 0,
+  `exchange_count` int(11) DEFAULT 0,
+  `timeframe_count` int(11) DEFAULT 0,
+  `source_count` int(11) DEFAULT 0,
+  `etf_count` int(11) DEFAULT 0,
+  `company_count` int(11) DEFAULT 0,
+  `wallet_count` int(11) DEFAULT 0,
+  `trader_count` int(11) DEFAULT 0,
+  `monitored_count` int(11) DEFAULT 0,
+  `coin_count` int(11) DEFAULT 0,
+  `address_count` int(11) DEFAULT 0,
+  `token_count` int(11) DEFAULT 0,
+  `blockchain_count` int(11) DEFAULT 0,
+  `signal_count` int(11) DEFAULT 0,
+  `latest_signal_time` datetime DEFAULT NULL,
+  `kline_latest_1m` datetime DEFAULT NULL,
+  `kline_latest_5m` datetime DEFAULT NULL,
+  `kline_latest_15m` datetime DEFAULT NULL,
+  `kline_latest_1h` datetime DEFAULT NULL,
+  `kline_latest_1d` datetime DEFAULT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`type_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据采集情况缓存，每5分钟由存储过程刷新'
 
 
 ================================================================================
@@ -122,7 +247,7 @@ CREATE TABLE `corporate_treasury_companies` (
   UNIQUE KEY `company_name` (`company_name`) USING BTREE,
   KEY `idx_company_name` (`company_name`) USING BTREE,
   KEY `idx_ticker` (`ticker_symbol`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=108 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='企业金库公司基础信息'
+) ENGINE=InnoDB AUTO_INCREMENT=111 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='企业金库公司基础信息'
 
 
 ================================================================================
@@ -170,7 +295,7 @@ CREATE TABLE `corporate_treasury_purchases` (
   KEY `idx_asset_type` (`asset_type`) USING BTREE,
   KEY `idx_purchase_date` (`purchase_date`) USING BTREE,
   CONSTRAINT `corporate_treasury_purchases_ibfk_1` FOREIGN KEY (`company_id`) REFERENCES `corporate_treasury_companies` (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=4552 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='企业金库购买记录'
+) ENGINE=InnoDB AUTO_INCREMENT=6235 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='企业金库购买记录'
 
 
 ================================================================================
@@ -282,7 +407,7 @@ CREATE TABLE `crypto_etf_flows` (
   KEY `idx_trade_date` (`trade_date`) USING BTREE,
   KEY `idx_net_inflow` (`net_inflow`) USING BTREE,
   CONSTRAINT `crypto_etf_flows_ibfk_1` FOREIGN KEY (`etf_id`) REFERENCES `crypto_etf_products` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=1202 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='加密货币ETF每日资金流向'
+) ENGINE=InnoDB AUTO_INCREMENT=2161 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='加密货币ETF每日资金流向'
 
 
 ================================================================================
@@ -306,7 +431,7 @@ CREATE TABLE `crypto_etf_products` (
   KEY `idx_ticker` (`ticker`) USING BTREE,
   KEY `idx_asset_type` (`asset_type`) USING BTREE,
   KEY `idx_provider` (`provider`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='加密货币ETF产品信息'
+) ENGINE=InnoDB AUTO_INCREMENT=24 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='加密货币ETF产品信息'
 
 
 ================================================================================
@@ -378,7 +503,7 @@ CREATE TABLE `daily_review_reports` (
   UNIQUE KEY `unique_date` (`date`),
   KEY `idx_date` (`date`),
   KEY `idx_capture_rate` (`capture_rate`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='每日复盘报告主表'
+) ENGINE=InnoDB AUTO_INCREMENT=32 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='每日复盘报告主表'
 
 
 ================================================================================
@@ -406,7 +531,65 @@ CREATE TABLE `daily_review_signal_analysis` (
   UNIQUE KEY `unique_review_signal` (`review_date`,`signal_type`),
   KEY `idx_review_date` (`review_date`),
   KEY `idx_score` (`score`)
-) ENGINE=InnoDB AUTO_INCREMENT=13 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='信号分析表'
+) ENGINE=InnoDB AUTO_INCREMENT=516 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='信号分析表'
+
+
+================================================================================
+表名: dashboard_hl_recent_trades
+================================================================================
+CREATE TABLE `dashboard_hl_recent_trades` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `address` varchar(50) NOT NULL,
+  `wallet_label` varchar(100) DEFAULT NULL,
+  `coin` varchar(20) NOT NULL,
+  `side` varchar(10) NOT NULL,
+  `price` decimal(20,8) DEFAULT 0.00000000,
+  `size` decimal(20,8) DEFAULT 0.00000000,
+  `notional_usd` decimal(20,2) DEFAULT 0.00,
+  `closed_pnl` decimal(20,8) DEFAULT 0.00000000,
+  `leverage` decimal(5,1) DEFAULT 1.0,
+  `trade_time` datetime NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=133655 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Dashboard聪明钱近50条交易快照，每5分钟刷新'
+
+
+================================================================================
+表名: dashboard_hl_summary
+================================================================================
+CREATE TABLE `dashboard_hl_summary` (
+  `id` int(11) NOT NULL DEFAULT 1,
+  `monitored_count` int(11) DEFAULT 0,
+  `active_wallets_24h` int(11) DEFAULT 0,
+  `total_volume_24h` decimal(20,4) DEFAULT 0.0000,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Dashboard聪明钱汇总缓存，每5分钟刷新'
+
+
+================================================================================
+表名: dashboard_snapshot
+================================================================================
+CREATE TABLE `dashboard_snapshot` (
+  `snapshot_key` varchar(50) NOT NULL,
+  `snapshot_json` mediumtext NOT NULL,
+  `updated_at` datetime NOT NULL,
+  `compute_ms` int(11) DEFAULT 0,
+  PRIMARY KEY (`snapshot_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+
+
+================================================================================
+表名: data_management_stats_cache
+================================================================================
+CREATE TABLE `data_management_stats_cache` (
+  `table_name` varchar(64) NOT NULL,
+  `row_count` bigint(20) DEFAULT 0,
+  `size_mb` decimal(10,2) DEFAULT 0.00,
+  `latest_time` datetime DEFAULT NULL,
+  `oldest_time` datetime DEFAULT NULL,
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`table_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='数据管理页面统计缓存，由存储过程每5分钟刷新'
 
 
 ================================================================================
@@ -439,6 +622,25 @@ CREATE TABLE `ema_signals` (
 
 
 ================================================================================
+表名: emergency_intervention
+================================================================================
+CREATE TABLE `emergency_intervention` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `account_id` int(11) NOT NULL COMMENT '账户ID',
+  `trading_type` varchar(50) NOT NULL COMMENT '交易类型 (usdt_futures/coin_futures)',
+  `intervention_type` varchar(50) NOT NULL COMMENT '干预类型 (BOTTOM_BOUNCE/TOP_REVERSAL)',
+  `block_long` tinyint(1) DEFAULT 0 COMMENT '是否阻止做多',
+  `block_short` tinyint(1) DEFAULT 0 COMMENT '是否阻止做空',
+  `trigger_reason` text DEFAULT NULL COMMENT '触发原因',
+  `expires_at` datetime NOT NULL COMMENT '失效时间',
+  `created_at` datetime DEFAULT current_timestamp() COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_account_type` (`account_id`,`trading_type`),
+  KEY `idx_expires` (`expires_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=62 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='紧急干预记录表'
+
+
+================================================================================
 表名: funding_rate_data
 ================================================================================
 CREATE TABLE `funding_rate_data` (
@@ -458,7 +660,7 @@ CREATE TABLE `funding_rate_data` (
   KEY `idx_symbol_funding_time` (`symbol`,`funding_time`) USING BTREE,
   KEY `ix_funding_rate_data_timestamp` (`timestamp`) USING BTREE,
   KEY `ix_funding_rate_data_funding_time` (`funding_time`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=1948784 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
+) ENGINE=InnoDB AUTO_INCREMENT=2162199 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
 
 
 ================================================================================
@@ -485,7 +687,7 @@ CREATE TABLE `funding_rate_stats` (
   KEY `idx_current_rate` (`current_rate`) USING BTREE,
   KEY `idx_trend` (`trend`) USING BTREE,
   KEY `idx_updated_at` (`updated_at`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=242838 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='资金费率统计表 - 每5分钟更新'
+) ENGINE=InnoDB AUTO_INCREMENT=453547 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='资金费率统计表 - 每5分钟更新'
 
 
 ================================================================================
@@ -508,32 +710,6 @@ CREATE TABLE `futures_funding_fees` (
   CONSTRAINT `futures_funding_fees_ibfk_1` FOREIGN KEY (`account_id`) REFERENCES `paper_trading_accounts` (`id`) ON DELETE CASCADE,
   CONSTRAINT `futures_funding_fees_ibfk_2` FOREIGN KEY (`position_id`) REFERENCES `futures_positions` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='合约资金费率记录表'
-
-
-================================================================================
-表名: futures_klines
-================================================================================
-CREATE TABLE `futures_klines` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT,
-  `symbol` varchar(20) NOT NULL COMMENT '交易对',
-  `timeframe` varchar(10) NOT NULL COMMENT '时间周期(1m,5m,15m,1h,4h,1d)',
-  `open_time` datetime NOT NULL COMMENT '开盘时间',
-  `close_time` datetime NOT NULL COMMENT '收盘时间',
-  `open_price` decimal(20,8) NOT NULL COMMENT '开盘价',
-  `high_price` decimal(20,8) NOT NULL COMMENT '最高价',
-  `low_price` decimal(20,8) NOT NULL COMMENT '最低价',
-  `close_price` decimal(20,8) NOT NULL COMMENT '收盘价',
-  `volume` decimal(20,8) NOT NULL DEFAULT 0.00000000 COMMENT '成交量',
-  `quote_volume` decimal(20,8) NOT NULL DEFAULT 0.00000000 COMMENT '成交额(USDT)',
-  `trades` int(11) NOT NULL DEFAULT 0 COMMENT '成交笔数',
-  `created_at` datetime NOT NULL DEFAULT current_timestamp() COMMENT '创建时间',
-  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp() COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `idx_symbol_timeframe_time` (`symbol`,`timeframe`,`open_time`),
-  KEY `idx_symbol_timeframe` (`symbol`,`timeframe`),
-  KEY `idx_open_time` (`open_time`),
-  KEY `idx_symbol_open_time` (`symbol`,`open_time`)
-) ENGINE=InnoDB AUTO_INCREMENT=214057 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='合约K线数据表'
 
 
 ================================================================================
@@ -656,7 +832,7 @@ CREATE TABLE `futures_orders` (
   KEY `idx_user_id` (`user_id`),
   CONSTRAINT `futures_orders_ibfk_1` FOREIGN KEY (`account_id`) REFERENCES `paper_trading_accounts` (`id`) ON DELETE CASCADE,
   CONSTRAINT `futures_orders_ibfk_2` FOREIGN KEY (`position_id`) REFERENCES `futures_positions` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=62233 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='模拟合约订单表'
+) ENGINE=InnoDB AUTO_INCREMENT=77674 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='模拟合约订单表'
 
 
 ================================================================================
@@ -700,6 +876,7 @@ CREATE TABLE `futures_positions` (
   `trailing_stop_activated` tinyint(1) DEFAULT 0,
   `trailing_stop_price` decimal(18,8) DEFAULT NULL,
   `entry_signal_type` varchar(500) DEFAULT NULL,
+  `signal_version` varchar(20) DEFAULT 'traditional' COMMENT '信号版本: v2/v3/traditional',
   `entry_score` int(11) DEFAULT NULL COMMENT '开仓得分',
   `signal_components` text DEFAULT NULL COMMENT '信号组成（JSON格式）',
   `entry_reason` varchar(500) DEFAULT NULL,
@@ -728,7 +905,7 @@ CREATE TABLE `futures_positions` (
   KEY `idx_planned_close_time` (`planned_close_time`),
   KEY `idx_close_extended` (`close_extended`),
   CONSTRAINT `futures_positions_ibfk_1` FOREIGN KEY (`account_id`) REFERENCES `paper_trading_accounts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=8282 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='合约持仓表（支持超级大脑智能建仓/平仓优化）'
+) ENGINE=InnoDB AUTO_INCREMENT=24602 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='合约持仓表（支持超级大脑智能建仓/平仓优化）'
 
 
 ================================================================================
@@ -764,7 +941,7 @@ CREATE TABLE `futures_trades` (
   KEY `idx_trade_time` (`trade_time`) USING BTREE,
   CONSTRAINT `futures_trades_ibfk_1` FOREIGN KEY (`account_id`) REFERENCES `paper_trading_accounts` (`id`) ON DELETE CASCADE,
   CONSTRAINT `futures_trades_ibfk_2` FOREIGN KEY (`position_id`) REFERENCES `futures_positions` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=14219 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='模拟合约交易历史表'
+) ENGINE=InnoDB AUTO_INCREMENT=29618 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='模拟合约交易历史表'
 
 
 ================================================================================
@@ -854,7 +1031,7 @@ CREATE TABLE `hyperliquid_monitored_wallets` (
   KEY `idx_is_monitoring` (`is_monitoring`) USING BTREE,
   KEY `idx_last_check` (`last_check_at`) USING BTREE,
   CONSTRAINT `hyperliquid_monitored_wallets_ibfk_1` FOREIGN KEY (`trader_id`) REFERENCES `hyperliquid_traders` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=16086 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Hyperliquid 监控钱包列表'
+) ENGINE=InnoDB AUTO_INCREMENT=19413 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Hyperliquid 监控钱包列表'
 
 
 ================================================================================
@@ -948,7 +1125,7 @@ CREATE TABLE `hyperliquid_symbol_aggregation` (
   KEY `idx_total_volume` (`total_volume`) USING BTREE,
   KEY `idx_hyperliquid_score` (`hyperliquid_score`) USING BTREE,
   KEY `idx_updated_at` (`updated_at`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=103117 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Hyperliquid币种聚合数据 - 每10分钟更新'
+) ENGINE=InnoDB AUTO_INCREMENT=136564 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Hyperliquid币种聚合数据 - 每10分钟更新'
 
 
 ================================================================================
@@ -966,7 +1143,7 @@ CREATE TABLE `hyperliquid_traders` (
   UNIQUE KEY `address` (`address`) USING BTREE,
   KEY `idx_address` (`address`) USING BTREE,
   KEY `idx_last_updated` (`last_updated`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=15189 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Hyperliquid 交易者基本信息'
+) ENGINE=InnoDB AUTO_INCREMENT=18504 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Hyperliquid 交易者基本信息'
 
 
 ================================================================================
@@ -1016,7 +1193,7 @@ CREATE TABLE `hyperliquid_wallet_positions` (
   KEY `idx_coin` (`coin`) USING BTREE,
   KEY `idx_snapshot_time` (`snapshot_time`) USING BTREE,
   CONSTRAINT `hyperliquid_wallet_positions_ibfk_1` FOREIGN KEY (`trader_id`) REFERENCES `hyperliquid_traders` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2574745 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Hyperliquid 钱包持仓快照'
+) ENGINE=InnoDB AUTO_INCREMENT=3615266 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Hyperliquid 钱包持仓快照'
 
 
 ================================================================================
@@ -1044,7 +1221,7 @@ CREATE TABLE `hyperliquid_wallet_trades` (
   KEY `idx_trade_time` (`trade_time`) USING BTREE,
   KEY `idx_notional` (`notional_usd`) USING BTREE,
   CONSTRAINT `hyperliquid_wallet_trades_ibfk_1` FOREIGN KEY (`trader_id`) REFERENCES `hyperliquid_traders` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=13835175 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Hyperliquid 钱包交易记录'
+) ENGINE=InnoDB AUTO_INCREMENT=17512474 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Hyperliquid 钱包交易记录'
 
 
 ================================================================================
@@ -1072,7 +1249,7 @@ CREATE TABLE `hyperliquid_weekly_performance` (
   KEY `idx_roi` (`roi`) USING BTREE,
   KEY `idx_pnl_rank` (`pnl_rank`) USING BTREE,
   CONSTRAINT `hyperliquid_weekly_performance_ibfk_1` FOREIGN KEY (`trader_id`) REFERENCES `hyperliquid_traders` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=81070 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Hyperliquid 交易者周度表现'
+) ENGINE=InnoDB AUTO_INCREMENT=135506 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='Hyperliquid 交易者周度表现'
 
 
 ================================================================================
@@ -1147,7 +1324,7 @@ CREATE TABLE `investment_recommendations_cache` (
   KEY `idx_confidence` (`confidence`) USING BTREE,
   KEY `idx_risk_level` (`risk_level`) USING BTREE,
   KEY `idx_updated_at` (`updated_at`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=222488 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='投资建议缓存表 - 每5分钟更新'
+) ENGINE=InnoDB AUTO_INCREMENT=367105 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='投资建议缓存表 - 每5分钟更新'
 
 
 ================================================================================
@@ -1177,7 +1354,7 @@ CREATE TABLE `kline_data` (
   KEY `idx_symbol_timeframe_time` (`symbol`,`timeframe`,`open_time`) USING BTREE,
   KEY `ix_kline_data_open_time` (`open_time`) USING BTREE,
   KEY `idx_timestamp` (`timestamp`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=14246178 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
+) ENGINE=InnoDB AUTO_INCREMENT=66959006 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
 
 
 ================================================================================
@@ -1265,9 +1442,8 @@ CREATE TABLE `live_futures_positions` (
   KEY `idx_status` (`status`),
   KEY `idx_open_time` (`open_time`),
   KEY `idx_strategy_id` (`strategy_id`),
-  KEY `idx_user_id` (`user_id`),
-  CONSTRAINT `live_futures_positions_ibfk_1` FOREIGN KEY (`account_id`) REFERENCES `live_trading_accounts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=1150 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='实盘合约持仓表'
+  KEY `idx_user_id` (`user_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=1469 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='实盘合约持仓表'
 
 
 ================================================================================
@@ -1372,7 +1548,7 @@ CREATE TABLE `login_logs` (
   KEY `idx_ip_address` (`ip_address`),
   KEY `idx_created_at` (`created_at`),
   KEY `idx_success` (`success`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='ç™»å½•æ—¥å¿—è¡¨'
+) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='ç™»å½•æ—¥å¿—è¡¨'
 
 
 ================================================================================
@@ -1395,6 +1571,30 @@ CREATE TABLE `market_observations` (
   PRIMARY KEY (`id`),
   KEY `idx_timestamp` (`timestamp`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+
+
+================================================================================
+表名: market_prediction
+================================================================================
+CREATE TABLE `market_prediction` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `symbol` varchar(20) NOT NULL,
+  `prediction_time` datetime NOT NULL,
+  `direction` enum('BULLISH','BEARISH','NEUTRAL') NOT NULL,
+  `confidence` int(11) NOT NULL COMMENT '0-100分',
+  `reasoning` text DEFAULT NULL COMMENT '分析依据',
+  `trend_1h` varchar(30) DEFAULT NULL,
+  `trend_15m` varchar(30) DEFAULT NULL,
+  `rsi_1h` decimal(6,2) DEFAULT NULL,
+  `adx_1h` decimal(6,2) DEFAULT NULL,
+  `key_level_support` decimal(18,8) DEFAULT NULL,
+  `key_level_resistance` decimal(18,8) DEFAULT NULL,
+  `valid_until` datetime DEFAULT NULL COMMENT '预测有效期(+4小时)',
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_symbol` (`symbol`),
+  KEY `idx_prediction_time` (`prediction_time`)
+) ENGINE=InnoDB AUTO_INCREMENT=28758 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='市场3~4小时走势预测'
 
 
 ================================================================================
@@ -1470,7 +1670,7 @@ CREATE TABLE `news_data` (
   KEY `idx_source` (`source`) USING BTREE,
   KEY `ix_news_data_published_datetime` (`published_datetime`) USING BTREE,
   KEY `idx_published_datetime` (`published_datetime`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=323918 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
+) ENGINE=InnoDB AUTO_INCREMENT=371802 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
 
 
 ================================================================================
@@ -1499,7 +1699,7 @@ CREATE TABLE `news_sentiment_aggregation` (
   KEY `idx_sentiment_index` (`sentiment_index`) USING BTREE,
   KEY `idx_news_score` (`news_score`) USING BTREE,
   KEY `idx_updated_at` (`updated_at`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=78822 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='新闻情绪聚合表 - 每15分钟更新'
+) ENGINE=InnoDB AUTO_INCREMENT=91628 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='新闻情绪聚合表 - 每15分钟更新'
 
 
 ================================================================================
@@ -1556,7 +1756,7 @@ CREATE TABLE `optimization_logs` (
   KEY `idx_log_type` (`log_type`),
   KEY `idx_symbol` (`symbol`),
   KEY `idx_created_at` (`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=2102 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='优化日志表'
+) ENGINE=InnoDB AUTO_INCREMENT=22147 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='优化日志表'
 
 
 ================================================================================
@@ -1644,7 +1844,7 @@ CREATE TABLE `paper_trading_balance_history` (
   KEY `idx_account_time` (`account_id`,`snapshot_time`) USING BTREE,
   KEY `idx_change_type` (`change_type`) USING BTREE,
   CONSTRAINT `paper_trading_balance_history_ibfk_1` FOREIGN KEY (`account_id`) REFERENCES `paper_trading_accounts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=93 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='账户资金变动历史表'
+) ENGINE=InnoDB AUTO_INCREMENT=131 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='账户资金变动历史表'
 
 
 ================================================================================
@@ -1681,7 +1881,7 @@ CREATE TABLE `paper_trading_orders` (
   KEY `idx_status` (`status`) USING BTREE,
   KEY `idx_created_at` (`created_at`) USING BTREE,
   CONSTRAINT `paper_trading_orders_ibfk_1` FOREIGN KEY (`account_id`) REFERENCES `paper_trading_accounts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=32 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='模拟交易订单表'
+) ENGINE=InnoDB AUTO_INCREMENT=70 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='模拟交易订单表'
 
 
 ================================================================================
@@ -1747,7 +1947,7 @@ CREATE TABLE `paper_trading_positions` (
   KEY `idx_account_symbol` (`account_id`,`symbol`) USING BTREE,
   KEY `idx_status` (`status`) USING BTREE,
   CONSTRAINT `paper_trading_positions_ibfk_1` FOREIGN KEY (`account_id`) REFERENCES `paper_trading_accounts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=42 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='模拟交易持仓表'
+) ENGINE=InnoDB AUTO_INCREMENT=198 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='模拟交易持仓表'
 
 
 ================================================================================
@@ -1806,7 +2006,7 @@ CREATE TABLE `paper_trading_trades` (
   KEY `idx_order_id` (`order_id`) USING BTREE,
   KEY `idx_trade_time` (`trade_time`) USING BTREE,
   CONSTRAINT `paper_trading_trades_ibfk_1` FOREIGN KEY (`account_id`) REFERENCES `paper_trading_accounts` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=37 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='模拟交易成交历史表'
+) ENGINE=InnoDB AUTO_INCREMENT=197 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='模拟交易成交历史表'
 
 
 ================================================================================
@@ -1857,6 +2057,28 @@ CREATE TABLE `pending_positions` (
   KEY `idx_strategy` (`strategy_id`),
   KEY `idx_created` (`created_at`)
 ) ENGINE=InnoDB AUTO_INCREMENT=1347 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='å¾…å¼€ä»“ä¿¡å·è¡¨'
+
+
+================================================================================
+表名: prediction_backtest
+================================================================================
+CREATE TABLE `prediction_backtest` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `symbol` varchar(20) NOT NULL,
+  `direction` enum('BULLISH','BEARISH') NOT NULL,
+  `confidence` int(11) NOT NULL,
+  `entry_price` decimal(18,8) NOT NULL,
+  `entry_time` datetime NOT NULL,
+  `exit_price` decimal(18,8) DEFAULT NULL,
+  `exit_time` datetime DEFAULT NULL,
+  `pnl_pct` decimal(8,4) DEFAULT NULL COMMENT '收益率%(含5x杠杆)',
+  `pnl_usdt` decimal(10,4) DEFAULT NULL COMMENT '100U本金实际盈亏',
+  `status` enum('OPEN','CLOSED') DEFAULT 'OPEN',
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_status` (`status`),
+  KEY `idx_entry_time` (`entry_time`)
+) ENGINE=InnoDB AUTO_INCREMENT=1586 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
 
 
 ================================================================================
@@ -1914,7 +2136,7 @@ CREATE TABLE `price_stats_24h` (
   KEY `idx_volume_24h` (`quote_volume_24h`) USING BTREE,
   KEY `idx_updated_at` (`updated_at`) USING BTREE,
   KEY `idx_trend` (`trend`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=881328 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='24小时价格统计缓存 - 每1分钟更新'
+) ENGINE=InnoDB AUTO_INCREMENT=1237670 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='24小时价格统计缓存 - 每1分钟更新'
 
 
 ================================================================================
@@ -1986,7 +2208,7 @@ CREATE TABLE `refresh_tokens` (
   KEY `idx_user_id` (`user_id`),
   KEY `idx_expires_at` (`expires_at`),
   CONSTRAINT `refresh_tokens_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='åˆ·æ–°ä»¤ç‰Œè¡¨'
+) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='åˆ·æ–°ä»¤ç‰Œè¡¨'
 
 
 ================================================================================
@@ -2033,7 +2255,7 @@ CREATE TABLE `retrospective_analysis` (
   KEY `idx_period` (`period_start`,`period_end`),
   KEY `idx_win_rate` (`win_rate`),
   KEY `idx_pnl` (`total_pnl`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='12小时复盘分析表'
+) ENGINE=InnoDB AUTO_INCREMENT=46 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='12小时复盘分析表'
 
 
 ================================================================================
@@ -2079,7 +2301,7 @@ CREATE TABLE `signal_analysis_reports` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_analysis_time` (`analysis_time`)
-) ENGINE=InnoDB AUTO_INCREMENT=89 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+) ENGINE=InnoDB AUTO_INCREMENT=472 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
 
 
 ================================================================================
@@ -2096,13 +2318,20 @@ CREATE TABLE `signal_blacklist` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp() COMMENT '创建时间',
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp() COMMENT '更新时间',
   `is_active` tinyint(1) DEFAULT 1 COMMENT '是否激活',
+  `blacklist_level` tinyint(4) DEFAULT 3 COMMENT '黑名单等级: 1=观察, 2=限制, 3=禁用',
+  `last_reviewed_at` timestamp NULL DEFAULT NULL COMMENT '上次评估时间',
+  `review_period_days` int(11) DEFAULT 7 COMMENT '评估周期（天）',
+  `retry_count` int(11) DEFAULT 0 COMMENT '重试次数（解除后再次拉黑的次数）',
+  `performance_json` text DEFAULT NULL COMMENT '加入黑名单后的表现（JSON）',
   `notes` text DEFAULT NULL COMMENT '备注',
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_signal_side` (`signal_type`,`position_side`),
   KEY `idx_active` (`is_active`),
   KEY `idx_signal_type` (`signal_type`),
-  KEY `idx_side` (`position_side`)
-) ENGINE=InnoDB AUTO_INCREMENT=59 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='信号黑名单表'
+  KEY `idx_side` (`position_side`),
+  KEY `idx_level` (`blacklist_level`),
+  KEY `idx_reviewed` (`last_reviewed_at`)
+) ENGINE=InnoDB AUTO_INCREMENT=263 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='信号黑名单表'
 
 
 ================================================================================
@@ -2124,7 +2353,7 @@ CREATE TABLE `signal_component_performance` (
   UNIQUE KEY `unique_component_side` (`component_name`,`position_side`),
   KEY `idx_side` (`position_side`),
   KEY `idx_analyzed` (`last_analyzed`)
-) ENGINE=InnoDB AUTO_INCREMENT=1026 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='信号组件表现统计'
+) ENGINE=InnoDB AUTO_INCREMENT=2505 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='信号组件表现统计'
 
 
 ================================================================================
@@ -2156,6 +2385,7 @@ CREATE TABLE `signal_position_multipliers` (
 CREATE TABLE `signal_scoring_weights` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `signal_component` varchar(50) NOT NULL COMMENT '信号组件名',
+  `strategy_type` varchar(30) NOT NULL DEFAULT 'default' COMMENT '策略类型',
   `weight_long` decimal(5,2) NOT NULL COMMENT 'LONG权重',
   `weight_short` decimal(5,2) NOT NULL COMMENT 'SHORT权重',
   `base_weight` decimal(5,2) NOT NULL COMMENT '基准权重（初始值）',
@@ -2166,10 +2396,10 @@ CREATE TABLE `signal_scoring_weights` (
   `is_active` tinyint(1) DEFAULT 1 COMMENT '是否启用',
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `signal_component` (`signal_component`),
+  UNIQUE KEY `uk_component_strategy` (`signal_component`,`strategy_type`),
   KEY `idx_component` (`signal_component`),
   KEY `idx_active` (`is_active`)
-) ENGINE=InnoDB AUTO_INCREMENT=24 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='信号评分权重表'
+) ENGINE=InnoDB AUTO_INCREMENT=42 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='信号评分权重表'
 
 
 ================================================================================
@@ -2187,7 +2417,7 @@ CREATE TABLE `signal_threshold_overrides` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_signal_side` (`signal_type`(255),`position_side`),
   KEY `idx_active` (`is_active`)
-) ENGINE=InnoDB AUTO_INCREMENT=16 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+) ENGINE=InnoDB AUTO_INCREMENT=103 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
 
 
 ================================================================================
@@ -2303,341 +2533,7 @@ CREATE TABLE `smart_money_transactions` (
   KEY `idx_address_token` (`address`,`token_symbol`) USING BTREE,
   KEY `idx_large_recent` (`is_large_transaction`,`timestamp`) USING BTREE,
   KEY `ix_smart_money_transactions_from_address` (`from_address`) USING BTREE
-) ENGINE=InnoDB AUTO_INCREMENT=375677 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
-
-
-================================================================================
-表名: spot_batch_history
-================================================================================
-CREATE TABLE `spot_batch_history` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `position_id` int(11) NOT NULL COMMENT '关联的持仓ID',
-  `batch_number` int(11) NOT NULL COMMENT '批次号 (1-5)',
-  `buy_price` decimal(20,8) NOT NULL COMMENT '买入价格',
-  `quantity` decimal(20,8) NOT NULL COMMENT '买入数量',
-  `cost` decimal(20,4) NOT NULL COMMENT '本批成本 (USDT)',
-  `signal_strength` decimal(5,2) DEFAULT NULL COMMENT '加仓时信号强度',
-  `signal_details` text DEFAULT NULL COMMENT '加仓信号详情',
-  `created_at` datetime NOT NULL COMMENT '加仓时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_position_id` (`position_id`),
-  KEY `idx_created_at` (`created_at`),
-  CONSTRAINT `spot_batch_history_ibfk_1` FOREIGN KEY (`position_id`) REFERENCES `spot_positions` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='现货加仓记录表'
-
-
-================================================================================
-表名: spot_capital_usage
-================================================================================
-CREATE TABLE `spot_capital_usage` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `total_capital` decimal(20,4) NOT NULL COMMENT '总资金',
-  `available_capital` decimal(20,4) NOT NULL COMMENT '可用资金',
-  `locked_capital` decimal(20,4) NOT NULL COMMENT '锁定资金 (持仓中)',
-  `active_positions` int(11) NOT NULL DEFAULT 0 COMMENT '活跃持仓数',
-  `total_pnl` decimal(20,4) DEFAULT NULL COMMENT '总盈亏',
-  `realized_pnl` decimal(20,4) DEFAULT NULL COMMENT '已实现盈亏',
-  `unrealized_pnl` decimal(20,4) DEFAULT NULL COMMENT '未实现盈亏',
-  `snapshot_time` datetime NOT NULL COMMENT '快照时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_snapshot_time` (`snapshot_time`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='现货资金使用统计表'
-
-
-================================================================================
-表名: spot_positions
-================================================================================
-CREATE TABLE `spot_positions` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `symbol` varchar(20) NOT NULL COMMENT '交易对 (如 BTC/USDT)',
-  `entry_price` decimal(20,8) NOT NULL COMMENT '首次买入价格',
-  `avg_entry_price` decimal(20,8) NOT NULL COMMENT '平均成本价',
-  `quantity` decimal(20,8) NOT NULL COMMENT '持仓数量',
-  `total_cost` decimal(20,4) NOT NULL COMMENT '总成本 (USDT)',
-  `current_batch` int(11) NOT NULL DEFAULT 1 COMMENT '当前批次 (1-5)',
-  `take_profit_price` decimal(20,8) DEFAULT NULL COMMENT '止盈价格',
-  `stop_loss_price` decimal(20,8) DEFAULT NULL COMMENT '止损价格',
-  `exit_price` decimal(20,8) DEFAULT NULL COMMENT '平仓价格',
-  `pnl` decimal(20,4) DEFAULT NULL COMMENT '盈亏金额 (USDT)',
-  `pnl_pct` decimal(10,6) DEFAULT NULL COMMENT '盈亏百分比',
-  `close_reason` varchar(50) DEFAULT NULL COMMENT '平仓原因 (止盈/止损/手动)',
-  `signal_strength` decimal(5,2) DEFAULT NULL COMMENT '开仓信号强度 (0-100)',
-  `signal_details` text DEFAULT NULL COMMENT '信号详情',
-  `status` varchar(20) NOT NULL DEFAULT 'active' COMMENT '状态 (active/closed)',
-  `created_at` datetime NOT NULL COMMENT '创建时间',
-  `updated_at` datetime NOT NULL COMMENT '更新时间',
-  `closed_at` datetime DEFAULT NULL COMMENT '平仓时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_symbol` (`symbol`),
-  KEY `idx_status` (`status`),
-  KEY `idx_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='现货持仓表'
-
-
-================================================================================
-表名: spot_positions_v2
-================================================================================
-CREATE TABLE `spot_positions_v2` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `symbol` varchar(20) NOT NULL COMMENT '交易对',
-  `status` varchar(20) NOT NULL DEFAULT 'active' COMMENT '状态: active, closed',
-  `phase` varchar(20) NOT NULL DEFAULT 'sampling' COMMENT '阶段: sampling, building, holding, exit_sampling, exit_ready, closed',
-  `signal_strength` decimal(5,2) DEFAULT 0.00 COMMENT '信号强度',
-  `sampling_start_time` datetime DEFAULT NULL COMMENT '采样开始时间',
-  `building_start_time` datetime DEFAULT NULL COMMENT '建仓开始时间',
-  `holding_start_time` datetime DEFAULT NULL COMMENT '持仓开始时间',
-  `exit_sampling_start_time` datetime DEFAULT NULL COMMENT '平仓采样开始时间',
-  `exit_time` datetime DEFAULT NULL COMMENT '平仓时间',
-  `target_entry_price` decimal(18,8) DEFAULT 0.00000000 COMMENT '目标建仓价格',
-  `current_batch` int(11) DEFAULT 0 COMMENT '当前批次 (0-5)',
-  `total_batches` int(11) DEFAULT 5 COMMENT '总批次数',
-  `total_quantity` decimal(18,8) DEFAULT 0.00000000 COMMENT '总数量',
-  `total_cost` decimal(20,2) DEFAULT 0.00 COMMENT '总成本',
-  `avg_entry_price` decimal(18,8) DEFAULT 0.00000000 COMMENT '平均建仓价格',
-  `take_profit_price` decimal(18,8) DEFAULT 0.00000000 COMMENT '止盈价格 (15%)',
-  `stop_loss_price` decimal(18,8) DEFAULT 0.00000000 COMMENT '止损价格 (5%)',
-  `exit_price` decimal(18,8) DEFAULT 0.00000000 COMMENT '平仓价格',
-  `realized_pnl` decimal(20,2) DEFAULT 0.00 COMMENT '已实现盈亏 (USDT)',
-  `realized_pnl_pct` decimal(10,4) DEFAULT 0.0000 COMMENT '已实现盈亏百分比',
-  `close_reason` varchar(100) DEFAULT NULL COMMENT '平仓原因',
-  `sample_count` int(11) DEFAULT 0 COMMENT '采集的价格样本数量',
-  `sample_price_min` decimal(18,8) DEFAULT 0.00000000 COMMENT '样本最低价',
-  `sample_price_max` decimal(18,8) DEFAULT 0.00000000 COMMENT '样本最高价',
-  `sample_price_avg` decimal(18,8) DEFAULT 0.00000000 COMMENT '样本平均价',
-  `created_at` datetime NOT NULL DEFAULT current_timestamp() COMMENT '创建时间',
-  `updated_at` datetime NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp() COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_symbol_status` (`symbol`,`status`),
-  KEY `idx_phase` (`phase`),
-  KEY `idx_created_at` (`created_at`),
-  KEY `idx_status_phase` (`status`,`phase`),
-  KEY `idx_symbol_created` (`symbol`,`created_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=145 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='现货短线持仓表V2-动态价格采样策略'
-
-
-================================================================================
-表名: spot_signals_history
-================================================================================
-CREATE TABLE `spot_signals_history` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `symbol` varchar(20) NOT NULL COMMENT '交易对',
-  `signal_strength` decimal(5,2) NOT NULL COMMENT '信号强度 (0-100)',
-  `best_strategy` varchar(50) DEFAULT NULL COMMENT '最佳策略 (A/B/C/D)',
-  `score_a` decimal(5,2) DEFAULT NULL COMMENT '策略A得分 (趋势突破)',
-  `score_b` decimal(5,2) DEFAULT NULL COMMENT '策略B得分 (超卖反弹)',
-  `score_c` decimal(5,2) DEFAULT NULL COMMENT '策略C得分 (趋势跟随)',
-  `score_d` decimal(5,2) DEFAULT NULL COMMENT '策略D得分 (多重共振)',
-  `details` text DEFAULT NULL COMMENT '信号详情',
-  `is_executed` tinyint(1) DEFAULT 0 COMMENT '是否已执行',
-  `position_id` int(11) DEFAULT NULL COMMENT '关联的持仓ID',
-  `created_at` datetime NOT NULL COMMENT '创建时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_symbol` (`symbol`),
-  KEY `idx_signal_strength` (`signal_strength`),
-  KEY `idx_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='现货信号历史表'
-
-
-================================================================================
-表名: spot_trading_logs
-================================================================================
-CREATE TABLE `spot_trading_logs` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `symbol` varchar(20) NOT NULL COMMENT '交易对',
-  `action` varchar(20) NOT NULL COMMENT '操作类型 (open/add_batch/close)',
-  `price` decimal(20,8) NOT NULL COMMENT '成交价格',
-  `quantity` decimal(20,8) NOT NULL COMMENT '数量',
-  `amount` decimal(20,4) NOT NULL COMMENT '金额 (USDT)',
-  `position_id` int(11) DEFAULT NULL COMMENT '关联的持仓ID',
-  `batch_number` int(11) DEFAULT NULL COMMENT '批次号 (仅add_batch时有值)',
-  `details` text DEFAULT NULL COMMENT '操作详情',
-  `created_at` datetime NOT NULL COMMENT '创建时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_symbol` (`symbol`),
-  KEY `idx_action` (`action`),
-  KEY `idx_position_id` (`position_id`),
-  KEY `idx_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='现货交易日志表'
-
-
-================================================================================
-表名: strategy_capital_management
-================================================================================
-CREATE TABLE `strategy_capital_management` (
-  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  `strategy_id` bigint(20) DEFAULT NULL COMMENT '策略ID（NULL表示系统操作，如充值、提现）',
-  `strategy_name` varchar(100) DEFAULT NULL COMMENT '策略名称',
-  `account_id` int(11) NOT NULL COMMENT '账户ID',
-  `symbol` varchar(20) NOT NULL COMMENT '交易对，如 BTC/USDT',
-  `trade_record_id` bigint(20) DEFAULT NULL COMMENT '关联的交易记录ID（strategy_trade_records表）',
-  `position_id` int(11) DEFAULT NULL COMMENT '关联的持仓ID',
-  `order_id` varchar(50) DEFAULT NULL COMMENT '关联的订单ID',
-  `change_type` varchar(20) NOT NULL COMMENT '资金变化类型: FROZEN(冻结保证金), UNFROZEN(解冻保证金), REALIZED_PNL(已实现盈亏), FEE(手续费), DEPOSIT(充值), WITHDRAW(提现)',
-  `action` varchar(20) DEFAULT NULL COMMENT '交易动作: BUY(买入/开仓), SELL(平仓), CLOSE(平仓)',
-  `direction` varchar(10) DEFAULT NULL COMMENT '方向: long(做多), short(做空)',
-  `amount_change` decimal(18,8) NOT NULL COMMENT '金额变化（正数表示增加，负数表示减少）',
-  `balance_before` decimal(18,8) DEFAULT NULL COMMENT '变化前余额',
-  `balance_after` decimal(18,8) DEFAULT NULL COMMENT '变化后余额',
-  `frozen_before` decimal(18,8) DEFAULT NULL COMMENT '变化前冻结金额',
-  `frozen_after` decimal(18,8) DEFAULT NULL COMMENT '变化后冻结金额',
-  `available_before` decimal(18,8) DEFAULT NULL COMMENT '变化前可用余额',
-  `available_after` decimal(18,8) DEFAULT NULL COMMENT '变化后可用余额',
-  `entry_price` decimal(18,8) DEFAULT NULL COMMENT '开仓价格',
-  `exit_price` decimal(18,8) DEFAULT NULL COMMENT '平仓价格',
-  `quantity` decimal(18,8) DEFAULT NULL COMMENT '数量',
-  `leverage` int(11) DEFAULT NULL COMMENT '杠杆倍数',
-  `margin` decimal(18,8) DEFAULT NULL COMMENT '保证金',
-  `realized_pnl` decimal(18,8) DEFAULT NULL COMMENT '已实现盈亏',
-  `fee` decimal(18,8) DEFAULT NULL COMMENT '手续费',
-  `reason` varchar(200) DEFAULT NULL COMMENT '资金变化原因，如：开仓冻结保证金、平仓解冻保证金、止损平仓等',
-  `description` text DEFAULT NULL COMMENT '详细描述',
-  `change_time` datetime NOT NULL COMMENT '资金变化时间',
-  `created_at` datetime DEFAULT current_timestamp() COMMENT '记录创建时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_strategy_id` (`strategy_id`),
-  KEY `idx_account_id` (`account_id`),
-  KEY `idx_symbol` (`symbol`),
-  KEY `idx_change_type` (`change_type`),
-  KEY `idx_change_time` (`change_time`),
-  KEY `idx_trade_record_id` (`trade_record_id`),
-  KEY `idx_position_id` (`position_id`),
-  KEY `idx_strategy_symbol_time` (`strategy_id`,`symbol`,`change_time`),
-  KEY `idx_account_change_time` (`account_id`,`change_time`)
-) ENGINE=InnoDB AUTO_INCREMENT=1802 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='策略资金管理表 - 记录策略资金变化'
-
-
-================================================================================
-表名: strategy_execution_result_details
-================================================================================
-CREATE TABLE `strategy_execution_result_details` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `execution_result_id` int(11) NOT NULL,
-  `symbol` varchar(20) NOT NULL,
-  `trades_count` int(11) DEFAULT 0,
-  `buy_count` int(11) DEFAULT 0,
-  `sell_count` int(11) DEFAULT 0,
-  `winning_trades` int(11) DEFAULT 0,
-  `losing_trades` int(11) DEFAULT 0,
-  `win_rate` decimal(10,2) DEFAULT NULL,
-  `initial_balance` decimal(20,2) DEFAULT 10000.00,
-  `final_balance` decimal(20,2) DEFAULT NULL,
-  `total_pnl` decimal(20,2) DEFAULT NULL,
-  `total_pnl_percent` decimal(10,2) DEFAULT NULL,
-  `golden_cross_count` int(11) DEFAULT 0,
-  `death_cross_count` int(11) DEFAULT 0,
-  `klines_count` int(11) DEFAULT 0,
-  `indicators_count` int(11) DEFAULT 0,
-  `error_message` text DEFAULT NULL,
-  `execution_result_data` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`execution_result_data`)),
-  `debug_info` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`debug_info`)),
-  `debug_info_count` int(11) DEFAULT 0,
-  `created_at` datetime DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_execution_result_id` (`execution_result_id`),
-  KEY `idx_symbol` (`symbol`),
-  CONSTRAINT `strategy_execution_result_details_ibfk_1` FOREIGN KEY (`execution_result_id`) REFERENCES `strategy_execution_results` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-
-
-================================================================================
-表名: strategy_execution_results
-================================================================================
-CREATE TABLE `strategy_execution_results` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `strategy_id` bigint(20) DEFAULT NULL,
-  `strategy_name` varchar(200) NOT NULL,
-  `account_id` int(11) NOT NULL DEFAULT 2,
-  `strategy_config` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`strategy_config`)),
-  `execution_start_time` datetime NOT NULL,
-  `execution_end_time` datetime NOT NULL,
-  `execution_duration_hours` decimal(10,2) DEFAULT NULL,
-  `total_symbols` int(11) DEFAULT 0,
-  `total_trades` int(11) DEFAULT 0,
-  `winning_trades` int(11) DEFAULT 0,
-  `losing_trades` int(11) DEFAULT 0,
-  `win_rate` decimal(10,2) DEFAULT NULL,
-  `initial_balance` decimal(20,2) DEFAULT 10000.00,
-  `final_balance` decimal(20,2) DEFAULT NULL,
-  `total_pnl` decimal(20,2) DEFAULT NULL,
-  `total_pnl_percent` decimal(10,2) DEFAULT NULL,
-  `max_drawdown` decimal(10,2) DEFAULT NULL,
-  `status` varchar(20) DEFAULT 'completed',
-  `error_message` text DEFAULT NULL,
-  `created_at` datetime DEFAULT current_timestamp(),
-  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  KEY `idx_strategy_id` (`strategy_id`),
-  KEY `idx_strategy_name` (`strategy_name`),
-  KEY `idx_account_id` (`account_id`),
-  KEY `idx_execution_start_time` (`execution_start_time`),
-  KEY `idx_status` (`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-
-
-================================================================================
-表名: strategy_hits
-================================================================================
-CREATE TABLE `strategy_hits` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `strategy_id` bigint(11) NOT NULL COMMENT '策略ID',
-  `strategy_name` varchar(100) NOT NULL COMMENT '策略名称',
-  `symbol` varchar(20) NOT NULL COMMENT '交易对',
-  `account_id` int(11) NOT NULL COMMENT '账户ID',
-  `signal_type` varchar(20) NOT NULL COMMENT '信号类型: BUY_LONG(做多买入), BUY_SHORT(做空买入), SELL(卖出)',
-  `signal_source` varchar(50) NOT NULL COMMENT '信号来源: ema_9_26, ma_ema5, ma_ema10等',
-  `signal_timeframe` varchar(10) NOT NULL COMMENT '信号时间周期: 5m, 15m, 1h',
-  `signal_timestamp` datetime NOT NULL COMMENT '信号触发时间',
-  `ema_short` decimal(20,8) DEFAULT NULL COMMENT '短期EMA值',
-  `ema_long` decimal(20,8) DEFAULT NULL COMMENT '长期EMA值',
-  `ma10` decimal(20,8) DEFAULT NULL COMMENT 'MA10值',
-  `ema10` decimal(20,8) DEFAULT NULL COMMENT 'EMA10值',
-  `ma5` decimal(20,8) DEFAULT NULL COMMENT 'MA5值',
-  `ema5` decimal(20,8) DEFAULT NULL COMMENT 'EMA5值',
-  `current_price` decimal(20,8) NOT NULL COMMENT '当前价格',
-  `ema_cross_strength_pct` decimal(10,4) DEFAULT NULL COMMENT 'EMA交叉强度百分比',
-  `ma10_ema10_strength_pct` decimal(10,4) DEFAULT NULL COMMENT 'MA10/EMA10强度百分比',
-  `volume_ratio` decimal(10,2) DEFAULT NULL COMMENT '成交量放大倍数',
-  `volume_condition_met` tinyint(1) DEFAULT NULL COMMENT '成交量条件是否满足',
-  `ma10_ema10_trend_ok` tinyint(1) DEFAULT NULL COMMENT 'MA10/EMA10趋势过滤是否通过',
-  `trend_confirm_ok` tinyint(1) DEFAULT NULL COMMENT '趋势持续性检查是否通过',
-  `signal_strength_ok` tinyint(1) DEFAULT NULL COMMENT '信号强度过滤是否通过',
-  `executed` tinyint(1) DEFAULT 0 COMMENT '是否已执行交易',
-  `execution_result` varchar(20) DEFAULT NULL COMMENT '执行结果: SUCCESS, FAILED, SKIPPED',
-  `execution_reason` varchar(200) DEFAULT NULL COMMENT '执行或跳过的原因',
-  `position_id` int(11) DEFAULT NULL COMMENT '如果执行成功，关联的持仓ID',
-  `order_id` varchar(100) DEFAULT NULL COMMENT '如果执行成功，关联的订单ID',
-  `direction` varchar(10) DEFAULT NULL COMMENT '交易方向: long, short',
-  `leverage` int(11) DEFAULT NULL COMMENT '杠杆倍数',
-  `position_size_pct` decimal(5,2) DEFAULT NULL COMMENT '仓位大小百分比',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp() COMMENT '记录创建时间',
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp() COMMENT '最后更新时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_strategy_id` (`strategy_id`),
-  KEY `idx_symbol` (`symbol`),
-  KEY `idx_signal_timestamp` (`signal_timestamp`),
-  KEY `idx_signal_type` (`signal_type`),
-  KEY `idx_executed` (`executed`),
-  KEY `idx_created_at` (`created_at`),
-  KEY `idx_strategy_symbol_time` (`strategy_id`,`symbol`,`signal_timestamp`)
-) ENGINE=InnoDB AUTO_INCREMENT=9350 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='策略命中记录表 - 实时记录所有策略信号命中情况'
-
-
-================================================================================
-表名: strategy_regime_params
-================================================================================
-CREATE TABLE `strategy_regime_params` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `strategy_id` bigint(11) NOT NULL COMMENT '关联的策略ID',
-  `regime_type` varchar(30) NOT NULL COMMENT '行情类型',
-  `enabled` tinyint(1) DEFAULT 1 COMMENT '是否在该行情类型下启用交易',
-  `params` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '该行情类型下的策略参数' CHECK (json_valid(`params`)),
-  `description` varchar(500) DEFAULT NULL COMMENT '参数说明',
-  `created_at` datetime DEFAULT current_timestamp(),
-  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_strategy_regime` (`strategy_id`,`regime_type`),
-  KEY `idx_regime_type` (`regime_type`)
-) ENGINE=InnoDB AUTO_INCREMENT=31 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='策略行情参数预设表'
+) ENGINE=InnoDB AUTO_INCREMENT=574791 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC
 
 
 ================================================================================
@@ -2667,51 +2563,17 @@ CREATE TABLE `strategy_test_records` (
   `trade_time` datetime NOT NULL,
   `created_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
+  KEY `ix_strategy_test_records_action` (`action`),
+  KEY `ix_strategy_test_records_trade_time` (`trade_time`),
   KEY `ix_strategy_test_records_strategy_id` (`strategy_id`),
-  KEY `ix_strategy_test_records_order_id` (`order_id`),
   KEY `ix_strategy_test_records_account_id` (`account_id`),
+  KEY `ix_strategy_test_records_order_id` (`order_id`),
   KEY `idx_account_action_time` (`account_id`,`action`,`trade_time`),
   KEY `ix_strategy_test_records_symbol` (`symbol`),
   KEY `idx_strategy_symbol_time` (`strategy_id`,`symbol`,`trade_time`),
-  KEY `ix_strategy_test_records_position_id` (`position_id`),
-  KEY `ix_strategy_test_records_action` (`action`),
-  KEY `ix_strategy_test_records_trade_time` (`trade_time`),
-  KEY `idx_position_id` (`position_id`)
+  KEY `idx_position_id` (`position_id`),
+  KEY `ix_strategy_test_records_position_id` (`position_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-
-
-================================================================================
-表名: strategy_test_results
-================================================================================
-CREATE TABLE `strategy_test_results` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `strategy_id` bigint(20) DEFAULT NULL COMMENT '策略ID',
-  `strategy_name` varchar(200) NOT NULL COMMENT '策略名称',
-  `strategy_config` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL COMMENT '策略配置（完整JSON）' CHECK (json_valid(`strategy_config`)),
-  `test_start_time` datetime NOT NULL COMMENT '测试开始时间',
-  `test_end_time` datetime NOT NULL COMMENT '测试结束时间',
-  `test_duration_hours` decimal(10,2) DEFAULT NULL COMMENT '测试时长（小时）',
-  `total_symbols` int(11) DEFAULT 0 COMMENT '测试的交易对数量',
-  `total_trades` int(11) DEFAULT 0 COMMENT '总交易次数',
-  `winning_trades` int(11) DEFAULT 0 COMMENT '盈利交易次数',
-  `losing_trades` int(11) DEFAULT 0 COMMENT '亏损交易次数',
-  `win_rate` decimal(10,2) DEFAULT NULL COMMENT '胜率（%）',
-  `initial_balance` decimal(20,2) DEFAULT 10000.00 COMMENT '初始资金',
-  `final_balance` decimal(20,2) DEFAULT NULL COMMENT '最终资金',
-  `total_pnl` decimal(20,2) DEFAULT NULL COMMENT '总盈亏',
-  `total_pnl_percent` decimal(10,2) DEFAULT NULL COMMENT '总盈亏百分比',
-  `max_drawdown` decimal(10,2) DEFAULT NULL COMMENT '最大回撤（%）',
-  `status` varchar(20) DEFAULT 'completed' COMMENT '测试状态：completed, failed, running',
-  `error_message` text DEFAULT NULL COMMENT '错误信息（如果测试失败）',
-  `created_at` datetime DEFAULT current_timestamp() COMMENT '创建时间',
-  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp() COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_strategy_id` (`strategy_id`),
-  KEY `idx_strategy_name` (`strategy_name`),
-  KEY `idx_test_start_time` (`test_start_time`),
-  KEY `idx_created_at` (`created_at`),
-  KEY `idx_status` (`status`)
-) ENGINE=InnoDB AUTO_INCREMENT=473 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='策略测试结果主表'
 
 
 ================================================================================
@@ -2719,37 +2581,39 @@ CREATE TABLE `strategy_test_results` (
 ================================================================================
 CREATE TABLE `strategy_trade_records` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `strategy_id` bigint(20) NOT NULL COMMENT '策略ID',
-  `strategy_name` varchar(100) DEFAULT NULL COMMENT '策略名称',
-  `account_id` int(11) NOT NULL COMMENT '账户ID（0=测试，其他=实盘）',
-  `symbol` varchar(20) NOT NULL COMMENT '交易对',
-  `action` varchar(20) NOT NULL COMMENT '交易动作: BUY(买入/开仓), SELL(平仓), CLOSE(平仓)',
-  `direction` varchar(10) DEFAULT NULL COMMENT '方向: long(做多), short(做空)',
-  `position_side` varchar(10) DEFAULT NULL COMMENT '持仓方向: LONG, SHORT',
-  `entry_price` decimal(18,8) DEFAULT NULL COMMENT '开仓价格',
-  `exit_price` decimal(18,8) DEFAULT NULL COMMENT '平仓价格',
-  `quantity` decimal(18,8) NOT NULL COMMENT '数量',
-  `leverage` int(11) DEFAULT 1 COMMENT '杠杆倍数',
-  `margin` decimal(18,8) DEFAULT NULL COMMENT '保证金',
-  `total_value` decimal(18,8) DEFAULT NULL COMMENT '总价值',
-  `fee` decimal(18,8) DEFAULT NULL COMMENT '手续费',
-  `realized_pnl` decimal(18,8) DEFAULT NULL COMMENT '已实现盈亏',
-  `position_id` int(11) DEFAULT NULL COMMENT '持仓ID',
-  `order_id` varchar(50) DEFAULT NULL COMMENT '订单ID',
-  `signal_id` int(11) DEFAULT NULL COMMENT '信号ID（关联strategy_hits表）',
-  `reason` varchar(200) DEFAULT NULL COMMENT '交易原因，如：策略信号、止损、止盈、趋势反转等',
-  `trade_time` datetime NOT NULL COMMENT '交易时间',
-  `created_at` datetime DEFAULT current_timestamp() COMMENT '记录创建时间',
+  `strategy_id` bigint(20) NOT NULL,
+  `strategy_name` varchar(100) DEFAULT NULL,
+  `account_id` int(11) NOT NULL,
+  `symbol` varchar(20) NOT NULL,
+  `action` varchar(20) NOT NULL,
+  `direction` varchar(10) DEFAULT NULL,
+  `position_side` varchar(10) DEFAULT NULL,
+  `entry_price` decimal(18,8) DEFAULT NULL,
+  `exit_price` decimal(18,8) DEFAULT NULL,
+  `quantity` decimal(18,8) NOT NULL,
+  `leverage` int(11) DEFAULT NULL,
+  `margin` decimal(18,8) DEFAULT NULL,
+  `total_value` decimal(18,8) DEFAULT NULL,
+  `fee` decimal(18,8) DEFAULT NULL,
+  `realized_pnl` decimal(18,8) DEFAULT NULL,
+  `position_id` int(11) DEFAULT NULL,
+  `order_id` varchar(50) DEFAULT NULL,
+  `signal_id` int(11) DEFAULT NULL,
+  `reason` varchar(200) DEFAULT NULL,
+  `trade_time` datetime NOT NULL,
+  `created_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_strategy_id` (`strategy_id`),
-  KEY `idx_account_id` (`account_id`),
-  KEY `idx_symbol` (`symbol`),
-  KEY `idx_action` (`action`),
-  KEY `idx_trade_time` (`trade_time`),
-  KEY `idx_strategy_symbol_time` (`strategy_id`,`symbol`,`trade_time`),
+  KEY `ix_strategy_trade_records_strategy_id` (`strategy_id`),
+  KEY `ix_strategy_trade_records_order_id` (`order_id`),
+  KEY `ix_strategy_trade_records_account_id` (`account_id`),
   KEY `idx_account_action_time` (`account_id`,`action`,`trade_time`),
+  KEY `ix_strategy_trade_records_symbol` (`symbol`),
+  KEY `idx_strategy_symbol_time` (`strategy_id`,`symbol`,`trade_time`),
+  KEY `ix_strategy_trade_records_position_id` (`position_id`),
+  KEY `ix_strategy_trade_records_trade_time` (`trade_time`),
+  KEY `ix_strategy_trade_records_action` (`action`),
   KEY `idx_position_id` (`position_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='策略交易记录表 - 存储策略执行的买入、平仓等交易信息'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 
 
 ================================================================================
@@ -2802,7 +2666,24 @@ CREATE TABLE `symbol_volatility_profile` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_symbol` (`symbol`),
   KEY `idx_last_updated` (`last_updated_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=1574 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='交易对波动率配置表(15M K线动态止盈)'
+) ENGINE=InnoDB AUTO_INCREMENT=20906 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='交易对波动率配置表(15M K线动态止盈)'
+
+
+================================================================================
+表名: system_settings
+================================================================================
+CREATE TABLE `system_settings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `setting_key` varchar(100) NOT NULL COMMENT '配置键',
+  `setting_value` text NOT NULL COMMENT '配置值',
+  `description` varchar(255) DEFAULT NULL COMMENT '配置说明',
+  `updated_by` varchar(100) DEFAULT 'system' COMMENT '更新者',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `setting_key` (`setting_key`),
+  KEY `idx_setting_key` (`setting_key`)
+) ENGINE=InnoDB AUTO_INCREMENT=2902 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='系统配置表'
 
 
 ================================================================================
@@ -2860,7 +2741,55 @@ CREATE TABLE `technical_indicators_cache` (
   KEY `idx_signal` (`technical_signal`) USING BTREE,
   KEY `idx_symbol_timeframe_updated` (`symbol`,`timeframe`,`updated_at`),
   KEY `idx_timeframe_symbol_updated` (`timeframe`,`symbol`,`updated_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=817230 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='技术指标缓存表 - 每5分钟更新'
+) ENGINE=InnoDB AUTO_INCREMENT=1777238 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC COMMENT='技术指标缓存表 - 每5分钟更新'
+
+
+================================================================================
+表名: technical_signals_cache
+================================================================================
+CREATE TABLE `technical_signals_cache` (
+  `symbol` varchar(20) NOT NULL,
+  `window_label` varchar(10) NOT NULL,
+  `timeframe` varchar(10) NOT NULL,
+  `total_klines` int(11) DEFAULT 0,
+  `bullish_count` int(11) DEFAULT 0,
+  `bearish_count` int(11) DEFAULT 0,
+  `bullish_pct` decimal(5,2) DEFAULT 0.00,
+  `bearish_pct` decimal(5,2) DEFAULT 0.00,
+  `avg_bullish_strength` decimal(20,6) DEFAULT 0.000000,
+  `avg_bearish_strength` decimal(20,6) DEFAULT 0.000000,
+  `total_volume` decimal(20,4) DEFAULT 0.0000,
+  `trend` varchar(20) DEFAULT '震荡',
+  `updated_at` datetime NOT NULL,
+  PRIMARY KEY (`symbol`,`window_label`,`timeframe`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='技术信号K线统计缓存，由存储过程每5分钟刷新'
+
+
+================================================================================
+表名: top_performing_symbols
+================================================================================
+CREATE TABLE `top_performing_symbols` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `symbol` varchar(20) NOT NULL COMMENT '交易对',
+  `total_realized_pnl` decimal(20,8) NOT NULL COMMENT '总盈利(USDT)',
+  `total_trades` int(11) NOT NULL DEFAULT 0 COMMENT '总交易次数',
+  `winning_trades` int(11) NOT NULL DEFAULT 0 COMMENT '盈利次数',
+  `losing_trades` int(11) NOT NULL DEFAULT 0 COMMENT '亏损次数',
+  `win_rate` decimal(5,2) NOT NULL DEFAULT 0.00 COMMENT '胜率(%)',
+  `avg_pnl_per_trade` decimal(20,8) NOT NULL DEFAULT 0.00000000 COMMENT '平均每笔盈利',
+  `max_single_profit` decimal(20,8) DEFAULT NULL COMMENT '单笔最大盈利',
+  `max_single_loss` decimal(20,8) DEFAULT NULL COMMENT '单笔最大亏损',
+  `profit_factor` decimal(10,4) DEFAULT NULL COMMENT '盈亏比(总盈利/总亏损)',
+  `rank_score` int(11) NOT NULL COMMENT '排名(1-50)',
+  `last_updated` datetime NOT NULL COMMENT '最后更新时间',
+  `created_at` datetime DEFAULT current_timestamp(),
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `symbol` (`symbol`),
+  KEY `idx_symbol` (`symbol`),
+  KEY `idx_rank` (`rank_score`),
+  KEY `idx_pnl` (`total_realized_pnl`)
+) ENGINE=InnoDB AUTO_INCREMENT=51 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='盈利Top 50交易对统计表'
 
 
 ================================================================================
@@ -2889,21 +2818,17 @@ CREATE TABLE `trade_data` (
 
 
 ================================================================================
-表名: trading_control
+表名: trading_control_backup
 ================================================================================
-CREATE TABLE `trading_control` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
+CREATE TABLE `trading_control_backup` (
+  `id` int(11) NOT NULL DEFAULT 0,
   `account_id` int(11) NOT NULL COMMENT '账户ID: 2=U本位合约, 3=币本位合约',
   `trading_enabled` tinyint(1) DEFAULT 1 COMMENT '交易是否启用',
-  `trading_type` varchar(50) NOT NULL COMMENT '交易类型: usdt_futures/coin_futures',
-  `updated_by` varchar(100) DEFAULT NULL COMMENT '更新人',
+  `trading_type` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT '交易类型: usdt_futures/coin_futures',
+  `updated_by` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT '更新人',
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_account_type` (`account_id`,`trading_type`),
-  KEY `idx_account_id` (`account_id`),
-  KEY `idx_trading_type` (`trading_type`)
-) ENGINE=InnoDB AUTO_INCREMENT=46 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='交易控制开关表'
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 
 
 ================================================================================
@@ -2946,7 +2871,7 @@ CREATE TABLE `trading_mode_config` (
   UNIQUE KEY `uk_account_type` (`account_id`,`trading_type`),
   KEY `idx_mode_type` (`mode_type`),
   KEY `idx_active` (`is_active`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='交易模式配置表'
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='交易模式配置表'
 
 
 ================================================================================
@@ -3015,15 +2940,30 @@ CREATE TABLE `trading_symbol_rating` (
   `previous_level` int(11) DEFAULT NULL COMMENT '上一个等级',
   `level_changed_at` timestamp NULL DEFAULT NULL COMMENT '等级变更时间',
   `level_change_reason` varchar(500) DEFAULT NULL COMMENT '等级变更原因',
-  `stats_start_date` date NOT NULL COMMENT '统计开始日期',
-  `stats_end_date` date NOT NULL COMMENT '统计结束日期',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `stats_start_date` date DEFAULT NULL COMMENT '统计开始日期',
+  `stats_end_date` date DEFAULT NULL COMMENT '统计结束日期',
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_symbol` (`symbol`),
   KEY `idx_rating_level` (`rating_level`),
   KEY `idx_updated_at` (`updated_at`)
-) ENGINE=InnoDB AUTO_INCREMENT=589 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='交易对评级表(黑名单分级制度)'
+) ENGINE=InnoDB AUTO_INCREMENT=1517 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='交易对评级表(黑名单分级制度)'
+
+
+================================================================================
+表名: trading_symbols
+================================================================================
+CREATE TABLE `trading_symbols` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `symbol` varchar(20) NOT NULL,
+  `exchange` varchar(20) DEFAULT 'binance_futures',
+  `enabled` tinyint(1) DEFAULT 1 COMMENT '是否启用',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `idx_symbol_exchange` (`symbol`,`exchange`)
+) ENGINE=InnoDB AUTO_INCREMENT=786 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='交易对配置表'
 
 
 ================================================================================
@@ -3051,7 +2991,7 @@ CREATE TABLE `user_api_keys` (
   KEY `idx_exchange` (`exchange`),
   KEY `idx_status` (`status`),
   CONSTRAINT `user_api_keys_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='ç”¨æˆ·APIå¯†é’¥è¡¨'
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='ç”¨æˆ·APIå¯†é’¥è¡¨'
 
 
 ================================================================================
@@ -3072,7 +3012,7 @@ CREATE TABLE `users` (
   UNIQUE KEY `uk_email` (`email`),
   KEY `idx_status` (`status`),
   KEY `idx_role` (`role`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='ç”¨æˆ·è¡¨'
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='ç”¨æˆ·è¡¨'
 
 
 ================================================================================
