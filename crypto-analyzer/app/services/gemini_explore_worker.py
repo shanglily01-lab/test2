@@ -43,9 +43,9 @@ from app.services.gemini_swan_worker import (
     GEMINI_MODEL,
     TOP_MOVER,
     TOP_FUNDING,
+    MIN_QUOTE_VOLUME,
     _call_gemini,
-    _fetch_movers_24h,
-    _fetch_extreme_funding,
+    _is_excluded,
     _merge_universe,
     _read_setting,
 )
@@ -61,6 +61,14 @@ EXPLORE_TP_PCT = 8.0   # 8%
 EXPLORE_CONFIDENCE_THRESHOLD = 0.6
 EXPLORE_ACCOUNT_ID = 2
 EXPLORE_SOURCE = 'gemini_explore'
+
+# 数据新鲜度门槛 (本地宽松版, 跟 swan_worker 不同):
+#   - swan_worker 用 price=10min / funding=30min (写死 SQL)
+#   - 我们用 price=20min, 因为 price_stats_24h 在远程实测有 ~12-13 min 漂移,
+#     卡 10min 会让 universe 经常为空, Gemini 调用形同虚设
+#   - funding 维持 30min, 资金费率本身刷新频率就是 8h 周期, 30min 足够
+EXPLORE_PRICE_FRESH_MIN = 20
+EXPLORE_FUNDING_FRESH_MIN = 30
 
 
 # ---------------- DB 连接 ----------------
@@ -81,8 +89,57 @@ def _connect():
 
 
 # ---------------- 候选池采集 ----------------
+# 自己实现 fetcher (跟 swan_worker 同结构, 但门槛放宽到本地常量):
+# 不调 swan_worker 的版本因为它 SQL 里把 10 分钟写死了,
+# 改 swan_worker 会影响其它使用者, 所以本地复制一份.
+def _fetch_movers_24h(cur, top_n: int):
+    """24h 涨/跌 各 top_n. 新鲜度门槛: EXPLORE_PRICE_FRESH_MIN 分钟."""
+    base_sql = """
+        SELECT symbol, current_price, change_24h, quote_volume_24h, trend, updated_at
+        FROM price_stats_24h
+        WHERE quote_volume_24h >= %s
+          AND change_24h IS NOT NULL
+          AND updated_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL %s MINUTE)
+        ORDER BY change_24h {order}
+        LIMIT %s
+    """
+    cur.execute(base_sql.format(order="DESC"),
+                (MIN_QUOTE_VOLUME, EXPLORE_PRICE_FRESH_MIN, top_n * 3))
+    gainers = [r for r in cur.fetchall() if not _is_excluded(r["symbol"])][:top_n]
+    cur.execute(base_sql.format(order="ASC"),
+                (MIN_QUOTE_VOLUME, EXPLORE_PRICE_FRESH_MIN, top_n * 3))
+    losers = [r for r in cur.fetchall() if not _is_excluded(r["symbol"])][:top_n]
+    return gainers, losers
+
+
+def _fetch_extreme_funding(cur, top_n: int):
+    """资金费率 极正/极负 各 top_n. 新鲜度门槛: EXPLORE_FUNDING_FRESH_MIN 分钟."""
+    base_sql = """
+        SELECT t.symbol AS symbol,
+               t.funding_rate AS current_rate,
+               NULL AS rate_avg_7d,
+               t.timestamp AS updated_at
+        FROM funding_rate_data t
+        INNER JOIN (
+            SELECT symbol, MAX(funding_time) AS max_ft
+            FROM funding_rate_data
+            WHERE timestamp >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL %s MINUTE)
+            GROUP BY symbol
+        ) latest ON t.symbol = latest.symbol AND t.funding_time = latest.max_ft
+        ORDER BY t.funding_rate {order}
+        LIMIT %s
+    """
+    cur.execute(base_sql.format(order="DESC"),
+                (EXPLORE_FUNDING_FRESH_MIN, top_n * 3))
+    pos = [r for r in cur.fetchall() if not _is_excluded(r["symbol"])][:top_n]
+    cur.execute(base_sql.format(order="ASC"),
+                (EXPLORE_FUNDING_FRESH_MIN, top_n * 3))
+    neg = [r for r in cur.fetchall() if not _is_excluded(r["symbol"])][:top_n]
+    return pos, neg
+
+
 def _build_universe(conn) -> dict:
-    """复用 gemini_swan_worker 的辅助函数, 在本地 binance-data 上跑."""
+    """构建 Gemini 探索候选池 (用本地宽松门槛 fetcher)."""
     with conn.cursor() as cur:
         gainers, losers = _fetch_movers_24h(cur, TOP_MOVER)
         fund_pos, fund_neg = _fetch_extreme_funding(cur, TOP_FUNDING)
