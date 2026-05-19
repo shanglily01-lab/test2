@@ -41,10 +41,11 @@ from loguru import logger
 
 from app.services.gemini_swan_worker import (
     GEMINI_MODEL,
+    GEMINI_API_KEY,
+    GEMINI_TIMEOUT_S,
     TOP_MOVER,
     TOP_FUNDING,
     MIN_QUOTE_VOLUME,
-    _call_gemini,
     _is_excluded,
     _merge_universe,
     _read_setting,
@@ -144,6 +145,259 @@ def _build_universe(conn) -> dict:
         gainers, losers = _fetch_movers_24h(cur, TOP_MOVER)
         fund_pos, fund_neg = _fetch_extreme_funding(cur, TOP_FUNDING)
     return _merge_universe(gainers, losers, fund_pos, fund_neg)
+
+
+# ---------------- 技术指标 + 多周期 K 线增强 ----------------
+def _ema(values: List[float], period: int) -> Optional[float]:
+    """简易 EMA: alpha = 2/(period+1). 返回最后一个值. 数据不足返回 None."""
+    if not values or len(values) < period:
+        return None
+    alpha = 2.0 / (period + 1)
+    ema = sum(values[:period]) / period  # SMA seed
+    for v in values[period:]:
+        ema = alpha * v + (1 - alpha) * ema
+    return ema
+
+
+def _rsi(closes: List[float], period: int = 14) -> Optional[float]:
+    """标准 RSI 14. 数据不足返回 None."""
+    if not closes or len(closes) < period + 1:
+        return None
+    gains, losses = [], []
+    for i in range(1, len(closes)):
+        diff = closes[i] - closes[i - 1]
+        gains.append(max(diff, 0))
+        losses.append(max(-diff, 0))
+    # SMA 初值
+    avg_gain = sum(gains[:period]) / period
+    avg_loss = sum(losses[:period]) / period
+    # Wilder smoothing
+    for i in range(period, len(gains)):
+        avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+        avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return 100 - 100 / (1 + rs)
+
+
+def _fetch_klines(cur, symbol: str, timeframe: str, limit: int) -> List[Dict]:
+    """取最近 N 根 K 线 (按 open_time 升序). 不到 limit 也返回."""
+    cur.execute(
+        "SELECT open_time, open_price, high_price, low_price, close_price, volume "
+        "FROM kline_data "
+        "WHERE symbol=%s AND timeframe=%s AND exchange='binance_futures' "
+        "ORDER BY open_time DESC LIMIT %s",
+        (symbol, timeframe, limit),
+    )
+    rows = list(reversed(cur.fetchall()))
+    return rows
+
+
+def _compact_kline(rows: List[Dict], digits: int = 6) -> List[List[float]]:
+    """K 线压缩成 [open, high, low, close] 数组列表 (省 token)."""
+    out = []
+    for r in rows:
+        try:
+            out.append([
+                round(float(r['open_price']), digits),
+                round(float(r['high_price']), digits),
+                round(float(r['low_price']), digits),
+                round(float(r['close_price']), digits),
+            ])
+        except Exception:
+            continue
+    return out
+
+
+def _enrich_symbol(cur, sym_data: dict) -> None:
+    """给单个 symbol dict 加上 K 线 + 指标. 失败不阻塞 (字段缺即 None)."""
+    symbol = sym_data['symbol']
+
+    # 多周期 K 线 (按 token 预算: 1d×7 + 1h×12 + 15m×8 ≈ 27 根/symbol)
+    k_1d = _fetch_klines(cur, symbol, '1d', 7)
+    k_1h = _fetch_klines(cur, symbol, '1h', 12)
+    k_15m = _fetch_klines(cur, symbol, '15m', 8)
+
+    sym_data['k_1d_ohlc'] = _compact_kline(k_1d)
+    sym_data['k_1h_ohlc'] = _compact_kline(k_1h)
+    sym_data['k_15m_ohlc'] = _compact_kline(k_15m)
+
+    # 技术指标
+    closes_1h = [float(r['close_price']) for r in k_1h]
+    closes_15m = [float(r['close_price']) for r in k_15m]
+
+    rsi_1h = _rsi(closes_1h, 14) if len(closes_1h) >= 15 else None
+    ema9_15m = _ema(closes_15m, 9) if len(closes_15m) >= 9 else None
+
+    # 距 7d 高/低距离 (用 1d K 线高低数据算更准确)
+    above_7d_low_pct = below_7d_high_pct = None
+    if k_1d:
+        try:
+            highs_7d = [float(r['high_price']) for r in k_1d]
+            lows_7d = [float(r['low_price']) for r in k_1d]
+            high_7d = max(highs_7d)
+            low_7d = min(lows_7d)
+            cur_price = sym_data.get('current_price')
+            if cur_price and low_7d > 0:
+                above_7d_low_pct = round((cur_price - low_7d) / low_7d * 100, 2)
+            if cur_price and high_7d > 0:
+                below_7d_high_pct = round((cur_price - high_7d) / high_7d * 100, 2)
+        except Exception:
+            pass
+
+    sym_data['tech'] = {
+        'rsi_14_1h': round(rsi_1h, 1) if rsi_1h is not None else None,
+        'ema9_15m': round(ema9_15m, 6) if ema9_15m is not None else None,
+        'above_7d_low_pct': above_7d_low_pct,
+        'below_7d_high_pct': below_7d_high_pct,
+    }
+
+
+def _enrich_universe(conn, universe: dict) -> None:
+    """对 universe 里每个 symbol 加 K 线 + 指标."""
+    with conn.cursor() as cur:
+        for sym_data in universe.values():
+            try:
+                _enrich_symbol(cur, sym_data)
+            except Exception as e:
+                logger.debug(f"[Gemini探索] enrich {sym_data.get('symbol')} 失败: {e}")
+
+
+def _build_global_context(conn) -> dict:
+    """全局市场环境 — 给 Gemini 看完整背景."""
+    ctx = {'asof_utc': datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
+
+    # Big4 当前信号
+    ctx['big4_signal'] = _get_big4_signal(conn)
+
+    # BTC / ETH / SOL 24h 涨跌幅 (大盘节奏)
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT symbol, current_price, change_24h FROM price_stats_24h "
+            "WHERE symbol IN ('BTC/USDT','ETH/USDT','SOL/USDT')"
+        )
+        for r in cur.fetchall():
+            base = r['symbol'].split('/')[0].lower()
+            ctx[f'{base}_price'] = float(r['current_price']) if r['current_price'] else None
+            ctx[f'{base}_change_24h'] = float(r['change_24h']) if r['change_24h'] is not None else None
+
+    return ctx
+
+
+# ---------------- Gemini 调用 (Explore 专用 prompt, 不复用 swan) ----------------
+EXPLORE_PROMPT_TEMPLATE = """你是加密货币衍生品研究员, 负责识别**未来 6 小时内**最可能爆发的红/黑天鹅事件并给出可交易方向.
+
+# 全局市场环境 (asof: {asof})
+{global_context_json}
+
+Big4 是 BTC/ETH/BNB/SOL 综合趋势指标 (取值: STRONG_BULLISH/BULLISH/NEUTRAL/BEARISH/STRONG_BEARISH).
+注意 Big4 BEARISH/STRONG_BEARISH 时不要给 LONG 信号 (系统会拒绝); BULLISH/STRONG_BULLISH 时不要给 SHORT.
+
+# 当前候选 symbol (来自 24h 涨跌 + 资金费率极值)
+每个 symbol 字段:
+- triggers: 进入候选池的原因 (24h_gainer / 24h_loser / funding_pos_extreme / funding_neg_extreme)
+- current_price / change_24h / quote_volume_24h: 价格和成交额
+- current_rate: 资金费率 (>0 多头付空头, <0 反之)
+- k_15m_ohlc: 最近 8 根 15 分钟 K 线, 数组格式 [open, high, low, close], 时间升序
+- k_1h_ohlc: 最近 12 根 1 小时 K 线
+- k_1d_ohlc: 最近 7 根 日线
+- tech.rsi_14_1h: 1 小时 RSI (>70 超买, <30 超卖)
+- tech.ema9_15m: 15 分钟 EMA9 (短期均值)
+- tech.above_7d_low_pct: 现价距 7 日最低点的百分比 (越接近 0 表示在低位)
+- tech.below_7d_high_pct: 现价距 7 日最高点的百分比 (负值, 越接近 0 表示在高位)
+
+{universe_json}
+
+# 任务
+为每个 symbol 标注:
+- category: 'red_swan' (做多)  / 'black_swan' (做空)  / 'skip' (不交易)
+- confidence: 0.0-1.0, 越大越确定
+- catalyst: 你的判断依据, **必须引用具体数据** (不接受"高波动""不确定"这类宏观话术)
+- data_signal: 哪个数据点最支持判断 (例: "rsi=28 + above_7d_low_pct=2.1 + 资金费率-0.8%")
+- risk_note: 反向风险一句
+
+判定原则:
+1. 看**多周期一致性**: 1d 主趋势 + 1h 节奏 + 15m 入场点, 三者方向一致才高 confidence
+2. 看**资金费率 vs 价格背离**:
+   - 资金费极正 (拥挤多) + 价格在 7d 高点附近 + RSI 高 → black_swan (顶部砸盘)
+   - 资金费极负 (拥挤空) + 价格在 7d 低点附近 + RSI 低 → red_swan (空头挤兑)
+3. **不要单看 24h 涨跌幅**: 已经涨 100% 的不一定继续涨, 看是否还在加速
+4. **不熟该币就 skip** + confidence ≤ 0.3, 不要硬猜
+5. **结合 Big4 环境**: Big4 BEARISH 时 LONG 要更高 confidence 才下, SHORT 反之
+
+# 输出
+**仅** 一个合法 JSON, 不要 markdown 围栏:
+{{
+  "summary_zh": "整体市场氛围 + 主流叙事 1-2 句",
+  "verdicts": [
+    {{
+      "symbol": "FOO/USDT",
+      "category": "red_swan",
+      "confidence": 0.72,
+      "catalyst": "...具体依据, 引用数据...",
+      "data_signal": "rsi=28, above_7d_low_pct=1.5",
+      "risk_note": "..."
+    }}
+  ]
+}}
+"""
+
+
+def _call_gemini_explore(universe: dict, global_ctx: dict) -> Optional[dict]:
+    """专用版 Gemini 调用 — 多周期 K 线 + Big4 + 技术指标."""
+    if not GEMINI_API_KEY:
+        logger.error("[Gemini探索] GEMINI_API_KEY 未设置")
+        return None
+    try:
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        logger.error("[Gemini探索] 缺依赖, 请 pip install google-genai")
+        return None
+
+    asof = global_ctx.get('asof_utc', datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC'))
+
+    # universe 按 24h 涨跌排序, 让 Gemini 优先看异动大的
+    universe_list = sorted(
+        list(universe.values()),
+        key=lambda x: abs(x.get('change_24h') or 0),
+        reverse=True,
+    )
+
+    prompt = EXPLORE_PROMPT_TEMPLATE.format(
+        asof=asof,
+        global_context_json=json.dumps(global_ctx, ensure_ascii=False, indent=2),
+        universe_json=json.dumps(universe_list, ensure_ascii=False, indent=2, default=str),
+    )
+
+    logger.info(f"[Gemini探索] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens)")
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    cfg = types.GenerateContentConfig(
+        response_mime_type="application/json",
+        http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_S * 1000),
+    )
+
+    t0 = time.time()
+    try:
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL, contents=prompt, config=cfg,
+        )
+    except Exception as e:
+        logger.error(f"[Gemini探索] Gemini 调用失败: {e}")
+        return None
+
+    text = (resp.text or "").strip()
+    if text.startswith("```"):
+        text = text.strip("`").lstrip("json").strip()
+    logger.info(f"[Gemini探索] gemini 用时 {time.time()-t0:.1f}s, output_len={len(text)}")
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        logger.error(f"[Gemini探索] JSON 解析失败: {e}; raw[:500]={text[:500]}")
+        return None
 
 
 # ---------------- 闸门检查 ----------------
@@ -424,8 +678,18 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             logger.warning("[Gemini探索] 候选池为空, 本轮结束")
             return run_id
 
-        # 3. 调 Gemini (单轮, 不像 swan 那样多轮聚合)
-        gemini_response = _call_gemini(universe)
+        # 3a. 给每个 symbol 加 1d/1h/15m K 线 + RSI/EMA/距位指标 (实时数据)
+        _enrich_universe(conn, universe)
+        # 3b. 全局上下文: Big4 + BTC/ETH/SOL 24h 涨跌
+        global_ctx = _build_global_context(conn)
+        logger.info(
+            f"[Gemini探索] 全局: Big4={global_ctx.get('big4_signal')} "
+            f"BTC chg24h={global_ctx.get('btc_change_24h')}% "
+            f"ETH chg24h={global_ctx.get('eth_change_24h')}%"
+        )
+
+        # 3c. 调 Gemini (单轮, 用 explore 专用 prompt)
+        gemini_response = _call_gemini_explore(universe, global_ctx)
         if gemini_response is None:
             elapsed = time.time() - t0
             run_id = _insert_run(
