@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-六策略量化交易服务
-- S1: 早期做多  (未启动行情, 7天, 20%止盈, 无止损, 5x, 300U, 最多3单)
-- S2: 无量回调做多 (4小时, 5%止盈, 2%止损, 10x, 300U, 最多3单)
-- S3: 顶部做空  (3天, 15%止盈, 无止损, 5x, 300U, 最多3单)
-- S4: 反弹动能衰竭做空 (5小时, 10%止盈, 3%止损, 5x, 300U, 最多3单)
-- S5: 大币超卖反弹做多 (48小时, 5%止盈, 2%止损, 5x, 200U, 最多3单, 仅BTC/ETH/SOL/BNB/XRP)
-- S6: 小币量能异动做多 (8小时, 8%止盈, 3%止损, 5x, 200U, 最多5单, 排除大市值)
-- S7: 小币均线支撑反弹做多 (8小时, 6%止盈, 2.5%止损, 5x, 200U, 最多5单, 排除大市值)
+六策略量化交易服务 (v2 — 2026-05-22 精简确认层版)
+
+核心改动: 去掉所有滞后确认层, 每个策略保留 2-3 个前置信号, 提前入场。
+- S1: 早期做多 — 去掉 4H MACD (滞后 8h), 保留 RSI+MA20
+- S2: 回调做多 — 降低门槛 15%→8%, 去掉 15m RSI 上升确认
+- S3: 顶部做空 — 去掉"已从高点回落 3-15%"(等跌了才空=灾难), 阴线需求 2→1
+- S4: 反弹衰竭做空 — 去掉"反弹 5%+", 三选二→三选一
+- S5: 大币超卖 — 去掉 RSI 下降过滤 (RSI<32 本身已足够)
+- S6: 小币量能异动 — 去掉 RSI 28-55 (量能先行, 不需要 RSI 再确认)
+- S7: MA 支撑反弹 — 去掉量能确认 (等量确认=错过反弹)
 
 调度方式: 在 smart_trader_service.py 主循环中调用
 - run_fast(): 每5分钟, 负责 S2+S4+S7
@@ -492,7 +494,9 @@ class MultiStrategyService:
     # ─────────────────────────────────────────
 
     def scan_s1_early_long(self):
-        """S1: RSI 25-52 上升 + 4H MACD连续向上(仍在低位) + 价格在MA20 80-105% + 量能回升"""
+        """S1: RSI 25-52(上升) + 价格在MA20 80-105% + 量能回升
+        精简: 去掉 4H MACD (滞后8h, 等到确认趋势已走完), 保留核心 RSI+位置
+        """
         if self._strategy_position_count(self.S1_SOURCE) >= self.S1_MAX_POSITIONS:
             return
 
@@ -511,7 +515,7 @@ class MultiStrategyService:
                 continue
 
             try:
-                # 1H RSI 25-52，且最近2根在上升
+                # 1H RSI 25-52，且最近2根在上升（核心信号: RSI从超卖回升）
                 df_1h = self._get_klines(symbol, '1h', 30)
                 if df_1h is None or len(df_1h) < 20:
                     continue
@@ -524,20 +528,7 @@ class MultiStrategyService:
                 if float(rsi_series.iloc[-2]) >= last_rsi:
                     continue
 
-                # 4H MACD histogram 连续2根向上，且前一根 < 0.002（还在低位）
-                df_4h = self._get_klines(symbol, '4h', 40)
-                if df_4h is None or len(df_4h) < 30:
-                    continue
-                _, _, hist_4h = self.ti.calculate_macd(df_4h)
-                if len(hist_4h) < 3:
-                    continue
-                h1 = float(hist_4h.iloc[-3])
-                h2 = float(hist_4h.iloc[-2])
-                h3 = float(hist_4h.iloc[-1])
-                if not (h2 > h1 and h3 > h2 and h1 < 0.002):
-                    continue
-
-                # 价格在MA20的80-105%（放宽区间）
+                # 价格在MA20的80-105%（确认处于低位, 不是追高）
                 df_1d = self._get_klines(symbol, '1d', 25)
                 if df_1d is None or len(df_1d) < 21:
                     continue
@@ -546,7 +537,7 @@ class MultiStrategyService:
                 if not (ma20 * 0.80 <= cur_price_d <= ma20 * 1.05):
                     continue
 
-                # 量能回升：今日量 > 近7日均量 × 0.9（放宽）
+                # 量能回升：今日量 > 近7日均量 × 0.9
                 vol_today = float(df_1d['volume'].iloc[-1])
                 vol_avg7 = float(df_1d['volume'].iloc[-8:-1].mean()) if len(df_1d) >= 8 else vol_today
                 if vol_avg7 > 0 and vol_today < vol_avg7 * 0.9:
@@ -554,7 +545,6 @@ class MultiStrategyService:
 
                 reason = (
                     f"S1:1H_RSI={last_rsi:.1f}(上升),"
-                    f"4H_MACD_hist={h1:.4f}->{h2:.4f}->{h3:.4f},"
                     f"价格={cur_price_d:.4g},MA20={ma20:.4g},"
                     f"量比={vol_today / vol_avg7:.2f}"
                 )
@@ -576,7 +566,7 @@ class MultiStrategyService:
     # ─────────────────────────────────────────
 
     def scan_s2_pullback_long(self):
-        """S2: 48H涨>12%后回调15-38%，15m RSI 30-58企稳做多（去掉无量条件）"""
+        """S2: 48H涨>12%后回调8-38%，15m RSI 30-58（低位即可，不要求上升）"""
         if self._strategy_position_count(self.S2_SOURCE) >= self.S2_MAX_POSITIONS:
             return
 
@@ -600,35 +590,33 @@ class MultiStrategyService:
 
                 closes = df_1h['close'].values
                 recent_high = float(closes[-48:].max())
-                recent_low = float(closes[-48:].min())
                 current_close = float(closes[-1])
 
-                # 48H价格区间 > 12%
-                price_range_pct = (recent_high - recent_low) / recent_low if recent_low > 0 else 0
-                if price_range_pct < 0.12:
+                # 48H价格区间 > 8%（降低门槛，更多机会）
+                price_range_pct = max(closes[-48:]) / min(closes[-48:]) - 1 if min(closes[-48:]) > 0 else 0
+                if price_range_pct < 0.08:
                     continue
 
-                # 从48H高点回调15-38%
+                # 从48H高点回调8-38%（降低门槛，提前入场）
                 drawdown_pct = (recent_high - current_close) / recent_high if recent_high > 0 else 0
-                if not (0.15 <= drawdown_pct <= 0.38):
+                if not (0.08 <= drawdown_pct <= 0.38):
                     continue
 
-                # 15m RSI 30-58 且最近2根上升
+                # 15m RSI 30-58 即可（不要求上升，避免等RSI回升的延迟）
                 df_15m = self._get_klines(symbol, '15m', 30)
                 if df_15m is None or len(df_15m) < 15:
                     continue
                 rsi_15m = self.ti.calculate_rsi(df_15m)
-                if len(rsi_15m) < 3:
+                if len(rsi_15m) < 2:
                     continue
                 last_rsi = float(rsi_15m.iloc[-1])
-                prev_rsi = float(rsi_15m.iloc[-2])
-                if not (30 <= last_rsi <= 58 and last_rsi > prev_rsi):
+                if not (30 <= last_rsi <= 58):
                     continue
 
                 reason = (
                     f"S2:48H涨={price_range_pct * 100:.1f}%,"
                     f"回调={drawdown_pct * 100:.1f}%,"
-                    f"15m_RSI={last_rsi:.1f}(上升中)"
+                    f"15m_RSI={last_rsi:.1f}(低位)"
                 )
                 _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
                 if self._open_position(
@@ -648,7 +636,9 @@ class MultiStrategyService:
     # ─────────────────────────────────────────
 
     def scan_s3_top_short(self):
-        """S3: RSI>=70顶背离 + 从高点回落3-15% + 4H MACD下行 + 近3根2根阴线 + 48H涨>20%"""
+        """S3: RSI>=70顶背离 + 48H涨>20% + 4H MACD下行 + 近3根有阴线
+        精简: 去掉"已从高点回落3-15%"(最致命的滞后确认,等跌了才空=灾难)
+        """
         if self._strategy_position_count(self.S3_SOURCE) >= self.S3_MAX_POSITIONS:
             return
 
@@ -671,7 +661,7 @@ class MultiStrategyService:
                 if df_1h is None or len(df_1h) < 40:
                     continue
 
-                # 1H RSI > 70
+                # 1H RSI > 70（超买）
                 rsi_series = self.ti.calculate_rsi(df_1h)
                 if len(rsi_series) < 6:
                     continue
@@ -679,25 +669,20 @@ class MultiStrategyService:
                 if last_rsi <= 70:
                     continue
 
-                # RSI顶背离：当前RSI不是最近6根的最高点
+                # RSI顶背离：当前RSI不是最近6根的最高点（说明动量衰减）
                 recent_rsi_max = float(rsi_series.iloc[-6:].max())
                 if last_rsi >= recent_rsi_max:
                     continue
 
-                # 价格已从48H最高点回落3-15%（明显见顶迹象）
+                # 48H涨幅 > 20%（确认有可跌空间）
                 current_price = float(df_1h['close'].iloc[-1])
                 high_48h = float(df_1h['high'].iloc[-48:].max()) if len(df_1h) >= 48 else float(df_1h['high'].max())
-                retreat_pct = (high_48h - current_price) / high_48h if high_48h > 0 else 0
-                if not (0.03 <= retreat_pct <= 0.15):
-                    continue
-
-                # 48H涨幅 > 20%
                 price_48h_ago = float(df_1h['close'].iloc[-48]) if len(df_1h) >= 48 else float(df_1h['close'].iloc[0])
                 gain_48h = (high_48h - price_48h_ago) / price_48h_ago if price_48h_ago > 0 else 0
                 if gain_48h <= 0.20:
                     continue
 
-                # 4H MACD histogram 已经开始下行（多时间框架确认弱势）
+                # 4H MACD histogram 开始下行（多时间框架确认弱势）
                 df_4h = self._get_klines(symbol, '4h', 40)
                 if df_4h is None or len(df_4h) < 30:
                     continue
@@ -710,17 +695,18 @@ class MultiStrategyService:
                 if not (h4_3 < h4_2 or h4_2 < h4_1):
                     continue
 
-                # 近3根1H K线至少2根阴线（顶部压力确认）
+                # 近3根1H至少1根阴线（简化: 从2根改为1根, 不必等完全确认转弱）
                 bearish_count = sum(
                     1 for k in range(-3, 0)
                     if float(df_1h['close'].iloc[k]) < float(df_1h['open'].iloc[k])
                 )
-                if bearish_count < 2:
+                if bearish_count < 1:
                     continue
 
+                retreat_pct = (high_48h - current_price) / high_48h if high_48h > 0 else 0
                 reason = (
                     f"S3:1H_RSI={last_rsi:.1f}(顶背离,max={recent_rsi_max:.1f}),"
-                    f"从高点回落={retreat_pct * 100:.1f}%,"
+                    f"从高点已回={retreat_pct * 100:.1f}%,"
                     f"4H_MACD下行,48H涨={gain_48h * 100:.1f}%"
                 )
                 _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
@@ -741,7 +727,7 @@ class MultiStrategyService:
     # ─────────────────────────────────────────
 
     def scan_s4_rebound_short(self):
-        """S4: 14日高点50-85%反弹+曾下跌15%+从低点反弹5%，MACD/RSI/量能三选二"""
+        """S4: 14日高点50-85%反弹+曾下跌15%+ 1个指标确认（三选一）"""
         if self._strategy_position_count(self.S4_SOURCE) >= self.S4_MAX_POSITIONS:
             return
 
@@ -755,7 +741,6 @@ class MultiStrategyService:
                 continue
 
             try:
-                # 取14日1H K线计算14日高点
                 df_1h_14d = self._get_klines(symbol, '1h', 14 * 24 + 2)
                 if df_1h_14d is None or len(df_1h_14d) < 52:
                     continue
@@ -763,7 +748,7 @@ class MultiStrategyService:
                 two_week_high = float(df_1h_14d['high'].max())
                 current_price = float(df_1h_14d['close'].iloc[-1])
 
-                # 当前价格在14日高点的50-85%
+                # 当前价格在14日高点的50-85%（大幅回落后反弹）
                 rebound_pct = current_price / two_week_high if two_week_high > 0 else 0
                 if not (0.50 <= rebound_pct <= 0.85):
                     continue
@@ -774,28 +759,24 @@ class MultiStrategyService:
                 if max_drop < 0.15:
                     continue
 
-                # 当前价格高于7日最低点×1.05（从低点已反弹5%+，有真正反弹）
-                if current_price < low_7d * 1.05:
-                    continue
-
                 # 取最近52根K线做指标分析
                 df_1h = df_1h_14d.iloc[-52:].reset_index(drop=True)
 
+                # 三选一（之前三选二：减少确认延迟）
                 # 条件1: MACD histogram 任意一段下降
                 _, _, hist_1h = self.ti.calculate_macd(df_1h)
                 macd_bearish = False
                 if len(hist_1h) >= 3:
-                    h1 = float(hist_1h.iloc[-3])
-                    h2 = float(hist_1h.iloc[-2])
                     h3 = float(hist_1h.iloc[-1])
-                    if h3 < h2 or h2 < h1:
+                    h2 = float(hist_1h.iloc[-2])
+                    if h3 < h2:
                         macd_bearish = True
 
                 # 条件2: RSI < 65 且最后一根在下降
                 rsi_1h = self.ti.calculate_rsi(df_1h)
                 rsi_bearish = False
                 r3 = 50.0
-                if len(rsi_1h) >= 3:
+                if len(rsi_1h) >= 2:
                     r2 = float(rsi_1h.iloc[-2])
                     r3 = float(rsi_1h.iloc[-1])
                     if r3 < 65 and r3 < r2:
@@ -813,8 +794,8 @@ class MultiStrategyService:
                     if avg_dn > 0 and avg_up < avg_dn:
                         vol_shrink = True
 
-                # 三选二
-                if sum([macd_bearish, rsi_bearish, vol_shrink]) < 2:
+                # 三选一
+                if not (macd_bearish or rsi_bearish or vol_shrink):
                     continue
 
                 reason = (
@@ -841,7 +822,9 @@ class MultiStrategyService:
     # ─────────────────────────────────────────
 
     def scan_s5_large_oversold(self):
-        """S5: BTC/ETH/SOL/BNB/XRP 的 4H RSI<32 + 价格低于日MA20 做多"""
+        """S5: BTC/ETH/SOL/BNB/XRP 的 4H RSI<32 已回升 + 价格低于日MA20 做多
+        精简: 去掉"RSI仍在下降则跳过"（等回升确认=错过最低点）
+        """
         if self._strategy_position_count(self.S5_SOURCE) >= self.S5_MAX_POSITIONS:
             return
 
@@ -863,13 +846,10 @@ class MultiStrategyService:
                 if df_4h is None or len(df_4h) < 20:
                     continue
                 rsi_4h = self.ti.calculate_rsi(df_4h)
-                if len(rsi_4h) < 4:
+                if len(rsi_4h) < 2:
                     continue
-                prev_rsi_4h = float(rsi_4h.iloc[-2])
                 last_rsi_4h = float(rsi_4h.iloc[-1])
                 if last_rsi_4h >= 32:
-                    continue
-                if last_rsi_4h <= prev_rsi_4h:  # RSI仍在下降，不开仓
                     continue
 
                 # 价格低于日线MA20（处于均线下方，有均值回归空间）
@@ -884,7 +864,7 @@ class MultiStrategyService:
                 price_vs_ma = cur_price / ma20_1d
 
                 reason = (
-                    f"S5:4H_RSI={prev_rsi_4h:.1f}->{last_rsi_4h:.1f}(超卖回升),"
+                    f"S5:4H_RSI={last_rsi_4h:.1f}(超卖),"
                     f"价格={cur_price:.4g},日MA20={ma20_1d:.4g}({price_vs_ma * 100:.1f}%)"
                 )
                 _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
@@ -923,7 +903,9 @@ class MultiStrategyService:
             return []
 
     def scan_s6_vol_spike(self):
-        """S6: 12H量峰>3.5x均量 + 当前量1.2-5x + RSI 28-55 + 价格在MA20 75-108% + 3H涨<5%"""
+        """S6: 12H量峰>3.5x均量 + 当前量1.2-5x + 价格在MA20 75-108% + 3H涨<5%
+        精简: 去掉 RSI 28-55（量能异动本身就是先行信号，不需要RSI再确认）
+        """
         if self._strategy_position_count(self.S6_SOURCE) >= self.S6_MAX_POSITIONS:
             return
 
@@ -946,7 +928,6 @@ class MultiStrategyService:
                 if df_1h is None or len(df_1h) < 35:
                     continue
 
-                # 量能基准：过去48根的均量（约48H均量）
                 vol_base = float(df_1h['volume'].iloc[-49:-1].mean()) if len(df_1h) >= 49 else float(df_1h['volume'].iloc[:-1].mean())
                 if vol_base <= 0:
                     continue
@@ -957,18 +938,10 @@ class MultiStrategyService:
                 if not (1.2 <= vol_ratio_cur <= 5.0):
                     continue
 
-                # 12H内量峰 > 3.5x（先有异动）
+                # 12H内量峰 > 3.5x（核心信号：有资金入场）
                 max_vol_12h = float(df_1h['volume'].iloc[-12:].max())
                 peak_ratio = max_vol_12h / vol_base
                 if peak_ratio < 3.5:
-                    continue
-
-                # 1H RSI 28-55
-                rsi_1h = self.ti.calculate_rsi(df_1h)
-                if len(rsi_1h) < 3:
-                    continue
-                last_rsi = float(rsi_1h.iloc[-1])
-                if not (28 <= last_rsi <= 55):
                     continue
 
                 # 价格在MA20的75-108%（量能异动时价格仍在合理区间）
@@ -988,7 +961,7 @@ class MultiStrategyService:
 
                 reason = (
                     f"S6:量峰={peak_ratio:.1f}x,当前量={vol_ratio_cur:.1f}x,"
-                    f"1H_RSI={last_rsi:.1f},价格/MA20={price_ratio * 100:.1f}%,"
+                    f"价格/MA20={price_ratio * 100:.1f}%,"
                     f"3H涨={gain_3h * 100:.1f}%"
                 )
                 _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
@@ -1009,7 +982,7 @@ class MultiStrategyService:
     # ─────────────────────────────────────────
 
     def scan_s7_ma_support(self):
-        """S7: 价格跌至20H均线82-95%区间 + 反弹阳线 + 量能确认"""
+        """S7: 价格跌至20H均线82-95%区间 + 阳线反弹（移除量能确认: 等量=错过反弹）"""
         if self._strategy_position_count(self.S7_SOURCE) >= self.S7_MAX_POSITIONS:
             return
 
@@ -1046,20 +1019,13 @@ class MultiStrategyService:
                 if not (0.82 <= ratio <= 0.95):
                     continue
 
-                # 当前是阳线且高于前一根收盘（反弹确认）
+                # 当前是阳线且高于前一根收盘（核心信号：MA20附近获得支撑反弹）
                 if not (close_v > open_v and close_v > prev_close):
                     continue
 
-                # 量能确认：当前量 > 近10根均量×1.2
-                vol_base = float(df_1h['volume'].iloc[-11:-1].mean())
-                cur_vol = float(df_1h['volume'].iloc[-1])
-                if vol_base > 0 and cur_vol < vol_base * 1.2:
-                    continue
-
-                vol_ratio = cur_vol / vol_base if vol_base > 0 else 1.0
                 reason = (
                     f"S7:价格/20H_MA={ratio * 100:.1f}%,"
-                    f"阳线反弹,量比={vol_ratio:.2f}x"
+                    f"阳线反弹"
                 )
                 _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
                 if self._open_position(
