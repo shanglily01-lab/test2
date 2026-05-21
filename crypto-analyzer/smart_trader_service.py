@@ -734,33 +734,75 @@ class SmartDecisionBrain:
 
             # V1评分计算完成，稍后与V2一起打印
 
+            # 🔥 C2: 信号拥挤度惩罚：同方向≥4个组件时扣减溢出分
+            # 原理：信号越多，边际贡献递减，过多同向信号可能是情绪化共振而非技术面确认
+            # 惩罚规则：同方向每超过4个组件，每个额外组件扣减3分（上限扣15分）
+            _long_component_count = sum(1 for k in signal_components if k in {
+                'momentum_up_3pct', 'position_24h_low', 'breakout_long',
+                'volume_power_bull', 'volume_power_1h_bull', 'volume_power_12x_bull',
+                'consecutive_bull', 'trend_1h_bull', 'big4_strong_bull_cont',
+            })
+            _short_component_count = sum(1 for k in signal_components if k in {
+                'momentum_down_3pct', 'position_24h_high', 'breakdown_short',
+                'volume_power_bear', 'volume_power_1h_bear', 'volume_power_12x_bear',
+                'consecutive_bear', 'trend_1h_bear',
+            })
+            if _long_component_count >= 4:
+                _excess_long = _long_component_count - 3  # 允许3个同向组件不惩罚
+                _crowd_penalty_long = min(_excess_long * 3, 15)
+                long_score = max(0, long_score - _crowd_penalty_long)
+                logger.debug(f"[CROWDING-LONG] {symbol} {_long_component_count}个多头组件，拥挤惩罚-{_crowd_penalty_long}分")
+            if _short_component_count >= 4:
+                _excess_short = _short_component_count - 3
+                _crowd_penalty_short = min(_excess_short * 3, 15)
+                short_score = max(0, short_score - _crowd_penalty_short)
+                logger.debug(f"[CROWDING-SHORT] {symbol} {_short_component_count}个空头组件，拥挤惩罚-{_crowd_penalty_short}分")
+
             # 读取 Big4 整体信号
             # STRONG_BULLISH/STRONG_BEARISH: 单币>=11阳/阴+0.5% 且强权重>60%
             # BULLISH/BEARISH            : 单币>=9阳/阴+0.5%  且总权重>60%
             # NEUTRAL                    : 不满足上述条件
             _b4_signal = big4_result.get('overall_signal', 'NEUTRAL') if big4_result else 'NEUTRAL'
 
-            # ========== 开仓资格判断：仅信号确认模式 ==========
-            # STRONG_BULLISH : 信号确认多头，long_score >= threshold
-            # STRONG_BEARISH : 信号确认空头，short_score >= threshold
-            # BULLISH/BEARISH/NEUTRAL : 不开仓（趋势跟随已移除）
+            # ========== 开仓资格判断：放宽准入规则 ==========
+            # STRONG_BULLISH : 强力看多，标准阈值开LONG
+            # BULLISH       : 温和看多，阈值+5开LONG（防止弱趋势误入）
+            # STRONG_BEARISH: 强力看空，标准阈值开SHORT
+            # BEARISH       : 温和看空，阈值+5开SHORT
+            # NEUTRAL       : 无趋势，阈值+15且评分>=80才允许（仅极高置信信号）
             confirm_long_ok  = False
             confirm_short_ok = False
 
-            if _b4_signal == 'STRONG_BULLISH':
+            if _b4_signal in ('STRONG_BULLISH', 'BULLISH'):
+                _long_needed = self.threshold + (0 if _b4_signal == 'STRONG_BULLISH' else 5)
                 if self.signal_confirmation_enabled:
-                    confirm_long_ok = (long_score >= self.threshold)
-                    logger.debug(f"[SC-LONG] {symbol} Big4=STRONG_BULLISH long_score={long_score} threshold={self.threshold}")
+                    confirm_long_ok = (long_score >= _long_needed)
+                    logger.debug(f"[SC-LONG] {symbol} Big4={_b4_signal} long_score={long_score} ≥ {_long_needed} → {'通过' if confirm_long_ok else '拒绝'}")
                 else:
-                    logger.debug(f"[SC-SKIP] {symbol} Big4=STRONG_BULLISH 信号确认已禁用")
-            elif _b4_signal == 'STRONG_BEARISH':
+                    logger.debug(f"[SC-SKIP] {symbol} Big4={_b4_signal} 信号确认已禁用")
+            elif _b4_signal in ('STRONG_BEARISH', 'BEARISH'):
+                _short_needed = self.threshold + (0 if _b4_signal == 'STRONG_BEARISH' else 5)
                 if self.signal_confirmation_enabled:
-                    confirm_short_ok = (short_score >= self.threshold)
-                    logger.debug(f"[SC-SHORT] {symbol} Big4=STRONG_BEARISH short_score={short_score} threshold={self.threshold}")
+                    confirm_short_ok = (short_score >= _short_needed)
+                    logger.debug(f"[SC-SHORT] {symbol} Big4={_b4_signal} short_score={short_score} ≥ {_short_needed} → {'通过' if confirm_short_ok else '拒绝'}")
                 else:
-                    logger.debug(f"[SC-SKIP] {symbol} Big4=STRONG_BEARISH 信号确认已禁用")
+                    logger.debug(f"[SC-SKIP] {symbol} Big4={_b4_signal} 信号确认已禁用")
+            elif _b4_signal == 'NEUTRAL':
+                # NEUTRAL需要更高的置信度才能开仓，防止无趋势时的情绪化交易
+                _neutral_threshold = self.threshold + 15
+                if self.signal_confirmation_enabled:
+                    if long_score >= _neutral_threshold and long_score >= 80:
+                        confirm_long_ok = True
+                        logger.debug(f"[SC-NEUTRAL] {symbol} long_score={long_score} ≥ {_neutral_threshold} && ≥80，允许开LONG")
+                    if short_score >= _neutral_threshold and short_score >= 80:
+                        confirm_short_ok = True
+                        logger.debug(f"[SC-NEUTRAL] {symbol} short_score={short_score} ≥ {_neutral_threshold} && ≥80，允许开SHORT")
+                    if not confirm_long_ok and not confirm_short_ok:
+                        logger.debug(f"[SC-NEUTRAL] {symbol} 评分不足(L={long_score}/S={short_score}，需≥{_neutral_threshold}且≥80)，NEUTRAL拒绝")
+                else:
+                    logger.debug(f"[SC-SKIP] {symbol} Big4=NEUTRAL 信号确认已禁用")
             else:
-                logger.debug(f"[SKIP] {symbol} Big4={_b4_signal}，仅 STRONG_BULLISH/STRONG_BEARISH 触发开仓")
+                logger.debug(f"[SKIP] {symbol} Big4={_b4_signal} 未知信号，拒绝开仓")
 
             long_qualified  = confirm_long_ok
             short_qualified = confirm_short_ok
@@ -850,6 +892,28 @@ class SmartDecisionBrain:
 
                 if self.score_v2_service:
                     v2_result = self.score_v2_service.check_score_filter(symbol, side)
+
+                    # 🔥 M4: V2数据过期时保守模式
+                    # 当V2评分数据不可用时（如数据采集暂停），V1单独做判断风险更高
+                    # 将当前阈值+10，提高开仓门槛
+                    _v2_stale = v2_result.get('details', {}).get('no_v2_data', False)
+                    if _v2_stale:
+                        _v2_conservative_threshold = self.threshold + 10
+                        if score < _v2_conservative_threshold:
+                            logger.warning(
+                                f"[V2_STALE] {symbol} V2数据不可用，保守模式阈值+10至{_v2_conservative_threshold}"
+                                f"，当前评分{score}<{_v2_conservative_threshold}，拒绝开仓"
+                            )
+                            return None
+                        logger.info(f"[V2_STALE] {symbol} V2数据不可用，保守模式阈值+10，评分{score}≥{_v2_conservative_threshold}，放行")
+                    # V2数据存在但已过期(>15分钟)，同样应用保守模式
+                    _v2_age = v2_result.get('details', {}).get('data_age_minutes', 0)
+                    if _v2_age > 15 and score < self.threshold + 10:
+                        logger.warning(
+                            f"[V2_STALE] {symbol} V2数据已过时({_v2_age:.0f}min)，保守模式阈值+10至{self.threshold+10}"
+                            f"，当前评分{score}<{self.threshold+10}，拒绝开仓"
+                        )
+                        return None
 
                     # 提取V2数据
                     if v2_result.get('coin_score'):
@@ -1039,10 +1103,18 @@ class SmartDecisionBrain:
                         f"，FOMO追涨，LONG门槛+5至{herding_threshold}分: {before_count}→{len(opportunities)}个"
                     )
                 else:
-                    # 空头羊群 = 恐慌是趋势力量的体现，顺势放行所有SHORT，不设惩罚
-                    logger.info(
+                    # 🔥 M1: 空头羊群也增加冷却限制（恐慌也会过度，防止追空在底部）
+                    herding_threshold = self.threshold + 5
+                    short_before = len([o for o in opportunities if o['side'] == 'SHORT'])
+                    opportunities = [
+                        o for o in opportunities
+                        if o['side'] != 'SHORT' or o['score'] >= herding_threshold
+                    ]
+                    short_after = len([o for o in opportunities if o['side'] == 'SHORT'])
+                    logger.warning(
                         f"🧠 [HERDING-SHORT] {dominant_pct*100:.0f}%偏空({long_count}多/{short_count}空)"
-                        f"，恐慌=趋势确认，顺势放行全部{before_count}个SHORT信号"
+                        f"，恐慌追空，SHORT门槛+5至{herding_threshold}分: "
+                        f"{before_count}个({short_before}SHORT)→{len(opportunities)}个({short_after}SHORT)"
                     )
 
         # 🛑 崩后企稳检测：Big4刚从BEARISH转为NEUTRAL，禁止继续追空
@@ -1918,19 +1990,21 @@ class SmartTraderService:
             return False
 
         # 🧠 群体极化防御-资金费率：资金费率极端时拒绝同向开仓（机构已经完成布局，散户追涨正在被割）
-        # LONG时资金费率>0.1%（散户过度看多，多头爆仓风险大）→ 拒绝
-        # SHORT时资金费率<-0.1%（散户过度看空，空头爆仓风险大）→ 拒绝
+        # 🔥 L3: 使用动态阈值（均值+2σ），比固定0.1%更适应市场波动
         funding_rate_pct = self.get_funding_rate_pct(symbol)
         if funding_rate_pct is not None:
-            if side == 'LONG' and funding_rate_pct > 0.1:
+            _funding_threshold = self._get_dynamic_funding_threshold(symbol)
+            _funding_long_max = _funding_threshold['long_max']
+            _funding_short_min = _funding_threshold['short_min']
+            if side == 'LONG' and funding_rate_pct > _funding_long_max:
                 logger.warning(
-                    f"[FUNDING_VETO] {symbol} {side} - 资金费率{funding_rate_pct:.3f}%>0.1%，"
+                    f"[FUNDING_VETO] {symbol} {side} - 资金费率{funding_rate_pct:.3f}%>{_funding_long_max:.3f}%(动态阈值)，"
                     f"散户过度看多，拒绝追多（群体极化防御）"
                 )
                 return False
-            elif side == 'SHORT' and funding_rate_pct < -0.1:
+            elif side == 'SHORT' and funding_rate_pct < _funding_short_min:
                 logger.warning(
-                    f"[FUNDING_VETO] {symbol} {side} - 资金费率{funding_rate_pct:.3f}%<-0.1%，"
+                    f"[FUNDING_VETO] {symbol} {side} - 资金费率{funding_rate_pct:.3f}%<{_funding_short_min:.3f}%(动态阈值)，"
                     f"散户过度看空，拒绝追空（群体极化防御）"
                 )
                 return False
@@ -2126,6 +2200,26 @@ class SmartTraderService:
                 # 应用仓位倍数
                 adjusted_position_size = base_position_size * position_multiplier
 
+                # 🔥 C4: 按评分差异化仓位大小
+                # 评分 55-65   → 基础仓位 x0.6（弱信号，小仓测试）
+                # 评分 65-80   → 基础仓位 x0.8（中等信号）
+                # 评分 80-100  → 基础仓位 x1.0（标准信号）
+                # 评分 100-130 → 基础仓位 x1.2（强信号，适度加仓）
+                # 评分 >130    → 基础仓位 x0.8（高分可能追涨杀跌，降仓防御）
+                if not is_reversal or 'original_margin' not in opp:
+                    _score_multiplier = 1.0
+                    if _entry_score <= 65:
+                        _score_multiplier = 0.6
+                    elif _entry_score <= 80:
+                        _score_multiplier = 0.8
+                    elif _entry_score >= 130:
+                        _score_multiplier = 0.8  # 过高评分多为追涨杀跌，降仓防御
+                    elif _entry_score >= 100:
+                        _score_multiplier = 1.2  # 强信号适度加仓
+                    if _score_multiplier != 1.0:
+                        logger.info(f"[SCORE-POSITION] {symbol} score={_entry_score} 仓位倍率×{_score_multiplier}: ${adjusted_position_size:.0f} → ${adjusted_position_size*_score_multiplier:.0f}")
+                        adjusted_position_size *= _score_multiplier
+
             quantity = adjusted_position_size * self.leverage / current_price
             notional_value = quantity * current_price
             margin = adjusted_position_size
@@ -2149,6 +2243,34 @@ class SmartTraderService:
             else:
                 # 从 system_settings 读取止损止盈比例
                 stop_loss_pct, take_profit_pct = self._get_sl_tp_from_settings()
+
+                # 🔥 C5: 按评分动态调整止损止盈
+                # 评分  < 65 (弱信号) → SL+30%, TP-30% (给更多容错空间，提前止盈)
+                # 评分 65-80 (中等)   → SL+15%, TP-15%
+                # 评分 80-100 (标准)  → 使用默认值
+                # 评分 100-130 (强)   → SL-20%, TP+20% (高置信度，收窄止损放大止盈)
+                # 评分 >=130 (极强)   → SL-35%, TP+35%
+                _entry_score = opp.get('score', 100)
+                if _entry_score <= 65:
+                    stop_loss_pct *= 1.30
+                    take_profit_pct *= 0.70
+                    _sl_tp_note = f"弱信号score={_entry_score} → SLx1.30 TPx0.70"
+                elif _entry_score <= 80:
+                    stop_loss_pct *= 1.15
+                    take_profit_pct *= 0.85
+                    _sl_tp_note = f"中等score={_entry_score} → SLx1.15 TPx0.85"
+                elif _entry_score >= 130:
+                    stop_loss_pct *= 0.65
+                    take_profit_pct *= 1.35
+                    _sl_tp_note = f"极强score={_entry_score} → SLx0.65 TPx1.35"
+                elif _entry_score >= 100:
+                    stop_loss_pct *= 0.80
+                    take_profit_pct *= 1.20
+                    _sl_tp_note = f"强信号score={_entry_score} → SLx0.80 TPx1.20"
+                else:
+                    _sl_tp_note = f"标准score={_entry_score} → 默认SL/TP"
+
+                logger.info(f"[DYNAMIC_SL_TP] {symbol} {_sl_tp_note} → SL={stop_loss_pct*100:.1f}% TP={take_profit_pct*100:.1f}%")
 
                 if side == 'LONG':
                     stop_loss = current_price * (1 - stop_loss_pct)
@@ -2784,6 +2906,45 @@ class SmartTraderService:
         finally:
             if conn:
                 conn.close()
+
+    # 🔥 L3: 计算资金费率动态阈值（均值+2σ）
+    def _get_dynamic_funding_threshold(self, symbol: str) -> dict:
+        """
+        基于最近24小时资金费率数据计算动态阈值
+
+        Returns:
+            {'long_max': float, 'short_min': float} 或默认值（数据不足时）
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT current_rate_pct
+                FROM funding_rate_stats
+                WHERE symbol = %s
+                AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+                ORDER BY updated_at DESC
+            """, (symbol,))
+            rows = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            rates = [float(r[0]) for r in rows if r[0] is not None]
+            if len(rates) < 10:  # 数据不足10个时使用固定默认值
+                return {'long_max': 0.1, 'short_min': -0.1}
+            import statistics
+            mean = statistics.mean(rates)
+            stdev = statistics.stdev(rates)
+            # 阈值 = 均值 + 2σ（正态分布约95%的数据在此范围内）
+            long_max = mean + 2 * stdev
+            short_min = mean - 2 * stdev
+            # 保护：阈值不低于0.05%，避免在低波动市场中过于严格
+            long_max = max(long_max, 0.05)
+            short_min = min(short_min, -0.05)
+            logger.debug(f"[DYNAMIC_FUNDING] {symbol} mean={mean:.4f}% σ={stdev:.4f}% 阈值=[{short_min:.3f}%, {long_max:.3f}%] ({len(rates)}个样本)")
+            return {'long_max': long_max, 'short_min': short_min}
+        except Exception as e:
+            logger.debug(f"[DYNAMIC_FUNDING] {symbol} 计算失败，使用默认值: {e}")
+            return {'long_max': 0.1, 'short_min': -0.1}
 
     def is_symbol_in_top_performers(self, symbol: str) -> bool:
         """
@@ -3729,8 +3890,14 @@ class SmartTraderService:
                         all_symbols = [row['symbol'] for row in cursor.fetchall()]
                         logger.info(f"🚀 [MARKET-BOUNCE] 准备对 {len(all_symbols)} 个交易对开多")
 
+                        # 🔥 M2: 限制反弹窗口同时开仓数≤10，防止单次反弹过度建仓
+                        BOUNCE_MAX_OPEN = 10
+
                         opened_count = 0
                         for symbol in all_symbols:
+                            if opened_count >= BOUNCE_MAX_OPEN:
+                                logger.info(f"[BOUNCE-LIMIT] 反弹窗口开仓已达上限({BOUNCE_MAX_OPEN})，停止")
+                                break
                             if self.get_open_positions_count() >= self.max_positions:
                                 logger.info(f"[BOUNCE-SKIP] 已达最大持仓 {self.max_positions}，停止反弹交易")
                                 break

@@ -233,7 +233,33 @@ class SmartExitOptimizer:
                     logger.info(f"✅ 智能平仓完成: 持仓{position_id}")
                     break
 
-                await asyncio.sleep(1)  # 每秒检查一次（实时监控）
+                # 🔥 L1: 监控频率随持仓时间递减
+                # 持仓越久，仓位越稳定，监控频率可以降低，减少CPU和DB开销
+                try:
+                    _open_time = position.get('open_time')
+                    if _open_time:
+                        if isinstance(_open_time, str):
+                            _open_dt = datetime.fromisoformat(_open_time) if 'T' in _open_time else datetime.strptime(_open_time, '%Y-%m-%d %H:%M:%S')
+                        elif isinstance(_open_time, datetime):
+                            _open_dt = _open_time
+                        else:
+                            _open_dt = datetime.now()
+                        _age_hours = (datetime.now() - _open_dt).total_seconds() / 3600
+                    else:
+                        _age_hours = 0
+                except Exception:
+                    _age_hours = 0
+
+                if _age_hours < 0.5:       # < 30min: 高频监控
+                    _sleep_sec = 1
+                elif _age_hours < 2:         # 30min-2h: 中频
+                    _sleep_sec = 3
+                elif _age_hours < 4:         # 2h-4h: 低频
+                    _sleep_sec = 5
+                else:                        # > 4h: 极低频（趋势已明确）
+                    _sleep_sec = 10
+
+                await asyncio.sleep(_sleep_sec)
 
         except asyncio.CancelledError:
             logger.info(f"监控任务被取消: 持仓 {position_id}")
@@ -786,6 +812,31 @@ class SmartExitOptimizer:
             current_price: 当前价格
             reason: 平仓原因
         """
+        # 🔥 M3: close_reason_code枚举，用于后续分析各退出策略效果
+        CLOSE_REASON_CODE = {
+            '止损': 'SL',
+            '止盈': 'TP',
+            '超时': 'TIMEOUT',
+            '强制平仓': 'TIMEOUT',
+            'K线': 'KLINE_WEAK',
+            'K线强度': 'KLINE_WEAK',
+            '移动止盈': 'TRAILING_TP',
+            '趋势反转': 'TREND_REVERSAL',
+            '信号衰减': 'SIGNAL_DECAY',
+            '反转': 'REVERSAL',
+            '优': 'AI_OPTIMIZE',      # 止损优化
+            '波动': 'VOLATILITY',
+            '亏损熔断': 'LOSS_GUARD',
+            '人工': 'MANUAL',
+            '崩后': 'POST_CRASH',
+        }
+        _reason_code = 'OTHER'
+        for _kw, _code in CLOSE_REASON_CODE.items():
+            if _kw in reason:
+                _reason_code = _code
+                break
+        # 将reason_code追加到reason中，方便后续分析
+        reason_with_code = f"{reason}|code:{_reason_code}"
         try:
             # 获取持仓信息
             position = await self._get_position(position_id)
@@ -825,14 +876,14 @@ class SmartExitOptimizer:
                     paper_position_id=position_id,
                     symbol=position['symbol'],
                     direction=position['direction'],
-                    reason=reason
+                    reason=reason_with_code
                 )
 
                 # 更新数据库状态
                 await self._update_position_closed(
                     position_id,
                     float(current_price),
-                    reason,
+                    reason_with_code,
                     realized_pnl
                 )
 

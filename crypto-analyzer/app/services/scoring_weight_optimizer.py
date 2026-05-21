@@ -182,7 +182,8 @@ class ScoringWeightOptimizer:
         Returns:
             (new_weight, adjustment): 新权重和调整量
         """
-        # 调整策略
+        # 调整策略：新增降权支持
+        # 当表现评分 <= -10 时降权，未达阈值时加权的逻辑不变
         if performance_score > 10:
             adjustment = +3
         elif performance_score > 5:
@@ -192,13 +193,6 @@ class ScoringWeightOptimizer:
         elif performance_score < -5:
             adjustment = -2
         else:
-            adjustment = 0
-
-        # 只允许加分，不允许减分（多空双向均适用）
-        # 优化目标：放大优质信号的权重，而非压制差信号
-        # 差信号应通过 signal_blacklist 手动禁用，不能依赖减权（减权会造成方向性压制）
-        # 示例：空头行情下空头信号加权，不应同时削减多头权重；反之亦然
-        if adjustment < 0:
             adjustment = 0
 
         # 应用调整，使用组件最低保护地板（关键信号不低于保护值）
