@@ -150,39 +150,9 @@ class SmartDecisionBrain:
             blacklist_rows = cursor.fetchall()
             self.blacklist = [row['symbol'] for row in blacklist_rows] if blacklist_rows else []
 
-            # 3. 从数据库加载自适应参数
-            cursor.execute("""
-                SELECT param_key, param_value
-                FROM adaptive_params
-                WHERE param_type = 'long'
-            """)
-            long_params = {row['param_key']: float(row['param_value']) for row in cursor.fetchall()}
-
-            cursor.execute("""
-                SELECT param_key, param_value
-                FROM adaptive_params
-                WHERE param_type = 'short'
-            """)
-            short_params = {row['param_key']: float(row['param_value']) for row in cursor.fetchall()}
-
             cursor.close()
 
-            # 4. 构建自适应参数字典
-            self.adaptive_long = {
-                'stop_loss_pct': long_params.get('long_stop_loss_pct', 0.03),
-                'take_profit_pct': long_params.get('long_take_profit_pct', 0.02),
-                'min_holding_minutes': long_params.get('long_min_holding_minutes', 60),
-                'position_size_multiplier': long_params.get('long_position_size_multiplier', 1.0)
-            }
-
-            self.adaptive_short = {
-                'stop_loss_pct': short_params.get('short_stop_loss_pct', 0.03),
-                'take_profit_pct': short_params.get('short_take_profit_pct', 0.02),
-                'min_holding_minutes': short_params.get('short_min_holding_minutes', 60),
-                'position_size_multiplier': short_params.get('short_position_size_multiplier', 1.0)
-            }
-
-            # 5. 从数据库加载信号黑名单
+            # 3. 从数据库加载信号黑名单（adaptive_params 已淘汰，SL/TP 统一由 system_settings 配置）
             self.signal_blacklist = {}
             try:
                 cursor = conn.cursor()
@@ -207,9 +177,7 @@ class SmartDecisionBrain:
             logger.info(f"   总交易对: {len(all_symbols)}")
             logger.info(f"   数据库黑名单: {len(self.blacklist)} 个 (使用100U小仓位)")
             logger.info(f"   可交易: {len(self.whitelist)} 个")
-            logger.info(f"   📊 自适应参数 (从数据库):")
-            logger.info(f"      LONG止损: {self.adaptive_long['stop_loss_pct']*100:.1f}%, 止盈: {self.adaptive_long['take_profit_pct']*100:.1f}%, 最小持仓: {self.adaptive_long['min_holding_minutes']:.0f}分钟, 仓位倍数: {self.adaptive_long['position_size_multiplier']:.1f}")
-            logger.info(f"      SHORT止损: {self.adaptive_short['stop_loss_pct']*100:.1f}%, 止盈: {self.adaptive_short['take_profit_pct']*100:.1f}%, 最小持仓: {self.adaptive_short['min_holding_minutes']:.0f}分钟, 仓位倍数: {self.adaptive_short['position_size_multiplier']:.1f}")
+            logger.info(f"   ⚙️  SL/TP 由 system_settings 表配置 (动态加载)")
 
             if self.blacklist:
                 logger.info(f"   ⚠️  黑名单交易对(小仓位): {', '.join(self.blacklist)}")
@@ -280,9 +248,6 @@ class SmartDecisionBrain:
                 'AAVE/USDT', 'SUI/USDT', 'UNI/USDT', 'ADA/USDT', 'SOL/USDT'
             ]
             self.blacklist = []
-            self.adaptive_long = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
-            self.adaptive_short = {'stop_loss_pct': 0.03, 'take_profit_pct': 0.02, 'min_holding_minutes': 60, 'position_size_multiplier': 1.0}
-            # 🔥 修复: 初始化signal_blacklist
             self.signal_blacklist = {}
             # 🔥 修复: 初始化scoring_weights
             self.scoring_weights = {
@@ -2041,6 +2006,20 @@ class SmartTraderService:
             logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
             return False
 
+        # 🔥 P2: 按评分动态调整杠杆（同时影响 smart_entry_executor 和直接开仓两条路径）
+        _entry_score_for_leverage = opp.get('score', 100)
+        if _entry_score_for_leverage <= 65:
+            _dynamic_leverage = 3
+        elif _entry_score_for_leverage <= 80:
+            _dynamic_leverage = 4
+        elif _entry_score_for_leverage >= 130:
+            _dynamic_leverage = 3
+        else:
+            _dynamic_leverage = 5
+        if _dynamic_leverage != self.leverage:
+            logger.info(f"[DYNAMIC_LEVERAGE] {symbol} score={_entry_score_for_leverage} 杠杆: {self.leverage}x → {_dynamic_leverage}x")
+        used_leverage = _dynamic_leverage
+
         # ========== 第三步：价格采样建仓（15分钟采样找最优点，一次性开仓） ==========
         if self.smart_entry_executor and self.event_loop:
             try:
@@ -2048,7 +2027,7 @@ class SmartTraderService:
                 signal = {
                     'symbol': symbol,
                     'direction': side,
-                    'leverage': self.leverage,
+                    'leverage': used_leverage,
                     'signal_time': datetime.now(),
                     'strategy_id': 'smart_trader_v1',
                     'trade_params': {
@@ -2110,13 +2089,8 @@ class SmartTraderService:
                 adjusted_position_size = opp['original_margin']
                 logger.info(f"[REVERSAL_MARGIN] {symbol} 反转开仓, 使用原仓位保证金: ${adjusted_position_size:.2f}")
 
-                # 仍需获取自适应参数用于止损止盈
-                if side == 'LONG':
-                    adaptive_params = self.brain.adaptive_long
-                else:  # SHORT
-                    adaptive_params = self.brain.adaptive_short
-
                 # 反转开仓也需要检查评级(用于日志显示)
+                # 止损止盈统一走 system_settings（adaptive_params 已淘汰）
                 rating_level = self.opt_config.get_symbol_rating_level(symbol)
 
             if not is_reversal or 'original_margin' not in opp:
@@ -2191,12 +2165,6 @@ class SmartTraderService:
                         logger.warning(f"[BIG4-POSITION] 获取市场信号失败,使用默认仓位倍数1.0: {e}")
                         position_multiplier = 1.0
 
-                # 获取自适应参数
-                if side == 'LONG':
-                    adaptive_params = self.brain.adaptive_long
-                else:  # SHORT
-                    adaptive_params = self.brain.adaptive_short
-
                 # 应用仓位倍数
                 adjusted_position_size = base_position_size * position_multiplier
 
@@ -2220,7 +2188,7 @@ class SmartTraderService:
                         logger.info(f"[SCORE-POSITION] {symbol} score={_entry_score} 仓位倍率×{_score_multiplier}: ${adjusted_position_size:.0f} → ${adjusted_position_size*_score_multiplier:.0f}")
                         adjusted_position_size *= _score_multiplier
 
-            quantity = adjusted_position_size * self.leverage / current_price
+            quantity = adjusted_position_size * used_leverage / current_price
             notional_value = quantity * current_price
             margin = adjusted_position_size
 
@@ -2351,7 +2319,7 @@ class SmartTraderService:
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s,
                         DATE_ADD(NOW(), INTERVAL %s MINUTE), %s, 'open', NOW(), NOW())
             """, (
-                self.account_id, symbol, side, quantity, current_price, self.leverage,
+                self.account_id, symbol, side, quantity, current_price, used_leverage,
                 notional_value, margin, stop_loss, take_profit,
                 signal_combination_key, entry_reason, entry_score, signal_components_json,
                 base_timeout_minutes, timeout_at,
