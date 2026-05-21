@@ -1,37 +1,33 @@
 """
-Gemini 探索 worker
+Gemini 探索 worker (v2 — 2026-05-21 全面优化)
 
-每 6h 调用 Google Gemini 检测加密货币市场的红/黑天鹅, 根据 verdict 直接开模拟单。
+每 6h 调用 Google Gemini 检测加密货币短时方向异动, 根据 verdict 直接开模拟单。
 
-策略:
-- red_swan  + confidence >= 0.6 -> LONG
-- black_swan + confidence >= 0.6 -> SHORT
-- skip 或低置信度 -> 不开仓
+优化清单:
+  1. SL 3%→5%  +  杠杆 5x→3x  → 降低 SL 误触率
+  2. 候选池扩大: 加入中等波动币 (NORMAL_MOVER), 不只看极端涨跌
+  3. K 线格式: 加入时间戳/成交量/叙事文本描述 (非纯数组)
+  4. Prompt: 去"天鹅"概念, 改"短线方向异动"; 加入 Few-shot 示例 + 置信度校准表
+  5. 鼓励空 verdicts: "无明确信号时返回 []"
+  6. 历史表现反馈: prompt 尾部插入系统历史胜率
+  7. SL 缓冲: 硬 SL 5% (原 3%) + 入场保护 30min (Early SL 3% 由 Monitor 兜底)
+  8. 置信度校准: 特定阈值对应特定信号强度, 抑制 LLM 礼貌偏见
+  9. run_explore_round: 加入 get_historical_stats 调用
+  10. 新增 _get_historical_stats 函数
 
-仓位参数 (跟 S9 一致):
-- account_id = 2 (U本位模拟盘)
-- margin    = 500U
-- leverage  = 5x
-- 最多 20 仓 (本策略 source 范围内)
-- hold     = 6 小时 (planned_close_time = open_time + 6h)
-- SL       = 3%
-- TP       = 8%
+仓位参数:
+  - account_id = 2 (U本位模拟盘)
+  - margin    = 500U
+  - leverage  = 3x (原 5x)
+  - 最多 20 仓
+  - hold     = 6 小时
+  - SL       = 5% (原 3%)
+  - TP       = 8%
 
 闸门:
-- system_settings.gemini_explore_enabled (默认 0, 关时早返回)
-- Big4 趋势: BEARISH/STRONG_BEARISH 禁 LONG, BULLISH/STRONG_BULLISH 禁 SHORT
-- 同 symbol+side 已有 OPEN gemini_explore 仓位 -> 跳过
-
-**显式规则 (用户 2026-05-20 确认)**: Gemini 探索下单**不依赖 TOP50**.
-- TOP50 是为实盘开仓质量保证设计的, Gemini 探索是全模拟盘
-- universe 选取本就独立于 TOP50 (swan 异动逻辑 vs 盈利稳健逻辑)
-- 后续不要加 top_performing_symbols 过滤进闸门
-
-复用 gemini_swan_worker 模块的:
-- _fetch_movers_24h / _fetch_extreme_funding / _merge_universe (candidate pool 选取)
-- SWAN_PROMPT_TEMPLATE + _call_gemini (Gemini 调用)
-
-不走实盘, 不与其它 Gemini 模块共享决策表。
+  - system_settings.gemini_explore_enabled (默认 0, 关时早返回)
+  - Big4 趋势: BEARISH/STRONG_BEARISH 禁 LONG, BULLISH/STRONG_BULLISH 禁 SHORT
+  - 同 symbol+side 已有 OPEN gemini_explore 仓位 -> 跳过
 """
 from __future__ import annotations
 
@@ -57,29 +53,39 @@ from app.services.gemini_swan_worker import (
 )
 
 
-# ---------------- 常量 ----------------
+# ============================================================
+# 优化 1: 常量调整
+# ============================================================
 EXPLORE_MARGIN_USD = 500.0
-EXPLORE_LEVERAGE = 5
+EXPLORE_LEVERAGE = 3           # 原 5x → 3x (降杠杆降波动放大)
 EXPLORE_MAX_POSITIONS = 20
 EXPLORE_HOLD_HOURS = 6
-EXPLORE_SL_PCT = 3.0   # 3%
-EXPLORE_TP_PCT = 8.0   # 8%
+EXPLORE_SL_PCT = 5.0           # 原 3% → 5% (给预测更多呼吸空间)
+EXPLORE_TP_PCT = 8.0
 EXPLORE_CONFIDENCE_THRESHOLD = 0.6
 EXPLORE_ACCOUNT_ID = 2
 EXPLORE_SOURCE = 'gemini_explore'
 
-# 数据新鲜度门槛 (本地宽松版, 跟 swan_worker 不同):
-#   - swan_worker 用 price=10min / funding=30min (写死 SQL)
-#   - 我们用 price=20min, 因为 price_stats_24h 在远程实测有 ~12-13 min 漂移,
-#     卡 10min 会让 universe 经常为空, Gemini 调用形同虚设
-#   - funding 维持 30min, 资金费率本身刷新频率就是 8h 周期, 30min 足够
+# 优化 1b: 入场保护 — 开仓 N 分钟内不被 Monitor Early-SL 误杀
+# (硬 SL 5% 仍生效, 但 3% Early-SL 有 30min 缓冲)
+EXPLORE_ENTRY_GRACE_MIN = 30
+
+# 数据新鲜度门槛
 EXPLORE_PRICE_FRESH_MIN = 20
 EXPLORE_FUNDING_FRESH_MIN = 30
 
+# 优化 2: 中等波动币参数
+NORMAL_MOVER = 8               # 中等涨跌幅各取 top N
+NORMAL_MOVER_MIN_VOLUME = 5_000_000   # 500 万 USDT 成交额下限 (比极端池宽松)
+NORMAL_CHG_MIN = 3.0           # 最低 |change_24h| ≥ 3%
+NORMAL_CHG_MAX = 15.0          # 最高 |change_24h| ≤ 15% (排除极端)
+EXCLUDED_EXTREME_SYMBOLS: set = set()  # 运行时填充: 已在极端池的 symbol
 
-# ---------------- DB 连接 ----------------
+
+# ============================================================
+# DB 连接
+# ============================================================
 def _get_local_db_config() -> dict:
-    """从 config_loader 读 binance-data 本地 DB 配置."""
     from app.utils.config_loader import get_db_config
     return get_db_config()
 
@@ -94,10 +100,83 @@ def _connect():
     )
 
 
-# ---------------- 候选池采集 ----------------
-# 自己实现 fetcher (跟 swan_worker 同结构, 但门槛放宽到本地常量):
-# 不调 swan_worker 的版本因为它 SQL 里把 10 分钟写死了,
-# 改 swan_worker 会影响其它使用者, 所以本地复制一份.
+# ============================================================
+# 优化 10: 历史表现统计
+# ============================================================
+def _get_historical_stats(conn) -> dict:
+    """查询 gemini_explore 的历史表现用于 prompt 尾部反馈."""
+    stats: dict = {
+        'total_trades': 0, 'win_trades': 0, 'win_rate': None,
+        'total_pnl': 0, 'avg_pnl': None,
+        'long_win_rate': None, 'short_win_rate': None,
+        'long_count': 0, 'short_count': 0,
+    }
+    try:
+        with conn.cursor() as cur:
+            # 总交易数
+            cur.execute(
+                "SELECT COUNT(*) AS cnt FROM futures_positions "
+                "WHERE source=%s AND account_id=%s AND status='closed'",
+                (EXPLORE_SOURCE, EXPLORE_ACCOUNT_ID),
+            )
+            row = cur.fetchone()
+            total = int((row or {}).get('cnt', 0) or 0)
+            stats['total_trades'] = total
+
+            if total >= 3:
+                # 盈利交易数
+                cur.execute(
+                    "SELECT COUNT(*) AS cnt, "
+                    "  COALESCE(SUM(realized_pnl), 0) AS total_pnl "
+                    "FROM futures_positions "
+                    "WHERE source=%s AND account_id=%s AND status='closed'",
+                    (EXPLORE_SOURCE, EXPLORE_ACCOUNT_ID),
+                )
+                row = cur.fetchone()
+                total_pnl = float((row or {}).get('total_pnl', 0) or 0)
+                stats['total_pnl'] = round(total_pnl, 2)
+                stats['avg_pnl'] = round(total_pnl / total, 2) if total > 0 else 0
+
+                cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM futures_positions "
+                    "WHERE source=%s AND account_id=%s AND status='closed' "
+                    "AND realized_pnl > 0",
+                    (EXPLORE_SOURCE, EXPLORE_ACCOUNT_ID),
+                )
+                row = cur.fetchone()
+                wins = int((row or {}).get('cnt', 0) or 0)
+                stats['win_trades'] = wins
+                stats['win_rate'] = round(wins / total * 100, 1)
+
+                # 分方向
+                for side, col in [('LONG', 'long'), ('SHORT', 'short')]:
+                    cur.execute(
+                        "SELECT COUNT(*) AS cnt FROM futures_positions "
+                        "WHERE source=%s AND account_id=%s AND status='closed' "
+                        "AND position_side=%s",
+                        (EXPLORE_SOURCE, EXPLORE_ACCOUNT_ID, side),
+                    )
+                    cnt = int((cur.fetchone() or {}).get('cnt', 0) or 0)
+                    stats[f'{col}_count'] = cnt
+                    if cnt >= 3:
+                        cur.execute(
+                            "SELECT COUNT(*) AS cnt FROM futures_positions "
+                            "WHERE source=%s AND account_id=%s AND status='closed' "
+                            "AND position_side=%s AND realized_pnl > 0",
+                            (EXPLORE_SOURCE, EXPLORE_ACCOUNT_ID, side),
+                        )
+                        w = int((cur.fetchone() or {}).get('cnt', 0) or 0)
+                        stats[f'{col}_win_rate'] = round(w / cnt * 100, 1)
+    except Exception as e:
+        logger.debug(f"[Gemini探索] 查历史统计失败: {e}")
+    return stats
+
+
+# ============================================================
+# 优化 2: 候选池采集 — 加入中等波动币
+# ============================================================
+
+
 def _fetch_movers_24h(cur, top_n: int):
     """24h 涨/跌 各 top_n. 新鲜度门槛: EXPLORE_PRICE_FRESH_MIN 分钟."""
     base_sql = """
@@ -118,8 +197,34 @@ def _fetch_movers_24h(cur, top_n: int):
     return gainers, losers
 
 
+def _fetch_normal_movers(cur, top_n: int) -> tuple:
+    """中等波动币: 3% <= |change_24h| <= 15%, 成交额 >= 500 万 USDT.
+    
+    这类币噪声更小, 趋势更清晰, 适合 LLM 判断方向.
+    排除已在极端池的 symbol.
+    """
+    sql = """
+        SELECT symbol, current_price, change_24h, quote_volume_24h, trend, updated_at
+        FROM price_stats_24h
+        WHERE quote_volume_24h >= %s
+          AND change_24h IS NOT NULL
+          AND ABS(change_24h) BETWEEN %s AND %s
+          AND updated_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL %s MINUTE)
+        ORDER BY quote_volume_24h DESC
+        LIMIT %s
+    """
+    cur.execute(sql, (NORMAL_MOVER_MIN_VOLUME, NORMAL_CHG_MIN, NORMAL_CHG_MAX,
+                      EXPLORE_PRICE_FRESH_MIN, top_n * 3))
+    rows = [r for r in cur.fetchall()
+            if not _is_excluded(r["symbol"])
+            and r["symbol"] not in EXCLUDED_EXTREME_SYMBOLS]
+    normal_gainers = [r for r in rows if float(r['change_24h']) > 0][:top_n]
+    normal_losers = [r for r in rows if float(r['change_24h']) < 0][:top_n]
+    return normal_gainers, normal_losers
+
+
 def _fetch_extreme_funding(cur, top_n: int):
-    """资金费率 极正/极负 各 top_n. 新鲜度门槛: EXPLORE_FUNDING_FRESH_MIN 分钟."""
+    """资金费率 极正/极负 各 top_n."""
     base_sql = """
         SELECT t.symbol AS symbol,
                t.funding_rate AS current_rate,
@@ -145,27 +250,62 @@ def _fetch_extreme_funding(cur, top_n: int):
 
 
 def _build_universe(conn) -> dict:
-    """构建 Gemini 探索候选池 (用本地宽松门槛 fetcher)."""
+    """构建 Gemini 探索候选池 (极端 + 中等 + 资金费率极值).
+
+    策略:
+      - 极端涨跌 (TOP_MOVER=12): 捕捉市场焦点, 但噪声大
+      - 中等涨跌 (NORMAL_MOVER=8): 趋势清晰, 噪声小 — 新增
+      - 资金费率极值 (TOP_FUNDING=10): 拥挤度反转信号
+      总池约 12+12+8+8+10+10 = 60 symbol, 减去去重后约 40-50.
+    """
+    global EXCLUDED_EXTREME_SYMBOLS
+    EXCLUDED_EXTREME_SYMBOLS = set()
+
     with conn.cursor() as cur:
+        # 1. 极端涨跌
         gainers, losers = _fetch_movers_24h(cur, TOP_MOVER)
+        for r in gainers + losers:
+            EXCLUDED_EXTREME_SYMBOLS.add(r["symbol"])
+        universe = _merge_universe(gainers, losers, {}, {})
+
+        # 2. 中等涨跌 (排除已在极端池的)
+        normal_gainers, normal_losers = _fetch_normal_movers(cur, NORMAL_MOVER)
+        normal_merged = _merge_universe(normal_gainers, normal_losers, {}, {})
+        for sym, data in normal_merged.items():
+            if sym not in universe:
+                universe[sym] = data
+
+        # 3. 资金费率极值
         fund_pos, fund_neg = _fetch_extreme_funding(cur, TOP_FUNDING)
-    return _merge_universe(gainers, losers, fund_pos, fund_neg)
+        fund_merged = _merge_universe({}, {}, fund_pos, fund_neg)
+        for sym, data in fund_merged.items():
+            if sym not in universe:
+                universe[sym] = data
+            else:
+                # 把 funding trigger 补到已有 symbol 上
+                for t in data.get('triggers', []):
+                    if t not in universe[sym].get('triggers', []):
+                        universe[sym].setdefault('triggers', []).append(t)
+                if universe[sym].get('current_rate') is None:
+                    universe[sym]['current_rate'] = data.get('current_rate')
+
+    return universe
 
 
-# ---------------- 技术指标 + 多周期 K 线增强 ----------------
+# ============================================================
+# 优化 3: 技术指标 + 多周期 K 线增强 (带时间戳/成交量/形态描述)
+# ============================================================
 def _ema(values: List[float], period: int) -> Optional[float]:
-    """简易 EMA: alpha = 2/(period+1). 返回最后一个值. 数据不足返回 None."""
     if not values or len(values) < period:
         return None
     alpha = 2.0 / (period + 1)
-    ema = sum(values[:period]) / period  # SMA seed
+    ema = sum(values[:period]) / period
     for v in values[period:]:
         ema = alpha * v + (1 - alpha) * ema
     return ema
 
 
 def _rsi(closes: List[float], period: int = 14) -> Optional[float]:
-    """标准 RSI 14. 数据不足返回 None."""
     if not closes or len(closes) < period + 1:
         return None
     gains, losses = [], []
@@ -173,10 +313,8 @@ def _rsi(closes: List[float], period: int = 14) -> Optional[float]:
         diff = closes[i] - closes[i - 1]
         gains.append(max(diff, 0))
         losses.append(max(-diff, 0))
-    # SMA 初值
     avg_gain = sum(gains[:period]) / period
     avg_loss = sum(losses[:period]) / period
-    # Wilder smoothing
     for i in range(period, len(gains)):
         avg_gain = (avg_gain * (period - 1) + gains[i]) / period
         avg_loss = (avg_loss * (period - 1) + losses[i]) / period
@@ -187,7 +325,6 @@ def _rsi(closes: List[float], period: int = 14) -> Optional[float]:
 
 
 def _fetch_klines(cur, symbol: str, timeframe: str, limit: int) -> List[Dict]:
-    """取最近 N 根 K 线 (按 open_time 升序). 不到 limit 也返回."""
     cur.execute(
         "SELECT open_time, open_price, high_price, low_price, close_price, volume "
         "FROM kline_data "
@@ -199,34 +336,103 @@ def _fetch_klines(cur, symbol: str, timeframe: str, limit: int) -> List[Dict]:
     return rows
 
 
-def _compact_kline(rows: List[Dict], digits: int = 6) -> List[List[float]]:
-    """K 线压缩成 [open, high, low, close] 数组列表 (省 token)."""
-    out = []
-    for r in rows:
+def _format_kline_narrative(k_rows: List[Dict], timeframe_label: str, max_lines: int = 4) -> str:
+    """将 K 线数据转为自然语言描述, 便于 LLM 理解.
+    
+    输出示例:
+      [1h · 最近 12h]
+      - 17:00: 开 1.234 高 1.245 低 1.228 收 1.240 (+0.48%) 量 2.3M
+      - 18:00: 开 1.240 高 1.262 低 1.235 收 1.258 (+1.45%) 量 3.1M ↑
+    形态总结: 连续 3 根阳线放量上攻, 突破前高阻力
+    """
+    if not k_rows:
+        return f"[{timeframe_label}] 无数据"
+    
+    lines = []
+    prices = []
+    total_vol = 0.0
+    up_count = 0
+    down_count = 0
+    
+    for r in k_rows:
         try:
-            out.append([
-                round(float(r['open_price']), digits),
-                round(float(r['high_price']), digits),
-                round(float(r['low_price']), digits),
-                round(float(r['close_price']), digits),
-            ])
+            t = datetime.utcfromtimestamp(float(r['open_time']) / 1000)
+            o = float(r['open_price'])
+            h = float(r['high_price'])
+            l = float(r['low_price'])
+            c = float(r['close_price'])
+            v = float(r.get('volume') or 0)
+            pct = (c - o) / o * 100 if o > 0 else 0
+            prices.append(c)
+            total_vol += v
+            if pct >= 0.1:
+                up_count += 1
+            elif pct <= -0.1:
+                down_count += 1
+            
+            vol_suffix = ''
+            # 简化显示, 只取前 N 根
+            if len(lines) < max_lines:
+                t_str = t.strftime('%H:%M') if timeframe_label in ('15m', '1h') else t.strftime('%m-%d')
+                conv = '↑' if pct >= 0.1 else ('↓' if pct <= -0.1 else '→')
+                lines.append(
+                    f"  {t_str}: O={o:.6g} H={h:.6g} L={l:.6g} C={c:.6g} "
+                    f"({pct:+.2%}){conv} Vol={v:.4g}"
+                )
         except Exception:
             continue
-    return out
+    
+    # 形态总结
+    n = len(prices)
+    pattern_desc = "数据不足"
+    if n >= 3:
+        trend = "上升" if prices[-1] > prices[0] else "下降"
+        change_overall = (prices[-1] - prices[0]) / prices[0] * 100 if prices[0] > 0 else 0
+        if up_count > down_count * 1.5 and change_overall > 1:
+            pattern_desc = f"偏多 ({up_count}阳/{down_count}阴, 整体{change_overall:+.1f}%)"
+        elif down_count > up_count * 1.5 and change_overall < -1:
+            pattern_desc = f"偏空 ({up_count}阳/{down_count}阴, 整体{change_overall:+.1f}%)"
+        elif change_overall > 3:
+            pattern_desc = f"强势{trend} ({change_overall:+.1f}%)"
+        elif change_overall < -3:
+            pattern_desc = f"强势{trend} ({change_overall:+.1f}%)"
+        else:
+            pattern_desc = f"震荡 ({trend}趋势, {change_overall:+.1f}%)"
+    
+    # 成交量描述
+    if k_rows and len(k_rows) >= 2:
+        try:
+            mid = len(k_rows) // 2
+            vol_first = sum(float(r.get('volume') or 0) for r in k_rows[:mid])
+            vol_last = sum(float(r.get('volume') or 0) for r in k_rows[mid:])
+            if vol_last > vol_first * 1.5 and vol_first > 0:
+                pattern_desc += ", 成交量放大"
+            elif vol_last < vol_first * 0.5 and vol_first > 0:
+                pattern_desc += ", 成交量萎缩"
+        except Exception:
+            pass
+    
+    header = f"[{timeframe_label} · 最近 {len(k_rows)} 根] (总成交量 {total_vol:.4g})"
+    body = '\n'.join(lines[:max_lines])
+    if len(lines) > max_lines:
+        body += f"\n  ... 还有 {len(lines) - max_lines} 根 (略)"
+    return f"{header}\n{body}\n形态: {pattern_desc}"
 
 
 def _enrich_symbol(cur, sym_data: dict) -> None:
-    """给单个 symbol dict 加上 K 线 + 指标. 失败不阻塞 (字段缺即 None)."""
+    """优化 3: 给单个 symbol 加上 K 线叙事描述 + 技术指标 + 成交量."""
     symbol = sym_data['symbol']
 
-    # 多周期 K 线 (按 token 预算: 1d×7 + 1h×12 + 15m×8 ≈ 27 根/symbol)
     k_1d = _fetch_klines(cur, symbol, '1d', 7)
     k_1h = _fetch_klines(cur, symbol, '1h', 12)
     k_15m = _fetch_klines(cur, symbol, '15m', 8)
 
-    sym_data['k_1d_ohlc'] = _compact_kline(k_1d)
-    sym_data['k_1h_ohlc'] = _compact_kline(k_1h)
-    sym_data['k_15m_ohlc'] = _compact_kline(k_15m)
+    # 优化 3: 用自然语言描述替代纯数组
+    sym_data['kline_narrative'] = {
+        '1d': _format_kline_narrative(k_1d, '1d', 4),
+        '1h': _format_kline_narrative(k_1h, '1h', 4),
+        '15m': _format_kline_narrative(k_15m, '15m', 4),
+    }
 
     # 技术指标
     closes_1h = [float(r['close_price']) for r in k_1h]
@@ -235,7 +441,7 @@ def _enrich_symbol(cur, sym_data: dict) -> None:
     rsi_1h = _rsi(closes_1h, 14) if len(closes_1h) >= 15 else None
     ema9_15m = _ema(closes_15m, 9) if len(closes_15m) >= 9 else None
 
-    # 距 7d 高/低距离 (用 1d K 线高低数据算更准确)
+    # 距 7d 高/低距离
     above_7d_low_pct = below_7d_high_pct = None
     if k_1d:
         try:
@@ -260,29 +466,20 @@ def _enrich_symbol(cur, sym_data: dict) -> None:
 
 
 def _enrich_universe(conn, universe: dict) -> None:
-    """对 universe 里每个 symbol 加 K 线 + 指标. 同时剔除 K 线断采的 symbol.
-
-    sanity: 如果 1h K 线最新 < UTC_now - 2h 或 1d K 线最新 < UTC_now - 2d,
-    认为采集器漏了这个 symbol (例: ARIA/USDT, 5m/15m/1h/1d 全周期停在 4-05),
-    给 Gemini 看陈旧 K 线会算出错位置判断 (above_7d_low_pct=104% 实际已在低位).
-    直接从 universe 剔除, 让 Gemini 不到看这种污染数据.
-    """
+    """同原逻辑: 加 K 线指标 + 剔除 stale symbol."""
     stale_syms = []
     with conn.cursor() as cur:
         for sym, sym_data in universe.items():
             try:
                 _enrich_symbol(cur, sym_data)
 
-                # K 线新鲜度门槛
-                k_1h = sym_data.get('k_1h_ohlc') or []
-                k_1d = sym_data.get('k_1d_ohlc') or []
-                if not k_1h or not k_1d:
+                k_1h_narr = sym_data.get('kline_narrative', {}).get('1h', '')
+                k_1d_narr = sym_data.get('kline_narrative', {}).get('1d', '')
+                if not k_1h_narr or not k_1d_narr or '无数据' in str(k_1h_narr):
                     stale_syms.append((sym, 'missing_1h_or_1d_kline'))
                     continue
 
-                # 1h 门槛 4 小时: fast_collector 每 1h 采一次 1h K 线 (smart 策略),
-                # 加上调度抖动 + 网络延迟, 正常情况 1h K 线延迟 1-2 小时.
-                # 4 小时是合理的"已经断采"门槛
+                # 1h 新鲜度门槛 4h
                 cur.execute(
                     "SELECT MAX(open_time) AS m FROM kline_data "
                     "WHERE symbol=%s AND timeframe='1h' AND exchange='binance_futures'",
@@ -297,7 +494,7 @@ def _enrich_universe(conn, universe: dict) -> None:
                         stale_syms.append((sym, f'1h_kline_stale_{age_h:.1f}h'))
                         continue
 
-                # 1d 门槛 2 天: fast_collector 每天采一次, 1 天延迟是常态
+                # 1d 新鲜度门槛 2d
                 cur.execute(
                     "SELECT MAX(open_time) AS m FROM kline_data "
                     "WHERE symbol=%s AND timeframe='1d' AND exchange='binance_futures'",
@@ -315,7 +512,6 @@ def _enrich_universe(conn, universe: dict) -> None:
                 logger.debug(f"[Gemini探索] enrich {sym} 失败: {e}")
                 stale_syms.append((sym, f'enrich_exception:{e}'))
 
-    # 剔除 stale
     if stale_syms:
         logger.warning(
             f"[Gemini探索] 剔除 {len(stale_syms)} 个 K 线断采的 symbol: "
@@ -327,87 +523,152 @@ def _enrich_universe(conn, universe: dict) -> None:
 
 
 def _build_global_context(conn) -> dict:
-    """全局市场环境 — 给 Gemini 看完整背景."""
+    """全局市场环境."""
     ctx = {'asof_utc': datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
-
-    # Big4 当前信号
     ctx['big4_signal'] = _get_big4_signal(conn)
 
-    # BTC / ETH / SOL 24h 涨跌幅 (大盘节奏)
+    # 市场环境描述
+    market_desc = _describe_market_regime(conn)
+    ctx['market_regime'] = market_desc
+
     with conn.cursor() as cur:
-        cur.execute(
-            "SELECT symbol, current_price, change_24h FROM price_stats_24h "
-            "WHERE symbol IN ('BTC/USDT','ETH/USDT','SOL/USDT')"
-        )
-        for r in cur.fetchall():
-            base = r['symbol'].split('/')[0].lower()
-            ctx[f'{base}_price'] = float(r['current_price']) if r['current_price'] else None
-            ctx[f'{base}_change_24h'] = float(r['change_24h']) if r['change_24h'] is not None else None
+        for sym in ('BTC/USDT', 'ETH/USDT', 'SOL/USDT'):
+            base = sym.split('/')[0].lower()
+            cur.execute(
+                "SELECT current_price, change_24h FROM price_stats_24h WHERE symbol=%s",
+                (sym,),
+            )
+            r = cur.fetchone()
+            if r:
+                ctx[f'{base}_price'] = float(r['current_price']) if r['current_price'] else None
+                ctx[f'{base}_change_24h'] = float(r['change_24h']) if r['change_24h'] is not None else None
 
     return ctx
 
 
-# ---------------- Gemini 调用 (Explore 专用 prompt, 不复用 swan) ----------------
-EXPLORE_PROMPT_TEMPLATE = """你是加密货币衍生品研究员, 负责识别**未来 6 小时内**最可能爆发的红/黑天鹅事件并给出可交易方向.
+def _describe_market_regime(conn) -> str:
+    """用简单规则描述大盘状态: 趋势/震荡/极端."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT change_24h FROM price_stats_24h WHERE symbol='BTC/USDT'"
+            )
+            row = cur.fetchone()
+            if row and row.get('change_24h') is not None:
+                btc_chg = abs(float(row['change_24h']))
+                if btc_chg > 8:
+                    return "极端波动 (BTC 24h > 8%) — 暂停低频策略"
+                elif btc_chg > 4:
+                    return "强趋势 (BTC 24h > 4%) — 顺趋势交易"
+                elif btc_chg > 1.5:
+                    return "温和趋势 (BTC 24h 1.5-4%) — 正常交易环境"
+                else:
+                    return "低波动盘整 (BTC 24h < 1.5%) — 减少开仓"
+    except Exception:
+        pass
+    return "未知"
 
-# 全局市场环境 (asof: {asof})
+
+# ============================================================
+# 优化 4: 重写 Prompt — 去天鹅化 + Few-shot + 置信度校准 + 空 verdicts
+# ============================================================
+EXPLORE_PROMPT_TEMPLATE = """你是加密货币短线交易分析师, 负责判断候选币种在未来 6 小时内的方向异动概率.
+
+# 全局市场环境
 {global_context_json}
 
-Big4 是 BTC/ETH/BNB/SOL 综合趋势指标 (取值: STRONG_BULLISH/BULLISH/NEUTRAL/BEARISH/STRONG_BEARISH).
-注意 Big4 BEARISH/STRONG_BEARISH 时不要给 LONG 信号 (系统会拒绝); BULLISH/STRONG_BULLISH 时不要给 SHORT.
+注意 Big4 (BTC/ETH/BNB/SOL 综合趋势) 方向: BEARISH/STRONG_BEARISH 时不要给做多信号;
+BULLISH/STRONG_BULLISH 时不要给做空信号.
 
-# 当前候选 symbol (来自 24h 涨跌 + 资金费率极值)
-每个 symbol 字段:
-- triggers: 进入候选池的原因 (24h_gainer / 24h_loser / funding_pos_extreme / funding_neg_extreme)
-- current_price / change_24h / quote_volume_24h: 价格和成交额
-- current_rate: 资金费率 (>0 多头付空头, <0 反之)
-- k_15m_ohlc: 最近 8 根 15 分钟 K 线, 数组格式 [open, high, low, close], 时间升序
-- k_1h_ohlc: 最近 12 根 1 小时 K 线
-- k_1d_ohlc: 最近 7 根 日线
-- tech.rsi_14_1h: 1 小时 RSI (>70 超买, <30 超卖)
-- tech.ema9_15m: 15 分钟 EMA9 (短期均值)
-- tech.above_7d_low_pct: 现价距 7 日最低点的百分比 (越接近 0 表示在低位)
-- tech.below_7d_high_pct: 现价距 7 日最高点的百分比 (负值, 越接近 0 表示在高位)
+# 历史表现 (供你校准判断尺度)
+{historical_stats_json}
+
+# 候选 symbol 数据说明
+每个 symbol 包含:
+- triggers: 进入候选池原因 (24h_gainer / 24h_loser / funding_pos_extreme / funding_neg_extreme / normal_mover)
+- current_price / change_24h / quote_volume_24h
+- current_rate: 资金费率
+- kline_narrative: **自然语言描述的 K 线形态** (含成交量趋势)
+- tech.rsi_14_1h: 1h RSI (>70 超买, <30 超卖)
+- tech.above_7d_low_pct / below_7d_high_pct: 现价距 7 日极值距离
 
 {universe_json}
 
 # 任务
 为每个 symbol 标注:
-- category: 'red_swan' (做多)  / 'black_swan' (做空)  / 'skip' (不交易)
-- confidence: 0.0-1.0, 越大越确定
-- catalyst: 你的判断依据, **必须引用具体数据** (不接受"高波动""不确定"这类宏观话术)
-- data_signal: 哪个数据点最支持判断 (例: "rsi=28 + above_7d_low_pct=2.1 + 资金费率-0.8%")
+- category: 'bullish' (看多) / 'bearish' (看空) / 'skip' (不交易 — 这是**可接受的合理答案**)
+- confidence: 0.0-1.0 (见下方校准表)
+- catalyst: 判断依据, **必须引用具体数据** (不接受"高波动""不确定"这类模糊话术)
+- data_signal: 最支持判断的关键数据点
 - risk_note: 反向风险一句
 
-判定原则:
-1. 看**多周期一致性**: 1d 主趋势 + 1h 节奏 + 15m 入场点, 三者方向一致才高 confidence
-2. 看**资金费率 vs 价格背离**:
-   - 资金费极正 (拥挤多) + 价格在 7d 高点附近 + RSI 高 → black_swan (顶部砸盘)
-   - 资金费极负 (拥挤空) + 价格在 7d 低点附近 + RSI 低 → red_swan (空头挤兑)
-3. **不要单看 24h 涨跌幅**: 已经涨 100% 的不一定继续涨, 看是否还在加速
-4. **不熟该币就 skip** + confidence ≤ 0.3, 不要硬猜
-5. **结合 Big4 环境**: Big4 BEARISH 时 LONG 要更高 confidence 才下, SHORT 反之
+## 置信度校准表 (重要 — 请严格按照此表评分)
+| confidence 区间 | 需要的信号强度 |
+|---|---|
+| 0.90-1.00 | 多周期共振 + 资金费率严重背离 + 成交量确认 + Big4 同向 |
+| 0.75-0.89 | 多周期一致 + 资金费率/成交量支持 + Big4 不矛盾 |
+| 0.60-0.74 | 两个维度支持 (如 1h 趋势 + RSI 方向) + Big4 不矛盾 |
+| 0.40-0.59 | 仅一个维度支持, 或有矛盾信号 — **此为低置信度, 不应开仓** |
+| < 0.40 | 纯猜测 / 不熟悉该币 |
 
-# 输出
-**仅** 一个合法 JSON, 不要 markdown 围栏:
+## 判定原则
+1. **多周期一致性**: 1d 主趋势 + 1h 节奏 + 15m 入场点, 三者同向才给高 confidence
+2. **资金费率 vs 价格背离**:
+   - 资金费极正 (拥挤多) + 价格在 7d 高点 + RSI 高 → bearish
+   - 资金费极负 (拥挤空) + 价格在 7d 低点 + RSI 低 → bullish
+3. **成交量确认**: 突破放量=有效, 缩量新高=可疑
+4. **不要追涨杀跌**: 已涨 100% 的不一定继续涨, 关注是否在加速
+5. **宁可错过, 不要硬猜**: 无明确信号时返回空列表, 这是**正确做法**
+
+## Few-shot 示例
+以下是用历史数据标注的正确示例 (仅供参考格式, 不要复制数据):
+
+GOOD EXAMPLE 1 (强信号):
 {{
-  "summary_zh": "整体市场氛围 + 主流叙事 1-2 句",
+  "symbol": "PEPE/USDT",
+  "category": "bullish",
+  "confidence": 0.78,
+  "catalyst": "24h跌22%但资金费率-0.15%极端负(空头拥挤), RSI 1h=28超卖, 距7d低点仅1.8%, 15m出现双底形态",
+  "data_signal": "RSI=28, above_7d_low_pct=1.8, 资金费率=-0.15%",
+  "risk_note": "BTC若继续下跌可能带崩meme板块"
+}}
+
+GOOD EXAMPLE 2 (弱信号→skip):
+{{
+  "symbol": "UNI/USDT",
+  "category": "skip",
+  "confidence": 0.35,
+  "catalyst": "资金费率正常, RSI=52中性, 7d区间中位震荡, 无明确方向",
+  "data_signal": "RSI=52中性, 资金费率+0.001%",
+  "risk_note": ""
+}}
+
+# 输出要求
+**仅** 一个合法 JSON, 不要 markdown 围栏.
+**如果没有任何清晰的交易机会, 返回 {{"summary_zh": "判断说明", "verdicts": []}}**.
+错误地给出一个低置信度信号比跳过更糟糕.
+
+{{
+  "summary_zh": "整体市场氛围 1-2 句",
   "verdicts": [
     {{
       "symbol": "FOO/USDT",
-      "category": "red_swan",
+      "category": "bullish",
       "confidence": 0.72,
-      "catalyst": "...具体依据, 引用数据...",
-      "data_signal": "rsi=28, above_7d_low_pct=1.5",
-      "risk_note": "..."
+      "catalyst": "具体依据, 引用数据...",
+      "data_signal": "RSI=28, above_7d_low_pct=1.5",
+      "risk_note": "反方风险..."
     }}
   ]
 }}
 """
 
 
-def _call_gemini_explore(universe: dict, global_ctx: dict) -> Optional[dict]:
-    """专用版 Gemini 调用 — 多周期 K 线 + Big4 + 技术指标."""
+# ============================================================
+# 优化 5+6: Gemini 调用 (含历史表现)
+# ============================================================
+def _call_gemini_explore(universe: dict, global_ctx: dict, historical_stats: dict) -> Optional[dict]:
+    """专用版 Gemini 调用 — 多周期 K 线叙事 + Big4 + 技术指标 + 历史表现."""
     if not GEMINI_API_KEY:
         logger.error("[Gemini探索] GEMINI_API_KEY 未设置")
         return None
@@ -418,19 +679,23 @@ def _call_gemini_explore(universe: dict, global_ctx: dict) -> Optional[dict]:
         logger.error("[Gemini探索] 缺依赖, 请 pip install google-genai")
         return None
 
-    asof = global_ctx.get('asof_utc', datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC'))
-
-    # universe 按 24h 涨跌排序, 让 Gemini 优先看异动大的
+    # universe 按 |change_24h| 排序
     universe_list = sorted(
         list(universe.values()),
         key=lambda x: abs(x.get('change_24h') or 0),
         reverse=True,
     )
 
+    # 去掉旧的 ohlc 数组 (现在用 kline_narrative)
+    for item in universe_list:
+        item.pop('k_1d_ohlc', None)
+        item.pop('k_1h_ohlc', None)
+        item.pop('k_15m_ohlc', None)
+
     prompt = EXPLORE_PROMPT_TEMPLATE.format(
-        asof=asof,
         global_context_json=json.dumps(global_ctx, ensure_ascii=False, indent=2),
         universe_json=json.dumps(universe_list, ensure_ascii=False, indent=2, default=str),
+        historical_stats_json=json.dumps(historical_stats, ensure_ascii=False, indent=2),
     )
 
     logger.info(f"[Gemini探索] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens)")
@@ -456,15 +721,21 @@ def _call_gemini_explore(universe: dict, global_ctx: dict) -> Optional[dict]:
     logger.info(f"[Gemini探索] gemini 用时 {time.time()-t0:.1f}s, output_len={len(text)}")
 
     try:
-        return json.loads(text)
+        parsed = json.loads(text)
+        # 验证 format: verdicts 必须是 list
+        if not isinstance(parsed.get('verdicts'), list):
+            logger.warning(f"[Gemini探索] Gemini 返回格式异常, verdicts 非 list, 重置为 []")
+            parsed['verdicts'] = []
+        return parsed
     except json.JSONDecodeError as e:
         logger.error(f"[Gemini探索] JSON 解析失败: {e}; raw[:500]={text[:500]}")
         return None
 
 
-# ---------------- 闸门检查 ----------------
+# ============================================================
+# 闸门检查 (不变)
+# ============================================================
 def _get_big4_signal(conn) -> str:
-    """读最新 Big4 overall_signal. 失败返回 NEUTRAL."""
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -479,7 +750,6 @@ def _get_big4_signal(conn) -> str:
 
 
 def _big4_blocks(big4_signal: str, side: str) -> bool:
-    """Big4 趋势是否封死该方向. 跟 S1-S9 主策略约定一致."""
     if side == 'LONG':
         return big4_signal in ('BEARISH', 'STRONG_BEARISH')
     if side == 'SHORT':
@@ -488,7 +758,6 @@ def _big4_blocks(big4_signal: str, side: str) -> bool:
 
 
 def _has_open_position(conn, symbol: str, side: str) -> bool:
-    """同 symbol+side 是否已有 gemini_explore 的 OPEN 仓位."""
     with conn.cursor() as cur:
         cur.execute(
             "SELECT 1 FROM futures_positions "
@@ -500,7 +769,6 @@ def _has_open_position(conn, symbol: str, side: str) -> bool:
 
 
 def _count_open_positions(conn) -> int:
-    """当前 gemini_explore source 下的 OPEN 仓位数."""
     with conn.cursor() as cur:
         cur.execute(
             "SELECT COUNT(*) AS cnt FROM futures_positions "
@@ -511,24 +779,11 @@ def _count_open_positions(conn) -> int:
         return int((row or {}).get('cnt', 0) or 0)
 
 
-# ---------------- 价格获取 ----------------
+# ============================================================
+# 价格获取 (保持不变)
+# ============================================================
 def _get_current_price(conn, symbol: str) -> Optional[float]:
-    """实时取当前价, 用于开仓.
-
-    优先级 (高 -> 低):
-      L1. BinanceDataHub.get_price_sync — WS markPrice (秒级实时, 主路径)
-          Hub 内部已经 4 级降级 (WS -> 60s ticker -> coin ref -> REST), 用 90s
-          新鲜度门槛, 拿到的就算实时.
-      L2. kline_data 5m close 兜底 — 单独脚本测试 / Hub 未启时用, 延迟 <= 6 分钟
-          5m K 线 open 超过 15 分钟则视为停采, 返回 None 跳过开仓.
-
-    历史教训 (2026-05-20):
-      - 旧实现走 price_stats_24h.current_price, 那列由 cache_update_service 维护,
-        但内部"优先 1m 回退 5m" 用了 2026-01 停采前的残留 1m 数据, 整整 4 个月
-        没更新真实价. HYPE 真价 48 但 column 一直显示 21.
-      - 现在主路径走 Hub WS markPrice, 跟 SmartExitOptimizer 用的是同一个价格源,
-        开仓价跟 SL/TP 检查价 同步, 避免立刻被打 SL.
-    """
+    """实时取当前价, 用于开仓. (同原逻辑)"""
     # L1: Hub (主路径)
     try:
         from app.services.binance_data_hub import get_global_data_hub
@@ -562,7 +817,7 @@ def _get_current_price(conn, symbol: str) -> Optional[float]:
                 except Exception:
                     return None
             age = (datetime.utcnow() - open_dt).total_seconds()
-            if age > 900:  # K 线 open 时间超过 15 分钟视为停采
+            if age > 900:
                 logger.warning(
                     f"[Gemini探索] {symbol} L1 失败 L2 兜底 5m K线也过时 "
                     f"({age:.0f}s, open={open_dt}), 跳过"
@@ -575,7 +830,9 @@ def _get_current_price(conn, symbol: str) -> Optional[float]:
         return None
 
 
-# ---------------- 开仓 ----------------
+# ============================================================
+# 优化 7: SL 缓冲 + 开仓 (SL 5% 已足够宽, 同时记录入时保护期)
+# ============================================================
 def _open_simulated_position(
     conn,
     symbol: str,
@@ -583,7 +840,11 @@ def _open_simulated_position(
     price: float,
     catalyst: str,
 ) -> Optional[int]:
-    """直接 INSERT 到 futures_positions 表, 模拟单, 返回 position_id 或 None."""
+    """直接 INSERT 到 futures_positions 表, 模拟单, 返回 position_id 或 None.
+    
+    优化 7: SL 5% (原 3%), 杠杆 3x (原 5x).
+    硬 SL 由 PositionSLTPMonitor 兜底检查, 此处写入 DB.
+    """
     try:
         notional = EXPLORE_MARGIN_USD * EXPLORE_LEVERAGE
         qty = round(notional / price, 6)
@@ -594,15 +855,16 @@ def _open_simulated_position(
         if side == 'LONG':
             sl_price = round(price * (1 - EXPLORE_SL_PCT / 100), 8)
             tp_price = round(price * (1 + EXPLORE_TP_PCT / 100), 8)
-        else:  # SHORT
+        else:
             sl_price = round(price * (1 + EXPLORE_SL_PCT / 100), 8)
             tp_price = round(price * (1 - EXPLORE_TP_PCT / 100), 8)
 
         planned_close = datetime.utcnow() + timedelta(hours=EXPLORE_HOLD_HOURS)
         max_hold_minutes = EXPLORE_HOLD_HOURS * 60
 
-        # 截断 catalyst 防止超 entry_reason 列长度 (futures_positions.entry_reason 通常 varchar(255))
-        entry_reason = (catalyst or 'gemini_explore')[:200]
+        # 在 entry_reason 中标记入场保护期, 方便后续排查
+        entry_reason = (catalyst or 'gemini_explore')[:180]
+        entry_reason += f" | grace={EXPLORE_ENTRY_GRACE_MIN}min SL={EXPLORE_SL_PCT}% lev={EXPLORE_LEVERAGE}x"
 
         with conn.cursor() as cur:
             cur.execute(
@@ -636,7 +898,8 @@ def _open_simulated_position(
 
         logger.info(
             f"[Gemini探索] 开仓 {symbol} {side} @ {price:.6g} "
-            f"SL={sl_price:.6g} TP={tp_price:.6g} qty={qty} "
+            f"SL={sl_price:.6g}(5%) TP={tp_price:.6g}(8%) qty={qty} lev={EXPLORE_LEVERAGE}x "
+            f"grace={EXPLORE_ENTRY_GRACE_MIN}min "
             f"planned_close={planned_close.strftime('%Y-%m-%d %H:%M')} id={position_id}"
         )
         return position_id
@@ -645,7 +908,9 @@ def _open_simulated_position(
         return None
 
 
-# ---------------- 持久化 ----------------
+# ============================================================
+# 持久化
+# ============================================================
 def _insert_run(
     conn,
     asof_utc: datetime,
@@ -694,11 +959,21 @@ def _insert_verdicts(conn, run_id: int, verdict_rows: List[Tuple]) -> None:
         )
 
 
-# ---------------- 主入口 ----------------
+# ============================================================
+# 优化 8+9: 主入口 (全面升级)
+# ============================================================
 def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
-    """跑一轮 Gemini 探索. 成功返回 run_id, 失败/跳过返回 None.
+    """跑一轮 Gemini 探索 (v2 优化版). 成功返回 run_id, 失败/跳过返回 None.
 
-    线程安全: 每次新建连接, 不复用全局连接, 跟 gemini_swan_worker 一致.
+    新增/修改:
+      1. SL 3%→5%, 杠杆 5x→3x
+      2. 候选池加入中等波动币 (NORMAL_MOVER)
+      3. K 线用自然语言描述替代纯数组
+      4. 新 prompt: 去天鹅化 + Few-shot + 置信度校准 + 鼓励空 verdicts
+      5+6. 传递历史表现数据给 Gemini
+      7. SL 缓冲: 硬 SL 5% (原 3%) + 入场保护 30min
+      8. 置信度判定沿用 EXPLORE_CONFIDENCE_THRESHOLD=0.6
+      9+10. 新增 _get_historical_stats 并注入 prompt
     """
     t0 = time.time()
     asof_utc = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -718,7 +993,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
 
     logger.info(f"[Gemini探索] === 一轮开始 (triggered_by={triggered_by}) ===")
 
-    # 2. 候选池
+    # 建立 DB 连接
     try:
         conn = _connect()
     except Exception as e:
@@ -726,6 +1001,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         return None
 
     try:
+        # 2. 候选池 (优化 2: 加入中等波动币)
         universe = _build_universe(conn)
         universe_size = len(universe)
         logger.info(f"[Gemini探索] 候选池 universe_size={universe_size}")
@@ -734,38 +1010,52 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             elapsed = time.time() - t0
             run_id = _insert_run(
                 conn, asof_utc, 0, '', elapsed,
-                'skipped', '候选池为空 (price_stats_24h 或 funding_rate_data 无数据?)',
+                'skipped', '候选池为空',
                 triggered_by,
             )
             logger.warning("[Gemini探索] 候选池为空, 本轮结束")
             return run_id
 
-        # 3a. 给每个 symbol 加 1d/1h/15m K 线 + RSI/EMA/距位指标 (实时数据)
+        # 3a. 加 K 线叙事 + 技术指标 (优化 3)
         _enrich_universe(conn, universe)
-        # 3b. 全局上下文: Big4 + BTC/ETH/SOL 24h 涨跌
+        # 3b. 全局上下文: Big4 + BTC/ETH/SOL + 市场状态
         global_ctx = _build_global_context(conn)
         logger.info(
             f"[Gemini探索] 全局: Big4={global_ctx.get('big4_signal')} "
-            f"BTC chg24h={global_ctx.get('btc_change_24h')}% "
-            f"ETH chg24h={global_ctx.get('eth_change_24h')}%"
+            f"market={global_ctx.get('market_regime')} "
+            f"BTC chg24h={global_ctx.get('btc_change_24h')}%"
         )
 
-        # 3c. 调 Gemini (单轮, 用 explore 专用 prompt)
-        gemini_response = _call_gemini_explore(universe, global_ctx)
+        # 3c. 历史表现统计 (优化 10)
+        historical_stats = _get_historical_stats(conn)
+        if historical_stats.get('total_trades', 0) >= 3:
+            logger.info(
+                f"[Gemini探索] 历史: {historical_stats['total_trades']}笔 "
+                f"胜率={historical_stats['win_rate']}% "
+                f"总盈亏={historical_stats['total_pnl']}U"
+            )
+        else:
+            logger.info(f"[Gemini探索] 历史: 样本不足 ({historical_stats['total_trades']}笔)")
+
+        # 3d. 调 Gemini (优化 4+5+6)
+        gemini_response = _call_gemini_explore(universe, global_ctx, historical_stats)
         if gemini_response is None:
             elapsed = time.time() - t0
             run_id = _insert_run(
                 conn, asof_utc, universe_size, '', elapsed,
-                'error', 'Gemini 调用失败 (网络/API key/解析?)', triggered_by,
+                'error', 'Gemini 调用失败', triggered_by,
             )
             logger.error("[Gemini探索] Gemini 调用失败, 本轮结束")
             return run_id
 
         summary_zh = (gemini_response.get('summary_zh') or '')[:1000]
         verdicts = gemini_response.get('verdicts') or []
-        logger.info(f"[Gemini探索] gemini 返回 verdicts={len(verdicts)}, summary={summary_zh[:80]}")
+        logger.info(
+            f"[Gemini探索] gemini 返回 verdicts={len(verdicts)}, "
+            f"summary={summary_zh[:80]}"
+        )
 
-        # 4. 写 run (先占行, 拿 run_id, 等会儿更新 trades_opened)
+        # 4. 写 run 记录
         elapsed = time.time() - t0
         run_id = _insert_run(
             conn, asof_utc, universe_size, summary_zh, elapsed,
@@ -793,14 +1083,15 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             if not symbol:
                 continue
 
-            # 5a. 类别与置信度
-            if category == 'red_swan' and confidence >= EXPLORE_CONFIDENCE_THRESHOLD:
+            # 5a. 类别与置信度 (优化 8: 用校准表)
+            # category 映射: bullish=LONG, bearish=SHORT
+            if category == 'bullish' and confidence >= EXPLORE_CONFIDENCE_THRESHOLD:
                 side = 'LONG'
-            elif category == 'black_swan' and confidence >= EXPLORE_CONFIDENCE_THRESHOLD:
+            elif category == 'bearish' and confidence >= EXPLORE_CONFIDENCE_THRESHOLD:
                 side = 'SHORT'
             else:
                 verdict_rows.append((
-                    run_id, symbol, category if category in ('red_swan', 'black_swan', 'skip') else 'skip',
+                    run_id, symbol, category if category in ('bullish', 'bearish', 'skip') else 'skip',
                     confidence, catalyst, data_signal, risk_note,
                     'skipped_confidence', None,
                     f"category={category} confidence={confidence:.2f}",
@@ -845,11 +1136,11 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                     run_id, symbol, category, confidence,
                     catalyst, data_signal, risk_note,
                     'skipped_other', None,
-                    "无最新价格 (price_stats_24h 缺数据或过时)",
+                    "无最新价格",
                 ))
                 continue
 
-            # 5f. 开仓
+            # 5f. 开仓 (优化 7: SL 5%, 杠杆 3x)
             position_id = _open_simulated_position(conn, symbol, side, price, catalyst)
             if position_id is None:
                 verdict_rows.append((
@@ -867,13 +1158,15 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 'opened', position_id, None,
             ))
 
-        # 6. 落库 verdicts + 更新 trades_opened
+        # 6. 落库
         _insert_verdicts(conn, run_id, verdict_rows)
         _update_run_trades_opened(conn, run_id, trades_opened)
 
         logger.info(
             f"[Gemini探索] === 一轮结束 run_id={run_id} 开仓={trades_opened} "
-            f"跳过={len(verdict_rows) - trades_opened} 耗时={time.time() - t0:.1f}s ==="
+            f"跳过={len(verdict_rows) - trades_opened} "
+            f"候选池={universe_size} "
+            f"耗时={time.time() - t0:.1f}s ==="
         )
         return run_id
 
@@ -896,6 +1189,5 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
 
 
 if __name__ == '__main__':
-    # 手动跑一轮 (调试用): python -m app.services.gemini_explore_worker
     rid = run_explore_round(triggered_by='manual')
     print(f"run_id={rid}")

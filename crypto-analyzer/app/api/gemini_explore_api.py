@@ -90,11 +90,12 @@ async def status():
                 "max_positions": 20,
                 "params": {
                     "margin_usd": 500,
-                    "leverage": 5,
+                    "leverage": 3,
                     "hold_hours": 6,
-                    "sl_pct": 3,
+                    "sl_pct": 5,
                     "tp_pct": 8,
                     "confidence_threshold": 0.6,
+                    "entry_grace_min": 30,
                 },
             },
         }

@@ -111,7 +111,7 @@
 <header class="border-b border-outline-variant/10 px-8 py-5 flex items-center justify-between">
   <div>
     <h1 class="text-2xl font-bold tracking-tight">Gemini 探索</h1>
-    <p class="text-[11px] text-on-surface-variant mt-1 uppercase tracking-widest">每 6h 调用 Gemini 检测红/黑天鹅 · 模拟单 · SL 3% / TP 8% / 持仓 6h</p>
+    <p class="text-[11px] text-on-surface-variant mt-1 uppercase tracking-widest">每 6h 调用 Gemini 检测短时方向异动 · 模拟单 · SL 5% / TP 8% / 杠杆 3x / 持仓 6h</p>
   </div>
   <div class="flex items-center gap-4">
     <span id="status-chip" class="chip chip-off"><span class="material-symbols-outlined text-[14px]">power_off</span><span id="status-label">已禁用</span></span>
@@ -477,8 +477,9 @@ function toggleVerdicts(runId) {
       if (!vs.length) { cell.innerHTML = '<p class="text-on-surface-variant text-xs">无 verdicts</p>'; return; }
       var html = '<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="border-b border-outline-variant/20 text-on-surface-variant"><th class="px-2 py-2 text-left">Symbol</th><th class="px-2 py-2 text-left">类别</th><th class="px-2 py-2 text-right">置信</th><th class="px-2 py-2 text-left">动作</th><th class="px-2 py-2 text-left">催化剂</th><th class="px-2 py-2 text-left">数据信号</th><th class="px-2 py-2 text-left">跳过原因</th></tr></thead><tbody>';
       vs.forEach(function(v){
-        var catChip = v.category === 'red_swan' ? '<span class="chip chip-long">红天鹅</span>'
-                    : v.category === 'black_swan' ? '<span class="chip chip-short">黑天鹅</span>'
+        var catRaw = (v.category || '').toLowerCase();
+        var catChip = (catRaw === 'bullish' || catRaw === 'red_swan') ? '<span class="chip chip-long">看多</span>'
+                    : (catRaw === 'bearish' || catRaw === 'black_swan') ? '<span class="chip chip-short">看空</span>'
                     : '<span class="chip chip-skip">SKIP</span>';
         var act = v.action_taken || 'skipped_other';
         var actClass = act === 'opened' ? 'chip-action-opened'
