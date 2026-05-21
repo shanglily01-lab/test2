@@ -202,15 +202,31 @@ class MultiStrategyService:
             return None
 
     def _get_current_price(self, symbol: str) -> Optional[float]:
-        """只从 WS 实时数据取价格；WS 不可用时返回 None（宁可不开仓）"""
+        """获取实时价格: 优先 WS → 回退到 5m K 线最新收盘价"""
         if self.ws_service:
             try:
                 p = self.ws_service.get_price(symbol)
                 if p:
                     return float(p)
             except Exception as e:
-                logger.warning(f"[多策略] WS取价失败 {symbol}: {e}")
-        return None  # WS不可用，拒绝开仓
+                logger.debug(f"[多策略] WS取价失败 {symbol}: {e}")
+        # WS 不可用或未订阅该 symbol, 回退到 DB 5m K 线最新收盘价
+        try:
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT close_price FROM kline_data "
+                "WHERE symbol=%s AND timeframe='5m' AND exchange='binance_futures' "
+                "ORDER BY open_time DESC LIMIT 1",
+                (symbol,)
+            )
+            row = cur.fetchone()
+            cur.close(); conn.close()
+            if row and row.get('close_price') is not None:
+                return float(row['close_price'])
+        except Exception as e:
+            logger.warning(f"[多策略] DB取价失败 {symbol}: {e}")
+        return None
 
 
     def _get_big4_signal(self) -> str:
@@ -1104,8 +1120,8 @@ class MultiStrategyService:
             logger.info("[S8] Big4 强牛市,跳过顶部反转做空")
             return
 
-        # 24h 涨幅 >= 50% 的高波动币种 (实际 pump >= 80% 在 1h 数据里再精筛)
-        symbols = self._get_candidate_symbols(min_abs_change=50.0)
+        # 24h 涨跌 >= 15% 的候选币种 (48h pump >= 80% 在 1h 数据里再精筛)
+        symbols = self._get_candidate_symbols(min_abs_change=15.0)
         opened = 0
         now_ms = int(datetime.utcnow().timestamp() * 1000)
         signal_age_max_ms = self.S8_SIGNAL_AGE_HOURS * 3600 * 1000
