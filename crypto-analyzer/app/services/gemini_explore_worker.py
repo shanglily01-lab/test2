@@ -52,7 +52,7 @@ EXPLORE_MAX_POSITIONS = 20
 EXPLORE_HOLD_HOURS = 72                        # 3 天
 EXPLORE_SL_PCT = 5.0
 EXPLORE_TP_PCT = 15.0                          # 原 8%, 提到 15% 给足够容错
-EXPLORE_CONFIDENCE_THRESHOLD = 0.6
+EXPLORE_CONFIDENCE_THRESHOLD = 0.5      # 校准表 0.50+ 可开
 EXPLORE_ACCOUNT_ID = 2
 EXPLORE_SOURCE = 'gemini_explore'
 
@@ -60,7 +60,7 @@ EXPLORE_SOURCE = 'gemini_explore'
 EXPLORE_PRICE_FRESH_MIN = 20
 EXPLORE_FUNDING_FRESH_MIN = 30
 
-# 优化 2: 中等波动币参数
+# 中等波动币参数
 NORMAL_MOVER = 8               # 中等涨跌幅各取 top N
 NORMAL_MOVER_MIN_VOLUME = 5_000_000   # 500 万 USDT 成交额下限 (比极端池宽松)
 NORMAL_CHG_MIN = 3.0           # 最低 |change_24h| ≥ 3%
@@ -87,7 +87,7 @@ def _connect():
 
 
 # ============================================================
-# 优化 10: 历史表现统计
+# 历史表现统计
 # ============================================================
 def _get_historical_stats(conn) -> dict:
     """查询 gemini_explore 的历史表现用于 prompt 尾部反馈."""
@@ -159,7 +159,7 @@ def _get_historical_stats(conn) -> dict:
 
 
 # ============================================================
-# 优化 2: 候选池采集 — 加入中等波动币
+# 候选池采集 — 中等波动币
 # ============================================================
 
 
@@ -279,7 +279,7 @@ def _build_universe(conn) -> dict:
 
 
 # ============================================================
-# 优化 3: 技术指标 + 多周期 K 线增强 (带时间戳/成交量/形态描述)
+# 技术指标 + 多周期 K 线增强 (含时间戳/成交量/形态描述)
 # ============================================================
 def _ema(values: List[float], period: int) -> Optional[float]:
     if not values or len(values) < period:
@@ -406,14 +406,14 @@ def _format_kline_narrative(k_rows: List[Dict], timeframe_label: str, max_lines:
 
 
 def _enrich_symbol(cur, sym_data: dict) -> None:
-    """优化 3: 给单个 symbol 加上 K 线叙事描述 + 技术指标 + 成交量."""
+    """给单个 symbol 加上 K 线叙事描述 + 技术指标 + 成交量."""
     symbol = sym_data['symbol']
 
     k_1d = _fetch_klines(cur, symbol, '1d', 7)
     k_1h = _fetch_klines(cur, symbol, '1h', 12)
     k_15m = _fetch_klines(cur, symbol, '15m', 8)
 
-    # 优化 3: 用自然语言描述替代纯数组
+    # 用自然语言描述替代纯数组
     sym_data['kline_narrative'] = {
         '1d': _format_kline_narrative(k_1d, '1d', 4),
         '1h': _format_kline_narrative(k_1h, '1h', 4),
@@ -556,82 +556,123 @@ def _describe_market_regime(conn) -> str:
 
 
 # ============================================================
-# 优化 4: 重写 Prompt — 去天鹅化 + Few-shot + 置信度校准 + 空 verdicts
+# Prompt — 置信度校准 + 长持仓判定
 # ============================================================
-EXPLORE_PROMPT_TEMPLATE = """你是加密货币短线交易分析师, 负责判断候选币种在未来 6 小时内的方向异动概率.
+EXPLORE_PROMPT_TEMPLATE = """你是加密货币中级趋势交易分析师. 持仓期 3 天 (72h), SL=5%, TP=15%, 不做任何中途干预.
+
+你的任务是判断每个候选币种在未来 3 天内, 是否有延续/反转的结构性趋势行情, 值得持有 3 天.
+
+# 仓位设置 (供你理解容错空间)
+- 杠杆 3x, 名义本金 ~1500U, SL=5% 价格跌幅 (约 -225U), TP=15% 涨幅 (约 +225U)
+- 3 天到期按市价强制平仓, 期间不提前止盈止损 — 你选的方向必须能**涨 15% 或至少抗住 3 天不跌 5%**
+- 所以不要选"只涨 2-3%"的标的, 也不要把 SL 只看做"5% 容错"而随意开仓
 
 # 全局市场环境
 {global_context_json}
 
-注意 Big4 (BTC/ETH/BNB/SOL 综合趋势) 方向: BEARISH/STRONG_BEARISH 时不要给做多信号;
-BULLISH/STRONG_BULLISH 时不要给做空信号.
+Big4 (BTC/ETH/BNB/SOL 综合趋势): BEARISH/STRONG_BEARISH 时禁 LONG, BULLISH/STRONG_BULLISH 时禁 SHORT
 
 # 历史表现 (供你校准判断尺度)
 {historical_stats_json}
 
-# 候选 symbol 数据说明
+# 候选数据说明
 每个 symbol 包含:
-- triggers: 进入候选池原因 (24h_gainer / 24h_loser / funding_pos_extreme / funding_neg_extreme / normal_mover)
+- triggers: 进入候选池原因
 - current_price / change_24h / quote_volume_24h
 - current_rate: 资金费率
-- kline_narrative: **自然语言描述的 K 线形态** (含成交量趋势)
-- tech.rsi_14_1h: 1h RSI (>70 超买, <30 超卖)
+- kline_narrative: **自然语言描述的日/时/15m K 线形态** (含成交量趋势)
+- tech.rsi_14_1h: 1h RSI
 - tech.above_7d_low_pct / below_7d_high_pct: 现价距 7 日极值距离
 
 {universe_json}
 
 # 任务
-为每个 symbol 标注:
-- category: 'bullish' (看多) / 'bearish' (看空) / 'skip' (不交易 — 这是**可接受的合理答案**)
-- confidence: 0.0-1.0 (见下方校准表)
-- catalyst: 判断依据, **必须引用具体数据** (不接受"高波动""不确定"这类模糊话术)
+为**每个** symbol 标注:
+- category: 'bullish' / 'bearish' / 'skip'
+- confidence: 0.0-1.0 (见校准表)
+- catalyst: 判断依据, **必须引用具体数据**, 至少 2 句
 - data_signal: 最支持判断的关键数据点
 - risk_note: 反向风险一句
 
-## 置信度校准表 (重要 — 请严格按照此表评分)
-| confidence 区间 | 需要的信号强度 |
+# 置信度校准表 (重要 — 请严格按此表评分, 不要给 LLM 礼貌分)
+
+| confidence | 需要的信号强度 |
 |---|---|
-| 0.90-1.00 | 多周期共振 + 资金费率严重背离 + 成交量确认 + Big4 同向 |
-| 0.75-0.89 | 多周期一致 + 资金费率/成交量支持 + Big4 不矛盾 |
-| 0.60-0.74 | 两个维度支持 (如 1h 趋势 + RSI 方向) + Big4 不矛盾 |
-| 0.40-0.59 | 仅一个维度支持, 或有矛盾信号 — **此为低置信度, 不应开仓** |
-| < 0.40 | 纯猜测 / 不熟悉该币 |
+| 0.80-1.00 | 日线强趋势 + 多周期共振 + 成交量确认 + 同方向上还有空间 (非超买/超卖) |
+| 0.65-0.79 | 日线趋势明确 + 1h 方向一致 + Big4 不矛盾 + 无明显背离风险 |
+| 0.50-0.64 | 仅小时级别方向支持, 日线中性 — **此区间可以开, 但只开 1-2 个** |
+| 0.00-0.49 | 方向模糊 / 震荡区间 / 数据不足 — **跳过** |
 
-## 判定原则
-1. **多周期一致性**: 1d 主趋势 + 1h 节奏 + 15m 入场点, 三者同向才给高 confidence
-2. **资金费率 vs 价格背离**:
-   - 资金费极正 (拥挤多) + 价格在 7d 高点 + RSI 高 → bearish
-   - 资金费极负 (拥挤空) + 价格在 7d 低点 + RSI 低 → bullish
-3. **成交量确认**: 突破放量=有效, 缩量新高=可疑
-4. **不要追涨杀跌**: 已涨 100% 的不一定继续涨, 关注是否在加速
-5. **信号质量优先**: 如果最多只看到1-2个有依据的信号, 只出这1-2个即可, 不需要填满候选池
+# 判定原则 — 3 天持仓 vs 短线异动的关键区别
 
-## Few-shot 示例
-以下是用历史数据标注的正确示例 (仅供参考格式, 不要复制数据):
+## ✅ 适合 3 天持有 (应该输出 bullish/bearish)
 
-GOOD EXAMPLE 1 (强信号):
+**A. 趋势延续 — 最可靠**
+- 日线已走出清晰趋势 (连续 3+ 根同向阳/阴), 1h 节奏同向, 成交量放量支持
+- 现价在趋势中段, 距 7d 极值还有 5%+ 空间 (不是刚打到极值就跑)
+- 例如: BTC 强牛市 → 选强势山寨做多; BTC 瀑布 → 选跟跌山寨做空
+
+**B. 资金费率与价格严重背离 — 次可靠**
+- 资金费极端 + RSI 走到反向极值
+- 前提: 日线已经确认了拐点 (至少 1d K 线形态转势), 不只是 15m 级别反弹
+
+**C. 突破后回踩确认**
+- 刚突破关键阻力/支撑, 回踩确认后有望延续
+- 成交量在突破时放大, 回踩时缩量
+
+## ❌ 不适合 3 天持有 (必须 skip)
+
+**D. 暴涨暴跌后的报复性反弹 (Dead Cat Bounce)**
+- 24h 涨/跌 20%+ 且成交量异常放大: 大概率一日游, 3 天内会反转
+- 典型反例: BIO/USDT +79U 亏损 — 暴涨后追多被 SL 打掉
+
+**E. 同一品种近期开仓亏损过 (历史数据已提供)**
+- 如果历史表现显示某品种你之前开过方向错了, 这次谨慎对待
+- 典型反例: JTO/USDT 连续 3 次做多全亏 -151U, ZEC/USDT 连续 3 次全亏 -144U
+
+**F. 震荡区间 / 成交量萎缩**
+- 价格在窄幅震荡 (7d 高低差 < 10%), 成交量日均缩量 — 3 天难以走出趋势
+
+**G. 单纯因为跌多了就做多 / 涨多了就做空**
+- 仅凭"超跌"做多 = 接飞刀, 必须等日线确认拐点
+- 仅凭"超涨"做空 = 左侧摸顶, 必须等 RSI 顶背离 + 资金费严重正
+
+# Few-shot 示例
+
+GOOD EXAMPLE 1 (日线趋势延续 → bullish, 适合 3 天):
 {{
-  "symbol": "PEPE/USDT",
+  "symbol": "NEAR/USDT",
   "category": "bullish",
-  "confidence": 0.78,
-  "catalyst": "24h跌22%但资金费率-0.15%极端负(空头拥挤), RSI 1h=28超卖, 距7d低点仅1.8%, 15m出现双底形态",
-  "data_signal": "RSI=28, above_7d_low_pct=1.8, 资金费率=-0.15%",
-  "risk_note": "BTC若继续下跌可能带崩meme板块"
+  "confidence": 0.75,
+  "catalyst": "日线连续 4 阳放量上攻, 1h 沿 MA9 稳步攀升, RSI 1h=58 未超买仍有空间, 距 7d 高点 6% 空间足够 TP=15%. 资金费率 +0.003% 正常, 无明显拥挤",
+  "data_signal": "日线 4 连阳, 1h 沿 MA9, RSI=58, 距 7d 高点 6%",
+  "risk_note": "BTC 若回调可能带崩山寨"
 }}
 
-GOOD EXAMPLE 2 (弱信号→skip):
+GOOD EXAMPLE 2 (资金费率背离 → bearish, 适合 3 天):
 {{
-  "symbol": "UNI/USDT",
+  "symbol": "PEPE/USDT",
+  "category": "bearish",
+  "confidence": 0.70,
+  "catalyst": "日线连续 3 阴跌破 MA20, RSI 1h=72 超买但价格在跌 (顶背离), 资金费率 +0.08% 极度正 (多头拥挤). 距 7d 低点 15% 空间足够 TP=15% 下跌",
+  "data_signal": "RSI顶背离, 资金费率+0.08%, 跌破MA20",
+  "risk_note": "meme 币波动大, 若 BTC 反弹可能短暂拉升"
+}}
+
+GOOD EXAMPLE 3 (skip!):
+{{
+  "symbol": "XRP/USDT",
   "category": "skip",
-  "confidence": 0.35,
-  "catalyst": "资金费率正常, RSI=52中性, 7d区间中位震荡, 无明确方向",
-  "data_signal": "RSI=52中性, 资金费率+0.001%",
+  "confidence": 0.30,
+  "catalyst": "24h涨3%但在7d区间中段,RPA=52中性,资金费率正常,成交量和前日持平. 日线/1h/15m 三个周期都在震荡, 无明确突破或反转信号",
+  "data_signal": "所有周期震荡, RSI=52",
   "risk_note": ""
 }}
 
 # 输出要求
 **仅** 一个合法 JSON, 不要 markdown 围栏.
-**如果没有任何清晰的机会, 可以返回空列表, 但如果你看到有数据支撑的信号, 请自信输出 (confidence≥0.60).**
+优先 quality 而非 quantity, 宁可不做也不要做错.
+如果最多只看到 2-3 个靠谱机会, 只出这 2-3 个, 不需要填满候选池.
 
 {{
   "summary_zh": "整体市场氛围 1-2 句",
@@ -641,8 +682,8 @@ GOOD EXAMPLE 2 (弱信号→skip):
       "category": "bullish",
       "confidence": 0.72,
       "catalyst": "具体依据, 引用数据...",
-      "data_signal": "RSI=28, above_7d_low_pct=1.5",
-      "risk_note": "反方风险..."
+      "data_signal": "...",
+      "risk_note": "..."
     }}
   ]
 }}
@@ -650,10 +691,10 @@ GOOD EXAMPLE 2 (弱信号→skip):
 
 
 # ============================================================
-# 优化 5+6: Gemini 调用 (含历史表现)
+# Gemini 调用 (含历史表现)
 # ============================================================
 def _call_gemini_explore(universe: dict, global_ctx: dict, historical_stats: dict) -> Optional[dict]:
-    """专用版 Gemini 调用 — 多周期 K 线叙事 + Big4 + 技术指标 + 历史表现."""
+    """调用 Gemini — 按 3 天持仓趋势判断, 多周期 K 线叙事 + Big4 + 技术指标 + 历史表现."""
     if not GEMINI_API_KEY:
         logger.error("[Gemini探索] GEMINI_API_KEY 未设置")
         return None
@@ -816,11 +857,9 @@ def _get_current_price(conn, symbol: str) -> Optional[float]:
 
 
 # ============================================================
-# 优化 7: SL 缓冲 + 开仓 (SL 5% 已足够宽, 同时记录入时保护期)
-# ============================================================
+# SL 缓冲 + 开仓
 # ============================================================
 # 数据库兼容层：新 category → 旧 ENUM 映射
-# ============================================================
 _CATEGORY_MAP = {
     'bullish': 'red_swan',
     'bearish': 'black_swan',
@@ -844,8 +883,7 @@ def _open_simulated_position(
     catalyst: str,
 ) -> Optional[int]:
     """直接 INSERT 到 futures_positions 表, 模拟单, 返回 position_id 或 None.
-    
-    优化 7: SL 5% (原 3%), 杠杆 3x (原 5x).
+
     硬 SL 由 PositionSLTPMonitor 兜底检查, 此处写入 DB.
     """
     try:
@@ -969,7 +1007,7 @@ _explore_running_lock = threading.Lock()
 
 
 # ============================================================
-# 优化 8+9: 主入口 (全面升级)
+# 主入口
 # ============================================================
 def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
     """跑一轮 Gemini 探索 (v2 优化版). 成功返回 run_id, 失败/跳过返回 None.
@@ -1015,7 +1053,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         return None
 
     try:
-        # 2. 候选池 (优化 2: 加入中等波动币)
+        # 2. 候选池 (中等波动币)
         universe = _build_universe(conn)
         universe_size = len(universe)
         logger.info(f"[Gemini探索] 候选池 universe_size={universe_size}")
@@ -1030,7 +1068,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             logger.warning("[Gemini探索] 候选池为空, 本轮结束")
             return run_id
 
-        # 3a. 加 K 线叙事 + 技术指标 (优化 3)
+        # 3a. 加 K 线叙事 + 技术指标
         _enrich_universe(conn, universe)
         # 3b. 全局上下文: Big4 + BTC/ETH/SOL + 市场状态
         global_ctx = _build_global_context(conn)
@@ -1040,7 +1078,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             f"BTC chg24h={global_ctx.get('btc_change_24h')}%"
         )
 
-        # 3c. 历史表现统计 (优化 10)
+        # 3c. 历史表现统计
         historical_stats = _get_historical_stats(conn)
         if historical_stats.get('total_trades', 0) >= 3:
             logger.info(
@@ -1051,7 +1089,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         else:
             logger.info(f"[Gemini探索] 历史: 样本不足 ({historical_stats['total_trades']}笔)")
 
-        # 3d. 调 Gemini (优化 4+5+6)
+        # 3d. 调 Gemini
         gemini_response = _call_gemini_explore(universe, global_ctx, historical_stats)
         if gemini_response is None:
             elapsed = time.time() - t0
@@ -1098,7 +1136,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             if not symbol:
                 continue
 
-            # 5a. 类别与置信度 (优化 8: 用校准表)
+            # 5a. 类别与置信度 (按校准表)
             # category 映射: bullish=LONG, bearish=SHORT
             if category == 'bullish' and confidence >= EXPLORE_CONFIDENCE_THRESHOLD:
                 side = 'LONG'
@@ -1155,7 +1193,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            # 5f. 开仓 (优化 7: SL 5%, 杠杆 3x)
+            # 5f. 开仓 (SL 5%, 杠杆 3x)
             position_id = _open_simulated_position(conn, symbol, side, price, catalyst)
             if position_id is None:
                 verdict_rows.append((
