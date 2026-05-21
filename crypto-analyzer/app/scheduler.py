@@ -915,6 +915,33 @@ class UnifiedDataScheduler:
         """异步运行任务（schedule 兼容）"""
         await coro
 
+    # ── 后台线程调度辅助方法 ────────────────────────────────────────────────
+    # 所有非即时任务走 daemon 线程, 确保 schedule.run_pending() 快速返回,
+    # 不阻塞1分钟/5分钟任务的按时触发.
+
+    def _run_async_in_thread(self, coro_factory):
+        """在后台 daemon 线程执行异步任务.
+
+        Args:
+            coro_factory: 可调用, 调用后返回一个协程对象.
+                          例: self.collect_funding_rates 是 bound method → coroutine.
+        """
+        def _wrapper():
+            try:
+                asyncio.run(coro_factory())
+            except Exception as e:
+                logger.error(f"[后台线程] 异步任务异常: {e.__class__.__name__}: {e}")
+        threading.Thread(target=_wrapper, daemon=True).start()
+
+    def _run_sync_in_thread(self, fn):
+        """在后台 daemon 线程执行同步任务."""
+        def _wrapper():
+            try:
+                fn()
+            except Exception as e:
+                logger.error(f"[后台线程] 同步任务异常: {e.__class__.__name__}: {e}")
+        threading.Thread(target=_wrapper, daemon=True).start()
+
     def schedule_tasks(self):
         """设置所有定时任务"""
         logger.info("设置定时任务...")
@@ -982,15 +1009,15 @@ class UnifiedDataScheduler:
 
         # 2. 资金费率
         schedule.every(5).minutes.do(
-            lambda: asyncio.run(self.collect_funding_rates())
+            lambda: self._run_async_in_thread(self.collect_funding_rates)
         )
-        logger.info("  ✓ 资金费率 - 每 5 分钟")
+        logger.info("  ✓ 资金费率 - 每 5 分钟 (后台线程)")
 
         # 3. 新闻数据
         schedule.every(15).minutes.do(
-            lambda: asyncio.run(self.collect_news())
+            lambda: self._run_async_in_thread(self.collect_news)
         )
-        logger.info("  ✓ 新闻数据 - 每 15 分钟")
+        logger.info("  ✓ 新闻数据 - 每 15 分钟 (后台线程)")
 
         # 3.5 Binance 官方公告监控（新上线/下架/维护/Launchpool）
         schedule.every(30).minutes.do(self.monitor_binance_news)
@@ -1132,12 +1159,9 @@ class UnifiedDataScheduler:
         except Exception as e:
             logger.warning(f"  ⚠️  BitcoinTreasuries 任务注册失败: {e}")
 
-        # 5. Hyperliquid 排行榜
-        if self.hyperliquid_collector:
-            schedule.every().day.at("02:00").do(
-                lambda: asyncio.run(self.collect_hyperliquid_leaderboard())
-            )
-            logger.info("  ✓ Hyperliquid 排行榜 - 每天 02:00")
+        # 5. Hyperliquid 排行榜 (由下方 #5 区块统一注册, 此项已合并)
+        # 不在此重复注册 —— 见本文件 #5 区块的 Hyperliquid 排行榜任务
+        #
 
         # 3.5 自动合约交易 - 已移至 smart_trader_service.py
         logger.info("  ℹ️  自动合约交易已移至 smart_trader_service.py")
@@ -1149,26 +1173,32 @@ class UnifiedDataScheduler:
         # 4. Ethereum 链上数据
         if self.smart_money_collector:
             schedule.every(5).minutes.do(
-                lambda: asyncio.run(self.collect_ethereum_data('5m'))
+                lambda: self._run_async_in_thread(
+                    lambda: self.collect_ethereum_data('5m')
+                )
             )
-            logger.info("  ✓ Ethereum 5分钟数据 - 每 5 分钟")
+            logger.info("  ✓ Ethereum 5分钟数据 - 每 5 分钟 (后台线程)")
 
             schedule.every(1).hours.do(
-                lambda: asyncio.run(self.collect_ethereum_data('1h'))
+                lambda: self._run_async_in_thread(
+                    lambda: self.collect_ethereum_data('1h')
+                )
             )
-            logger.info("  ✓ Ethereum 1小时数据 - 每 1 小时")
+            logger.info("  ✓ Ethereum 1小时数据 - 每 1 小时 (后台线程)")
 
             schedule.every().day.at("00:10").do(
-                lambda: asyncio.run(self.collect_ethereum_data('1d'))
+                lambda: self._run_async_in_thread(
+                    lambda: self.collect_ethereum_data('1d')
+                )
             )
-            logger.info("  ✓ Ethereum 1天数据 - 每天 00:10")
+            logger.info("  ✓ Ethereum 1天数据 - 每天 00:10 (后台线程)")
 
-        # 5. Hyperliquid 排行榜
+        # 5. Hyperliquid 排行榜 (重复注册已修复: 仅此一处)
         if self.hyperliquid_collector:
             schedule.every().day.at("02:00").do(
-                lambda: asyncio.run(self.collect_hyperliquid_leaderboard())
+                lambda: self._run_async_in_thread(self.collect_hyperliquid_leaderboard)
             )
-            logger.info("  ✓ Hyperliquid 排行榜 - 每天 02:00")
+            logger.info("  ✓ Hyperliquid 排行榜 - 每天 02:00 (后台线程)")
 
         # 6. Hyperliquid 钱包监控 - 已移至独立的 hyperliquid_scheduler.py
         # 注意: Hyperliquid 监控任务现在由独立的调度器运行，避免阻塞主调度器
@@ -1184,22 +1214,22 @@ class UnifiedDataScheduler:
 
         # 价格缓存 - 每1分钟更新
         schedule.every(1).minutes.do(
-            lambda: asyncio.run(self.update_price_cache())
+            lambda: self._run_async_in_thread(self.update_price_cache)
         )
-        logger.info("  ✓ 价格统计缓存 (price_stats_24h) - 每 1 分钟")
+        logger.info("  ✓ 价格统计缓存 (price_stats_24h) - 每 1 分钟 (后台线程)")
 
         # 分析缓存 - 每5分钟
         schedule.every(5).minutes.do(
-            lambda: asyncio.run(self.update_analysis_cache())
+            lambda: self._run_async_in_thread(self.update_analysis_cache)
         )
-        logger.info("  ✓ 分析缓存 (技术指标+新闻+资金费率+投资建议) - 每 5 分钟")
+        logger.info("  ✓ 分析缓存 (技术指标+新闻+资金费率+投资建议) - 每 5 分钟 (后台线程)")
 
         # Hyperliquid缓存 - 每10分钟
         if self.hyperliquid_collector:
             schedule.every(10).minutes.do(
-                lambda: asyncio.run(self.update_hyperliquid_cache())
+                lambda: self._run_async_in_thread(self.update_hyperliquid_cache)
             )
-            logger.info("  ✓ Hyperliquid聚合缓存 - 每 10 分钟")
+            logger.info("  ✓ Hyperliquid聚合缓存 - 每 10 分钟 (后台线程)")
 
         # 模拟合约总权益更新 - 移除高频更新
         # if self.futures_engine:
@@ -1287,15 +1317,15 @@ class UnifiedDataScheduler:
         # 设置定时任务
         self.schedule_tasks()
 
-        # 首次采集
-        asyncio.run(self.run_initial_collection())
+        # 首次采集 — 后台线程执行, 不阻塞 schedule 主循环
+        self._run_async_in_thread(self.run_initial_collection)
 
         # 定期打印状态 (每小时)
         schedule.every(1).hours.do(self.print_status)
 
         logger.info("\n调度器已启动，按 Ctrl+C 停止\n")
 
-        # 保持运行
+        # 保持运行 — run_pending() 仅触发任务提交, 不阻塞 (任务已在后台线程跑)
         try:
             while True:
                 try:

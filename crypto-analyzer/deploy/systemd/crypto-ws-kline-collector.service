@@ -1,0 +1,25 @@
+[Unit]
+Description=Crypto Analyzer - WS K线采集器 (ws_kline_collector_service.py)
+# 此服务通过 WebSocket 采集 Binance K 线, 避免 REST 请求导致 IP 被 ban
+# 看门狗: 进程内检测全部连接不健康 WATCHDOG_STALE_CYCLES 次后主动退出, systemd 自动重启
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/crypto-analyzer
+Environment="PYTHONUNBUFFERED=1"
+ExecStart=/opt/crypto-analyzer/venv/bin/python ws_kline_collector_service.py
+Restart=on-failure
+RestartSec=30
+StandardOutput=append:/opt/crypto-analyzer/logs/ws_kline_collector_systemd.log
+StandardError=append:/opt/crypto-analyzer/logs/ws_kline_collector_systemd.log
+
+# 严防内存泄漏导致系统卡死
+MemoryMax=2G
+TasksMax=512
+
+[Install]
+WantedBy=multi-user.target

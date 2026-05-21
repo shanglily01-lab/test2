@@ -43,6 +43,8 @@ HEALTH_STALE_THRESHOLD_S = 120      # 健康检查阈值 (报告用)
 WS_RECV_TIMEOUT_S = 90              # 单次 recv 超时 — 90s 无消息视为僵尸, 主动断开重连
                                     # markPrice@1s 正常每秒推一条, 90s 一条都没有必有问题
 STALE_FATAL_COUNT = 5               # 连续 N 次僵尸重连仍无数据 → 严重错误日志
+WATCHDOG_STALE_CYCLES = 3           # 健康报告连续 N 次全部连接不健康 → 进程退出,触发 systemd 重启
+FLUSHER_MAX_RETRIES = 5             # 连续写库失败 N 次后丢弃 buffer 避免无限堆积
 
 
 # WS 消息回调签名: (symbol: str, interval: str, kline_dict: dict, market: str) -> Awaitable[None]
@@ -104,31 +106,35 @@ class WSKlineConnection:
                     self.connected_at = time.time()
                     self.last_msg_at = time.time()
                     backoff = RECONNECT_BACKOFF_BASE_S
-                    logger.info(f"[{self.name}] WS 已连接, SUBSCRIBE 已发送")
+                    logger.info(f"[{self.name}] WS 已连接, SUBSCRIBE 已发送 ({len(self.streams)} streams, 示例: {self.streams[:3]})")
 
                     while True:
                         try:
                             msg = await asyncio.wait_for(ws.recv(), timeout=WS_RECV_TIMEOUT_S)
                         except asyncio.TimeoutError:
                             consecutive_stale += 1
+                            stale_duration = time.time() - self.last_msg_at
                             logger.warning(
-                                f"[{self.name}] WS {WS_RECV_TIMEOUT_S}s 无数据 (僵尸连接 #{consecutive_stale}), 主动断开重连"
+                                f"[{self.name}] WS {WS_RECV_TIMEOUT_S}s 无数据 "
+                                f"(僵尸连接 #{consecutive_stale}, "
+                                f"距上条消息 {stale_duration:.0f}s), 主动断开重连"
                             )
                             if consecutive_stale >= STALE_FATAL_COUNT:
                                 logger.error(
                                     f"[{self.name}] 连续 {consecutive_stale} 次僵尸重连仍无数据 — "
-                                    f"可能 streams 数量/订阅有问题, 检查 MAX_STREAMS_PER_CONN={MAX_STREAMS_PER_CONN}"
+                                    f"可能 streams 数量/订阅有问题, 检查 MAX_STREAMS_PER_CONN={MAX_STREAMS_PER_CONN}, "
+                                    f"streams 示例: {self.streams[:3]}"
                                 )
                             break
                         self.last_msg_at = time.time()
                         consecutive_stale = 0
                         await self._handle_msg(msg)
             except (websockets.ConnectionClosed, OSError) as e:
-                logger.warning(f"[{self.name}] WS 断开: {e}, {backoff}s 后重连")
+                logger.warning(f"[{self.name}] WS 断开: {e.__class__.__name__}: {e}, {backoff}s 后重连")
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                logger.error(f"[{self.name}] WS 异常: {e}, {backoff}s 后重连")
+                logger.error(f"[{self.name}] WS 未知异常: {e.__class__.__name__}: {e}, {backoff}s 后重连")
             await asyncio.sleep(backoff)
             backoff = min(backoff * 2, RECONNECT_BACKOFF_MAX_S)
 
@@ -138,6 +144,10 @@ class WSKlineConnection:
             data = json.loads(msg)
             # 忽略 SUBSCRIBE 帧的确认消息: {"result": null, "id": N}
             if 'result' in data and 'id' in data:
+                return
+            # 检测 SUBSCRIBE 错误: {"error": {...}, "id": N}
+            if 'error' in data and 'id' in data:
+                logger.error(f"[{self.name}] SUBSCRIBE 被拒: {data['error']}")
                 return
             # combined stream 格式: {"stream":..., "data":{...}}; 也兼容 raw 格式直接 {...}
             k = data.get('data', {}).get('k') if 'data' in data else data.get('k')
@@ -238,45 +248,77 @@ class WSKlineCollector:
             self._stats['total_closed'] += 1
 
     async def _flusher_loop(self) -> None:
-        """每 1s 把 buffer 批量写库 (executor 隔离)"""
+        """每 1s 把 buffer 批量写库 (executor 隔离)
+
+        写库失败时不丢数据: 放入 retry_buffer, 下次 flush 优先重试.
+        连续重试 FLUSHER_MAX_RETRIES 次仍失败则丢弃, 防止无限堆积.
+        """
         from app.collectors.smart_futures_collector import SmartFuturesCollector
-        # 复用 save_klines 落盘逻辑, 但在 executor 里跑避免阻塞 ws loop
         writer = SmartFuturesCollector(self.db_config)
         loop = asyncio.get_event_loop()
 
+        retry_buffer: list[dict] = []
+        retry_count = 0
+
         while True:
             await asyncio.sleep(DB_FLUSH_INTERVAL_S)
+
+            # 从 WS buffer 取新数据
             async with self.buffer_lock:
                 batch = self.buffer[:]
                 self.buffer.clear()
-            if not batch:
+
+            # 合并重试 buffer + 新数据
+            to_save = retry_buffer + batch
+            if not to_save:
                 continue
+
+            # 格式转换也在 executor 里做, 不阻塞 event loop
             try:
-                klines_to_save = [self._to_save_format(item) for item in batch]
+                klines_to_save = self._to_save_format_batch(to_save)
+            except Exception as e:
+                logger.error(f"WS 格式转换失败 (丢弃 {len(to_save)} 条): {e}")
+                retry_buffer = []
+                retry_count = 0
+                continue
+
+            try:
                 inserted = await loop.run_in_executor(
                     None, writer.save_klines, klines_to_save
                 )
                 self._stats['total_flushed'] += len(klines_to_save)
+                retry_buffer = []
+                retry_count = 0
                 logger.debug(f"WS flush: {len(klines_to_save)} 条, 落盘 {inserted}")
             except Exception as e:
                 self._stats['flush_errors'] += 1
-                logger.error(f"WS 批量写库失败 (buffer 已清, 数据丢失): {e}")
+                retry_count += 1
+                if retry_count >= FLUSHER_MAX_RETRIES:
+                    logger.error(
+                        f"WS 连续 {FLUSHER_MAX_RETRIES} 次写库失败, 丢弃 {len(to_save)} 条数据: {e}"
+                    )
+                    retry_buffer = []
+                    retry_count = 0
+                else:
+                    logger.warning(
+                        f"WS 写库失败 (重试 #{retry_count}/{FLUSHER_MAX_RETRIES}, "
+                        f"{len(to_save)} 条待重试): {e}"
+                    )
+                    retry_buffer = to_save
 
     @staticmethod
     def _to_save_format(item: dict) -> dict:
-        """把 WS dict 转成 SmartFuturesCollector.save_klines() 期望的格式"""
+        """把单个 WS dict 转成 SmartFuturesCollector.save_klines() 期望的格式"""
         from datetime import datetime
         from decimal import Decimal
 
         kline = item['kline']
-        symbol_raw = item['symbol']  # 如 BTCUSDT or BTCUSD_PERP
+        symbol_raw = item['symbol']
         market = item['market']
 
         if market == 'coin':
-            # BTCUSD_PERP -> BTC/USD
             symbol_norm = symbol_raw.replace('USD_PERP', '/USD')
         else:
-            # BTCUSDT -> BTC/USDT (跟 SmartFuturesCollector.fetch_kline 一致)
             symbol_norm = f"{symbol_raw[:-4]}/USDT"
 
         return {
@@ -296,6 +338,10 @@ class WSKlineCollector:
             'taker_buy_base_volume': Decimal(kline['taker_buy_base']),
             'taker_buy_quote_volume': Decimal(kline['taker_buy_quote']),
         }
+
+    def _to_save_format_batch(self, items: list[dict]) -> list[dict]:
+        """批量格式转换 — 在 executor 中执行, 不阻塞 event loop"""
+        return [self._to_save_format(item) for item in items]
 
     async def _hydrate_history(self) -> None:
         """启动时拉一次历史 K 线 (REST), 让 DB 有历史数据"""
@@ -382,7 +428,10 @@ class WSKlineCollector:
         )
 
     async def _health_report_loop(self) -> None:
-        """每 5 分钟打印一次健康度"""
+        """每 5 分钟打印一次健康度.
+        连续 WATCHDOG_STALE_CYCLES 次全部连接不健康 → 进程退出 (触发 systemd 重启).
+        """
+        consecutive_all_dead = 0
         while True:
             await asyncio.sleep(5 * 60)
             healthy = sum(1 for c in self.connections if c.is_healthy())
@@ -399,3 +448,20 @@ class WSKlineCollector:
                 if not c.is_healthy():
                     stale_s = time.time() - c.last_msg_at if c.last_msg_at else -1
                     logger.warning(f"  不健康: {c.name}, last_msg {stale_s:.0f}s 前")
+
+            # 看门狗: 全部不健康 → 累计计数 → 达到阈值后退出
+            if total > 0 and healthy == 0:
+                consecutive_all_dead += 1
+                logger.warning(
+                    f"[看门狗] 全部 {total} 个连接不健康 (连续 {consecutive_all_dead}"
+                    f"/{WATCHDOG_STALE_CYCLES} 次), 等待 systemd 重启..."
+                )
+                if consecutive_all_dead >= WATCHDOG_STALE_CYCLES:
+                    logger.error(
+                        f"[看门狗] 全部连接持续不健康 {WATCHDOG_STALE_CYCLES} 次检查, "
+                        f"主动退出以触发 systemd 重启"
+                    )
+                    import os
+                    os._exit(1)  # 强制退出, systemd Restart=on-failure 会重启
+            else:
+                consecutive_all_dead = 0

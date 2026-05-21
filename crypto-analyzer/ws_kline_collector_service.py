@@ -98,9 +98,21 @@ async def main_async() -> None:
 def main() -> None:
     _setup_logging()
     try:
-        asyncio.run(main_async())
+        # 全局异常钩子: 捕获未处理的后台 task 异常
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.set_exception_handler(_async_exception_handler)
+        loop.run_until_complete(main_async())
     except KeyboardInterrupt:
         logger.info("收到停止信号, 服务退出")
+
+
+def _async_exception_handler(loop: asyncio.AbstractEventLoop, context: dict) -> None:
+    """全局 asyncio 异常处理器 — 记录后台 task 的未处理异常"""
+    msg = context.get('message', '未知 asyncio 异常')
+    exc = context.get('exception')
+    task = context.get('future') or context.get('task', '<无>')
+    logger.error(f"[全局异常] task={task}, msg={msg}, exc={exc}")
 
 
 if __name__ == '__main__':
