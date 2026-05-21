@@ -1016,6 +1016,22 @@ class SmartExitOptimizer:
             cursor = conn.cursor()
 
             now = datetime.now()
+
+            # 先获取持仓的 entry_price 以计算闭仓时刻的 profit_pct
+            cursor.execute(
+                "SELECT entry_price, position_side FROM futures_positions WHERE id=%s",
+                (position_id,)
+            )
+            pos_row = cursor.fetchone()
+            profit_pct_at_close = 0.0
+            if pos_row:
+                ep = float(pos_row[0] or 0)
+                if ep > 0:
+                    if pos_row[1] == 'LONG':
+                        profit_pct_at_close = (close_price - ep) / ep * 100
+                    else:
+                        profit_pct_at_close = (ep - close_price) / ep * 100
+
             cursor.execute("""
                 UPDATE futures_positions
                 SET
@@ -1023,9 +1039,11 @@ class SmartExitOptimizer:
                     close_time = %s,
                     mark_price = %s,
                     realized_pnl = %s,
+                    unrealized_pnl_pct = %s,
                     notes = CONCAT(IFNULL(notes, ''), '|close_reason:', %s)
                 WHERE id = %s
-            """, (now, close_price, round(realized_pnl, 4), close_reason, position_id))
+            """, (now, close_price, round(realized_pnl, 4), round(profit_pct_at_close, 2),
+                  close_reason, position_id))
             # live_futures_positions 由 _close_live_positions_on_exchange 在交易所平仓成功后逐条更新
             # 不在此处无条件更新，避免交易所未平仓时 DB 被错误标为 CLOSED
 

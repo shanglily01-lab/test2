@@ -1083,6 +1083,7 @@ class FuturesTradingEngine:
                 'stop_loss': '止损',
                 'hard_stop_loss': 'hard_stop_loss',  # 硬止损保持原样
                 'trailing_stop': '移动止损',
+                'trail-tp': '移动止盈',
                 'take_profit': '止盈',
                 'manual': '手动平仓',
                 'strategy': '策略平仓',
@@ -1094,12 +1095,21 @@ class FuturesTradingEngine:
             notes_reason = reason_map.get(reason, reason)
 
             # 🔥 全部平仓（每个持仓都是独立的，直接全部平仓）
+            profit_pct_at_close = 0.0
+            if entry_price > 0:
+                if position_side == 'LONG':
+                    profit_pct_at_close = float((current_price - entry_price) / entry_price * 100)
+                else:
+                    profit_pct_at_close = float((entry_price - current_price) / entry_price * 100)
+
             cursor.execute(
                 """UPDATE futures_positions
                 SET status = 'closed', close_time = %s,
-                    realized_pnl = %s, notes = %s
+                    realized_pnl = %s, notes = %s,
+                    mark_price = %s, unrealized_pnl_pct = %s
                 WHERE id = %s""",
-                (datetime.utcnow(), float(realized_pnl), notes_reason, position_id)
+                (datetime.utcnow(), float(realized_pnl), notes_reason,
+                 float(current_price), profit_pct_at_close, position_id)
             )
 
             # 释放全部保证金

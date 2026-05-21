@@ -288,12 +288,12 @@
 </div>
 </div>
 </div>
-<!-- Recent Trades Bento Grid Segment -->
+<!-- Real-time Prices Section -->
 <div class="mt-12">
-<h4 class="text-xl font-display font-bold tracking-tight mb-8">实时成交记录</h4>
-<div id="trades-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-<!-- 由 JS 动态渲染最新已平仓交易 -->
-<div class="col-span-3 text-center py-8 font-mono text-sm text-on-surface-variant">加载中...</div>
+<h4 class="text-xl font-display font-bold tracking-tight mb-8">实时价格</h4>
+<div id="prices-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+<!-- 由 JS 动态渲染 BTC/ETH/BNB/SOL 价格卡片 -->
+<div class="col-span-4 text-center py-8 font-mono text-sm text-on-surface-variant">加载中...</div>
 </div>
 </div>
 
@@ -703,54 +703,31 @@ function renderWinrateChart(history) {
     }
 }
 
-// ===== 实时成交记录渲染 =====
-function renderRecentTrades(trades) {
-    var container = document.getElementById('trades-container');
+// ===== 实时价格渲染 =====
+function renderLivePrices(prices) {
+    var container = document.getElementById('prices-container');
     if (!container) return;
-    if (!trades || trades.length === 0) {
-        container.innerHTML = '<div class="col-span-3 text-center py-8 font-mono text-sm text-on-surface-variant">暂无已平仓交易</div>';
+    if (!prices || prices.length === 0) {
+        container.innerHTML = '<div class="col-span-4 text-center py-8 font-mono text-sm text-on-surface-variant">暂无价格数据</div>';
         return;
     }
-    container.innerHTML = trades.map(function(t) {
-        var sym = (t.symbol || '');
-        if (sym.indexOf('/') === -1 && sym.endsWith('USDT')) {
-            sym = sym.slice(0, -4) + '/USDT';
-        }
-        var isLong = (t.direction || '').toUpperCase() === 'LONG';
-        var icon = isLong ? 'north_east' : 'south_east';
-        var dirLabel = isLong ? 'LONG' : 'SHORT';
-        var pnl = parseFloat(t.realized_pnl) || 0;
-        var pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
-        var pnlClass = pnl >= 0 ? 'text-primary' : 'text-error';
-        var entry = parseFloat(t.entry_price) || 0;
-        var close = parseFloat(t.close_price) || 0;
-        var pnlPct = entry > 0 ? ((close - entry) / entry * 100 * (isLong ? 1 : -1)).toFixed(2) : '--';
-        var closeTime = t.close_time ? String(t.close_time).slice(0, 19).replace('T', ' ') : '';
-        // Format close_time to more readable form
-        var ts = '';
-        if (closeTime) {
-            var parts = closeTime.split(' ');
-            if (parts.length >= 2) {
-                var dateParts = parts[0].split('-');
-                var timePart = parts[1].slice(0, 5);
-                ts = dateParts[0] + '.' + dateParts[1] + '.' + dateParts[2] + ' ' + timePart;
-            } else {
-                ts = closeTime;
-            }
-        }
-        return '<div class="bg-surface-container p-5 rounded-xl flex items-center justify-between group transition-all hover:bg-surface-container-high cursor-pointer">'
+    container.innerHTML = prices.map(function(p) {
+        var sym = p.symbol || '--';
+        var price = p.price;
+        var priceStr = price != null ? '$' + parseFloat(price).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 6}) : '--';
+        var coinIcon = (sym || '').replace('/USDT', '').toLowerCase();
+        return '<div class="bg-surface-container p-5 rounded-xl flex items-center justify-between group transition-all hover:bg-surface-container-high">'
             + '<div class="flex items-center gap-4">'
-            + '<div class="p-2 rounded-lg ' + (isLong ? 'bg-primary/10' : 'bg-error/10') + '">'
-            + '<span class="material-symbols-outlined text-xl ' + (isLong ? 'text-primary' : 'text-error') + '" data-icon="' + icon + '">' + icon + '</span>'
+            + '<div class="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-mono font-bold text-sm text-primary">'
+            + coinIcon.toUpperCase().slice(0, 2)
             + '</div>'
             + '<div>'
-            + '<p class="font-mono text-sm">' + sym + ' <span class="text-[10px] text-on-surface-variant ml-2">' + dirLabel + '</span></p>'
-            + '<p class="text-[10px] text-on-surface-variant font-mono">' + ts + '</p>'
+            + '<p class="font-mono font-semibold text-sm">' + sym + '</p>'
+            + '<p class="text-[10px] text-on-surface-variant font-mono">永续合约</p>'
             + '</div>'
             + '</div>'
             + '<div class="text-right">'
-            + '<p class="font-mono text-sm ' + pnlClass + '">' + pnlStr + 'U</p>'
-            + '<p class="text-[10px] text-on-surface-variant font-mono">ENTRY: ' + entry.toLocaleString('en-US', {maximumFractionDigits: 2}) + '</p>'
+            + '<p class="font-mono text-lg font-bold text-primary">' + priceStr + '</p>'
             + '</div>'
             + '</div>';
     }).join('');
@@ -772,7 +749,7 @@ async function loadSnapshot() {
         renderNewsPanel(d.news || []);
         renderHyperliquidPanel(d.hyperliquid || {});
         renderWinrateChart(d.winrate_history || []);
-        renderRecentTrades(d.recent_trades || []);
+        renderLivePrices(d.live_prices || []);
     } catch (e) {
         console.error('loadSnapshot failed:', e);
         var msg = (e.message && e.message.indexOf('503') !== -1)
@@ -784,6 +761,34 @@ async function loadSnapshot() {
         if (e.message && e.message.indexOf('503') !== -1) {
             setTimeout(loadSnapshot, 30000);
         }
+    }
+}
+
+// ===== 实时价格独立轮询（每15秒）=====
+async function refreshPrices() {
+    try {
+        var resp = await fetch('/api/futures/prices/batch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({symbols: ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT']})
+        });
+        if (!resp.ok) return;
+        var json = await resp.json();
+        // 响应格式: {success: true, prices: {BTCUSDT: {price: 85000, source: '...'}, ...}}
+        var rawPrices = json.prices || {};
+        var mapped = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT'].map(function(sym) {
+            var entry = rawPrices[sym];
+            var price = null;
+            if (entry && typeof entry === 'object' && entry.price != null) {
+                price = parseFloat(entry.price);
+            } else if (entry != null && !isNaN(parseFloat(entry))) {
+                price = parseFloat(entry);
+            }
+            return {symbol: sym.replace('USDT', '/USDT'), price: price};
+        });
+        renderLivePrices(mapped);
+    } catch (e) {
+        // 静默失败，下次轮询继续
     }
 }
 
@@ -1140,6 +1145,9 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(updateClock, 1000);
     loadSnapshot();
     setInterval(loadSnapshot, 5 * 60 * 1000);
+    // 实时价格每15秒轮询
+    refreshPrices();
+    setInterval(refreshPrices, 15 * 1000);
 });
 </script>
 </body></html>

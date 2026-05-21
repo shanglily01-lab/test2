@@ -179,7 +179,7 @@ def _fetch_winrate_history(cursor):
             COALESCE(SUM(margin), 0) AS total_margin
         FROM futures_positions
         WHERE account_id = 2
-          AND status = 'CLOSED'
+          AND status = 'closed'
           AND close_time >= CURDATE() - INTERVAL 10 DAY
           AND close_time < CURDATE() + INTERVAL 1 DAY
         GROUP BY DATE(close_time)
@@ -303,14 +303,36 @@ def _fetch_hyperliquid(cursor):
     }
 
 
+def _fetch_live_prices(cursor):
+    """获取 BTC/ETH/BNB/SOL 实时价格（通过统一 Hub 缓存）"""
+    symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
+    try:
+        from app.services.binance_data_hub import get_global_data_hub
+        hub = get_global_data_hub()
+        ticker_map = hub.get_full_ticker_map(market="futures") if hub else {}
+    except Exception:
+        ticker_map = {}
+
+    result = []
+    for sym in symbols:
+        display = sym.replace("USDT", "/USDT")
+        price_decimal = ticker_map.get(sym)
+        price = float(price_decimal) if price_decimal is not None else None
+        result.append({
+            'symbol': display,
+            'price': price,
+        })
+    return result
+
+
 def _fetch_recent_trades(cursor):
     """最新6条已平仓交易记录"""
     cursor.execute("""
         SELECT symbol, position_side AS direction, entry_price, close_price,
-               realized_pnl, close_time, entry_time
+               realized_pnl, close_time, open_time
         FROM futures_positions
         WHERE account_id = 2
-          AND status = 'CLOSED'
+          AND status = 'closed'
           AND close_time IS NOT NULL
         ORDER BY close_time DESC
         LIMIT 6
@@ -319,7 +341,7 @@ def _fetch_recent_trades(cursor):
     for r in cursor.fetchall():
         pnl = float(r['realized_pnl']) if r['realized_pnl'] is not None else 0
         entry_price = float(r['entry_price']) if r['entry_price'] else 0
-        entry_time = r['entry_time']
+        open_time = r['open_time']
         close_time = r['close_time']
         result.append({
             'symbol':      r['symbol'],
@@ -328,7 +350,7 @@ def _fetch_recent_trades(cursor):
             'close_price': float(r['close_price']) if r['close_price'] else 0,
             'realized_pnl': pnl,
             'close_time':  close_time.isoformat() if close_time else '',
-            'entry_time':  entry_time.isoformat() if entry_time else '',
+            'open_time':   open_time.isoformat() if open_time else '',
         })
     return result
 
@@ -352,7 +374,7 @@ def update_dashboard_snapshot():
         news            = _fetch_news(cursor)
         hyperliquid     = _fetch_hyperliquid(cursor)
         winrate_history = _fetch_winrate_history(cursor)
-        recent_trades   = _fetch_recent_trades(cursor)
+        live_prices     = _fetch_live_prices(cursor)
 
         snapshot = {
             'signals':         signals,
@@ -361,7 +383,7 @@ def update_dashboard_snapshot():
             'news':            news,
             'hyperliquid':     hyperliquid,
             'winrate_history': winrate_history,
-            'recent_trades':   recent_trades,
+            'live_prices':     live_prices,
             'updated_at':      datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
         }
 
@@ -381,7 +403,7 @@ def update_dashboard_snapshot():
         logger.info(f"[dashboard_snapshot] updated in {compute_ms}ms, "
                     f"signals={len(signals)}, futures={len(futures)}, "
                     f"news={len(news)}, hl_trades={len(hyperliquid['trades'])}, "
-                    f"recent_trades={len(recent_trades)}")
+                    f"live_prices={len(live_prices)}")
     except Exception as e:
         logger.error(f"[dashboard_snapshot] update failed: {e}")
         raise

@@ -102,6 +102,7 @@ class ClosePositionRequest(BaseModel):
     """平仓请求"""
     close_quantity: Optional[float] = Field(None, description="平仓数量，不填则全部平仓")
     reason: str = Field(default='manual', description="原因: manual, stop_loss, take_profit, liquidation")
+    close_price: Optional[float] = Field(None, description="指定平仓价格，不填则用实时市价")
 
 
 class BatchCloseRequest(BaseModel):
@@ -862,7 +863,8 @@ async def close_position(
         result = engine.close_position(
             position_id=position_id,
             close_quantity=close_quantity,
-            reason=request.reason or 'manual'
+            reason=request.reason or 'manual',
+            close_price=Decimal(str(request.close_price)) if request.close_price else None
         )
 
         if result['success']:

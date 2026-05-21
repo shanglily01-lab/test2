@@ -32,6 +32,7 @@ Gemini 探索 worker (v2 — 2026-05-21 全面优化)
 from __future__ import annotations
 
 import json
+import threading
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -557,13 +558,13 @@ def _describe_market_regime(conn) -> str:
             if row and row.get('change_24h') is not None:
                 btc_chg = abs(float(row['change_24h']))
                 if btc_chg > 8:
-                    return "极端波动 (BTC 24h > 8%) — 暂停低频策略"
+                    return "极端波动 (BTC 24h > 8%) — 注意止损保护"
                 elif btc_chg > 4:
                     return "强趋势 (BTC 24h > 4%) — 顺趋势交易"
                 elif btc_chg > 1.5:
                     return "温和趋势 (BTC 24h 1.5-4%) — 正常交易环境"
                 else:
-                    return "低波动盘整 (BTC 24h < 1.5%) — 减少开仓"
+                    return "低波动盘整 (BTC 24h < 1.5%) — 适合小周期震荡策略"
     except Exception:
         pass
     return "未知"
@@ -618,7 +619,7 @@ BULLISH/STRONG_BULLISH 时不要给做空信号.
    - 资金费极负 (拥挤空) + 价格在 7d 低点 + RSI 低 → bullish
 3. **成交量确认**: 突破放量=有效, 缩量新高=可疑
 4. **不要追涨杀跌**: 已涨 100% 的不一定继续涨, 关注是否在加速
-5. **宁可错过, 不要硬猜**: 无明确信号时返回空列表, 这是**正确做法**
+5. **信号质量优先**: 如果最多只看到1-2个有依据的信号, 只出这1-2个即可, 不需要填满候选池
 
 ## Few-shot 示例
 以下是用历史数据标注的正确示例 (仅供参考格式, 不要复制数据):
@@ -645,8 +646,7 @@ GOOD EXAMPLE 2 (弱信号→skip):
 
 # 输出要求
 **仅** 一个合法 JSON, 不要 markdown 围栏.
-**如果没有任何清晰的交易机会, 返回 {{"summary_zh": "判断说明", "verdicts": []}}**.
-错误地给出一个低置信度信号比跳过更糟糕.
+**如果没有任何清晰的机会, 可以返回空列表, 但如果你看到有数据支撑的信号, 请自信输出 (confidence≥0.60).**
 
 {{
   "summary_zh": "整体市场氛围 1-2 句",
@@ -833,6 +833,24 @@ def _get_current_price(conn, symbol: str) -> Optional[float]:
 # ============================================================
 # 优化 7: SL 缓冲 + 开仓 (SL 5% 已足够宽, 同时记录入时保护期)
 # ============================================================
+# ============================================================
+# 数据库兼容层：新 category → 旧 ENUM 映射
+# ============================================================
+_CATEGORY_MAP = {
+    'bullish': 'red_swan',
+    'bearish': 'black_swan',
+    'skip': 'skip',
+}
+
+
+def _map_category(cat: str) -> str:
+    """将新 prompt 的 category 映射到 DB ENUM 允许的值."""
+    normalized = (cat or 'skip').lower().strip()
+    if normalized in ('red_swan', 'black_swan', 'skip'):
+        return normalized
+    return _CATEGORY_MAP.get(normalized, 'skip')
+
+
 def _open_simulated_position(
     conn,
     symbol: str,
@@ -960,6 +978,12 @@ def _insert_verdicts(conn, run_id: int, verdict_rows: List[Tuple]) -> None:
 
 
 # ============================================================
+# 全局并发锁
+# ============================================================
+_explore_running_lock = threading.Lock()
+
+
+# ============================================================
 # 优化 8+9: 主入口 (全面升级)
 # ============================================================
 def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
@@ -975,6 +999,11 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
       8. 置信度判定沿用 EXPLORE_CONFIDENCE_THRESHOLD=0.6
       9+10. 新增 _get_historical_stats 并注入 prompt
     """
+    # 并发锁: 防止 scheduler + manual 同时触发
+    if not _explore_running_lock.acquire(blocking=False):
+        logger.warning(f"[Gemini探索] 上一轮还未结束, 跳过 (triggered_by={triggered_by})")
+        return None
+
     t0 = time.time()
     asof_utc = datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -1072,6 +1101,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         for v in verdicts:
             symbol = (v.get('symbol') or '').upper()
             category = (v.get('category') or 'skip').lower()
+            db_category = _map_category(category)  # 映射到 DB ENUM
             try:
                 confidence = float(v.get('confidence') or 0)
             except Exception:
@@ -1091,7 +1121,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 side = 'SHORT'
             else:
                 verdict_rows.append((
-                    run_id, symbol, category if category in ('bullish', 'bearish', 'skip') else 'skip',
+                    run_id, symbol, db_category,
                     confidence, catalyst, data_signal, risk_note,
                     'skipped_confidence', None,
                     f"category={category} confidence={confidence:.2f}",
@@ -1101,7 +1131,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             # 5b. Big4 闸门
             if _big4_blocks(big4, side):
                 verdict_rows.append((
-                    run_id, symbol, category, confidence,
+                    run_id, symbol, db_category, confidence,
                     catalyst, data_signal, risk_note,
                     'skipped_big4', None,
                     f"Big4={big4} 禁 {side}",
@@ -1111,7 +1141,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             # 5c. 同 symbol+side 去重
             if _has_open_position(conn, symbol, side):
                 verdict_rows.append((
-                    run_id, symbol, category, confidence,
+                    run_id, symbol, db_category, confidence,
                     catalyst, data_signal, risk_note,
                     'skipped_dedup', None,
                     f"{symbol} {side} 已存在 OPEN 仓位",
@@ -1122,7 +1152,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             current_open = _count_open_positions(conn)
             if current_open >= EXPLORE_MAX_POSITIONS:
                 verdict_rows.append((
-                    run_id, symbol, category, confidence,
+                    run_id, symbol, db_category, confidence,
                     catalyst, data_signal, risk_note,
                     'skipped_max_positions', None,
                     f"当前 OPEN={current_open} >= {EXPLORE_MAX_POSITIONS}",
@@ -1133,7 +1163,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             price = _get_current_price(conn, symbol)
             if price is None or price <= 0:
                 verdict_rows.append((
-                    run_id, symbol, category, confidence,
+                    run_id, symbol, db_category, confidence,
                     catalyst, data_signal, risk_note,
                     'skipped_other', None,
                     "无最新价格",
@@ -1144,7 +1174,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             position_id = _open_simulated_position(conn, symbol, side, price, catalyst)
             if position_id is None:
                 verdict_rows.append((
-                    run_id, symbol, category, confidence,
+                    run_id, symbol, db_category, confidence,
                     catalyst, data_signal, risk_note,
                     'skipped_other', None,
                     "开仓 INSERT 失败 (见日志)",
@@ -1153,7 +1183,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
 
             trades_opened += 1
             verdict_rows.append((
-                run_id, symbol, category, confidence,
+                run_id, symbol, db_category, confidence,
                 catalyst, data_signal, risk_note,
                 'opened', position_id, None,
             ))
@@ -1184,6 +1214,10 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
     finally:
         try:
             conn.close()
+        except Exception:
+            pass
+        try:
+            _explore_running_lock.release()
         except Exception:
             pass
 

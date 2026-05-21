@@ -174,7 +174,13 @@ class PositionSLTPMonitor:
 
                 pullback_thresh = _dynamic_trail_pullback(new_peak)
                 if (new_peak - pnl_pct) >= pullback_thresh:
-                    reason = "trail-tp"
+                    current_drawdown = (new_peak - pnl_pct) * 100
+                    reason = (
+                        f"移动止盈(峰值价格收益{new_peak*100:.2f}% "
+                        f"回撤{current_drawdown:.2f}%, trail-tp)"
+                    )
+                    # 同步 peak 到 DB，方便复盘分析
+                    self._sync_peak_to_db(pid, new_peak * 100)
                 elif not in_grace and new_peak >= BREAKEVEN_AFTER_PEAK_PCT and pnl_pct <= BREAKEVEN_SL_PCT:
                     reason = "breakeven-sl"
                 elif not in_grace and pnl_pct <= -EARLY_SL_PCT:
@@ -212,9 +218,34 @@ class PositionSLTPMonitor:
         self._disable_cache = (now, val)
         return val
 
+    def _sync_peak_to_db(self, pid: int, peak_pct: float) -> None:
+        """将峰值价格收益率同步到 futures_positions.max_profit_pct（DB 字段为价格%）。
+
+        仅在 peak_pct > 当前 DB 记录时更新，避免旧值覆盖新值。
+        使用独立短连接，异常不抛出。
+        """
+        try:
+            conn = pymysql.connect(**_db_cfg())
+            try:
+                with conn.cursor() as c:
+                    c.execute(
+                        "UPDATE futures_positions "
+                        "SET max_profit_pct = GREATEST(COALESCE(max_profit_pct, 0), %s) "
+                        "WHERE id=%s AND status='open'",
+                        (peak_pct, pid),
+                    )
+                    conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            pass  # 峰值同步非关键路径，静默失败
+
     def _do_close(self, pid: int, symbol: str, side: str, reason: str,
                   trigger_price: float, now: float) -> None:
-        """通过 HTTP API 平仓，避免直接调用 engine 的共享连接导致线程冲突。"""
+        """通过 HTTP API 平仓，避免直接调用 engine 的共享连接导致线程冲突。
+        
+        使用详细的 reason 字符串（如"移动止盈(峰值...)"）提交，API 端会写入 notes。
+        """
         try:
             resp = requests.post(
                 f"{self.api_base}/api/futures/close/{pid}",

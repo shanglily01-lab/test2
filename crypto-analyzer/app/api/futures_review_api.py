@@ -1014,7 +1014,8 @@ async def get_strategy_suggestions(
             SELECT
                 entry_reason, entry_signal_type, notes as close_reason,
                 realized_pnl, unrealized_pnl_pct, position_side,
-                stop_loss_pct, take_profit_pct, max_profit_pct
+                stop_loss_pct, take_profit_pct, max_profit_pct,
+                entry_price, leverage
             FROM futures_positions
             WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
         """, (account_id, time_threshold))
@@ -1067,12 +1068,21 @@ async def get_strategy_suggestions(
                 max_tp_count += 1
             elif close_code == 'trailing_take_profit':
                 trailing_tp_count += 1
-                # 计算回撤幅度
-                max_profit = float(pos['max_profit_pct'] or 0)
-                final_pnl_pct = float(pos['unrealized_pnl_pct'] or 0)
-                if max_profit > 0:
-                    drawdown = max_profit - final_pnl_pct
+                # 计算回撤幅度 — 从 close_reason 字符串解析实际回撤值
+                # 字符串格式:
+                #   "移动止盈(峰值价格收益X.XX% 回撤Y.YY%, ..."  ← smart_exit_optimizer
+                #   "trail-tp"                                         ← position_sl_tp_monitor (无回撤数据)
+                import re
+                notes_raw = str(pos['close_reason'] or '')
+                m = re.search(r'回撤([\d.]+)%', notes_raw)
+                if m:
+                    drawdown = float(m.group(1))
                     trailing_tp_drawdowns.append(drawdown)
+                else:
+                    # fallback: 用 max_profit_pct 作为参考（不含明细场景）
+                    max_profit = float(pos['max_profit_pct'] or 0)
+                    if max_profit > 0:
+                        trailing_tp_drawdowns.append(max_profit)
             elif close_code in ['death_cross_reversal', 'golden_cross_reversal']:
                 cross_reversal_count += 1
             elif close_code in ['5m_death_cross_sl', '5m_golden_cross_sl']:
