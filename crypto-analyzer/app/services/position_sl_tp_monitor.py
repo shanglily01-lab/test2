@@ -161,6 +161,22 @@ class PositionSLTPMonitor:
             reason: Optional[str] = None
             trigger_price = price
 
+            # ────────────────────────────────────────────────────────────────
+            # Gemini 探索：跳过动态风控（Early-SL/移动止盈/保本守护），只走硬 SL/TP
+            # ────────────────────────────────────────────────────────────────
+            if pos.get('source') == 'gemini_explore':
+                trig = self._check_trigger(side, price, sl, tp)
+                if trig:
+                    reason, trigger_price = trig
+                    logger.info(
+                        f"[Gemini探索硬SL/TP] pid={pid} {symbol} {side} "
+                        f"reason={reason} price={price:.6f} SL={sl} TP={tp}"
+                    )
+                    self._cooldown[pid] = now + self._cooldown_seconds
+                    self._peak_pnl_map.pop(pid, None)
+                    self._do_close(pid, symbol, side, reason, trigger_price, now)
+                continue
+
             # 1. 新规则（受 disable_sl_tp_hold 控制）
             if not disable_rules:
                 # 入场保护期：开仓 ENTRY_GRACE_MIN 分钟内 early-sl/breakeven 不触发

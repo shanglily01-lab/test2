@@ -173,6 +173,20 @@ class SmartExitOptimizer:
                     await asyncio.sleep(2)  # 等待2秒后重试
                     continue
 
+                # ────────────────────────────────────────────────────────────
+                # Gemini 探索：跳过所有智能平仓逻辑，只检查 planned_close_time 到期
+                # SL/TP 由 position_sl_tp_monitor 兜底
+                # ────────────────────────────────────────────────────────────
+                if position.get('source') == 'gemini_explore':
+                    if position.get('planned_close_time') and datetime.now() >= position['planned_close_time']:
+                        logger.warning(
+                            f"[Gemini探索] 持仓{position_id} {position['symbol']} 持有72h到期，强制平仓"
+                        )
+                        await self._execute_close(position_id, current_price, "Gemini探索持有72h到期")
+                        break
+                    await asyncio.sleep(30)
+                    continue
+
                 # 计算当前盈亏（如果avg_entry_price为空，使用entry_price作为备用）
                 try:
                     profit_info = self._calculate_profit(position, current_price)
@@ -500,10 +514,11 @@ class SmartExitOptimizer:
         if hold_minutes >= 30 and roi_pct <= -15.0:
             return True, f"极端亏损止损(ROI{roi_pct:.2f}%<=-15%, 价格变化{profit_pct:.2f}%, 持仓{hold_minutes:.0f}min)"
 
-        # 多策略持仓（S1-S7）跳过动态趋势反转，依赖固定止损止盈和planned_close_time
+        # 多策略持仓（S1-S7 + Gemini探索）跳过动态趋势反转，依赖固定止损止盈和planned_close_time
         _MULTI_STRATEGY_SOURCES = (
             's1_early_long', 's2_pullback_long', 's3_top_short',
             's4_rebound_short', 's5_large_oversold', 's6_vol_spike', 's7_ma_support',
+            'gemini_explore',
         )
         if position.get('source') in _MULTI_STRATEGY_SOURCES:
             return False, ""

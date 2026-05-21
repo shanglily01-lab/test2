@@ -1,28 +1,17 @@
 """
-Gemini 探索 worker (v2 — 2026-05-21 全面优化)
+Gemini 探索 worker (v3 — 2026-05-21 长持仓版)
 
 每 6h 调用 Google Gemini 检测加密货币短时方向异动, 根据 verdict 直接开模拟单。
-
-优化清单:
-  1. SL 3%→5%  +  杠杆 5x→3x  → 降低 SL 误触率
-  2. 候选池扩大: 加入中等波动币 (NORMAL_MOVER), 不只看极端涨跌
-  3. K 线格式: 加入时间戳/成交量/叙事文本描述 (非纯数组)
-  4. Prompt: 去"天鹅"概念, 改"短线方向异动"; 加入 Few-shot 示例 + 置信度校准表
-  5. 鼓励空 verdicts: "无明确信号时返回 []"
-  6. 历史表现反馈: prompt 尾部插入系统历史胜率
-  7. SL 缓冲: 硬 SL 5% (原 3%) + 入场保护 30min (Early SL 3% 由 Monitor 兜底)
-  8. 置信度校准: 特定阈值对应特定信号强度, 抑制 LLM 礼貌偏见
-  9. run_explore_round: 加入 get_historical_stats 调用
-  10. 新增 _get_historical_stats 函数
+现在改为长持仓模式: 持仓 3 天, TP=15%, 跳过一切智能平仓, 只走硬 SL/TP。
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
   - margin    = 500U
-  - leverage  = 3x (原 5x)
+  - leverage  = 3x
   - 最多 20 仓
-  - hold     = 6 小时
-  - SL       = 5% (原 3%)
-  - TP       = 8%
+  - hold     = 72 小时 (3 天)
+  - SL       = 5%
+  - TP       = 15%
 
 闸门:
   - system_settings.gemini_explore_enabled (默认 0, 关时早返回)
@@ -55,21 +44,17 @@ from app.services.gemini_swan_worker import (
 
 
 # ============================================================
-# 优化 1: 常量调整
+# v3 长持仓常量
 # ============================================================
 EXPLORE_MARGIN_USD = 500.0
-EXPLORE_LEVERAGE = 3           # 原 5x → 3x (降杠杆降波动放大)
+EXPLORE_LEVERAGE = 3
 EXPLORE_MAX_POSITIONS = 20
-EXPLORE_HOLD_HOURS = 6
-EXPLORE_SL_PCT = 5.0           # 原 3% → 5% (给预测更多呼吸空间)
-EXPLORE_TP_PCT = 8.0
+EXPLORE_HOLD_HOURS = 72                        # 3 天
+EXPLORE_SL_PCT = 5.0
+EXPLORE_TP_PCT = 15.0                          # 原 8%, 提到 15% 给足够容错
 EXPLORE_CONFIDENCE_THRESHOLD = 0.6
 EXPLORE_ACCOUNT_ID = 2
 EXPLORE_SOURCE = 'gemini_explore'
-
-# 优化 1b: 入场保护 — 开仓 N 分钟内不被 Monitor Early-SL 误杀
-# (硬 SL 5% 仍生效, 但 3% Early-SL 有 30min 缓冲)
-EXPLORE_ENTRY_GRACE_MIN = 30
 
 # 数据新鲜度门槛
 EXPLORE_PRICE_FRESH_MIN = 20
@@ -882,7 +867,7 @@ def _open_simulated_position(
 
         # 在 entry_reason 中标记入场保护期, 方便后续排查
         entry_reason = (catalyst or 'gemini_explore')[:180]
-        entry_reason += f" | grace={EXPLORE_ENTRY_GRACE_MIN}min SL={EXPLORE_SL_PCT}% lev={EXPLORE_LEVERAGE}x"
+        entry_reason += f" | SL={EXPLORE_SL_PCT}% TP={EXPLORE_TP_PCT}% lev={EXPLORE_LEVERAGE}x hold={EXPLORE_HOLD_HOURS}h"
 
         with conn.cursor() as cur:
             cur.execute(
@@ -916,9 +901,9 @@ def _open_simulated_position(
 
         logger.info(
             f"[Gemini探索] 开仓 {symbol} {side} @ {price:.6g} "
-            f"SL={sl_price:.6g}(5%) TP={tp_price:.6g}(8%) qty={qty} lev={EXPLORE_LEVERAGE}x "
-            f"grace={EXPLORE_ENTRY_GRACE_MIN}min "
-            f"planned_close={planned_close.strftime('%Y-%m-%d %H:%M')} id={position_id}"
+            f"SL={sl_price:.6g}({EXPLORE_SL_PCT}%) TP={tp_price:.6g}({EXPLORE_TP_PCT}%) "
+            f"qty={qty} lev={EXPLORE_LEVERAGE}x hold={EXPLORE_HOLD_HOURS}h "
+            f"id={position_id}"
         )
         return position_id
     except Exception as e:
