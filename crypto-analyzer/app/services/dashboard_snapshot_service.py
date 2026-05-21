@@ -169,27 +169,54 @@ def _fetch_futures(cursor):
 
 
 def _fetch_winrate_history(cursor):
-    """近10日每日胜率 + 捕获率，用于看板趋势图"""
+    """近10日每日胜率 + 盈亏，直接从 futures_positions 计算"""
     cursor.execute("""
-        SELECT date,
-               CAST(JSON_UNQUOTE(JSON_EXTRACT(report_json, '$.trading_summary.win_rate'))
-                    AS DECIMAL(6,2)) AS win_rate,
-               capture_rate
-        FROM daily_review_reports
+        SELECT
+            DATE(close_time) AS date,
+            COUNT(*) AS total,
+            SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
+            COALESCE(SUM(realized_pnl), 0) AS total_pnl,
+            COALESCE(SUM(margin), 0) AS total_margin
+        FROM futures_positions
+        WHERE account_id = 2
+          AND status = 'CLOSED'
+          AND close_time >= CURDATE() - INTERVAL 10 DAY
+          AND close_time < CURDATE() + INTERVAL 1 DAY
+        GROUP BY DATE(close_time)
         ORDER BY date DESC
-        LIMIT 10
     """)
     rows = cursor.fetchall()
-    result = []
+    # Build lookup map keyed by date string
+    data_by_date = {}
     for r in rows:
         d = r['date']
         date_str = d.strftime('%m/%d') if hasattr(d, 'strftime') else str(d)[5:10]
-        result.append({
-            'date':         date_str,
-            'win_rate':     float(r['win_rate'])     if r['win_rate']     is not None else None,
-            'capture_rate': float(r['capture_rate']) if r['capture_rate'] is not None else None,
-        })
-    result.reverse()   # 由旧到新，左到右显示
+        total = int(r['total'] or 0)
+        wins = int(r['wins'] or 0)
+        win_rate = round(wins / total * 100, 1) if total > 0 else None
+        total_pnl = float(r['total_pnl'] or 0)
+        total_margin = float(r['total_margin'] or 0)
+        roi = round(total_pnl / total_margin * 100, 1) if total_margin > 0 else None
+        data_by_date[date_str] = {
+            'date': date_str, 'win_rate': win_rate, 'total_pnl': total_pnl,
+            'roi': roi, 'total_trades': total, 'wins': wins,
+            'capture_rate': win_rate,
+        }
+    # Build ordered 10-day list: today-9 ... today
+    from datetime import date, timedelta
+    today = date.today()
+    result = []
+    for i in range(9, -1, -1):
+        d = today - timedelta(days=i)
+        ds = d.strftime('%m/%d')
+        if ds in data_by_date:
+            result.append(data_by_date[ds])
+        else:
+            result.append({
+                'date': ds, 'win_rate': None, 'total_pnl': 0,
+                'roi': None, 'total_trades': 0, 'wins': 0,
+                'capture_rate': None,
+            })
     return result
 
 
@@ -276,6 +303,36 @@ def _fetch_hyperliquid(cursor):
     }
 
 
+def _fetch_recent_trades(cursor):
+    """最新6条已平仓交易记录"""
+    cursor.execute("""
+        SELECT symbol, position_side AS direction, entry_price, close_price,
+               realized_pnl, close_time, entry_time
+        FROM futures_positions
+        WHERE account_id = 2
+          AND status = 'CLOSED'
+          AND close_time IS NOT NULL
+        ORDER BY close_time DESC
+        LIMIT 6
+    """)
+    result = []
+    for r in cursor.fetchall():
+        pnl = float(r['realized_pnl']) if r['realized_pnl'] is not None else 0
+        entry_price = float(r['entry_price']) if r['entry_price'] else 0
+        entry_time = r['entry_time']
+        close_time = r['close_time']
+        result.append({
+            'symbol':      r['symbol'],
+            'direction':   (r['direction'] or 'LONG').upper(),
+            'entry_price': entry_price,
+            'close_price': float(r['close_price']) if r['close_price'] else 0,
+            'realized_pnl': pnl,
+            'close_time':  close_time.isoformat() if close_time else '',
+            'entry_time':  entry_time.isoformat() if entry_time else '',
+        })
+    return result
+
+
 def update_dashboard_snapshot():
     """
     计算所有 Dashboard 数据并写入 dashboard_snapshot 表。
@@ -295,6 +352,7 @@ def update_dashboard_snapshot():
         news            = _fetch_news(cursor)
         hyperliquid     = _fetch_hyperliquid(cursor)
         winrate_history = _fetch_winrate_history(cursor)
+        recent_trades   = _fetch_recent_trades(cursor)
 
         snapshot = {
             'signals':         signals,
@@ -303,6 +361,7 @@ def update_dashboard_snapshot():
             'news':            news,
             'hyperliquid':     hyperliquid,
             'winrate_history': winrate_history,
+            'recent_trades':   recent_trades,
             'updated_at':      datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
         }
 
@@ -321,7 +380,8 @@ def update_dashboard_snapshot():
         cursor.close()
         logger.info(f"[dashboard_snapshot] updated in {compute_ms}ms, "
                     f"signals={len(signals)}, futures={len(futures)}, "
-                    f"news={len(news)}, hl_trades={len(hyperliquid['trades'])}")
+                    f"news={len(news)}, hl_trades={len(hyperliquid['trades'])}, "
+                    f"recent_trades={len(recent_trades)}")
     except Exception as e:
         logger.error(f"[dashboard_snapshot] update failed: {e}")
         raise

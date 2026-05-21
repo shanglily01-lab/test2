@@ -2061,3 +2061,130 @@ async def get_daily_pnl_stats(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/strategy-performance")
+async def get_strategy_performance(
+    hours: int = Query(default=24, ge=1, le=168, description="统计时间范围（小时）"),
+    account_id: int = Query(default=2, description="账户ID")
+):
+    """
+    获取各策略的胜率与盈亏统计
+
+    按 source 字段分组统计每个策略：
+    - 交易笔数、胜率、总盈亏、平均盈亏、盈利率
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        time_threshold = datetime.utcnow() - timedelta(hours=hours)
+
+        cursor.execute("""
+            SELECT
+                source,
+                COUNT(*) AS total_trades,
+                SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
+                SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS losses,
+                COALESCE(SUM(realized_pnl), 0) AS total_pnl,
+                COALESCE(AVG(realized_pnl), 0) AS avg_pnl,
+                COALESCE(SUM(CASE WHEN realized_pnl > 0 THEN realized_pnl ELSE 0 END), 0) AS total_profit,
+                COALESCE(SUM(CASE WHEN realized_pnl < 0 THEN realized_pnl ELSE 0 END), 0) AS total_loss,
+                COALESCE(SUM(margin), 0) AS total_margin
+            FROM futures_positions
+            WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
+              AND source IS NOT NULL AND source != ''
+            GROUP BY source
+            ORDER BY COALESCE(SUM(realized_pnl), 0) DESC
+        """, (account_id, time_threshold))
+
+        rows = cursor.fetchall()
+
+        cursor.close()
+        conn.close()
+
+        STRATEGY_NAMES = {
+            's1_early_long': 'S1 早期做多',
+            's2_pullback_long': 'S2 回调做多',
+            's3_top_short': 'S3 顶部做空',
+            's4_rebound_short': 'S4 反弹衰竭做空',
+            's5_large_oversold': 'S5 大币超卖做多',
+            's6_vol_spike': 'S6 放量异动做多',
+            's7_ma_support': 'S7 MA支撑做多',
+            's8_topshort': 'S8 顶部做空',
+            's9_gemini_ai': 'S9 Gemini AI',
+            'gemini_explore': 'Gemini 探索',
+            'BTC_MOMENTUM': 'BTC 动量',
+        }
+
+        STRATEGY_SHORT = {
+            's1_early_long': 'S1',
+            's2_pullback_long': 'S2',
+            's3_top_short': 'S3',
+            's4_rebound_short': 'S4',
+            's5_large_oversold': 'S5',
+            's6_vol_spike': 'S6',
+            's7_ma_support': 'S7',
+            's8_topshort': 'S8',
+            's9_gemini_ai': 'S9',
+            'gemini_explore': '探索',
+            'BTC_MOMENTUM': 'BTC',
+        }
+
+        strategies = []
+        total_all = {'trades': 0, 'wins': 0, 'pnl': 0}
+        for row in rows:
+            source = row['source']
+            total = int(row['total_trades'] or 0)
+            wins = int(row['wins'] or 0)
+            losses = int(row['losses'] or 0)
+            total_pnl = float(row['total_pnl'] or 0)
+            avg_pnl = float(row['avg_pnl'] or 0)
+            total_profit = float(row['total_profit'] or 0)
+            total_loss = float(row['total_loss'] or 0)
+            total_margin = float(row['total_margin'] or 0)
+
+            win_rate = (wins / total * 100) if total > 0 else 0
+            loss_rate = (losses / total * 100) if total > 0 else 0
+            roi = (total_pnl / total_margin * 100) if total_margin > 0 else 0
+
+            total_all['trades'] += total
+            total_all['wins'] += wins
+            total_all['pnl'] += total_pnl
+
+            strategies.append({
+                'source': source,
+                'name': STRATEGY_NAMES.get(source, source),
+                'short': STRATEGY_SHORT.get(source, source),
+                'total_trades': total,
+                'wins': wins,
+                'losses': losses,
+                'win_rate': round(win_rate, 1),
+                'loss_rate': round(loss_rate, 1),
+                'total_pnl': round(total_pnl, 2),
+                'avg_pnl': round(avg_pnl, 2),
+                'total_profit': round(total_profit, 2),
+                'total_loss': round(total_loss, 2),
+                'roi': round(roi, 2),
+            })
+
+        overall_win_rate = (total_all['wins'] / total_all['trades'] * 100) if total_all['trades'] > 0 else 0
+
+        return {
+            "success": True,
+            "data": {
+                "strategies": strategies,
+                "overall": {
+                    "total_trades": total_all['trades'],
+                    "total_wins": total_all['wins'],
+                    "win_rate": round(overall_win_rate, 1),
+                    "total_pnl": round(total_all['pnl'], 2),
+                }
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"获取策略表现统计失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

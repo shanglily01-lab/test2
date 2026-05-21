@@ -50,10 +50,12 @@ class SmartFuturesCollector:
         # 超时设置（秒）
         self.timeout = aiohttp.ClientTimeout(total=5, connect=2)
 
-        # 并发限制 (10 在启动时雪崩触发 -1003, 降到 3)
-        self.max_concurrent = 3
-        # 启动首轮间隔之间的额外间隔 (秒), 防止 5 个周期同时打 Binance 雪崩
-        self.inter_interval_sleep = 2.0
+        # 并发限制: 6 路并发 = ~250/6 ≈ 42 批, 每批 ~0.3-0.5s, 单周期 ≈ 12-21 秒
+        # 首轮启动有雪崩防护(只采5m), 后续正常周期由 should_collect_interval 整数点判跳,
+        # 极少出现 5 个周期同时触发(仅在 UTC 00:00), 6 并发安全.
+        self.max_concurrent = 6
+        # 间隔间等待: 并行采集后不再需要, 保留仅作兜底
+        self.inter_interval_sleep = 0.5
 
         # 上次采集时间记录（用于判断是否需要采集）
         self.last_collection_time = {}
@@ -581,15 +583,32 @@ class SmartFuturesCollector:
             logger.error(f"获取币本位合约交易对列表失败: {e}")
             return []
 
+    async def collect_interval_data(self, symbols, coin_symbols, interval, limit):
+        """并行采集单个周期的K线数据（U本位+币本位同时进行）"""
+        klines = []
+        tasks = []
+        if symbols:
+            tasks.append(self.collect_batch(symbols, interval, limit))
+        if coin_symbols:
+            tasks.append(self.collect_coin_batch(coin_symbols, interval, limit))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for r in results:
+            if isinstance(r, Exception):
+                logger.error(f"  采集 {interval} 异常: {r}")
+            elif r:
+                klines.extend(r)
+        self.last_collection_time[interval] = datetime.utcnow()
+        return klines
+
     async def run_collection_cycle(self):
         """
         执行一次智能采集周期
         根据时间判断需要采集哪些时间周期，避免重复采集
-        同时采集U本位和币本位合约数据
+        各周期并行采集，大幅缩短总耗时
         """
         start_time = datetime.utcnow()
         logger.info("=" * 60)
-        logger.info("🧠 开始智能数据采集周期（分层策略）")
+        logger.info("🧠 开始智能数据采集周期（并行采集策略）")
 
         # 获取U本位和币本位交易对列表
         usdt_symbols = self.get_trading_symbols()
@@ -602,7 +621,6 @@ class SmartFuturesCollector:
         logger.info(f"目标: {len(usdt_symbols)} 个U本位交易对 + {len(coin_symbols)} 个币本位交易对")
 
         # 定义所有时间周期及其采集规则
-        # 🔥 修复：5m/15m获取2根K线，只保存第一根（已完成的），丢弃第二根（未完成的）
         intervals = [
             ('5m', 2),    # 5分钟K线，获取2根，只保存第1根（已完成）
             ('15m', 2),   # 15分钟K线，获取2根，只保存第1根（已完成）
@@ -612,10 +630,9 @@ class SmartFuturesCollector:
         ]
 
         all_klines = []
-        collected_intervals = []  # 记录本次采集的时间周期
+        collected_intervals = []
 
-        # 首轮启动雪崩防护: last_collection_time 为空时, 只采 5m, 其它周期标记为已采,
-        # 让后续 should_collect_interval 按整点自然触发, 不在启动时一次性扫 5 个周期
+        # 首轮启动雪崩防护: last_collection_time 为空时, 只采 5m, 其它周期标记为已采
         first_run = not self.last_collection_time
         if first_run:
             logger.info("🛡️  首轮启动: 只采 5m, 其它周期等下次整点自然触发")
@@ -624,33 +641,30 @@ class SmartFuturesCollector:
                 if itv != '5m':
                     self.last_collection_time[itv] = now_utc
 
-        # 智能判断并采集各个时间周期
-        for idx, (interval, limit) in enumerate(intervals):
+        # 智能判断需要采集的周期，并行执行
+        interval_tasks = []
+        for interval, limit in intervals:
             if self.should_collect_interval(interval):
                 logger.info(f"✅ 采集 {interval} K线 (每个交易对{limit}条，距上次 {self._get_elapsed_time(interval)})...")
-
-                # 采集U本位
-                if usdt_symbols:
-                    usdt_klines = await self.collect_batch(usdt_symbols, interval, limit)
-                    all_klines.extend(usdt_klines)
-
-                # 采集币本位
-                if coin_symbols:
-                    coin_klines = await self.collect_coin_batch(coin_symbols, interval, limit)
-                    all_klines.extend(coin_klines)
-
-                logger.info(f"   成功获取 {len(all_klines) - len([k for k in all_klines if k['timeframe'] != interval])} 条 {interval} K线")
                 collected_intervals.append(interval)
-
-                # 更新采集时间
-                self.last_collection_time[interval] = datetime.utcnow()
-
-                # 周期之间加间隔, 防止多个周期一起打 Binance 触发 weight 雪崩
-                if idx < len(intervals) - 1:
-                    await asyncio.sleep(self.inter_interval_sleep)
+                interval_tasks.append(
+                    self.collect_interval_data(usdt_symbols, coin_symbols, interval, limit)
+                )
             else:
                 elapsed = self._get_elapsed_time(interval)
-                logger.info(f"⏭️  跳过 {interval} K线 (距上次仅 {elapsed}，无需采集)")
+                logger.info(f"⏭️  跳过 {interval} K线 (距上次仅 {elapsed})")
+
+        # 并行执行所有需要采集的周期
+        if interval_tasks:
+            results = await asyncio.gather(*interval_tasks)
+            for klines in results:
+                if klines:
+                    all_klines.extend(klines)
+
+            # 统计各周期采集量
+            for interval in collected_intervals:
+                count = len([k for k in all_klines if k.get('timeframe') == interval])
+                logger.info(f"  ✓ {interval}: {count} 条")
 
         # 保存所有K线
         if all_klines:
@@ -660,17 +674,15 @@ class SmartFuturesCollector:
         # 统计
         elapsed = (datetime.utcnow() - start_time).total_seconds()
 
-        # 分别统计U本位和币本位数据
         usdt_klines = [k for k in all_klines if k.get('contract_type') != 'coin_futures']
-        coin_klines = [k for k in all_klines if k.get('contract_type') == 'coin_futures']
+        coin_klines_c = [k for k in all_klines if k.get('contract_type') == 'coin_futures']
 
         logger.info(f"✓ 采集周期完成，耗时 {elapsed:.2f} 秒")
         logger.info(f"  本次采集: {', '.join(collected_intervals) if collected_intervals else '无'}")
         logger.info(f"  总K线数: {len(all_klines)}")
         if coin_symbols:
-            logger.info(f"  U本位: {len(usdt_klines)} 条 | 币本位: {len(coin_klines)} 条")
+            logger.info(f"  U本位: {len(usdt_klines)} 条 | 币本位: {len(coin_klines_c)} 条")
 
-        # 显示节省统计
         if not collected_intervals:
             logger.info(f"  ⚡ 本次跳过所有周期，节省100%采集资源")
         elif len(collected_intervals) < len(intervals):

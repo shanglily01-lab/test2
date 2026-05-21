@@ -291,55 +291,9 @@
 <!-- Recent Trades Bento Grid Segment -->
 <div class="mt-12">
 <h4 class="text-xl font-display font-bold tracking-tight mb-8">实时成交记录</h4>
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-<!-- Trade Item 1 -->
-<div class="bg-surface-container p-5 rounded-xl flex items-center justify-between group transition-all hover:bg-surface-container-high cursor-pointer">
-<div class="flex items-center gap-4">
-<div class="p-2 rounded-lg bg-primary/10">
-<span class="material-symbols-outlined text-primary text-xl" data-icon="south_east">south_east</span>
-</div>
-<div>
-<p class="font-mono text-sm">BTC/USDT <span class="text-[10px] text-on-surface-variant ml-2">SHORT</span></p>
-<p class="text-[10px] text-on-surface-variant font-mono">2023.11.24 14:28:11</p>
-</div>
-</div>
-<div class="text-right">
-<p class="font-mono text-sm text-error">-0.45%</p>
-<p class="text-[10px] text-on-surface-variant font-mono">ENTRY: 37,210.5</p>
-</div>
-</div>
-<!-- Trade Item 2 -->
-<div class="bg-surface-container p-5 rounded-xl flex items-center justify-between group transition-all hover:bg-surface-container-high cursor-pointer">
-<div class="flex items-center gap-4">
-<div class="p-2 rounded-lg bg-primary/10">
-<span class="material-symbols-outlined text-primary text-xl" data-icon="north_east">north_east</span>
-</div>
-<div>
-<p class="font-mono text-sm">ETH/USDT <span class="text-[10px] text-on-surface-variant ml-2">LONG</span></p>
-<p class="text-[10px] text-on-surface-variant font-mono">2023.11.24 14:25:40</p>
-</div>
-</div>
-<div class="text-right">
-<p class="font-mono text-sm text-primary">+1.12%</p>
-<p class="text-[10px] text-on-surface-variant font-mono">ENTRY: 2,055.2</p>
-</div>
-</div>
-<!-- Trade Item 3 -->
-<div class="bg-surface-container p-5 rounded-xl flex items-center justify-between group transition-all hover:bg-surface-container-high cursor-pointer">
-<div class="flex items-center gap-4">
-<div class="p-2 rounded-lg bg-primary/10">
-<span class="material-symbols-outlined text-primary text-xl" data-icon="north_east">north_east</span>
-</div>
-<div>
-<p class="font-mono text-sm">SOL/USDT <span class="text-[10px] text-on-surface-variant ml-2">LONG</span></p>
-<p class="text-[10px] text-on-surface-variant font-mono">2023.11.24 14:12:02</p>
-</div>
-</div>
-<div class="text-right">
-<p class="font-mono text-sm text-primary">+3.84%</p>
-<p class="text-[10px] text-on-surface-variant font-mono">ENTRY: 58.22</p>
-</div>
-</div>
+<div id="trades-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- 由 JS 动态渲染最新已平仓交易 -->
+<div class="col-span-3 text-center py-8 font-mono text-sm text-on-surface-variant">加载中...</div>
 </div>
 </div>
 
@@ -711,14 +665,13 @@ function renderWinrateChart(history) {
     var latestEl = document.getElementById('winrate-latest');
     if (!barsEl || !history || !history.length) return;
 
-    // 取有胜率数据的条目；若全为 null 则用 capture_rate 替代
+    // 取有胜率数据的条目
     var hasWr = history.some(function(d) { return d.win_rate != null; });
     var values = history.map(function(d) {
         return hasWr ? d.win_rate : d.capture_rate;
     });
 
     var max = Math.max.apply(null, values.filter(function(v){ return v != null; })) || 100;
-    // 图表基准线：超过50%高度开始；最低高度8%
     var minH = 8;
 
     barsEl.innerHTML = values.map(function(v, i) {
@@ -729,7 +682,10 @@ function renderWinrateChart(history) {
         var isHigh    = v >= 50;
         var colorClass = isHigh ? 'bg-primary/70' : 'bg-error/50';
         var glow       = (i === values.length - 1 && isHigh) ? ' shadow-[0_0_10px_rgba(73,244,200,0.4)]' : '';
-        return '<div class="relative flex-1 ' + colorClass + ' rounded-t-sm' + glow + '" style="height:' + heightPct + '%">'
+        var dayData = history[i] || {};
+        var tooltip = (v != null ? v.toFixed(0) + '%' : '--') + ' | ' + (dayData.total_trades || 0) + '笔'
+                    + (dayData.total_pnl != null ? ' | ' + (dayData.total_pnl >= 0 ? '+' : '') + dayData.total_pnl.toFixed(1) + 'U' : '');
+        return '<div class="relative flex-1 ' + colorClass + ' rounded-t-sm' + glow + '" style="height:' + heightPct + '%" title="' + tooltip + '">'
             + '<span class="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] font-mono text-on-surface-variant whitespace-nowrap">'
             + (v != null ? v.toFixed(0) + '%' : '')
             + '</span></div>';
@@ -739,13 +695,65 @@ function renderWinrateChart(history) {
         return '<span class="text-[8px] font-mono text-on-surface-variant/50">' + (d.date || '') + '</span>';
     }).join('');
 
-    // 最新一天数值展示在标题右侧
     var last = values[values.length - 1];
     if (last != null && latestEl) {
         var label = hasWr ? '胜率 ' : '捕获率 ';
         latestEl.textContent = label + last.toFixed(1) + '%';
         latestEl.className = 'text-[10px] font-mono ' + (last >= 50 ? 'text-primary' : 'text-error');
     }
+}
+
+// ===== 实时成交记录渲染 =====
+function renderRecentTrades(trades) {
+    var container = document.getElementById('trades-container');
+    if (!container) return;
+    if (!trades || trades.length === 0) {
+        container.innerHTML = '<div class="col-span-3 text-center py-8 font-mono text-sm text-on-surface-variant">暂无已平仓交易</div>';
+        return;
+    }
+    container.innerHTML = trades.map(function(t) {
+        var sym = (t.symbol || '');
+        if (sym.indexOf('/') === -1 && sym.endsWith('USDT')) {
+            sym = sym.slice(0, -4) + '/USDT';
+        }
+        var isLong = (t.direction || '').toUpperCase() === 'LONG';
+        var icon = isLong ? 'north_east' : 'south_east';
+        var dirLabel = isLong ? 'LONG' : 'SHORT';
+        var pnl = parseFloat(t.realized_pnl) || 0;
+        var pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+        var pnlClass = pnl >= 0 ? 'text-primary' : 'text-error';
+        var entry = parseFloat(t.entry_price) || 0;
+        var close = parseFloat(t.close_price) || 0;
+        var pnlPct = entry > 0 ? ((close - entry) / entry * 100 * (isLong ? 1 : -1)).toFixed(2) : '--';
+        var closeTime = t.close_time ? String(t.close_time).slice(0, 19).replace('T', ' ') : '';
+        // Format close_time to more readable form
+        var ts = '';
+        if (closeTime) {
+            var parts = closeTime.split(' ');
+            if (parts.length >= 2) {
+                var dateParts = parts[0].split('-');
+                var timePart = parts[1].slice(0, 5);
+                ts = dateParts[0] + '.' + dateParts[1] + '.' + dateParts[2] + ' ' + timePart;
+            } else {
+                ts = closeTime;
+            }
+        }
+        return '<div class="bg-surface-container p-5 rounded-xl flex items-center justify-between group transition-all hover:bg-surface-container-high cursor-pointer">'
+            + '<div class="flex items-center gap-4">'
+            + '<div class="p-2 rounded-lg ' + (isLong ? 'bg-primary/10' : 'bg-error/10') + '">'
+            + '<span class="material-symbols-outlined text-xl ' + (isLong ? 'text-primary' : 'text-error') + '" data-icon="' + icon + '">' + icon + '</span>'
+            + '</div>'
+            + '<div>'
+            + '<p class="font-mono text-sm">' + sym + ' <span class="text-[10px] text-on-surface-variant ml-2">' + dirLabel + '</span></p>'
+            + '<p class="text-[10px] text-on-surface-variant font-mono">' + ts + '</p>'
+            + '</div>'
+            + '</div>'
+            + '<div class="text-right">'
+            + '<p class="font-mono text-sm ' + pnlClass + '">' + pnlStr + 'U</p>'
+            + '<p class="text-[10px] text-on-surface-variant font-mono">ENTRY: ' + entry.toLocaleString('en-US', {maximumFractionDigits: 2}) + '</p>'
+            + '</div>'
+            + '</div>';
+    }).join('');
 }
 
 // ===== 主加载：单次请求快照，分发到各面板 =====
@@ -764,6 +772,7 @@ async function loadSnapshot() {
         renderNewsPanel(d.news || []);
         renderHyperliquidPanel(d.hyperliquid || {});
         renderWinrateChart(d.winrate_history || []);
+        renderRecentTrades(d.recent_trades || []);
     } catch (e) {
         console.error('loadSnapshot failed:', e);
         var msg = (e.message && e.message.indexOf('503') !== -1)

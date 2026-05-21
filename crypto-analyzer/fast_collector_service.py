@@ -65,10 +65,10 @@ class SmartCollectorService:
         self.collector = SmartFuturesCollector(db_config)
 
         # 检查间隔 (秒)
-        # 2026-05-18: WS 暂时被 Binance 暗惩罚 (multi-stream 不推), 改回 5 分钟做 WS 兜底主力.
-        # 已有 IP 熔断保护, smart_futures_collector.should_collect_interval 智能判断只采到点的周期,
-        # 250 req/5min ≈ 50 req/min, 远低于 2400 weight/min 限制, 安全.
-        self.interval = 300  # 5 分钟
+        # 2026-05-21: WS 阶段性免挂, 缩短到 3 分钟保证时效性;
+        # should_collect_interval 智能判断只采到点的周期, 250 req/3min ≈ 83 req/min,
+        # 仍远低于 2400 weight/min 限制, 安全.
+        self.interval = 180  # 3 分钟
 
         logger.info("🧠 智能数据采集服务初始化完成")
         logger.info(f"检查间隔: {self.interval}秒 (5分钟)")
