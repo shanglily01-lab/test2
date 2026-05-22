@@ -449,7 +449,12 @@ async function loadPositions() {
             'signal_confirm': '信号确认', 'trend_follow': '趋势跟随',
             'smart_trader': '趋势跟随', 'smart_trader_batch': '趋势跟随', 'smart_trader_batch_v2': '趋势跟随',
             'BTC_MOMENTUM': 'BTC动量', 'PREDICTOR': '预测神器',
-            'u_coin_style': 'U本位破位', 'manual': '手动'
+            'u_coin_style': 'U本位破位', 'manual': '手动',
+            's1_early_long': 'S1 早期做多', 's2_pullback_long': 'S2 回调做多',
+            's3_top_short': 'S3 顶部做空', 's4_rebound_short': 'S4 反弹做空',
+            's5_large_oversold': 'S5 大币超卖', 's6_vol_spike': 'S6 量能异动',
+            's7_ma_support': 'S7 均线支撑', 's8_topshort': 'S8 顶部反转',
+            's9_gemini_ai': 'S9 Gemini抄底'
         };
         var srcLabel = sourceLabels[pos.source] || pos.source || '';
         var signalType = pos.entry_signal_type || '--';

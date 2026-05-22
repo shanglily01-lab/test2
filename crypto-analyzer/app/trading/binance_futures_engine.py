@@ -650,6 +650,19 @@ class BinanceFuturesEngine:
                 'quantity': str(quantity)
             }
 
+            # 5.5. 添加 clientOrderId 标记策略来源（在交易所订单列表可见）
+            # 对 S1~S9 / BTC_MOMENTUM / PREDICTOR 等策略加上前缀，方便在 Binance 后台识别
+            source_prefix = source.lower().replace(' ', '_')
+            known_sources = {
+                's1_early_long', 's2_pullback_long', 's3_top_short', 's4_rebound_short',
+                's5_large_oversold', 's6_vol_spike', 's7_ma_support', 's8_topshort', 's9_gemini_ai',
+                'btc_momentum', 'predictor',
+            }
+            if source_prefix in known_sources:
+                # newClientOrderId 最长 36 字符，截短以防溢出
+                short_src = source_prefix[:20]
+                params['newClientOrderId'] = f"{short_src}_{int(time.time())}"
+
             # 如果是限价单
             if limit_price:
                 limit_price = self._round_price(limit_price, symbol)

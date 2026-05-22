@@ -414,7 +414,7 @@
 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
 <div>
 <p class="cfg-l2-label">3.1 持仓限制</p>
-<label class="block text-xs text-slate-500 mb-2">最大持仓时长</label>
+<label class="block text-xs text-slate-500 mb-2">Smart Trader 持仓时长</label>
 <div class="relative">
 <select id="maxHoldHoursSelect" class="w-full bg-[#151a20] border border-slate-800 rounded-xl py-3 px-3 pr-10 text-slate-200 text-sm font-mono appearance-none focus:ring-1 focus:ring-[#49f4c8]/40 focus:border-[#49f4c8]/30">
 <option value="3">3H</option>
@@ -432,7 +432,25 @@
 </div>
 </div>
 <div>
-<label class="block text-xs text-slate-500 mb-2 mt-6 sm:mt-[2.35rem]">最大持仓数量</label>
+<label class="block text-xs text-slate-500 mb-2 mt-6 sm:mt-[2.35rem]">S1~S9 持仓时长</label>
+<div class="relative">
+<select id="s1s9MaxHoldHoursSelect" class="w-full bg-[#151a20] border border-slate-800 rounded-xl py-3 px-3 pr-10 text-slate-200 text-sm font-mono appearance-none focus:ring-1 focus:ring-[#49f4c8]/40 focus:border-[#49f4c8]/30">
+<option value="3">3H</option>
+<option value="4">4H</option>
+<option value="5">5H</option>
+<option value="6" selected="">6H</option>
+<option value="7">7H</option>
+<option value="8">8H</option>
+<option value="9">9H</option>
+<option value="10">10H</option>
+<option value="11">11H</option>
+<option value="12">12H</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-2.5 text-slate-500 pointer-events-none text-lg">expand_more</span>
+</div>
+</div>
+<div class="sm:col-span-2">
+<label class="block text-xs text-slate-500 mb-2">最大持仓数量</label>
 <input id="maxPositionsInput" class="w-full bg-[#151a20] border border-slate-800 rounded-xl py-3 px-3 text-slate-200 font-mono text-sm focus:ring-1 focus:ring-[#49f4c8]/40" type="number" min="1" max="100" value="50"/>
 </div>
 </div>
@@ -647,10 +665,11 @@
 
         async function loadAll() {
             try {
-                const [dirData, svcData, holdData, big4SettingData, maxPosData] = await Promise.all([
+                const [dirData, svcData, holdData, s1s9HoldData, big4SettingData, maxPosData] = await Promise.all([
                     apiGet('/trading-direction'),
                     apiGet('/trading-services'),
                     apiGet('/max-hold-hours'),
+                    apiGet('/s1s9-max-hold-hours'),
                     apiGet('/settings/big4_filter_enabled'),
                     apiGet('/settings/max_positions').catch(function() { return { data: { value: '50' } }; })
                 ]);
@@ -658,6 +677,7 @@
                 const dir  = dirData.data  || dirData;
                 const svc  = svcData.data  || svcData;
                 const hold = holdData.data || holdData;
+                const s1s9hold = s1s9HoldData.data || s1s9HoldData;
                 const big4Setting = big4SettingData.data || big4SettingData;
                 const maxPosSetting = maxPosData.data || maxPosData;
 
@@ -692,6 +712,10 @@
                 const sel = document.getElementById('maxHoldHoursSelect');
                 if (sel) {
                     sel.value = String(hold.hours ?? 6);
+                }
+                const s1s9Sel = document.getElementById('s1s9MaxHoldHoursSelect');
+                if (s1s9Sel) {
+                    s1s9Sel.value = String(s1s9hold.hours ?? 6);
                 }
 
                 // 止损/止盈
@@ -882,6 +906,20 @@
             });
         }
 
+        // S1~S9 持仓时长 select
+        const s1s9MaxHoldSel = document.getElementById('s1s9MaxHoldHoursSelect');
+        if (s1s9MaxHoldSel) {
+            s1s9MaxHoldSel.addEventListener('change', async function () {
+                const hours = parseInt(this.value, 10);
+                try {
+                    await apiPut('/s1s9-max-hold-hours', { hours: hours });
+                    showToast('S1~S9 持仓时长已设为 ' + hours + ' 小时', false);
+                } catch (err) {
+                    showToast('保存失败: ' + err.message, true);
+                }
+            });
+        }
+
         // ---------------------------------------------------------------
         // 保存按钮 - 一键保存全部当前开关状态
         // ---------------------------------------------------------------
@@ -894,6 +932,7 @@
                 saveBtn.disabled = true;
                 try {
                     const hours = parseInt(maxHoldSel ? maxHoldSel.value : '6', 10);
+                    const s1s9Hours = parseInt(s1s9MaxHoldSel ? s1s9MaxHoldSel.value : '6', 10);
                     const slVal = parseFloat(document.getElementById('stopLossInput')?.value || '2') / 100;
                     const tpVal = parseFloat(document.getElementById('takeProfitInput')?.value || '6') / 100;
                     const mpVal = parseInt(document.getElementById('maxPositionsInput')?.value || '50', 10);
@@ -915,6 +954,7 @@
                         }),
                         apiPut('/big4-filter', { enabled: getToggle('big4Toggle') }),
                         apiPut('/max-hold-hours', { hours: hours }),
+                        apiPut('/s1s9-max-hold-hours', { hours: s1s9Hours }),
                         apiPut('/settings/max_positions', { setting_key: 'max_positions', setting_value: String(mpVal), description: '最大持仓数量' })
                     ]);
 

@@ -279,6 +279,9 @@ class MultiStrategyService:
         """从 system_settings 读 (sl_pct, tp_pct, hold_hours). 2026-05-17 起 S1-S9 统一用此值,
         不再用策略硬编码常量。SQL UPDATE setting_value 后 60 秒内动态生效。
 
+        2026-05-22: S1~S9 使用独立的 s1_s9_max_hold_hours（默认 6H），
+        Smart Trader/预测神器/BTC动量 仍使用 max_hold_hours（默认 4H）。
+
         Returns:
             (sl_pct, tp_pct, hold_hours) - 默认 (0.02, 0.05, 6)
         """
@@ -287,13 +290,13 @@ class MultiStrategyService:
             cur = conn.cursor()
             cur.execute("""
                 SELECT setting_key, setting_value FROM system_settings
-                WHERE setting_key IN ('stop_loss_pct', 'take_profit_pct', 'max_hold_hours')
+                WHERE setting_key IN ('stop_loss_pct', 'take_profit_pct', 's1_s9_max_hold_hours')
             """)
             rows = {r['setting_key']: r['setting_value'] for r in cur.fetchall()}
             cur.close(); conn.close()
             sl = float(rows.get('stop_loss_pct', 0.02))
             tp = float(rows.get('take_profit_pct', 0.05))
-            hold = max(1, int(float(rows.get('max_hold_hours', 6))))
+            hold = max(1, int(float(rows.get('s1_s9_max_hold_hours', 6))))
             return sl, tp, hold
         except Exception as e:
             logger.warning(f"[多策略] 读 system_settings SL/TP/hold 失败,用默认 (0.02/0.05/6h): {e}")

@@ -617,6 +617,18 @@ async def lifespan(app: FastAPI):
         schedule.every(6).hours.do(run_gemini_explore)
         logger.info("[Gemini探索] 调度已注册, 每 6h 跑一次 (kill switch 默认 OFF)")
 
+        # Gemini 预测 - 每 12h 调一次 Gemini 预测 TOP50 方向
+        def run_gemini_predict():
+            try:
+                from app.services.gemini_predictor import run_predict_round
+                run_predict_round(triggered_by='scheduler')
+            except Exception as e:
+                logger.error(f"[Gemini预测] 调度异常: {e}")
+                import traceback
+                traceback.print_exc()
+        schedule.every(12).hours.do(run_gemini_predict)
+        logger.info("[Gemini预测] 调度已注册, 每 12h 跑一次 (kill switch 默认 ON)")
+
 
         # ── 独立子进程周期任务（与 FastAPI 主进程完全隔离）──────────────────────────
         # 每个存储过程调用都在独立 OS 子进程中运行；
@@ -1017,6 +1029,16 @@ try:
     logger.info("[Gemini探索] API路由已注册")
 except Exception as e:
     logger.warning(f"[Gemini探索] API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
+# 注册 Gemini 预测 API 路由
+try:
+    from app.api.gemini_predict_api import router as gemini_predict_router
+    app.include_router(gemini_predict_router)
+    logger.info("[Gemini预测] API路由已注册")
+except Exception as e:
+    logger.warning(f"[Gemini预测] API路由注册失败: {e}")
     import traceback
     traceback.print_exc()
 
