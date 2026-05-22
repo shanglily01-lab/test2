@@ -164,43 +164,110 @@ def _get_historical_stats(conn) -> dict:
 
 
 def _fetch_movers_24h(cur, top_n: int):
-    """24h 涨/跌 各 top_n. 新鲜度门槛: EXPLORE_PRICE_FRESH_MIN 分钟."""
-    base_sql = """
-        SELECT symbol, current_price, change_24h, quote_volume_24h, trend, updated_at
-        FROM price_stats_24h
-        WHERE quote_volume_24h >= %s
-          AND change_24h IS NOT NULL
-          AND updated_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL %s MINUTE)
+    """24h 涨/跌 各 top_n. 直接从 kline_data 实时计算."""
+    sql = """
+        SELECT k.symbol,
+               k.close_price                        AS current_price,
+               (k.close_price - p24.p24_close) / p24.p24_close * 100
+                                                     AS change_24h,
+               COALESCE(vol.qvol, 0)                 AS quote_volume_24h
+        FROM kline_data k
+        -- 最新 5m K 线 (当前价格)
+        INNER JOIN (
+            SELECT symbol, MAX(open_time) AS max_t
+            FROM kline_data
+            WHERE timeframe='5m' AND exchange='binance_futures'
+              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 10 MINUTE) * 1000)
+            GROUP BY symbol
+        ) latest ON k.symbol = latest.symbol
+                AND k.open_time = latest.max_t
+                AND k.timeframe = '5m' AND k.exchange = 'binance_futures'
+        -- 24h 前 1h K 线收盘价
+        INNER JOIN (
+            SELECT k2.symbol, k2.close_price AS p24_close
+            FROM kline_data k2
+            INNER JOIN (
+                SELECT symbol, MAX(open_time) AS max_t
+                FROM kline_data
+                WHERE timeframe='1h' AND exchange='binance_futures'
+                  AND open_time <= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+                  AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 HOUR) * 1000)
+                GROUP BY symbol
+            ) p24t ON k2.symbol = p24t.symbol
+                   AND k2.open_time = p24t.max_t
+                   AND k2.timeframe = '1h' AND k2.exchange = 'binance_futures'
+        ) p24 ON k.symbol = p24.symbol
+        -- 24h 成交额
+        INNER JOIN (
+            SELECT symbol, SUM(quote_volume) AS qvol
+            FROM kline_data
+            WHERE timeframe='5m' AND exchange='binance_futures'
+              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+            GROUP BY symbol
+        ) vol ON k.symbol = vol.symbol
+        WHERE p24.p24_close > 0
+          AND vol.qvol >= %s
+          AND k.symbol LIKE '%/USDT'
         ORDER BY change_24h {order}
         LIMIT %s
     """
-    cur.execute(base_sql.format(order="DESC"),
-                (MIN_QUOTE_VOLUME, EXPLORE_PRICE_FRESH_MIN, top_n * 3))
+    cur.execute(sql.format(order="DESC"), (MIN_QUOTE_VOLUME, top_n * 3))
     gainers = [r for r in cur.fetchall() if not _is_excluded(r["symbol"])][:top_n]
-    cur.execute(base_sql.format(order="ASC"),
-                (MIN_QUOTE_VOLUME, EXPLORE_PRICE_FRESH_MIN, top_n * 3))
+    cur.execute(sql.format(order="ASC"), (MIN_QUOTE_VOLUME, top_n * 3))
     losers = [r for r in cur.fetchall() if not _is_excluded(r["symbol"])][:top_n]
     return gainers, losers
 
 
 def _fetch_normal_movers(cur, top_n: int) -> tuple:
-    """中等波动币: 3% <= |change_24h| <= 15%, 成交额 >= 500 万 USDT.
-    
-    这类币噪声更小, 趋势更清晰, 适合 LLM 判断方向.
-    排除已在极端池的 symbol.
+    """中等波动币: 3% <= |change_24h| <= 15%, 成交额 >= NORMAL_MOVER_MIN_VOLUME.
+
+    直接从 kline_data 实时计算. 排除已在极端池的 symbol.
     """
     sql = """
-        SELECT symbol, current_price, change_24h, quote_volume_24h, trend, updated_at
-        FROM price_stats_24h
-        WHERE quote_volume_24h >= %s
-          AND change_24h IS NOT NULL
-          AND ABS(change_24h) BETWEEN %s AND %s
-          AND updated_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL %s MINUTE)
-        ORDER BY quote_volume_24h DESC
+        SELECT k.symbol,
+               k.close_price                        AS current_price,
+               (k.close_price - p24.p24_close) / p24.p24_close * 100
+                                                     AS change_24h,
+               COALESCE(vol.qvol, 0)                 AS quote_volume_24h
+        FROM kline_data k
+        INNER JOIN (
+            SELECT symbol, MAX(open_time) AS max_t
+            FROM kline_data
+            WHERE timeframe='5m' AND exchange='binance_futures'
+              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 10 MINUTE) * 1000)
+            GROUP BY symbol
+        ) latest ON k.symbol = latest.symbol
+                AND k.open_time = latest.max_t
+                AND k.timeframe = '5m' AND k.exchange = 'binance_futures'
+        INNER JOIN (
+            SELECT k2.symbol, k2.close_price AS p24_close
+            FROM kline_data k2
+            INNER JOIN (
+                SELECT symbol, MAX(open_time) AS max_t
+                FROM kline_data
+                WHERE timeframe='1h' AND exchange='binance_futures'
+                  AND open_time <= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+                  AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 HOUR) * 1000)
+                GROUP BY symbol
+            ) p24t ON k2.symbol = p24t.symbol
+                   AND k2.open_time = p24t.max_t
+                   AND k2.timeframe = '1h' AND k2.exchange = 'binance_futures'
+        ) p24 ON k.symbol = p24.symbol
+        INNER JOIN (
+            SELECT symbol, SUM(quote_volume) AS qvol
+            FROM kline_data
+            WHERE timeframe='5m' AND exchange='binance_futures'
+              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+            GROUP BY symbol
+        ) vol ON k.symbol = vol.symbol
+        WHERE p24.p24_close > 0
+          AND vol.qvol >= %s
+          AND ABS((k.close_price - p24.p24_close) / p24.p24_close * 100) BETWEEN %s AND %s
+          AND k.symbol LIKE '%/USDT'
+        ORDER BY vol.qvol DESC
         LIMIT %s
     """
-    cur.execute(sql, (NORMAL_MOVER_MIN_VOLUME, NORMAL_CHG_MIN, NORMAL_CHG_MAX,
-                      EXPLORE_PRICE_FRESH_MIN, top_n * 3))
+    cur.execute(sql, (NORMAL_MOVER_MIN_VOLUME, NORMAL_CHG_MIN, NORMAL_CHG_MAX, top_n * 3))
     rows = [r for r in cur.fetchall()
             if not _is_excluded(r["symbol"])
             and r["symbol"] not in EXCLUDED_EXTREME_SYMBOLS]
@@ -520,10 +587,36 @@ def _build_global_context(conn) -> dict:
     with conn.cursor() as cur:
         for sym in ('BTC/USDT', 'ETH/USDT', 'SOL/USDT'):
             base = sym.split('/')[0].lower()
-            cur.execute(
-                "SELECT current_price, change_24h FROM price_stats_24h WHERE symbol=%s",
-                (sym,),
-            )
+            cur.execute("""
+                SELECT k.close_price AS current_price,
+                       (k.close_price - p24.p24_close) / p24.p24_close * 100 AS change_24h
+                FROM kline_data k
+                INNER JOIN (
+                    SELECT symbol, MAX(open_time) AS max_t
+                    FROM kline_data
+                    WHERE timeframe='5m' AND exchange='binance_futures'
+                      AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 10 MINUTE) * 1000)
+                    GROUP BY symbol
+                ) latest ON k.symbol = latest.symbol
+                        AND k.open_time = latest.max_t
+                        AND k.timeframe = '5m' AND k.exchange = 'binance_futures'
+                INNER JOIN (
+                    SELECT k2.symbol, k2.close_price AS p24_close
+                    FROM kline_data k2
+                    INNER JOIN (
+                        SELECT symbol, MAX(open_time) AS max_t
+                        FROM kline_data
+                        WHERE timeframe='1h' AND exchange='binance_futures'
+                          AND open_time <= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+                          AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 HOUR) * 1000)
+                        GROUP BY symbol
+                    ) p24t ON k2.symbol = p24t.symbol
+                           AND k2.open_time = p24t.max_t
+                           AND k2.timeframe = '1h' AND k2.exchange = 'binance_futures'
+                ) p24 ON k.symbol = p24.symbol
+                WHERE k.symbol = %s AND p24.p24_close > 0
+                LIMIT 1
+            """, (sym,))
             r = cur.fetchone()
             if r:
                 ctx[f'{base}_price'] = float(r['current_price']) if r['current_price'] else None
@@ -533,12 +626,38 @@ def _build_global_context(conn) -> dict:
 
 
 def _describe_market_regime(conn) -> str:
-    """用简单规则描述大盘状态: 趋势/震荡/极端."""
+    """用简单规则描述大盘状态: 趋势/震荡/极端. 从 kline_data 实时计算."""
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT change_24h FROM price_stats_24h WHERE symbol='BTC/USDT'"
-            )
+            cur.execute("""
+                SELECT (k.close_price - p24.p24_close) / p24.p24_close * 100 AS change_24h
+                FROM kline_data k
+                INNER JOIN (
+                    SELECT symbol, MAX(open_time) AS max_t
+                    FROM kline_data
+                    WHERE timeframe='5m' AND exchange='binance_futures'
+                      AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 10 MINUTE) * 1000)
+                    GROUP BY symbol
+                ) latest ON k.symbol = latest.symbol
+                        AND k.open_time = latest.max_t
+                        AND k.timeframe = '5m' AND k.exchange = 'binance_futures'
+                INNER JOIN (
+                    SELECT k2.symbol, k2.close_price AS p24_close
+                    FROM kline_data k2
+                    INNER JOIN (
+                        SELECT symbol, MAX(open_time) AS max_t
+                        FROM kline_data
+                        WHERE timeframe='1h' AND exchange='binance_futures'
+                          AND open_time <= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+                          AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 HOUR) * 1000)
+                        GROUP BY symbol
+                    ) p24t ON k2.symbol = p24t.symbol
+                           AND k2.open_time = p24t.max_t
+                           AND k2.timeframe = '1h' AND k2.exchange = 'binance_futures'
+                ) p24 ON k.symbol = p24.symbol
+                WHERE k.symbol = 'BTC/USDT' AND p24.p24_close > 0
+                LIMIT 1
+            """)
             row = cur.fetchone()
             if row and row.get('change_24h') is not None:
                 btc_chg = abs(float(row['change_24h']))
@@ -1088,13 +1207,14 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             # 诊断: 检查各数据源为何为空
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT COUNT(*) AS cnt FROM price_stats_24h "
-                    "WHERE updated_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 20 MINUTE)"
+                    "SELECT COUNT(DISTINCT symbol) AS cnt FROM kline_data "
+                    "WHERE timeframe='5m' AND exchange='binance_futures' "
+                    "AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 10 MINUTE) * 1000)"
                 )
                 fresh_rows = cur.fetchone() or {}
                 cur.execute(
-                    "SELECT COUNT(*) AS cnt FROM price_stats_24h "
-                    "WHERE updated_at IS NOT NULL"
+                    "SELECT COUNT(DISTINCT symbol) AS cnt FROM kline_data "
+                    "WHERE timeframe='1h' AND exchange='binance_futures'"
                 )
                 total_rows = cur.fetchone() or {}
                 cur.execute(
@@ -1104,8 +1224,8 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 fresh_funding = cur.fetchone() or {}
                 logger.warning(
                     f"[Gemini探索] 候选池为空诊断: "
-                    f"price_stats_24h 总行数={total_rows.get('cnt', -1)}, "
-                    f"新鲜行数(20min内)={fresh_rows.get('cnt', -1)}, "
+                    f"kline_data 5m 最新10分钟有币数={fresh_rows.get('cnt', -1)}, "
+                    f"kline_data 1h 总币数={total_rows.get('cnt', -1)}, "
                     f"新鲜资金费率(30min内)={fresh_funding.get('cnt', -1)}"
                 )
             elapsed = time.time() - t0
