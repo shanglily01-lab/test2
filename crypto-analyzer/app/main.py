@@ -32,7 +32,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Request
 from fastapi import Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from loguru import logger
@@ -1386,6 +1386,7 @@ async def mobile_spot_page(request: Request):
     if not p.exists():
         raise HTTPException(status_code=404, detail="mobile_spot.html not found")
     html = p.read_text(encoding="utf-8")
+    from fastapi.responses import HTMLResponse
     return HTMLResponse(html)
 
 
