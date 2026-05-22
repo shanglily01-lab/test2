@@ -5,15 +5,18 @@
 
 核心逻辑:
   - 每 30 分钟扫描候选币, 寻找下跌至支撑位的买入机会
-  - 技术条件: 日线 RSI<35(超卖) + 价格靠近 MA99 + 1H 量能回升
-  - 买入后设置 止盈(+8%) / 止损(-5%) / 超时(48h)
+  - 技术条件: 日线 RSI<35(超卖) + 价格靠近 MA99
+  - 买入后设置 止盈(+25%) / 止损(-15%) / 超时(14天)
   - 每 1 分钟检查持仓状态, 触发条件时自动卖出
   - 实盘同步: Binance 现货限价单 (低于市价 0.2%) / 市价卖出
   - 单笔金额: 从 API key 的 max_position_value 读取
 
-价格来源:
-  统一走 BinanceDataHub (WS → 缓存 → DB → REST 兜底),
-  不直接调 Binance API 或 写死 fallback。
+策略风格:
+  - DCA 抄底型 — "别人恐惧我贪婪"
+  - 条件放宽, 日线大方向正确即可入场 (不做短线企稳判断)
+  - 预期持有 1~14 天, 止盈 25% (顺趋势反弹)
+  - 控制单笔仓位 (固定 max_position_value USDT / 单)
+  - 最多同时持有 5 个现货仓位
 """
 
 import sys, os, asyncio
@@ -37,10 +40,9 @@ from app.services.binance_data_hub import get_global_data_hub
 # ──────────────────────────────────────────────
 ACCOUNT_ID = 3                     # 现货专用账号 ID
 MAX_POSITIONS = 5                  # 最大同时持仓数
-MAX_HOLD_HOURS = 48.0              # 最长持有时间
-TP_PCT = 0.08                      # 止盈 +8%
-SL_PCT = 0.05                      # 止损 -5%
-MIN_PROFIT_TO_CLOSE = 0.03         # 持有 >24h 后, 盈利 >=+3% 即可止盈
+MAX_HOLD_HOURS = 336.0             # 最长持有时间 (14 天, 现货以周为单位)
+TP_PCT = 0.25                      # 止盈 +25% (超卖反弹空间大)
+SL_PCT = 0.15                      # 止损 -15% (现货无爆仓, 宽松风控)
 LIMIT_SPREAD = 0.002               # 限价单挂单: 低于市价 0.2%
 
 SOURCE = 'spot_dca'                # 策略标识
@@ -368,7 +370,7 @@ def _check_entry_conditions(symbol: str) -> Optional[str]:
 
         close_d = df_daily['close'].astype(float)
 
-        # 日线 RSI < 35 (超卖区域)
+        # 日线 RSI < 35 (超卖区域) — "别人恐惧我贪婪"
         rsi_d = ti.calculate_rsi(df_daily)
         if rsi_d is None or len(rsi_d) < 2:
             return None
@@ -376,40 +378,30 @@ def _check_entry_conditions(symbol: str) -> Optional[str]:
         if last_rsi >= 35:
             return None
 
-        # 价格在 MA99 附近 (±8%)
+        # 价格在 MA99 附近, 允许惯性下跌到 -15% (超卖后可能继续跌一段)
         ma99 = close_d.rolling(99).mean().iloc[-1]
         cur_close = float(close_d.iloc[-1])
         dist_to_ma99 = (cur_close - ma99) / ma99
-        if dist_to_ma99 < -0.08 or dist_to_ma99 > 0.08:
+        if dist_to_ma99 < -0.15 or dist_to_ma99 > 0.08:
             return None
 
-        # 1H 数据 — 确认短期企稳
-        df_1h = _get_klines(symbol, '1h', 48)
-        if df_1h is None or len(df_1h) < 20:
+        # 1H 快速确认: 只要不是单边崩盘即可
+        df_1h = _get_klines(symbol, '1h', 24)
+        if df_1h is None or len(df_1h) < 12:
             return None
 
         close_1h = df_1h['close'].astype(float)
 
-        # 1H 价格在 MA20 上方 (短期有支撑)
+        # 1H 价格不低于 MA20 的 97% (刚跌破但收回的情况可接受)
         ma20_1h = close_1h.rolling(20).mean().iloc[-1]
         cur_1h_close = float(close_1h.iloc[-1])
-        if cur_1h_close < ma20_1h * 0.99:
-            return None
-
-        # 最近 3 根 1H K 线收盘价依次上升 (企稳信号)
-        last_3 = close_1h.iloc[-3:].tolist()
-        if len(last_3) >= 3 and not (last_3[-3] < last_3[-2] < last_3[-1]):
-            return None
-
-        # 最近 3 根成交量依次放大 (量能回升)
-        vol_1h = df_1h['volume'].astype(float).iloc[-3:].tolist()
-        if len(vol_1h) >= 3 and not (vol_1h[-3] < vol_1h[-2] < vol_1h[-1]):
+        if cur_1h_close < ma20_1h * 0.97:
             return None
 
         reason = (
             f"日RSI={last_rsi:.0f}超卖+"
             f"MA99偏离={dist_to_ma99*100:+.1f}%+"
-            f"1H企稳放量"
+            f"1H>MA20={cur_1h_close/ma20_1h*100-100:+.1f}%"
         )
         return reason[:200]
 
@@ -442,7 +434,6 @@ def _check_open_positions():
         tp = float(pos['take_profit_price']) if pos.get('take_profit_price') else None
         sl = float(pos['stop_loss_price']) if pos.get('stop_loss_price') else None
         planned_close = pos.get('planned_close_time')
-        open_time = pos.get('open_time')
 
         price = _get_current_price(symbol)
         if not price or price <= 0:
@@ -450,27 +441,20 @@ def _check_open_positions():
 
         profit_pct = (price - entry) / entry
 
-        # 止盈
+        # 止盈 +25%
         if tp and price >= tp:
             _close_position(pid, symbol, f"止盈+{profit_pct*100:.1f}%")
             continue
 
-        # 止损
+        # 止损 -15%
         if sl and price <= sl:
             _close_position(pid, symbol, f"止损{profit_pct*100:.1f}%")
             continue
 
-        # 超时
+        # 超时 14 天
         if planned_close and datetime.utcnow() >= planned_close:
             _close_position(pid, symbol, f"超时平仓(profit={profit_pct*100:+.1f}%)")
             continue
-
-        # 持有 >24h 且盈利 >=+3%, 落袋为安
-        if open_time:
-            hold_hours = (datetime.utcnow() - open_time).total_seconds() / 3600
-            if hold_hours >= 24 and profit_pct >= MIN_PROFIT_TO_CLOSE:
-                _close_position(pid, symbol, f"落袋为安+{profit_pct*100:.1f}%(已{hold_hours:.0f}h)")
-                continue
 
 
 # ──────────────────────────────────────────────
@@ -545,3 +529,20 @@ async def spot_trader_loop():
             last_scan = now
 
         await asyncio.sleep(POSITION_CHECK_INTERVAL_SECONDS)
+
+
+# ==========================================================
+# 独立启动入口
+# ==========================================================
+if __name__ == "__main__":
+    logger.info("=" * 50)
+    logger.info("现货交易策略服务 — 独立启动")
+    logger.info("=" * 50)
+
+    # 首次运行时立即扫描一轮
+    logger.info("[现货] 首次扫描买入机会...")
+    _scan_buy_opportunities()
+    logger.info("[现货] 首次扫描完成")
+
+    # 进入后台循环
+    asyncio.run(spot_trader_loop())
