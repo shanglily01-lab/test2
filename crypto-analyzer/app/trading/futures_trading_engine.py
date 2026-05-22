@@ -1230,24 +1230,24 @@ class FuturesTradingEngine:
             # 不再用 self.live_engine (config.yaml 单账号) 按 symbol+side 模糊匹配,
             # 多账号场景下那会用错账号的密钥去查持仓导致静默失败。
             try:
-                # 先检查 live_trading_enabled 开关 (控制模拟盘与实盘的关联)
-                live_trading_enabled = False
+                # 先检查 live_close_enabled 开关 (控制模拟盘与实盘的平仓同步)
+                live_close_enabled = False
                 try:
                     chk_cur = connection.cursor()
                     chk_cur.execute(
-                        "SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'"
+                        "SELECT setting_value FROM system_settings WHERE setting_key='live_close_enabled'"
                     )
                     row = chk_cur.fetchone()
                     chk_cur.close()
                     if row:
-                        live_trading_enabled = str(row.get('setting_value', '0')).lower() in ('1', 'true', 'yes')
+                        live_close_enabled = str(row.get('setting_value', '0')).lower() in ('1', 'true', 'yes')
                 except Exception as _ge:
-                    logger.warning(f"[同步实盘] 读 live_trading_enabled 失败,保守跳过: {_ge}")
-                    live_trading_enabled = False
+                    logger.warning(f"[同步实盘] 读 live_close_enabled 失败,保守跳过: {_ge}")
+                    live_close_enabled = False
 
-                if not live_trading_enabled:
+                if not live_close_enabled:
                     logger.info(
-                        f"[同步实盘] live_trading_enabled=0,跳过 {symbol} {position_side} 实盘平仓 "
+                        f"[同步实盘] live_close_enabled=0,跳过 {symbol} {position_side} 实盘平仓 "
                         f"(paper_position_id={position_id}, reason={reason})"
                     )
                 else:

@@ -386,7 +386,7 @@ class MarketPredictor:
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute(
-                "SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'"
+                "SELECT setting_value FROM system_settings WHERE setting_key='live_close_enabled'"
             )
             r = cur.fetchone()
             live_enabled = r and str(r.get('setting_value', '0')).lower() in ('1', 'true', 'yes')

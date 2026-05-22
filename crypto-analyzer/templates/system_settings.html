@@ -282,10 +282,19 @@
 <p class="cfg-l2-label">1.2 其余权限</p>
 <div class="cfg-row">
 <div class="min-w-0">
-<div class="text-sm font-medium text-slate-200">实盘下单</div>
-<p class="text-xs text-slate-500 mt-0.5">真实资金</p>
+<div class="text-sm font-medium text-slate-200">实盘开仓</div>
+<p class="text-xs text-slate-500 mt-0.5">真实资金 · 仅控制开仓</p>
 </div>
 <div id="liveToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div>
+</div>
+</div>
+<div class="cfg-row">
+<div class="min-w-0">
+<div class="text-sm font-medium text-slate-200">实盘平仓</div>
+<p class="text-xs text-slate-500 mt-0.5">同步平仓 · 仅控制平仓</p>
+</div>
+<div id="liveCloseToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div>
 </div>
 </div>
@@ -658,6 +667,7 @@
 
                 // 总开关 - 交易服务
                 setToggle('liveToggle', svc.live_trading_enabled !== false);
+                setToggle('liveCloseToggle', svc.live_close_enabled !== false);
                 setToggle('usdtToggle', svc.usdt_futures_enabled !== false);
 
                 // 策略开关
@@ -704,11 +714,22 @@
         // 单个 toggle 的保存逻辑
         // ---------------------------------------------------------------
 
-        // 实盘交易
+        // 实盘开仓
         bindToggle('liveToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { live_trading_enabled: enabled });
-                showToast('实盘交易已' + (enabled ? '开启' : '关闭'), false);
+                showToast('实盘开仓已' + (enabled ? '开启' : '关闭'), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
+        // 实盘平仓
+        bindToggle('liveCloseToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { live_close_enabled: enabled });
+                showToast('实盘平仓已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;

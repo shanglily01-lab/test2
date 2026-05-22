@@ -923,7 +923,7 @@ class SmartExitOptimizer:
         查找与模拟单关联的实盘仓位，调用 BinanceFuturesEngine 真实平仓
 
         安全门禁 (2026-05-14):
-        1. live_trading_enabled=0 时直接返回,绝不动实盘
+        1. live_close_enabled=0 时直接返回,绝不动实盘
         2. 仅平 paper_position_id 关联的实盘单,删除旧的"按 symbol+direction 模糊匹配"fallback
            (该 fallback 会误平用户手动开仓的同 symbol 单,如 binance_sync 来源)
         """
@@ -931,24 +931,24 @@ class SmartExitOptimizer:
             import pymysql
             import pymysql.cursors
 
-            # ===== 安全门禁 1: live_trading_enabled 硬门 =====
+            # ===== 安全门禁 1: live_close_enabled 硬门 =====
             try:
                 _gconn = pymysql.connect(
                     **self.db_config, charset='utf8mb4',
                     cursorclass=pymysql.cursors.DictCursor, autocommit=True
                 )
                 _gcur = _gconn.cursor()
-                _gcur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
+                _gcur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_close_enabled'")
                 _grow = _gcur.fetchone()
                 _gcur.close(); _gconn.close()
                 _live_enabled = _grow and str(_grow.get('setting_value', '0')).lower() in ('1', 'true', 'yes')
             except Exception as _ge:
-                logger.warning(f"[实盘平仓] 读 live_trading_enabled 失败,保守跳过: {_ge}")
+                logger.warning(f"[实盘平仓] 读 live_close_enabled 失败,保守跳过: {_ge}")
                 return
 
             if not _live_enabled:
                 logger.info(
-                    f"[实盘平仓] live_trading_enabled=0,跳过 {symbol} {direction} "
+                    f"[实盘平仓] live_close_enabled=0,跳过 {symbol} {direction} "
                     f"(paper_position_id={paper_position_id}, reason={reason})"
                 )
                 return

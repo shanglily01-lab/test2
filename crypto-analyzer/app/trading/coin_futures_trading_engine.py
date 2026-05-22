@@ -1428,23 +1428,23 @@ class CoinFuturesTradingEngine:
                         logger.info(f"[同步实盘] {symbol} {position_side} 无策略ID，默认同步实盘平仓")
 
                     if should_sync:
-                        # ===== 安全门禁 (2026-05-14): live_trading_enabled 硬门 =====
-                        # 即使策略配置 syncLive=true,全局 live_trading_enabled=0 时也禁止动实盘
+                        # ===== 安全门禁 (2026-05-22): live_close_enabled 硬门 =====
+                        # 即使策略配置 syncLive=true,全局 live_close_enabled=0 时也禁止动实盘
                         try:
                             _gcur = connection.cursor()
                             _gcur.execute(
-                                "SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'"
+                                "SELECT setting_value FROM system_settings WHERE setting_key='live_close_enabled'"
                             )
                             _grow = _gcur.fetchone()
                             _gcur.close()
                             _live_enabled = _grow and str(_grow.get('setting_value', '0')).lower() in ('1', 'true', 'yes')
                         except Exception as _ge:
-                            logger.warning(f"[同步实盘] 读 live_trading_enabled 失败,保守跳过: {_ge}")
+                            logger.warning(f"[同步实盘] 读 live_close_enabled 失败,保守跳过: {_ge}")
                             _live_enabled = False
 
                         if not _live_enabled:
                             logger.info(
-                                f"[同步实盘] live_trading_enabled=0,跳过 {symbol} {position_side} 实盘平仓 "
+                                f"[同步实盘] live_close_enabled=0,跳过 {symbol} {position_side} 实盘平仓 "
                                 f"(reason={reason})"
                             )
                         else:

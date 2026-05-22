@@ -3069,7 +3069,7 @@ class SmartTraderService:
             try:
                 _c = self._get_connection()
                 _cur = _c.cursor()
-                _cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
+                _cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_close_enabled'")
                 _r = _cur.fetchone()
                 live_enabled = _r and str(_r.get('setting_value', '0')).lower() in ('1', 'true', 'yes')
                 _cur.close(); _c.close()

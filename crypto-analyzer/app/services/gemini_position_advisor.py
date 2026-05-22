@@ -11,7 +11,8 @@ Gemini 实盘持仓顾问 (2026-05-17)
 
 开关:
   system_settings.gemini_position_advisor_enabled = 1 启用 (默认 0)
-  + live_trading_enabled = 1 (实盘开关) 才会真正动实盘
+  + live_trading_enabled = 1 (实盘开仓开关) 才会真正动实盘开仓
+  + live_close_enabled = 1 (实盘平仓开关) 才会真正动实盘平仓
 
 设计文档: design/系统设计文档.md (S9 Gemini + 持仓顾问独立模块)
 """
@@ -66,13 +67,13 @@ class GeminiPositionAdvisor:
         except Exception:
             return False
 
-    def _is_live_enabled(self) -> bool:
+    def _is_close_enabled(self) -> bool:
         try:
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute(
                 "SELECT setting_value FROM system_settings "
-                "WHERE setting_key='live_trading_enabled' LIMIT 1"
+                "WHERE setting_key='live_close_enabled' LIMIT 1"
             )
             row = cur.fetchone()
             cur.close(); conn.close()
@@ -329,9 +330,9 @@ Output ONLY a single valid JSON object, no markdown fence:
 
     def _close_live_position(self, position: dict, reason: str) -> bool:
         """通过 BinanceFuturesEngine 真实平仓 + 更新 live_futures_positions"""
-        if not self._is_live_enabled():
+        if not self._is_close_enabled():
             logger.warning(
-                f"[Gemini顾问] live_trading_enabled=0,不平 "
+                f"[Gemini顾问] live_close_enabled=0,不平 "
                 f"id={position['id']} {position['symbol']} {position['position_side']}"
             )
             return False
