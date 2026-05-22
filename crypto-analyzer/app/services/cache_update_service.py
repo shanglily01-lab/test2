@@ -107,76 +107,120 @@ class CacheUpdateService:
                 charset='utf8mb4',
                 autocommit=True,
             )
-            try:
-                with conn.cursor() as cur:
-                    # 单条 UPDATE 用 4 个子聚合一次性更新所有 symbol
-                    # 注意: 不限定 symbol IN (...), 因为 price_stats_24h 已经有这些行
-                    # ws_kline_collector 写入的所有 symbol 都自动得到更新
-                    cur.execute("""
-                        UPDATE price_stats_24h p
+        except Exception as e:
+            logger.error(f"[price_stats] DB 连接失败: {e}", exc_info=True)
+            return
+
+        try:
+            with conn.cursor() as cur:
+                # 单条 UPDATE 用 4 个子聚合一次性更新所有 symbol
+                # 注意: ago24h/stat24h 使用 LEFT JOIN, 避免因个别数据缺失导致整行不更新
+                # 即使 24h 前价格不可用, 也会刷新 updated_at 防止数据全表过时
+                cur.execute("""
+                    UPDATE price_stats_24h p
+                    LEFT JOIN (
+                        -- latest_5m: 每个 symbol 最新 5m close = current_price
+                        SELECT k.symbol, k.close_price AS cur_price
+                        FROM kline_data k
                         INNER JOIN (
-                            -- latest_5m: 每个 symbol 最新 5m close = current_price
-                            SELECT k.symbol, k.close_price AS cur_price
-                            FROM kline_data k
-                            INNER JOIN (
-                                SELECT symbol, MAX(open_time) AS max_t
-                                FROM kline_data
-                                WHERE timeframe='5m' AND exchange='binance_futures'
-                                  AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 MINUTE) * 1000)
-                                GROUP BY symbol
-                            ) cap ON k.symbol=cap.symbol AND k.open_time=cap.max_t AND k.timeframe='5m'
-                        ) latest5m ON p.symbol = latest5m.symbol
-                        INNER JOIN (
-                            -- 24h_ago_1h: 每个 symbol 24h 前最近 1h K线 close
-                            SELECT k.symbol, k.close_price AS p24
-                            FROM kline_data k
-                            INNER JOIN (
-                                SELECT symbol, MAX(open_time) AS max_t
-                                FROM kline_data
-                                WHERE timeframe='1h' AND exchange='binance_futures'
-                                  AND open_time <= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
-                                  AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 HOUR) * 1000)
-                                GROUP BY symbol
-                            ) cap ON k.symbol=cap.symbol AND k.open_time=cap.max_t AND k.timeframe='1h'
-                        ) ago24h ON p.symbol = ago24h.symbol
-                        LEFT JOIN (
-                            -- 24h 内 5m K线高低 + 成交量
-                            SELECT symbol,
-                                   MAX(high_price) AS h24,
-                                   MIN(low_price)  AS l24,
-                                   SUM(volume) AS vol,
-                                   SUM(quote_volume) AS qvol
+                            SELECT symbol, MAX(open_time) AS max_t
                             FROM kline_data
                             WHERE timeframe='5m' AND exchange='binance_futures'
-                              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+                              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 MINUTE) * 1000)
                             GROUP BY symbol
-                        ) stat24h ON p.symbol = stat24h.symbol
-                        SET p.current_price   = latest5m.cur_price,
-                            p.price_24h_ago   = ago24h.p24,
-                            p.change_24h_abs  = latest5m.cur_price - ago24h.p24,
-                            p.change_24h      = (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100,
-                            p.high_24h        = IFNULL(stat24h.h24, latest5m.cur_price),
-                            p.low_24h         = IFNULL(stat24h.l24, latest5m.cur_price),
-                            p.volume_24h      = IFNULL(stat24h.vol, 0),
-                            p.quote_volume_24h = IFNULL(stat24h.qvol, 0),
-                            p.price_range_24h = IFNULL(stat24h.h24, latest5m.cur_price) - IFNULL(stat24h.l24, latest5m.cur_price),
-                            p.price_range_pct = (IFNULL(stat24h.h24, latest5m.cur_price) - IFNULL(stat24h.l24, latest5m.cur_price))
-                                                / latest5m.cur_price * 100,
-                            p.trend           = CASE
-                                WHEN (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100 > 5  THEN 'strong_up'
-                                WHEN (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100 > 1  THEN 'up'
-                                WHEN (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100 < -5 THEN 'strong_down'
-                                WHEN (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100 < -1 THEN 'down'
-                                ELSE 'sideways' END,
-                            p.updated_at = UTC_TIMESTAMP()
-                        WHERE ago24h.p24 > 0
-                    """)
-                    affected = cur.rowcount
+                        ) cap ON k.symbol=cap.symbol AND k.open_time=cap.max_t AND k.timeframe='5m'
+                    ) latest5m ON p.symbol = latest5m.symbol
+                    LEFT JOIN (
+                        -- 24h_ago_1h: 每个 symbol 24h 前最近 1h K线 close
+                        SELECT k.symbol, k.close_price AS p24
+                        FROM kline_data k
+                        INNER JOIN (
+                            SELECT symbol, MAX(open_time) AS max_t
+                            FROM kline_data
+                            WHERE timeframe='1h' AND exchange='binance_futures'
+                              AND open_time <= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+                              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 HOUR) * 1000)
+                            GROUP BY symbol
+                        ) cap ON k.symbol=cap.symbol AND k.open_time=cap.max_t AND k.timeframe='1h'
+                    ) ago24h ON p.symbol = ago24h.symbol
+                    LEFT JOIN (
+                        -- 24h 内 5m K线高低 + 成交量
+                        SELECT symbol,
+                               MAX(high_price) AS h24,
+                               MIN(low_price)  AS l24,
+                               SUM(volume) AS vol,
+                               SUM(quote_volume) AS qvol
+                        FROM kline_data
+                        WHERE timeframe='5m' AND exchange='binance_futures'
+                          AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+                        GROUP BY symbol
+                    ) stat24h ON p.symbol = stat24h.symbol
+                    SET p.current_price   = COALESCE(latest5m.cur_price, p.current_price),
+                        p.price_24h_ago   = COALESCE(ago24h.p24, p.price_24h_ago),
+                        p.change_24h_abs  = CASE
+                            WHEN latest5m.cur_price IS NOT NULL AND ago24h.p24 IS NOT NULL AND ago24h.p24 > 0
+                                THEN latest5m.cur_price - ago24h.p24
+                            ELSE p.change_24h_abs END,
+                        p.change_24h      = CASE
+                            WHEN latest5m.cur_price IS NOT NULL AND ago24h.p24 IS NOT NULL AND ago24h.p24 > 0
+                                THEN (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100
+                            ELSE p.change_24h END,
+                        p.high_24h        = COALESCE(stat24h.h24, latest5m.cur_price, p.high_24h),
+                        p.low_24h         = COALESCE(stat24h.l24, latest5m.cur_price, p.low_24h),
+                        p.volume_24h      = COALESCE(stat24h.vol, p.volume_24h, 0),
+                        p.quote_volume_24h = COALESCE(stat24h.qvol, p.quote_volume_24h, 0),
+                        p.price_range_24h = COALESCE(stat24h.h24, latest5m.cur_price, p.high_24h)
+                                            - COALESCE(stat24h.l24, latest5m.cur_price, p.low_24h),
+                        p.price_range_pct = CASE
+                            WHEN COALESCE(latest5m.cur_price, p.current_price) > 0
+                                THEN (COALESCE(stat24h.h24, latest5m.cur_price, p.high_24h)
+                                     - COALESCE(stat24h.l24, latest5m.cur_price, p.low_24h))
+                                     / COALESCE(latest5m.cur_price, p.current_price) * 100
+                            ELSE 0 END,
+                        p.trend           = CASE
+                            WHEN latest5m.cur_price IS NOT NULL AND ago24h.p24 IS NOT NULL AND ago24h.p24 > 0
+                                 AND (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100 > 5  THEN 'strong_up'
+                            WHEN latest5m.cur_price IS NOT NULL AND ago24h.p24 IS NOT NULL AND ago24h.p24 > 0
+                                 AND (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100 > 1  THEN 'up'
+                            WHEN latest5m.cur_price IS NOT NULL AND ago24h.p24 IS NOT NULL AND ago24h.p24 > 0
+                                 AND (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100 < -5 THEN 'strong_down'
+                            WHEN latest5m.cur_price IS NOT NULL AND ago24h.p24 IS NOT NULL AND ago24h.p24 > 0
+                                 AND (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100 < -1 THEN 'down'
+                            ELSE 'sideways' END,
+                        p.updated_at = UTC_TIMESTAMP()
+                """)
+                affected = cur.rowcount
                 logger.info(f"[price_stats] 批量更新完成: {affected} 行")
-            finally:
-                conn.close()
+
+                # 兜底: 自动补入缺少的行 (首次部署或新 symbol)
+                cur.execute("""
+                    INSERT IGNORE INTO price_stats_24h
+                        (symbol, current_price, high_24h, low_24h,
+                         volume_24h, quote_volume_24h, updated_at)
+                    SELECT
+                        k.symbol, k.close_price, k.high_price, k.low_price,
+                        k.volume, k.quote_volume, UTC_TIMESTAMP()
+                    FROM kline_data k
+                    INNER JOIN (
+                        SELECT symbol, MAX(open_time) AS max_t
+                        FROM kline_data
+                        WHERE timeframe='5m' AND exchange='binance_futures'
+                          AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 MINUTE) * 1000)
+                        GROUP BY symbol
+                    ) cap ON k.symbol=cap.symbol AND k.open_time=cap.max_t AND k.timeframe='5m'
+                    LEFT JOIN price_stats_24h p ON k.symbol = p.symbol
+                    WHERE p.symbol IS NULL
+                """)
+                inserted = cur.rowcount
+                if inserted > 0:
+                    logger.info(f"[price_stats] 自动补入 {inserted} 个新行")
         except Exception as e:
             logger.error(f"[price_stats] 批量更新失败: {e}", exc_info=True)
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
         return
 
     async def update_price_stats_cache_legacy(self, symbols: List[str]):

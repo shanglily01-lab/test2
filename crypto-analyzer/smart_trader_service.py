@@ -526,17 +526,25 @@ class SmartDecisionBrain:
             recent_24h = klines_1h[-24:]
             volatility = (max(k['high'] for k in recent_24h) - min(k['low'] for k in recent_24h)) / current * 100
 
-            # 高波动率更适合交易
+            # 🔥 P1-5优化: 高波动不再作为独立信号加分，仅在趋势明确时作为强度加成
+            # 只有当存在明确趋势信号时才加分（避免高波动在盘整中产生假信号）
             if volatility > 5:  # 波动超过5%
-                weight = self.scoring_weights.get('volatility_high', {'long': 10, 'short': 10})
-                if long_score > short_score:
+                _has_long_trend = any(k in signal_components for k in
+                    ['trend_1h_bull', 'volume_power_bull', 'consecutive_bull', 'big4_strong_bull_cont'])
+                _has_short_trend = any(k in signal_components for k in
+                    ['trend_1h_bear', 'volume_power_bear', 'consecutive_bear', 'breakdown_short'])
+
+                if _has_long_trend and long_score > short_score:
+                    weight = self.scoring_weights.get('volatility_high', {'long': 10, 'short': 10})
                     long_score += weight['long']
                     if weight['long'] > 0:
                         signal_components['volatility_high'] = weight['long']
-                else:
+                elif _has_short_trend and short_score > long_score:
+                    weight = self.scoring_weights.get('volatility_high', {'long': 10, 'short': 10})
                     short_score += weight['short']
                     if weight['short'] > 0:
                         signal_components['volatility_high'] = weight['short']
+                # 不满足条件：趋势不明确时，高波动视为风险不加分
 
             # 5. 连续趋势强化信号 - 最近10根1小时K线
             recent_10h = klines_1h[-10:]

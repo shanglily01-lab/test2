@@ -419,11 +419,43 @@ class MarketPredictor:
         except Exception as e:
             logger.error(f"[预测下单] _sync_close_live 异常: {e}")
 
+    def _get_big4_signal(self, cursor) -> str:
+        """获取最新 Big4 总体信号，返回 'BULLISH'/'BEARISH'/'NEUTRAL'"""
+        try:
+            cursor.execute(
+                "SELECT overall_signal, signal_strength FROM big4_trend_history "
+                "ORDER BY created_at DESC LIMIT 1"
+            )
+            row = cursor.fetchone()
+            if row:
+                return row['overall_signal']
+        except Exception:
+            pass
+        return 'NEUTRAL'
+
+    def _get_total_notional_by_side(self, cursor, account_id: int) -> dict:
+        """查询当前各方向总名义价值"""
+        result = {'LONG': 0.0, 'SHORT': 0.0}
+        try:
+            cursor.execute(
+                "SELECT position_side, SUM(notional_value) AS total_notional "
+                "FROM futures_positions "
+                "WHERE account_id=%s AND status='open' AND source='PREDICTOR' "
+                "GROUP BY position_side",
+                (account_id,)
+            )
+            for row in cursor.fetchall():
+                result[row['position_side']] = float(row['total_notional'] or 0)
+        except Exception:
+            pass
+        return result
+
     def _open_real_paper_trades(self, cursor, results: List[Dict], now: datetime) -> int:
         """
-        取 confidence>=70 的预测，按置信度排序，开真实模拟单到 futures_positions
-        - 不限制持仓数量，所有合格信号均开单
-        - 模拟盘 400U x5（1级黑名单 100U，2级黑名单 50U），止损2%，止盈6%
+        取 confidence>=85 的预测，按置信度排序，开真实模拟单到 futures_positions
+        - 加入 Big4 市场方向过滤：做多信号在 Big4 看跌时跳过，做空在 Big4 看涨时跳过
+        - 总净敞口上限：多/空方向各不超过 30,000U 名义价值
+        - 模拟盘 400U x5，止损3.5%，止盈6%
         - source='PREDICTOR' 标识来源
         """
         DEFAULT_MARGIN = 400
@@ -431,19 +463,27 @@ class MarketPredictor:
         RESTRICTED_MARGIN_L2 = 50   # rating_level=2 严格限制
         LEVERAGE = 5
         ACCOUNT_ID = 2
-        # 从 system_settings 读取止损止盈，默认 2%/5%
+        # 总净敞口上限（名义价值）
+        MAX_NOTIONAL_PER_SIDE = 30000
+
+        # --- P0-1: 获取 Big4 信号 ---
+        big4_signal = self._get_big4_signal(cursor)
+        if big4_signal != 'NEUTRAL':
+            logger.info(f"[预测下单] 当前 Big4 信号: {big4_signal}，将据此过滤反向开仓信号")
+
+        # 从 system_settings 读取止损止盈，默认 3.5%/6%
         try:
             _sc = self._get_conn()
             _scur = _sc.cursor()
             _scur.execute("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('stop_loss_pct','take_profit_pct')")
             _rows = {r['setting_key']: r['setting_value'] for r in _scur.fetchall()}
             _scur.close(); _sc.close()
-            SL_PCT = float(_rows.get('stop_loss_pct', 0.02))
-            TP_PCT = float(_rows.get('take_profit_pct', 0.05))
+            SL_PCT = float(_rows.get('stop_loss_pct', 0.035))
+            TP_PCT = float(_rows.get('take_profit_pct', 0.06))
         except Exception as _e:
             logger.warning(f"[预测器] 读取SL/TP配置失败，使用默认值: {_e}")
-            SL_PCT = 0.02
-            TP_PCT = 0.05
+            SL_PCT = 0.035
+            TP_PCT = 0.06
 
         # 查询黑名单交易对（1级和2级，分别限制保证金）
         try:
@@ -462,9 +502,12 @@ class MarketPredictor:
         )
         existing = {r['symbol']: r['position_side'] for r in cursor.fetchall()}
 
-        # 候选：confidence>=70，非NEUTRAL，按置信度降序
+        # --- P0-3: 当前各方向总名义价值 ---
+        side_notional = self._get_total_notional_by_side(cursor, ACCOUNT_ID)
+
+        # 候选：confidence>=85，非NEUTRAL，按置信度降序
         candidates = sorted(
-            [r for r in results if r['direction'] != 'NEUTRAL' and r['confidence'] >= 70],
+            [r for r in results if r['direction'] != 'NEUTRAL' and r['confidence'] >= 85],
             key=lambda x: x['confidence'], reverse=True
         )
 
@@ -472,6 +515,14 @@ class MarketPredictor:
         for r in candidates:
             symbol = r['symbol']
             direction = 'LONG' if r['direction'] == 'BULLISH' else 'SHORT'
+
+            # --- P0-1: Big4 方向过滤 ---
+            if direction == 'LONG' and big4_signal in ('BEARISH', 'STRONG_BEARISH'):
+                logger.info(f"[预测下单] {symbol} LONG 预测被 Big4={big4_signal} 过滤跳过")
+                continue
+            if direction == 'SHORT' and big4_signal in ('BULLISH', 'STRONG_BULLISH'):
+                logger.info(f"[预测下单] {symbol} SHORT 预测被 Big4={big4_signal} 过滤跳过")
+                continue
 
             # 已有同向仓：跳过
             if existing.get(symbol) == direction:
@@ -491,6 +542,17 @@ class MarketPredictor:
             if not entry_price:
                 continue
 
+            notional = MARGIN * LEVERAGE
+
+            # --- P0-3: 检查总净敞口上限 ---
+            if side_notional[direction] + notional > MAX_NOTIONAL_PER_SIDE:
+                logger.info(
+                    f"[预测下单] {symbol} {direction} 跳过: "
+                    f"当前{direction}方向名义价值={side_notional[direction]:.0f}U，"
+                    f"再开 {notional:.0f}U 将超过上限 {MAX_NOTIONAL_PER_SIDE}U"
+                )
+                continue
+
             if direction == 'LONG':
                 sl = round(entry_price * (1 - SL_PCT), 8)
                 tp = round(entry_price * (1 + TP_PCT), 8)
@@ -498,7 +560,6 @@ class MarketPredictor:
                 sl = round(entry_price * (1 + SL_PCT), 8)
                 tp = round(entry_price * (1 - TP_PCT), 8)
 
-            notional = MARGIN * LEVERAGE
             qty = round(notional / entry_price, 6)
 
             try:
@@ -521,6 +582,8 @@ class MarketPredictor:
                 ))
                 logger.info(f"[预测下单] {symbol} {direction} @ {entry_price:.6g}  "
                             f"SL={sl:.6g}  TP={tp:.6g}  margin={MARGIN}U  confidence={r['confidence']}")
+                # 更新方向名义价值
+                side_notional[direction] += notional
                 # 获取刚插入的 paper_position_id，用于实盘同步
                 paper_id = cursor.lastrowid
                 opened += 1
@@ -719,11 +782,11 @@ class MarketPredictor:
         except Exception as e:
             logger.error(f"[回测] 开虚拟单失败: {e}")
 
-        # ④ 开真实模拟单（confidence>=70，不限数量，带止损2%/止盈6%）
+        # ④ 开真实模拟单（confidence>=85，Big4过滤，净敞口上限3万U，止损3.5%/止盈6%）
         try:
             real_opened = self._open_real_paper_trades(cursor, all_results, now)
             if real_opened:
-                logger.info(f"[预测下单] 新开{real_opened}个模拟单（400U x5，SL2% TP6%）")
+                logger.info(f"[预测下单] 新开{real_opened}个模拟单（400U x5，SL3.5% TP6%）")
         except Exception as e:
             logger.error(f"[预测下单] 开单失败: {e}")
 

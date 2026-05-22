@@ -987,17 +987,43 @@ def _update_run_trades_opened(conn, run_id: int, trades_opened: int) -> None:
 def _insert_verdicts(conn, run_id: int, verdict_rows: List[Tuple]) -> None:
     if not verdict_rows:
         return
+    # 安全截断: 防止 category / action_taken / skip_reason 过长导致 Data truncated 错误
+    safe_rows = []
+    for row in verdict_rows:
+        # row = (run_id, symbol, category, confidence, catalyst, data_signal,
+        #        risk_note, action_taken, position_id, skip_reason)
+        row_list = list(row)
+        row_list[2] = (row_list[2] or 'skip')[:20]       # category
+        row_list[7] = (row_list[7] or '')[:30]            # action_taken
+        if row_list[9] is not None:
+            row_list[9] = str(row_list[9])[:255]          # skip_reason
+        safe_rows.append(tuple(row_list))
     with conn.cursor() as cur:
-        cur.executemany(
-            """
-            INSERT INTO gemini_explore_verdicts
-              (run_id, symbol, category, confidence,
-               catalyst, data_signal, risk_note,
-               action_taken, position_id, skip_reason)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """,
-            verdict_rows,
-        )
+        try:
+            cur.executemany(
+                """
+                INSERT INTO gemini_explore_verdicts
+                  (run_id, symbol, category, confidence,
+                   catalyst, data_signal, risk_note,
+                   action_taken, position_id, skip_reason)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                safe_rows,
+            )
+        except Exception as e:
+            logger.error(f"[Gemini探索] 写入 verdicts 失败: {e}")
+            # 打印第一条记录的字段长度帮助排查
+            if safe_rows:
+                sample = safe_rows[0]
+                lengths = {
+                    'run_id': len(str(sample[0])),
+                    'symbol': len(str(sample[1])),
+                    'category': len(str(sample[2])),
+                    'action_taken': len(str(sample[7])),
+                    'skip_reason': len(str(sample[9])) if sample[9] else 0,
+                }
+                logger.error(f"[Gemini探索] 首条 verdict 各字段长度: {lengths}")
+            raise
 
 
 # ============================================================
@@ -1059,6 +1085,29 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         logger.info(f"[Gemini探索] 候选池 universe_size={universe_size}")
 
         if universe_size == 0:
+            # 诊断: 检查各数据源为何为空
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM price_stats_24h "
+                    "WHERE updated_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 20 MINUTE)"
+                )
+                fresh_rows = cur.fetchone() or {}
+                cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM price_stats_24h "
+                    "WHERE updated_at IS NOT NULL"
+                )
+                total_rows = cur.fetchone() or {}
+                cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM funding_rate_data "
+                    "WHERE timestamp >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE)"
+                )
+                fresh_funding = cur.fetchone() or {}
+                logger.warning(
+                    f"[Gemini探索] 候选池为空诊断: "
+                    f"price_stats_24h 总行数={total_rows.get('cnt', -1)}, "
+                    f"新鲜行数(20min内)={fresh_rows.get('cnt', -1)}, "
+                    f"新鲜资金费率(30min内)={fresh_funding.get('cnt', -1)}"
+                )
             elapsed = time.time() - t0
             run_id = _insert_run(
                 conn, asof_utc, 0, '', elapsed,

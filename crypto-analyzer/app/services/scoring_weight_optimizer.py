@@ -245,7 +245,7 @@ class ScoringWeightOptimizer:
                 # 调整LONG权重
                 if 'LONG' in performance:
                     perf = performance['LONG']
-                    if perf['total_orders'] >= 5:  # 至少5个订单才调整
+                    if perf['total_orders'] >= 3:  # 至少3个订单才调整（P2-6优化：从5降低到3加快差信号降权）
                         new_weight, adjustment = self.calculate_weight_adjustment(
                             float(current['weight_long']),
                             perf['performance_score'],
@@ -278,7 +278,7 @@ class ScoringWeightOptimizer:
                 # 调整SHORT权重
                 if 'SHORT' in performance:
                     perf = performance['SHORT']
-                    if perf['total_orders'] >= 5:  # 至少5个订单才调整
+                    if perf['total_orders'] >= 3:  # 至少3个订单才调整（P2-6优化：从5降低到3）
                         new_weight, adjustment = self.calculate_weight_adjustment(
                             float(current['weight_short']),
                             perf['performance_score'],
