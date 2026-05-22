@@ -41,6 +41,8 @@ class TradingServicesUpdate(BaseModel):
     coin_futures_enabled: Optional[bool] = None
     live_trading_enabled: Optional[bool] = None
     live_close_enabled: Optional[bool] = None       # 2026-05-22 实盘平仓独立开关
+    spot_trading_enabled: Optional[bool] = None      # 2026-05-23 现货交易开关
+    spot_close_enabled: Optional[bool] = None         # 2026-05-23 现货自动卖出开关
     predictor_enabled: Optional[bool] = None
     btc_momentum_enabled: Optional[bool] = None
     u_coin_style_enabled: Optional[bool] = None
@@ -365,6 +367,7 @@ async def get_trading_services():
             FROM system_settings
             WHERE setting_key IN ('u_futures_trading_enabled', 'coin_futures_trading_enabled',
                                   'live_trading_enabled', 'live_close_enabled',
+                                  'spot_trading_enabled', 'spot_close_enabled',
                                   'predictor_enabled',
                                   'btc_momentum_enabled', 'u_coin_style_enabled',
                                   'signal_confirmation_enabled', 'trend_following_enabled',
@@ -382,6 +385,8 @@ async def get_trading_services():
             'coin_futures_trading_enabled': 'coin_futures_enabled',
             'live_trading_enabled': 'live_trading_enabled',
             'live_close_enabled': 'live_close_enabled',
+            'spot_trading_enabled': 'spot_trading_enabled',
+            'spot_close_enabled': 'spot_close_enabled',
             'predictor_enabled': 'predictor_enabled',
             'btc_momentum_enabled': 'btc_momentum_enabled',
             'u_coin_style_enabled': 'u_coin_style_enabled',
@@ -397,6 +402,8 @@ async def get_trading_services():
             'coin_futures_enabled': True,
             'live_trading_enabled': True,
             'live_close_enabled': True,
+            'spot_trading_enabled': True,
+            'spot_close_enabled': True,
             'predictor_enabled': True,
             'btc_momentum_enabled': True,
             'u_coin_style_enabled': False,
@@ -495,6 +502,32 @@ async def update_trading_services(data: TradingServicesUpdate):
             """, (value,))
             status = '启动' if data.live_close_enabled else '暂停'
             updates.append(f"实盘平仓服务: {status}")
+
+        if data.spot_trading_enabled is not None:
+            value = '1' if data.spot_trading_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('spot_trading_enabled', %s, '现货交易开关 (1=启用, 0=禁用)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            status = '启动' if data.spot_trading_enabled else '暂停'
+            updates.append(f"现货交易: {status}")
+
+        if data.spot_close_enabled is not None:
+            value = '1' if data.spot_close_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('spot_close_enabled', %s, '现货自动卖出开关 (1=启用, 0=禁用)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            status = '启动' if data.spot_close_enabled else '暂停'
+            updates.append(f"现货卖出: {status}")
 
         if data.predictor_enabled is not None:
             value = '1' if data.predictor_enabled else '0'

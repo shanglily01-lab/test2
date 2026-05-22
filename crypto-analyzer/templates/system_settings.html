@@ -386,6 +386,15 @@
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
 </div>
 </div>
+<div class="cfg-row">
+<div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-[#f0b90b] text-xl shrink-0">currency_bitcoin</span>
+<div><div class="text-sm font-medium text-slate-200">现货交易</div><p class="text-[11px] text-slate-500">DCA抄底: 日RSI超卖 + MA99支撑 + 1H企稳放量 · 100U/单</p></div>
+</div>
+<div id="spotTradingToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
+</div>
+</div>
 </div>
 <div class="cfg-l2">
 <p class="cfg-l2-label">2.2 主策略模式</p>
@@ -696,6 +705,7 @@
                 setToggle('s8TopshortToggle',  !!svc.s8_topshort_enabled);
                 setToggle('s9GeminiToggle',    !!svc.s9_gemini_ai_enabled);
                 setToggle('geminiAdvisorToggle', !!svc.gemini_position_advisor_enabled);
+                setToggle('spotTradingToggle',  !!svc.spot_trading_enabled);
                 setToggle('big4Toggle',
                     big4Setting.value === '1' ||
                     big4Setting.value === 'true' ||
@@ -859,6 +869,17 @@
             try {
                 await apiPut('/trading-services', { coin_futures_enabled: enabled });
                 showToast('币本位交易已' + (enabled ? '开启' : '关闭'), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
+        // 现货交易
+        bindToggle('spotTradingToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { spot_trading_enabled: enabled });
+                showToast('现货交易已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;

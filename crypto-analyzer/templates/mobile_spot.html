@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+<title>超级大脑 - 现货交易</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<style>
+.material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
+.mono { font-family:'JetBrains Mono',monospace; }
+body { background:#070b10; color:#ebeef5; font-family:'Manrope',sans-serif;
+    -webkit-font-smoothing:antialiased; min-height:100dvh;
+    overscroll-behavior-y:contain; }
+.bottom-nav { padding-bottom:max(env(safe-area-inset-bottom),8px); }
+main { padding-bottom:calc(76px + max(env(safe-area-inset-bottom),8px)); }
+button,a { -webkit-tap-highlight-color:transparent; }
+.no-scrollbar::-webkit-scrollbar { display:none; }
+.no-scrollbar { -ms-overflow-style:none;scrollbar-width:none; }
+#toast { position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:500;
+    background:#1a2235;color:#ebeef5;padding:8px 18px;border-radius:20px;
+    font-size:13px;font-weight:600;opacity:0;transition:opacity .2s;
+    border:1px solid #44484e;white-space:nowrap;pointer-events:none; }
+#toast.show { opacity:1; }
+#toast.err { border-color:rgba(255,77,106,.3);color:#ff4d6a; }
+.skeleton { background:linear-gradient(90deg,#1a2235 25%,#20283a 50%,#1a2235 75%);
+    background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px; }
+@keyframes shimmer { 0%{background-position:200% 0}100%{background-position:-200% 0} }
+#overlay { display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;
+    align-items:center;justify-content:center; }
+#overlay.show { display:flex; }
+.dialog { background:#0f1520;border:1px solid #1e2d45;border-radius:16px;
+    padding:24px;width:calc(100% - 48px);max-width:320px; }
+</style>
+<script id="tailwind-config">
+tailwind.config = {
+    darkMode: "class",
+    theme: { extend: { colors: {
+        "primary-container": "#00d4aa", "on-surface-variant": "#a8abb2",
+        "surface-variant": "#20262e", "error": "#ff4d6a",
+        "outline-variant": "#44484e", "primary": "#49f4c8",
+        "surface-container-low": "#0f1419", "background": "#070b10",
+        "surface": "#070b10", "surface-container": "#0f1520",
+        "surface-container-highest": "#20262e"
+    }, fontFamily: { "headline": ["Space Grotesk"], "body": ["Manrope"] } } }
+}
+</script>
+</head>
+<body class="antialiased overflow-x-hidden">
+
+<div id="toast"></div>
+
+<!-- 顶部栏 -->
+<header class="fixed top-0 w-full z-50 flex justify-between items-center px-5 h-14 bg-[#0a0f14] shadow-[0_0_20px_rgba(73,244,200,.05)]"
+        style="padding-top:env(safe-area-inset-top);">
+    <div class="flex items-center gap-2">
+        <span class="material-symbols-outlined text-[#49f4c8]" style="font-variation-settings:'FILL' 1;">psychology</span>
+        <div class="flex items-baseline gap-2">
+            <h1 class="text-xl font-bold tracking-tighter text-[#49f4c8] font-['Space_Grotesk']">超级大脑</h1>
+            <span class="bg-surface-container-highest text-on-surface-variant text-[10px] px-1.5 py-0.5 rounded font-medium">现货</span>
+        </div>
+    </div>
+    <div class="flex items-center gap-3">
+        <div class="flex items-center gap-1.5 bg-[#0f1419] px-2.5 py-1.5 rounded-full">
+            <span id="tradingDot" class="w-1.5 h-1.5 rounded-full bg-[#44484e]"></span>
+            <span id="tradingText" class="text-[11px] font-medium text-on-surface-variant tracking-wider">加载中</span>
+        </div>
+        <button class="w-10 h-10 flex items-center justify-center active:scale-95 transition-transform" onclick="loadAll()" aria-label="刷新">
+            <span class="material-symbols-outlined text-on-surface-variant text-xl">refresh</span>
+        </button>
+    </div>
+</header>
+
+<main class="pt-16 px-4 space-y-4">
+    <!-- 统计行 -->
+    <section class="grid grid-cols-3 gap-2.5">
+        <div class="bg-[#0f1520] border border-[#1e2d45] rounded-xl p-3">
+            <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-semibold">持仓数</p>
+            <p id="posCount" class="text-xl font-bold text-secondary mono-nums">--</p>
+        </div>
+        <div class="bg-[#0f1520] border border-[#1e2d45] rounded-xl p-3">
+            <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-semibold">浮动盈亏</p>
+            <p id="totalPnl" class="text-xl font-bold text-primary mono-nums">--</p>
+        </div>
+        <div class="bg-[#0f1520] border border-[#1e2d45] rounded-xl p-3">
+            <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-semibold">总投入</p>
+            <p id="totalCost" class="text-xl font-bold text-primary mono-nums">--</p>
+        </div>
+    </section>
+
+    <!-- 现货持仓列表 -->
+    <section class="space-y-3">
+        <header class="flex justify-between items-center px-1">
+            <div class="flex items-center gap-2">
+                <h2 class="text-[11px] font-bold text-on-surface-variant tracking-widest uppercase">现货持仓</h2>
+                <span id="lastUpdate" class="text-[10px] text-on-surface-variant/50 font-mono"></span>
+            </div>
+        </header>
+        <div id="positionsList">
+            <div class="skeleton h-32 w-full mb-3"></div>
+            <div class="skeleton h-32 w-full"></div>
+        </div>
+    </section>
+
+    <!-- 历史记录 -->
+    <section class="space-y-3">
+        <header class="flex justify-between items-center px-1 pt-2">
+            <div class="flex items-center gap-2">
+                <h2 class="text-[11px] font-bold text-on-surface-variant tracking-widest uppercase">最近平仓</h2>
+            </div>
+        </header>
+        <div id="historyList">
+            <div class="text-center py-8 text-on-surface-variant text-sm">加载中...</div>
+        </div>
+    </section>
+</main>
+
+<!-- 底部导航 -->
+<nav class="bottom-nav fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 h-[68px] bg-[#0a0f14]/90 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,.4)] border-t border-[#44484e]/20">
+    <a class="flex flex-col items-center justify-center text-[#a8abb2] hover:text-[#49f4c8] transition-colors min-w-[64px] h-full" href="/m/settings">
+        <span class="material-symbols-outlined text-[22px] mb-0.5">settings</span>
+        <span class="text-[10px] font-semibold uppercase tracking-wide">设置</span>
+    </a>
+    <a class="flex flex-col items-center justify-center text-[#a8abb2] hover:text-[#49f4c8] transition-colors min-w-[64px] h-full" href="/m/futures">
+        <span class="material-symbols-outlined text-[22px] mb-0.5">candlestick_chart</span>
+        <span class="text-[10px] font-semibold uppercase tracking-wide">U本位</span>
+    </a>
+    <a class="flex flex-col items-center justify-center text-[#49f4c8] font-bold min-w-[64px] h-full" href="/m/spot">
+        <span class="material-symbols-outlined text-[22px] mb-0.5" style="font-variation-settings:'FILL' 1;">currency_exchange</span>
+        <span class="text-[10px] font-bold uppercase tracking-wide">现货</span>
+    </a>
+    <a class="flex flex-col items-center justify-center text-[#a8abb2] hover:text-[#49f4c8] transition-colors min-w-[64px] h-full" href="/m/live">
+        <span class="material-symbols-outlined text-[22px] mb-0.5">sensors</span>
+        <span class="text-[10px] font-semibold uppercase tracking-wide">实盘</span>
+    </a>
+</nav>
+
+<script>
+const API = '/api/spot-trading';
+let spotPositions = [];
+
+function toast(msg, type='ok') {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.className = 'show ' + type;
+    setTimeout(() => el.className = '', 2200);
+}
+function fmt(n, d=2) {
+    if (n == null || isNaN(n)) return '--';
+    return parseFloat(n).toFixed(d);
+}
+function fmtPnl(n) {
+    const v = parseFloat(n) || 0;
+    return (v >= 0 ? '+' : '') + v.toFixed(2) + 'U';
+}
+
+async function loadTradingStatus() {
+    try {
+        const r = await fetch('/api/system/trading-services').then(r => r.json());
+        const data = r.data || r;
+        const on = data.spot_trading_enabled ?? false;
+        document.getElementById('tradingDot').className =
+            'w-1.5 h-1.5 rounded-full ' + (on ? 'bg-primary animate-pulse' : 'bg-[#44484e]');
+        document.getElementById('tradingText').textContent = on ? '运行中' : '已暂停';
+    } catch(e) {}
+}
+
+async function loadSummary() {
+    try {
+        const r = await fetch(`${API}/summary`).then(r => r.json());
+        if (!r || r.detail) {
+            document.getElementById('posCount').textContent = '--';
+            return;
+        }
+        document.getElementById('posCount').textContent = r.total_positions ?? '--';
+        const upnl = parseFloat(r.total_unrealized_pnl) || 0;
+        const upnlEl = document.getElementById('totalPnl');
+        upnlEl.textContent = fmtPnl(upnl);
+        upnlEl.className = 'text-xl font-bold mono-nums ' + (upnl >= 0 ? 'text-primary' : 'text-error');
+        document.getElementById('totalCost').textContent = fmt(r.total_cost, 0) + 'U';
+    } catch(e) {}
+}
+
+async function loadPositions() {
+    try {
+        const positions = await fetch(`${API}/positions`).then(r => r.json());
+        if (!Array.isArray(positions)) {
+            document.getElementById('positionsList').innerHTML =
+                '<div class="text-center py-10 text-on-surface-variant text-sm">无法加载持仓</div>';
+            return;
+        }
+        spotPositions = positions;
+        document.getElementById('lastUpdate').textContent =
+            new Date().toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' });
+
+        if (!positions.length) {
+            document.getElementById('positionsList').innerHTML =
+                '<div class="text-center py-10 text-on-surface-variant text-sm">暂无现货持仓</div>';
+            return;
+        }
+
+        const html = positions.map(pos => {
+            const ep = parseFloat(pos.entry_price) || 0;
+            const qty = parseFloat(pos.quantity) || 0;
+            const cost = parseFloat(pos.total_cost) || 0;
+            const cp = parseFloat(pos.current_price) || 0;
+            let upnl = 0, upnlPct = 0;
+            if (cp > 0 && ep > 0) {
+                upnl = (cp - ep) * qty;
+                upnlPct = cost > 0 ? upnl / cost * 100 : 0;
+            } else {
+                upnl = parseFloat(pos.unrealized_pnl) || 0;
+                upnlPct = parseFloat(pos.unrealized_pnl_pct) || 0;
+            }
+            const pnlCls = upnl >= 0 ? 'text-primary' : 'text-error';
+            const symbol = pos.symbol.replace('/USDT', '');
+            const tp = pos.take_profit_price ? parseFloat(pos.take_profit_price) : null;
+            const sl = pos.stop_loss_price ? parseFloat(pos.stop_loss_price) : null;
+            const reason = pos.signal_details || '';
+
+            return `
+            <div class="bg-[#0f1520] border border-[#1e2d45] border-l-4 border-l-[#49f4c8] rounded-xl overflow-hidden">
+                <div class="p-4 bg-primary/5 border-b border-primary/10">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-base font-bold text-on-surface mono">${symbol}</p>
+                            <p class="text-[11px] text-on-surface-variant mt-0.5">入场 ${fmt(ep)} · 数量 ${fmt(qty, 4)}</p>
+                        </div>
+                        <p class="text-sm font-bold mono ${pnlCls}">${fmtPnl(upnl)}</p>
+                    </div>
+                    <div class="flex justify-between items-center mt-2">
+                        <p class="text-[11px] text-on-surface-variant">现价 <span class="mono text-on-surface">${fmt(cp)}</span></p>
+                        <p class="text-[11px] font-bold mono ${pnlCls}">${fmt(upnlPct, 1)}%</p>
+                    </div>
+                </div>
+                <div class="px-4 py-2 flex justify-between items-center">
+                    <div class="flex gap-3 text-[10px] text-on-surface-variant">
+                        ${tp ? `<span>止盈 <span class="text-primary mono">${fmt(tp)}</span></span>` : ''}
+                        ${sl ? `<span>止损 <span class="text-error mono">${fmt(sl)}</span></span>` : ''}
+                    </div>
+                    <span class="text-[10px] text-on-surface-variant/60 truncate max-w-[120px]">${reason}</span>
+                </div>
+            </div>`;
+        }).join('');
+        document.getElementById('positionsList').innerHTML = html;
+    } catch(e) {
+        document.getElementById('positionsList').innerHTML =
+            '<div class="text-center py-10 text-on-surface-variant text-sm">加载失败</div>';
+    }
+}
+
+async function loadHistory() {
+    try {
+        const r = await fetch(`${API}/history?limit=10`).then(r => r.json());
+        if (!Array.isArray(r) || !r.length) {
+            document.getElementById('historyList').innerHTML =
+                '<div class="text-center py-6 text-on-surface-variant text-sm">暂无平仓记录</div>';
+            return;
+        }
+        const html = r.map(h => {
+            const pnl = parseFloat(h.pnl) || 0;
+            const pnlPct = parseFloat(h.pnl_pct) || 0;
+            const pnlCls = pnl >= 0 ? 'text-primary' : 'text-error';
+            const symbol = h.symbol.replace('/USDT', '');
+            const reason = h.close_reason || '';
+            const time = h.closed_at ? new Date(h.closed_at).toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) : '';
+            return `
+            <div class="bg-[#0f1520] border border-[#1e2d45] rounded-xl p-3">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-2">
+                        <span class="text-sm font-bold mono text-on-surface">${symbol}</span>
+                        <span class="text-[10px] text-on-surface-variant">${time}</span>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-bold mono ${pnlCls}">${fmtPnl(pnl)}</p>
+                        <p class="text-[10px] mono ${pnlCls}">${fmt(pnlPct, 1)}%</p>
+                    </div>
+                </div>
+                ${reason ? `<p class="text-[10px] text-on-surface-variant/60 mt-1">${reason}</p>` : ''}
+            </div>`;
+        }).join('');
+        document.getElementById('historyList').innerHTML = html;
+    } catch(e) {
+        document.getElementById('historyList').innerHTML =
+            '<div class="text-center py-6 text-on-surface-variant text-sm">暂无平仓记录</div>';
+    }
+}
+
+function loadAll() {
+    loadTradingStatus();
+    loadSummary();
+    loadPositions();
+    loadHistory();
+}
+
+// 每 30 秒自动刷新
+loadAll();
+setInterval(loadAll, 30000);
+</script>
+</body>
+</html>

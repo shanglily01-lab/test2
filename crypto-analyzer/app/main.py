@@ -682,6 +682,14 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(_dashboard_snapshot_loop())
         logger.info("Dashboard快照预计算任务已启动（每5分钟更新）")
 
+        # ── 现货交易策略 ─────────────────────────────────────────────────────
+        try:
+            from app.services.spot_trader_service import spot_trader_loop
+            asyncio.create_task(spot_trader_loop())
+            logger.info("现货交易策略后台循环已启动")
+        except Exception as e:
+            logger.warning(f"现货交易策略启动失败: {e}")
+
         # watchdog 已移除 — fast_collector_service 和 ws_kline_collector_service
         # 改由 systemd 管理 (见 deploy/*.service)
         # 进程自愈逻辑已在 binance_ws_kline_collector.py 内置 (recv timeout 重连)
@@ -1366,6 +1374,19 @@ async def mobile_futures_page():
     p = project_root / "templates" / "mobile_futures.html"
     if p.exists(): return FileResponse(str(p))
     raise HTTPException(status_code=404, detail="mobile_futures.html not found")
+
+
+@app.get("/m/spot")
+async def mobile_spot_page(request: Request):
+    """手机端现货交易页面（需登录）"""
+    user_id, role = _parse_mobile_session(request)
+    if user_id is None:
+        return RedirectResponse(url="/m/login?next=/m/spot", status_code=302)
+    p = project_root / "templates" / "mobile_spot.html"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="mobile_spot.html not found")
+    html = p.read_text(encoding="utf-8")
+    return HTMLResponse(html)
 
 
 @app.get("/m/live")

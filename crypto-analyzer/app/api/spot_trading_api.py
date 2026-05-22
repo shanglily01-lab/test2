@@ -83,7 +83,7 @@ class SpotSummary(BaseModel):
 @router.get("/positions", response_model=List[SpotPosition])
 async def get_spot_positions():
     """
-    获取当前现货持仓列表
+    获取当前现货持仓列表 (合并 DCA 策略自动仓 + 手动仓)
 
     Returns:
         现货持仓列表
@@ -92,7 +92,21 @@ async def get_spot_positions():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # 查询所有open状态的持仓（使用paper_trading_positions表）
+        # 查询 DCA 策略自动仓 (spot_positions 表)
+        cursor.execute("""
+            SELECT
+                id, symbol, entry_price, quantity,
+                cost_basis AS total_cost,
+                take_profit_price, stop_loss_price, entry_reason AS signal_details,
+                open_time AS created_at, updated_at
+            FROM spot_positions
+            WHERE status = 'open' AND account_id = %s
+            ORDER BY open_time DESC
+        """, (3,))
+
+        auto_positions = cursor.fetchall()
+
+        # 查询手动持仓 (paper_trading_positions 表)
         cursor.execute("""
             SELECT
                 id, symbol, avg_entry_price AS entry_price, avg_entry_price,
@@ -104,30 +118,38 @@ async def get_spot_positions():
             ORDER BY created_at DESC
         """)
 
-        positions = cursor.fetchall()
+        manual_positions = cursor.fetchall()
 
-        # 获取当前价格（从WebSocket价格服务或数据库）
+        # 合并
+        all_positions = list(auto_positions) + list(manual_positions)
+
+        # 获取当前价格
         result = []
-        for pos in positions:
+        for pos in all_positions:
             current_price = await _get_current_price(cursor, pos['symbol'])
 
+            # 如果 auto 仓 cost_basis 缺失，用 quantity * entry_price
+            cost = float(pos.get('total_cost') or 0)
+            if cost <= 0:
+                cost = float(pos['quantity']) * float(pos['entry_price'])
+
             current_value = float(pos['quantity']) * float(current_price) if current_price else None
-            unrealized_pnl = (current_value - float(pos['total_cost'])) if current_value else None
-            unrealized_pnl_pct = (unrealized_pnl / float(pos['total_cost']) * 100) if unrealized_pnl else None
+            unrealized_pnl = (current_value - cost) if current_value else None
+            unrealized_pnl_pct = (unrealized_pnl / cost * 100) if unrealized_pnl and cost else None
 
             result.append(SpotPosition(
                 id=pos['id'],
                 symbol=pos['symbol'],
                 entry_price=float(pos['entry_price']),
                 quantity=float(pos['quantity']),
-                total_cost=float(pos['total_cost']),
+                total_cost=cost,
                 current_price=current_price,
                 current_value=current_value,
                 unrealized_pnl=unrealized_pnl,
                 unrealized_pnl_pct=unrealized_pnl_pct,
                 take_profit_price=float(pos['take_profit_price']) if pos['take_profit_price'] else None,
                 stop_loss_price=float(pos['stop_loss_price']) if pos['stop_loss_price'] else None,
-                signal_details=pos['signal_details'],
+                signal_details=pos.get('signal_details') or '',
                 created_at=pos['created_at'],
                 updated_at=pos['updated_at']
             ))
@@ -151,37 +173,46 @@ async def get_spot_history(
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD")
 ):
     """
-    获取现货交易历史记录
-
-    Args:
-        limit: 返回记录数（默认100，最大500）
-        offset: 跳过记录数（用于分页）
-        start_date: 开始日期（可选）
-        end_date: 结束日期（可选）
-
-    Returns:
-        历史交易记录列表
+    获取现货交易历史记录 (DCA 策略自动平仓 + 手动平仓)
     """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # 构建查询条件（paper_trading_trades 表）
-        where_conditions = ["t.account_id = 1", "t.side = 'SELL'"]
-        params = []
-
+        # DCA 策略历史 (spot_positions closed)
+        dca_where = ["account_id = 3", "status = 'closed'"]
+        dca_params = []
         if start_date:
-            where_conditions.append("DATE(t.trade_time) >= %s")
-            params.append(start_date)
-
+            dca_where.append("DATE(close_time) >= %s")
+            dca_params.append(start_date)
         if end_date:
-            where_conditions.append("DATE(t.trade_time) <= %s")
-            params.append(end_date)
+            dca_where.append("DATE(close_time) <= %s")
+            dca_params.append(end_date)
+        dca_clause = " AND ".join(dca_where)
 
-        where_clause = " AND ".join(where_conditions)
+        cursor.execute(f"""
+            SELECT id, symbol, entry_price, close_price, quantity, cost_basis,
+                   realized_pnl, close_reason, entry_reason AS signal_details,
+                   open_time, close_time
+            FROM spot_positions
+            WHERE {dca_clause}
+            ORDER BY close_time DESC
+            LIMIT %s OFFSET %s
+        """, dca_params + [limit, offset])
+        dca_records = cursor.fetchall()
 
-        # 查询历史记录（使用paper_trading_trades表，SELL成交即为已平仓记录）
-        query = f"""
+        # 手动历史 (paper_trading_trades SELL)
+        manual_where = ["t.account_id = 1", "t.side = 'SELL'"]
+        manual_params = []
+        if start_date:
+            manual_where.append("DATE(t.trade_time) >= %s")
+            manual_params.append(start_date)
+        if end_date:
+            manual_where.append("DATE(t.trade_time) <= %s")
+            manual_params.append(end_date)
+        manual_clause = " AND ".join(manual_where)
+
+        cursor.execute(f"""
             SELECT
                 t.id, t.symbol,
                 COALESCE(t.cost_price, t.price) AS entry_price,
@@ -192,18 +223,37 @@ async def get_spot_history(
                 '' AS close_reason, '' AS signal_details,
                 t.trade_time AS created_at, t.trade_time AS closed_at
             FROM paper_trading_trades t
-            WHERE {where_clause}
+            WHERE {manual_clause}
             ORDER BY t.trade_time DESC
             LIMIT %s OFFSET %s
-        """
+        """, manual_params + [limit, offset])
+        manual_records = cursor.fetchall()
 
-        params.extend([limit, offset])
-        cursor.execute(query, params)
-
-        history = cursor.fetchall()
-
+        # 合并两种来源，按时间降序排序
         result = []
-        for rec in history:
+
+        # DCA 记录
+        for rec in dca_records:
+            pnl = float(rec['realized_pnl'] or 0)
+            cost = float(rec['cost_basis'] or 0)
+            pnl_pct = (pnl / cost * 100) if cost > 0 else 0
+            result.append(SpotHistoryPosition(
+                id=rec['id'],
+                symbol=rec['symbol'],
+                entry_price=float(rec['entry_price'] or 0),
+                exit_price=float(rec['close_price'] or 0),
+                quantity=float(rec['quantity'] or 0),
+                total_cost=cost,
+                pnl=pnl,
+                pnl_pct=pnl_pct,
+                close_reason=rec['close_reason'] or '',
+                signal_details=rec.get('signal_details', rec.get('entry_reason', '')) or '',
+                created_at=rec.get('open_time', datetime.utcnow()),
+                closed_at=rec.get('close_time', datetime.utcnow())
+            ))
+
+        # 手动记录
+        for rec in manual_records:
             result.append(SpotHistoryPosition(
                 id=rec['id'],
                 symbol=rec['symbol'],
@@ -213,16 +263,19 @@ async def get_spot_history(
                 total_cost=float(rec['total_cost'] or 0),
                 pnl=float(rec['pnl'] or 0),
                 pnl_pct=float(rec['pnl_pct'] or 0),
-                close_reason=rec['close_reason'],
-                signal_details=rec['signal_details'],
-                created_at=rec['created_at'],
-                closed_at=rec['closed_at']
+                close_reason=rec.get('close_reason', '') or '',
+                signal_details=rec.get('signal_details', '') or '',
+                created_at=rec.get('created_at', datetime.utcnow()),
+                closed_at=rec.get('closed_at', datetime.utcnow())
             ))
+
+        # 按闭仓时间降序
+        result.sort(key=lambda x: x.closed_at, reverse=True)
 
         cursor.close()
         conn.close()
 
-        return result
+        return result[:limit]
 
     except Exception as e:
         logger.error(f"获取现货历史失败: {e}")
@@ -232,75 +285,109 @@ async def get_spot_history(
 @router.get("/summary", response_model=SpotSummary)
 async def get_spot_summary():
     """
-    获取现货交易概览统计
-
-    Returns:
-        现货交易统计数据
+    获取现货交易概览统计 (含 DCA 策略 + 手动)
     """
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # 1. 统计当前持仓（使用paper_trading_positions表）
+        # ====== 1. 当前持仓统计 ======
+        # DCA 策略仓 (spot_positions)
         cursor.execute("""
             SELECT
                 COUNT(*) as total_positions,
-                SUM(total_cost) as total_cost,
+                COALESCE(SUM(cost_basis), 0) as total_cost,
                 SUM(quantity) as total_quantity
+            FROM spot_positions
+            WHERE status = 'open' AND account_id = 3
+        """)
+        dca_open = cursor.fetchone()
+
+        cursor.execute("""
+            SELECT id, symbol, quantity, cost_basis
+            FROM spot_positions
+            WHERE status = 'open' AND account_id = 3
+        """)
+        dca_open_positions = cursor.fetchall()
+
+        # 手动仓 (paper_trading_positions)
+        cursor.execute("""
+            SELECT
+                COUNT(*) as total_positions,
+                COALESCE(SUM(total_cost), 0) as total_cost
             FROM paper_trading_positions
             WHERE status = 'open' AND account_id = 1
         """)
-        open_stats = cursor.fetchone()
+        manual_open = cursor.fetchone()
 
-        # 2. 获取当前持仓的市值和未实现盈亏（使用paper_trading_positions表）
         cursor.execute("""
             SELECT id, symbol, quantity, total_cost
             FROM paper_trading_positions
             WHERE status = 'open' AND account_id = 1
         """)
-        open_positions = cursor.fetchall()
+        manual_open_positions = cursor.fetchall()
+
+        # 合并统计
+        all_open = list(dca_open_positions) + list(manual_open_positions)
+        total_positions = (dca_open['total_positions'] or 0) + (manual_open['total_positions'] or 0)
+        total_cost = float(dca_open['total_cost'] or 0) + float(manual_open['total_cost'] or 0)
 
         total_value = 0
         total_unrealized_pnl = 0
-
-        for pos in open_positions:
+        for pos in all_open:
             current_price = await _get_current_price(cursor, pos['symbol'])
             if current_price:
-                value = float(pos['quantity']) * float(current_price)
+                cost = float(pos.get('cost_basis') or pos.get('total_cost') or 0)
+                if cost <= 0:
+                    cost = 0
+                qty = float(pos['quantity']) if pos['quantity'] else 0
+                value = qty * float(current_price)
                 total_value += value
-                total_unrealized_pnl += (value - float(pos['total_cost']))
+                total_unrealized_pnl += (value - cost)
 
-        total_cost = float(open_stats['total_cost']) if open_stats['total_cost'] else 0
         total_unrealized_pnl_pct = (total_unrealized_pnl / total_cost * 100) if total_cost > 0 else 0
 
-        # 3. 统计历史交易（使用paper_trading_positions表）
+        # ====== 2. 历史统计 ======
+        # DCA 平仓历史
         cursor.execute("""
             SELECT
-                SUM(unrealized_pnl) as total_pnl,
+                COALESCE(SUM(realized_pnl), 0) as total_pnl,
+                SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) as win_count,
+                SUM(CASE WHEN realized_pnl <= 0 THEN 1 ELSE 0 END) as loss_count,
+                COUNT(*) as total_count
+            FROM spot_positions
+            WHERE status = 'closed' AND account_id = 3
+        """)
+        dca_history = cursor.fetchone()
+
+        # 手动平仓历史 (paper_trading_positions)
+        cursor.execute("""
+            SELECT
+                COALESCE(SUM(unrealized_pnl), 0) as total_pnl,
                 SUM(CASE WHEN unrealized_pnl > 0 THEN 1 ELSE 0 END) as win_count,
                 SUM(CASE WHEN unrealized_pnl <= 0 THEN 1 ELSE 0 END) as loss_count,
                 COUNT(*) as total_count
             FROM paper_trading_positions
             WHERE status = 'closed' AND account_id = 1
         """)
-        history_stats = cursor.fetchone()
+        manual_history = cursor.fetchone()
 
-        history_total_pnl = float(history_stats['total_pnl']) if history_stats['total_pnl'] else 0
-        win_count = history_stats['win_count'] or 0
-        loss_count = history_stats['loss_count'] or 0
-        total_count = history_stats['total_count'] or 0
+        total_pnl = float(dca_history['total_pnl'] or 0) + float(manual_history['total_pnl'] or 0)
+        win_count = (dca_history['win_count'] or 0) + (manual_history['win_count'] or 0)
+        loss_count = (dca_history['loss_count'] or 0) + (manual_history['loss_count'] or 0)
+        total_count = (dca_history['total_count'] or 0) + (manual_history['total_count'] or 0)
         win_rate = (win_count / total_count * 100) if total_count > 0 else 0
 
         cursor.close()
         conn.close()
 
         return SpotSummary(
-            total_positions=open_stats['total_positions'] or 0,
+            total_positions=total_positions,
             total_cost=total_cost,
             total_value=total_value,
             total_unrealized_pnl=total_unrealized_pnl,
             total_unrealized_pnl_pct=total_unrealized_pnl_pct,
-            history_total_pnl=history_total_pnl,
+            history_total_pnl=total_pnl,
             history_win_count=win_count,
             history_loss_count=loss_count,
             history_win_rate=win_rate
