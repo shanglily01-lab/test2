@@ -68,7 +68,7 @@ class SmartExitOptimizer:
         self.last_5m_check: Dict[int, datetime] = {}  # position_id -> 上次检查5M的时间
         self.last_15m_check: Dict[int, datetime] = {}  # position_id -> 上次检查15M的时间
 
-        # 价格采样器（用于150分钟后的最优价格评估）
+        # 价格采样器（用于180分钟后的最优价格评估）
         self.price_samples: Dict[int, List[float]] = {}  # position_id -> 价格采样列表
 
         # 分阶段超时 - 亏损持续时间追踪（生物学负反馈：需持续亏损才平仓，非瞬时亏损）
@@ -1373,7 +1373,7 @@ class SmartExitOptimizer:
 
     async def _update_price_samples(self, position_id: int, current_price: float):
         """
-        更新价格采样（用于150分钟后的最优价格评估）
+        更新价格采样（用于180分钟后的最优价格评估）
 
         Args:
             position_id: 持仓ID
@@ -1390,7 +1390,7 @@ class SmartExitOptimizer:
 
     async def _find_optimal_exit_price(self, position_id: int, position_side: str, current_price: float, profit_pct: float) -> bool:
         """
-        寻找最优平仓价格（150分钟后启动）
+        寻找最优平仓价格（180分钟后启动）
 
         Args:
             position_id: 持仓ID
@@ -1407,35 +1407,34 @@ class SmartExitOptimizer:
 
         recent_prices = self.price_samples[position_id][-1800:]  # 最近30分钟
 
-        if profit_pct > 0:
-            # 盈利场景: 寻找局部高点
+        if profit_pct >= 2.0:
+            # 盈利≥2%场景: 寻找局部高点保护利润
             if position_side == 'LONG':
-                # 做多: 当前价格是最近10分钟的最高点
                 recent_10min = recent_prices[-600:]
                 if current_price >= max(recent_10min):
                     logger.info(f"持仓{position_id} LONG 找到局部高点 ${current_price:.6f}，盈利{profit_pct:.2f}%")
                     return True
             else:  # SHORT
-                # 做空: 当前价格是最近10分钟的最低点
                 recent_10min = recent_prices[-600:]
                 if current_price <= min(recent_10min):
                     logger.info(f"持仓{position_id} SHORT 找到局部低点 ${current_price:.6f}，盈利{profit_pct:.2f}%")
                     return True
-        else:
-            # 亏损场景: 寻找相对回升点
+        elif profit_pct > 0 and profit_pct < 2.0:
+            # 微盈利 0~2%: 继续持有让利润奔跑，不触发平仓
+            return False
+        elif profit_pct <= -0.5:
+            # 亏损≤-0.5%场景: 寻找相对回升点减亏
             if position_side == 'LONG':
-                # 做多亏损: 价格反弹（相对回升）
                 recent_10min = recent_prices[-600:]
                 if current_price >= max(recent_10min[-120:]):  # 最近2分钟的高点
                     logger.info(f"持仓{position_id} LONG 找到相对回升点 ${current_price:.6f}，亏损{profit_pct:.2f}%")
                     return True
             else:  # SHORT
-                # 做空亏损: 价格回落（相对回升）
                 recent_10min = recent_prices[-600:]
                 if current_price <= min(recent_10min[-120:]):  # 最近2分钟的低点
                     logger.info(f"持仓{position_id} SHORT 找到相对回落点 ${current_price:.6f}，亏损{profit_pct:.2f}%")
                     return True
-
+        # 微亏 0~-0.5%: 正常波动范围，继续持有等待反转
         return False
 
     async def _check_top_bottom(self, symbol: str, position_side: str, entry_price: float, leverage: float = 1.0) -> tuple:
@@ -1516,7 +1515,7 @@ class SmartExitOptimizer:
         1. 极端亏损兜底止损（ROI≤-10%）
         2. 固定止盈检查（兜底）
         3. 智能顶底识别（30分钟后）
-        4. 最优价格评估（150分钟后）
+        4. 最优价格评估（180分钟后）
         5. 动态超时检查
         6. 分阶段超时检查
         7. 绝对时间强制平仓
@@ -1615,10 +1614,10 @@ class SmartExitOptimizer:
                 return (tb_reason, 1.0)
 
             # ============================================================
-            # === 优先级4.5: 最优价格评估（150分钟后启动）===
+            # === 优先级4.5: 最优价格评估（180分钟后启动）===
             # ============================================================
-            # 接近3小时持仓时间（150分钟后），启动价格评估系统寻找最优平仓点
-            if hold_minutes >= 150:
+            # 接近3小时持仓时间（180分钟后），启动价格评估系统寻找最优平仓点
+            if hold_minutes >= 180:
                 pnl_pct = profit_info.get('profit_pct', 0)
                 optimal_found = await self._find_optimal_exit_price(
                     position_id, position_side, float(current_price), pnl_pct
