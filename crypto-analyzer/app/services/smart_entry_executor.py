@@ -89,15 +89,12 @@ class SmartEntryExecutor:
         return stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct
 
     def _get_sl_tp_from_settings(self):
-        """从 system_settings 读取止损/止盈比例，失败时返回默认值 2%/5%"""
+        """从 system_settings 缓存读取止损/止盈比例，失败时返回默认值 2%/5%"""
         try:
-            conn = pymysql.connect(**self.db_config, charset='utf8mb4',
-                                   cursorclass=pymysql.cursors.DictCursor, autocommit=True)
-            cur = conn.cursor()
-            cur.execute("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('stop_loss_pct','take_profit_pct')")
-            rows = {r['setting_key']: r['setting_value'] for r in cur.fetchall()}
-            cur.close(); conn.close()
-            return float(rows.get('stop_loss_pct', 0.02)), float(rows.get('take_profit_pct', 0.05))
+            from app.services.system_settings_loader import get_setting as _get_cached_setting
+            sl = float(_get_cached_setting('stop_loss_pct', '0.02'))
+            tp = float(_get_cached_setting('take_profit_pct', '0.05'))
+            return sl, tp
         except Exception as e:
             logger.warning(f"[SL/TP] 读取system_settings失败，使用默认值: {e}")
             return 0.02, 0.05
@@ -375,12 +372,12 @@ class SmartEntryExecutor:
 
             # ========== 同步实盘开仓 ==========
             try:
+                # 从 data_cache 缓存读 live_trading_enabled
+                from app.services.system_settings_loader import get_setting as _get_cached_setting
+                live_trading_enabled = str(_get_cached_setting('live_trading_enabled', '0')).lower() in ('1', 'true', 'yes')
+                # 实盘同步必须是 TOP 30 交易对
                 _c = pymysql.connect(**self.db_config, autocommit=True)
                 _cur = _c.cursor()
-                _cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
-                _r = _cur.fetchone()
-                live_trading_enabled = _r and str(_r[0]).lower() in ('1', 'true', 'yes')
-                # 实盘同步必须是 TOP 30 交易对
                 _cur.execute("SELECT COUNT(*) FROM top_performing_symbols WHERE symbol=%s", (symbol,))
                 in_top30 = (_cur.fetchone() or [0])[0] > 0
                 _cur.close(); _c.close()

@@ -1276,8 +1276,9 @@ class UnifiedDataScheduler:
         schedule.every(30).minutes.do(lambda: _run_cache_task(refresh_position_stats))
         logger.info("  ✓ position_stats_snapshot - 每 30 分钟 (后台线程)")
 
-        # 系统设置缓存 - 首次同步
-        _run_cache_task(sync_settings_cache)
+        # 系统设置缓存 - 每1分钟同步 (保持与 system_settings 表同步)
+        schedule.every(1).minutes.do(lambda: _run_cache_task(sync_settings_cache))
+        logger.info("  ✓ settings_cache - 每 1 分钟 (后台线程)")
 
         logger.info("所有定时任务设置完成")
 

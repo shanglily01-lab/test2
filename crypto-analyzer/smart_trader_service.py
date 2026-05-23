@@ -1360,25 +1360,11 @@ class SmartTraderService:
         return self.connection
 
     def _load_trading_mode_flags_from_db(self):
-        """启动时从 DB 同步信号确认开关（趋势跟随已移除）。"""
+        """启动时从缓存同步信号确认开关。"""
         try:
-            conn = pymysql.connect(
-                **self.db_config,
-                autocommit=True,
-                connect_timeout=10,
-                read_timeout=30,
-                write_timeout=30,
-            )
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("""
-                        SELECT setting_key, setting_value FROM system_settings
-                        WHERE setting_key = 'signal_confirmation_enabled'
-                    """)
-                    rows = {r[0]: r[1] for r in cur.fetchall()}
-            finally:
-                conn.close()
-            new_sc = int(float(rows.get('signal_confirmation_enabled', '0'))) == 1
+            from app.services.system_settings_loader import get_setting as _get_cached_setting
+            val = _get_cached_setting('signal_confirmation_enabled', '0')
+            new_sc = str(val).lower() in ('1', 'true')
             self.brain.signal_confirmation_enabled = new_sc
             logger.info(f"[TRADING-MODE] 主策略(启动): 信号确认={'ON' if new_sc else 'OFF'}")
         except Exception as e:
@@ -1386,44 +1372,18 @@ class SmartTraderService:
 
     def check_trading_enabled(self) -> bool:
         """
-        检查交易是否启用（从system_settings表读取）
+        检查交易是否启用（从 system_settings 缓存读取）
 
         Returns:
             bool: True=交易启用, False=交易停止
         """
         try:
-            # 注意: _get_connection() 返回单例连接 self.connection，不应调用 conn.close()
-            # 单例连接通过 ping(reconnect=True) 自动保活，无需每次重建
-            conn = self._get_connection()
-            cursor = conn.cursor(pymysql.cursors.DictCursor)
-
-            # 从 system_settings 表读取 u_futures_trading_enabled
-            cursor.execute("""
-                SELECT setting_value
-                FROM system_settings
-                WHERE setting_key = 'u_futures_trading_enabled'
-            """)
-
-            result = cursor.fetchone()
-            cursor.close()
-            # ⚠️ 不调用 conn.close() — conn 是单例 self.connection，关闭会强迫每5秒重建TCP连接
-
-            if result:
-                # setting_value 可能是字符串 '1'/'0' 或布尔值
-                value = result['setting_value']
-                if isinstance(value, str):
-                    enabled = value in ('1', 'true', 'True', 'yes')
-                else:
-                    enabled = bool(value)
-                # 缓存上次成功读取的值，用于连接失败时的兜底
-                self._last_trading_enabled = enabled
-                self._last_trading_enabled_at = datetime.now()
-                return enabled
-            else:
-                # 如果数据库中没有记录，默认禁止（安全策略：查不到开关就不开单）
-                logger.warning(f"[TRADING-CONTROL] 未找到U本位交易控制设置(u_futures_trading_enabled), 默认禁止开单")
-                return False
-
+            from app.services.system_settings_loader import get_setting as _get_cached_setting
+            val = _get_cached_setting('u_futures_trading_enabled', '0')
+            enabled = str(val).lower() in ('1', 'true', 'yes')
+            self._last_trading_enabled = enabled
+            self._last_trading_enabled_at = datetime.now()
+            return enabled
         except Exception as e:
             # 连接失败时，优先使用缓存值（60秒内有效），避免短暂DB断线就停止交易
             cached = getattr(self, '_last_trading_enabled', None)
@@ -1777,29 +1737,21 @@ class SmartTraderService:
         return True, "时间框架一致"
 
     def _load_max_positions(self) -> int:
-        """从 system_settings 读取 max_positions，失败时返回默认值 50"""
+        """从 system_settings 缓存读取 max_positions，失败时返回默认值 50"""
         try:
-            conn = self._get_connection()
-            cur = conn.cursor(pymysql.cursors.DictCursor)
-            cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='max_positions'")
-            row = cur.fetchone()
-            cur.close()
-            if row:
-                return int(float(row['setting_value']))
+            from app.services.system_settings_loader import get_setting as _get_cached_setting
+            val = _get_cached_setting('max_positions', '50')
+            return int(float(val))
         except Exception as e:
             logger.warning(f"[MAX-POS] 读取max_positions失败，使用默认值50: {e}")
         return 50
 
     def _get_sl_tp_from_settings(self):
-        """从 system_settings 读取止损/止盈比例，失败时返回默认值 2%/5%"""
+        """从 system_settings 缓存读取止损/止盈比例，失败时返回默认值 2%/5%"""
         try:
-            conn = self._get_connection()
-            cur = conn.cursor(pymysql.cursors.DictCursor)
-            cur.execute("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('stop_loss_pct','take_profit_pct')")
-            rows = {r['setting_key']: r['setting_value'] for r in cur.fetchall()}
-            cur.close()
-            sl = float(rows.get('stop_loss_pct', 0.02))
-            tp = float(rows.get('take_profit_pct', 0.05))
+            from app.services.system_settings_loader import get_setting as _get_cached_setting
+            sl = float(_get_cached_setting('stop_loss_pct', '0.02'))
+            tp = float(_get_cached_setting('take_profit_pct', '0.05'))
             return sl, tp
         except Exception as e:
             logger.warning(f"[SL/TP] 读取system_settings失败，使用默认值: {e}")
@@ -1988,15 +1940,10 @@ class SmartTraderService:
             logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 系统已禁止{direction_name}")
             return False
 
-        # 🔥 Top 30过滤：仅实盘开启时生效，模拟盘无限制
+        # 🔥 Top 30过滤：仅实盘开启时生效，模拟盘无限制（从 data_cache 缓存读取）
         try:
-            conn_t30 = self._get_connection()
-            cur_t30 = conn_t30.cursor()
-            cur_t30.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
-            row_t30 = cur_t30.fetchone()
-            cur_t30.close()
-            conn_t30.close()
-            live_enabled = row_t30 and str(row_t30.get('setting_value', '0')) in ('1', 'true')
+            from app.services.system_settings_loader import get_setting as _get_cached_setting
+            live_enabled = str(_get_cached_setting('live_trading_enabled', '0')).lower() in ('1', 'true')
         except Exception:
             live_enabled = False
         if live_enabled and not self.is_symbol_in_top_performers(symbol):
@@ -3067,12 +3014,8 @@ class SmartTraderService:
                 return True
 
             try:
-                _c = self._get_connection()
-                _cur = _c.cursor()
-                _cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_close_enabled'")
-                _r = _cur.fetchone()
-                live_enabled = _r and str(_r.get('setting_value', '0')).lower() in ('1', 'true', 'yes')
-                _cur.close(); _c.close()
+                from app.services.system_settings_loader import get_setting as _get_cached_setting
+                live_enabled = str(_get_cached_setting('live_close_enabled', '0')).lower() in ('1', 'true', 'yes')
             except Exception:
                 live_enabled = False
 
@@ -3689,31 +3632,17 @@ class SmartTraderService:
 
                     last_config_reload = now
 
-                # 0.65. 定期重新加载交易模式开关 (每60秒，使复选框变化快速生效，独立连接避免影响主连接)
+                # 0.65. 定期重新加载交易模式开关 (每60秒，从 data_cache 缓存读取)
                 if (now - last_trading_mode_reload).total_seconds() >= 60:
                     try:
-                        _tm_conn = pymysql.connect(
-                            **self.db_config,
-                            autocommit=True,
-                            connect_timeout=10,
-                            read_timeout=10,
-                            write_timeout=10,
-                        )
-                        try:
-                            with _tm_conn.cursor() as _tm_cur:
-                                _tm_cur.execute("""
-                                    SELECT setting_key, setting_value FROM system_settings
-                                    WHERE setting_key IN ('signal_confirmation_enabled', 'max_positions')
-                                """)
-                                _tm_rows = {r[0]: r[1] for r in _tm_cur.fetchall()}
-                        finally:
-                            _tm_conn.close()
-                        new_sc = int(float(_tm_rows.get('signal_confirmation_enabled', '0'))) == 1
+                        from app.services.system_settings_loader import get_setting as _get_cached_setting
+                        new_sc = str(_get_cached_setting('signal_confirmation_enabled', '0')).lower() in ('1', 'true')
                         if new_sc != self.brain.signal_confirmation_enabled:
                             logger.info(f"[TRADING-MODE] 模式更新: 信号确认={'ON' if new_sc else 'OFF'}")
                             self.brain.signal_confirmation_enabled = new_sc
-                        if 'max_positions' in _tm_rows:
-                            new_mp = int(float(_tm_rows['max_positions']))
+                        _tmp_mp = _get_cached_setting('max_positions', '50')
+                        if _tmp_mp is not None:
+                            new_mp = int(float(str(_tmp_mp)))
                             if new_mp != self.max_positions:
                                 logger.info(f"[CONFIG-RELOAD] 最大持仓数更新: {self.max_positions} -> {new_mp}")
                                 self.max_positions = new_mp

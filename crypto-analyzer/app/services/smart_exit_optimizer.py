@@ -933,15 +933,8 @@ class SmartExitOptimizer:
 
             # ===== 安全门禁 1: live_close_enabled 硬门 =====
             try:
-                _gconn = pymysql.connect(
-                    **self.db_config, charset='utf8mb4',
-                    cursorclass=pymysql.cursors.DictCursor, autocommit=True
-                )
-                _gcur = _gconn.cursor()
-                _gcur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_close_enabled'")
-                _grow = _gcur.fetchone()
-                _gcur.close(); _gconn.close()
-                _live_enabled = _grow and str(_grow.get('setting_value', '0')).lower() in ('1', 'true', 'yes')
+                from app.services.system_settings_loader import get_setting as _get_cached_setting
+                _live_enabled = str(_get_cached_setting('live_close_enabled', '0')).lower() in ('1', 'true', 'yes')
             except Exception as _ge:
                 logger.warning(f"[实盘平仓] 读 live_close_enabled 失败,保守跳过: {_ge}")
                 return
