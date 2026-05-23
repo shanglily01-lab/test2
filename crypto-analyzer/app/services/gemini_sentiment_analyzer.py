@@ -640,9 +640,20 @@ def _insert_run_record(
     trump_key_topics: Optional[str],
     trump_market_impact: Optional[str],
 ) -> Optional[int]:
-    """插入运行记录到 gemini_sentiment_runs。"""
+    """插入运行记录到 gemini_sentiment_runs。
+    
+    所有 varchar 字段做了截断保护，避免 Data too long 错误。
+    """
     elapsed = time.time() - t0
     asof_utc = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 截断保护 (对应 DB 列长度)
+    market_sentiment_label = (market_sentiment_label or '')[:20] or None
+    market_direction_verdict = (market_direction_verdict or '')[:500] or None
+    trump_impact_label = (trump_impact_label or '')[:20] or None
+    trump_key_topics = (trump_key_topics or '')[:500] or None
+    trump_market_impact = (trump_market_impact or '')[:200] or None
+    error_msg = (error_msg or '')[:500] or None
 
     sql = """
         INSERT INTO gemini_sentiment_runs
