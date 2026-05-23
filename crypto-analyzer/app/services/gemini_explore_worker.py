@@ -207,7 +207,7 @@ def _fetch_movers_24h(cur, top_n: int):
         ) vol ON k.symbol = vol.symbol
         WHERE p24.p24_close > 0
           AND vol.qvol >= %s
-          AND k.symbol LIKE '%/USDT'
+          AND k.symbol LIKE '%%/USDT'
         ORDER BY change_24h {order}
         LIMIT %s
     """
@@ -263,7 +263,7 @@ def _fetch_normal_movers(cur, top_n: int) -> tuple:
         WHERE p24.p24_close > 0
           AND vol.qvol >= %s
           AND ABS((k.close_price - p24.p24_close) / p24.p24_close * 100) BETWEEN %s AND %s
-          AND k.symbol LIKE '%/USDT'
+          AND k.symbol LIKE '%%/USDT'
         ORDER BY vol.qvol DESC
         LIMIT %s
     """
