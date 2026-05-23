@@ -1280,7 +1280,52 @@ class UnifiedDataScheduler:
         schedule.every(1).minutes.do(lambda: _run_cache_task(sync_settings_cache))
         logger.info("  ✓ settings_cache - 每 1 分钟 (后台线程)")
 
-        logger.info("所有定时任务设置完成")
+        # ============================================================
+        # 9. Gemini 系列 — AI 交易任务
+        # ============================================================
+        logger.info("\n  🤖 Gemini 系列: AI 交易任务")
+
+        # Gemini 探索 - 每 6h 调一轮 Gemini 检测方向异动, 模拟开仓
+        # kill switch = system_settings.gemini_explore_enabled
+        def _run_gemini_explore():
+            def wrapper():
+                try:
+                    from app.services.gemini_explore_worker import run_explore_round
+                    run_explore_round(triggered_by='scheduler')
+                except Exception as e:
+                    logger.error(f"[Gemini探索] 调度异常: {e}", exc_info=True)
+            threading.Thread(target=wrapper, daemon=True, name="GeminiExplore").start()
+
+        schedule.every(6).hours.do(_run_gemini_explore)
+        logger.info("  ✓ gemini_explore - 每 6 小时 (后台线程, kill switch 默认 OFF)")
+
+        # Gemini 预测 - 每 12h 调一次 Gemini 预测 TOP50 方向
+        def _run_gemini_predict():
+            def wrapper():
+                try:
+                    from app.services.gemini_predictor import run_predict_round
+                    run_predict_round(triggered_by='scheduler')
+                except Exception as e:
+                    logger.error(f"[Gemini预测] 调度异常: {e}", exc_info=True)
+            threading.Thread(target=wrapper, daemon=True, name="GeminiPredict").start()
+
+        schedule.every(12).hours.do(_run_gemini_predict)
+        logger.info("  ✓ gemini_predict - 每 12 小时 (后台线程, kill switch 默认 OFF)")
+
+        # Gemini 市场情绪 + 川普分析 - 每 8h 调一次
+        def _run_gemini_sentiment():
+            def wrapper():
+                try:
+                    from app.services.gemini_sentiment_analyzer import run_sentiment_round
+                    run_sentiment_round(triggered_by='scheduler')
+                except Exception as e:
+                    logger.error(f"[Gemini情绪分析] 调度异常: {e}", exc_info=True)
+            threading.Thread(target=wrapper, daemon=True, name="GeminiSentiment").start()
+
+        schedule.every(8).hours.do(_run_gemini_sentiment)
+        logger.info("  ✓ gemini_sentiment - 每 8 小时 (后台线程, kill switch 默认 ON)")
+
+        logger.info("\n所有定时任务设置完成")
 
     async def run_initial_collection(self):
         """首次启动时执行一次缓存更新.
@@ -1389,6 +1434,29 @@ class UnifiedDataScheduler:
 
         # 首次采集 — 后台线程执行, 不阻塞 schedule 主循环
         self._run_async_in_thread(self.run_initial_collection)
+
+        # Gemini 系列首次启动立即执行 (scheduler 启动时就跑)
+        def _run_gemini_init():
+            def wrapper():
+                import time
+                time.sleep(15)  # 等 initial_collection 完成
+                try:
+                    from app.services.gemini_explore_worker import run_explore_round
+                    run_explore_round(triggered_by='scheduler_init')
+                except Exception as e:
+                    logger.error(f"[Gemini探索] 初始化运行失败: {e}")
+                try:
+                    from app.services.gemini_predictor import run_predict_round
+                    run_predict_round(triggered_by='scheduler_init')
+                except Exception as e:
+                    logger.error(f"[Gemini预测] 初始化运行失败: {e}")
+                try:
+                    from app.services.gemini_sentiment_analyzer import run_sentiment_round
+                    run_sentiment_round(triggered_by='scheduler_init')
+                except Exception as e:
+                    logger.error(f"[Gemini情绪分析] 初始化运行失败: {e}")
+            threading.Thread(target=wrapper, daemon=True, name="GeminiInit").start()
+        _run_gemini_init()
 
         # 定期打印状态 (每小时)
         schedule.every(1).hours.do(self.print_status)
