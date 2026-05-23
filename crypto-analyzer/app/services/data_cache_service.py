@@ -81,7 +81,7 @@ def refresh_market_snapshot() -> dict:
             cur.execute(
                 f"SELECT symbol, current_price, change_24h "
                 f"FROM `{MAIN_DB}`.price_stats_24h "
-                f"WHERE symbol IN ({placeholders})",
+                f"WHERE REPLACE(symbol,'/','') IN ({placeholders})",
                 core_symbols,
             )
             for r in cur.fetchall():
@@ -177,11 +177,11 @@ def refresh_market_movers() -> dict:
 
             # --- 涨幅榜 gainers ---
             cur.execute(
-                f"SELECT symbol, price_change_pct_24h AS val "
+                f"SELECT symbol, change_24h AS val "
                 f"FROM `{MAIN_DB}`.price_stats_24h "
                 f"WHERE quote_volume_24h >= 5000000 "
                 f"  AND symbol LIKE '%%/USDT' "
-                f"ORDER BY price_change_pct_24h DESC LIMIT 20"
+                f"ORDER BY change_24h DESC LIMIT 20"
             )
             for rank, r in enumerate(cur.fetchall(), 1):
                 sym = r["symbol"]
@@ -196,11 +196,11 @@ def refresh_market_movers() -> dict:
 
             # --- 跌幅榜 losers ---
             cur.execute(
-                f"SELECT symbol, price_change_pct_24h AS val "
+                f"SELECT symbol, change_24h AS val "
                 f"FROM `{MAIN_DB}`.price_stats_24h "
                 f"WHERE quote_volume_24h >= 5000000 "
                 f"  AND symbol LIKE '%%/USDT' "
-                f"ORDER BY price_change_pct_24h ASC LIMIT 20"
+                f"ORDER BY change_24h ASC LIMIT 20"
             )
             for rank, r in enumerate(cur.fetchall(), 1):
                 sym = r["symbol"]
@@ -382,9 +382,11 @@ def refresh_candidate_pool() -> dict:
             # 1) 清空旧池
             cur.execute("DELETE FROM data_cache.candidate_pool_snapshot")
 
+            main_db = MAIN_DB
+
             # 2) 获取所有候选 symbol (有成交量的 /USDT 交易对)
             cur.execute(
-                f"SELECT symbol, current_price, price_change_pct_24h AS change_24h, "
+                f"SELECT symbol, current_price, change_24h, "
                 f"       quote_volume_24h "
                 f"FROM `{MAIN_DB}`.price_stats_24h "
                 f"WHERE symbol LIKE '%%/USDT' "
