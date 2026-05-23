@@ -42,6 +42,50 @@ from app.services.gemini_swan_worker import (
     _read_setting,
 )
 
+# ── data_cache 层: 尝试从缓存快速读取, 失败时回退到主库 ──
+_DATA_CACHE_AVAILABLE = False
+try:
+    from app.services.data_cache_service import (
+        get_candidate_pool,
+        get_market_snapshot,
+        get_market_movers,
+        get_position_stats,
+        get_setting,
+    )
+    _DATA_CACHE_AVAILABLE = True
+except ImportError:
+    pass
+
+
+def _try_candidate_pool(min_volume: float = 1000000, limit: int = 100) -> Optional[List[Dict]]:
+    """尝试从 data_cache.candidate_pool_snapshot 读取候选池, 失败返回 None."""
+    if not _DATA_CACHE_AVAILABLE:
+        return None
+    try:
+        return get_candidate_pool(min_volume=min_volume, limit=limit)
+    except Exception:
+        return None
+
+
+def _try_market_snapshot() -> Optional[Dict]:
+    """尝试读取 market_snapshot 缓存."""
+    if not _DATA_CACHE_AVAILABLE:
+        return None
+    try:
+        return get_market_snapshot()
+    except Exception:
+        return None
+
+
+def _try_position_stats(source: str, account_id: int = 2) -> Optional[Dict]:
+    """尝试读取 position_stats 缓存."""
+    if not _DATA_CACHE_AVAILABLE:
+        return None
+    try:
+        return get_position_stats(source, account_id)
+    except Exception:
+        return None
+
 
 # ============================================================
 # v3 长持仓常量
@@ -90,13 +134,35 @@ def _connect():
 # 历史表现统计
 # ============================================================
 def _get_historical_stats(conn) -> dict:
-    """查询 gemini_explore 的历史表现用于 prompt 尾部反馈."""
+    """查询 gemini_explore 的历史表现用于 prompt 尾部反馈.
+
+    优先从 data_cache.position_stats_snapshot 读取.
+    """
     stats: dict = {
         'total_trades': 0, 'win_trades': 0, 'win_rate': None,
         'total_pnl': 0, 'avg_pnl': None,
         'long_win_rate': None, 'short_win_rate': None,
         'long_count': 0, 'short_count': 0,
     }
+
+    # 从缓存读取
+    cached = _try_position_stats(EXPLORE_SOURCE, EXPLORE_ACCOUNT_ID)
+    if cached:
+        stats['total_trades'] = int(cached.get('closed_30d', 0) or 0)
+        stats['win_trades'] = int(cached.get('wins_30d', 0) or 0)
+        stats['total_pnl'] = float(cached.get('pnl_30d', 0) or 0)
+        stats['win_rate'] = float(cached.get('win_rate_30d', 0) or 0)
+        stats['long_count'] = int(cached.get('long_count', 0) or 0)
+        stats['short_count'] = int(cached.get('short_count', 0) or 0)
+        if stats['total_trades'] > 0:
+            stats['avg_pnl'] = round(stats['total_pnl'] / stats['total_trades'], 2)
+        # long win rate / short win rate 从缓存不能精确得到, 用总体近似
+        if stats['long_count'] >= 3:
+            stats['long_win_rate'] = stats['win_rate']
+        if stats['short_count'] >= 3:
+            stats['short_win_rate'] = stats['win_rate']
+        return stats
+
     try:
         with conn.cursor() as cur:
             # 总交易数
@@ -305,15 +371,87 @@ def _fetch_extreme_funding(cur, top_n: int):
 def _build_universe(conn) -> dict:
     """构建 Gemini 探索候选池 (极端 + 中等 + 资金费率极值).
 
-    策略:
-      - 极端涨跌 (TOP_MOVER=12): 捕捉市场焦点, 但噪声大
-      - 中等涨跌 (NORMAL_MOVER=8): 趋势清晰, 噪声小 — 新增
-      - 资金费率极值 (TOP_FUNDING=10): 拥挤度反转信号
-      总池约 12+12+8+8+10+10 = 60 symbol, 减去去重后约 40-50.
+    优先从 data_cache.candidate_pool_snapshot 读取 (零 JOIN),
+    失败时回退到 kline_data 多层 JOIN.
     """
     global EXCLUDED_EXTREME_SYMBOLS
     EXCLUDED_EXTREME_SYMBOLS = set()
 
+    # ── 尝试从缓存取 ──
+    cached = _try_candidate_pool(min_volume=1000000, limit=200)
+    if cached:
+        logger.info("[Gemini探索] 从 data_cache.candidate_pool_snapshot 读取候选池 "
+                     f"({len(cached)} 个 symbol)")
+        return _build_universe_from_cache(cached)
+
+    # ── 回退: 原逻辑 ──
+    logger.info("[Gemini探索] data_cache 不可用, 回退 kline_data 多层 JOIN")
+    return _build_universe_fallback(conn)
+
+
+def _build_universe_from_cache(cached_rows: List[Dict]) -> dict:
+    """从缓存行构建 universe."""
+    universe = {}
+    seen = set()
+    move_buy = {"gainers": [], "losers": []}
+    move_other = {"norm_up": [], "norm_down": []}
+    fund_extremes = {"pos": [], "neg": []}
+
+    for row in cached_rows:
+        sym = row["symbol"]
+        chg = float(row["change_24h"] or 0)
+        vol = float(row["quote_volume_24h"] or 0)
+        price = float(row["current_price"] or 0)
+        fr = float(row["funding_rate"] or 0)
+
+        # 极端 mover
+        if vol >= MIN_QUOTE_VOLUME and abs(chg) >= 8:
+            EXCLUDED_EXTREME_SYMBOLS.add(sym)
+
+        triggers = []
+        if vol >= MIN_QUOTE_VOLUME:
+            triggers.append(f"24h涨跌{chg:+.2f}%")
+        if abs(fr) > 0.001:
+            triggers.append(f"资金费率{fr:+.6f}")
+
+        if sym not in seen and not _is_excluded(sym):
+            seen.add(sym)
+            sym_data = {
+                "symbol": sym,
+                "current_price": price,
+                "change_24h": chg,
+                "quote_volume_24h": vol,
+                "current_rate": fr,
+                "triggers": triggers,
+                # 从缓存读预先计算好的 K 线叙事
+                "kline_narrative": {},
+                "tech": {},
+            }
+
+            # 如果有预计算的叙事, 直接使用
+            if row.get("narrative_1h"):
+                sym_data["kline_narrative"]["1h"] = row["narrative_1h"]
+            if row.get("narrative_15m"):
+                sym_data["kline_narrative"]["15m"] = row["narrative_15m"]
+            if row.get("narrative_1d"):
+                sym_data["kline_narrative"]["1d"] = row["narrative_1d"]
+
+            if row.get("rsi_14") is not None:
+                sym_data["tech"]["rsi_14_1h"] = float(row["rsi_14"])
+            if row.get("ema_9") is not None:
+                sym_data["tech"]["ema9_15m"] = float(row["ema_9"])
+            if row.get("above_7d_low_pct") is not None:
+                sym_data["tech"]["above_7d_low_pct"] = float(row["above_7d_low_pct"])
+            if row.get("below_7d_high_pct") is not None:
+                sym_data["tech"]["below_7d_high_pct"] = float(row["below_7d_high_pct"])
+
+            universe[sym] = sym_data
+
+    return universe
+
+
+def _build_universe_fallback(conn) -> dict:
+    """回退: 原 kline_data 多层 JOIN 逻辑."""
     with conn.cursor() as cur:
         # 1. 极端涨跌
         gainers, losers = _fetch_movers_24h(cur, TOP_MOVER)
@@ -321,7 +459,7 @@ def _build_universe(conn) -> dict:
             EXCLUDED_EXTREME_SYMBOLS.add(r["symbol"])
         universe = _merge_universe(gainers, losers, {}, {})
 
-        # 2. 中等涨跌 (排除已在极端池的)
+        # 2. 中等涨跌
         normal_gainers, normal_losers = _fetch_normal_movers(cur, NORMAL_MOVER)
         normal_merged = _merge_universe(normal_gainers, normal_losers, {}, {})
         for sym, data in normal_merged.items():
@@ -335,7 +473,6 @@ def _build_universe(conn) -> dict:
             if sym not in universe:
                 universe[sym] = data
             else:
-                # 把 funding trigger 补到已有 symbol 上
                 for t in data.get('triggers', []):
                     if t not in universe[sym].get('triggers', []):
                         universe[sym].setdefault('triggers', []).append(t)
@@ -473,8 +610,15 @@ def _format_kline_narrative(k_rows: List[Dict], timeframe_label: str, max_lines:
 
 
 def _enrich_symbol(cur, sym_data: dict) -> None:
-    """给单个 symbol 加上 K 线叙事描述 + 技术指标 + 成交量."""
+    """给单个 symbol 加上 K 线叙事描述 + 技术指标 + 成交量.
+
+    如果 data_cache 中有预计算数据 (已带 narrative), 直接跳过查询.
+    """
     symbol = sym_data['symbol']
+
+    # 如果缓存已经有叙事, 直接跳过
+    if sym_data.get('kline_narrative', {}).get('1d'):
+        return
 
     k_1d = _fetch_klines(cur, symbol, '1d', 7)
     k_1h = _fetch_klines(cur, symbol, '1h', 12)
@@ -576,11 +720,35 @@ def _enrich_universe(conn, universe: dict) -> None:
 
 
 def _build_global_context(conn) -> dict:
-    """全局市场环境."""
-    ctx = {'asof_utc': datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
-    ctx['big4_signal'] = _get_big4_signal(conn)
+    """全局市场环境.
 
-    # 市场环境描述
+    优先从 data_cache.market_snapshot 读取,
+    失败时回退 kline_data 多层 JOIN.
+    """
+    ctx = {'asof_utc': datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
+
+    # 尝试从缓存读取
+    snap = _try_market_snapshot()
+    if snap:
+        ctx['big4_signal'] = snap.get('big4_signal', 'NEUTRAL')
+        for sym, base in [('BTCUSDT', 'btc'), ('ETHUSDT', 'eth'), ('SOLUSDT', 'sol')]:
+            if snap.get(f'{sym[:3].lower()}_price'):
+                ctx[f'{base}_price'] = float(snap[f'{sym[:3].lower()}_price'])
+                ctx[f'{base}_change_24h'] = float(snap[f'{sym[:3].lower()}_change_24h'] or 0)
+        # market regime
+        btc_chg = abs(ctx.get('btc_change_24h', 0) or 0)
+        if btc_chg > 8:
+            ctx['market_regime'] = "极端波动 (BTC 24h > 8%) — 注意止损保护"
+        elif btc_chg > 4:
+            ctx['market_regime'] = "强趋势 (BTC 24h > 4%) — 顺趋势交易"
+        elif btc_chg > 1.5:
+            ctx['market_regime'] = "温和趋势 (BTC 24h 1.5-4%) — 正常交易环境"
+        else:
+            ctx['market_regime'] = "低波动盘整 (BTC 24h < 1.5%) — 适合小周期震荡策略"
+        return ctx
+
+    # 回退: 原逻辑
+    ctx['big4_signal'] = _get_big4_signal(conn)
     market_desc = _describe_market_regime(conn)
     ctx['market_regime'] = market_desc
 
@@ -881,6 +1049,14 @@ def _call_gemini_explore(universe: dict, global_ctx: dict, historical_stats: dic
 # 闸门检查 (不变)
 # ============================================================
 def _get_big4_signal(conn) -> str:
+    """从 big4_trend_history 或 cache 获取 Big4 信号."""
+    if _DATA_CACHE_AVAILABLE:
+        try:
+            snap = _try_market_snapshot()
+            if snap and snap.get("big4_signal"):
+                return str(snap["big4_signal"])
+        except Exception:
+            pass
     try:
         with conn.cursor() as cur:
             cur.execute(

@@ -1238,6 +1238,47 @@ class UnifiedDataScheduler:
         #     )
         #     logger.info("  ✓ 模拟合约总权益更新 - 每 30 秒")
 
+        # ============================================================
+        # 8. data_cache 层 — 预计算缓存刷新
+        # ============================================================
+        logger.info("\n  🚀 data_cache 层: 预计算缓存自动刷新")
+
+        def _run_cache_task(job_fn):
+            """在线程中执行缓存任务."""
+            def wrapper():
+                try:
+                    job_fn()
+                except Exception as e:
+                    logger.error(f"[data_cache] 任务失败: {e}", exc_info=True)
+            threading.Thread(target=wrapper, daemon=True, name=f"Cache_{job_fn.__name__}").start()
+
+        from app.services.data_cache_service import (
+            refresh_market_snapshot,
+            refresh_market_movers,
+            refresh_candidate_pool,
+            refresh_position_stats,
+            sync_settings_cache,
+        )
+
+        # 市场快照 - 每1分钟
+        schedule.every(1).minutes.do(lambda: _run_cache_task(refresh_market_snapshot))
+        logger.info("  ✓ market_snapshot - 每 1 分钟 (后台线程)")
+
+        # 市场异动 - 每5分钟
+        schedule.every(5).minutes.do(lambda: _run_cache_task(refresh_market_movers))
+        logger.info("  ✓ market_movers_snapshot - 每 5 分钟 (后台线程)")
+
+        # 候选交易对池 - 每6分钟
+        schedule.every(6).minutes.do(lambda: _run_cache_task(refresh_candidate_pool))
+        logger.info("  ✓ candidate_pool_snapshot - 每 6 分钟 (后台线程)")
+
+        # 持仓统计 - 每30分钟
+        schedule.every(30).minutes.do(lambda: _run_cache_task(refresh_position_stats))
+        logger.info("  ✓ position_stats_snapshot - 每 30 分钟 (后台线程)")
+
+        # 系统设置缓存 - 首次同步
+        _run_cache_task(sync_settings_cache)
+
         logger.info("所有定时任务设置完成")
 
     async def run_initial_collection(self):
@@ -1280,6 +1321,34 @@ class UnifiedDataScheduler:
                 logger.warning("  ⊗ Hyperliquid 缓存更新超时")
             except Exception as e:
                 logger.warning(f"  ⊗ Hyperliquid 缓存更新失败: {e}")
+
+        # data_cache 初始刷新 (后台线程, 不阻塞)
+        try:
+            from app.services.data_cache_service import (
+                refresh_market_snapshot,
+                refresh_market_movers,
+                refresh_candidate_pool,
+                refresh_position_stats,
+                sync_settings_cache,
+            )
+            import threading as _t
+
+            def _init_cache():
+                logger.info("[data_cache] 首次刷新 market_movers_snapshot (后台)...")
+                refresh_market_movers()
+                logger.info("[data_cache] 首次刷新 market_snapshot (后台)...")
+                refresh_market_snapshot()
+                logger.info("[data_cache] 首次刷新 settings_cache (后台)...")
+                sync_settings_cache()
+                logger.info("[data_cache] 首次刷新 candidate_pool_snapshot (后台)...")
+                refresh_candidate_pool()
+                logger.info("[data_cache] 首次刷新 position_stats_snapshot (后台)...")
+                refresh_position_stats()
+                logger.info("[data_cache] 首次刷新完成")
+
+            _t.Thread(target=_init_cache, daemon=True, name="InitDataCache").start()
+        except Exception as e:
+            logger.warning(f"[data_cache] 首次刷新失败 (将在定时任务中重试): {e}")
 
         logger.info("\n" + "=" * 80)
         logger.info("首次数据采集完成")

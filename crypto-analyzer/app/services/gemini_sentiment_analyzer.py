@@ -30,6 +30,18 @@ from app.services.gemini_swan_worker import (
     _read_setting,
 )
 
+# ── data_cache 层 ──
+_DATA_CACHE_SENTIMENT = False
+try:
+    from app.services.data_cache_service import (
+        get_market_snapshot,
+        get_market_movers,
+        get_setting as get_cached_setting,
+    )
+    _DATA_CACHE_SENTIMENT = True
+except ImportError:
+    pass
+
 
 # ============================================================
 # 常量
@@ -67,7 +79,34 @@ def _connect():
 # 数据采集
 # ============================================================
 def _fetch_core_prices(conn) -> dict:
-    """获取核心币种最新价格及 24h 变化。"""
+    """获取核心币种最新价格及 24h 变化。
+
+    优先从 data_cache.market_snapshot 读取。
+    """
+    if _DATA_CACHE_SENTIMENT:
+        try:
+            snap = get_market_snapshot()
+            if snap:
+                result = {}
+                for sym, pair in [("BTCUSDT", "BTCUSDT"), ("ETHUSDT", "ETHUSDT"),
+                                  ("SOLUSDT", "SOLUSDT"), ("BNBUSDT", "BNBUSDT"),
+                                  ("XRPUSDT", "XRPUSDT")]:
+                    # market_snapshot 列名是小写加下划线
+                    prefix = sym[:3].lower()
+                    price = snap.get(f"{prefix}_price")
+                    chg = snap.get(f"{prefix}_change_24h")
+                    if price:
+                        result[sym] = {
+                            "price": float(price),
+                            "change_24h": float(chg) if chg else None,
+                            "volume_24h": None,
+                        }
+                if result:
+                    return result
+        except Exception:
+            pass
+
+    # 回退: 原逻辑
     sql = """
         SELECT
             k.symbol,
@@ -105,7 +144,29 @@ def _fetch_core_prices(conn) -> dict:
 
 
 def _fetch_top_movers(conn, top_n: int = 10) -> dict:
-    """获取 24h 涨幅/跌幅最大交易对。"""
+    """获取 24h 涨幅/跌幅最大交易对。
+
+    优先从 data_cache.market_movers_snapshot 读取。
+    """
+    if _DATA_CACHE_SENTIMENT:
+        try:
+            gainers = get_market_movers("gainers", top_n)
+            losers = get_market_movers("losers", top_n)
+            if gainers or losers:
+                return {
+                    "gainers": [
+                        {"symbol": r["symbol"], "change": float(r["value"] or 0), "volume": 0}
+                        for r in gainers
+                    ],
+                    "losers": [
+                        {"symbol": r["symbol"], "change": float(r["value"] or 0), "volume": 0}
+                        for r in losers
+                    ],
+                }
+        except Exception:
+            pass
+
+    # 回退
     sql = """
         SELECT symbol, price_change_pct_24h, quote_volume_24h
         FROM price_stats_24h
@@ -140,7 +201,29 @@ def _fetch_top_movers(conn, top_n: int = 10) -> dict:
 
 
 def _fetch_funding_extremes(conn, top_n: int = 6) -> dict:
-    """获取资金费率最高/最低的交易对。"""
+    """获取资金费率最高/最低的交易对。
+
+    优先从 data_cache.market_movers_snapshot 读取。
+    """
+    if _DATA_CACHE_SENTIMENT:
+        try:
+            high = get_market_movers("funding_high", top_n)
+            low = get_market_movers("funding_low", top_n)
+            if high or low:
+                return {
+                    "highest": [
+                        {"symbol": r["symbol"], "rate": float(r["value"] or 0) * 100}
+                        for r in high
+                    ],
+                    "lowest": [
+                        {"symbol": r["symbol"], "rate": float(r["value"] or 0) * 100}
+                        for r in low
+                    ],
+                }
+        except Exception:
+            pass
+
+    # 回退
     sql = """
         SELECT symbol, funding_rate, funding_time
         FROM funding_rate_data
@@ -172,7 +255,17 @@ def _fetch_funding_extremes(conn, top_n: int = 6) -> dict:
 
 
 def _fetch_big4_signal(conn) -> Optional[str]:
-    """获取 Big4 市场趋势信号。"""
+    """获取 Big4 市场趋势信号.
+
+    优先从 data_cache.market_snapshot 读取.
+    """
+    if _DATA_CACHE_SENTIMENT:
+        try:
+            snap = get_market_snapshot()
+            if snap and snap.get("big4_signal"):
+                return str(snap["big4_signal"])
+        except Exception:
+            pass
     try:
         with conn.cursor() as cur:
             cur.execute(

@@ -11,10 +11,15 @@ import os
 from datetime import datetime, timezone
 from loguru import logger
 
+DATA_CACHE_DB = "data_cache"
 
-def _get_conn():
+
+def _get_conn(database: str = None):
+    cfg = get_db_config()
+    if database:
+        cfg = {**cfg, "database": database}
     return pymysql.connect(
-        **get_db_config(),
+        **cfg,
         charset='utf8mb4',
         cursorclass=pymysql.cursors.DictCursor,
         connect_timeout=10
@@ -33,6 +38,42 @@ def _ensure_table(cursor):
 
 
 def _fetch_signals(cursor):
+    # 优先从 data_cache.candidate_pool_snapshot 读取
+    try:
+        cc = _get_conn(DATA_CACHE_DB)
+        with cc.cursor() as c:
+            c.execute("""
+                SELECT symbol, total_score, direction, strength_level, updated_at
+                FROM candidate_pool_snapshot
+                WHERE total_score IS NOT NULL
+                ORDER BY ABS(total_score) DESC
+                LIMIT 20
+            """)
+            rows = c.fetchall()
+        cc.close()
+        if rows:
+            result = []
+            for r in rows:
+                result.append({
+                    'symbol':        r['symbol'],
+                    'total_score':   float(r['total_score']) if r['total_score'] is not None else 0,
+                    'direction':     r['direction'] or '',
+                    'h1_score':      None,
+                    'm15_score':     None,
+                    'h1_bullish':    0,
+                    'h1_bearish':    0,
+                    'm15_bullish':   0,
+                    'm15_bearish':   0,
+                    'm5_bullish':    0,
+                    'm5_bearish':    0,
+                    'strength_level': r['strength_level'],
+                    'updated_at':    r['updated_at'].isoformat() if r['updated_at'] else None,
+                })
+            return result
+    except Exception as e:
+        logger.warning(f"[dashboard_snapshot] 读 candidate_pool_snapshot 失败，回退直接查询: {e}")
+
+    # 兜底
     cursor.execute("""
         SELECT symbol, total_score, direction,
                h1_score, m15_score,
@@ -70,8 +111,24 @@ def _fetch_signals(cursor):
 
 
 def _fetch_stats(cursor):
-    # 今日开仓总数 + 盈亏 + 胜率（来自 futures_positions）
-    # 使用 CURDATE() 与 DB 时区一致，避免 Python UTC 与 MySQL 本地时区不匹配导致统计为 0
+    # 优先从 data_cache.position_stats_snapshot 读取
+    try:
+        cc = _get_conn(DATA_CACHE_DB)
+        with cc.cursor() as c:
+            c.execute("SELECT * FROM position_stats_snapshot WHERE source='binance'")
+            row = c.fetchone()
+        cc.close()
+        if row:
+            return {
+                'today_signals': int(row.get('today_signals') or 0),
+                'today_open':    int(row.get('today_open') or 0),
+                'today_pnl':     float(row.get('today_pnl') or 0),
+                'win_rate':      float(row.get('win_rate')) if row.get('win_rate') is not None else None,
+            }
+    except Exception as e:
+        logger.warning(f"[dashboard_snapshot] 读 position_stats_snapshot 失败，回退: {e}")
+
+    # 兜底
     cursor.execute("""
         SELECT
             COUNT(*) AS total_opened,
@@ -83,7 +140,6 @@ def _fetch_stats(cursor):
           AND DATE(open_time) = CURDATE()
     """)
     r = cursor.fetchone() or {}
-    # 当前有信号的交易对数（来自 coin_kline_scores，作为"今日信号数"展示）
     cursor.execute("""
         SELECT COUNT(*) AS sig_count
         FROM coin_kline_scores
@@ -93,8 +149,8 @@ def _fetch_stats(cursor):
     closed = int(r.get('closed_count') or 0)
     wins   = int(r.get('wins')         or 0)
     return {
-        'today_signals': int(sig_r.get('sig_count')  or 0),   # 当前有信号的交易对数
-        'today_open':    int(r.get('total_opened')    or 0),   # 今日开仓总数
+        'today_signals': int(sig_r.get('sig_count')  or 0),
+        'today_open':    int(r.get('total_opened')    or 0),
         'today_pnl':     float(r.get('today_pnl')    or 0),
         'win_rate':      round(wins / closed * 100, 1) if closed > 0 else None,
     }
@@ -304,8 +360,25 @@ def _fetch_hyperliquid(cursor):
 
 
 def _fetch_live_prices(cursor):
-    """获取 BTC/ETH/BNB/SOL 实时价格（通过统一 Hub 缓存）"""
-    symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"]
+    """获取 BTC/ETH/BNB/SOL 实时价格（优先 data_cache，兜底 Hub）"""
+    symbols_map = {"BTCUSDT": "btc", "ETHUSDT": "eth", "BNBUSDT": "bnb", "SOLUSDT": "sol"}
+    try:
+        cc = _get_conn(DATA_CACHE_DB)
+        with cc.cursor() as c:
+            c.execute("SELECT btc_price, eth_price, bnb_price, sol_price FROM market_snapshot ORDER BY id DESC LIMIT 1")
+            row = c.fetchone()
+        cc.close()
+        if row:
+            result = []
+            for sym, prefix in symbols_map.items():
+                display = sym.replace("USDT", "/USDT")
+                price = float(row.get(f"{prefix}_price") or 0) if row.get(f"{prefix}_price") is not None else None
+                result.append({'symbol': display, 'price': price})
+            return result
+    except Exception as e:
+        logger.warning(f"[dashboard_snapshot] 读 market_snapshot 失败，回退 Hub: {e}")
+
+    # 兜底：Hub 缓存
     try:
         from app.services.binance_data_hub import get_global_data_hub
         hub = get_global_data_hub()
@@ -314,7 +387,7 @@ def _fetch_live_prices(cursor):
         ticker_map = {}
 
     result = []
-    for sym in symbols:
+    for sym in symbols_map:
         display = sym.replace("USDT", "/USDT")
         price_decimal = ticker_map.get(sym)
         price = float(price_decimal) if price_decimal is not None else None

@@ -85,7 +85,22 @@ def _load_remote_db_cfg() -> dict:
     return cfg
 
 
+# ── data_cache 层: 带本地内存缓存的 setting 读取 ──
+from app.services.data_cache_service import get_setting as _cached_get_setting
+_DATA_CACHE_SETTINGS = True
+
+
 def _read_setting(cur, key: str, default: str) -> str:
+    """
+    尝试从 data_cache.settings_cache 读取 (带 60s 本地缓存),
+    失败时回退到 system_settings 直接查询.
+    """
+    if _DATA_CACHE_SETTINGS:
+        try:
+            return _cached_get_setting(key, default)
+        except Exception:
+            pass
+    # 回退
     cur.execute(
         "SELECT setting_value FROM system_settings WHERE setting_key = %s LIMIT 1",
         (key,),

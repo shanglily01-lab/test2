@@ -38,6 +38,41 @@ from app.services.gemini_swan_worker import (
     _read_setting,
 )
 
+# ── data_cache 层: 尝试从缓存读取, 失败回退 ──
+_DATA_CACHE_AVAILABLE_PREDICT = False
+try:
+    from app.services.data_cache_service import (
+        get_candidate_pool,
+        get_market_snapshot,
+        get_position_stats,
+    )
+    _DATA_CACHE_AVAILABLE_PREDICT = True
+except ImportError:
+    pass
+
+
+def _try_candidate(symbol: str) -> Optional[Dict]:
+    """按 symbol 从缓存读取单个交易对数据."""
+    if not _DATA_CACHE_AVAILABLE_PREDICT:
+        return None
+    try:
+        pool = get_candidate_pool(min_volume=0, limit=500)
+        for r in pool:
+            if r["symbol"] == symbol:
+                return r
+    except Exception:
+        pass
+    return None
+
+
+def _try_snapshot() -> Optional[Dict]:
+    if not _DATA_CACHE_AVAILABLE_PREDICT:
+        return None
+    try:
+        return get_market_snapshot()
+    except Exception:
+        return None
+
 
 # ============================================================
 # 常量
@@ -227,7 +262,33 @@ def _format_kline_narrative(k_rows: List[Dict], timeframe_label: str, max_lines:
 # 数据组装
 # ============================================================
 def _build_symbol_data(conn, symbol: str) -> Optional[Dict]:
-    """获取单个 symbol 的完整数据: K 线叙事 + 技术指标 + 当前价."""
+    """获取单个 symbol 的完整数据: K 线叙事 + 技术指标 + 当前价.
+
+    优先从 data_cache.candidate_pool_snapshot 读取.
+    """
+    # 尝试从缓存读取
+    cached = _try_candidate(symbol)
+    if cached and cached.get("current_price"):
+        kline_narrative = {}
+        if cached.get("narrative_1h"):
+            kline_narrative["1h"] = cached["narrative_1h"]
+        if cached.get("narrative_15m"):
+            kline_narrative["15m"] = cached["narrative_15m"]
+        if cached.get("narrative_1d"):
+            kline_narrative["1d"] = cached["narrative_1d"]
+        return {
+            "symbol": symbol,
+            "current_price": float(cached["current_price"]) if cached.get("current_price") else None,
+            "change_24h": float(cached["change_24h"]) if cached.get("change_24h") else None,
+            "quote_volume_24h": float(cached["quote_volume_24h"]) if cached.get("quote_volume_24h") else None,
+            "funding_rate": float(cached["funding_rate"]) if cached.get("funding_rate") else None,
+            "kline_narrative": kline_narrative,
+            "rsi_14_1h": float(cached["rsi_14"]) if cached.get("rsi_14") else None,
+            "above_7d_low_pct": float(cached["above_7d_low_pct"]) if cached.get("above_7d_low_pct") else None,
+            "below_7d_high_pct": float(cached["below_7d_high_pct"]) if cached.get("below_7d_high_pct") else None,
+        }
+
+    # 回退: 原逻辑
     with conn.cursor() as cur:
         k_1d = _fetch_klines(cur, symbol, '1d', 7)
         k_1h = _fetch_klines(cur, symbol, '1h', 72)
@@ -291,8 +352,23 @@ def _build_symbol_data(conn, symbol: str) -> Optional[Dict]:
 
 
 def _build_global_context(conn) -> dict:
-    """全局市场环境."""
+    """全局市场环境.
+
+    优先从 data_cache.market_snapshot 读取.
+    """
     ctx = {'asof_utc': datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
+
+    snap = _try_snapshot()
+    if snap:
+        ctx['big4_signal'] = snap.get('big4_signal', 'NEUTRAL')
+        for pair, base in [('BTCUSDT', 'btc'), ('ETHUSDT', 'eth'), ('SOLUSDT', 'sol')]:
+            price_key = f'{pair[:3].lower()}_price'
+            chg_key = f'{pair[:3].lower()}_change_24h'
+            if snap.get(price_key):
+                ctx[f'{base}_price'] = float(snap[price_key])
+                ctx[f'{base}_change_24h'] = float(snap[chg_key] or 0)
+        return ctx
+
     ctx['big4_signal'] = _get_big4_signal(conn)
 
     try:

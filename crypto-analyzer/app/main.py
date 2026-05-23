@@ -838,6 +838,15 @@ async def lifespan(app: FastAPI):
         import traceback
         traceback.print_exc()
 
+    # data_cache 初始同步 (后台线程, 不阻塞启动)
+    try:
+        from app.services.data_cache_service import sync_settings_cache
+        import threading as _t
+        _t.Thread(target=sync_settings_cache, daemon=True, name="InitSettingsCache").start()
+        logger.info("[data_cache] settings_cache 初始同步已提交 (后台)")
+    except Exception as e:
+        logger.warning(f"[data_cache] 初始同步失败: {e}")
+
     yield
 
     # 关闭时的清理工作
@@ -1172,6 +1181,14 @@ except Exception as e:
     logger.warning("Binance 公告监控API路由注册失败: %s", e)
     import traceback
     traceback.print_exc()
+
+# 注册 data_cache API 路由 (性能优化缓存)
+try:
+    from app.api.data_cache_api import router as data_cache_router
+    app.include_router(data_cache_router)
+    logger.info("✅ data_cache API路由已注册 (/api/data-cache)")
+except Exception as e:
+    logger.warning(f"⚠️  data_cache API路由注册失败: {e}")
 
 # ==================== API路由 ====================
 
