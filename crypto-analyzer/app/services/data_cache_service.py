@@ -81,7 +81,7 @@ def refresh_market_snapshot() -> dict:
             cur.execute(
                 f"SELECT symbol, current_price, change_24h "
                 f"FROM `{MAIN_DB}`.price_stats_24h "
-                f"WHERE REPLACE(symbol,'/','') IN ({placeholders})",
+                f"WHERE symbol IN ({placeholders})",
                 core_symbols,
             )
             for r in cur.fetchall():
