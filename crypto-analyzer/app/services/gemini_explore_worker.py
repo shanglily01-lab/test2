@@ -1287,6 +1287,14 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         big4 = _get_big4_signal(conn)
         logger.info(f"[Gemini探索] Big4 当前信号={big4}")
 
+        # 5a. 读系统方向开关 (用户可在管理后台手动勾选)
+        with conn.cursor() as cur:
+            allow_long_raw = _read_setting(cur, 'allow_long', '1').strip().lower()
+            allow_short_raw = _read_setting(cur, 'allow_short', '1').strip().lower()
+        allow_long = allow_long_raw in ('1', 'true', 'yes', 'on')
+        allow_short = allow_short_raw in ('1', 'true', 'yes', 'on')
+        logger.info(f"[Gemini探索] 方向开关: allow_long={allow_long} allow_short={allow_short}")
+
         trades_opened = 0
         verdict_rows: List[Tuple] = []
 
@@ -1305,7 +1313,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             if not symbol:
                 continue
 
-            # 5a. 类别与置信度 (按校准表)
+            # 5b. 类别与置信度 (按校准表)
             # category 映射: bullish=LONG, bearish=SHORT
             if category == 'bullish' and confidence >= EXPLORE_CONFIDENCE_THRESHOLD:
                 side = 'LONG'
@@ -1320,7 +1328,25 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            # 5b. Big4 闸门
+            # 5c. 系统方向开关闸门
+            if side == 'LONG' and not allow_long:
+                verdict_rows.append((
+                    run_id, symbol, db_category, confidence,
+                    catalyst, data_signal, risk_note,
+                    'skipped_direction_lock', None,
+                    "系统配置禁止做多",
+                ))
+                continue
+            if side == 'SHORT' and not allow_short:
+                verdict_rows.append((
+                    run_id, symbol, db_category, confidence,
+                    catalyst, data_signal, risk_note,
+                    'skipped_direction_lock', None,
+                    "系统配置禁止做空",
+                ))
+                continue
+
+            # 5d. Big4 闸门
             if _big4_blocks(big4, side):
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,
@@ -1330,7 +1356,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            # 5c. 同 symbol+side 去重
+            # 5e. 同 symbol+side 去重
             if _has_open_position(conn, symbol, side):
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,
@@ -1340,7 +1366,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            # 5d. 最大仓位限制
+            # 5f. 最大仓位限制
             current_open = _count_open_positions(conn)
             if current_open >= EXPLORE_MAX_POSITIONS:
                 verdict_rows.append((
@@ -1351,7 +1377,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            # 5e. 取价
+            # 5g. 取价
             price = _get_current_price(conn, symbol)
             if price is None or price <= 0:
                 verdict_rows.append((
@@ -1362,7 +1388,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            # 5f. 开仓 (SL 5%, 杠杆 3x)
+            # 5h. 开仓 (SL 5%, 杠杆 3x)
             position_id = _open_simulated_position(conn, symbol, side, price, catalyst)
             if position_id is None:
                 verdict_rows.append((
