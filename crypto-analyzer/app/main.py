@@ -629,6 +629,18 @@ async def lifespan(app: FastAPI):
         schedule.every(12).hours.do(run_gemini_predict)
         logger.info("[Gemini预测] 调度已注册, 每 12h 跑一次 (kill switch 默认 ON)")
 
+        # Gemini 市场情绪 + 川普分析 - 每 8h 调一次
+        def run_gemini_sentiment():
+            try:
+                from app.services.gemini_sentiment_analyzer import run_sentiment_round
+                run_sentiment_round(triggered_by='scheduler')
+            except Exception as e:
+                logger.error(f"[Gemini情绪分析] 调度异常: {e}")
+                import traceback
+                traceback.print_exc()
+        schedule.every(8).hours.do(run_gemini_sentiment)
+        logger.info("[Gemini情绪分析] 调度已注册, 每 8h 跑一次 (kill switch 默认 ON)")
+
 
         # ── 独立子进程周期任务（与 FastAPI 主进程完全隔离）──────────────────────────
         # 每个存储过程调用都在独立 OS 子进程中运行；
@@ -1047,6 +1059,16 @@ try:
     logger.info("[Gemini预测] API路由已注册")
 except Exception as e:
     logger.warning(f"[Gemini预测] API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
+# 注册 Gemini 市场情绪 + 川普分析 API 路由
+try:
+    from app.api.gemini_sentiment_api import router as gemini_sentiment_router
+    app.include_router(gemini_sentiment_router)
+    logger.info("[Gemini情绪分析] API路由已注册")
+except Exception as e:
+    logger.warning(f"[Gemini情绪分析] API路由注册失败: {e}")
     import traceback
     traceback.print_exc()
 
