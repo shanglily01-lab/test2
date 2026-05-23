@@ -28,6 +28,12 @@ try:
 except ImportError:
     _CURL_CFFI_AVAILABLE = False
 
+try:
+    import cloudscraper
+    _CLOUDSCRAPER_AVAILABLE = True
+except ImportError:
+    _CLOUDSCRAPER_AVAILABLE = False
+
 # 页面列名中需跳过的非单只 ETF 代码列
 _SKIP_COLUMNS = frozenset(
     {
@@ -259,6 +265,21 @@ def _is_cloudflare_challenge(text: str) -> bool:
     return False
 
 
+def _fetch_with_cloudscraper(url: str, timeout: int) -> str:
+    """使用 cloudscraper 绕过 Cloudflare（最优先，因为 cloudscraper 专为此设计）。"""
+    try:
+        scraper = cloudscraper.create_scraper(
+            disableCloudflareV1=True,
+        )
+        r = scraper.get(url, timeout=timeout, allow_redirects=True)
+        if r.status_code == 200 and not _is_cloudflare_challenge(r.text):
+            return r.text
+        logger.warning("cloudscraper 返回 {} / CF 挑战, 降级", r.status_code)
+    except Exception as e:
+        logger.warning("cloudscraper 请求失败: {}", e)
+    return ""
+
+
 def _fetch_with_curl_cffi(url: str, timeout: int) -> str:
     """使用 curl_cffi 多指纹 + Session 尝试获取页面内容。"""
     # 先尝试多指纹（不使用 Session），较快
@@ -295,15 +316,22 @@ def _fetch_with_curl_cffi(url: str, timeout: int) -> str:
 
 def fetch_farside_html(url: str, timeout: int = 30) -> str:
     """
-    抓取 Farside 页面。网站由 Cloudflare 保护，优先使用 curl_cffi 模拟浏览器 TLS
-    指纹绕过 403；curl_cffi 不可用时回退 requests（可能被拒）。
+    抓取 Farside 页面。网站由 Cloudflare 保护，爬虫策略严格。
+    尝试链: cloudscraper -> curl_cffi -> plain requests
     """
+    # 1. cloudscraper (专为 Cloudflare 而生，最优先)
+    if _CLOUDSCRAPER_AVAILABLE:
+        text = _fetch_with_cloudscraper(url, timeout)
+        if text:
+            return text
+
+    # 2. curl_cffi 多指纹
     if _CURL_CFFI_AVAILABLE:
         text = _fetch_with_curl_cffi(url, timeout)
         if text:
             return text
 
-    # fallback: plain requests (may hit 403 on Cloudflare-protected sites)
+    # 3. fallback: plain requests (may hit 403 on Cloudflare-protected sites)
     session = requests.Session()
     session.headers.update(_DEFAULT_HEADERS)
     r = session.get(url, timeout=timeout, allow_redirects=True)

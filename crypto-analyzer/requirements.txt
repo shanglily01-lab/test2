@@ -16,6 +16,7 @@ requests==2.31.0          # HTTP library for funding rate API calls
 beautifulsoup4>=4.12.0    # HTML parsing (Farside ETF table, etc.)
 lxml>=5.0.0               # BeautifulSoup parser backend
 curl_cffi>=0.7.0          # Cloudflare TLS fingerprint bypass (Farside ETF)
+cloudscraper>=1.2.71       # Cloudflare JS challenge solver (alternative to curl_cffi)
 
 # ==================== Data Processing and Analysis ====================
 pandas>=2.0.0             # Compatible with Python 3.11+

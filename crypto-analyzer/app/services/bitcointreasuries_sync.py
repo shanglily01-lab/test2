@@ -28,6 +28,12 @@ try:
 except ImportError:
     _CURL_CFFI_AVAILABLE = False
 
+try:
+    import cloudscraper
+    _CLOUDSCRAPER_AVAILABLE = True
+except ImportError:
+    _CLOUDSCRAPER_AVAILABLE = False
+
 DEFAULT_URL = "https://bitcointreasuries.net/"
 
 _HEADERS = {
@@ -55,16 +61,36 @@ def _is_cloudflare_challenge(text: str) -> bool:
     return False
 
 
+def _fetch_with_cloudscraper(url: str, timeout: int) -> str:
+    """使用 cloudscraper 绕过 Cloudflare（最优先）。"""
+    try:
+        scraper = cloudscraper.create_scraper(
+            disableCloudflareV1=True,
+        )
+        r = scraper.get(url, timeout=timeout, allow_redirects=True)
+        if r.status_code == 200 and not _is_cloudflare_challenge(r.text):
+            return r.text
+        logger.warning("[cloudscraper] 返回 {} / CF 挑战, 降级", r.status_code)
+    except Exception as e:
+        logger.warning("[cloudscraper] 请求失败: {}", e)
+    return ""
+
+
 def fetch_homepage_html(url: str = DEFAULT_URL, timeout: int = 45) -> str:
     """
     抓取 bitcointreasuries.net 首页 HTML。
     网站由 Cloudflare 保护,普通 requests 在 AWS / 数据中心 IP 上几乎肯定被 403。
-    优先用 curl_cffi 模拟 Chrome TLS 指纹绕过,失败再回退到 requests。
-    多版本 Chrome 指纹尝试 + Session 保底,提升绕过率。
+    尝试链: cloudscraper -> curl_cffi -> plain requests
     """
-    # 优先 curl_cffi (绕 Cloudflare)
+    # 1. cloudscraper (专为 Cloudflare 而生)
+    if _CLOUDSCRAPER_AVAILABLE:
+        text = _fetch_with_cloudscraper(url, timeout)
+        if text:
+            return text
+
+    # 2. curl_cffi 多指纹 + Session
     if _CURL_CFFI_AVAILABLE:
-        # 多版本指纹逐个尝试
+        logger.info("[bitcointreasuries] curl_cffi 可用, 尝试多指纹绕过")
         for chrome_ver in ("chrome124", "chrome120", "chrome110"):
             try:
                 r = cf_requests.get(url, impersonate=chrome_ver, timeout=timeout)
@@ -83,7 +109,7 @@ def fetch_homepage_html(url: str = DEFAULT_URL, timeout: int = 45) -> str:
             except Exception as e:
                 logger.warning("[curl_cffi] {} {} 请求失败: {}", chrome_ver, url, e)
 
-        # Session 模式保底（cookie 续传可能绕过）
+        # Session 模式保底
         try:
             sess = cf_requests.Session()
             sess.get(url, impersonate="chrome124", timeout=timeout)
@@ -95,11 +121,11 @@ def fetch_homepage_html(url: str = DEFAULT_URL, timeout: int = 45) -> str:
             logger.warning("[curl_cffi] Session 请求失败: {}", e)
     else:
         logger.warning(
-            "[bitcointreasuries] curl_cffi 未安装,直连可能被 Cloudflare 拦 403. "
-            "建议: pip install curl_cffi"
+            "[bitcointreasuries] curl_cffi 未安装. "
+            "建议: pip install curl_cffi cloudscraper"
         )
 
-    # Fallback: 普通 requests (AWS IP 可能被 403)
+    # 3. Fallback: 普通 requests (AWS IP 可能被 403)
     session = requests.Session()
     session.headers.update(_HEADERS)
     r = session.get(url, timeout=timeout, allow_redirects=True)
