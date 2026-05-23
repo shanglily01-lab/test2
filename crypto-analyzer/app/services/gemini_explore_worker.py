@@ -1182,6 +1182,9 @@ def _sync_to_live(
 ) -> None:
     """将模拟单同步到实盘账号 (调用 Binance API 真实下单).
 
+    受统一闸门 system_settings.live_trading_enabled 控制,
+    打开后, 每次 Gemini 探索开模拟单, 会同步在各实盘账号开真实仓位。
+
     逻辑参照 market_predictor._sync_live():
     1. 检查 live_trading_enabled 开关
     2. 获取所有活跃的 API Key
@@ -1190,7 +1193,7 @@ def _sync_to_live(
 
     每个账号限制最多 20 个实盘持仓。
     """
-    # 1. 检查实盘开关
+    # 1. 检查实盘开关 (受统一闸门 live_trading_enabled 控制)
     try:
         conn = _connect()
         with conn.cursor() as cur:
