@@ -116,10 +116,10 @@ def refresh_market_snapshot() -> dict:
             except Exception:
                 pass
 
-            # 写入 market_snapshot
+            # 写入 data_cache.market_snapshot
             p = lambda sym: prices.get(sym, {}) or {}
             sql = """
-                REPLACE INTO market_snapshot
+                REPLACE INTO data_cache.market_snapshot
                     (id, btc_price, btc_change_24h,
                      eth_price, eth_change_24h,
                      sol_price, sol_change_24h,
@@ -170,7 +170,7 @@ def refresh_market_movers() -> dict:
         conn = _get_conn()
         with conn.cursor() as cur:
             # 清空旧数据
-            cur.execute("DELETE FROM market_movers_snapshot")
+            cur.execute("DELETE FROM data_cache.market_movers_snapshot")
 
             main_db = MAIN_DB
             inserted = 0
@@ -178,7 +178,7 @@ def refresh_market_movers() -> dict:
             # --- 涨幅榜 gainers ---
             cur.execute(
                 f"SELECT symbol, price_change_pct_24h AS val "
-                f"FROM `{main_db}`.price_stats_24h "
+                f"FROM `{MAIN_DB}`.price_stats_24h "
                 f"WHERE quote_volume_24h >= 5000000 "
                 f"  AND symbol LIKE '%%/USDT' "
                 f"ORDER BY price_change_pct_24h DESC LIMIT 20"
@@ -188,7 +188,7 @@ def refresh_market_movers() -> dict:
                 if _is_excluded(sym):
                     continue
                 cur.execute(
-                    "INSERT INTO market_movers_snapshot "
+                    "INSERT INTO data_cache.market_movers_snapshot "
                     "(category, symbol, value, rank_no) VALUES (%s, %s, %s, %s)",
                     ("gainers", sym, r["val"], rank),
                 )
@@ -197,7 +197,7 @@ def refresh_market_movers() -> dict:
             # --- 跌幅榜 losers ---
             cur.execute(
                 f"SELECT symbol, price_change_pct_24h AS val "
-                f"FROM `{main_db}`.price_stats_24h "
+                f"FROM `{MAIN_DB}`.price_stats_24h "
                 f"WHERE quote_volume_24h >= 5000000 "
                 f"  AND symbol LIKE '%%/USDT' "
                 f"ORDER BY price_change_pct_24h ASC LIMIT 20"
@@ -207,7 +207,7 @@ def refresh_market_movers() -> dict:
                 if _is_excluded(sym):
                     continue
                 cur.execute(
-                    "INSERT INTO market_movers_snapshot "
+                    "INSERT INTO data_cache.market_movers_snapshot "
                     "(category, symbol, value, rank_no) VALUES (%s, %s, %s, %s)",
                     ("losers", sym, r["val"], rank),
                 )
@@ -216,10 +216,10 @@ def refresh_market_movers() -> dict:
             # --- 资金费率最高 ---
             cur.execute(
                 f"SELECT t.symbol, t.funding_rate AS val "
-                f"FROM `{main_db}`.funding_rate_data t "
+                f"FROM `{MAIN_DB}`.funding_rate_data t "
                 f"INNER JOIN ("
                 f"  SELECT symbol, MAX(funding_time) AS max_ft "
-                f"  FROM `{main_db}`.funding_rate_data "
+                f"  FROM `{MAIN_DB}`.funding_rate_data "
                 f"  GROUP BY symbol"
                 f") latest ON t.symbol = latest.symbol AND t.funding_time = latest.max_ft "
                 f"ORDER BY t.funding_rate DESC LIMIT 10"
@@ -229,7 +229,7 @@ def refresh_market_movers() -> dict:
                 if _is_excluded(sym):
                     continue
                 cur.execute(
-                    "INSERT INTO market_movers_snapshot "
+                    "INSERT INTO data_cache.market_movers_snapshot "
                     "(category, symbol, value, rank_no) VALUES (%s, %s, %s, %s)",
                     ("funding_high", sym, r["val"], rank),
                 )
@@ -238,10 +238,10 @@ def refresh_market_movers() -> dict:
             # --- 资金费率最低 ---
             cur.execute(
                 f"SELECT t.symbol, t.funding_rate AS val "
-                f"FROM `{main_db}`.funding_rate_data t "
+                f"FROM `{MAIN_DB}`.funding_rate_data t "
                 f"INNER JOIN ("
                 f"  SELECT symbol, MAX(funding_time) AS max_ft "
-                f"  FROM `{main_db}`.funding_rate_data "
+                f"  FROM `{MAIN_DB}`.funding_rate_data "
                 f"  GROUP BY symbol"
                 f") latest ON t.symbol = latest.symbol AND t.funding_time = latest.max_ft "
                 f"ORDER BY t.funding_rate ASC LIMIT 10"
@@ -251,7 +251,7 @@ def refresh_market_movers() -> dict:
                 if _is_excluded(sym):
                     continue
                 cur.execute(
-                    "INSERT INTO market_movers_snapshot "
+                    "INSERT INTO data_cache.market_movers_snapshot "
                     "(category, symbol, value, rank_no) VALUES (%s, %s, %s, %s)",
                     ("funding_low", sym, r["val"], rank),
                 )
@@ -380,13 +380,13 @@ def refresh_candidate_pool() -> dict:
         with conn.cursor() as cur:
 
             # 1) 清空旧池
-            cur.execute("DELETE FROM candidate_pool_snapshot")
+            cur.execute("DELETE FROM data_cache.candidate_pool_snapshot")
 
             # 2) 获取所有候选 symbol (有成交量的 /USDT 交易对)
             cur.execute(
                 f"SELECT symbol, current_price, price_change_pct_24h AS change_24h, "
                 f"       quote_volume_24h "
-                f"FROM `{main_db}`.price_stats_24h "
+                f"FROM `{MAIN_DB}`.price_stats_24h "
                 f"WHERE symbol LIKE '%%/USDT' "
                 f"  AND quote_volume_24h >= 1000000 "
                 f"ORDER BY quote_volume_24h DESC"
@@ -396,10 +396,10 @@ def refresh_candidate_pool() -> dict:
             # 3) 一次性获取所有资金费率
             cur.execute(
                 f"SELECT t.symbol, t.funding_rate "
-                f"FROM `{main_db}`.funding_rate_data t "
+                f"FROM `{MAIN_DB}`.funding_rate_data t "
                 f"INNER JOIN ("
                 f"  SELECT symbol, MAX(funding_time) AS max_ft "
-                f"  FROM `{main_db}`.funding_rate_data "
+                f"  FROM `{MAIN_DB}`.funding_rate_data "
                 f"  GROUP BY symbol"
                 f") latest ON t.symbol = latest.symbol AND t.funding_time = latest.max_ft"
             )
@@ -458,7 +458,7 @@ def refresh_candidate_pool() -> dict:
                 fr = funding_map.get(sym) or funding_map.get(sym.replace("/", ""))
 
                 cur.execute(
-                    "INSERT INTO candidate_pool_snapshot "
+                    "INSERT INTO data_cache.candidate_pool_snapshot "
                     "(symbol, exchange, current_price, change_24h, quote_volume_24h, "
                     " funding_rate, rsi_14, ema_9, ema_21, "
                     " kline_1h_json, kline_15m_json, kline_1d_json, "
@@ -504,7 +504,7 @@ def _fetch_klines(cur, main_db: str, symbol: str, timeframe: str, limit: int) ->
     try:
         cur.execute(
             f"SELECT open_time, open_price, high_price, low_price, close_price, volume "
-            f"FROM `{main_db}`.kline_data "
+            f"FROM `{MAIN_DB}`.kline_data "
             f"WHERE symbol=%s AND timeframe=%s AND exchange='binance_futures' "
             f"ORDER BY open_time DESC LIMIT %s",
             (symbol, timeframe, limit),
@@ -529,7 +529,7 @@ def refresh_position_stats() -> dict:
         with conn.cursor() as cur:
 
             # 清空旧数据
-            cur.execute("DELETE FROM position_stats_snapshot")
+            cur.execute("DELETE FROM data_cache.position_stats_snapshot")
 
             sources = ["gemini_explore", "gemini_predict", "PREDICTOR"]
             account_id = 2
@@ -537,7 +537,7 @@ def refresh_position_stats() -> dict:
             def _agg(src: str) -> dict:
                 # 当前持仓数
                 cur.execute(
-                    f"SELECT COUNT(*) AS cnt FROM `{main_db}`.futures_positions "
+                    f"SELECT COUNT(*) AS cnt FROM `{MAIN_DB}`.futures_positions "
                     f"WHERE source=%s AND status='open' AND account_id=%s",
                     (src, account_id),
                 )
@@ -553,7 +553,7 @@ def refresh_position_stats() -> dict:
                     f"  SUM(CASE WHEN position_side='SHORT' THEN 1 ELSE 0 END) AS short_cnt, "
                     f"  SUM(CASE WHEN position_side='LONG' THEN COALESCE(realized_pnl, 0) ELSE 0 END) AS long_pnl, "
                     f"  SUM(CASE WHEN position_side='SHORT' THEN COALESCE(realized_pnl, 0) ELSE 0 END) AS short_pnl "
-                    f"FROM `{main_db}`.futures_positions "
+                    f"FROM `{MAIN_DB}`.futures_positions "
                     f"WHERE source=%s AND status='closed' AND account_id=%s "
                     f"  AND close_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)",
                     (src, account_id),
@@ -563,7 +563,7 @@ def refresh_position_stats() -> dict:
                 # 7d
                 cur.execute(
                     f"SELECT COUNT(*) AS total, COALESCE(SUM(realized_pnl),0) AS pnl "
-                    f"FROM `{main_db}`.futures_positions "
+                    f"FROM `{MAIN_DB}`.futures_positions "
                     f"WHERE source=%s AND status='closed' AND account_id=%s "
                     f"  AND close_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)",
                     (src, account_id),
@@ -573,7 +573,7 @@ def refresh_position_stats() -> dict:
                 # 24h
                 cur.execute(
                     f"SELECT COUNT(*) AS total, COALESCE(SUM(realized_pnl),0) AS pnl "
-                    f"FROM `{main_db}`.futures_positions "
+                    f"FROM `{MAIN_DB}`.futures_positions "
                     f"WHERE source=%s AND status='closed' AND account_id=%s "
                     f"  AND close_time >= DATE_SUB(NOW(), INTERVAL 1 DAY)",
                     (src, account_id),
@@ -605,7 +605,7 @@ def refresh_position_stats() -> dict:
             for src in sources:
                 d = _agg(src)
                 cur.execute(
-                    "INSERT INTO position_stats_snapshot "
+                    "INSERT INTO data_cache.position_stats_snapshot "
                     "(source, account_id, open_count, closed_24h, closed_7d, closed_30d, "
                     " pnl_24h, pnl_7d, pnl_30d, total_pnl, "
                     " wins_30d, losses_30d, win_rate_30d, "
@@ -628,7 +628,7 @@ def refresh_position_stats() -> dict:
                 f"  COALESCE(SUM(realized_pnl),0) AS total_pnl, "
                 f"  SUM(CASE WHEN realized_pnl>0 THEN 1 ELSE 0 END) AS wins, "
                 f"  COUNT(*) AS cnt "
-                f"FROM `{main_db}`.futures_positions "
+                f"FROM `{MAIN_DB}`.futures_positions "
                 f"WHERE status='closed' AND account_id=%s "
                 f"  AND close_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)",
                 (account_id,),
@@ -637,7 +637,7 @@ def refresh_position_stats() -> dict:
             all_total = int(r_all.get("cnt", 0) or 0)
             all_wins = int(r_all.get("wins", 0) or 0)
             cur.execute(
-                "INSERT INTO position_stats_snapshot "
+                "INSERT INTO data_cache.position_stats_snapshot "
                 "(source, account_id, closed_30d, pnl_30d, "
                 " wins_30d, losses_30d, win_rate_30d) "
                 "VALUES (%s, %s, %s, %s, %s, %s, %s)",
@@ -684,19 +684,19 @@ def sync_settings_cache(setting_key: str = None) -> dict:
             if setting_key:
                 cur.execute(
                     f"SELECT setting_key, setting_value "
-                    f"FROM `{main_db}`.system_settings WHERE setting_key=%s",
+                    f"FROM `{MAIN_DB}`.system_settings WHERE setting_key=%s",
                     (setting_key,),
                 )
             else:
                 cur.execute(
                     f"SELECT setting_key, setting_value "
-                    f"FROM `{main_db}`.system_settings"
+                    f"FROM `{MAIN_DB}`.system_settings"
                 )
 
             rows = cur.fetchall()
             for r in rows:
                 cur.execute(
-                    "REPLACE INTO settings_cache (setting_key, setting_value) VALUES (%s, %s)",
+                    "REPLACE INTO data_cache.settings_cache (setting_key, setting_value) VALUES (%s, %s)",
                     (r["setting_key"], r.get("setting_value", "")),
                 )
 
@@ -843,7 +843,7 @@ def get_setting(key: str, default: str = "") -> str:
             # 兜底读主库
             _ensure_main_db()
             cur.execute(
-                f"SELECT setting_value FROM `{main_db}`.system_settings WHERE setting_key=%s LIMIT 1",
+                f"SELECT setting_value FROM `{MAIN_DB}`.system_settings WHERE setting_key=%s LIMIT 1",
                 (key,),
             )
             row = cur.fetchone()
