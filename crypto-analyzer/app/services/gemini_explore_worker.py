@@ -1170,6 +1170,119 @@ def _map_category(cat: str) -> str:
     return _CATEGORY_MAP.get(normalized, 'skip')
 
 
+def _sync_to_live(
+    paper_position_id: int,
+    symbol: str,
+    side: str,
+    entry_price: float,
+    sl_price: float,
+    tp_price: float,
+    qty: float,
+    catalyst: str,
+) -> None:
+    """将模拟单同步到实盘账号 (调用 Binance API 真实下单).
+
+    逻辑参照 market_predictor._sync_live():
+    1. 检查 live_trading_enabled 开关
+    2. 获取所有活跃的 API Key
+    3. 对每个账号调用 BinanceFuturesEngine.open_position()
+    4. 通过 paper_position_id 关联实盘单与模拟单
+
+    每个账号限制最多 20 个实盘持仓。
+    """
+    # 1. 检查实盘开关
+    try:
+        conn = _connect()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'"
+            )
+            row = cur.fetchone()
+            enabled = (row and str(row.get('setting_value', '0')).strip().lower() in ('1', 'true', 'yes'))
+        conn.close()
+        if not enabled:
+            logger.info(f"[Gemini探索] live_trading_enabled=0, 跳过实盘同步 {symbol}")
+            return
+    except Exception as e:
+        logger.warning(f"[Gemini探索] 检查实盘开关失败, 跳过实盘同步: {e}")
+        return
+
+    # 2. 获取实盘账号
+    try:
+        from app.services.api_key_service import APIKeyService
+        from app.trading.binance_futures_engine import BinanceFuturesEngine
+        from decimal import Decimal
+
+        db_config = _get_local_db_config()
+        svc = APIKeyService(db_config)
+        active_keys = svc.get_all_active_api_keys('binance')
+    except Exception as e:
+        logger.error(f"[Gemini探索] 获取实盘账号失败: {e}")
+        return
+
+    if not active_keys:
+        logger.info("[Gemini探索] 无活跃 API Key, 跳过实盘同步")
+        return
+
+    # 3. 对每个账号下单
+    db_config = _get_local_db_config()
+    for ak in active_keys:
+        try:
+            act_margin = float(ak.get('max_position_value') or EXPLORE_MARGIN_USD)
+            act_lev = int(ak.get('max_leverage') or EXPLORE_LEVERAGE)
+            # 按账号实际保证金计算数量
+            notional = act_margin * act_lev
+            live_qty = Decimal(str(round(notional / entry_price, 6)))
+            if live_qty <= 0:
+                continue
+
+            engine = BinanceFuturesEngine(
+                db_config,
+                api_key=ak['api_key'],
+                api_secret=ak['api_secret'],
+            )
+            result = engine.open_position(
+                account_id=ak['id'],
+                symbol=symbol,
+                position_side=side,
+                quantity=live_qty,
+                leverage=act_lev,
+                stop_loss_price=Decimal(str(sl_price)),
+                take_profit_price=Decimal(str(tp_price)),
+                source='gemini_explore',
+                paper_position_id=paper_position_id,
+            )
+            if result.get('success'):
+                logger.info(
+                    f"[Gemini探索] 实盘下单成功 {ak['account_name']} {symbol} {side} "
+                    f"margin={act_margin}U lev={act_lev}x "
+                    f"paper_id={paper_position_id}"
+                )
+                try:
+                    from app.services.trade_notifier import get_trade_notifier
+                    notifier = get_trade_notifier()
+                    if notifier:
+                        notifier.notify_open_position(
+                            symbol=symbol, direction=side,
+                            quantity=float(live_qty), entry_price=entry_price,
+                            leverage=act_lev, stop_loss_price=sl_price,
+                            take_profit_price=tp_price,
+                            margin=act_margin,
+                            strategy_name=f'Gemini探索[{ak["account_name"]}]'
+                        )
+                except Exception:
+                    pass
+            else:
+                logger.error(
+                    f"[Gemini探索] 实盘下单失败 {ak['account_name']} {symbol}: "
+                    f"{result.get('error', '')}"
+                )
+        except Exception as e:
+            logger.error(
+                f"[Gemini探索] 实盘下单异常 {ak.get('account_name','')} {symbol}: {e}"
+            )
+
+
 def _open_simulated_position(
     conn,
     symbol: str,
@@ -1238,6 +1351,10 @@ def _open_simulated_position(
             f"qty={qty} lev={EXPLORE_LEVERAGE}x hold={EXPLORE_HOLD_HOURS}h "
             f"id={position_id}"
         )
+
+        # 同步实盘: 模拟单创建后立即在各实盘账号开真实仓位
+        _sync_to_live(position_id, symbol, side, price, sl_price, tp_price, qty, catalyst)
+
         return position_id
     except Exception as e:
         logger.error(f"[Gemini探索] 开仓失败 {symbol} {side}: {e}")
