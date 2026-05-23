@@ -41,24 +41,58 @@ _HEADERS = {
 }
 
 
+def _is_cloudflare_challenge(text: str) -> bool:
+    """检测页面是否为 Cloudflare 挑战页。"""
+    if not text:
+        return True
+    low = text.lower()
+    if "just a moment" in low and ("cloudflare" in low or "checking your browser" in low):
+        return True
+    if "cf-browser-verification" in text:
+        return True
+    if "id=\"challenge-form\"" in text or "challenge-form" in text:
+        return True
+    return False
+
+
 def fetch_homepage_html(url: str = DEFAULT_URL, timeout: int = 45) -> str:
     """
     抓取 bitcointreasuries.net 首页 HTML。
     网站由 Cloudflare 保护,普通 requests 在 AWS / 数据中心 IP 上几乎肯定被 403。
     优先用 curl_cffi 模拟 Chrome TLS 指纹绕过,失败再回退到 requests。
+    多版本 Chrome 指纹尝试 + Session 保底,提升绕过率。
     """
     # 优先 curl_cffi (绕 Cloudflare)
     if _CURL_CFFI_AVAILABLE:
+        # 多版本指纹逐个尝试
+        for chrome_ver in ("chrome124", "chrome120", "chrome110"):
+            try:
+                r = cf_requests.get(url, impersonate=chrome_ver, timeout=timeout)
+                if r.status_code == 200 and not _is_cloudflare_challenge(r.text):
+                    return r.text
+                if r.status_code == 200:
+                    logger.warning(
+                        "[curl_cffi] {} {} 返回 CF 挑战页, 换指纹重试",
+                        chrome_ver, url
+                    )
+                else:
+                    logger.warning(
+                        "[curl_cffi] {} {} 返回 {}, 换指纹重试",
+                        chrome_ver, url, r.status_code
+                    )
+            except Exception as e:
+                logger.warning("[curl_cffi] {} {} 请求失败: {}", chrome_ver, url, e)
+
+        # Session 模式保底（cookie 续传可能绕过）
         try:
-            r = cf_requests.get(url, impersonate="chrome110", timeout=timeout)
-            if r.status_code == 200:
-                return r.text
-            logger.warning(
-                "[curl_cffi] {} 返回 {},尝试 requests 回退",
-                url, r.status_code
-            )
+            sess = cf_requests.Session()
+            sess.get(url, impersonate="chrome124", timeout=timeout)
+            r2 = sess.get(url, impersonate="chrome124", timeout=timeout)
+            if r2.status_code == 200 and not _is_cloudflare_challenge(r2.text):
+                return r2.text
+            logger.warning("[curl_cffi] Session 仍返回 CF 挑战页")
         except Exception as e:
-            logger.warning("[curl_cffi] 请求失败: {},回退 requests", e)
+            logger.warning("[curl_cffi] Session 请求失败: {}", e)
     else:
         logger.warning(
             "[bitcointreasuries] curl_cffi 未安装,直连可能被 Cloudflare 拦 403. "
@@ -70,6 +104,8 @@ def fetch_homepage_html(url: str = DEFAULT_URL, timeout: int = 45) -> str:
     session.headers.update(_HEADERS)
     r = session.get(url, timeout=timeout, allow_redirects=True)
     r.raise_for_status()
+    if _is_cloudflare_challenge(r.text):
+        raise RuntimeError(f"Cloudflare 挑战页拦截, 无法获取 {url}")
     return r.text
 
 

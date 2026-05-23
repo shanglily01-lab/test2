@@ -245,19 +245,63 @@ def parse_farside_eth_table(html: str) -> Tuple[List[str], List[Dict[str, Any]]]
     return parse_farside_flow_table(html, kind="eth")
 
 
+def _is_cloudflare_challenge(text: str) -> bool:
+    """检测页面是否为 Cloudflare 挑战页（含 cf-browser-verify 等特征）。"""
+    if not text:
+        return True
+    low = text.lower()
+    if "just a moment" in low and ("cloudflare" in low or "checking your browser" in low):
+        return True
+    if "cf-browser-verification" in text:
+        return True
+    if "id=\"challenge-form\"" in text or "challenge-form" in text:
+        return True
+    return False
+
+
+def _fetch_with_curl_cffi(url: str, timeout: int) -> str:
+    """使用 curl_cffi 多指纹 + Session 尝试获取页面内容。"""
+    # 先尝试多指纹（不使用 Session），较快
+    for chrome_ver in ("chrome124", "chrome120", "chrome110"):
+        try:
+            r = cf_requests.get(url, impersonate=chrome_ver, timeout=timeout)
+            if r.status_code == 200 and not _is_cloudflare_challenge(r.text):
+                return r.text
+            if r.status_code == 200:
+                logger.warning(
+                    "curl_cffi {} 返回 CF 挑战页, 换指纹重试", chrome_ver
+                )
+            else:
+                logger.warning(
+                    "curl_cffi {} 返回 {}, 换指纹重试", chrome_ver, r.status_code
+                )
+        except Exception as e:
+            logger.warning("curl_cffi {} 请求失败: {}", chrome_ver, e)
+
+    # 最后尝试 Session 模式（维护 cookie，有时可绕过）
+    try:
+        sess = cf_requests.Session()
+        # 先 GET 首页 / 获取 cookie
+        sess.get(url, impersonate="chrome124", timeout=timeout)
+        r2 = sess.get(url, impersonate="chrome124", timeout=timeout)
+        if r2.status_code == 200 and not _is_cloudflare_challenge(r2.text):
+            return r2.text
+        logger.warning("curl_cffi Session 仍返回 CF 挑战页")
+    except Exception as e:
+        logger.warning("curl_cffi Session 请求失败: {}", e)
+
+    return ""
+
+
 def fetch_farside_html(url: str, timeout: int = 30) -> str:
     """
     抓取 Farside 页面。网站由 Cloudflare 保护，优先使用 curl_cffi 模拟浏览器 TLS
     指纹绕过 403；curl_cffi 不可用时回退 requests（可能被拒）。
     """
     if _CURL_CFFI_AVAILABLE:
-        try:
-            r = cf_requests.get(url, impersonate="chrome110", timeout=timeout)
-            if r.status_code == 200:
-                return r.text
-            logger.warning("curl_cffi 请求 {} 返回 {}, 尝试 requests 回退", url, r.status_code)
-        except Exception as e:
-            logger.warning("curl_cffi 请求失败: {}, 回退 requests", e)
+        text = _fetch_with_curl_cffi(url, timeout)
+        if text:
+            return text
 
     # fallback: plain requests (may hit 403 on Cloudflare-protected sites)
     session = requests.Session()
@@ -267,6 +311,8 @@ def fetch_farside_html(url: str, timeout: int = 30) -> str:
         alt = url.replace("https://farside", "https://www.farside", 1)
         r = session.get(alt, timeout=timeout, allow_redirects=True)
     r.raise_for_status()
+    if _is_cloudflare_challenge(r.text):
+        raise RuntimeError(f"Cloudflare 挑战页拦截, 无法获取 {url}")
     return r.text
 
 
