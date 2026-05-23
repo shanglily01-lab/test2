@@ -342,21 +342,28 @@ def _fetch_trump_news(conn, limit: int = 10) -> List[dict]:
 # Gemini 调用
 # ============================================================
 def _call_gemini(prompt: str) -> Optional[str]:
-    """调用 Gemini API 获取文本回复。"""
-    import google.generativeai as genai
-
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(GEMINI_MODEL)
-
+    """调用 Gemini API 获取文本回复 (使用新版 google.genai SDK)。"""
+    if not GEMINI_API_KEY:
+        logger.error("[情绪分析] GEMINI_API_KEY 未设置")
+        return None
     try:
-        resp = model.generate_content(
-            prompt,
-            generation_config={
-                "temperature": 0.7,
-                "top_p": 0.95,
-                "max_output_tokens": 4096,
-            },
-            request_options={"timeout": SENTIMENT_TIMEOUT_S},
+        from google import genai
+        from google.genai import types
+    except ImportError:
+        logger.error("[情绪分析] 缺依赖, 请 pip install google-genai")
+        return None
+
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    try:
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.7,
+                top_p=0.95,
+                max_output_tokens=4096,
+                http_options=types.HttpOptions(timeout=SENTIMENT_TIMEOUT_S * 1000),
+            ),
         )
         return resp.text
     except Exception as e:
