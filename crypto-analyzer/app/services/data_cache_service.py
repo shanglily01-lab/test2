@@ -132,11 +132,11 @@ def refresh_market_snapshot() -> dict:
             """
             cur.execute(sql, (
                 1,
-                p("BTCUSDT").get("current_price"), p("BTCUSDT").get("change_24h"),
-                p("ETHUSDT").get("current_price"), p("ETHUSDT").get("change_24h"),
-                p("SOLUSDT").get("current_price"), p("SOLUSDT").get("change_24h"),
-                p("BNBUSDT").get("current_price"), p("BNBUSDT").get("change_24h"),
-                p("XRPUSDT").get("current_price"), p("XRPUSDT").get("change_24h"),
+                p("BTC/USDT").get("current_price"), p("BTC/USDT").get("change_24h"),
+                p("ETH/USDT").get("current_price"), p("ETH/USDT").get("change_24h"),
+                p("SOL/USDT").get("current_price"), p("SOL/USDT").get("change_24h"),
+                p("BNB/USDT").get("current_price"), p("BNB/USDT").get("change_24h"),
+                p("XRP/USDT").get("current_price"), p("XRP/USDT").get("change_24h"),
                 big4, fg_val, fg_label,
                 int((time.time() - t0) * 1000),
             ))
