@@ -76,7 +76,7 @@ def refresh_market_snapshot() -> dict:
         conn = _get_conn()
         with conn.cursor() as cur:
             prices = {}
-            core_symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"]
+            core_symbols = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT"]
             placeholders = ",".join("%s" for _ in core_symbols)
             cur.execute(
                 f"SELECT symbol, current_price, change_24h "
