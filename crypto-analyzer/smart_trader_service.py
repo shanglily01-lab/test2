@@ -1947,7 +1947,7 @@ class SmartTraderService:
         except Exception:
             live_enabled = False
         if live_enabled and not self.is_symbol_in_top_performers(symbol):
-            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 实盘模式：不在盈利Top 30交易对中")
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 实盘模式：不在TOP100也非白名单")
             return False
 
         # 🔥 V5.1优化: 移除防追高/防杀跌过滤
@@ -2871,26 +2871,32 @@ class SmartTraderService:
 
     def is_symbol_in_top_performers(self, symbol: str) -> bool:
         """
-        检查交易对是否在盈利Top 100列表中
-        返回True表示在列表中,允许开仓
-        返回False表示不在列表中,拒绝开仓
+        检查交易对是否在盈利Top 100列表中或白名单中
+        返回True表示允许开仓
         """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute("""
-                SELECT COUNT(*) FROM top_performing_symbols
-                WHERE symbol = %s
-            """, (symbol,))
+                SELECT
+                  (SELECT 1 FROM top_performing_symbols WHERE symbol = %s LIMIT 1) AS in_top100,
+                  (SELECT rating_level FROM trading_symbol_rating WHERE symbol = %s LIMIT 1) AS rating_level
+            """, (symbol, symbol))
 
             result = cursor.fetchone()
             cursor.close()
+            conn.close()
 
-            return result[0] > 0 if result else False
+            if result:
+                in_top100 = result[0] == 1 if len(result) > 0 else False
+                rating_level = int(result[1]) if result[1] is not None else None
+                is_whitelist = rating_level == 0
+                return in_top100 or is_whitelist
+            return False
         except Exception as e:
             # 如果表不存在或查询失败，默认允许开仓（向后兼容）
-            logger.warning(f"检查Top 100列表失败: {e}, 默认允许开仓")
+            logger.warning(f"检查Top 100/白名单列表失败: {e}, 默认允许开仓")
             return True
 
     def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal", sync_live: bool = True):

@@ -256,23 +256,27 @@ class MultiStrategyService:
         except Exception:
             return False
 
-    def _is_symbol_in_top100(self, symbol: str) -> bool:
-        """检查 symbol 是否在 top_performing_symbols 表中 (TOP100)
-        与 smart_trader_service.is_symbol_in_top_performers 行为一致
-        实盘开仓前过滤,模拟盘不调用此方法
-        """
+    def _is_allowed_for_live(self, symbol: str) -> bool:
+        """白名单或 TOP100 才允许同步实盘。"""
         try:
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute(
-                "SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1",
-                (symbol,)
+                "SELECT "
+                "  (SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1) AS in_top100,"
+                "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s LIMIT 1) AS rating_level",
+                (symbol, symbol),
             )
             row = cur.fetchone()
             cur.close(); conn.close()
-            return row is not None
+            if row:
+                in_top100 = row.get('in_top100') == 1
+                is_whitelist = row.get('rating_level') is not None and int(row['rating_level']) == 0
+                if in_top100 or is_whitelist:
+                    return True
+            return False
         except Exception as e:
-            logger.warning(f"[多策略] TOP100 查询失败 {symbol}: {e}, 默认允许")
+            logger.warning(f"[多策略] 检查白名单/TOP100失败 {symbol}: {e}, 默认允许")
             return True
 
     def _get_runtime_sl_tp_hold(self) -> tuple:
@@ -458,8 +462,8 @@ class MultiStrategyService:
         source: str,
     ):
         """同步实盘下单"""
-        # TOP100 实盘过滤: 与主策略保持一致, 模拟单已开但实盘不下
-        if not self._is_symbol_in_top100(symbol):
+        # TOP100/白名单实盘过滤: 模拟单已开但实盘不下
+        if not self._is_allowed_for_live(symbol):
             logger.info(f"[{source}] {symbol} 不在 TOP100, 跳过实盘 (模拟单已开)")
             return
         try:

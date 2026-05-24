@@ -598,14 +598,20 @@ def _sync_to_live(
                 conn.close()
                 return
 
-            # 1b. 实盘开仓仅限 TOP 100 交易对
+            # 1b. 实盘开仓仅限 TOP 100 或 白名单交易对
             cur.execute(
-                "SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1",
-                (symbol,),
+                "SELECT "
+                "  (SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1) AS in_top100,"
+                "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s LIMIT 1) AS rating_level",
+                (symbol, symbol),
             )
-            if cur.fetchone() is None:
+            row = cur.fetchone()
+            in_top100 = row and row.get('in_top100') == 1
+            is_whitelist = row and row.get('rating_level') is not None and int(row['rating_level']) == 0
+            if not in_top100 and not is_whitelist:
+                reason = "不在 TOP 100 也非白名单"
                 logger.warning(
-                    f"[Gemini预测] {symbol} 不在 TOP 100 内, 跳过实盘同步 "
+                    f"[Gemini预测] {symbol} {reason}, 跳过实盘同步 "
                     f"(模拟单已开, 但不同步到实盘)"
                 )
                 conn.close()
