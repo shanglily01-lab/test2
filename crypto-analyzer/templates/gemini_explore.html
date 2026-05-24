@@ -171,6 +171,31 @@
   </div>
 </section>
 
+<!-- 统计盈亏 (累计) -->
+<section class="px-8 pb-6 grid grid-cols-5 gap-4">
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">合计已实现盈亏</p>
+    <p class="mono text-2xl font-medium" id="e-stat-realized">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">当前浮盈</p>
+    <p class="mono text-2xl font-medium" id="e-stat-floating">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">总盈亏 (已实现+浮盈)</p>
+    <p class="mono text-2xl font-medium" id="e-stat-total">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">胜率 (30d)</p>
+    <p class="mono text-2xl font-medium" id="e-stat-winrate">--</p>
+    <p class="text-[10px] text-on-surface-variant mt-1" id="e-stat-wl">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">30天平仓数</p>
+    <p class="mono text-2xl font-medium" id="e-stat-closed2">--</p>
+  </div>
+</section>
+
 <!-- 当前持仓 -->
 <section class="px-8 pb-6">
   <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant mb-3">当前持仓 (OPEN)</h2>
@@ -678,6 +703,26 @@ function loadClosedPositions() {
 }
 
 // ============================================================
+// STATS (盈亏统计)
+// ============================================================
+function loadExploreStats() {
+  fetch('/api/gemini-explore/stats?days=30')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.success) return;
+      var s = d.data || {};
+      var pCls = function(v){ return (v || 0) >= 0 ? 'pp' : 'pn'; };
+      document.getElementById('e-stat-realized').innerHTML = '<span class="' + pCls(s.total_realized_pnl) + '">' + fmtSigned(s.total_realized_pnl) + ' U</span>';
+      document.getElementById('e-stat-floating').innerHTML = '<span class="' + pCls(s.floating_pnl) + '">' + fmtSigned(s.floating_pnl) + ' U</span>';
+      document.getElementById('e-stat-total').innerHTML = '<span class="' + pCls(s.total_pnl) + '">' + fmtSigned(s.total_pnl) + ' U</span>';
+      document.getElementById('e-stat-winrate').innerHTML = '<span class="' + ((s.win_rate || 0) >= 50 ? 'pp' : 'pn') + '">' + fmt(s.win_rate, 1) + '%</span>';
+      document.getElementById('e-stat-wl').textContent = s.wins + '胜 ' + s.losses + '负';
+      document.getElementById('e-stat-closed2').textContent = s.total_trades;
+    })
+    .catch(function(e){ console.error('explore stats error', e); });
+}
+
+// ============================================================
 // RUNS + VERDICTS (expandable)
 // ============================================================
 var _verdictsCache = {};
@@ -817,12 +862,15 @@ function loadAll() {
   loadOpenPositions();
   loadRuns();
   loadClosedPositions();
+  loadExploreStats();
 }
 loadAll();
 // 持仓 + 实时盈亏: 每 3 秒刷 (Hub WS markPrice 秒级实时)
 setInterval(loadOpenPositions, 3000);
 // status + 顶部统计卡 (除 open_count/总盈亏外): 每 30 秒刷
 setInterval(loadStatus, 30000);
+// 盈亏统计: 每 30 秒刷
+setInterval(loadExploreStats, 30000);
 
 // ============================================================
 // GEMINI PREDICT - STATUS + TOGGLE
