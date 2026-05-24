@@ -80,7 +80,7 @@ def _try_snapshot() -> Optional[Dict]:
 PREDICT_MARGIN_USD = 500.0
 PREDICT_LEVERAGE = 3
 PREDICT_MAX_POSITIONS = 20
-PREDICT_HOLD_HOURS = 72                     # 3 天 (与 Gemini 探索一致)
+PREDICT_HOLD_HOURS = 24                        # 1 天 (原 3 天)
 PREDICT_SL_PCT = 5.0                        # 硬 SL 5%
 PREDICT_TP_PCT = 15.0                       # 硬 TP 15%
 PREDICT_CONFIDENCE_THRESHOLD = 0.60
@@ -438,11 +438,11 @@ def _count_open_positions(conn) -> int:
 # ============================================================
 # Prompt 构建
 # ============================================================
-PREDICT_PROMPT_TEMPLATE = """你是加密货币中级趋势交易分析师. 预测每个币种在未来 3 天内的方向走势概率.
+PREDICT_PROMPT_TEMPLATE = """你是加密货币中级趋势交易分析师. 预测每个币种在未来 1 天内的方向走势概率.
 
-持仓期 3 天 (72h), SL=5%, TP=15%, 杠杆 3x, 不做中途干预.
+持仓期 1 天 (24h), SL=5%, TP=15%, 杠杆 3x, 不做中途干预.
 
-选中的币种需要能在 3 天内到达 15% 的涨幅/跌幅空间, 或至少抗住 3 天不跌/不涨过 5%.
+选中的币种需要能在 1 天内到达 15% 的涨幅/跌幅空间, 或至少抗住 1 天不跌/不涨过 5%.
 不要选"只波动 2-3%"的标的.
 
 # 全局市场环境
@@ -563,6 +563,121 @@ def _call_gemini_predict(symbols_data: List[Dict], global_ctx: dict) -> Optional
 # ============================================================
 # 开仓
 # ============================================================
+def _sync_to_live(
+    paper_position_id: int,
+    symbol: str,
+    side: str,
+    entry_price: float,
+    sl_price: float,
+    tp_price: float,
+    qty: float,
+    catalyst: str,
+) -> None:
+    """将模拟单同步到实盘账号 (调用 Binance API 真实下单).
+
+    受统一闸门 system_settings.live_trading_enabled 控制,
+    打开后, 每次 Gemini 预测开模拟单, 会同步在各实盘账号开真实仓位。
+
+    逻辑参照 gemini_explore_worker._sync_to_live():
+    1. 检查 live_trading_enabled 开关
+    2. 获取所有活跃的 API Key
+    3. 对每个账号调用 BinanceFuturesEngine.open_position()
+    4. 通过 paper_position_id 关联实盘单与模拟单
+    """
+    # 1. 检查实盘开关
+    try:
+        conn = _connect()
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'"
+            )
+            row = cur.fetchone()
+            enabled = (row and str(row.get('setting_value', '0')).strip().lower() in ('1', 'true', 'yes'))
+        conn.close()
+        if not enabled:
+            logger.info(f"[Gemini预测] live_trading_enabled=0, 跳过实盘同步 {symbol}")
+            return
+    except Exception as e:
+        logger.warning(f"[Gemini预测] 检查实盘开关失败, 跳过实盘同步: {e}")
+        return
+
+    # 2. 获取实盘账号
+    try:
+        from app.services.api_key_service import APIKeyService
+        from app.trading.binance_futures_engine import BinanceFuturesEngine
+        from decimal import Decimal
+
+        db_config = _get_local_db_config()
+        svc = APIKeyService(db_config)
+        active_keys = svc.get_all_active_api_keys('binance')
+    except Exception as e:
+        logger.error(f"[Gemini预测] 获取实盘账号失败: {e}")
+        return
+
+    if not active_keys:
+        logger.info("[Gemini预测] 无活跃 API Key, 跳过实盘同步")
+        return
+
+    # 3. 对每个账号下单
+    db_config = _get_local_db_config()
+    for ak in active_keys:
+        try:
+            act_margin = float(ak.get('max_position_value') or PREDICT_MARGIN_USD)
+            act_lev = int(ak.get('max_leverage') or PREDICT_LEVERAGE)
+            notional = act_margin * act_lev
+            live_qty = Decimal(str(round(notional / entry_price, 6)))
+            if live_qty <= 0:
+                continue
+
+            engine = BinanceFuturesEngine(
+                db_config,
+                api_key=ak['api_key'],
+                api_secret=ak['api_secret'],
+            )
+            result = engine.open_position(
+                account_id=ak['id'],
+                symbol=symbol,
+                position_side=side,
+                quantity=live_qty,
+                leverage=act_lev,
+                stop_loss_price=Decimal(str(sl_price)),
+                take_profit_price=Decimal(str(tp_price)),
+                stop_loss_pct=Decimal(str(PREDICT_SL_PCT)),
+                take_profit_pct=Decimal(str(PREDICT_TP_PCT)),
+                source='gemini_predict',
+                paper_position_id=paper_position_id,
+            )
+            if result.get('success'):
+                logger.info(
+                    f"[Gemini预测] 实盘下单成功 {ak['account_name']} {symbol} {side} "
+                    f"margin={act_margin}U lev={act_lev}x "
+                    f"paper_id={paper_position_id}"
+                )
+                try:
+                    from app.services.trade_notifier import get_trade_notifier
+                    notifier = get_trade_notifier()
+                    if notifier:
+                        notifier.notify_open_position(
+                            symbol=symbol, direction=side,
+                            quantity=float(live_qty), entry_price=entry_price,
+                            leverage=act_lev, stop_loss_price=sl_price,
+                            take_profit_price=tp_price,
+                            margin=act_margin,
+                            strategy_name=f'Gemini预测[{ak["account_name"]}]'
+                        )
+                except Exception:
+                    pass
+            else:
+                logger.error(
+                    f"[Gemini预测] 实盘下单失败 {ak['account_name']} {symbol}: "
+                    f"{result.get('error', '')}"
+                )
+        except Exception as e:
+            logger.error(
+                f"[Gemini预测] 实盘下单异常 {ak.get('account_name','')} {symbol}: {e}"
+            )
+
+
 def _open_simulated_position(
     conn,
     symbol: str,
@@ -627,6 +742,10 @@ def _open_simulated_position(
             f"qty={qty} lev={PREDICT_LEVERAGE}x hold={PREDICT_HOLD_HOURS}h "
             f"id={position_id}"
         )
+
+        # 同步实盘: 模拟单创建后立即在各实盘账号开真实仓位
+        _sync_to_live(position_id, symbol, side, price, sl_price, tp_price, qty, catalyst)
+
         return position_id
     except Exception as e:
         logger.error(f"[Gemini预测] 开仓失败 {symbol} {side}: {e}")
