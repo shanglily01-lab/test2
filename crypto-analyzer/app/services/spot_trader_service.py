@@ -185,7 +185,7 @@ def _get_top50_symbols() -> List[str]:
         conn = _get_conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT symbol FROM top_performing_symbols ORDER BY rank ASC LIMIT 50"
+            "SELECT symbol FROM top_performing_symbols ORDER BY rank_score ASC LIMIT 50"
         )
         rows = cur.fetchall()
         cur.close(); conn.close()
