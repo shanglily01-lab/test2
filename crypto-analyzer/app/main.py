@@ -89,7 +89,8 @@ enhanced_dashboard = None
 price_cache_service = None  # 价格缓存服务
 pending_order_executor = None  # 待成交订单自动执行器（现货限价单）
 futures_limit_order_executor = None  # 合约限价单自动执行器
-futures_monitor_service = None  # 合约止盈止损监控服务
+futures_monitor_service = None  # 合约止盈止损监控服务（已废弃，由 sl_tp_monitor 替代）
+sl_tp_monitor = None              # 止盈止损监控服务（负责所有模拟盘SL/TP检查，包括Gemini/S6）
 
 # 技术信号页面API缓存配置（5分钟缓存）
 _technical_signals_cache = None
@@ -120,6 +121,7 @@ async def lifespan(app: FastAPI):
     global config, price_collector, news_aggregator
     global technical_analyzer, sentiment_analyzer, signal_generator, enhanced_dashboard, price_cache_service
     global pending_order_executor, futures_limit_order_executor, futures_monitor_service, live_order_monitor
+    global sl_tp_monitor
 
     # 加载配置（支持环境变量）
     from app.utils.config_loader import load_config, get_config_summary
@@ -277,9 +279,29 @@ async def lifespan(app: FastAPI):
         # 合约限价单自动执行器已移除（archived）
         futures_limit_order_executor = None
 
-        # 合约止盈止损监控服务已停用（平仓逻辑已统一到SmartExitOptimizer）
-        # 所有止盈止损、超时平仓逻辑现在由 smart_trader_service.py 中的 SmartExitOptimizer 统一处理
+        # 合约止盈止损监控服务已停用 — 改用独立 PositionSLTPMonitor
+        # SmartExitOptimizer 只对非多策略持仓有效 (Gemini/S6 等被跳过 SL/TP),
+        # 因此需要 PositionSLTPMonitor 兜底所有模拟盘的硬 SL/TP 检查
         futures_monitor_service = None
+
+        # 止盈止损监控服务（独立于 SmartExitOptimizer）
+        # 负责所有模拟盘 (futures_positions) 的硬 SL/TP 检查
+        # 覆盖范围: gemini_explore, gemini_predict, s1-s7, 及其他所有 source
+        # SmartExitOptimizer 明确跳过 Gemini/S6 的 SL/TP, 所以此处必须启动
+        sl_tp_monitor = None
+        try:
+            from app.services.position_sl_tp_monitor import init_sl_tp_monitor
+            sl_tp_monitor = init_sl_tp_monitor(
+                interval_seconds=5.0,
+                source_filter='%',
+                api_base='http://localhost:9020',
+            )
+            logger.info("✅ 止盈止损监控服务初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  止盈止损监控服务初始化失败: {e}")
+            import traceback
+            traceback.print_exc()
+            sl_tp_monitor = None
 
         # 初始化实盘订单监控服务（限价单成交后自动设置止损止盈）
         try:
@@ -372,25 +394,14 @@ async def lifespan(app: FastAPI):
     #         logger.warning(f"⚠️  启动合约限价单自动执行任务失败: {e}")
     #         futures_limit_order_executor = None
 
-    # 合约止盈止损监控服务已停用（平仓逻辑已统一到SmartExitOptimizer）
-    # 所有止盈止损、超时平仓逻辑现在由 smart_trader_service.py 中的 SmartExitOptimizer 统一处理
-    # if futures_monitor_service:
-    #     try:
-    #         import asyncio
-    #         async def monitor_futures_positions_loop():
-    #             """合约止盈止损监控循环（每5秒）"""
-    #             while True:
-    #                 try:
-    #                     await asyncio.to_thread(futures_monitor_service.monitor_positions)
-    #                 except Exception as e:
-    #                     logger.error(f"合约止盈止损监控出错: {e}")
-    #                 await asyncio.sleep(5)
-    #
-    #         asyncio.create_task(monitor_futures_positions_loop())
-    #         logger.info("✅ 合约止盈止损监控服务已启动（每5秒检查）")
-    #     except Exception as e:
-    #         logger.warning(f"⚠️  启动合约止盈止损监控任务失败: {e}")
-    #         futures_monitor_service = None
+    # 启动止盈止损监控服务（每5秒检查模拟盘硬SL/TP）
+    if sl_tp_monitor:
+        try:
+            sl_tp_monitor.start()
+            logger.info("✅ 止盈止损监控服务已启动（每5秒检查）")
+        except Exception as e:
+            logger.warning(f"⚠️  启动止盈止损监控服务失败: {e}")
+            sl_tp_monitor = None
 
     # 启动实盘订单监控服务（限价单成交后自动设置止损止盈）
     if live_order_monitor:
@@ -882,6 +893,14 @@ async def lifespan(app: FastAPI):
             logger.info("✅ 实盘订单监控服务已停止")
         except Exception as e:
             logger.warning(f"⚠️  停止实盘订单监控服务失败: {e}")
+
+    # 停止止盈止损监控服务
+    if sl_tp_monitor:
+        try:
+            sl_tp_monitor.stop()
+            logger.info("✅ 止盈止损监控服务已停止")
+        except Exception as e:
+            logger.warning(f"⚠️  停止止盈止损监控服务失败: {e}")
 
     # 停止超级大脑优化服务
     if daily_optimizer_task:
