@@ -1486,6 +1486,22 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         logger.info(f"[Gemini探索] kill switch=0, 跳过 (triggered_by={triggered_by})")
         return None
 
+    # 启动防重: 上次成功 run 距今 < 5h 则跳过 (防止重启/手动误触导致重复执行)
+    try:
+        with _connect() as conn_chk:
+            with conn_chk.cursor() as cur:
+                cur.execute(
+                    "SELECT MAX(asof_utc) AS last_run FROM gemini_explore_runs WHERE status='ok'"
+                )
+                row = cur.fetchone()
+                if row and row.get('last_run'):
+                    elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
+                    if elapsed_h < 5:
+                        logger.info(f"[Gemini探索] 上次成功运行距今 {elapsed_h:.1f}h < 5h, 跳过 (防重启重复)")
+                        return None
+    except Exception as e:
+        logger.warning(f"[Gemini探索] 启动防重检查失败, 继续: {e}")
+
     logger.info(f"[Gemini探索] === 一轮开始 (triggered_by={triggered_by}) ===")
 
     # 建立 DB 连接

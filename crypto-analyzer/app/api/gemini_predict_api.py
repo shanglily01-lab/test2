@@ -369,6 +369,71 @@ async def list_positions_live():
 
 
 # ============================================================
+# 盈亏统计
+# ============================================================
+@router.get("/stats")
+async def stats(days: int = Query(30, ge=1, le=365)):
+    """返回 Gemini 预测的累计盈亏统计."""
+    try:
+        conn = _connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        COUNT(*) AS total_trades,
+                        SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
+                        SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS losses,
+                        COALESCE(SUM(realized_pnl), 0) AS total_pnl,
+                        COALESCE(AVG(realized_pnl), 0) AS avg_pnl
+                    FROM futures_positions
+                    WHERE source='gemini_predict' AND status='closed' AND account_id=2
+                      AND close_time >= DATE_SUB(NOW(), INTERVAL %s DAY)
+                    """,
+                    (days,),
+                )
+                row = cur.fetchone()
+                total = int(row['total_trades'] or 0)
+                wins = int(row['wins'] or 0)
+                losses = int(row['losses'] or 0)
+
+                # 当前浮盈
+                cur.execute(
+                    """
+                    SELECT COALESCE(SUM(unrealized_pnl), 0) AS floating_pnl
+                    FROM futures_positions
+                    WHERE source='gemini_predict' AND status='open' AND account_id=2
+                    """
+                )
+                float_row = cur.fetchone()
+                floating_pnl = float(float_row['floating_pnl'] or 0)
+        finally:
+            conn.close()
+
+        win_rate = round(wins / total * 100, 2) if total > 0 else 0
+        total_pnl = float(row['total_pnl'] or 0)
+        avg_pnl = float(row['avg_pnl'] or 0)
+
+        return {
+            "success": True,
+            "data": {
+                "total_trades": total,
+                "wins": wins,
+                "losses": losses,
+                "win_rate": win_rate,
+                "total_realized_pnl": round(total_pnl, 2),
+                "avg_realized_pnl": round(avg_pnl, 2),
+                "floating_pnl": round(floating_pnl, 2),
+                "total_pnl": round(total_pnl + floating_pnl, 2),
+                "days": days,
+            },
+        }
+    except Exception as e:
+        logger.error(f"[Gemini预测 API] /stats 失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================
 # 手动触发
 # ============================================================
 _run_lock = threading.Lock()

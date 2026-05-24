@@ -724,6 +724,22 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
         logger.info(f"[Gemini预测] kill switch=0, 跳过 (triggered_by={triggered_by})")
         return None
 
+    # 启动防重: 上次成功 run 距今 < 11h 则跳过 (防止重启/手动误触导致重复执行)
+    try:
+        with _connect() as conn_chk:
+            with conn_chk.cursor() as cur:
+                cur.execute(
+                    "SELECT MAX(asof_utc) AS last_run FROM gemini_predict_runs WHERE status='ok'"
+                )
+                row = cur.fetchone()
+                if row and row.get('last_run'):
+                    elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
+                    if elapsed_h < 11:
+                        logger.info(f"[Gemini预测] 上次成功运行距今 {elapsed_h:.1f}h < 11h, 跳过 (防重启重复)")
+                        return None
+    except Exception as e:
+        logger.warning(f"[Gemini预测] 启动防重检查失败, 继续: {e}")
+
     logger.info(f"[Gemini预测] === 一轮开始 (triggered_by={triggered_by}) ===")
 
     try:
