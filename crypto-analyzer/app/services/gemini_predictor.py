@@ -80,9 +80,9 @@ def _try_snapshot() -> Optional[Dict]:
 PREDICT_MARGIN_USD = 500.0
 PREDICT_LEVERAGE = 3
 PREDICT_MAX_POSITIONS = 20
-PREDICT_HOLD_HOURS = 12
-PREDICT_SL_PCT = 3.0
-PREDICT_TP_PCT = 6.0
+PREDICT_HOLD_HOURS = 72                     # 3 天 (与 Gemini 探索一致)
+PREDICT_SL_PCT = 5.0                        # 硬 SL 5%
+PREDICT_TP_PCT = 15.0                       # 硬 TP 15%
 PREDICT_CONFIDENCE_THRESHOLD = 0.60
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'gemini_predict'
@@ -438,9 +438,12 @@ def _count_open_positions(conn) -> int:
 # ============================================================
 # Prompt 构建
 # ============================================================
-PREDICT_PROMPT_TEMPLATE = """你是加密货币短线交易分析师. 预测每个币种在未来 12 小时内的方向概率.
+PREDICT_PROMPT_TEMPLATE = """你是加密货币中级趋势交易分析师. 预测每个币种在未来 3 天内的方向走势概率.
 
-持仓期 12h, SL=3%, TP=6%, 杠杆 3x, 不做中途干预.
+持仓期 3 天 (72h), SL=5%, TP=15%, 杠杆 3x, 不做中途干预.
+
+选中的币种需要能在 3 天内到达 15% 的涨幅/跌幅空间, 或至少抗住 3 天不跌/不涨过 5%.
+不要选"只波动 2-3%"的标的.
 
 # 全局市场环境
 {global_context_json}

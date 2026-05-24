@@ -174,15 +174,16 @@ class SmartExitOptimizer:
                     continue
 
                 # ────────────────────────────────────────────────────────────
-                # Gemini 探索：跳过所有智能平仓逻辑，只检查 planned_close_time 到期
+                # Gemini 探索/预测：跳过所有智能平仓逻辑，只检查 planned_close_time 到期
                 # SL/TP 由 position_sl_tp_monitor 兜底
                 # ────────────────────────────────────────────────────────────
-                if position.get('source') == 'gemini_explore':
+                if position.get('source') in ('gemini_explore', 'gemini_predict'):
+                    src_name = 'Gemini探索' if position.get('source') == 'gemini_explore' else 'Gemini预测'
                     if position.get('planned_close_time') and datetime.now() >= position['planned_close_time']:
                         logger.warning(
-                            f"[Gemini探索] 持仓{position_id} {position['symbol']} 持有72h到期，强制平仓"
+                            f"[{src_name}] 持仓{position_id} {position['symbol']} 持有3天到期，强制平仓"
                         )
-                        await self._execute_close(position_id, current_price, "Gemini探索持有72h到期")
+                        await self._execute_close(position_id, current_price, f"{src_name}持有72h到期")
                         break
                     await asyncio.sleep(30)
                     continue
@@ -217,11 +218,12 @@ class SmartExitOptimizer:
                     break
 
                 # === K线强度衰减检测 (新增 - 每15分钟检查一次) ===
-                # 多策略持仓 (S1-S7 + Gemini 探索) 依赖计划平仓时间和固定止损止盈, 跳过K线衰减检测
+                # 多策略持仓 (S1-S7 + Gemini 探索/预测) 依赖计划平仓时间和固定止损止盈, 跳过K线衰减检测
                 _MULTI_STRATEGY_SOURCES = (
                     's1_early_long', 's2_pullback_long', 's3_top_short',
                     's4_rebound_short', 's5_large_oversold', 's6_vol_spike', 's7_ma_support',
-                    'gemini_explore',  # Gemini 探索: 用户指定只走 SL/TP/6h
+                    'gemini_explore',      # Gemini 探索: 只走 SL/TP/72h
+                    'gemini_predict',      # Gemini 预测: 只走 SL/TP/72h
                 )
                 _is_multi_strategy = position.get('source') in _MULTI_STRATEGY_SOURCES
                 should_check_kline = await self._should_check_kline_strength(position_id)
@@ -508,20 +510,21 @@ class SmartExitOptimizer:
         leverage = float(position.get('leverage', 1))
         roi_pct = profit_pct * leverage
 
+        # 多策略持仓（S1-S7 + Gemini探索/预测）跳过所有动态平仓逻辑，只走硬SL/TP和planned_close_time
+        _MULTI_STRATEGY_SOURCES = (
+            's1_early_long', 's2_pullback_long', 's3_top_short',
+            's4_rebound_short', 's5_large_oversold', 's6_vol_spike', 's7_ma_support',
+            'gemini_explore',
+            'gemini_predict',
+        )
+        if position.get('source') in _MULTI_STRATEGY_SOURCES:
+            return False, ""
+
         # === 优先级1: 极端亏损兜底止损 ===
         # 阈值 ROI <= -15%（原 -10% 在 5x 杠杆下容易被山寨币 2% 日常波动触发）
         # 豁免: 开仓 30 分钟内豁免，避免开仓初期插针误杀
         if hold_minutes >= 30 and roi_pct <= -15.0:
             return True, f"极端亏损止损(ROI{roi_pct:.2f}%<=-15%, 价格变化{profit_pct:.2f}%, 持仓{hold_minutes:.0f}min)"
-
-        # 多策略持仓（S1-S7 + Gemini探索）跳过动态趋势反转，依赖固定止损止盈和planned_close_time
-        _MULTI_STRATEGY_SOURCES = (
-            's1_early_long', 's2_pullback_long', 's3_top_short',
-            's4_rebound_short', 's5_large_oversold', 's6_vol_spike', 's7_ma_support',
-            'gemini_explore',
-        )
-        if position.get('source') in _MULTI_STRATEGY_SOURCES:
-            return False, ""
 
         # === 开仓60分钟后启动智能监控 ===
         if hold_minutes >= MIN_HOLD_MINUTES:

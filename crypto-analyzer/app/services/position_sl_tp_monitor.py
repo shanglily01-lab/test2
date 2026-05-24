@@ -162,14 +162,15 @@ class PositionSLTPMonitor:
             trigger_price = price
 
             # ────────────────────────────────────────────────────────────────
-            # Gemini 探索：跳过动态风控（Early-SL/移动止盈/保本守护），只走硬 SL/TP
+            # Gemini 探索/预测：跳过动态风控（Early-SL/移动止盈/保本守护），只走硬 SL/TP
             # ────────────────────────────────────────────────────────────────
-            if pos.get('source') == 'gemini_explore':
+            if pos.get('source') in ('gemini_explore', 'gemini_predict'):
+                src_name = 'Gemini探索' if pos.get('source') == 'gemini_explore' else 'Gemini预测'
                 trig = self._check_trigger(side, price, sl, tp)
                 if trig:
                     reason, trigger_price = trig
                     logger.info(
-                        f"[Gemini探索硬SL/TP] pid={pid} {symbol} {side} "
+                        f"[{src_name}硬SL/TP] pid={pid} {symbol} {side} "
                         f"reason={reason} price={price:.6f} SL={sl} TP={tp}"
                     )
                     self._cooldown[pid] = now + self._cooldown_seconds
