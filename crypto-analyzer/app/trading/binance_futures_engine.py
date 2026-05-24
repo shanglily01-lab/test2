@@ -870,7 +870,7 @@ class BinanceFuturesEngine:
 
     def _place_stop_loss(self, symbol: str, position_side: str, quantity: Decimal,
                          stop_price: Decimal) -> Dict:
-        """设置止损单 (STOP_MARKET)"""
+        """设置止损单 (STOP_MARKET)，含 Algo Order API 回退。"""
         binance_symbol = self._convert_symbol(symbol)
         side = 'SELL' if position_side == 'LONG' else 'BUY'
         stop_price = self._round_price(stop_price, symbol)
@@ -885,16 +885,31 @@ class BinanceFuturesEngine:
             'quantity': str(quantity),
             'workingType': 'MARK_PRICE',
             'timeInForce': 'GTE_GTC',
+            'reduceOnly': 'true',
         }
 
         result = self._request('POST', '/fapi/v1/order', params)
+
+        # -4120: 该账号需用 Algo Order API 下条件单，自动回退
+        if isinstance(result, dict) and result.get('code') == -4120:
+            logger.warning(f"[止损] 账号需用Algo Order API, 切换重试 {symbol} {position_side}")
+            algo_params = {
+                'symbol': binance_symbol,
+                'side': side,
+                'positionSide': position_side,
+                'type': 'STOP_MARKET',
+                'stopPrice': str(stop_price),
+                'quantity': str(quantity),
+                'workingType': 'MARK_PRICE',
+            }
+            result = self._request('POST', '/fapi/v1/algo/order', algo_params)
 
         if isinstance(result, dict) and result.get('success') == False:
             return result
 
         return {
             'success': True,
-            'order_id': str(result.get('orderId', '')),
+            'order_id': str(result.get('algoId') or result.get('orderId', '')),
             'stop_price': float(stop_price)
         }
 
@@ -1005,7 +1020,7 @@ class BinanceFuturesEngine:
 
     def _place_take_profit(self, symbol: str, position_side: str, quantity: Decimal,
                            take_profit_price: Decimal) -> Dict:
-        """设置止盈单 (TAKE_PROFIT_MARKET)"""
+        """设置止盈单 (TAKE_PROFIT_MARKET)，含 Algo Order API 回退。"""
         binance_symbol = self._convert_symbol(symbol)
         side = 'SELL' if position_side == 'LONG' else 'BUY'
         take_profit_price = self._round_price(take_profit_price, symbol)
@@ -1020,16 +1035,31 @@ class BinanceFuturesEngine:
             'quantity': str(quantity),
             'workingType': 'MARK_PRICE',
             'timeInForce': 'GTE_GTC',
+            'reduceOnly': 'true',
         }
 
         result = self._request('POST', '/fapi/v1/order', params)
+
+        # -4120: 该账号需用 Algo Order API 下条件单，自动回退
+        if isinstance(result, dict) and result.get('code') == -4120:
+            logger.warning(f"[止盈] 账号需用Algo Order API, 切换重试 {symbol} {position_side}")
+            algo_params = {
+                'symbol': binance_symbol,
+                'side': side,
+                'positionSide': position_side,
+                'type': 'TAKE_PROFIT_MARKET',
+                'stopPrice': str(take_profit_price),
+                'quantity': str(quantity),
+                'workingType': 'MARK_PRICE',
+            }
+            result = self._request('POST', '/fapi/v1/algo/order', algo_params)
 
         if isinstance(result, dict) and result.get('success') == False:
             return result
 
         return {
             'success': True,
-            'order_id': str(result.get('orderId', '')),
+            'order_id': str(result.get('algoId') or result.get('orderId', '')),
             'take_profit_price': float(take_profit_price)
         }
 

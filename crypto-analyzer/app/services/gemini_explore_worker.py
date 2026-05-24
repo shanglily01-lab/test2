@@ -1252,6 +1252,8 @@ def _sync_to_live(
                 leverage=act_lev,
                 stop_loss_price=Decimal(str(sl_price)),
                 take_profit_price=Decimal(str(tp_price)),
+                stop_loss_pct=Decimal(str(EXPLORE_SL_PCT)),
+                take_profit_pct=Decimal(str(EXPLORE_TP_PCT)),
                 source='gemini_explore',
                 paper_position_id=paper_position_id,
             )
