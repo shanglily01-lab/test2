@@ -233,6 +233,26 @@ async def set_symbol_rating(request: ManualRatingRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class DeleteRatingRequest(BaseModel):
+    """删除评级请求"""
+    symbol: str
+
+
+@router.delete("/api/rating/delete")
+async def delete_symbol_rating(symbol: str):
+    """删除交易对的评级记录"""
+    try:
+        opt_config = OptimizationConfig(DB_CONFIG)
+        deleted = opt_config.delete_symbol_rating(symbol.upper())
+        if not deleted:
+            raise HTTPException(status_code=404, detail=f"{symbol.upper()} 未找到评级记录")
+        return {"success": True, "message": f"{symbol.upper()} 评级已删除"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/top50")
 async def get_top50():
     """获取 TOP50 高胜率交易对列表及统计"""

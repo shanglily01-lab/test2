@@ -418,6 +418,30 @@ class OptimizationConfig:
 
         return result
 
+    def delete_symbol_rating(self, symbol: str) -> bool:
+        """
+        删除交易对评级记录
+
+        Args:
+            symbol: 交易对符号
+
+        Returns:
+            是否成功删除
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM trading_symbol_rating WHERE symbol = %s", (symbol,))
+            deleted = cursor.rowcount > 0
+            cursor.close()
+            if deleted:
+                logger.info(f"[评级] 已删除 {symbol} 的评级记录")
+            return deleted
+        except Exception as e:
+            cursor.close()
+            logger.error(f"[评级] 删除 {symbol} 评级记录失败: {e}")
+            raise
+
     def get_all_symbol_ratings(self) -> List[Dict[str, Any]]:
         """
         获取所有交易对的评级信息

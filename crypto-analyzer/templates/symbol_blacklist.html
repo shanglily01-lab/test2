@@ -315,11 +315,12 @@ function renderGrid() {
       if (item.reason) tip += item.reason;
       if (item.total_trades) tip += ' | ' + item.total_trades + '笔 胜率' + (item.win_rate ? item.win_rate.toFixed(1)+'%' : '--');
       if (item.hard_stop_loss_count) tip += ' | 止损' + item.hard_stop_loss_count + '次';
-      html += '<div class="group ' + c.bg + ' border ' + c.border + ' px-3 py-1.5 rounded-md flex items-center gap-2 ' + c.hover + ' transition-all cursor-pointer"'
-            + ' title="' + esc(tip) + '"'
-            + ' onclick="openEditModal(\'' + esc(item.symbol) + '\',' + item.rating_level + ')">';
-      html += '<span class="text-xs font-mono font-medium ' + c.text + '">' + esc(item.symbol) + '</span>';
-      html += '<span class="material-symbols-outlined text-[14px] text-gray-600 group-hover:' + c.text.replace('text-','') + ' transition-colors">edit</span>';
+      html += '<div class="flex items-center gap-1 ' + c.bg + ' border ' + c.border + ' px-3 py-1.5 rounded-md ' + c.hover + ' transition-all">';
+      html += '<span class="text-xs font-mono font-medium ' + c.text + ' cursor-pointer" onclick="openEditModal(\'' + esc(item.symbol) + '\',' + item.rating_level + ')" title="' + esc(tip) + '">' + esc(item.symbol) + '</span>';
+      // Edit icon
+      html += '<span class="material-symbols-outlined text-[14px] text-gray-600 cursor-pointer hover:' + c.text.replace('text-','') + ' transition-colors" onclick="openEditModal(\'' + esc(item.symbol) + '\',' + item.rating_level + ')" title="编辑">edit</span>';
+      // Delete button (red, on hover)
+      html += '<span class="material-symbols-outlined text-[14px] text-gray-600 hover:text-status-danger transition-colors cursor-pointer ml-1" onclick="deleteSymbol(\'' + esc(item.symbol) + '\')" title="删除">remove_circle</span>';
       html += '</div>';
     });
     html += '</div></section>';
@@ -404,6 +405,19 @@ async function submitRating() {
   } catch(e) {
     errEl.textContent = e.message;
     errEl.classList.remove('hidden');
+  }
+}
+
+async function deleteSymbol(symbol) {
+  if (!confirm('确定要删除 ' + symbol + ' 的评级记录吗？')) return;
+  try {
+    var r = await fetch('/api/rating/delete?symbol=' + encodeURIComponent(symbol), { method: 'DELETE' });
+    var data = await r.json();
+    if (!data.success) throw new Error(data.detail || '删除失败');
+    showToast(symbol + ' 评级已删除');
+    loadData();
+  } catch(e) {
+    showToast('删除失败: ' + e.message);
   }
 }
 
