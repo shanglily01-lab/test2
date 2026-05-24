@@ -174,19 +174,18 @@ class SmartExitOptimizer:
                     continue
 
                 # ────────────────────────────────────────────────────────────
-                # Gemini 探索/预测：跳过所有智能平仓逻辑，只检查 planned_close_time 到期
-                # SL/TP 由 position_sl_tp_monitor 兜底
+                # Gemini 探索/预测：检查 planned_close_time 到期后强制平仓
+                # 其余智能平仓逻辑（SL/TP/趋势反转等）与普通持仓一致
                 # ────────────────────────────────────────────────────────────
                 if position.get('source') in ('gemini_explore', 'gemini_predict'):
                     src_name = 'Gemini探索' if position.get('source') == 'gemini_explore' else 'Gemini预测'
                     if position.get('planned_close_time') and datetime.now() >= position['planned_close_time']:
+                        hold_hours = 24
                         logger.warning(
-                            f"[{src_name}] 持仓{position_id} {position['symbol']} 持有3天到期，强制平仓"
+                            f"[{src_name}] 持仓{position_id} {position['symbol']} 持有{hold_hours}h到期，强制平仓"
                         )
-                        await self._execute_close(position_id, current_price, f"{src_name}持有72h到期")
+                        await self._execute_close(position_id, current_price, f"{src_name}持有{hold_hours}h到期")
                         break
-                    await asyncio.sleep(30)
-                    continue
 
                 # 计算当前盈亏（如果avg_entry_price为空，使用entry_price作为备用）
                 try:
