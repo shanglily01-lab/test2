@@ -8,13 +8,13 @@ Wants=network-online.target
 Type=simple
 User=ec2-user
 Group=ec2-user
-WorkingDirectory=/opt/crypto-analyzer
+WorkingDirectory=/home/test2/crypto-analyzer
 Environment="PYTHONUNBUFFERED=1"
-ExecStart=/opt/crypto-analyzer/venv/bin/python fast_collector_service.py
+ExecStart=/home/test2/crypto-analyzer/venv/bin/python fast_collector_service.py
 Restart=on-failure
 RestartSec=20
-StandardOutput=append:/opt/crypto-analyzer/logs/fast_collector_systemd.log
-StandardError=append:/opt/crypto-analyzer/logs/fast_collector_systemd.log
+StandardOutput=append:/home/test2/crypto-analyzer/logs/fast_collector_systemd.log
+StandardError=append:/home/test2/crypto-analyzer/logs/fast_collector_systemd.log
 
 # 严防内存泄漏导致系统卡死
 MemoryMax=1G
