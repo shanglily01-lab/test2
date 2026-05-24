@@ -1078,13 +1078,13 @@ def _big4_blocks(big4_signal: str, side: str) -> bool:
     return False
 
 
-def _has_open_position(conn, symbol: str, side: str) -> bool:
+def _has_open_position(conn, symbol: str) -> bool:
     with conn.cursor() as cur:
         cur.execute(
             "SELECT 1 FROM futures_positions "
-            "WHERE source=%s AND status='open' AND symbol=%s AND position_side=%s "
+            "WHERE source=%s AND status='open' AND symbol=%s "
             "LIMIT 1",
-            (EXPLORE_SOURCE, symbol, side),
+            (EXPLORE_SOURCE, symbol),
         )
         return cur.fetchone() is not None
 
@@ -1670,13 +1670,13 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            # 5e. 同 symbol+side 去重
-            if _has_open_position(conn, symbol, side):
+            # 5e. 同 symbol 去重 (不管方向)
+            if _has_open_position(conn, symbol):
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,
                     catalyst, data_signal, risk_note,
                     'skipped_dedup', None,
-                    f"{symbol} {side} 已存在 OPEN 仓位",
+                    f"{symbol} 已有 OPEN 仓位, 跳过反方向",
                 ))
                 continue
 

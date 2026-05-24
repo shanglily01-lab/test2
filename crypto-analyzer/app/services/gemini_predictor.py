@@ -413,13 +413,13 @@ def _big4_blocks(big4_signal: str, side: str) -> bool:
     return False
 
 
-def _has_open_position(conn, symbol: str, side: str) -> bool:
+def _has_open_position(conn, symbol: str) -> bool:
     with conn.cursor() as cur:
         cur.execute(
             "SELECT 1 FROM futures_positions "
-            "WHERE source=%s AND status='open' AND symbol=%s AND position_side=%s "
+            "WHERE source=%s AND status='open' AND symbol=%s "
             "LIMIT 1",
-            (PREDICT_SOURCE, symbol, side),
+            (PREDICT_SOURCE, symbol),
         )
         return cur.fetchone() is not None
 
@@ -858,13 +858,13 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 predictions_made += 1
                 continue
 
-            # 7c. 去重
-            if _has_open_position(conn, symbol, side):
+            # 7c. 去重 (同 symbol 已有 OPEN 则跳过, 不管方向)
+            if _has_open_position(conn, symbol):
                 verdict_rows.append((
                     run_id, symbol, category, confidence,
                     catalyst, data_signal, risk_note,
                     price_at_pred, 'skipped_dedup', None,
-                    f"{symbol} {side} 已存在 OPEN 仓位",
+                    f"{symbol} 已有 OPEN 仓位, 跳过反方向",
                 ))
                 predictions_made += 1
                 continue
