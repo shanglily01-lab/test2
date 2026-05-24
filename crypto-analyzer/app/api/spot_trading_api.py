@@ -72,6 +72,7 @@ class SpotSummary(BaseModel):
     total_value: float
     total_unrealized_pnl: float
     total_unrealized_pnl_pct: float
+    current_balance: float
     history_total_pnl: float
     history_win_count: int
     history_loss_count: int
@@ -378,6 +379,14 @@ async def get_spot_summary():
         total_count = (dca_history['total_count'] or 0) + (manual_history['total_count'] or 0)
         win_rate = (win_count / total_count * 100) if total_count > 0 else 0
 
+        # ====== 3. 账户余额 (现货手动账户) ======
+        cursor.execute("""
+            SELECT current_balance FROM paper_trading_accounts
+            WHERE account_id = 1
+        """)
+        balance_row = cursor.fetchone()
+        current_balance = float(balance_row['current_balance']) if balance_row else 0
+
         cursor.close()
         conn.close()
 
@@ -387,6 +396,7 @@ async def get_spot_summary():
             total_value=total_value,
             total_unrealized_pnl=total_unrealized_pnl,
             total_unrealized_pnl_pct=total_unrealized_pnl_pct,
+            current_balance=current_balance,
             history_total_pnl=total_pnl,
             history_win_count=win_count,
             history_loss_count=loss_count,
