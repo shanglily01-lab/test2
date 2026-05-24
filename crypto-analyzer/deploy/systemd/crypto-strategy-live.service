@@ -6,8 +6,8 @@ Requires=crypto-app-main.service
 
 [Service]
 Type=simple
-User=ubuntu
-Group=ubuntu
+User=ec2-user
+Group=ec2-user
 WorkingDirectory=/opt/crypto-analyzer
 Environment="PYTHONUNBUFFERED=1"
 ExecStart=/opt/crypto-analyzer/venv/bin/python strategy_live.py
