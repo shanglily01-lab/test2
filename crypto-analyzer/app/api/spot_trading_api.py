@@ -515,10 +515,7 @@ async def sell_spot_position(req: SellRequest):
 
 @router.post("/prices/batch")
 async def get_spot_prices_batch(symbols: List[str] = Body(..., embed=True)):
-    """批量获取现货实时价格（从 Binance Spot API），body: {"symbols": [...]}"""
-    import aiohttp
-    from aiohttp import ClientTimeout
-
+    """批量获取现货实时价格（从 BinanceDataHub WebSocket），body: {"symbols": [...]}"""
     if not symbols:
         return {"success": True, "prices": {}}
 
@@ -527,16 +524,15 @@ async def get_spot_prices_batch(symbols: List[str] = Body(..., embed=True)):
         clean = s.replace("/", "").replace("%2F", "").upper()
         symbol_map[clean] = s
 
-    # paper 现货价格 = DataHub 合约同 symbol 参考价 (现货/合约价差 < 0.1%, 不影响 paper 仿真)
     prices = {}
     try:
         from app.services.binance_data_hub import get_global_data_hub
         hub = get_global_data_hub()
         if hub is not None:
-            price_map = hub.get_full_ticker_map(market="futures")
             for clean, original in symbol_map.items():
-                if clean in price_map:
-                    prices[original] = {"price": float(price_map[clean]), "source": "binance_futures_ref"}
+                price = hub.get_price_sync(original, max_age_seconds=90)
+                if price is not None and price > 0:
+                    prices[original] = {"price": float(price), "source": "binance_hub"}
     except Exception as e:
         logger.warning(f"DataHub 批量取价失败 (paper batch): {e}")
 
@@ -548,19 +544,20 @@ async def get_spot_prices_batch(symbols: List[str] = Body(..., embed=True)):
 async def _get_current_price(cursor, symbol: str) -> Optional[float]:
     """
     获取币种当前价格
-    优先从WebSocket价格服务获取，失败则从数据库获取
+    优先从 BinanceDataHub WebSocket 获取，失败则从数据库 kline 获取
     """
+    # 1. DataHub WebSocket 实时价 (最快)
     try:
-        # 尝试从价格缓存获取（如果有WebSocket服务）
-        from app.services.price_cache_service import get_global_price_cache
-        price_cache = get_global_price_cache()
-        cached_price = price_cache.get_price(symbol)
-        if cached_price:
-            return cached_price
+        from app.services.binance_data_hub import get_global_data_hub
+        hub = get_global_data_hub()
+        if hub is not None:
+            price = hub.get_price_sync(symbol, max_age_seconds=90)
+            if price is not None and price > 0:
+                return float(price)
     except Exception:
         pass
 
-    # 从数据库获取最新价格（现货数据）
+    # 2. 从数据库获取最新K线收盘价（兜底）
     try:
         cursor.execute("""
             SELECT close_price
@@ -574,6 +571,6 @@ async def _get_current_price(cursor, symbol: str) -> Optional[float]:
         if result:
             return float(result['close_price'])
     except Exception as e:
-        logger.warning(f"获取价格失败 {symbol}: {e}")
+        logger.warning(f"[现货] 数据库取价失败 {symbol}: {e}")
 
     return None
