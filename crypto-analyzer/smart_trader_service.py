@@ -2871,7 +2871,7 @@ class SmartTraderService:
 
     def is_symbol_in_top_performers(self, symbol: str) -> bool:
         """
-        检查交易对是否在盈利Top 50列表中
+        检查交易对是否在盈利Top 100列表中
         返回True表示在列表中,允许开仓
         返回False表示不在列表中,拒绝开仓
         """
@@ -2890,7 +2890,7 @@ class SmartTraderService:
             return result[0] > 0 if result else False
         except Exception as e:
             # 如果表不存在或查询失败，默认允许开仓（向后兼容）
-            logger.warning(f"检查Top 50列表失败: {e}, 默认允许开仓")
+            logger.warning(f"检查Top 100列表失败: {e}, 默认允许开仓")
             return True
 
     def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal", sync_live: bool = True):
@@ -4183,9 +4183,9 @@ async def async_main():
                     None,
                     update_top_performing_symbols,
                     2,  # account_id=2 (U本位)
-                    50  # top_n=50
+                    top_n=100
                 )
-                logger.info("Top 50更新完成")
+                logger.info("Top 100更新完成")
 
             except Exception as e:
                 logger.error(f"❌ Top 30更新失败: {e}")

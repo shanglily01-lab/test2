@@ -256,8 +256,8 @@ class MultiStrategyService:
         except Exception:
             return False
 
-    def _is_symbol_in_top50(self, symbol: str) -> bool:
-        """检查 symbol 是否在 top_performing_symbols 表中 (TOP50)
+    def _is_symbol_in_top100(self, symbol: str) -> bool:
+        """检查 symbol 是否在 top_performing_symbols 表中 (TOP100)
         与 smart_trader_service.is_symbol_in_top_performers 行为一致
         实盘开仓前过滤,模拟盘不调用此方法
         """
@@ -272,7 +272,7 @@ class MultiStrategyService:
             cur.close(); conn.close()
             return row is not None
         except Exception as e:
-            logger.warning(f"[多策略] TOP50 查询失败 {symbol}: {e}, 默认允许")
+            logger.warning(f"[多策略] TOP100 查询失败 {symbol}: {e}, 默认允许")
             return True
 
     def _get_runtime_sl_tp_hold(self) -> tuple:
@@ -458,9 +458,9 @@ class MultiStrategyService:
         source: str,
     ):
         """同步实盘下单"""
-        # TOP50 实盘过滤: 与主策略保持一致, 模拟单已开但实盘不下
-        if not self._is_symbol_in_top50(symbol):
-            logger.info(f"[{source}] {symbol} 不在 TOP50, 跳过实盘 (模拟单已开)")
+        # TOP100 实盘过滤: 与主策略保持一致, 模拟单已开但实盘不下
+        if not self._is_symbol_in_top100(symbol):
+            logger.info(f"[{source}] {symbol} 不在 TOP100, 跳过实盘 (模拟单已开)")
             return
         try:
             from app.services.api_key_service import APIKeyService

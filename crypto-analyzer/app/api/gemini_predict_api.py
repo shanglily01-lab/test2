@@ -95,7 +95,7 @@ async def status():
                     "sl_pct": 3,
                     "tp_pct": 6,
                     "confidence_threshold": 0.6,
-                    "top_n": 50,
+                    "top_n": 100,
                 },
             },
         }

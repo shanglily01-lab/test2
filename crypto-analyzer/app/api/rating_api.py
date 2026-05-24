@@ -255,7 +255,7 @@ async def delete_symbol_rating(symbol: str):
 
 @router.get("/api/top50")
 async def get_top50():
-    """获取 TOP50 高胜率交易对列表及统计"""
+    """获取 TOP100 高胜率交易对列表及统计"""
     import pymysql
     try:
         conn = pymysql.connect(**DB_CONFIG, cursorclass=pymysql.cursors.DictCursor)
@@ -266,7 +266,7 @@ async def get_top50():
                    profit_factor, rank_score, last_updated
             FROM top_performing_symbols
             ORDER BY rank_score DESC
-            LIMIT 50
+            LIMIT 100
         """)
         rows = cur.fetchall()
         cur.close()
@@ -304,7 +304,7 @@ async def get_top50():
             }
         }
     except Exception as e:
-        logger.error(f"获取TOP50失败: {e}")
+        logger.error(f"获取TOP100失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

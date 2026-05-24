@@ -1,7 +1,7 @@
 """
 Gemini 预测 worker (v1 — 2026-05-22)
 
-每 12h 对 TOP 50 交易对调用 Google Gemini 预测未来 12h 方向,
+每 12h 对 TOP 100 交易对调用 Google Gemini 预测未来 12h 方向,
 根据预测结果直接开模拟单.
 
 仓位参数:
@@ -86,7 +86,7 @@ PREDICT_TP_PCT = 15.0                       # 硬 TP 15%
 PREDICT_CONFIDENCE_THRESHOLD = 0.60
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'gemini_predict'
-PREDICT_TOP_N = 50
+PREDICT_TOP_N = 100
 
 # 数据新鲜度门槛
 PREDICT_PRICE_FRESH_MIN = 20
@@ -112,10 +112,10 @@ def _connect():
 
 
 # ============================================================
-# 数据查询 — TOP 50
+# 数据查询 — TOP 100
 # ============================================================
-def _get_top50_symbols(conn) -> List[str]:
-    """从 top_performing_symbols 获取 TOP 50 交易对."""
+def _get_top100_symbols(conn) -> List[str]:
+    """从 top_performing_symbols 获取 TOP 100 交易对."""
     with conn.cursor() as cur:
         cur.execute(
             "SELECT symbol FROM top_performing_symbols "
@@ -511,7 +511,7 @@ Big4 (BTC/ETH/BNB/SOL 综合趋势): BEARISH/STRONG_BEARISH 时严禁做多, BUL
 # Gemini 调用
 # ============================================================
 def _call_gemini_predict(symbols_data: List[Dict], global_ctx: dict) -> Optional[dict]:
-    """调用 Gemini — 批量预测所有 TOP50 方向."""
+    """调用 Gemini — 批量预测所有 TOP100 方向."""
     if not GEMINI_API_KEY:
         logger.error("[Gemini预测] GEMINI_API_KEY 未设置")
         return None
@@ -584,7 +584,7 @@ def _sync_to_live(
     3. 对每个账号调用 BinanceFuturesEngine.open_position()
     4. 通过 paper_position_id 关联实盘单与模拟单
     """
-    # 1. 检查实盘开关
+    # 1. 检查实盘开关 & TOP 100 过滤
     try:
         conn = _connect()
         with conn.cursor() as cur:
@@ -593,12 +593,26 @@ def _sync_to_live(
             )
             row = cur.fetchone()
             enabled = (row and str(row.get('setting_value', '0')).strip().lower() in ('1', 'true', 'yes'))
+            if not enabled:
+                logger.info(f"[Gemini预测] live_trading_enabled=0, 跳过实盘同步 {symbol}")
+                conn.close()
+                return
+
+            # 1b. 实盘开仓仅限 TOP 100 交易对
+            cur.execute(
+                "SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1",
+                (symbol,),
+            )
+            if cur.fetchone() is None:
+                logger.warning(
+                    f"[Gemini预测] {symbol} 不在 TOP 100 内, 跳过实盘同步 "
+                    f"(模拟单已开, 但不同步到实盘)"
+                )
+                conn.close()
+                return
         conn.close()
-        if not enabled:
-            logger.info(f"[Gemini预测] live_trading_enabled=0, 跳过实盘同步 {symbol}")
-            return
     except Exception as e:
-        logger.warning(f"[Gemini预测] 检查实盘开关失败, 跳过实盘同步: {e}")
+        logger.warning(f"[Gemini预测] 检查实盘开关/TOP100失败, 跳过实盘同步: {e}")
         return
 
     # 2. 获取实盘账号
@@ -868,20 +882,20 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
         return None
 
     try:
-        # 2. 获取 TOP50
-        top50 = _get_top50_symbols(conn)
-        if not top50:
-            logger.warning("[Gemini预测] TOP50 为空, 跳过")
+        # 2. 获取 TOP100
+        top100 = _get_top100_symbols(conn)
+        if not top100:
+            logger.warning("[Gemini预测] TOP100 为空, 跳过")
             elapsed = time.time() - t0
-            _insert_run(conn, asof_utc, 0, '', elapsed, 'skipped', 'TOP50为空', triggered_by)
+            _insert_run(conn, asof_utc, 0, '', elapsed, 'skipped', 'TOP100为空', triggered_by)
             return None
 
-        logger.info(f"[Gemini预测] TOP50 获取到 {len(top50)} 个 symbol")
+        logger.info(f"[Gemini预测] TOP100 获取到 {len(top100)} 个 symbol")
 
         # 3. 构建每个 symbol 的数据
         symbols_data = []
         failed_symbols = []
-        for sym in top50:
+        for sym in top100:
             data = _build_symbol_data(conn, sym)
             if data and data['current_price']:
                 symbols_data.append(data)
@@ -894,7 +908,7 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
         if not symbols_data:
             logger.warning("[Gemini预测] 所有 symbol 数据获取失败, 跳过")
             elapsed = time.time() - t0
-            _insert_run(conn, asof_utc, len(top50), '', elapsed, 'skipped', '所有symbol数据获取失败', triggered_by)
+            _insert_run(conn, asof_utc, len(top100), '', elapsed, 'skipped', '所有symbol数据获取失败', triggered_by)
             return None
 
         # 4. 全局上下文

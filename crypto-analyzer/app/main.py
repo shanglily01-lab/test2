@@ -413,7 +413,7 @@ async def lifespan(app: FastAPI):
             live_order_monitor = None
 
     # 信号分析后台服务已从 main 移除 (2026-05-19)
-    # 改为每天 02:00 本地调度 update_top_performing_symbols 更新 TOP 50, 见下方 schedule.every().day.at("02:00")
+        # 改为每天 02:00 本地调度 update_top_performing_symbols 更新 TOP 100, 见下方 schedule.every().day.at("02:00")
     signal_analysis_service = None
 
     # 启动每日优化服务（每天凌晨1点执行）
@@ -597,22 +597,22 @@ async def lifespan(app: FastAPI):
                 logger.error(f"[FAIL] 市场预测分析失败: {e}")
         schedule.every(4).hours.do(run_market_prediction)
 
-        # TOP 50 盈利交易对更新 (每天 02:00 本地, 仅 U 本位 account_id=2)
+        # TOP 100 盈利交易对更新 (每天 02:00 本地, 仅 U 本位 account_id=2)
         # 实盘 live_trading_enabled=1 时, 所有开仓必须在 top_performing_symbols 内,
         # 该列表每天根据 futures_positions 历史持仓表现重新统计.
         def run_top50_update():
-            """每天更新 top_performing_symbols 表的 Top 50 盈利交易对."""
+            """每天更新 top_performing_symbols 表的 Top 100 盈利交易对."""
             try:
-                logger.info("[TOP50] 开始更新 U 本位 TOP 50 交易对...")
+                logger.info("[TOP100] 开始更新 U 本位 TOP 100 交易对...")
                 from update_top_performers import update_top_performing_symbols
-                update_top_performing_symbols(account_id=2, top_n=50)
-                logger.info("[TOP50] 完成更新")
+                update_top_performing_symbols(account_id=2, top_n=100)
+                logger.info("[TOP100] 完成更新")
             except Exception as e:
-                logger.error(f"[TOP50] 更新失败: {type(e).__name__}: {e}")
+                logger.error(f"[TOP100] 更新失败: {type(e).__name__}: {e}")
                 import traceback
                 traceback.print_exc()
         schedule.every().day.at("02:00").do(run_top50_update)
-        logger.info("[OK] TOP 50 更新任务已注册 (每天 02:00 本地)")
+        logger.info("[OK] TOP 100 更新任务已注册 (每天 02:00 本地)")
 
         # Gemini 探索 - 每 6h 调一轮 Gemini 检测红黑天鹅, 模拟单开仓
         # kill switch system_settings.gemini_explore_enabled 默认 0,
@@ -628,7 +628,7 @@ async def lifespan(app: FastAPI):
         schedule.every(6).hours.do(run_gemini_explore)
         logger.info("[Gemini探索] 调度已注册, 每 6h 跑一次 (kill switch 默认 OFF)")
 
-        # Gemini 预测 - 每 12h 调一次 Gemini 预测 TOP50 方向
+        # Gemini 预测 - 每 12h 调一次 Gemini 预测 TOP100 方向
         def run_gemini_predict():
             try:
                 from app.services.gemini_predictor import run_predict_round
@@ -1631,11 +1631,11 @@ def paper_trading_page():
 
 @app.get("/top50")
 async def top50_page():
-    """TOP50高胜率交易对页面"""
+    """TOP100高胜率交易对页面"""
     p = project_root / "templates" / "top50.html"
     if p.exists():
         return FileResponse(str(p))
-    raise HTTPException(status_code=404, detail="TOP50 page not found")
+    raise HTTPException(status_code=404, detail="TOP100 page not found")
 
 
 @app.get("/symbol_blacklist")

@@ -611,10 +611,10 @@ class MarketPredictor:
             cnt_row = cur.fetchone()
             cur.close(); conn.close()
             if not (cnt_row and cnt_row['cnt'] > 0):
-                logger.debug(f"[预测下单] {symbol} 不在TOP50，跳过实盘同步")
+                logger.debug(f"[预测下单] {symbol} 不在TOP100，跳过实盘同步")
                 return
         except Exception as e:
-            logger.warning(f"[预测下单] 查询实盘开关/TOP50失败: {e}")
+            logger.warning(f"[预测下单] 查询实盘开关/TOP100失败: {e}")
             return
 
         try:

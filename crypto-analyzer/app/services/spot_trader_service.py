@@ -179,19 +179,19 @@ def _has_position(symbol: str) -> bool:
     except Exception:
         return True  # 保守: 如果不能查就跳过
 
-def _get_top50_symbols() -> List[str]:
-    """从 top_performing_symbols 表获取 TOP 50"""
+def _get_top100_symbols() -> List[str]:
+    """从 top_performing_symbols 表获取 TOP 100"""
     try:
         conn = _get_conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT symbol FROM top_performing_symbols ORDER BY rank_score ASC LIMIT 50"
+            "SELECT symbol FROM top_performing_symbols ORDER BY rank_score ASC LIMIT 100"
         )
         rows = cur.fetchall()
         cur.close(); conn.close()
         return [r['symbol'] for r in rows if r['symbol'].endswith('/USDT')]
     except Exception as e:
-        logger.warning(f"[现货] 获取 TOP50 失败: {e}")
+        logger.warning(f"[现货] 获取 TOP100 失败: {e}")
         return []
 
 
@@ -471,7 +471,7 @@ def _scan_buy_opportunities():
         logger.debug(f"[现货] 持仓已达 {MAX_POSITIONS}, 跳过扫描")
         return
 
-    symbols = _get_top50_symbols()
+    symbols = _get_top100_symbols()
     if not symbols:
         logger.warning("[现货] 候选池为空, 跳过扫描")
         return

@@ -100,6 +100,23 @@ EXPLORE_CONFIDENCE_THRESHOLD = 0.5      # 校准表 0.50+ 可开
 EXPLORE_ACCOUNT_ID = 2
 EXPLORE_SOURCE = 'gemini_explore'
 
+# ============================================================
+# TOP 100 检查 (实盘同步闸门)
+# ============================================================
+def _is_in_top100(conn, symbol: str) -> bool:
+    """检查 symbol 是否在 top_performing_symbols TOP 100 内."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1",
+                (symbol,),
+            )
+            return cur.fetchone() is not None
+    except Exception as e:
+        logger.warning(f"[TOP100] 检查失败: {e}")
+        return False
+
+
 # 数据新鲜度门槛
 EXPLORE_PRICE_FRESH_MIN = 20
 EXPLORE_FUNDING_FRESH_MIN = 30
@@ -1202,12 +1219,26 @@ def _sync_to_live(
             )
             row = cur.fetchone()
             enabled = (row and str(row.get('setting_value', '0')).strip().lower() in ('1', 'true', 'yes'))
+            if not enabled:
+                logger.info(f"[Gemini探索] live_trading_enabled=0, 跳过实盘同步 {symbol}")
+                conn.close()
+                return
+
+            # 1b. 实盘开仓仅限 TOP 100 交易对
+            cur.execute(
+                "SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1",
+                (symbol,),
+            )
+            if cur.fetchone() is None:
+                logger.warning(
+                    f"[Gemini探索] {symbol} 不在 TOP 100 内, 跳过实盘同步 "
+                    f"(模拟单已开, 但不同步到实盘)"
+                )
+                conn.close()
+                return
         conn.close()
-        if not enabled:
-            logger.info(f"[Gemini探索] live_trading_enabled=0, 跳过实盘同步 {symbol}")
-            return
     except Exception as e:
-        logger.warning(f"[Gemini探索] 检查实盘开关失败, 跳过实盘同步: {e}")
+        logger.warning(f"[Gemini探索] 检查实盘开关/TOP100失败, 跳过实盘同步: {e}")
         return
 
     # 2. 获取实盘账号

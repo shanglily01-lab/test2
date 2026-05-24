@@ -24,13 +24,13 @@ MYSQL_CONFIG = {
 }
 
 
-def update_top_performing_symbols(account_id: int = 2, top_n: int = 50):
+def update_top_performing_symbols(account_id: int = 2, top_n: int = 100):
     """
     更新盈利Top N交易对
 
     Args:
         account_id: 账户ID (2=U本位, 3=币本位)
-        top_n: 保留前N名 (默认50)
+        top_n: 保留前N名 (默认100)
     """
     conn = None
     try:
@@ -167,7 +167,7 @@ def update_top_performing_symbols(account_id: int = 2, top_n: int = 50):
 
 
 if __name__ == '__main__':
-    """直接执行时更新U本位Top 50"""
-    logger.info("开始更新盈利Top 50交易对...")
-    update_top_performing_symbols(account_id=2, top_n=50)
+    """直接执行时更新U本位Top 100"""
+    logger.info("开始更新盈利Top 100交易对...")
+    update_top_performing_symbols(account_id=2, top_n=100)
     logger.info("更新完成！")
