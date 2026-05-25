@@ -721,14 +721,14 @@ async def lifespan(app: FastAPI):
         # 每 5 分钟检查 kline_data 中 5m/15m 最新 timestamp.
         # 超过阈值未更新 -> WS 可能卡死, TG 告警.
         # 阈值: 5m K线 close + 落盘 ~1-2s, 留 2 分钟缓冲 = 7 分钟.
-        # 告警去重: 同 timeframe 30 分钟内只告警一次.
+        # 告警去重: 同 timeframe 4 小时内只告警一次, 避免 TG 刷屏.
         async def _ws_kline_health_check_loop():
             import pymysql as _pymysql
             from app.services.trade_notifier import get_trade_notifier as _get_notifier
 
             _STALE_THRESHOLD_MIN = {'5m': 7, '15m': 17}  # 周期 + 2min 缓冲
             _CHECK_INTERVAL_S = 5 * 60
-            _ALERT_COOLDOWN_S = 30 * 60
+            _ALERT_COOLDOWN_S = 4 * 3600  # 4 小时冷却, 避免 TG 刷屏
 
             last_alert_at: dict = {}
             in_alert_state: dict = {}
