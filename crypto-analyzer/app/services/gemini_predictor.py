@@ -80,7 +80,7 @@ def _try_snapshot() -> Optional[Dict]:
 PREDICT_MARGIN_USD = 500.0
 PREDICT_LEVERAGE = 3
 PREDICT_MAX_POSITIONS = 20
-PREDICT_HOLD_HOURS = 24                        # 1 天 (原 3 天)
+PREDICT_HOLD_HOURS = 6                         # 6 小时 (原 24h, 过长准确度下降)
 PREDICT_SL_PCT = 5.0                        # 硬 SL 5%
 PREDICT_TP_PCT = 15.0                       # 硬 TP 15%
 PREDICT_CONFIDENCE_THRESHOLD = 0.60
