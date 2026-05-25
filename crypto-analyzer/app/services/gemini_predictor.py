@@ -115,15 +115,10 @@ def _connect():
 # 数据查询 — TOP 100
 # ============================================================
 def _get_top100_symbols(conn) -> List[str]:
-    """从 top_performing_symbols 获取 TOP 100 + 白名单(rating_level=0) 交易对."""
+    """从 top_performing_symbols 获取 TOP 100 交易对."""
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT DISTINCT symbol FROM ("
-            "  SELECT symbol, rank_score FROM top_performing_symbols "
-            "  UNION "
-            "  SELECT symbol, 0 AS rank_score FROM trading_symbol_rating "
-            "  WHERE rating_level = 0"
-            ") AS combined "
+            "SELECT symbol FROM top_performing_symbols "
             "ORDER BY rank_score DESC LIMIT %s",
             (PREDICT_TOP_N,),
         )
