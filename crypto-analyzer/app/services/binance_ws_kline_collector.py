@@ -506,7 +506,7 @@ class WSKlineCollector:
             conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor, autocommit=True)
             try:
                 with conn.cursor() as cur:
-                    exchange = 'usdt_futures' if market == 'usdt' else 'coin_futures'
+                    exchange = 'binance_futures' if market == 'usdt' else 'binance_coin_futures'
                     cur.execute(
                         "SELECT MAX(open_time) AS ot FROM kline_data "
                         "WHERE timeframe=%s AND exchange=%s",
@@ -570,17 +570,20 @@ class WSKlineCollector:
         return 5
 
     async def _backfill_loop(self) -> None:
-        """每 5 分钟检查一次 DB 最新 K 线新鲜度, 有空洞则 REST 回填"""
+        """每 5 分钟并行检查一次 DB 最新 K 线新鲜度, 有空洞则 REST 回填"""
         logger.info(f"[回填] REST 回填服务已启动 (每 {BACKFILL_CHECK_INTERVAL_S/60:.0f} 分钟检查)")
         await asyncio.sleep(BACKFILL_CHECK_INTERVAL_S)  # 先给 WS 一段时间预热
         while True:
             try:
+                tasks = []
                 markets = ['usdt']
                 if self.coin_symbols:
                     markets.append('coin')
                 for market in markets:
                     for interval in BACKFILL_ALLOWED_INTERVALS:
-                        await self._check_and_backfill(market, interval)
+                        tasks.append(self._check_and_backfill(market, interval))
+                if tasks:
+                    await asyncio.gather(*tasks)
             except Exception as e:
                 logger.error(f"[回填] 循环异常: {e}")
             await asyncio.sleep(BACKFILL_CHECK_INTERVAL_S)
