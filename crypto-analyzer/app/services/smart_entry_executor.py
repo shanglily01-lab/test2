@@ -375,20 +375,28 @@ class SmartEntryExecutor:
                 # 从 data_cache 缓存读 live_trading_enabled
                 from app.services.system_settings_loader import get_setting as _get_cached_setting
                 live_trading_enabled = str(_get_cached_setting('live_trading_enabled', '0')).lower() in ('1', 'true', 'yes')
-                # 实盘同步必须是 TOP 30 交易对
+                # 实盘同步必须是 TOP 100 或白名单交易对
                 _c = pymysql.connect(**self.db_config, autocommit=True)
-                _cur = _c.cursor()
-                _cur.execute("SELECT COUNT(*) FROM top_performing_symbols WHERE symbol=%s", (symbol,))
-                in_top30 = (_cur.fetchone() or [0])[0] > 0
+                _cur = _c.cursor(pymysql.cursors.DictCursor)
+                _cur.execute(
+                    "SELECT "
+                    "  (SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1) AS in_top100,"
+                    "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s LIMIT 1) AS rating_level",
+                    (symbol, symbol),
+                )
+                _row = _cur.fetchone()
+                _in_top100 = _row and _row.get('in_top100') == 1
+                _is_whitelist = _row and _row.get('rating_level') is not None and int(_row['rating_level']) == 0
+                _allowed = _in_top100 or _is_whitelist
                 _cur.close(); _c.close()
             except Exception:
                 live_trading_enabled = False
-                in_top30 = False
+                _allowed = False
 
             if not live_trading_enabled:
                 pass  # 同步开关关闭
-            elif not in_top30:
-                logger.info(f"[同步实盘] {symbol} 不在TOP30列表，跳过实盘同步")
+            elif not _allowed:
+                logger.info(f"[同步实盘] {symbol} 不在TOP100也非白名单，跳过实盘同步")
             else:
                 try:
                     from app.services.api_key_service import APIKeyService
