@@ -30,8 +30,8 @@ from loguru import logger
 WS_BASE_USDT = "wss://fstream.binance.com/stream"
 WS_BASE_COIN = "wss://dstream.binance.com/stream"
 
-MAX_STREAMS_PER_CONN = 30           # 单连接上限 (2026-05-26: 从 50 降到 30, 减少静默不推概率)
-                                    # 5m+15m+1h × 249 symbols / 30 ≈ 25 连接, 在 300/IP 上限内安全
+MAX_STREAMS_PER_CONN = 15           # 单连接上限 (2026-05-26: 降到 15, Binance 在多 streams 时容易静默不推)
+                                    # 5m+15m × 249 symbols / 15 ≈ 34 连接, 在 300/IP 上限内安全
 SUBSCRIBE_RATE_PER_SEC = 5          # 币安建连速率限制
 PING_INTERVAL = 20                  # 主动 ping 间隔
 PING_TIMEOUT = 10                   # ping 超时
@@ -40,8 +40,10 @@ RECONNECT_BACKOFF_MAX_S = 60        # 重连退避上限
 BUFFER_MAX_SIZE = 5000              # WS buffer 上限, 防内存爆炸
 DB_FLUSH_INTERVAL_S = 1.0           # batch flush 间隔
 HEALTH_STALE_THRESHOLD_S = 120      # 健康检查阈值 (报告用)
-WS_RECV_TIMEOUT_S = 30              # 单次 recv 超时 — 30s 无消息视为僵尸 (2026-05-26: 从 90 降到 30)
-                                    # 5m kline 每 5min 才一条, 但正常情况下 markPrice 每秒推一条
+WS_RECV_TIMEOUT_S = 60              # 单次 recv 超时 — 60s 无消息视为僵尸 (2026-05-26: 从 30 回到 60)
+                                    # 只订阅 kline 流, 5m 间隔下 5 分钟才一条 closed 消息.
+                                    # 太短的 timeout 会导致假阳性僵尸重连.
+                                    # websockets 库内置 ping_interval=20 会主动保活.
 STALE_FATAL_COUNT = 5               # 连续 N 次僵尸重连仍无数据 → 严重错误日志
 WATCHDOG_STALE_CYCLES = 3           # 健康报告连续 N 次全部连接不健康 → 进程退出,触发 systemd 重启
 FLUSHER_MAX_RETRIES = 5             # 连续写库失败 N 次后丢弃 buffer 避免无限堆积
