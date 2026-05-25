@@ -374,6 +374,35 @@ Output ONLY a single valid JSON object, no markdown fence:
                        WHERE id=%s""",
                     (close_p, live_pnl, reason, reason, position['id'])
                 )
+
+                # 同步关闭对应的模拟盘 (futures_positions)
+                cur.execute(
+                    "SELECT paper_position_id FROM live_futures_positions WHERE id=%s",
+                    (position['id'],),
+                )
+                link_row = cur.fetchone()
+                paper_id = link_row and link_row.get('paper_position_id')
+                if paper_id:
+                    paper_sym = position['symbol']
+                    paper_side = position['position_side']
+                    cur.execute(
+                        """UPDATE futures_positions
+                           SET status='closed',
+                               close_time=NOW(),
+                               mark_price=%s,
+                               realized_pnl=ROUND((%s * quantity) - (entry_price * quantity), 2),
+                               unrealized_pnl=0,
+                               unrealized_pnl_pct=0,
+                               notes='synced_close:gemini_advisor已平实盘'
+                           WHERE id=%s AND status='open'""",
+                        (close_p, close_p, paper_id),
+                    )
+                    if cur.rowcount > 0:
+                        logger.info(
+                            f"[Gemini顾问] 同步关闭模拟盘 id={paper_id} "
+                            f"{paper_sym} {paper_side}"
+                        )
+
                 cur.close(); conn.close()
                 logger.info(
                     f"[Gemini顾问] 已平 id={position['id']} {position['symbol']} "
