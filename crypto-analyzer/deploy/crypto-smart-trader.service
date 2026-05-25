@@ -1,0 +1,23 @@
+[Unit]
+Description=Crypto Analyzer SmartTrader Service
+Documentation=https://github.com/your-repo/crypto-analyzer
+After=network.target mysql.service mariadb.service crypto-fastapi.service
+Wants=mysql.service mariadb.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/crypto-analyzer
+ExecStart=/usr/bin/python3 smart_trader_service.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/root/crypto-analyzer/logs/smart_trader_stdout.log
+StandardError=append:/root/crypto-analyzer/logs/smart_trader_stderr.log
+
+# 安全限制
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
