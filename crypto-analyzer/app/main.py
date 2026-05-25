@@ -640,7 +640,7 @@ async def lifespan(app: FastAPI):
         schedule.every(6).hours.do(run_gemini_predict)
         logger.info("[Gemini预测] 调度已注册, 每 6h 跑一次 (kill switch 默认 ON)")
 
-        # Gemini 市场情绪 + 川普分析 - 每 8h 调一次
+        # Gemini 市场情绪 + 川普分析 - 每 6h 调一次
         def run_gemini_sentiment():
             try:
                 from app.services.gemini_sentiment_analyzer import run_sentiment_round
@@ -649,8 +649,8 @@ async def lifespan(app: FastAPI):
                 logger.error(f"[Gemini情绪分析] 调度异常: {e}")
                 import traceback
                 traceback.print_exc()
-        schedule.every(8).hours.do(run_gemini_sentiment)
-        logger.info("[Gemini情绪分析] 调度已注册, 每 8h 跑一次 (kill switch 默认 ON)")
+        schedule.every(6).hours.do(run_gemini_sentiment)
+        logger.info("[Gemini情绪分析] 调度已注册, 每 6h 跑一次 (kill switch 默认 ON)")
 
 
         # ── 独立子进程周期任务（与 FastAPI 主进程完全隔离）──────────────────────────
