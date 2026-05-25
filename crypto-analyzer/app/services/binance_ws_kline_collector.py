@@ -54,7 +54,7 @@ BACKFILL_ALLOWED_INTERVALS = ('5m', '15m', '1h')  # 检查这些周期
 BACKFILL_LAG_THRESHOLD_S = {         # 超过此阈值则认为缺失, 触发 REST 回填
     '5m': 8 * 60,   # 8 分钟
     '15m': 20 * 60,  # 20 分钟
-    '1h': 10 * 60,   # 10 分钟 (1h 已从 WS 移除, 靠回填及时补上)
+    '1h': 65 * 60,   # 65 分钟 (1h 蜡烛每 60 分钟才收盘, 天然滞后 ~60 分)
 }
 BACKFILL_LOOKBACK_MINUTES = {        # REST 回填拉多少分钟历史
     '5m': 30,
