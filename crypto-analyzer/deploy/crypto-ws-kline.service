@@ -1,0 +1,18 @@
+[Unit]
+Description=Crypto Analyzer WS Kline Collector Service
+After=network.target mysql.service mariadb.service
+Wants=mysql.service mariadb.service
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/test2/crypto-analyzer
+ExecStart=/home/test2/crypto-analyzer/venv/bin/python3 ws_kline_collector_service.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/test2/crypto-analyzer/logs/ws_kline_stdout.log
+StandardError=append:/home/test2/crypto-analyzer/logs/ws_kline_stderr.log
+
+[Install]
+WantedBy=multi-user.target

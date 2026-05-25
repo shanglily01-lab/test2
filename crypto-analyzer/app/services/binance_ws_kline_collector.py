@@ -68,13 +68,26 @@ class WSKlineConnection:
         self.market = market
         self.name = name
         self.last_msg_at: float = 0.0
+        self.last_closed_at: float = 0.0  # 最后收到 closed K 线的时间
         self.connected_at: float = 0.0
 
     def is_healthy(self) -> bool:
-        """超过阈值没收到消息视为不健康"""
+        """超过阈值没收到消息视为不健康.
+        
+        同时检查 last_msg_at (任何消息) 和 last_closed_at (closed K 线).
+        有些僵尸连接 binance 还发着 ping/x:false 更新, last_msg_at 一直在刷新,
+        但 closed K 线不进来, DB 不更新. 此时视为不健康.
+        """
         if self.last_msg_at == 0:
             return False
-        return (time.time() - self.last_msg_at) < HEALTH_STALE_THRESHOLD_S
+        now = time.time()
+        msg_ok = (now - self.last_msg_at) < HEALTH_STALE_THRESHOLD_S
+        if self.last_closed_at > 0:
+            # 单连接 50 streams, 5m/15m 多 symbol 应该每分钟都有 close 事件
+            STALE_CLOSED_THRESHOLD_S = 300  # 5 分钟无 closed kline → 数据肯定卡了
+            data_ok = (now - self.last_closed_at) < STALE_CLOSED_THRESHOLD_S
+            return msg_ok and data_ok
+        return msg_ok
 
     async def run_forever(self) -> None:
         """长跑, 自愈重连 (建空连接 + SUBSCRIBE 帧订阅 + recv 超时检测僵尸)
@@ -154,6 +167,7 @@ class WSKlineConnection:
             if not k or not k.get('x'):
                 # 不是 closed K 线, 直接丢弃 (99% 消息走这里)
                 return
+            self.last_closed_at = time.time()
             symbol = k['s']
             interval = k['i']
             kline = {
