@@ -1,18 +1,13 @@
 """
-Big4市场状态监控器（操纵子原理 / lac Operon）
+Big4市场状态监控器（仅记录告警，不修改系统设置）
 
-类比大肠杆菌lac操纵子：根据环境信号（Big4趋势分布）自动切换策略模式，
-无需人工手动切换 allow_long / allow_short 开关。
+检测Big4过去48小时趋势信号分布，仅输出日志和Telegram通知，
+不再自动覆写 allow_long/allow_short 开关。
 
-状态判定逻辑（基于big4_trend_history过去48小时的信号分布）：
-- BULL状态  （多头信号占比 >=70%）→ allow_long=1, allow_short=0
-- BEAR状态  （空头信号占比 >=70%）→ allow_long=0, allow_short=1
-- SIDEWAYS状态（多空各占一席）   → allow_long=1, allow_short=1
-
-设计哲学：
-  生物体中，lac操纵子在乳糖存在时自动开启乳糖代谢基因，
-  葡萄糖充足时自动关闭，环境信号直接驱动基因开关，不需要外部干预。
-  本模块让超级大脑同样具备"感知环境→自动切换代谢模式"的能力。
+状态判定逻辑（仅用于日志/通知参考）：
+- BULL状态    （多头信号占比 >=70%）-> 建议 allow_short=0
+- BEAR状态    （空头信号占比 >=70%）-> 建议 allow_long=0
+- SIDEWAYS状态（多空各占一席）       -> 建议 allow_long=1, allow_short=1
 """
 
 import pymysql
@@ -23,10 +18,10 @@ from typing import Dict, Optional
 
 class Big4RegimeMonitor:
     """
-    Big4市场状态监控器
+    Big4市场状态监控器（仅记录告警，不修改系统设置）
 
-    基于Big4过去48小时趋势信号的分布，判断当前整体市场状态，
-    并自动更新system_settings中的allow_long/allow_short开关。
+    基于Big4过去48小时趋势信号的分布，检测市场状态并输出日志。
+    不再自动覆写 allow_long/allow_short 开关。
     建议每小时运行一次（由调用方决定频率）。
     """
 
@@ -118,62 +113,29 @@ class Big4RegimeMonitor:
 
     def apply_regime(self, regime_result: Dict) -> bool:
         """
-        根据检测到的市场状态更新system_settings（仅在状态切换时写库）
+        记录市场状态变化（仅供日志/通知参考，不修改系统设置）
 
-        BULL     → allow_long=1, allow_short=0
-        BEAR     → allow_long=0, allow_short=1
-        SIDEWAYS → allow_long=1, allow_short=1
+        Args:
+            regime_result: detect_regime 的返回结果
 
         Returns:
-            bool: 状态是否发生切换
+            bool: 状态是否发生变化
         """
         regime = regime_result['regime']
 
         if regime == self.current_regime:
-            return False  # 状态无变化，不写库
+            return False  # 状态无变化
 
-        regime_settings = {
-            self.REGIME_BULL:     (1, 0),
-            self.REGIME_BEAR:     (0, 1),
-            self.REGIME_SIDEWAYS: (1, 1),
-        }
-        allow_long, allow_short = regime_settings[regime]
+        old_regime = self.current_regime or '初始化'
+        self.current_regime = regime
+        self.last_check_time = datetime.now()
 
-        conn = self._get_connection()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO system_settings (setting_key, setting_value) VALUES ('allow_long', %s)"
-                " ON DUPLICATE KEY UPDATE setting_value = %s",
-                (str(allow_long), str(allow_long))
-            )
-            cursor.execute(
-                "INSERT INTO system_settings (setting_key, setting_value) VALUES ('allow_short', %s)"
-                " ON DUPLICATE KEY UPDATE setting_value = %s",
-                (str(allow_short), str(allow_short))
-            )
-            conn.commit()
-            cursor.close()
-
-            old_regime = self.current_regime or '初始化'
-            self.current_regime = regime
-            self.last_check_time = datetime.now()
-
-            logger.warning(
-                f"🧬 [BIG4-REGIME] 市场状态切换: {old_regime} → {regime} | "
-                f"{regime_result['reason']} | "
-                f"allow_long={allow_long} allow_short={allow_short}"
-            )
-            return True
-        except Exception as e:
-            logger.error(f"❌ [BIG4-REGIME] 更新system_settings失败: {e}")
-            try:
-                conn.rollback()
-            except Exception:
-                pass
-            return False
-        finally:
-            conn.close()
+        logger.warning(
+            f"🧬 [BIG4-REGIME] 市场状态切换: {old_regime} → {regime} | "
+            f"{regime_result['reason']} | "
+            f"(仅记录，未修改 allow_long/allow_short)"
+        )
+        return True
 
     def run_detection(self) -> Dict:
         """

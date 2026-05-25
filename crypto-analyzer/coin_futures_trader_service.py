@@ -1409,16 +1409,15 @@ class CoinFuturesTraderService:
 
     def _check_profit_and_auto_disable(self, profit_threshold=200.0, window_hours=6, check_interval_hours=4) -> bool:
         """
-        盈利熔断：统计窗口内总盈利超过阈值后自动禁止开仓
+        盈利熔断：仅告警+跳过本轮开仓，不修改系统设置
 
         逻辑：
         - 每 check_interval_hours 小时检测一次（默认4小时）
         - 检查最近 window_hours 小时已平仓PNL总和（默认6小时）
-        - 若超过 profit_threshold（币本位默认200U），说明刚经历大行情，市场随时可能反转
-        - 立即将 coin_futures_trading_enabled 设为 0，由用户手动重新开启
+        - 若超过 profit_threshold（币本位默认200U），发通知但不动系统设置
 
         Returns:
-            True = 已触发熔断（调用方应停止本轮开仓）
+            True = 已触发（调用方跳过本轮开仓）
         """
         # 每 check_interval_hours 小时检测一次，避免每次扫描都查询
         last_check = getattr(self, '_profit_guard_last_check', None)
@@ -1438,21 +1437,15 @@ class CoinFuturesTraderService:
                   AND close_time >= %s
             """, (self.account_id, since))
             pnl_6h = float(cursor.fetchone()[0])
+            cursor.close()
+            conn.close()
 
-            logger.info(f"[PROFIT-GUARD] 过去{window_hours}h盈利: {pnl_6h:+.2f}U | 熔断阈值: {profit_threshold}U")
+            logger.info(f"[PROFIT-GUARD] 过去{window_hours}h盈利: {pnl_6h:+.2f}U | 阈值: {profit_threshold}U")
 
             if pnl_6h >= profit_threshold:
-                cursor.execute("""
-                    UPDATE system_settings
-                    SET setting_value = '0',
-                        description = CONCAT('盈利熔断自动禁止: 过去6h盈利=', %s, 'U，请手动重新开启'),
-                        updated_at = NOW()
-                    WHERE setting_key = 'coin_futures_trading_enabled'
-                """, (round(pnl_6h, 1),))
-                cursor.close()
                 logger.warning(
                     f"[PROFIT-GUARD] 盈利熔断触发! 过去{window_hours}h盈利={pnl_6h:+.1f}U "
-                    f"超过阈值{profit_threshold}U => coin_futures_trading_enabled=0，请手动重新开启"
+                    f"超过阈值{profit_threshold}U (仅告警，未关闭交易)"
                 )
                 _last_notified = getattr(self, '_profit_guard_notified_at', None)
                 _cooldown_ok = (_last_notified is None or
@@ -1460,17 +1453,16 @@ class CoinFuturesTraderService:
                 if _cooldown_ok and hasattr(self, 'telegram_notifier') and self.telegram_notifier:
                     try:
                         self.telegram_notifier.send_message(
-                            f"🔴 【币本位盈利熔断】已触发\n\n"
+                            f"🟡 【币本位盈利熔断】已触发（仅告警）\n\n"
                             f"过去{window_hours}h盈利: {pnl_6h:+.1f}U\n"
                             f"阈值: {profit_threshold}U\n"
-                            f"币本位交易已自动停止，请手动重新开启"
+                            f"已跳过本轮扫描，系统设置未修改"
                         )
                         self._profit_guard_notified_at = datetime.utcnow()
                     except Exception:
                         pass
                 return True
 
-            cursor.close()
             self._profit_guard_notified_at = None  # 条件解除，重置冷却
             return False
 
@@ -1480,16 +1472,15 @@ class CoinFuturesTraderService:
 
     def _check_loss_and_auto_disable(self, loss_threshold=100.0, window_hours=3, check_interval_hours=3) -> bool:
         """
-        亏损熔断：统计窗口内总亏损超过阈值后自动禁止开仓
+        亏损熔断：仅告警+跳过本轮开仓，不修改系统设置
 
         逻辑：
         - 每 check_interval_hours 小时检测一次（默认3小时）
         - 检查最近 window_hours 小时已平仓PNL总和（默认3小时）
-        - 若亏损超过 loss_threshold（币本位默认100U），自动禁止开仓
-        - 立即将 coin_futures_trading_enabled 设为 0，由用户手动重新开启
+        - 若亏损超过 loss_threshold（币本位默认100U），发通知但不动系统设置
 
         Returns:
-            True = 已触发熔断（调用方应停止本轮开仓）
+            True = 已触发（调用方跳过本轮开仓）
         """
         last_check = getattr(self, '_loss_guard_last_check', None)
         if last_check and (datetime.utcnow() - last_check).total_seconds() < check_interval_hours * 3600:
@@ -1508,21 +1499,15 @@ class CoinFuturesTraderService:
                   AND close_time >= %s
             """, (self.account_id, since))
             pnl = float(cursor.fetchone()[0])
+            cursor.close()
+            conn.close()
 
             logger.info(f"[LOSS-GUARD] 过去{window_hours}h盈亏: {pnl:+.2f}U | 亏损熔断阈值: -{loss_threshold}U")
 
             if pnl <= -loss_threshold:
-                cursor.execute("""
-                    UPDATE system_settings
-                    SET setting_value = '0',
-                        description = CONCAT('亏损熔断自动禁止: 过去3h亏损=', %s, 'U，请手动重新开启'),
-                        updated_at = NOW()
-                    WHERE setting_key = 'coin_futures_trading_enabled'
-                """, (round(pnl, 1),))
-                cursor.close()
                 logger.warning(
                     f"[LOSS-GUARD] 亏损熔断触发! 过去{window_hours}h亏损={pnl:+.1f}U "
-                    f"超过阈值-{loss_threshold}U => coin_futures_trading_enabled=0，请手动重新开启"
+                    f"超过阈值-{loss_threshold}U (仅告警，未关闭交易)"
                 )
                 _last_notified = getattr(self, '_loss_guard_notified_at', None)
                 _cooldown_ok = (_last_notified is None or
@@ -1530,10 +1515,10 @@ class CoinFuturesTraderService:
                 if _cooldown_ok and hasattr(self, 'telegram_notifier') and self.telegram_notifier:
                     try:
                         self.telegram_notifier.send_message(
-                            f"🔴 【币本位亏损熔断】已触发\n\n"
+                            f"🟡 【币本位亏损熔断】已触发（仅告警）\n\n"
                             f"过去{window_hours}h亏损: {pnl:+.1f}U\n"
                             f"阈值: -{loss_threshold}U\n"
-                            f"币本位交易已自动停止，请手动重新开启"
+                            f"已跳过本轮扫描，系统设置未修改"
                         )
                         self._loss_guard_notified_at = datetime.utcnow()
                     except Exception:
