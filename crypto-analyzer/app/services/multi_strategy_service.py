@@ -331,15 +331,19 @@ class MultiStrategyService:
             return default
 
     def _get_candidate_symbols(self, min_abs_change: float = 5.0) -> List[str]:
-        """从 price_stats_24h 过滤出有明显波动的 USDT 交易对"""
+        """从 price_stats_24h 过滤出有明显波动的 USDT 交易对, 同时包含白名单(rating_level=0)"""
         try:
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute("""
-                SELECT symbol FROM price_stats_24h
-                WHERE symbol LIKE '%%/USDT'
-                  AND ABS(change_24h) >= %s
-                ORDER BY ABS(change_24h) DESC
+                SELECT DISTINCT symbol FROM (
+                  SELECT symbol, ABS(change_24h) AS score FROM price_stats_24h
+                  WHERE symbol LIKE '%%/USDT'
+                    AND ABS(change_24h) >= %s
+                  UNION
+                  SELECT symbol, 999 AS score FROM trading_symbol_rating
+                  WHERE rating_level = 0 AND symbol LIKE '%%/USDT'
+                ) combined ORDER BY score DESC
             """, (min_abs_change,))
             rows = cur.fetchall()
             cur.close(); conn.close()
@@ -908,13 +912,18 @@ class MultiStrategyService:
     # ─────────────────────────────────────────
 
     def _get_small_cap_symbols(self) -> List[str]:
-        """从 price_stats_24h 获取小中市值 USDT 交易对（排除大市值）"""
+        """从 price_stats_24h 获取小中市值 USDT 交易对（排除大市值）, 同时包含白名单(rating_level=0)"""
         try:
             conn = self._get_conn()
             cur = conn.cursor()
-            cur.execute(
-                "SELECT symbol FROM price_stats_24h WHERE symbol LIKE '%/USDT'"
-            )
+            cur.execute("""
+                SELECT DISTINCT symbol FROM (
+                  SELECT symbol FROM price_stats_24h WHERE symbol LIKE '%/USDT'
+                  UNION
+                  SELECT symbol FROM trading_symbol_rating
+                  WHERE rating_level = 0 AND symbol LIKE '%/USDT'
+                ) combined
+            """)
             rows = cur.fetchall()
             cur.close(); conn.close()
             return [
@@ -1255,7 +1264,7 @@ class MultiStrategyService:
             return None
 
     def _s9_get_top30_symbols(self) -> List[str]:
-        """S9 候选池: 24h 成交额降序 LIMIT 100,排除头部 5 大币 + 证券类。
+        """S9 候选池: 24h 成交额降序 LIMIT 100 + 白名单, 排除头部 5 大币 + 证券类。
 
         历史名字保留是为了向下兼容(其它地方都按这个名字调),实际不再硬性截断到 30。
         """
@@ -1269,11 +1278,14 @@ class MultiStrategyService:
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute("""
-                SELECT symbol, volume_24h FROM price_stats_24h
-                WHERE symbol LIKE '%%/USDT'
-                  AND volume_24h >= %s
-                ORDER BY volume_24h DESC
-                LIMIT 100
+                SELECT DISTINCT symbol, score FROM (
+                  SELECT symbol, volume_24h AS score FROM price_stats_24h
+                  WHERE symbol LIKE '%%/USDT'
+                    AND volume_24h >= %s
+                  UNION
+                  SELECT symbol, 999999999 AS score FROM trading_symbol_rating
+                  WHERE rating_level = 0 AND symbol LIKE '%%/USDT'
+                ) combined ORDER BY score DESC LIMIT 100
             """, (self.S9_MIN_QUOTE_VOLUME,))
             rows = cur.fetchall()
             cur.close(); conn.close()
