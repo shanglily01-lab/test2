@@ -28,8 +28,9 @@ from app.services.binance_ws_kline_collector import WSKlineCollector
 from app.utils.pid_lock import acquire_pid_lock
 
 
-# Phase 1: 只采 U本位 5m 和 15m
-PHASE1_INTERVALS = ['5m', '15m']
+# Phase 1: 采 U本位 5m, 15m 和 1h
+# 2026-05-26: 加入 1h, 之前 1h 依赖 REST 轮询经常滞后 1h+
+PHASE1_INTERVALS = ['5m', '15m', '1h']
 PHASE1_INCLUDE_COIN = False  # Phase 1 不采币本位
 HEARTBEAT_INTERVAL_S = 3600  # 主循环 sleep 间隔
 

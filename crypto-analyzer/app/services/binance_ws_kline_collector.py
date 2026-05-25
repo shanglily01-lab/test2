@@ -30,8 +30,8 @@ from loguru import logger
 WS_BASE_USDT = "wss://fstream.binance.com/stream"
 WS_BASE_COIN = "wss://dstream.binance.com/stream"
 
-MAX_STREAMS_PER_CONN = 50           # 单连接上限. 200/100 实测都被 Binance 静默不推, 50 试水
-                                    # 5m+15m × 249 symbols / 50 = 10 个连接, 在 300/IP 上限内安全
+MAX_STREAMS_PER_CONN = 30           # 单连接上限 (2026-05-26: 从 50 降到 30, 减少静默不推概率)
+                                    # 5m+15m+1h × 249 symbols / 30 ≈ 25 连接, 在 300/IP 上限内安全
 SUBSCRIBE_RATE_PER_SEC = 5          # 币安建连速率限制
 PING_INTERVAL = 20                  # 主动 ping 间隔
 PING_TIMEOUT = 10                   # ping 超时
@@ -40,11 +40,25 @@ RECONNECT_BACKOFF_MAX_S = 60        # 重连退避上限
 BUFFER_MAX_SIZE = 5000              # WS buffer 上限, 防内存爆炸
 DB_FLUSH_INTERVAL_S = 1.0           # batch flush 间隔
 HEALTH_STALE_THRESHOLD_S = 120      # 健康检查阈值 (报告用)
-WS_RECV_TIMEOUT_S = 90              # 单次 recv 超时 — 90s 无消息视为僵尸, 主动断开重连
-                                    # markPrice@1s 正常每秒推一条, 90s 一条都没有必有问题
+WS_RECV_TIMEOUT_S = 30              # 单次 recv 超时 — 30s 无消息视为僵尸 (2026-05-26: 从 90 降到 30)
+                                    # 5m kline 每 5min 才一条, 但正常情况下 markPrice 每秒推一条
 STALE_FATAL_COUNT = 5               # 连续 N 次僵尸重连仍无数据 → 严重错误日志
 WATCHDOG_STALE_CYCLES = 3           # 健康报告连续 N 次全部连接不健康 → 进程退出,触发 systemd 重启
 FLUSHER_MAX_RETRIES = 5             # 连续写库失败 N 次后丢弃 buffer 避免无限堆积
+
+# ── REST 回填 ──
+BACKFILL_CHECK_INTERVAL_S = 5 * 60   # 每 5 分钟检查 DB 新鲜度
+BACKFILL_ALLOWED_INTERVALS = ('5m', '15m', '1h')  # 检查这些周期
+BACKFILL_LAG_THRESHOLD_S = {         # 超过此阈值则认为缺失, 触发 REST 回填
+    '5m': 8 * 60,   # 8 分钟
+    '15m': 20 * 60,  # 20 分钟
+    '1h': 65 * 60,   # 65 分钟
+}
+BACKFILL_LOOKBACK_MINUTES = {        # REST 回填拉多少分钟历史
+    '5m': 30,
+    '15m': 120,
+    '1h': 360,
+}
 
 
 # WS 消息回调签名: (symbol: str, interval: str, kline_dict: dict, market: str) -> Awaitable[None]
@@ -434,6 +448,9 @@ class WSKlineCollector:
         # 5. 启动健康度报告
         asyncio.create_task(self._health_report_loop())
 
+        # 6. 启动 REST 回填 (定时检查 + 自动补漏)
+        asyncio.create_task(self._backfill_loop())
+
         logger.info(
             f"WS K线采集已启动: {len(self.connections)} 连接, "
             f"U本位 {len(self.usdt_symbols)} symbols, "
@@ -479,3 +496,89 @@ class WSKlineCollector:
                     os._exit(1)  # 强制退出, systemd Restart=on-failure 会重启
             else:
                 consecutive_all_dead = 0
+
+    async def _check_and_backfill(self, market: str, interval: str) -> None:
+        """检查单个市场+周期的 DB 新鲜度, 落后则 REST 回填"""
+        try:
+            import pymysql
+            conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor, autocommit=True)
+            try:
+                with conn.cursor() as cur:
+                    exchange = 'usdt_futures' if market == 'usdt' else 'coin_futures'
+                    cur.execute(
+                        "SELECT MAX(open_time) AS ot FROM kline_data "
+                        "WHERE timeframe=%s AND exchange=%s",
+                        (interval, exchange),
+                    )
+                    row = cur.fetchone()
+            finally:
+                conn.close()
+
+            if not row or not row['ot']:
+                logger.info(f"[回填] {market} {interval}: DB 无数据, 跳过回填检查")
+                return
+
+            latest_ot = row['ot'] / 1000  # ms → s
+            age_seconds = time.time() - latest_ot
+            threshold = BACKFILL_LAG_THRESHOLD_S.get(interval, 600)
+
+            if age_seconds < threshold:
+                return  # 数据够新, 不需要回填
+
+            logger.warning(
+                f"[回填] {market} {interval} 数据滞后 {age_seconds/60:.0f} 分钟 "
+                f"(阈值 {threshold/60:.0f} 分钟), 触发 REST 回填"
+            )
+
+            # 计算需要拉多少历史
+            lookback_minutes = BACKFILL_LOOKBACK_MINUTES.get(interval, 60)
+            limit = max(2, int(lookback_minutes / self._interval_to_minutes(interval)) + 1)
+
+            symbols = self.usdt_symbols if market == 'usdt' else self.coin_symbols
+            if not symbols:
+                return
+
+            from app.collectors.smart_futures_collector import SmartFuturesCollector
+            hydrator = SmartFuturesCollector(self.db_config)
+            loop = asyncio.get_event_loop()
+
+            if market == 'usdt':
+                klines = await hydrator.collect_batch(symbols, interval=interval, limit=limit)
+            else:
+                klines = await hydrator.collect_coin_batch(symbols, interval=interval, limit=limit)
+
+            if klines:
+                # save_klines 是同步 DB 操作, 放 executor 避免阻塞 event loop
+                saved = await loop.run_in_executor(None, hydrator.save_klines, klines)
+                logger.info(f"[回填] {market} {interval}: REST 采集 {len(klines)} 条, 落盘 {saved} 条")
+            else:
+                logger.warning(f"[回填] {market} {interval}: REST 采集返回空")
+        except Exception as e:
+            logger.error(f"[回填] {market} {interval} 异常: {e}")
+
+    @staticmethod
+    def _interval_to_minutes(interval: str) -> int:
+        """'5m'→5, '15m'→15, '1h'→60, '4h'→240, '1d'→1440"""
+        if interval.endswith('m'):
+            return int(interval[:-1])
+        elif interval.endswith('h'):
+            return int(interval[:-1]) * 60
+        elif interval.endswith('d'):
+            return int(interval[:-1]) * 1440
+        return 5
+
+    async def _backfill_loop(self) -> None:
+        """每 5 分钟检查一次 DB 最新 K 线新鲜度, 有空洞则 REST 回填"""
+        logger.info(f"[回填] REST 回填服务已启动 (每 {BACKFILL_CHECK_INTERVAL_S/60:.0f} 分钟检查)")
+        await asyncio.sleep(BACKFILL_CHECK_INTERVAL_S)  # 先给 WS 一段时间预热
+        while True:
+            try:
+                markets = ['usdt']
+                if self.coin_symbols:
+                    markets.append('coin')
+                for market in markets:
+                    for interval in BACKFILL_ALLOWED_INTERVALS:
+                        await self._check_and_backfill(market, interval)
+            except Exception as e:
+                logger.error(f"[回填] 循环异常: {e}")
+            await asyncio.sleep(BACKFILL_CHECK_INTERVAL_S)

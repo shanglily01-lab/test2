@@ -65,10 +65,8 @@ class SmartCollectorService:
         self.collector = SmartFuturesCollector(db_config)
 
         # 检查间隔 (秒)
-        # 2026-05-21: WS 阶段性免挂, 缩短到 3 分钟保证时效性;
-        # should_collect_interval 智能判断只采到点的周期, 250 req/3min ≈ 83 req/min,
-        # 仍远低于 2400 weight/min 限制, 安全.
-        self.interval = 180  # 3 分钟
+        # 2026-05-26: WS 现在覆盖 5m+15m+1h, REST 降为兜底只做长周期补漏
+        self.interval = 600  # 10 分钟
 
         logger.info("🧠 智能数据采集服务初始化完成")
         logger.info(f"检查间隔: {self.interval}秒 (5分钟)")
