@@ -1,20 +1,16 @@
 """
-Gemini 实盘持仓顾问 (2026-05-17)
+Gemini 持仓顾问 (2026-05-26 改为模拟仓)
 
 功能:
-  - 扫描 live_futures_positions 中 U本位 (account_id 对应 user_api_keys.id)
-    status=OPEN 且持仓 >= 4 小时 的实盘单
+  - 扫描 futures_positions 中 U本位
+    status=open 且持仓 >= 2 小时 的模拟单
   - 喂给 Gemini: 持仓数据 + 近 4h 15m K线 + Big4 当前评分
   - Gemini 三选一: hold / observe / sell
-  - "sell" 自动通过 BinanceFuturesEngine.close_position_direct 真实平仓
+  - "sell" 关闭模拟仓，同步机制自动同步到实盘平仓
   - 每 1 小时检查一次 (内部去重,同 position 1h 内不重复问)
 
 开关:
   system_settings.gemini_position_advisor_enabled = 1 启用 (默认 0)
-  + live_trading_enabled = 1 (实盘开仓开关) 才会真正动实盘开仓
-  + live_close_enabled = 1 (实盘平仓开关) 才会真正动实盘平仓
-
-设计文档: design/系统设计文档.md (S9 Gemini + 持仓顾问独立模块)
 """
 from __future__ import annotations
 
@@ -22,7 +18,6 @@ import datetime
 import json
 import os
 import time
-from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
 import pymysql
@@ -32,12 +27,12 @@ from loguru import logger
 
 GEMINI_TIMEOUT_MS = 180_000
 PER_POSITION_INTERVAL_S = 3600  # 同 position 1 小时内不重复问
-MIN_HOLD_HOURS = 4              # 持仓不满 4h 不查
+MIN_HOLD_HOURS = 2              # 持仓不满 2h 不查
 GEMINI_PER_CALL_DELAY_S = 1.0   # 防 Gemini rate limit
 
 
 class GeminiPositionAdvisor:
-    """实盘持仓 Gemini 顾问"""
+    """模拟仓 Gemini 顾问：问 Gemini 是否继续持有，sell 则关模拟仓自动同步实盘"""
 
     def __init__(self, db_config: dict):
         self.db_config = db_config
@@ -64,22 +59,6 @@ class GeminiPositionAdvisor:
                 return False
             val = str(row.get('setting_value', '0')).strip().lower()
             return val in ('1', 'true', 'yes', 'on')
-        except Exception:
-            return False
-
-    def _is_close_enabled(self) -> bool:
-        try:
-            conn = self._get_conn()
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT setting_value FROM system_settings "
-                "WHERE setting_key='live_close_enabled' LIMIT 1"
-            )
-            row = cur.fetchone()
-            cur.close(); conn.close()
-            if not row:
-                return False
-            return str(row.get('setting_value', '0')).strip().lower() in ('1', 'true', 'yes', 'on')
         except Exception:
             return False
 
@@ -122,23 +101,22 @@ class GeminiPositionAdvisor:
 
     def get_eligible_positions(self) -> List[Dict]:
         """
-        查 U本位实盘 OPEN 持仓 >= 4h 的所有单。
-        通过 join user_api_keys.exchange='binance' 过滤掉币本位 (币本位用不同 exchange)。
+        查模拟仓 (futures_positions) U本位 OPEN >= 2h 的所有单。
+        只查 account_id=2 (U本位模拟盘)。
         """
         try:
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute(
                 """
-                SELECT lp.id, lp.account_id, lp.symbol, lp.position_side, lp.entry_price,
-                       lp.quantity, lp.leverage, lp.margin, lp.open_time, lp.source,
-                       TIMESTAMPDIFF(MINUTE, lp.open_time, NOW())/60.0 AS hold_hours
-                FROM live_futures_positions lp
-                JOIN user_api_keys k ON lp.account_id = k.id
-                WHERE lp.status='OPEN'
-                  AND k.exchange='binance'
-                  AND TIMESTAMPDIFF(HOUR, lp.open_time, NOW()) >= %s
-                ORDER BY lp.open_time ASC
+                SELECT id, account_id, symbol, position_side, entry_price,
+                       quantity, leverage, margin, open_time, source,
+                       TIMESTAMPDIFF(MINUTE, open_time, NOW())/60.0 AS hold_hours
+                FROM futures_positions
+                WHERE status='open'
+                  AND account_id = 2
+                  AND TIMESTAMPDIFF(HOUR, open_time, NOW()) >= %s
+                ORDER BY open_time ASC
                 """,
                 (MIN_HOLD_HOURS,)
             )
@@ -146,7 +124,7 @@ class GeminiPositionAdvisor:
             cur.close(); conn.close()
             return rows
         except Exception as e:
-            logger.error(f"[Gemini顾问] 查实盘持仓失败: {e}")
+            logger.error(f"[Gemini顾问] 查模拟仓失败: {e}")
             return []
 
     def _get_current_price(self, symbol: str) -> Optional[float]:
@@ -329,105 +307,60 @@ Output ONLY a single valid JSON object, no markdown fence:
     # ────────────────────────────────────────────────────────
 
     def _close_live_position(self, position: dict, reason: str) -> bool:
-        """通过 BinanceFuturesEngine 真实平仓 + 更新 live_futures_positions"""
-        if not self._is_close_enabled():
-            logger.warning(
-                f"[Gemini顾问] live_close_enabled=0,不平 "
-                f"id={position['id']} {position['symbol']} {position['position_side']}"
-            )
-            return False
+        """关闭模拟仓 (futures_positions)，同步机制自动同步到实盘平仓"""
         try:
-            from app.services.api_key_service import APIKeyService
-            from app.trading.binance_futures_engine import BinanceFuturesEngine
-            svc = APIKeyService(self.db_config)
-            keys = svc.get_all_active_api_keys('binance')
-            target_key = next((k for k in keys if k['id'] == position['account_id']), None)
-            if not target_key:
-                logger.error(
-                    f"[Gemini顾问] account_id={position['account_id']} 无活跃 API key,无法平仓"
-                )
-                return False
+            conn = self._get_conn()
+            cur = conn.cursor()
 
-            engine = BinanceFuturesEngine(
-                self.db_config,
-                api_key=target_key['api_key'],
-                api_secret=target_key['api_secret'],
-            )
-            result = engine.close_position_direct(
-                symbol=position['symbol'],
-                position_side=position['position_side'],
-                quantity=Decimal(str(position['quantity'])),
-                entry_price=Decimal(str(position['entry_price'])),
-                reason=reason,
-            )
-            if result.get('success'):
-                # 更新 live_futures_positions
-                close_p = result.get('close_price', 0)
-                live_pnl = result.get('realized_pnl', 0)
-                conn = self._get_conn()
-                cur = conn.cursor()
-                cur.execute(
-                    """UPDATE live_futures_positions
-                       SET status='CLOSED', close_time=NOW(),
-                           close_price=%s, realized_pnl=%s, close_reason=%s,
-                           notes=CONCAT(IFNULL(notes,''),'|gemini_advisor:',%s)
-                       WHERE id=%s""",
-                    (close_p, live_pnl, reason, reason, position['id'])
-                )
-
-                # 同步关闭对应的模拟盘 (futures_positions)
-                cur.execute(
-                    "SELECT paper_position_id FROM live_futures_positions WHERE id=%s",
-                    (position['id'],),
-                )
-                link_row = cur.fetchone()
-                paper_id = link_row and link_row.get('paper_position_id')
-                if paper_id:
-                    paper_sym = position['symbol']
-                    paper_side = position['position_side']
-                    cur.execute(
-                        """UPDATE futures_positions
-                           SET status='closed',
-                               close_time=NOW(),
-                               mark_price=%s,
-                               realized_pnl=ROUND((%s * quantity) - (entry_price * quantity), 2),
-                               unrealized_pnl=0,
-                               unrealized_pnl_pct=0,
-                               notes='synced_close:gemini_advisor已平实盘'
-                           WHERE id=%s AND status='open'""",
-                        (close_p, close_p, paper_id),
-                    )
-                    if cur.rowcount > 0:
-                        logger.info(
-                            f"[Gemini顾问] 同步关闭模拟盘 id={paper_id} "
-                            f"{paper_sym} {paper_side}"
-                        )
-
+            # 获取当前价格
+            current_price = self._get_current_price(position['symbol'])
+            if not current_price:
+                logger.warning(f"[Gemini顾问] {position['symbol']} 取价失败，跳过平仓")
                 cur.close(); conn.close()
-                logger.info(
-                    f"[Gemini顾问] 已平 id={position['id']} {position['symbol']} "
-                    f"{position['position_side']} pnl={live_pnl}"
-                )
-                # Telegram
-                try:
-                    from app.services.trade_notifier import get_trade_notifier
-                    notif = get_trade_notifier()
-                    if notif:
-                        notif.send_message(
-                            f"[Gemini顾问 SELL] {position['symbol']} {position['position_side']} "
-                            f"已平仓\nentry={position['entry_price']} "
-                            f"close={close_p} pnl={live_pnl}U\nreason={reason[:60]}"
-                        )
-                except Exception:
-                    pass
-                return True
-            else:
-                logger.error(
-                    f"[Gemini顾问] 平仓失败 id={position['id']}: {result.get('error', '')}"
-                )
                 return False
+
+            # 更新模拟仓为 closed
+            cur.execute(
+                """UPDATE futures_positions
+                   SET status='closed',
+                       close_time=NOW(),
+                       mark_price=%s,
+                       realized_pnl=ROUND((%s * quantity) - (entry_price * quantity), 2),
+                       unrealized_pnl=0,
+                       unrealized_pnl_pct=0,
+                       notes=CONCAT(IFNULL(notes,''),'|gemini_advisor:',%s)
+                   WHERE id=%s AND status='open'""",
+                (current_price, current_price, reason, position['id'])
+            )
+
+            if cur.rowcount == 0:
+                logger.warning(f"[Gemini顾问] 模拟仓 id={position['id']} 已非 open,跳过")
+                cur.close(); conn.close()
+                return False
+
+            cur.close(); conn.close()
+
+            logger.info(
+                f"[Gemini顾问] 模拟仓已关 id={position['id']} {position['symbol']} "
+                f"{position['position_side']} (同步机制将自动平实盘)"
+            )
+
+            # Telegram
+            try:
+                from app.services.trade_notifier import get_trade_notifier
+                notif = get_trade_notifier()
+                if notif:
+                    notif.send_message(
+                        f"[Gemini顾问 SELL] {position['symbol']} {position['position_side']} "
+                        f"模拟仓已平，同步机制将自动平实盘\n"
+                        f"reason={reason[:60]}"
+                    )
+            except Exception:
+                pass
+            return True
+
         except Exception as e:
-            logger.error(f"[Gemini顾问] 平仓异常 id={position['id']}: {e}")
+            logger.error(f"[Gemini顾问] 关模拟仓异常 id={position['id']}: {e}")
             return False
 
     # ────────────────────────────────────────────────────────
@@ -449,7 +382,7 @@ Output ONLY a single valid JSON object, no markdown fence:
         if not positions:
             return stats
 
-        logger.info(f"[Gemini顾问] tick 开始,候选 {len(positions)} 实盘单 >= 4h")
+        logger.info(f"[Gemini顾问] tick 开始,候选 {len(positions)} 模拟单 >= {MIN_HOLD_HOURS}h")
 
         now = time.time()
         for pos in positions:
