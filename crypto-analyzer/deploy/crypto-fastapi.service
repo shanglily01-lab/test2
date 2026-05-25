@@ -1,24 +1,18 @@
 [Unit]
 Description=Crypto Analyzer FastAPI Web Service
-Documentation=https://github.com/your-repo/crypto-analyzer
 After=network.target mysql.service mariadb.service
 Wants=mysql.service mariadb.service
 
 [Service]
 Type=simple
-User=root
-Group=root
-WorkingDirectory=/root/crypto-analyzer
-ExecStart=/usr/bin/python3 -m app.main
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/test2/crypto-analyzer
+ExecStart=/home/test2/crypto-analyzer/venv/bin/python3 -m app.main
 Restart=always
 RestartSec=5
-StandardOutput=append:/root/crypto-analyzer/logs/fastapi_stdout.log
-StandardError=append:/root/crypto-analyzer/logs/fastapi_stderr.log
-
-# 安全限制
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=full
+StandardOutput=append:/home/test2/crypto-analyzer/logs/fastapi_stdout.log
+StandardError=append:/home/test2/crypto-analyzer/logs/fastapi_stderr.log
 
 [Install]
 WantedBy=multi-user.target

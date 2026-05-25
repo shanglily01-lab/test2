@@ -7,7 +7,7 @@ set -e
 # 用法: sudo bash deploy/install_services.sh
 # ============================================================
 
-PROJECT_DIR="/root/crypto-analyzer"
+PROJECT_DIR="/home/test2/crypto-analyzer"
 
 echo "========================================"
 echo "安装 systemd 服务..."
@@ -19,6 +19,9 @@ cp "$PROJECT_DIR/deploy/crypto-smart-trader.service" /etc/systemd/system/
 
 # 2. 确保 logs 目录存在
 mkdir -p "$PROJECT_DIR/logs"
+
+# 修复权限，让 ec2-user 有写权限
+chown -R ec2-user:ec2-user "$PROJECT_DIR/logs" 2>/dev/null || true
 
 # 3. 重新加载 systemd
 systemctl daemon-reload
