@@ -51,7 +51,7 @@ tailwind.config = {
 
 <div id="toast"></div>
 
-<!-- 确认对话框 -->
+<!-- 确认对话�?-->
 <div id="overlay">
     <div class="dialog">
         <h3 id="dialogTitle" class="font-headline font-bold text-base mb-2">确认操作</h3>
@@ -63,7 +63,7 @@ tailwind.config = {
     </div>
 </div>
 
-<!-- 顶部栏 -->
+<!-- 顶部�?-->
 <header class="fixed top-0 w-full z-50 bg-[#0a0f14] border-b-2 border-[#ffb800] shadow-[0_4px_20px_rgba(0,0,0,.3)]"
         style="padding-top:env(safe-area-inset-top);">
     <div class="flex items-center justify-between px-5 h-14 w-full">
@@ -82,7 +82,7 @@ tailwind.config = {
 </header>
 
 <main class="mt-14 px-4 space-y-4">
-    <!-- 账号选择器 -->
+    <!-- 账号选择�?-->
     <section class="space-y-3 pt-2">
         <div id="accountBtns" class="flex overflow-x-auto gap-2 no-scrollbar pb-1">
             <div class="skeleton h-9 w-24 flex-shrink-0"></div>
@@ -91,20 +91,20 @@ tailwind.config = {
         <div class="flex items-center justify-between px-1">
             <div class="flex items-center gap-2">
                 <span id="connDot" class="w-2 h-2 rounded-full bg-[#44484e]"></span>
-                <span id="connText" class="text-xs font-medium text-on-surface-variant uppercase tracking-tight">加载中</span>
+                <span id="connText" class="text-xs font-medium text-on-surface-variant uppercase tracking-tight">加载�?/span>
             </div>
             <span id="lastUpdate" class="text-[10px] font-mono text-on-surface-variant/60"></span>
         </div>
     </section>
 
-    <!-- 统计卡片行 -->
+    <!-- 统计卡片�?-->
     <div class="grid grid-cols-3 gap-2.5">
         <div class="bg-surface-container p-3 rounded-xl border border-outline-variant/10">
-            <p class="text-[10px] text-on-surface-variant uppercase font-bold mb-1">持仓数</p>
+            <p class="text-[10px] text-on-surface-variant uppercase font-bold mb-1">持仓�?/p>
             <p id="posCount" class="mono text-lg font-bold text-[#ffb800]">--</p>
         </div>
         <div class="bg-surface-container p-3 rounded-xl border border-outline-variant/10">
-            <p class="text-[10px] text-on-surface-variant uppercase font-bold mb-1">未实现盈亏</p>
+            <p class="text-[10px] text-on-surface-variant uppercase font-bold mb-1">未实现盈�?/p>
             <p id="totalPnl" class="mono text-base font-bold text-[#00d4aa]">--</p>
         </div>
         <div class="bg-surface-container p-3 rounded-xl border border-outline-variant/10">
@@ -120,11 +120,11 @@ tailwind.config = {
             <h3 class="text-[10px] font-bold text-[#ffb800] uppercase tracking-[.2em] mb-4">账户余额</h3>
             <div class="grid grid-cols-2 gap-6">
                 <div>
-                    <p class="text-[10px] text-on-surface-variant uppercase font-medium mb-1">总权益 (USDT)</p>
+                    <p class="text-[10px] text-on-surface-variant uppercase font-medium mb-1">总权�?(USDT)</p>
                     <p id="totalEquity" class="mono text-xl font-bold text-[#ffb800]">--</p>
                 </div>
                 <div>
-                    <p class="text-[10px] text-on-surface-variant uppercase font-medium mb-1">可用保证金</p>
+                    <p class="text-[10px] text-on-surface-variant uppercase font-medium mb-1">可用保证�?/p>
                     <p id="availableMargin" class="mono text-xl font-bold text-[#ffb800]">--</p>
                 </div>
             </div>
@@ -224,7 +224,7 @@ async function loadAccounts() {
         if (userRole !== 'admin' && userId) accounts = accounts.filter(a => a.user_id === userId);
         const bar = document.getElementById('accountBtns');
         if (!accounts.length) {
-            bar.innerHTML = '<span class="text-sm text-on-surface-variant">无可用账号</span>';
+            bar.innerHTML = '<span class="text-sm text-on-surface-variant">无可用账�?/span>';
             return;
         }
         bar.innerHTML = accounts.map(a =>
@@ -320,10 +320,10 @@ async function loadPositions() {
                     </div>
                     <div class="grid grid-cols-2 gap-y-3 gap-x-4">
                         <div><p class="text-[10px] text-on-surface-variant uppercase">开仓价</p><p class="mono text-xs font-medium">${fmt(ep,4)}</p></div>
-                        <div><p class="text-[10px] text-on-surface-variant uppercase">标记价</p><p class="mono text-xs font-medium">${fmt(mp,4)}</p></div>
+                        <div><p class="text-[10px] text-on-surface-variant uppercase">标记�?/p><p class="mono text-xs font-medium">${fmt(mp,4)}</p></div>
                         <div><p class="text-[10px] text-on-surface-variant uppercase">数量</p><p class="mono text-xs font-medium">${fmt(qty,4)}</p></div>
-                        <div><p class="text-[10px] text-on-surface-variant uppercase">保证金</p><p class="mono text-xs font-medium">${margin ? fmt(margin,2) : '--'}</p></div>
-                        ${liq ? `<div><p class="text-[10px] text-on-surface-variant uppercase">爆仓价</p><p class="mono text-xs font-bold text-error">${fmt(liq,4)}</p></div>` : ''}
+                        <div><p class="text-[10px] text-on-surface-variant uppercase">保证�?/p><p class="mono text-xs font-medium">${margin ? fmt(margin,2) : '--'}</p></div>
+                        ${liq ? `<div><p class="text-[10px] text-on-surface-variant uppercase">爆仓�?/p><p class="mono text-xs font-bold text-error">${fmt(liq,4)}</p></div>` : ''}
                     </div>
                     <button class="w-full min-h-[40px] mt-1 py-2 rounded-xl border border-error/30 text-error text-[11px] font-bold uppercase active:bg-error/10 transition-colors"
                         onclick="confirmClose('${sym}','${isLong?'LONG':'SHORT'}')">市价平仓</button>
@@ -379,17 +379,17 @@ function setDays(n, el) {
 
 async function loadHistory() {
     const el = document.getElementById('historyList');
-    el.innerHTML = '<div class="text-center py-6 text-on-surface-variant text-sm">加载中…</div>';
+    el.innerHTML = '<div class="text-center py-6 text-on-surface-variant text-sm">加载中�?/div>';
     try {
         const r = await authFetch(`${API}/history?days=${histDays}`).then(r => r.json());
         if (!r.success) { el.innerHTML = '<div class="text-center py-6 text-error text-sm">加载失败</div>'; return; }
         const rows = r.data || [];
         if (!rows.length) {
-            el.innerHTML = `<div class="text-center py-6 text-on-surface-variant text-sm">${histDays}天内无成交记录</div>`;
+            el.innerHTML = `<div class="text-center py-6 text-on-surface-variant text-sm">${histDays}天内无成交记�?/div>`;
             return;
         }
-        const srcMap = { SMART_TRADER:'主策略', BTC_MOMENTUM:'BTC动量', PREDICTOR:'预测器',
-                         U_COIN_STYLE:'破位策略', KLINE_PULLBACK:'K线回调' };
+        const srcMap = { SMART_TRADER:'主策�?, BTC_MOMENTUM:'BTC动量', PREDICTOR:'预测�?,
+                         U_COIN_STYLE:'破位策略', KLINE_PULLBACK:'K线回�? };
         const fmtTime = s => s ? s.replace('T',' ').slice(0,16) : '--';
         el.innerHTML = rows.map(h => {
             const pnl = parseFloat(h.realized_pnl) || 0;
@@ -448,7 +448,7 @@ async function doClose() {
             method: 'POST',
             body: JSON.stringify({ symbol: pendingAction.symbol, position_side: pendingAction.side })
         }).then(r => r.json());
-        if (r.success) { toast('平仓指令已发送'); setTimeout(loadPositions, 1500); }
+        if (r.success) { toast('平仓指令已发�?); setTimeout(loadPositions, 1500); }
         else toast('平仓失败: ' + (r.message || ''), 'err');
     } catch(e) { toast('请求失败', 'err'); }
 }
@@ -480,8 +480,7 @@ async function loadAll() {
     await Promise.all([loadBalance(), loadPositions(), loadOrders(), loadStats()]);
 }
 
-// 初始化
-(async () => {
+// 初始�?(async () => {
     try {
         const r = await fetch('/api/auth/refresh', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },

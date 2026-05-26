@@ -56,7 +56,7 @@ main { padding-bottom:max(env(safe-area-inset-bottom),24px); }
     </div>
     <form class="w-full space-y-5" onsubmit="login(); return false;">
         <div class="space-y-2">
-            <label class="text-[13px] font-semibold text-[#6b7fa3] ml-1" for="uname">用户名</label>
+            <label class="text-[13px] font-semibold text-[#6b7fa3] ml-1" for="uname">用户�?/label>
             <input id="uname"
                 class="w-full h-12 px-4 input-fill border border-[#1e2d45] focus:border-primary focus:ring-0 rounded-[10px] text-on-surface placeholder-[#44484e] transition-all outline-none text-base"
                 placeholder="请输入您的用户名" type="text"
@@ -67,7 +67,7 @@ main { padding-bottom:max(env(safe-area-inset-bottom),24px); }
             <div class="relative">
                 <input id="pwd"
                     class="w-full h-12 px-4 pr-12 input-fill border border-[#1e2d45] focus:border-primary focus:ring-0 rounded-[10px] text-on-surface placeholder-[#44484e] transition-all outline-none text-base"
-                    placeholder="请输入您的密码" type="password" autocomplete="current-password"/>
+                    placeholder="请输入您的密�? type="password" autocomplete="current-password"/>
                 <button class="absolute right-3 top-1/2 -translate-y-1/2 text-[#6b7fa3] hover:text-primary transition-colors w-9 h-9 flex items-center justify-center"
                     type="button" onclick="togglePwd(this)">
                     <span class="material-symbols-outlined text-[20px]">visibility_off</span>
@@ -81,7 +81,7 @@ main { padding-bottom:max(env(safe-area-inset-bottom),24px); }
         <div class="pt-1">
             <button id="btn"
                 class="w-full h-[52px] bg-gradient-to-r from-primary to-primary-container text-[#070b10] font-bold text-base rounded-xl glow-button hover:opacity-90 active:scale-[0.97] transition-all duration-200"
-                type="submit">登 录</button>
+                type="submit">�?�?/button>
         </div>
         <div class="flex items-center justify-between pt-1">
             <label class="flex items-center gap-2 cursor-pointer min-h-[44px]">
@@ -146,8 +146,8 @@ async function login(silent) {
     const remember = document.getElementById('rememberMe').checked;
     const btn = document.getElementById('btn');
     if (!silent) document.getElementById('err').style.display = 'none';
-    if (!username || !password) { if (!silent) showErr('请输入用户名和密码'); return false; }
-    if (!silent) { btn.textContent = '验证中…'; btn.disabled = true; }
+    if (!username || !password) { if (!silent) showErr('请输入用户名和密�?); return false; }
+    if (!silent) { btn.textContent = '验证中�?; btn.disabled = true; }
     try {
         const r = await fetch(`${SYS}/mobile/login`, {
             method: 'POST', credentials: 'include',
@@ -168,7 +168,7 @@ async function login(silent) {
             document.getElementById('pwd').focus();
         }
     } catch(e) { if (!silent) showErr('网络错误: ' + e.message); }
-    if (!silent) { btn.textContent = '登 录'; btn.disabled = false; }
+    if (!silent) { btn.textContent = '�?�?; btn.disabled = false; }
     return false;
 }
 
@@ -187,7 +187,7 @@ document.getElementById('pwd').addEventListener('keydown', e => { if (e.key === 
             // 凭据失效，清除并显示表单
             clearCreds();
             document.getElementById('pwd').value = '';
-            document.getElementById('btn').textContent = '登 录';
+            document.getElementById('btn').textContent = '�?�?;
             document.getElementById('btn').disabled = false;
         }
     }

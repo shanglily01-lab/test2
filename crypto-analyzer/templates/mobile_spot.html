@@ -51,7 +51,7 @@ tailwind.config = {
 
 <div id="toast"></div>
 
-<!-- 顶部栏 -->
+<!-- 顶部�?-->
 <header class="fixed top-0 w-full z-50 flex justify-between items-center px-5 h-14 bg-[#0a0f14] shadow-[0_0_20px_rgba(73,244,200,.05)]"
         style="padding-top:env(safe-area-inset-top);">
     <div class="flex items-center gap-2">
@@ -64,7 +64,7 @@ tailwind.config = {
     <div class="flex items-center gap-3">
         <div class="flex items-center gap-1.5 bg-[#0f1419] px-2.5 py-1.5 rounded-full">
             <span id="tradingDot" class="w-1.5 h-1.5 rounded-full bg-[#44484e]"></span>
-            <span id="tradingText" class="text-[11px] font-medium text-on-surface-variant tracking-wider">加载中</span>
+            <span id="tradingText" class="text-[11px] font-medium text-on-surface-variant tracking-wider">加载�?/span>
         </div>
         <button class="w-10 h-10 flex items-center justify-center active:scale-95 transition-transform" onclick="loadAll()" aria-label="刷新">
             <span class="material-symbols-outlined text-on-surface-variant text-xl">refresh</span>
@@ -73,10 +73,10 @@ tailwind.config = {
 </header>
 
 <main class="pt-16 px-4 space-y-4">
-    <!-- 统计行 -->
+    <!-- 统计�?-->
     <section class="grid grid-cols-3 gap-2.5">
         <div class="bg-[#0f1520] border border-[#1e2d45] rounded-xl p-3">
-            <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-semibold">持仓数</p>
+            <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-semibold">持仓�?/p>
             <p id="posCount" class="text-xl font-bold text-secondary mono-nums">--</p>
         </div>
         <div class="bg-[#0f1520] border border-[#1e2d45] rounded-xl p-3">
@@ -84,7 +84,7 @@ tailwind.config = {
             <p id="totalPnl" class="text-xl font-bold text-primary mono-nums">--</p>
         </div>
         <div class="bg-[#0f1520] border border-[#1e2d45] rounded-xl p-3">
-            <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-semibold">总投入</p>
+            <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-semibold">总投�?/p>
             <p id="totalCost" class="text-xl font-bold text-primary mono-nums">--</p>
         </div>
     </section>
@@ -107,11 +107,11 @@ tailwind.config = {
     <section class="space-y-3">
         <header class="flex justify-between items-center px-1 pt-2">
             <div class="flex items-center gap-2">
-                <h2 class="text-[11px] font-bold text-on-surface-variant tracking-widest uppercase">最近平仓</h2>
+                <h2 class="text-[11px] font-bold text-on-surface-variant tracking-widest uppercase">最近平�?/h2>
             </div>
         </header>
         <div id="historyList">
-            <div class="text-center py-8 text-on-surface-variant text-sm">加载中...</div>
+            <div class="text-center py-8 text-on-surface-variant text-sm">加载�?..</div>
         </div>
     </section>
 </main>
@@ -161,7 +161,7 @@ async function loadTradingStatus() {
         const on = data.spot_trading_enabled ?? false;
         document.getElementById('tradingDot').className =
             'w-1.5 h-1.5 rounded-full ' + (on ? 'bg-primary animate-pulse' : 'bg-[#44484e]');
-        document.getElementById('tradingText').textContent = on ? '运行中' : '已暂停';
+        document.getElementById('tradingText').textContent = on ? '运行�? : '已暂�?;
     } catch(e) {}
 }
 
@@ -293,7 +293,7 @@ function loadAll() {
     loadHistory();
 }
 
-// 每 30 秒自动刷新
+// �?30 秒自动刷�?
 loadAll();
 setInterval(loadAll, 30000);
 </script>
