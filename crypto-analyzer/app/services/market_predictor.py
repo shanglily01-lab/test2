@@ -599,6 +599,7 @@ class MarketPredictor:
                    sl: float, tp: float, leverage: int, margin: float,
                    paper_pos_id: int, confidence: int):
         """同步到实盘账号（调用交易引擎真实下单）"""
+        logger.info(f"[预测下单] _sync_live 开始 {symbol} {direction} confidence={confidence}")
         try:
             conn = self._get_conn()
             cur = conn.cursor()
@@ -606,6 +607,7 @@ class MarketPredictor:
             row = cur.fetchone()
             if not (row and str(row['setting_value']) in ('1', 'true')):
                 cur.close(); conn.close()
+                logger.debug(f"[预测下单] {symbol} live_trading_enabled 未开启，跳过实盘同步")
                 return
             # 实盘开仓仅限 TOP 50 或 白名单交易对
             _clean_sym = symbol.replace('/', '')
@@ -638,6 +640,9 @@ class MarketPredictor:
             from decimal import Decimal
             svc = APIKeyService(self.db_config)
             active_keys = svc.get_all_active_api_keys('binance')
+            if not active_keys:
+                logger.warning(f"[预测下单] {symbol} 无活跃API密钥，跳过实盘同步")
+                return
         except Exception as e:
             logger.error(f"[预测下单] 获取实盘账号失败: {e}")
             return

@@ -371,10 +371,14 @@ class SmartEntryExecutor:
             logger.info(f"✅ {symbol} 一次性开仓完成 | 持仓ID:{position_id} | 价格:${entry_price:.4f} | 保证金:{margin}U")
 
             # ========== 同步实盘开仓 ==========
+            # 从 data_cache 缓存读 live_trading_enabled（独立于 DB 查询，避免被异常覆盖）
             try:
-                # 从 data_cache 缓存读 live_trading_enabled
                 from app.services.system_settings_loader import get_setting as _get_cached_setting
                 live_trading_enabled = str(_get_cached_setting('live_trading_enabled', '0')).lower() in ('1', 'true', 'yes')
+            except Exception:
+                live_trading_enabled = False
+            _allowed = False
+            try:
                 # 实盘同步必须是 TOP 50 或白名单交易对
                 _c = pymysql.connect(**self.db_config, autocommit=True)
                 _cur = _c.cursor(pymysql.cursors.DictCursor)
@@ -390,12 +394,11 @@ class SmartEntryExecutor:
                 _is_whitelist = _row and _row.get('rating_level') is not None and int(_row['rating_level']) == 0
                 _allowed = _in_top100 or _is_whitelist
                 _cur.close(); _c.close()
-            except Exception:
-                live_trading_enabled = False
-                _allowed = False
+            except Exception as _ex:
+                logger.error(f"[同步实盘] TOP50/白名单查询失败 {symbol}: {_ex}")
 
             if not live_trading_enabled:
-                pass  # 同步开关关闭
+                logger.info(f"[同步实盘] {symbol} live_trading_enabled=0，跳过实盘同步")
             elif not _allowed:
                 logger.info(f"[同步实盘] {symbol} 不在TOP50也非白名单，跳过实盘同步")
             else:
@@ -405,6 +408,8 @@ class SmartEntryExecutor:
                     from decimal import Decimal as _D
                     svc = APIKeyService(self.db_config)
                     active_keys = svc.get_all_active_api_keys('binance')
+                    if not active_keys:
+                        logger.warning(f"[同步实盘] {symbol} 无活跃API密钥，跳过实盘同步")
                     for ak in active_keys:
                         try:
                             _engine = BinanceFuturesEngine(self.db_config, api_key=ak['api_key'], api_secret=ak['api_secret'])
