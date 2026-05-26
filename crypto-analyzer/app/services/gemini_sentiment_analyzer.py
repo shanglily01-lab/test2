@@ -417,7 +417,7 @@ def _build_sentiment_prompt(
         )
     trump_section = "\n".join(trump_lines) if trump_lines else "  (暂无川普相关新闻数据)"
 
-    prompt = f"""你是一个专业的加密货币市场情绪分析师。请基于以下市场数据，完成两项分析任务。
+    prompt = f"""你是超级交易大师。请基于以下市场数据，完成两项分析任务。
 
 ## 任务一：市场情绪综合分析
 分析当前市场整体情绪状态，判断是否存在情绪躁动（FOMO/恐慌），并给出大方向决策建议。

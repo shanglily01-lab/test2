@@ -601,14 +601,14 @@ async def lifespan(app: FastAPI):
         # 实盘 live_trading_enabled=1 时, 所有开仓必须在 top_performing_symbols 内,
         # 该列表每天根据 futures_positions 历史持仓表现重新统计.
         def run_top50_update():
-            """每天更新 top_performing_symbols 表的 Top 100 盈利交易对."""
+            """每天更新 top_performing_symbols 表的 Top 50 盈利交易对."""
             try:
-                logger.info("[TOP100] 开始更新 U 本位 TOP 100 交易对...")
+                logger.info("[TOP50] 开始更新 U 本位 TOP 50 交易对...")
                 from update_top_performers import update_top_performing_symbols
-                update_top_performing_symbols(account_id=2, top_n=100)
-                logger.info("[TOP100] 完成更新")
+                update_top_performing_symbols(account_id=2, top_n=50)
+                logger.info("[TOP50] 完成更新")
             except Exception as e:
-                logger.error(f"[TOP100] 更新失败: {type(e).__name__}: {e}")
+                logger.error(f"[TOP50] 更新失败: {type(e).__name__}: {e}")
                 import traceback
                 traceback.print_exc()
         schedule.every().day.at("02:00").do(run_top50_update)
@@ -628,7 +628,7 @@ async def lifespan(app: FastAPI):
         schedule.every(6).hours.do(run_gemini_explore)
         logger.info("[Gemini探索] 调度已注册, 每 6h 跑一次 (kill switch 默认 OFF)")
 
-        # Gemini 预测 - 每 6h 调一次 Gemini 预测 TOP100 方向
+        # Gemini 预测 - 每 12h 调一次 Gemini 预测 TOP50 方向
         def run_gemini_predict():
             try:
                 from app.services.gemini_predictor import run_predict_round
@@ -637,8 +637,8 @@ async def lifespan(app: FastAPI):
                 logger.error(f"[Gemini预测] 调度异常: {e}")
                 import traceback
                 traceback.print_exc()
-        schedule.every(6).hours.do(run_gemini_predict)
-        logger.info("[Gemini预测] 调度已注册, 每 6h 跑一次 (kill switch 默认 ON)")
+        schedule.every(12).hours.do(run_gemini_predict)
+        logger.info("[Gemini预测] 调度已注册, 每 12h 跑一次 (kill switch 默认 ON)")
 
         # Gemini 市场情绪 + 川普分析 - 每 6h 调一次
         def run_gemini_sentiment():

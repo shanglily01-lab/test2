@@ -607,12 +607,13 @@ class MarketPredictor:
             if not (row and str(row['setting_value']) in ('1', 'true')):
                 cur.close(); conn.close()
                 return
-            # 实盘开仓仅限 TOP 100 或 白名单交易对
+            # 实盘开仓仅限 TOP 50 或 白名单交易对
+            _clean_sym = symbol.replace('/', '')
             cur.execute(
                 "SELECT "
                 "  (SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1) AS in_top100,"
-                "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s LIMIT 1) AS rating_level",
-                (symbol, symbol),
+                "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s OR symbol=%s LIMIT 1) AS rating_level",
+                (symbol, symbol, _clean_sym),
             )
             row = cur.fetchone()
             cur.close(); conn.close()
@@ -622,13 +623,13 @@ class MarketPredictor:
                 if in_top100 or is_whitelist:
                     pass  # 允许同步
                 else:
-                    logger.debug(f"[预测下单] {symbol} 不在TOP100也非白名单，跳过实盘同步")
+                    logger.debug(f"[预测下单] {symbol} 不在TOP50也非白名单，跳过实盘同步")
                     return
             else:
-                logger.debug(f"[预测下单] {symbol} 不在TOP100也非白名单，跳过实盘同步")
+                logger.debug(f"[预测下单] {symbol} 不在TOP50也非白名单，跳过实盘同步")
                 return
         except Exception as e:
-            logger.warning(f"[预测下单] 查询实盘开关/TOP100失败: {e}")
+            logger.warning(f"[预测下单] 查询实盘开关/TOP50失败: {e}")
             return
 
         try:

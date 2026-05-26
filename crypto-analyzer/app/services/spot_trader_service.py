@@ -180,18 +180,18 @@ def _has_position(symbol: str) -> bool:
         return True  # 保守: 如果不能查就跳过
 
 def _get_top100_symbols() -> List[str]:
-    """从 top_performing_symbols 表获取 TOP 100"""
+    """从 top_performing_symbols 表获取 TOP 50"""
     try:
         conn = _get_conn()
         cur = conn.cursor()
         cur.execute(
-            "SELECT symbol FROM top_performing_symbols ORDER BY rank_score ASC LIMIT 100"
+            "SELECT symbol FROM top_performing_symbols ORDER BY rank_score ASC LIMIT 50"
         )
         rows = cur.fetchall()
         cur.close(); conn.close()
         return [r['symbol'] for r in rows if r['symbol'].endswith('/USDT')]
     except Exception as e:
-        logger.warning(f"[现货] 获取 TOP100 失败: {e}")
+        logger.warning(f"[现货] 获取 TOP50 失败: {e}")
         return []
 
 

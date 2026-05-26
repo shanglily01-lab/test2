@@ -101,10 +101,10 @@ EXPLORE_ACCOUNT_ID = 2
 EXPLORE_SOURCE = 'gemini_explore'
 
 # ============================================================
-# TOP 100 检查 (实盘同步闸门)
+# TOP 50 检查 (实盘同步闸门)
 # ============================================================
-def _is_in_top100(conn, symbol: str) -> bool:
-    """检查 symbol 是否在 top_performing_symbols TOP 100 内."""
+def _is_in_top50(conn, symbol: str) -> bool:
+    """检查 symbol 是否在 top_performing_symbols TOP 50 内."""
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -113,7 +113,7 @@ def _is_in_top100(conn, symbol: str) -> bool:
             )
             return cur.fetchone() is not None
     except Exception as e:
-        logger.warning(f"[TOP100] 检查失败: {e}")
+        logger.warning(f"[TOP50] 检查失败: {e}")
         return False
 
 
@@ -862,7 +862,7 @@ def _describe_market_regime(conn) -> str:
 # ============================================================
 # Prompt — 置信度校准 + 长持仓判定
 # ============================================================
-EXPLORE_PROMPT_TEMPLATE = """你是加密货币中级趋势交易分析师. 持仓期 3 天 (72h), SL=5%, TP=15%, 不做任何中途干预.
+EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 3 天 (72h), SL=5%, TP=15%, 不做任何中途干预.
 
 你的任务是判断每个候选币种在未来 3 天内, 是否有延续/反转的结构性趋势行情, 值得持有 3 天.
 
@@ -1224,18 +1224,21 @@ def _sync_to_live(
                 conn.close()
                 return
 
-            # 1b. 实盘开仓仅限 TOP 100 或 白名单交易对
+            # 1b. 实盘开仓仅限 TOP 50 或 白名单交易对
+            # 注意: trading_symbol_rating 可能存 WLDUSDT (管理后台无斜杠输入)
+            # 用 OR 同时匹配两种格式
+            _clean_sym = symbol.replace('/', '')
             cur.execute(
                 "SELECT "
                 "  (SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1) AS in_top100,"
-                "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s LIMIT 1) AS rating_level",
-                (symbol, symbol),
+                "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s OR symbol=%s LIMIT 1) AS rating_level",
+                (symbol, symbol, _clean_sym),
             )
             row = cur.fetchone()
             in_top100 = row and row.get('in_top100') == 1
             is_whitelist = row and row.get('rating_level') is not None and int(row['rating_level']) == 0
             if not in_top100 and not is_whitelist:
-                reason = "不在 TOP 100 也非白名单"
+                reason = "不在 TOP 50 也非白名单"
                 logger.warning(
                     f"[Gemini探索] {symbol} {reason}, 跳过实盘同步 "
                     f"(模拟单已开, 但不同步到实盘)"
@@ -1244,7 +1247,7 @@ def _sync_to_live(
                 return
         conn.close()
     except Exception as e:
-        logger.warning(f"[Gemini探索] 检查实盘开关/TOP100失败, 跳过实盘同步: {e}")
+        logger.warning(f"[Gemini探索] 检查实盘开关/TOP50失败, 跳过实盘同步: {e}")
         return
 
     # 2. 获取实盘账号

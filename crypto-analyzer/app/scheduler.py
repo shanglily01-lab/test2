@@ -1299,7 +1299,7 @@ class UnifiedDataScheduler:
         schedule.every(6).hours.do(_run_gemini_explore)
         logger.info("  ✓ gemini_explore - 每 6 小时 (后台线程, kill switch 默认 OFF)")
 
-        # Gemini 预测 - 每 12h 调一次 Gemini 预测 TOP100 方向
+        # Gemini 预测 - 每 12h 调一次 Gemini 预测 TOP50 方向
         def _run_gemini_predict():
             def wrapper():
                 try:

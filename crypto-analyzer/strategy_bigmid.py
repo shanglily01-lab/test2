@@ -523,7 +523,7 @@ def _build_gemini_prompt(data: dict) -> str:
             lines.append(f"{k['t']:<17} {k['o']:>14} {k['h']:>14} {k['l']:>14} {k['c']:>14} {k['v']:>14}")
         return "\n".join(lines)
 
-    return f"""You are a quantitative crypto futures trading analyst.
+    return f"""你是超级交易大师。
 Your job is to find **bottom-reversal LONG entries** for {sym} on a 12-hour swing trade.
 SHORT positions are NOT allowed in this task.
 

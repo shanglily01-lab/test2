@@ -30,6 +30,14 @@
 - `data_cache`: 预计算缓存库 (v3.5 新增,5 张缓存表)
 - 连接通过 .env 配置,需显式在服务启动时连接
 
+## 重要规则
+
+- **Big4RegimeMonitor / 熔断禁止改系统设置**: Big4 和盈亏熔断只能发通知，不允许修改 `system_settings` 的 `allow_long`/`allow_short`/`trading_enabled`。用户手动控制。
+- **1h K线天然滞后**: 1h 最新收盘的 K 线永远是上一小时的，延迟约 60-65 分钟属正常。`BACKFILL_LAG_THRESHOLD_S['1h']=3900` (65min)，不要改小。
+- **WS K线 backfill exchange name**: `_check_and_backfill` 中 exchange 必须用 `binance_futures`（匹配 `save_klines` 的存储名），不能用 `usdt_futures`。
+- **关模拟仓不会自动同步实盘**: 没有后台监听服务。需要通过 `BinanceFuturesEngine.close_position_direct()` 主动在交易所平仓。
+- **除 crypto-scheduler 外不要加心跳日志**: WS 采集器日志中有 `send_heartbeat` 日志是正常的 (每 20s)，不要把它当作 bug 去修。
+
 ## scheduler 调度任务
 
 | 任务 | 频率 |
@@ -41,8 +49,8 @@
 | data_cache.candidate_pool_snapshot | 每 30 分钟 |
 | data_cache.settings_cache | 每 1 分钟 |
 | Gemini 探索 | 每 6 小时 |
-| Gemini 预测 | 每 12 小时 |
-| 市场情绪分析 | 每 8 小时 |
+| Gemini 预测 | 每 6 小时 |
+| 市场情绪分析 | 每 6 小时 |
 | ETF 同步 | 每天 06:45 |
 | 金库同步 | 每天 07:30 |
 
@@ -50,16 +58,24 @@
 
 ### gemini_explore_worker (探索)
 - 每 6h, kill switch: `gemini_explore_enabled`
-- 检测红/黑天鹅,开模拟单 (SL=5%/TP=15%/3x/72h/500U)
+- 检测红/黑天鹅,开模拟单 (SL=3%/TP=8%/3x/6h/500U)
 - v3.5 接入实盘: `live_trading_enabled=1` 时同步到所有 active API Key
 
 ### gemini_predictor (预测)
-- 每 12h, kill switch: `gemini_predict_enabled`
-- 预测 TOP50 方向,不实盘接入
+- 每 6h, kill switch: `gemini_predict_enabled`
+- 预测 TOP50 方向,持仓 6h,SL=3%/TP=8%
+- 不实盘接入
 
 ### gemini_sentiment_analyzer (情绪)
-- 每 8h, kill switch: `gemini_sentiment_enabled` (默认 1)
+- 每 6h, kill switch: `gemini_sentiment_enabled` (默认 1)
 - 市场情绪标签 + 川普分析
+
+### GeminiPositionAdvisor (持仓顾问)
+- 开关: `system_settings.gemini_position_advisor_enabled`
+- 扫描 `futures_positions` (模拟仓, account_id=2), 持仓 >= 2h
+- 问 Gemini 三选一: hold/observe/sell
+- sell 时通过 `BinanceFuturesEngine.close_position_direct()` 平实盘，再同步关模拟仓
+- 需 `live_close_enabled=1`（实盘平仓开关）才能操作实盘
 
 ### S9 (multi_strategy_service 内)
 - 每 6h, kill switch: `s9_gemini_ai_enabled`
@@ -80,3 +96,10 @@
 - 代码改动后必须重启对应进程 (Python 不热重载)
 - Gemini 使用新版 SDK: `import google.genai as genai`
 - 非必要不要对已有逻辑进行过度封装,不要过度抽象
+
+## 进程间关系
+
+- `smart_trader_service.py` (U本位) 和 `coin_futures_trader_service.py` (币本位) 各自独立
+- `app/scheduler.py` (crypto-scheduler) 统一调度价格采集、Gemini 等
+- `app/main.py` (FastAPI) 提供 Web 界面
+- 四个进程必须全部启动。某个挂了其他仍能运行，但对应功能会缺失

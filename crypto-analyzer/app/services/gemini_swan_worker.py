@@ -210,7 +210,7 @@ def _merge_universe(gainers, losers, fund_pos, fund_neg) -> dict:
 
 
 # ------------------ Gemini 调用 ------------------
-SWAN_PROMPT_TEMPLATE = """你是加密货币衍生品风险研究员. 我会给你一组当前市场上有异动迹象的 USDT 永续合约,
+SWAN_PROMPT_TEMPLATE = """你是超级交易大师. 我会给你一组当前市场上有异动迹象的 USDT 永续合约,
 **附带每个 symbol 的实时数据 (24h 涨跌幅, 资金费率, 触发原因)**.
 
 请基于这些**实时数据 + 你对该币种基本面/赛道/历史叙事的认知**, 标注每个 symbol 在**未来 1-7 天**最可能的天鹅类型:

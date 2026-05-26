@@ -229,10 +229,10 @@ class GeminiPositionAdvisor:
         btc_6h = ctx.get('btc_6h_change', 0)
         eth_6h = ctx.get('eth_6h_change', 0)
 
-        return f"""You are a crypto futures position management AI.
-A LIVE position has been held over {hold_h:.1f}h. Decide whether to hold, observe, or sell.
+        return f"""你是一个超级交易大师。
+一个实盘仓位已持仓超过 {hold_h:.1f}h。请决定是 hold / observe / sell。
 
-POSITION
+仓位信息
   Symbol:          {symbol}
   Direction:       {side}
   Entry price:     {entry}

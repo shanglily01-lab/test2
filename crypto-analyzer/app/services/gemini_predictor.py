@@ -1,17 +1,17 @@
 """
 Gemini 预测 worker (v1 — 2026-05-22)
 
-每 12h 对 TOP 100 交易对调用 Google Gemini 预测未来 12h 方向,
+每 12h 对 TOP 50 交易对调用 Google Gemini 预测未来 12h 方向,
 根据预测结果直接开模拟单.
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
   - margin    = 500U
-  - leverage  = 3x
+  - leverage  = 5x
   - 最多 20 仓
   - hold     = 12 小时
-  - SL       = 3%
-  - TP       = 6%
+  - SL       = 5%
+  - TP       = 10%
 
 闸门:
   - system_settings.gemini_predict_enabled (默认 1, 关时早返回)
@@ -78,15 +78,15 @@ def _try_snapshot() -> Optional[Dict]:
 # 常量
 # ============================================================
 PREDICT_MARGIN_USD = 500.0
-PREDICT_LEVERAGE = 3
+PREDICT_LEVERAGE = 5
 PREDICT_MAX_POSITIONS = 20
-PREDICT_HOLD_HOURS = 6                         # 6 小时 (原 24h, 过长准确度下降)
-PREDICT_SL_PCT = 3.0                        # 硬 SL 3%
-PREDICT_TP_PCT = 8.0                        # 硬 TP 8%
+PREDICT_HOLD_HOURS = 12                         # 12 小时 (原 6h，改为12h)
+PREDICT_SL_PCT = 5.0                        # 硬 SL 5%
+PREDICT_TP_PCT = 10.0                        # 硬 TP 10%
 PREDICT_CONFIDENCE_THRESHOLD = 0.60
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'gemini_predict'
-PREDICT_TOP_N = 100
+PREDICT_TOP_N = 50
 
 # 数据新鲜度门槛
 PREDICT_PRICE_FRESH_MIN = 20
@@ -112,10 +112,10 @@ def _connect():
 
 
 # ============================================================
-# 数据查询 — TOP 100
+# 数据查询 — TOP 50
 # ============================================================
-def _get_top100_symbols(conn) -> List[str]:
-    """从 top_performing_symbols 获取 TOP 100 交易对."""
+def _get_top50_symbols(conn) -> List[str]:
+    """从 top_performing_symbols 获取 TOP 50 交易对."""
     with conn.cursor() as cur:
         cur.execute(
             "SELECT symbol FROM top_performing_symbols "
@@ -438,7 +438,7 @@ def _count_open_positions(conn) -> int:
 # ============================================================
 # Prompt 构建
 # ============================================================
-PREDICT_PROMPT_TEMPLATE = """你是加密货币中级趋势交易分析师. 预测每个币种在未来 1 天内的方向走势概率.
+PREDICT_PROMPT_TEMPLATE = """你是超级交易大师. 预测每个币种在未来 1 天内的方向走势概率.
 
 持仓期 1 天 (24h), SL=5%, TP=15%, 杠杆 3x, 不做中途干预.
 
@@ -598,7 +598,7 @@ def _sync_to_live(
                 conn.close()
                 return
 
-            # 1b. 实盘开仓仅限 TOP 100 或 白名单交易对
+            # 1b. 实盘开仓仅限 TOP 50 或 白名单交易对
             cur.execute(
                 "SELECT "
                 "  (SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1) AS in_top100,"
@@ -609,7 +609,7 @@ def _sync_to_live(
             in_top100 = row and row.get('in_top100') == 1
             is_whitelist = row and row.get('rating_level') is not None and int(row['rating_level']) == 0
             if not in_top100 and not is_whitelist:
-                reason = "不在 TOP 100 也非白名单"
+                reason = "不在 TOP 50 也非白名单"
                 logger.warning(
                     f"[Gemini预测] {symbol} {reason}, 跳过实盘同步 "
                     f"(模拟单已开, 但不同步到实盘)"
@@ -618,7 +618,7 @@ def _sync_to_live(
                 return
         conn.close()
     except Exception as e:
-        logger.warning(f"[Gemini预测] 检查实盘开关/TOP100失败, 跳过实盘同步: {e}")
+        logger.warning(f"[Gemini预测] 检查实盘开关/TOP50失败, 跳过实盘同步: {e}")
         return
 
     # 2. 获取实盘账号
@@ -888,15 +888,15 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
         return None
 
     try:
-        # 2. 获取 TOP100
-        top100 = _get_top100_symbols(conn)
+        # 2. 获取 TOP50
+        top100 = _get_top50_symbols(conn)
         if not top100:
-            logger.warning("[Gemini预测] TOP100 为空, 跳过")
+            logger.warning("[Gemini预测] TOP50 为空, 跳过")
             elapsed = time.time() - t0
-            _insert_run(conn, asof_utc, 0, '', elapsed, 'skipped', 'TOP100为空', triggered_by)
+            _insert_run(conn, asof_utc, 0, '', elapsed, 'skipped', 'TOP50为空', triggered_by)
             return None
 
-        logger.info(f"[Gemini预测] TOP100 获取到 {len(top100)} 个 symbol")
+        logger.info(f"[Gemini预测] TOP50 获取到 {len(top100)} 个 symbol")
 
         # 3. 构建每个 symbol 的数据
         symbols_data = []

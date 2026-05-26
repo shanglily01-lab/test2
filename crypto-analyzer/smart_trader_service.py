@@ -1932,7 +1932,7 @@ class SmartTraderService:
         except Exception:
             live_enabled = False
         if live_enabled and not self.is_symbol_in_top_performers(symbol):
-            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 实盘模式：不在TOP100也非白名单")
+            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 实盘模式：不在TOP50也非白名单")
             return False
 
         # 🔥 V5.1优化: 移除防追高/防杀跌过滤
@@ -2862,12 +2862,13 @@ class SmartTraderService:
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
+            _clean_sym = symbol.replace('/', '')
 
             cursor.execute("""
                 SELECT
                   (SELECT 1 FROM top_performing_symbols WHERE symbol = %s LIMIT 1) AS in_top100,
-                  (SELECT rating_level FROM trading_symbol_rating WHERE symbol = %s LIMIT 1) AS rating_level
-            """, (symbol, symbol))
+                  (SELECT rating_level FROM trading_symbol_rating WHERE symbol = %s OR symbol = %s LIMIT 1) AS rating_level
+            """, (symbol, symbol, _clean_sym))
 
             result = cursor.fetchone()
             cursor.close()
@@ -4174,7 +4175,7 @@ async def async_main():
                     None,
                     update_top_performing_symbols,
                     2,  # account_id=2 (U本位)
-                    top_n=100
+                    top_n=50
                 )
                 logger.info("Top 100更新完成")
 
