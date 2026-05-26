@@ -265,7 +265,7 @@ async def get_top50():
                    win_rate, avg_pnl_per_trade, max_single_profit, max_single_loss,
                    profit_factor, rank_score, last_updated
             FROM top_performing_symbols
-            ORDER BY rank_score DESC
+            ORDER BY rank_score ASC
             LIMIT 50
         """)
         rows = cur.fetchall()
