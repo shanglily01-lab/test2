@@ -91,11 +91,11 @@ def _try_position_stats(source: str, account_id: int = 2) -> Optional[Dict]:
 # v3 长持仓常量
 # ============================================================
 EXPLORE_MARGIN_USD = 500.0
-EXPLORE_LEVERAGE = 3
+EXPLORE_LEVERAGE = 5
 EXPLORE_MAX_POSITIONS = 20
 EXPLORE_HOLD_HOURS = 6                         # 6 小时 (原 24h，过长准确度下降)
-EXPLORE_SL_PCT = 3.0
-EXPLORE_TP_PCT = 8.0                          # 原 15%
+EXPLORE_SL_PCT = 5.0
+EXPLORE_TP_PCT = 10.0                          # 原 8%
 EXPLORE_CONFIDENCE_THRESHOLD = 0.5      # 校准表 0.50+ 可开
 EXPLORE_ACCOUNT_ID = 2
 EXPLORE_SOURCE = 'gemini_explore'
