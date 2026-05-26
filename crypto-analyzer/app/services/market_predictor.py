@@ -452,7 +452,7 @@ class MarketPredictor:
 
     def _open_real_paper_trades(self, cursor, results: List[Dict], now: datetime) -> int:
         """
-        取 confidence>=85 的预测，按置信度排序，开真实模拟单到 futures_positions
+        取 confidence>=70 的预测（方向+至少一个技术面确认），按置信度排序，开真实模拟单到 futures_positions
         - 加入 Big4 市场方向过滤：做多信号在 Big4 看跌时跳过，做空在 Big4 看涨时跳过
         - 总净敞口上限：多/空方向各不超过 30,000U 名义价值
         - 模拟盘 400U x5，止损3.5%，止盈6%
@@ -505,9 +505,9 @@ class MarketPredictor:
         # --- P0-3: 当前各方向总名义价值 ---
         side_notional = self._get_total_notional_by_side(cursor, ACCOUNT_ID)
 
-        # 候选：confidence>=85，非NEUTRAL，按置信度降序
+        # 候选：confidence>=70，非NEUTRAL，按置信度降序
         candidates = sorted(
-            [r for r in results if r['direction'] != 'NEUTRAL' and r['confidence'] >= 85],
+            [r for r in results if r['direction'] != 'NEUTRAL' and r['confidence'] >= 70],
             key=lambda x: x['confidence'], reverse=True
         )
 
@@ -702,9 +702,8 @@ class MarketPredictor:
             if _rows.get('predictor_enabled') in ('0', 'false', 'False'):
                 logger.info("[预测] predictor_enabled=0，本轮跳过")
                 return 0
-            if _rows.get('u_futures_trading_enabled') in ('0', 'false', 'False'):
-                logger.info("[预测] u_futures_trading_enabled=0，本轮跳过")
-                return 0
+            # u_futures_trading_enabled 只影响实盘同步，不影响模拟盘分析
+            # 如果 u_futures_trading_enabled=0，_sync_live 内部会自行检查并跳过
         except Exception as e:
             logger.warning(f"[预测] 读取系统开关失败，默认继续: {e}")
 
@@ -797,7 +796,7 @@ class MarketPredictor:
         except Exception as e:
             logger.error(f"[回测] 开虚拟单失败: {e}")
 
-        # ④ 开真实模拟单（confidence>=85，Big4过滤，净敞口上限3万U，止损3.5%/止盈6%）
+        # ④ 开真实模拟单（confidence>=70，Big4过滤，净敞口上限3万U，止损3.5%/止盈6%）
         try:
             real_opened = self._open_real_paper_trades(cursor, all_results, now)
             if real_opened:
