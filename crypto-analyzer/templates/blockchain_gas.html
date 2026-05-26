@@ -53,7 +53,7 @@
 <nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto">
 <a href="/dashboard" data-path="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
 <a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>U本位合约</span></a>
-<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_bitcoin</span><span>币本位合�?/span></a>
+<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_bitcoin</span><span>币本位合约</span></a>
 <a href="/gemini_explore" data-path="/gemini_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>Gemini 探索</span></a>
 <a href="/live_trading" data-path="/live_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">precision_manufacturing</span><span>Live Trading</span></a>
 <a href="/futures_review" data-path="/futures_review" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>复盘分析</span></a>
@@ -61,7 +61,7 @@
 <a href="/market_regime" data-path="/market_regime" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">pulse_alert</span><span>行情识别</span></a>
 <a class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm" data-path="/top50" href="/top50"><span class="material-symbols-outlined text-lg">workspace_premium</span><span>TOP 50</span></a>
     <a href="/symbol_blacklist" data-path="/symbol_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">block</span><span>交易对黑名单</span></a>
-    <a href="/signal_blacklist" data-path="/signal_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">do_not_disturb_on</span><span>信号黑名�?/span></a>
+    <a href="/signal_blacklist" data-path="/signal_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">do_not_disturb_on</span><span>信号黑名单</span></a>
 <a href="/spot_trading" data-path="/spot_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_exchange</span><span>现货交易</span></a>
 <a href="/etf_data" data-path="/etf_data" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">candlestick_chart</span><span>ETF 数据</span></a>
 <a href="/blockchain_gas" data-path="/blockchain_gas" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Gas 监控</span></a>
@@ -193,15 +193,15 @@
 <!-- Chain Gas Summary Table -->
 <div class="lg:col-span-2 bg-surface border border-slate-800/50 rounded-xl overflow-hidden">
 <div class="p-6 border-b border-slate-800/50">
-<h2 class="text-white font-headline font-bold">�?Gas 汇�?/h2>
+<h2 class="text-white font-headline font-bold">链 Gas 汇总</h2>
 </div>
 <table class="w-full text-left font-label text-xs">
 <thead class="bg-slate-900/50 text-slate-500 border-b border-slate-800/50">
 <tr>
-<th class="px-6 py-4 font-medium uppercase tracking-wider">链名�?/th>
+<th class="px-6 py-4 font-medium uppercase tracking-wider">链名称</th>
 <th class="px-4 py-4 font-medium uppercase tracking-wider text-right">当前 Gas</th>
-<th class="px-4 py-4 font-medium uppercase tracking-wider text-right">7D 均�?/th>
-<th class="px-6 py-4 font-medium uppercase tracking-wider text-center">状�?/th>
+<th class="px-4 py-4 font-medium uppercase tracking-wider text-right">7D 均值</th>
+<th class="px-6 py-4 font-medium uppercase tracking-wider text-center">状态</th>
 </tr>
 </thead>
 <tbody id="chains-summary-tbody" class="divide-y divide-slate-800/50">
@@ -394,7 +394,7 @@
   // -----------------------------------------------------------------------
   // Helpers
   // -----------------------------------------------------------------------
-  // DB 存储单位�?Wei，显示时转换�?Gwei (/ 1e9)
+  // DB 存储单位为 Wei，显示时转换为 Gwei (/ 1e9)
   function weiToGwei(val) {
     if (val == null || val === '' || isNaN(Number(val))) return null;
     return Number(val) / 1e9;

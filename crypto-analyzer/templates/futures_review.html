@@ -113,7 +113,7 @@
 <nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto">
 <a href="/dashboard" data-path="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
 <a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>U本位合约</span></a>
-<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_bitcoin</span><span>币本位合�?/span></a>
+<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_bitcoin</span><span>币本位合约</span></a>
 <a href="/gemini_explore" data-path="/gemini_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>Gemini 探索</span></a>
 <a href="/live_trading" data-path="/live_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">precision_manufacturing</span><span>Live Trading</span></a>
 <a href="/futures_review" data-path="/futures_review" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>复盘分析</span></a>
@@ -121,7 +121,7 @@
 <a href="/market_regime" data-path="/market_regime" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">pulse_alert</span><span>行情识别</span></a>
 <a class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm" data-path="/top50" href="/top50"><span class="material-symbols-outlined text-lg">workspace_premium</span><span>TOP 50</span></a>
     <a href="/symbol_blacklist" data-path="/symbol_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">block</span><span>交易对黑名单</span></a>
-    <a href="/signal_blacklist" data-path="/signal_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">do_not_disturb_on</span><span>信号黑名�?/span></a>
+    <a href="/signal_blacklist" data-path="/signal_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">do_not_disturb_on</span><span>信号黑名单</span></a>
 <a href="/spot_trading" data-path="/spot_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_exchange</span><span>现货交易</span></a>
 <a href="/etf_data" data-path="/etf_data" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">candlestick_chart</span><span>ETF 数据</span></a>
 <a href="/blockchain_gas" data-path="/blockchain_gas" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Gas 监控</span></a>
@@ -154,14 +154,14 @@
     <div class="h-4 w-[1px] bg-outline-variant/30"></div>
     <div class="flex items-center gap-1 bg-surface-container rounded-lg p-1">
       <button id="btn-usdt" onclick="switchMarginType('usdt')" class="px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider transition-all af">U本位</button>
-      <button id="btn-coin" onclick="switchMarginType('coin')" class="px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface transition-all">币本�?/button>
+      <button id="btn-coin" onclick="switchMarginType('coin')" class="px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface transition-all">币本位</button>
     </div>
     <select id="hours-select" onchange="onHoursChange(this.value)" class="bg-surface-container text-on-surface text-xs rounded-lg px-3 py-1.5 border border-outline-variant/30 focus:outline-none focus:border-primary/50 font-['Space_Grotesk']">
       <option value="12">12小时</option>
       <option value="24" selected>24小时</option>
       <option value="48">48小时</option>
       <option value="72">72小时</option>
-      <option value="168">7�?/option>
+      <option value="168">7天</option>
     </select>
     <div class="h-4 w-[1px] bg-outline-variant/30"></div>
     <div class="flex items-center gap-2">
@@ -212,7 +212,7 @@
         <p class="mono text-3xl font-medium text-error" id="stat-loss">--</p>
       </div>
       <div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-primary/30">
-        <p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">总盈�?(U)</p>
+        <p class="text-on-surface-variant text-[10px] uppercase font-headline tracking-widest mb-2">总盈亏 (U)</p>
         <p class="mono text-3xl font-medium" id="stat-pnl">--</p>
       </div>
       <div class="bg-surface-container-low p-6 rounded-xl border-l-2 border-secondary/30">
@@ -223,17 +223,17 @@
     <div class="grid grid-cols-2 gap-6">
       <div class="bg-surface-container-low rounded-xl p-6">
         <div class="flex items-center justify-between mb-4">
-          <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">信号健康�?/h3>
+          <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">信号健康度</h3>
           <span id="signal-health-badge" class="text-xs px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">--</span>
         </div>
         <div id="signal-analysis-list" class="space-y-3">
-          <p class="text-xs text-on-surface-variant">加载�?..</p>
+          <p class="text-xs text-on-surface-variant">加载中...</p>
         </div>
       </div>
       <div class="bg-surface-container-low rounded-xl p-6">
-        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">交易对表�?/h3>
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">交易对表现</h3>
         <div id="best-symbols-list" class="space-y-2">
-          <p class="text-xs text-on-surface-variant">加载�?..</p>
+          <p class="text-xs text-on-surface-variant">加载中...</p>
         </div>
       </div>
     </div>
@@ -254,17 +254,17 @@
         <button onclick="setTradePnl('win',this)" class="trade-pnl-btn px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface bg-surface-container">盈利</button>
         <button onclick="setTradePnl('loss',this)" class="trade-pnl-btn px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface bg-surface-container">亏损</button>
       </div>
-      <span class="text-xs text-on-surface-variant">�?<span id="trades-count" class="text-primary font-bold">0</span> �?/span>
+      <span class="text-xs text-on-surface-variant">共 <span id="trades-count" class="text-primary font-bold">0</span> 条</span>
     </div>
     <div class="bg-surface-container-low rounded-xl overflow-hidden flex flex-col flex-1 min-h-0">
       <div class="overflow-y-auto flex-1 min-h-0">
         <table class="w-full text-xs">
           <thead class="sticky top-0 bg-surface-container-low z-10">
             <tr class="border-b border-outline-variant/20">
-              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">交易�?/ 时间</th>
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">交易对 / 时间</th>
               <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">方向</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">开仓价</th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">平仓�?/th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">平仓价</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">盈亏(U)</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">持仓时长</th>
               <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">平仓原因</th>
@@ -286,7 +286,7 @@
         <div class="space-y-2">
           <div class="flex justify-between text-xs"><span class="text-on-surface-variant">交易次数</span><span id="long-count" class="mono text-on-surface">--</span></div>
           <div class="flex justify-between text-xs"><span class="text-on-surface-variant">胜率</span><span id="long-wr" class="mono text-primary">--</span></div>
-          <div class="flex justify-between text-xs"><span class="text-on-surface-variant">总盈�?/span><span id="long-pnl" class="mono">--</span></div>
+          <div class="flex justify-between text-xs"><span class="text-on-surface-variant">总盈亏</span><span id="long-pnl" class="mono">--</span></div>
           <div class="flex justify-between text-xs"><span class="text-on-surface-variant">平均盈亏</span><span id="long-avg" class="mono">--</span></div>
         </div>
       </div>
@@ -295,7 +295,7 @@
         <div class="space-y-2">
           <div class="flex justify-between text-xs"><span class="text-on-surface-variant">交易次数</span><span id="short-count" class="mono text-on-surface">--</span></div>
           <div class="flex justify-between text-xs"><span class="text-on-surface-variant">胜率</span><span id="short-wr" class="mono text-primary">--</span></div>
-          <div class="flex justify-between text-xs"><span class="text-on-surface-variant">总盈�?/span><span id="short-pnl" class="mono">--</span></div>
+          <div class="flex justify-between text-xs"><span class="text-on-surface-variant">总盈亏</span><span id="short-pnl" class="mono">--</span></div>
           <div class="flex justify-between text-xs"><span class="text-on-surface-variant">平均盈亏</span><span id="short-avg" class="mono">--</span></div>
         </div>
       </div>
@@ -311,7 +311,7 @@
               <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">信号类型</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">次数</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">胜率</th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总盈�?/th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总盈亏</th>
             </tr>
           </thead>
           <tbody id="entry-analysis-body">
@@ -331,7 +331,7 @@
               <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">平仓方式</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">次数</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">平均盈亏</th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总盈�?/th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总盈亏</th>
             </tr>
           </thead>
           <tbody id="close-analysis-body">
@@ -346,7 +346,7 @@
   <div id="pane-suggestions" class="tab-pane space-y-6">
     <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">AI 智能建议</h3>
     <div id="suggestions-grid" class="grid grid-cols-3 gap-4">
-      <p class="col-span-3 text-xs text-on-surface-variant text-center py-8">加载�?..</p>
+      <p class="col-span-3 text-xs text-on-surface-variant text-center py-8">加载中...</p>
     </div>
   </div>
 
@@ -359,7 +359,7 @@
         <p class="mono text-2xl font-medium text-on-surface" id="sp-total-strats">--</p>
       </div>
       <div class="bg-surface-container-low rounded-xl p-5">
-        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">总交易笔�?/p>
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">总交易笔数</p>
         <p class="mono text-2xl font-medium text-on-surface" id="sp-total-trades">--</p>
       </div>
       <div class="bg-surface-container-low rounded-xl p-5">
@@ -367,44 +367,44 @@
         <p class="mono text-2xl font-medium text-secondary" id="sp-overall-wr">--</p>
       </div>
       <div class="bg-surface-container-low rounded-xl p-5">
-        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">总盈�?(U)</p>
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">总盈亏 (U)</p>
         <p class="mono text-2xl font-medium" id="sp-overall-pnl">--</p>
       </div>
     </div>
 
-    <!-- 策略胜率排行�?-->
+    <!-- 策略胜率排行榜 -->
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      <!-- 按胜率排�?-->
+      <!-- 按胜率排行 -->
       <div class="bg-surface-container-low rounded-xl p-6">
-        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">按胜率排�?/h3>
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">按胜率排行</h3>
         <div id="sp-winrate-rank" class="space-y-2">
-          <p class="text-xs text-on-surface-variant">加载�?..</p>
+          <p class="text-xs text-on-surface-variant">加载中...</p>
         </div>
       </div>
-      <!-- 按盈亏排�?-->
+      <!-- 按盈亏排行 -->
       <div class="bg-surface-container-low rounded-xl p-6">
-        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">按盈亏排�?/h3>
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">按盈亏排行</h3>
         <div id="sp-pnl-rank" class="space-y-2">
-          <p class="text-xs text-on-surface-variant">加载�?..</p>
+          <p class="text-xs text-on-surface-variant">加载中...</p>
         </div>
       </div>
     </div>
 
-    <!-- 策略详情�?-->
+    <!-- 策略详情表 -->
     <div class="bg-surface-container-low rounded-xl overflow-hidden">
       <div class="px-6 py-4 border-b border-outline-variant/20">
-        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">各策略详�?/h3>
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">各策略详情</h3>
       </div>
       <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
         <table class="w-full text-xs">
           <thead class="bg-surface-container-low sticky top-0 z-10">
             <tr class="border-b border-outline-variant/20">
               <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">策略</th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">交易�?/th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">交易数</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">盈利</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">亏损</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">胜率</th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总盈�?U)</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总盈亏(U)</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">平均盈亏</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">ROI</th>
             </tr>
@@ -428,12 +428,12 @@
       <div class="bg-surface-container-low rounded-xl p-5">
         <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">月度盈亏</p>
         <p class="mono text-2xl font-medium" id="m-total-pnl">--</p>
-        <p class="text-[10px] text-on-surface-variant mt-1">总交�?<span id="m-total-trades" class="text-on-surface">--</span> �?/p>
+        <p class="text-[10px] text-on-surface-variant mt-1">总交易 <span id="m-total-trades" class="text-on-surface">--</span> 笔</p>
       </div>
       <div class="bg-surface-container-low rounded-xl p-5">
         <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">盈利天数</p>
         <p class="mono text-2xl font-medium text-primary" id="m-profit-days">--</p>
-        <p class="text-[10px] text-on-surface-variant mt-1">盈利�?<span id="m-profit-ratio" class="text-on-surface">--</span></p>
+        <p class="text-[10px] text-on-surface-variant mt-1">盈利率 <span id="m-profit-ratio" class="text-on-surface">--</span></p>
       </div>
       <div class="bg-surface-container-low rounded-xl p-5">
         <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">日均盈亏</p>
@@ -441,7 +441,7 @@
         <p class="text-[10px] text-on-surface-variant mt-1">交易天数 <span id="m-trading-days" class="text-on-surface">--</span></p>
       </div>
       <div class="bg-surface-container-low rounded-xl p-5">
-        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">最佳单�?/p>
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">最佳单日</p>
         <p class="mono text-2xl font-medium text-primary" id="m-max-pnl">--</p>
         <p class="text-[10px] text-on-surface-variant mt-1"><span id="m-max-date" class="text-on-surface">--</span></p>
       </div>
@@ -464,13 +464,13 @@
           <thead class="bg-surface-container-low sticky top-0 z-10">
             <tr class="border-b border-outline-variant/20">
               <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">日期</th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">交易�?/th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">交易数</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">盈利</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">亏损</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">胜率</th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总盈�?/th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">盈利�?/th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">亏损�?/th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总盈亏</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">盈利额</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">亏损额</th>
             </tr>
           </thead>
           <tbody id="daily-pnl-tbody">
@@ -507,28 +507,28 @@
         <p class="mono text-xl font-medium" id="btc-change">--</p>
       </div>
       <div class="bg-surface-container-low rounded-xl p-5">
-        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">BTC 最�?/p>
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">BTC 最高</p>
         <p class="mono text-xl font-medium text-primary" id="btc-high">--</p>
       </div>
       <div class="bg-surface-container-low rounded-xl p-5">
-        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">BTC 最�?/p>
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">BTC 最低</p>
         <p class="mono text-xl font-medium text-error" id="btc-low">--</p>
       </div>
     </div>
     <div class="bg-surface-container-low rounded-xl overflow-hidden">
       <div class="px-6 py-4 border-b border-outline-variant/20">
-        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">逐小时趋�?/h3>
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">逐小时趋势</h3>
       </div>
       <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
         <table class="w-full text-xs">
           <thead class="bg-surface-container-low sticky top-0 z-10">
             <tr class="border-b border-outline-variant/20">
               <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">时间 CST</th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">开�?/th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">开盘</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">收盘</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">涨跌%</th>
               <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">方向</th>
-              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">交易�?/th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">交易数</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">区间盈亏</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">胜率</th>
             </tr>
@@ -541,7 +541,7 @@
     </div>
     <div id="retro-perf-grid" class="grid grid-cols-5 gap-4">
       <div class="bg-surface-container-low rounded-xl p-5">
-        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">区间总盈�?/p>
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">区间总盈亏</p>
         <p class="mono text-xl font-medium" id="rp-total-pnl">--</p>
       </div>
       <div class="bg-surface-container-low rounded-xl p-5">
@@ -1047,7 +1047,7 @@ function loadStrategyPerformance() {
         return;
       }
 
-      // 按胜率排�?
+      // 按胜率排行
       var byWr = strats.slice().sort(function(a, b) { return b.win_rate - a.win_rate; });
       var wrHtml = '';
       byWr.forEach(function(s) {
@@ -1059,20 +1059,20 @@ function loadStrategyPerformance() {
           '</div>' +
           '<div class="flex items-center gap-2">' +
             '<div class="bar-bg flex-1"><div class="bar-fill" style="width:' + s.win_rate + '%;background:' + barColor + '"></div></div>' +
-            '<span class="mono text-[10px] text-on-surface-variant">' + s.total_trades + '�?/span>' +
+            '<span class="mono text-[10px] text-on-surface-variant">' + s.total_trades + '笔</span>' +
           '</div>' +
         '</div>';
       });
       document.getElementById('sp-winrate-rank').innerHTML = wrHtml;
 
-      // 按盈亏排�?
+      // 按盈亏排行
       var byPnl = strats.slice().sort(function(a, b) { return b.total_pnl - a.total_pnl; });
       var pnlHtml = '';
       byPnl.forEach(function(s) {
         pnlHtml += '<div class="flex items-center justify-between py-1.5 border-b border-outline-variant/10 text-xs">' +
           '<span class="text-on-surface font-medium">' + s.name + '</span>' +
           '<div class="flex items-center gap-4">' +
-            '<span class="mono text-on-surface-variant">' + s.total_trades + '�?/span>' +
+            '<span class="mono text-on-surface-variant">' + s.total_trades + '笔</span>' +
             '<span class="mono font-medium ' + pCls(s.total_pnl) + '">' + fmtPnl(s.total_pnl) + '</span>' +
           '</div>' +
         '</div>';
@@ -1108,7 +1108,7 @@ function initMonthSelector() {
     var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     var m = d.getMonth() + 1;
     var val = d.getFullYear() + '-' + (m < 10 ? '0' : '') + m;
-    var lbl = d.getFullYear() + '�? + m + '�?;
+    var lbl = d.getFullYear() + '年' + m + '月';
     var opt = document.createElement('option');
     opt.value = val; opt.textContent = lbl;
     if (i === 0) opt.selected = true;

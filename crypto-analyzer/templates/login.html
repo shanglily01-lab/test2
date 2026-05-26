@@ -195,7 +195,7 @@
             <div class="login-header">
                 <div class="login-logo">📊</div>
                 <h1 class="login-title">加密货币分析系统</h1>
-                <p class="login-subtitle">登录您的账户以继�?/p>
+                <p class="login-subtitle">登录您的账户以继续</p>
             </div>
 
             <div id="alert-container"></div>
@@ -206,7 +206,7 @@
                     <div class="input-group">
                         <span class="input-group-text"><i class="bi bi-person"></i></span>
                         <input type="text" class="form-control" id="username"
-                               placeholder="请输入用户名或邮�? required autofocus>
+                               placeholder="请输入用户名或邮箱" required autofocus>
                     </div>
                 </div>
 
@@ -215,7 +215,7 @@
                     <div class="input-group">
                         <span class="input-group-text"><i class="bi bi-lock"></i></span>
                         <input type="password" class="form-control" id="password"
-                               placeholder="请输入密�? required>
+                               placeholder="请输入密码" required>
                         <span class="input-group-text password-toggle" onclick="togglePassword()">
                             <i class="bi bi-eye" id="password-icon"></i>
                         </span>
@@ -225,14 +225,14 @@
                 <div class="mb-4 d-flex justify-content-between align-items-center">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="remember-me">
-                        <label class="form-check-label" for="remember-me">记住�?/label>
+                        <label class="form-check-label" for="remember-me">记住我</label>
                     </div>
                 </div>
 
                 <button type="submit" class="btn btn-primary" id="login-btn">
-                    <span id="btn-text">�?�?/span>
+                    <span id="btn-text">登 录</span>
                     <span id="btn-loading" class="d-none">
-                        <span class="spinner-border spinner-border-sm me-2"></span>登录�?..
+                        <span class="spinner-border spinner-border-sm me-2"></span>登录中...
                     </span>
                 </button>
             </form>
@@ -263,13 +263,13 @@
                 }
             })
             .catch(() => {
-                // token无效，清�?
+                // token无效，清除
                 localStorage.removeItem('access_token');
                 localStorage.removeItem('refresh_token');
             });
         }
 
-        // 切换密码可见�?
+        // 切换密码可见性
         function togglePassword() {
             const passwordInput = document.getElementById('password');
             const icon = document.getElementById('password-icon');
@@ -294,7 +294,7 @@
             `;
         }
 
-        // 设置按钮状�?
+        // 设置按钮状态
         function setLoading(loading) {
             const btn = document.getElementById('login-btn');
             const btnText = document.getElementById('btn-text');
@@ -314,7 +314,7 @@
             const rememberMe = document.getElementById('remember-me').checked;
 
             if (!username || !password) {
-                showAlert('请填写用户名和密�?);
+                showAlert('请填写用户名和密码');
                 return;
             }
 
@@ -341,9 +341,9 @@
                         localStorage.setItem('remember_me', 'true');
                     }
 
-                    showAlert('登录成功，正在跳�?..', 'success');
+                    showAlert('登录成功，正在跳转...', 'success');
 
-                    // 跳转到首�?
+                    // 跳转到首页
                     setTimeout(() => {
                         const redirect = new URLSearchParams(window.location.search).get('redirect');
                         window.location.href = redirect || '/';
@@ -359,7 +359,7 @@
             }
         });
 
-        // 回车键提�?
+        // 回车键提交
         document.getElementById('password').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 document.getElementById('login-form').dispatchEvent(new Event('submit'));

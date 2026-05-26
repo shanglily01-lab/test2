@@ -124,7 +124,7 @@
         }
         .cfg-row:last-child { border-bottom: none; padding-bottom: 0; }
         .cfg-row:first-of-type { padding-top: 0; }
-        /* 层级：第一层区块标�?*/
+        /* 层级：第一层区块标题 */
         .cfg-l1 {
             display: flex;
             align-items: flex-start;
@@ -204,7 +204,7 @@
 <nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto">
 <a href="/dashboard" data-path="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
 <a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>U本位合约</span></a>
-<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_bitcoin</span><span>币本位合�?/span></a>
+<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_bitcoin</span><span>币本位合约</span></a>
 <a href="/gemini_explore" data-path="/gemini_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>Gemini 探索</span></a>
 <a href="/live_trading" data-path="/live_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">precision_manufacturing</span><span>Live Trading</span></a>
 <a href="/futures_review" data-path="/futures_review" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>复盘分析</span></a>
@@ -212,7 +212,7 @@
 <a href="/market_regime" data-path="/market_regime" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">pulse_alert</span><span>行情识别</span></a>
 <a class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm" data-path="/top50" href="/top50"><span class="material-symbols-outlined text-lg">workspace_premium</span><span>TOP 50</span></a>
     <a href="/symbol_blacklist" data-path="/symbol_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">block</span><span>交易对黑名单</span></a>
-    <a href="/signal_blacklist" data-path="/signal_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">do_not_disturb_on</span><span>信号黑名�?/span></a>
+    <a href="/signal_blacklist" data-path="/signal_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">do_not_disturb_on</span><span>信号黑名单</span></a>
 <a href="/spot_trading" data-path="/spot_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_exchange</span><span>现货交易</span></a>
 <a href="/etf_data" data-path="/etf_data" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">candlestick_chart</span><span>ETF 数据</span></a>
 <a href="/blockchain_gas" data-path="/blockchain_gas" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Gas 监控</span></a>
@@ -235,7 +235,7 @@
 </script>
 </aside>
 <div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 z-[55] bg-black/60 md:hidden opacity-0 pointer-events-none transition-opacity duration-200" aria-hidden="true"></div>
-<!-- Main Content Area：手机全宽，md+ 与侧�?240px 对齐 -->
+<!-- Main Content Area：手机全宽，md+ 与侧栏 240px 对齐 -->
 <main class="ml-0 w-full min-w-0 md:ml-[240px] flex-1 min-h-screen md:h-screen overflow-y-auto bg-[#0a0f14] relative">
 <header class="sticky top-0 z-40 flex items-center justify-between pl-3 pr-4 sm:px-6 md:px-10 min-h-14 py-2 border-b border-slate-800/80 bg-[#0a0f14]/90 backdrop-blur-md">
 <div class="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -245,14 +245,14 @@
 <span class="material-symbols-outlined text-[#49f4c8] shrink-0 hidden sm:inline">tune</span>
 <div class="min-w-0">
 <h1 class="text-[15px] sm:text-base font-bold text-slate-100 font-headline leading-tight">系统配置</h1>
-<p class="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-2 md:truncate md:line-clamp-none">总开关与子开�?· 修改后由后端即时生效</p>
+<p class="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 leading-snug line-clamp-2 md:truncate md:line-clamp-none">总开关与子开关 · 修改后由后端即时生效</p>
 </div>
 </div>
 </header>
 
 <div class="max-w-3xl mx-auto px-4 sm:px-5 md:px-8 py-6 sm:py-8 pb-28">
 <p class="text-sm text-slate-400 mb-6 leading-relaxed border-l-2 border-[#49f4c8]/40 pl-4">
-  自上而下三层�?strong class="text-slate-300">交易权限</strong> �?<strong class="text-slate-300">策略与模�?/strong> �?<strong class="text-slate-300">持仓与风�?/strong>。先开 U 本位总开关，再开子策略�?
+  自上而下三层：<strong class="text-slate-300">交易权限</strong> → <strong class="text-slate-300">策略与模式</strong> → <strong class="text-slate-300">持仓与风控</strong>。先开 U 本位总开关，再开子策略。
 </p>
 
 <div class="space-y-10">
@@ -263,15 +263,15 @@
 <span class="cfg-l1-num" aria-hidden="true">1</span>
 <div class="cfg-l1-text">
 <div class="cfg-l1-title">交易权限</div>
-<p class="cfg-l1-desc">最外层：总开关与方向、实盘、币本位�?/p>
+<p class="cfg-l1-desc">最外层：总开关与方向、实盘、币本位。</p>
 </div>
 </div>
 <div class="rounded-xl bg-[#070b10]/90 border border-[#49f4c8]/20 p-4 mb-4">
-<p class="cfg-l2-label text-[#49f4c8]/90">1.1 总开关（必看�?/p>
+<p class="cfg-l2-label text-[#49f4c8]/90">1.1 总开关（必看）</p>
 <div class="cfg-row !py-0 !border-0">
 <div class="min-w-0">
-<div class="text-sm font-semibold text-slate-100">U本位总开�?/div>
-<p class="text-xs text-slate-500 mt-1 leading-snug">�?�?预测 / 动量 / 主策略均不新开�?/p>
+<div class="text-sm font-semibold text-slate-100">U本位总开关</div>
+<p class="text-xs text-slate-500 mt-1 leading-snug">关 → 预测 / 动量 / 主策略均不新开仓</p>
 </div>
 <div id="usdtToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div>
@@ -282,8 +282,8 @@
 <p class="cfg-l2-label">1.2 其余权限</p>
 <div class="cfg-row">
 <div class="min-w-0">
-<div class="text-sm font-medium text-slate-200">实盘开�?/div>
-<p class="text-xs text-slate-500 mt-0.5">真实资金 · 仅控制开�?/p>
+<div class="text-sm font-medium text-slate-200">实盘开仓</div>
+<p class="text-xs text-slate-500 mt-0.5">真实资金 · 仅控制开仓</p>
 </div>
 <div id="liveToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div>
@@ -292,7 +292,7 @@
 <div class="cfg-row">
 <div class="min-w-0">
 <div class="text-sm font-medium text-slate-200">实盘平仓</div>
-<p class="text-xs text-slate-500 mt-0.5">同步平仓 · 仅控制平�?/p>
+<p class="text-xs text-slate-500 mt-0.5">同步平仓 · 仅控制平仓</p>
 </div>
 <div id="liveCloseToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div>
@@ -300,7 +300,7 @@
 </div>
 <div class="cfg-row">
 <div class="min-w-0">
-<div class="text-sm font-medium text-slate-200">币本位交�?/div>
+<div class="text-sm font-medium text-slate-200">币本位交易</div>
 </div>
 <div id="coinFuturesToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div>
@@ -326,16 +326,16 @@
 <div class="cfg-l1">
 <span class="cfg-l1-num">2</span>
 <div class="cfg-l1-text">
-<div class="cfg-l1-title">策略与模�?/div>
-<p class="cfg-l1-desc">总开关打开后，再按需开启；含子策略与主策略两种路径�?/p>
+<div class="cfg-l1-title">策略与模式</div>
+<p class="cfg-l1-desc">总开关打开后，再按需开启；含子策略与主策略两种路径。</p>
 </div>
 </div>
 <div class="cfg-l2 mb-5">
-<p class="cfg-l2-label">2.1 子策�?/p>
+<p class="cfg-l2-label">2.1 子策略</p>
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#49f4c8] text-xl shrink-0">analytics</span>
-<div><div class="text-sm font-medium text-slate-200">市场预测�?/div><p class="text-[11px] text-slate-500">预测神器</p></div>
+<div><div class="text-sm font-medium text-slate-200">市场预测器</div><p class="text-[11px] text-slate-500">预测神器</p></div>
 </div>
 <div id="predictorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
@@ -353,7 +353,7 @@
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#ff6b6b] text-xl shrink-0">trending_down</span>
-<div><div class="text-sm font-medium text-slate-200">S8 顶部反转做空</div><p class="text-[11px] text-slate-500">48h�?0% + 6根无新高 + 12天上�?/p></div>
+<div><div class="text-sm font-medium text-slate-200">S8 顶部反转做空</div><p class="text-[11px] text-slate-500">48h涨80% + 6根无新高 + 12天上市</p></div>
 </div>
 <div id="s8TopshortToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
@@ -362,7 +362,7 @@
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#9b59ff] text-xl shrink-0">smart_toy</span>
-<div><div class="text-sm font-medium text-slate-200">S9 Gemini AI 抄底</div><p class="text-[11px] text-slate-500">�?6h �?Gemini · 收费 API · LONG-only</p></div>
+<div><div class="text-sm font-medium text-slate-200">S9 Gemini AI 抄底</div><p class="text-[11px] text-slate-500">每 6h 调 Gemini · 收费 API · LONG-only</p></div>
 </div>
 <div id="s9GeminiToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
@@ -371,7 +371,7 @@
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#ff9500] text-xl shrink-0">visibility</span>
-<div><div class="text-sm font-medium text-slate-200">Gemini 持仓顾问</div><p class="text-[11px] text-slate-500">实盘持仓 �?h �?1h �?Gemini �?持有/观察/卖掉 (可触发实盘平�?)</p></div>
+<div><div class="text-sm font-medium text-slate-200">Gemini 持仓顾问</div><p class="text-[11px] text-slate-500">实盘持仓 ≥4h 每 1h 让 Gemini 判 持有/观察/卖掉 (可触发实盘平仓!)</p></div>
 </div>
 <div id="geminiAdvisorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
@@ -389,7 +389,7 @@
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#f0b90b] text-xl shrink-0">currency_bitcoin</span>
-<div><div class="text-sm font-medium text-slate-200">现货交易</div><p class="text-[11px] text-slate-500">DCA抄底: 日RSI超卖 + MA99支撑 + 1H企稳放量 · 100U/�?/p></div>
+<div><div class="text-sm font-medium text-slate-200">现货交易</div><p class="text-[11px] text-slate-500">DCA抄底: 日RSI超卖 + MA99支撑 + 1H企稳放量 · 100U/单</p></div>
 </div>
 <div id="spotTradingToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
@@ -397,27 +397,27 @@
 </div>
 </div>
 <div class="cfg-l2">
-<p class="cfg-l2-label">2.2 主策略模�?/p>
+<p class="cfg-l2-label">2.2 主策略模式</p>
 <p class="text-[11px] text-slate-500 mb-3 leading-relaxed border-l-2 border-slate-700/80 pl-3">
-  <strong class="text-slate-400">勾选才启用</strong>信号确认路径；Big4 STRONG_BULLISH/STRONG_BEARISH 时触发开仓。预测器 / BTC 动量为上方独立开关�?
+  <strong class="text-slate-400">勾选才启用</strong>信号确认路径；Big4 STRONG_BULLISH/STRONG_BEARISH 时触发开仓。预测器 / BTC 动量为上方独立开关。
 </p>
 <label class="flex items-start justify-between gap-4 py-3 cursor-pointer group">
 <div class="min-w-0">
 <span class="text-sm font-medium text-slate-200 group-hover:text-white">信号确认</span>
-<p class="text-xs text-slate-500 mt-1">Big4 强势路径（STRONG_BULLISH / STRONG_BEARISH�?/p>
+<p class="text-xs text-slate-500 mt-1">Big4 强势路径（STRONG_BULLISH / STRONG_BEARISH）</p>
 </div>
 <input id="signalConfirmCheckbox" type="checkbox" class="mt-1 w-4 h-4 rounded border-slate-600 bg-[#151a20] text-[#49f4c8] focus:ring-[#49f4c8]/40" />
 </label>
 </div>
 </section>
 
-<!-- 第三层：持仓与风�?-->
+<!-- 第三层：持仓与风控 -->
 <section class="cfg-card rounded-2xl p-5 md:p-6">
 <div class="cfg-l1">
 <span class="cfg-l1-num">3</span>
 <div class="cfg-l1-text">
-<div class="cfg-l1-title">持仓与风�?/div>
-<p class="cfg-l1-desc">数量、时长与止损止盈；与开关层级独立，但一并保存�?/p>
+<div class="cfg-l1-title">持仓与风控</div>
+<p class="cfg-l1-desc">数量、时长与止损止盈；与开关层级独立，但一并保存。</p>
 </div>
 </div>
 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
@@ -459,7 +459,7 @@
 </div>
 </div>
 <div class="sm:col-span-2">
-<label class="block text-xs text-slate-500 mb-2">最大持仓数�?/label>
+<label class="block text-xs text-slate-500 mb-2">最大持仓数量</label>
 <input id="maxPositionsInput" class="w-full bg-[#151a20] border border-slate-800 rounded-xl py-3 px-3 text-slate-200 font-mono text-sm focus:ring-1 focus:ring-[#49f4c8]/40" type="number" min="1" max="100" value="50"/>
 </div>
 </div>
@@ -486,10 +486,10 @@
 
 <section class="cfg-card rounded-2xl p-5 md:p-6 border border-dashed border-slate-700/90 bg-[#0a0f14]/50">
 <div class="cfg-l1 border-0 pb-0 mb-2">
-<span class="cfg-l1-num opacity-60">�?/span>
+<span class="cfg-l1-num opacity-60">—</span>
 <div class="cfg-l1-text">
 <div class="cfg-l1-title text-slate-400">说明</div>
-<p class="cfg-l1-desc">开仓评分阈值由代码�?<code class="text-[#49f4c8]/90 text-[11px]">signal_scoring_weights</code> 管理，本页不调节�?/p>
+<p class="cfg-l1-desc">开仓评分阈值由代码与 <code class="text-[#49f4c8]/90 text-[11px]">signal_scoring_weights</code> 管理，本页不调节。</p>
 </div>
 </div>
 </section>
@@ -592,7 +592,7 @@
         // ---------------------------------------------------------------
 
         /**
-         * 根据 data-enabled 属性渲�?toggle 外观�?
+         * 根据 data-enabled 属性渲染 toggle 外观。
          * 开启：亮绿背景，thumb 靠右
          * 关闭：暗淡背景，thumb 靠左
          */
@@ -631,8 +631,8 @@
         }
 
         /**
-         * 注册 toggle 点击事件�?
-         * onToggle(newEnabled) 是异步回调，返回 false 表示失败则回滚�?
+         * 注册 toggle 点击事件。
+         * onToggle(newEnabled) 是异步回调，返回 false 表示失败则回滚。
          */
         function bindToggle(id, onToggle) {
             const el = document.getElementById(id);
@@ -669,7 +669,7 @@
         }
 
         // ---------------------------------------------------------------
-        // 加载所有数�?
+        // 加载所有数据
         // ---------------------------------------------------------------
 
         async function loadAll() {
@@ -690,16 +690,16 @@
                 const big4Setting = big4SettingData.data || big4SettingData;
                 const maxPosSetting = maxPosData.data || maxPosData;
 
-                // 总开�?- 交易方向
+                // 总开关 - 交易方向
                 setToggle('longToggle',  dir.allow_long?.value  ?? true);
                 setToggle('shortToggle', dir.allow_short?.value ?? true);
 
-                // 总开�?- 交易服务
+                // 总开关 - 交易服务
                 setToggle('liveToggle', svc.live_trading_enabled !== false);
                 setToggle('liveCloseToggle', svc.live_close_enabled !== false);
                 setToggle('usdtToggle', svc.usdt_futures_enabled !== false);
 
-                // 策略开�?
+                // 策略开关
                 setToggle('btcMomentumToggle', !!svc.btc_momentum_enabled);
                 setToggle('predictorToggle',   !!svc.predictor_enabled);
                 setToggle('s8TopshortToggle',  !!svc.s8_topshort_enabled);
@@ -713,12 +713,12 @@
                 );
                 var scCb = document.getElementById('signalConfirmCheckbox');
                 if (scCb) scCb.checked = !!svc.signal_confirmation_enabled;
-                // 币本位：如果后端�?coin_futures_enabled 字段则读�?
+                // 币本位：如果后端有 coin_futures_enabled 字段则读取
                 if ('coin_futures_enabled' in svc) {
                     setToggle('coinFuturesToggle', !!svc.coin_futures_enabled);
                 }
 
-                // 最大持仓时�?
+                // 最大持仓时长
                 const sel = document.getElementById('maxHoldHoursSelect');
                 if (sel) {
                     sel.value = String(hold.hours ?? 6);
@@ -734,7 +734,7 @@
                 const tpEl = document.getElementById('takeProfitInput');
                 if (tpEl && svc.take_profit_pct != null) tpEl.value = (parseFloat(svc.take_profit_pct) * 100).toFixed(1);
 
-                // 最大持仓数�?
+                // 最大持仓数量
                 const mpEl = document.getElementById('maxPositionsInput');
                 if (mpEl && maxPosSetting.value != null) mpEl.value = maxPosSetting.value;
 
@@ -748,11 +748,11 @@
         // 单个 toggle 的保存逻辑
         // ---------------------------------------------------------------
 
-        // 实盘开�?
+        // 实盘开仓
         bindToggle('liveToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { live_trading_enabled: enabled });
-                showToast('实盘开仓已' + (enabled ? '开�? : '关闭'), false);
+                showToast('实盘开仓已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
@@ -763,7 +763,7 @@
         bindToggle('liveCloseToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { live_close_enabled: enabled });
-                showToast('实盘平仓�? + (enabled ? '开�? : '关闭'), false);
+                showToast('实盘平仓已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
@@ -774,7 +774,7 @@
         bindToggle('usdtToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { usdt_futures_enabled: enabled });
-                showToast('U本位模拟交易�? + (enabled ? '开�? : '关闭'), false);
+                showToast('U本位模拟交易已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
@@ -788,7 +788,7 @@
                     allow_long: enabled,
                     allow_short: getToggle('shortToggle')
                 });
-                showToast('做多方向�? + (enabled ? '开�? : '关闭'), false);
+                showToast('做多方向已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
@@ -802,7 +802,7 @@
                     allow_long: getToggle('longToggle'),
                     allow_short: enabled
                 });
-                showToast('做空方向�? + (enabled ? '开�? : '关闭'), false);
+                showToast('做空方向已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
@@ -813,18 +813,18 @@
         bindToggle('btcMomentumToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { btc_momentum_enabled: enabled });
-                showToast('BTC动量跟随�? + (enabled ? '开�? : '关闭'), false);
+                showToast('BTC动量跟随已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
             }
         });
 
-        // 市场预测�?
+        // 市场预测器
         bindToggle('predictorToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { predictor_enabled: enabled });
-                showToast('市场预测器已' + (enabled ? '开�? : '关闭'), false);
+                showToast('市场预测器已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
@@ -835,7 +835,7 @@
         bindToggle('s8TopshortToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { s8_topshort_enabled: enabled });
-                showToast('S8 顶部反转做空�? + (enabled ? '开�? : '关闭'), false);
+                showToast('S8 顶部反转做空已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
@@ -846,7 +846,7 @@
         bindToggle('s9GeminiToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { s9_gemini_ai_enabled: enabled });
-                showToast('S9 Gemini AI �? + (enabled ? '开�? : '关闭') + (enabled ? '(注意 API 收费)' : ''), false);
+                showToast('S9 Gemini AI 已' + (enabled ? '开启' : '关闭') + (enabled ? '(注意 API 收费)' : ''), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
@@ -857,18 +857,18 @@
         bindToggle('geminiAdvisorToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { gemini_position_advisor_enabled: enabled });
-                showToast('Gemini 持仓顾问�? + (enabled ? '开�?(可能触发实盘平仓!)' : '关闭'), false);
+                showToast('Gemini 持仓顾问已' + (enabled ? '开启 (可能触发实盘平仓!)' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
             }
         });
 
-        // 币本位交�?
+        // 币本位交易
         bindToggle('coinFuturesToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { coin_futures_enabled: enabled });
-                showToast('币本位交易已' + (enabled ? '开�? : '关闭'), false);
+                showToast('币本位交易已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
@@ -879,7 +879,7 @@
         bindToggle('spotTradingToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { spot_trading_enabled: enabled });
-                showToast('现货交易�? + (enabled ? '开�? : '关闭'), false);
+                showToast('现货交易已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
@@ -890,20 +890,20 @@
         bindToggle('big4Toggle', async function (enabled) {
             try {
                 await apiPut('/big4-filter', { enabled: enabled });
-                showToast('Big4趋势过滤�? + (enabled ? '开�? : '关闭'), false);
+                showToast('Big4趋势过滤已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
             }
         });
 
-        // 信号确认（复选框�?
+        // 信号确认（复选框）
         var scCbEl = document.getElementById('signalConfirmCheckbox');
         if (scCbEl) {
             scCbEl.addEventListener('change', async function () {
                 try {
                     await apiPut('/trading-services', { signal_confirmation_enabled: this.checked });
-                    showToast('信号确认�? + (this.checked ? '开�? : '关闭'), false);
+                    showToast('信号确认已' + (this.checked ? '开启' : '关闭'), false);
                 } catch (err) {
                     showToast('保存失败: ' + err.message, true);
                     this.checked = !this.checked;
@@ -912,7 +912,7 @@
         }
 
         // ---------------------------------------------------------------
-        // 最大持仓时�?select
+        // 最大持仓时长 select
         // ---------------------------------------------------------------
         const maxHoldSel = document.getElementById('maxHoldHoursSelect');
         if (maxHoldSel) {
@@ -934,7 +934,7 @@
                 const hours = parseInt(this.value, 10);
                 try {
                     await apiPut('/s1s9-max-hold-hours', { hours: hours });
-                    showToast('S1~S9 持仓时长已设�?' + hours + ' 小时', false);
+                    showToast('S1~S9 持仓时长已设为 ' + hours + ' 小时', false);
                 } catch (err) {
                     showToast('保存失败: ' + err.message, true);
                 }
@@ -942,14 +942,14 @@
         }
 
         // ---------------------------------------------------------------
-        // 保存按钮 - 一键保存全部当前开关状�?
+        // 保存按钮 - 一键保存全部当前开关状态
         // ---------------------------------------------------------------
         const saveBtn = document.getElementById('saveBtn');
         const saveBtnText = document.getElementById('saveBtnText');
 
         if (saveBtn) {
             saveBtn.addEventListener('click', async function () {
-                saveBtnText.textContent = '保存�?..';
+                saveBtnText.textContent = '保存中...';
                 saveBtn.disabled = true;
                 try {
                     const hours = parseInt(maxHoldSel ? maxHoldSel.value : '6', 10);
@@ -976,11 +976,11 @@
                         apiPut('/big4-filter', { enabled: getToggle('big4Toggle') }),
                         apiPut('/max-hold-hours', { hours: hours }),
                         apiPut('/s1s9-max-hold-hours', { hours: s1s9Hours }),
-                        apiPut('/settings/max_positions', { setting_key: 'max_positions', setting_value: String(mpVal), description: '最大持仓数�? })
+                        apiPut('/settings/max_positions', { setting_key: 'max_positions', setting_value: String(mpVal), description: '最大持仓数量' })
                     ]);
 
-                    saveBtnText.textContent = '已保�?;
-                    showToast('全部配置已保�?, false);
+                    saveBtnText.textContent = '已保存';
+                    showToast('全部配置已保存', false);
                     setTimeout(function () {
                         saveBtnText.textContent = '保存配置';
                         saveBtn.disabled = false;
@@ -997,7 +997,7 @@
         }
 
         // ---------------------------------------------------------------
-        // 初始�?
+        // 初始化
         // ---------------------------------------------------------------
         document.addEventListener('DOMContentLoaded', loadAll);
 

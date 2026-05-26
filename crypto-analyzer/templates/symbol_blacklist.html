@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>超级大脑 - 黑名单管�?/title>
+<title>超级大脑 - 黑名单管理</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
@@ -59,14 +59,14 @@
   <nav class="flex-1 overflow-y-auto space-y-0.5 px-3" id="sidebar-nav">
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/dashboard" href="/dashboard"><span class="material-symbols-outlined text-lg">dashboard</span><span>Dashboard</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/futures_trading" href="/futures_trading"><span class="material-symbols-outlined text-lg">show_chart</span><span>U本位合约</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/coin_futures_trading" href="/coin_futures_trading"><span class="material-symbols-outlined text-lg">currency_bitcoin</span><span>币本位合�?/span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/coin_futures_trading" href="/coin_futures_trading"><span class="material-symbols-outlined text-lg">currency_bitcoin</span><span>币本位合约</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/gemini_explore" href="/gemini_explore"><span class="material-symbols-outlined text-lg">auto_awesome</span><span>Gemini 探索</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/live_trading" href="/live_trading"><span class="material-symbols-outlined text-lg">precision_manufacturing</span><span>Live Trading</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/futures_review" href="/futures_review"><span class="material-symbols-outlined text-lg">history_edu</span><span>复盘分析</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/technical-signals" href="/technical-signals"><span class="material-symbols-outlined text-lg">sensors</span><span>信号分析</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/market_regime" href="/market_regime"><span class="material-symbols-outlined text-lg">pulse_alert</span><span>行情识别</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/symbol_blacklist" href="/symbol_blacklist"><span class="material-symbols-outlined text-lg">block</span><span>交易对黑名单</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/signal_blacklist" href="/signal_blacklist"><span class="material-symbols-outlined text-lg">do_not_disturb_on</span><span>信号黑名�?/span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/signal_blacklist" href="/signal_blacklist"><span class="material-symbols-outlined text-lg">do_not_disturb_on</span><span>信号黑名单</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/spot_trading" href="/spot_trading"><span class="material-symbols-outlined text-lg">currency_exchange</span><span>现货交易</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/etf_data" href="/etf_data"><span class="material-symbols-outlined text-lg">candlestick_chart</span><span>ETF 数据</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/blockchain_gas" href="/blockchain_gas"><span class="material-symbols-outlined text-lg">local_gas_station</span><span>Gas 监控</span></a>
@@ -84,18 +84,18 @@
   <header class="fixed top-0 right-0 left-[240px] h-16 bg-[#070b10] border-b border-[#0f1520] z-40">
     <div class="flex items-center justify-between px-6 w-full h-full font-mono">
       <div class="flex items-center gap-4">
-        <h2 class="text-lg font-bold text-white">黑名单管�?/h2>
-        <span id="total-badge" class="px-3 py-1 bg-gray-800 text-gray-400 rounded-full text-xs">加载�?..</span>
+        <h2 class="text-lg font-bold text-white">黑名单管理</h2>
+        <span id="total-badge" class="px-3 py-1 bg-gray-800 text-gray-400 rounded-full text-xs">加载中...</span>
         <!-- Market toggle -->
         <div class="flex items-center bg-[#0d1117] rounded-md p-0.5 border border-gray-800">
           <button id="btn-usdt" onclick="setMarket('usdt_futures')" class="px-4 py-1 text-[#49f4c8] bg-[#49f4c8]/10 rounded font-medium text-xs transition-all">U本位</button>
-          <button id="btn-coin" onclick="setMarket('coin_futures')" class="px-4 py-1 text-gray-400 hover:text-white rounded text-xs transition-all">币本�?/button>
+          <button id="btn-coin" onclick="setMarket('coin_futures')" class="px-4 py-1 text-gray-400 hover:text-white rounded text-xs transition-all">币本位</button>
         </div>
       </div>
       <div class="flex items-center gap-3">
         <div class="relative w-56 group">
           <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg group-focus-within:text-[#49f4c8]">search</span>
-          <input id="search-input" type="text" placeholder="搜索交易�?.." oninput="filterSymbols()" class="w-full bg-[#0d1117] border border-gray-800 rounded-lg pl-10 pr-4 py-1.5 text-sm focus:outline-none focus:border-[#49f4c8] text-gray-200"/>
+          <input id="search-input" type="text" placeholder="搜索交易对..." oninput="filterSymbols()" class="w-full bg-[#0d1117] border border-gray-800 rounded-lg pl-10 pr-4 py-1.5 text-sm focus:outline-none focus:border-[#49f4c8] text-gray-200"/>
         </div>
         <div class="h-6 w-px bg-gray-800"></div>
         <button onclick="openAddModal()" class="text-[#49f4c8] border border-[#49f4c8] px-4 py-1.5 rounded text-sm hover:bg-[#49f4c8]/10 transition-all font-medium active:scale-95">手动添加</button>
@@ -115,19 +115,19 @@
     <div class="grid grid-cols-4 gap-6 mb-8">
       <div class="bg-brand-surface p-6 rounded-xl border border-gray-800 relative overflow-hidden">
         <div class="absolute right-[-10px] bottom-[-10px] opacity-10"><span class="material-symbols-outlined text-6xl text-status-success">check_circle</span></div>
-        <p class="text-gray-500 text-sm font-medium mb-1">白名�?/p>
+        <p class="text-gray-500 text-sm font-medium mb-1">白名单</p>
         <h4 id="stat-0" class="text-3xl font-mono font-bold text-status-success">--</h4>
-        <p class="text-[10px] text-gray-600 mt-2 flex items-center gap-1 uppercase tracking-wider"><span class="w-1.5 h-1.5 rounded-full bg-status-success"></span>正常可交�?/p>
+        <p class="text-[10px] text-gray-600 mt-2 flex items-center gap-1 uppercase tracking-wider"><span class="w-1.5 h-1.5 rounded-full bg-status-success"></span>正常可交易</p>
       </div>
       <div class="bg-brand-surface p-6 rounded-xl border border-gray-800 relative overflow-hidden">
         <div class="absolute right-[-10px] bottom-[-10px] opacity-10"><span class="material-symbols-outlined text-6xl text-status-warning">warning</span></div>
-        <p class="text-gray-500 text-sm font-medium mb-1">黑名�?�?/p>
+        <p class="text-gray-500 text-sm font-medium mb-1">黑名单1级</p>
         <h4 id="stat-1" class="text-3xl font-mono font-bold text-status-warning">--</h4>
-        <p class="text-[10px] text-gray-600 mt-2 flex items-center gap-1 uppercase tracking-wider"><span class="w-1.5 h-1.5 rounded-full bg-status-warning"></span>保证金限�?/p>
+        <p class="text-[10px] text-gray-600 mt-2 flex items-center gap-1 uppercase tracking-wider"><span class="w-1.5 h-1.5 rounded-full bg-status-warning"></span>保证金限制</p>
       </div>
       <div class="bg-brand-surface p-6 rounded-xl border border-gray-800 relative overflow-hidden">
         <div class="absolute right-[-10px] bottom-[-10px] opacity-10"><span class="material-symbols-outlined text-6xl text-status-orange">report_problem</span></div>
-        <p class="text-gray-500 text-sm font-medium mb-1">黑名�?�?/p>
+        <p class="text-gray-500 text-sm font-medium mb-1">黑名单2级</p>
         <h4 id="stat-2" class="text-3xl font-mono font-bold text-status-orange">--</h4>
         <p class="text-[10px] text-gray-600 mt-2 flex items-center gap-1 uppercase tracking-wider"><span class="w-1.5 h-1.5 rounded-full bg-status-orange"></span>严格限制</p>
       </div>
@@ -135,22 +135,22 @@
         <div class="absolute right-[-10px] bottom-[-10px] opacity-10"><span class="material-symbols-outlined text-6xl text-status-danger">cancel</span></div>
         <p class="text-gray-500 text-sm font-medium mb-1">永久禁止</p>
         <h4 id="stat-3" class="text-3xl font-mono font-bold text-status-danger">--</h4>
-        <p class="text-[10px] text-gray-600 mt-2 flex items-center gap-1 uppercase tracking-wider"><span class="w-1.5 h-1.5 rounded-full bg-status-danger"></span>禁止开�?/p>
+        <p class="text-[10px] text-gray-600 mt-2 flex items-center gap-1 uppercase tracking-wider"><span class="w-1.5 h-1.5 rounded-full bg-status-danger"></span>禁止开仓</p>
       </div>
     </div>
 
     <!-- Tab Bar -->
     <div class="border-b border-gray-800 mb-8 flex items-center gap-6 px-2 font-mono text-sm">
       <button id="tab-all" onclick="setTab('all')" class="tab-btn pb-4 text-[#49f4c8] border-b-2 border-[#49f4c8] font-bold">全部 <span id="cnt-all">0</span></button>
-      <button id="tab-0"   onclick="setTab('0')"   class="tab-btn pb-4 text-gray-400 hover:text-gray-200 transition-colors">白名�?<span id="cnt-0">0</span></button>
-      <button id="tab-1"   onclick="setTab('1')"   class="tab-btn pb-4 text-gray-400 hover:text-gray-200 transition-colors">黑名�?�?<span id="cnt-1">0</span></button>
-      <button id="tab-2"   onclick="setTab('2')"   class="tab-btn pb-4 text-gray-400 hover:text-gray-200 transition-colors">黑名�?�?<span id="cnt-2">0</span></button>
+      <button id="tab-0"   onclick="setTab('0')"   class="tab-btn pb-4 text-gray-400 hover:text-gray-200 transition-colors">白名单 <span id="cnt-0">0</span></button>
+      <button id="tab-1"   onclick="setTab('1')"   class="tab-btn pb-4 text-gray-400 hover:text-gray-200 transition-colors">黑名单1级 <span id="cnt-1">0</span></button>
+      <button id="tab-2"   onclick="setTab('2')"   class="tab-btn pb-4 text-gray-400 hover:text-gray-200 transition-colors">黑名单2级 <span id="cnt-2">0</span></button>
       <button id="tab-3"   onclick="setTab('3')"   class="tab-btn pb-4 text-gray-400 hover:text-gray-200 transition-colors">永久禁止 <span id="cnt-3">0</span></button>
     </div>
 
     <!-- Symbol Grid -->
     <div id="symbol-grid" class="space-y-10">
-      <div class="text-gray-500 text-sm text-center py-16">加载�?..</div>
+      <div class="text-gray-500 text-sm text-center py-16">加载中...</div>
     </div>
   </div>
 </main>
@@ -164,23 +164,23 @@
     </div>
     <div class="p-6 space-y-6">
       <div class="space-y-2">
-        <label class="text-xs text-gray-400 font-mono tracking-wider uppercase">交易对名�?/label>
-        <input id="modal-symbol" type="text" placeholder="�? BTCUSDT" class="w-full bg-[#0d1117] border border-gray-800 rounded-lg px-4 py-3 font-mono focus:border-[#49f4c8] focus:ring-0 text-white outline-none"/>
+        <label class="text-xs text-gray-400 font-mono tracking-wider uppercase">交易对名称</label>
+        <input id="modal-symbol" type="text" placeholder="如: BTCUSDT" class="w-full bg-[#0d1117] border border-gray-800 rounded-lg px-4 py-3 font-mono focus:border-[#49f4c8] focus:ring-0 text-white outline-none"/>
       </div>
       <div class="space-y-2">
         <label class="text-xs text-gray-400 font-mono tracking-wider uppercase">安全评级</label>
         <div class="grid grid-cols-2 gap-3">
           <button id="lvl-btn-0" onclick="selectLevel(0)" class="flex flex-col items-center justify-center p-4 rounded-xl border border-gray-800 bg-[#0d1117] hover:border-status-success/50 transition-all group active:scale-[0.98]">
             <span class="material-symbols-outlined text-gray-600 group-hover:text-status-success mb-1">check_circle</span>
-            <span class="text-xs font-bold text-gray-400 group-hover:text-status-success">白名�?/span>
+            <span class="text-xs font-bold text-gray-400 group-hover:text-status-success">白名单</span>
           </button>
           <button id="lvl-btn-1" onclick="selectLevel(1)" class="flex flex-col items-center justify-center p-4 rounded-xl border border-gray-800 bg-[#0d1117] hover:border-status-warning/50 transition-all group active:scale-[0.98]">
             <span class="material-symbols-outlined text-gray-600 group-hover:text-status-warning mb-1">warning</span>
-            <span class="text-xs font-bold text-gray-400 group-hover:text-status-warning">黑名�?�?/span>
+            <span class="text-xs font-bold text-gray-400 group-hover:text-status-warning">黑名单1级</span>
           </button>
           <button id="lvl-btn-2" onclick="selectLevel(2)" class="flex flex-col items-center justify-center p-4 rounded-xl border border-gray-800 bg-[#0d1117] hover:border-status-orange/50 transition-all group active:scale-[0.98]">
             <span class="material-symbols-outlined text-gray-600 group-hover:text-status-orange mb-1">report_problem</span>
-            <span class="text-xs font-bold text-gray-400 group-hover:text-status-orange">黑名�?�?/span>
+            <span class="text-xs font-bold text-gray-400 group-hover:text-status-orange">黑名单2级</span>
           </button>
           <button id="lvl-btn-3" onclick="selectLevel(3)" class="flex flex-col items-center justify-center p-4 rounded-xl border border-gray-800 bg-[#0d1117] hover:border-status-danger/50 transition-all group active:scale-[0.98]">
             <span class="material-symbols-outlined text-gray-600 group-hover:text-status-danger mb-1">cancel</span>
@@ -214,8 +214,8 @@ var allData = {};
 var selectedLevel = 0;
 
 var LEVEL_ICONS  = ['check_circle','warning','report_problem','cancel'];
-var LEVEL_LABELS = ['白名�?,'黑名�?�?,'黑名�?�?,'永久禁止'];
-var LEVEL_DESCS  = ['正常可交�?,'保证金限�?,'严格限制','禁止开�?];
+var LEVEL_LABELS = ['白名单','黑名单1级','黑名单2级','永久禁止'];
+var LEVEL_DESCS  = ['正常可交易','保证金限制','严格限制','禁止开仓'];
 var LEVEL_COLORS = [
   { text:'text-status-success', border:'border-[#49f4c8]/20', bg:'bg-[#49f4c8]/5', hover:'hover:border-[#49f4c8]/50' },
   { text:'text-status-warning', border:'border-yellow-500/20', bg:'bg-yellow-500/5', hover:'hover:border-yellow-500/50' },
@@ -248,7 +248,7 @@ function setTab(tab) {
 }
 
 async function loadData() {
-  document.getElementById('symbol-grid').innerHTML = '<div class="text-gray-500 text-sm text-center py-16">加载�?..</div>';
+  document.getElementById('symbol-grid').innerHTML = '<div class="text-gray-500 text-sm text-center py-16">加载中...</div>';
   try {
     var r = await fetch('/api/rating/current?trading_type=' + currentMarket);
     var data = await r.json();
@@ -263,7 +263,7 @@ async function loadData() {
       total += cnt;
     });
     document.getElementById('cnt-all').textContent = total;
-    document.getElementById('total-badge').textContent = '�?' + total + ' 个交易对';
+    document.getElementById('total-badge').textContent = '共 ' + total + ' 个交易对';
 
     renderGrid();
   } catch(e) {
@@ -313,8 +313,8 @@ function renderGrid() {
     lvlItems.forEach(function(item) {
       var tip = '';
       if (item.reason) tip += item.reason;
-      if (item.total_trades) tip += ' | ' + item.total_trades + '�?胜率' + (item.win_rate ? item.win_rate.toFixed(1)+'%' : '--');
-      if (item.hard_stop_loss_count) tip += ' | 止损' + item.hard_stop_loss_count + '�?;
+      if (item.total_trades) tip += ' | ' + item.total_trades + '笔 胜率' + (item.win_rate ? item.win_rate.toFixed(1)+'%' : '--');
+      if (item.hard_stop_loss_count) tip += ' | 止损' + item.hard_stop_loss_count + '次';
       html += '<div class="flex items-center gap-1 ' + c.bg + ' border ' + c.border + ' px-3 py-1.5 rounded-md ' + c.hover + ' transition-all">';
       html += '<span class="text-xs font-mono font-medium ' + c.text + ' cursor-pointer" onclick="openEditModal(\'' + esc(item.symbol) + '\',' + item.rating_level + ')" title="' + esc(tip) + '">' + esc(item.symbol) + '</span>';
       // Edit icon
@@ -409,12 +409,12 @@ async function submitRating() {
 }
 
 async function deleteSymbol(symbol) {
-  if (!confirm('确定要删�?' + symbol + ' 的评级记录吗�?)) return;
+  if (!confirm('确定要删除 ' + symbol + ' 的评级记录吗？')) return;
   try {
     var r = await fetch('/api/rating/delete?symbol=' + encodeURIComponent(symbol), { method: 'DELETE' });
     var data = await r.json();
     if (!data.success) throw new Error(data.detail || '删除失败');
-    showToast(symbol + ' 评级已删�?);
+    showToast(symbol + ' 评级已删除');
     loadData();
   } catch(e) {
     showToast('删除失败: ' + e.message);
