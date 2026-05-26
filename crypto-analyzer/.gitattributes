@@ -1,0 +1,11 @@
+# 模板文件必须是 LF + UTF-8，防止 Windows CRLF 损坏中文
+*.html    text eol=lf
+*.css     text eol=lf
+*.js      text eol=lf
+*.py      text eol=lf
+*.yaml    text eol=lf
+*.yml     text eol=lf
+*.md      text eol=lf
+*.txt     text eol=lf
+*.sql     text eol=lf
+*.sh      text eol=lf

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>超级大脑 - TOP 50 高胜率交易对</title>
+<title>超级大脑 - TOP 100 高胜率交易对</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
@@ -72,7 +72,7 @@
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/futures_review" href="/futures_review"><span class="material-symbols-outlined text-lg">history_edu</span><span>复盘分析</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/technical-signals" href="/technical-signals"><span class="material-symbols-outlined text-lg">sensors</span><span>信号分析</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/market_regime" href="/market_regime"><span class="material-symbols-outlined text-lg">pulse_alert</span><span>行情识别</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/top50" href="/top50"><span class="material-symbols-outlined text-lg">workspace_premium</span><span>TOP 50</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/top50" href="/top50"><span class="material-symbols-outlined text-lg">workspace_premium</span><span>TOP 100</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/symbol_blacklist" href="/symbol_blacklist"><span class="material-symbols-outlined text-lg">block</span><span>交易对黑名单</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/signal_blacklist" href="/signal_blacklist"><span class="material-symbols-outlined text-lg">do_not_disturb_on</span><span>信号黑名单</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/spot_trading" href="/spot_trading"><span class="material-symbols-outlined text-lg">currency_exchange</span><span>现货交易</span></a>
@@ -103,7 +103,7 @@
   <header class="fixed top-0 right-0 left-[240px] h-16 bg-[#070b10] border-b border-[#0f1520] z-40">
     <div class="flex items-center justify-between px-6 w-full h-full font-mono">
       <div class="flex items-center gap-4">
-        <h2 class="text-lg font-bold text-white font-headline">TOP 50 高胜率交易对</h2>
+        <h2 class="text-lg font-bold text-white font-headline">TOP 100 高胜率交易对</h2>
         <span class="px-2 py-0.5 bg-[#49f4c8]/10 text-[#49f4c8] rounded text-xs border border-[#49f4c8]/20">实盘开仓白名单</span>
         <span id="hdr-update" class="text-xs text-gray-500">--</span>
       </div>
@@ -179,7 +179,7 @@
 <script>
 var _data = [];
 var _sortKey = 'rank_score';
-var _sortAsc = true;
+var _sortAsc = false;
 var _searchVal = '';
 
 function authHeaders() {
@@ -264,23 +264,24 @@ function render() {
     return;
   }
 
-    var html = rows.map(function(r, idx) {
-    var rankPos = idx + 1;
+  var html = rows.map(function(r, idx) {
+    var rank = r.rank_score;
     var rankBadge, rowCls = '';
-    if (rankPos === 1) {
+    if (rank === _data.length) {
       rankBadge = '<span class="rank-gold inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold">1</span>';
       rowCls = 'top1';
-    } else if (rankPos === 2) {
+    } else if (rank === _data.length - 1) {
       rankBadge = '<span class="rank-silver inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold">2</span>';
       rowCls = 'top2';
-    } else if (rankPos === 3) {
+    } else if (rank === _data.length - 2) {
       rankBadge = '<span class="rank-bronze inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold">3</span>';
       rowCls = 'top3';
     } else {
-      rankBadge = '<span class="rank-normal inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold">' + rankPos + '</span>';
+      var displayRank = _data.length - rank + 1;
+      rankBadge = '<span class="rank-normal inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold">' + displayRank + '</span>';
     }
 
-var wr = parseFloat(r.win_rate) || 0;
+    var wr = parseFloat(r.win_rate) || 0;
     var wrBar = '<div class="flex items-center gap-2"><div class="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden"><div class="h-full rounded-full bg-[#49f4c8]" style="width:' + Math.min(wr, 100) + '%"></div></div><span class="font-mono text-xs ' + (wr >= 60 ? 'text-[#49f4c8]' : wr >= 50 ? 'text-yellow-400' : 'text-red-400') + '">' + wr.toFixed(1) + '%</span></div>';
 
     var pnl = parseFloat(r.total_realized_pnl) || 0;
