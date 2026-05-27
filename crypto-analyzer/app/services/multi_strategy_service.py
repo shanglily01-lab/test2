@@ -407,6 +407,20 @@ class MultiStrategyService:
     ) -> bool:
         """开模拟仓位；live_trading_enabled=1 时同步实盘"""
         try:
+            # 黑名单3级防御性检查
+            _clean_sym = symbol.replace('/', '')
+            conn = self._get_conn()
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT 1 FROM trading_symbol_rating WHERE (symbol=%s OR symbol=%s) AND rating_level >= 3 LIMIT 1",
+                (symbol, _clean_sym),
+            )
+            if cur.fetchone() is not None:
+                cur.close(); conn.close()
+                logger.warning(f"[{source}] {symbol} 黑名单3级, 禁止开仓模拟单")
+                return False
+            cur.close(); conn.close()
+
             price = self._get_current_price(symbol)
             if not price or price <= 0:
                 return False
