@@ -424,8 +424,9 @@ class NewsAggregator:
         self.collectors = []
 
         # 初始化启用的采集器
-        if config.get('news', {}).get('cryptopanic', {}).get('enabled'):
-            self.collectors.append(CryptoPanicCollector(config.get('news', {})))
+        # CryptoPanic 已禁用 (API 404 失效)
+        # if config.get('news', {}).get('cryptopanic', {}).get('enabled'):
+        #     self.collectors.append(CryptoPanicCollector(config.get('news', {})))
 
         if config.get('news', {}).get('rss', {}).get('enabled', True):
             self.collectors.append(RSSCollector(config.get('news', {})))
