@@ -1102,6 +1102,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册 DeepSeek 预测 API 路由
+try:
+    from app.api.deepseek_predict_api import router as deepseek_predict_router
+    app.include_router(deepseek_predict_router)
+    logger.info("[DeepSeek预测] API路由已注册")
+except Exception as e:
+    logger.warning(f"[DeepSeek预测] API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册 Gemini 预测 API 路由
 try:
     from app.api.gemini_predict_api import router as gemini_predict_router

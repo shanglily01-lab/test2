@@ -112,7 +112,8 @@ class UnifiedDataScheduler:
             'futures_equity_update': {'count': 0, 'last_run': None, 'last_error': None},
             'binance_news': {'count': 0, 'last_run': None, 'last_error': None},
             'correct_live_trades': {'count': 0, 'last_run': None, 'last_error': None},
-            'deepseek_explore': {'count': 0, 'last_run': None, 'last_error': None}
+            'deepseek_explore': {'count': 0, 'last_run': None, 'last_error': None},
+            'deepseek_predict': {'count': 0, 'last_run': None, 'last_error': None}
         }
 
         logger.info(f"调度器初始化完成 - 监控币种: {len(self.symbols)} 个")
@@ -1315,6 +1316,19 @@ class UnifiedDataScheduler:
         schedule.every(6).hours.do(_run_deepseek_explore)
         logger.info("  ✓ deepseek_explore - 每 6 小时 (后台线程, kill switch 默认 OFF)")
 
+        # DeepSeek 预测 - 每 12h 调一次 DeepSeek 预测 TOP50 方向
+        def _run_deepseek_predict():
+            def wrapper():
+                try:
+                    from app.services.deepseek_predictor import run_predict_round
+                    run_predict_round(triggered_by='scheduler')
+                except Exception as e:
+                    logger.error(f"[DeepSeek预测] 调度异常: {e}", exc_info=True)
+            threading.Thread(target=wrapper, daemon=True, name="DeepSeekPredict").start()
+
+        schedule.every(12).hours.do(_run_deepseek_predict)
+        logger.info("  ✓ deepseek_predict - 每 12 小时 (后台线程, kill switch 默认 OFF)")
+
         # Gemini 预测 - 每 12h 调一次 Gemini 预测 TOP50 方向
         def _run_gemini_predict():
             def wrapper():
@@ -1491,6 +1505,11 @@ class UnifiedDataScheduler:
                     run_explore_round(triggered_by='scheduler_init')
                 except Exception as e:
                     logger.error(f"[DeepSeek探索] 初始化运行失败: {e}")
+                try:
+                    from app.services.deepseek_predictor import run_predict_round
+                    run_predict_round(triggered_by='scheduler_init')
+                except Exception as e:
+                    logger.error(f"[DeepSeek预测] 初始化运行失败: {e}")
             threading.Thread(target=wrapper, daemon=True, name="GeminiInit").start()
         _run_gemini_init()
 
