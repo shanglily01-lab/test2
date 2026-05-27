@@ -50,6 +50,13 @@ class TradingServicesUpdate(BaseModel):
     trend_following_enabled: Optional[bool] = None
     gemini_explore_enabled: Optional[bool] = None   # 2026-05-27 Gemini 探索
     gemini_predict_enabled: Optional[bool] = None   # 2026-05-27 Gemini 预测
+    s1_early_long_enabled: Optional[bool] = None     # 2026-05-27 S1 早期做多
+    s2_pullback_long_enabled: Optional[bool] = None   # 2026-05-27 S2 回调做多
+    s3_top_short_enabled: Optional[bool] = None        # 2026-05-27 S3 顶部做空
+    s4_rebound_short_enabled: Optional[bool] = None    # 2026-05-27 S4 反弹做空
+    s5_large_oversold_enabled: Optional[bool] = None   # 2026-05-27 S5 大币超卖
+    s6_vol_spike_enabled: Optional[bool] = None         # 2026-05-27 S6 小币量能异动
+    s7_ma_support_enabled: Optional[bool] = None        # 2026-05-27 S7 MA支撑反弹
     s8_topshort_enabled: Optional[bool] = None       # 2026-05-16 S8 顶部反转做空
     s9_gemini_ai_enabled: Optional[bool] = None      # 2026-05-16 S9 Gemini AI 抄底反转
     gemini_position_advisor_enabled: Optional[bool] = None  # 2026-05-17 Gemini 实盘持仓顾问
@@ -374,6 +381,10 @@ async def get_trading_services():
                                   'btc_momentum_enabled', 'u_coin_style_enabled',
                                   'signal_confirmation_enabled', 'trend_following_enabled',
                                   'gemini_explore_enabled', 'gemini_predict_enabled',
+                                  's1_early_long_enabled', 's2_pullback_long_enabled',
+                                  's3_top_short_enabled', 's4_rebound_short_enabled',
+                                  's5_large_oversold_enabled', 's6_vol_spike_enabled',
+                                  's7_ma_support_enabled',
                                   's8_topshort_enabled', 's9_gemini_ai_enabled',
                                   'gemini_position_advisor_enabled',
                                   'stop_loss_pct', 'take_profit_pct')
@@ -400,6 +411,13 @@ async def get_trading_services():
             's8_topshort_enabled': 's8_topshort_enabled',
             's9_gemini_ai_enabled': 's9_gemini_ai_enabled',
             'gemini_position_advisor_enabled': 'gemini_position_advisor_enabled',
+            's1_early_long_enabled': 's1_early_long_enabled',
+            's2_pullback_long_enabled': 's2_pullback_long_enabled',
+            's3_top_short_enabled': 's3_top_short_enabled',
+            's4_rebound_short_enabled': 's4_rebound_short_enabled',
+            's5_large_oversold_enabled': 's5_large_oversold_enabled',
+            's6_vol_spike_enabled': 's6_vol_spike_enabled',
+            's7_ma_support_enabled': 's7_ma_support_enabled',
         }
 
         result = {
@@ -419,6 +437,13 @@ async def get_trading_services():
             's8_topshort_enabled': False,
             's9_gemini_ai_enabled': False,
             'gemini_position_advisor_enabled': False,
+            's1_early_long_enabled': False,
+            's2_pullback_long_enabled': False,
+            's3_top_short_enabled': False,
+            's4_rebound_short_enabled': False,
+            's5_large_oversold_enabled': False,
+            's6_vol_spike_enabled': False,
+            's7_ma_support_enabled': False,
             'stop_loss_pct': 0.02,
             'take_profit_pct': 0.05,
         }
@@ -598,6 +623,104 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (value,))
             updates.append(f"趋势跟随: {'启用' if data.trend_following_enabled else '禁用'}")
+
+        if data.s1_early_long_enabled is not None:
+            value = '1' if data.s1_early_long_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('s1_early_long_enabled', %s,
+                        'S1 早期做多开关 (1=启用, 0=禁用)',
+                        'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"S1早期做多: {'启用' if data.s1_early_long_enabled else '禁用'}")
+
+        if data.s2_pullback_long_enabled is not None:
+            value = '1' if data.s2_pullback_long_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('s2_pullback_long_enabled', %s,
+                        'S2 无量回调做多开关 (1=启用, 0=禁用)',
+                        'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"S2回调做多: {'启用' if data.s2_pullback_long_enabled else '禁用'}")
+
+        if data.s3_top_short_enabled is not None:
+            value = '1' if data.s3_top_short_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('s3_top_short_enabled', %s,
+                        'S3 顶部做空开关 (1=启用, 0=禁用)',
+                        'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"S3顶部做空: {'启用' if data.s3_top_short_enabled else '禁用'}")
+
+        if data.s4_rebound_short_enabled is not None:
+            value = '1' if data.s4_rebound_short_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('s4_rebound_short_enabled', %s,
+                        'S4 反弹动能衰竭做空开关 (1=启用, 0=禁用)',
+                        'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"S4反弹做空: {'启用' if data.s4_rebound_short_enabled else '禁用'}")
+
+        if data.s5_large_oversold_enabled is not None:
+            value = '1' if data.s5_large_oversold_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('s5_large_oversold_enabled', %s,
+                        'S5 大币4H超卖反弹做多开关 (1=启用, 0=禁用)',
+                        'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"S5大币超卖: {'启用' if data.s5_large_oversold_enabled else '禁用'}")
+
+        if data.s6_vol_spike_enabled is not None:
+            value = '1' if data.s6_vol_spike_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('s6_vol_spike_enabled', %s,
+                        'S6 小币量能异动做多开关 (1=启用, 0=禁用)',
+                        'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"S6量能异动: {'启用' if data.s6_vol_spike_enabled else '禁用'}")
+
+        if data.s7_ma_support_enabled is not None:
+            value = '1' if data.s7_ma_support_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('s7_ma_support_enabled', %s,
+                        'S7 小币均线支撑反弹做多开关 (1=启用, 0=禁用)',
+                        'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"S7均线支撑: {'启用' if data.s7_ma_support_enabled else '禁用'}")
 
         if data.gemini_explore_enabled is not None:
             value = '1' if data.gemini_explore_enabled else '0'

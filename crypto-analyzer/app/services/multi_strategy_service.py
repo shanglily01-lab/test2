@@ -542,6 +542,8 @@ class MultiStrategyService:
         """S1: RSI 25-52(上升) + 价格在MA20 80-105% + 量能回升
         精简: 去掉 4H MACD (滞后8h, 等到确认趋势已走完), 保留核心 RSI+位置
         """
+        if not self._read_setting_bool('s1_early_long_enabled', default=False):
+            return
         if self._strategy_position_count(self.S1_SOURCE) >= self.S1_MAX_POSITIONS:
             return
 
@@ -612,6 +614,8 @@ class MultiStrategyService:
 
     def scan_s2_pullback_long(self):
         """S2: 48H涨>12%后回调8-38%，15m RSI 30-58（低位即可，不要求上升）"""
+        if not self._read_setting_bool('s2_pullback_long_enabled', default=False):
+            return
         if self._strategy_position_count(self.S2_SOURCE) >= self.S2_MAX_POSITIONS:
             return
 
@@ -684,6 +688,8 @@ class MultiStrategyService:
         """S3: RSI>=70顶背离 + 48H涨>20% + 4H MACD下行 + 近3根有阴线
         精简: 去掉"已从高点回落3-15%"(最致命的滞后确认,等跌了才空=灾难)
         """
+        if not self._read_setting_bool('s3_top_short_enabled', default=False):
+            return
         if self._strategy_position_count(self.S3_SOURCE) >= self.S3_MAX_POSITIONS:
             return
 
@@ -773,6 +779,8 @@ class MultiStrategyService:
 
     def scan_s4_rebound_short(self):
         """S4: 14日高点50-85%反弹+曾下跌15%+ 1个指标确认（三选一）"""
+        if not self._read_setting_bool('s4_rebound_short_enabled', default=False):
+            return
         if self._strategy_position_count(self.S4_SOURCE) >= self.S4_MAX_POSITIONS:
             return
 
@@ -870,6 +878,8 @@ class MultiStrategyService:
         """S5: BTC/ETH/SOL/BNB/XRP 的 4H RSI<32 已回升 + 价格低于日MA20 做多
         精简: 去掉"RSI仍在下降则跳过"（等回升确认=错过最低点）
         """
+        if not self._read_setting_bool('s5_large_oversold_enabled', default=False):
+            return
         if self._strategy_position_count(self.S5_SOURCE) >= self.S5_MAX_POSITIONS:
             return
 
@@ -959,6 +969,8 @@ class MultiStrategyService:
         """S6: 12H量峰>3.5x均量 + 当前量1.2-5x + 价格在MA20 75-108% + 3H涨<5%
         精简: 去掉 RSI 28-55（量能异动本身就是先行信号，不需要RSI再确认）
         """
+        if not self._read_setting_bool('s6_vol_spike_enabled', default=False):
+            return
         if self._strategy_position_count(self.S6_SOURCE) >= self.S6_MAX_POSITIONS:
             return
 
@@ -1036,6 +1048,8 @@ class MultiStrategyService:
 
     def scan_s7_ma_support(self):
         """S7: 价格跌至20H均线82-95%区间 + 阳线反弹（移除量能确认: 等量=错过反弹）"""
+        if not self._read_setting_bool('s7_ma_support_enabled', default=False):
+            return
         if self._strategy_position_count(self.S7_SOURCE) >= self.S7_MAX_POSITIONS:
             return
 
