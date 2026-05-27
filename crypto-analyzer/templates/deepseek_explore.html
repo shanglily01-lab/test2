@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>DeepSeek 探索 | Neural Obsidian</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  body { font-family: 'Manrope', sans-serif; }
+  h1, h2, h3, .headline { font-family: 'Space Grotesk', sans-serif; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #0f1520; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #49f4c8; }
+  .pp { color: #49f4c8; }
+  .pn { color: #ff716c; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .chip-on { background: rgba(73,244,200,0.15); color: #49f4c8; border: 1px solid rgba(73,244,200,0.3); }
+  .chip-off { background: rgba(168,171,178,0.1); color: #a8abb2; border: 1px solid rgba(168,171,178,0.2); }
+  .chip-long { background: rgba(73,244,200,0.12); color: #49f4c8; }
+  .chip-short { background: rgba(255,113,108,0.12); color: #ff716c; }
+  .chip-skip { background: rgba(168,171,178,0.08); color: #a8abb2; }
+  .chip-action-opened { background: rgba(73,244,200,0.15); color: #49f4c8; }
+  .chip-action-big4 { background: rgba(255,176,0,0.12); color: #ffb000; }
+  .chip-action-dedup { background: rgba(91,158,255,0.12); color: #5b9eff; }
+  .chip-action-confidence { background: rgba(168,171,178,0.08); color: #a8abb2; }
+  .chip-action-other { background: rgba(168,171,178,0.08); color: #a8abb2; }
+  /* toggle switch */
+  .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
+  .toggle input { display: none; }
+  .toggle .slider { position: absolute; cursor: pointer; top:0; left:0; right:0; bottom:0; background: #334155; border-radius: 12px; transition: .2s; }
+  .toggle .slider:before { position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #ebeef5; border-radius: 50%; transition: .2s; }
+  .toggle input:checked + .slider { background: #49f4c8; }
+  .toggle input:checked + .slider:before { transform: translateX(20px); background: #002045; }
+  .row-expand { background: #0f1419; }
+</style>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "on-surface": "#ebeef5", "surface-container-low": "#0f1419",
+          "outline": "#72767c", "surface-container-highest": "#20262e",
+          "tertiary": "#ff6e80", "primary-container": "#00d4aa",
+          "surface": "#0a0f14", "error": "#ff716c",
+          "surface-variant": "#20262e", "surface-tint": "#49f4c8",
+          "on-surface-variant": "#a8abb2", "surface-container-lowest": "#000000",
+          "surface-container-high": "#1a2027", "surface-container": "#151a20",
+          "outline-variant": "#44484e", "primary": "#49f4c8",
+          "background": "#0a0f14", "secondary": "#5b9eff",
+          "on-background": "#ebeef5"
+        },
+        fontFamily: {"headline":["Space Grotesk"],"body":["Manrope"],"label":["Manrope"]},
+        borderRadius: {"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},
+      },
+    },
+  }
+</script>
+</head>
+<body class="bg-surface text-on-surface">
+
+<!-- Sidebar Navigation -->
+<aside class="fixed left-0 top-0 h-screen w-[240px] bg-[#0a0f14] border-r border-slate-800 flex flex-col py-6 z-50">
+<div class="px-5 mb-6">
+<a href="/" class="block group">
+<h1 class="text-xl font-black tracking-tighter text-[#49f4c8] group-hover:opacity-80 transition-opacity">NEURAL OBSIDIAN</h1>
+<p class="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">Quant Terminal</p>
+</a>
+</div>
+<nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto">
+<a href="/dashboard" data-path="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
+<a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>U本位合约</span></a>
+<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_bitcoin</span><span>币本位合约</span></a>
+<a href="/gemini_explore" data-path="/gemini_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>Gemini 探索</span></a>
+<a href="/deepseek_explore" data-path="/deepseek_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">psychology</span><span>DeepSeek 探索</span></a>
+<a href="/live_trading" data-path="/live_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">precision_manufacturing</span><span>Live Trading</span></a>
+<a href="/futures_review" data-path="/futures_review" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>复盘分析</span></a>
+<a href="/technical-signals" data-path="/technical-signals" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">sensors</span><span>信号分析</span></a>
+<a href="/market_regime" data-path="/market_regime" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">pulse_alert</span><span>行情识别</span></a>
+<a class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm" data-path="/top50" href="/top50"><span class="material-symbols-outlined text-lg">workspace_premium</span><span>TOP 50</span></a>
+    <a href="/symbol_blacklist" data-path="/symbol_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">block</span><span>交易对黑名单</span></a>
+    <a href="/signal_blacklist" data-path="/signal_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">do_not_disturb_on</span><span>信号黑名单</span></a>
+<a href="/spot_trading" data-path="/spot_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_exchange</span><span>现货交易</span></a>
+<a href="/etf_data" data-path="/etf_data" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">candlestick_chart</span><span>ETF 数据</span></a>
+<a href="/blockchain_gas" data-path="/blockchain_gas" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Gas 监控</span></a>
+<a href="/corporate_treasury" data-path="/corporate_treasury" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">account_balance</span><span>企业金库</span></a>
+<a href="/data_management" data-path="/data_management" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">storage</span><span>数据管理</span></a>
+<a href="/api-keys" data-path="/api-keys" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">api</span><span>API Keys</span></a>
+<a href="/system-settings" data-path="/system-settings" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">settings</span><span>Settings</span></a>
+    <a href="/binance-news" data-path="/binance-news" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">campaign</span><span>公告监控</span></a>
+</nav>
+<script>
+(function(){
+  var path = window.location.pathname.replace(/\/$/, '') || '/';
+  document.querySelectorAll('#sidebar-nav .nav-item').forEach(function(a){
+    if(a.getAttribute('data-path') === path){
+      a.classList.remove('text-slate-400');
+      a.classList.add('text-[#49f4c8]','bg-[#151a20]','border-r-2','border-[#49f4c8]','font-semibold');
+    }
+  });
+})();
+</script>
+</aside>
+
+<main class="ml-[240px] min-h-screen">
+
+<!-- Header -->
+<header class="border-b border-outline-variant/10 px-8 py-5 flex items-center justify-between">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">DeepSeek 探索</h1>
+    <p class="text-[11px] text-on-surface-variant mt-1 uppercase tracking-widest">每 6h 调用 DeepSeek 检测短时方向异动 · 模拟单 · SL 5% / TP 10% / 杠杆 5x / 持仓 6h</p>
+  </div>
+  <div class="flex items-center gap-4">
+    <span id="status-chip" class="chip chip-off"><span class="material-symbols-outlined text-[14px]">power_off</span><span id="status-label">已禁用</span></span>
+    <label class="toggle" title="启用 / 禁用 DeepSeek 探索 (开关后台自动跑)">
+      <input type="checkbox" id="enable-toggle" onchange="onToggle(this.checked)"/>
+      <span class="slider"></span>
+    </label>
+    <button onclick="loadAll()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-highest text-xs text-on-surface-variant transition-colors">
+      <span class="material-symbols-outlined text-[14px]">refresh</span>刷新
+    </button>
+  </div>
+</header>
+
+<!-- 顶部统计卡 -->
+<section class="px-8 py-6 grid grid-cols-5 gap-4">
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">当前持仓</p>
+    <p class="mono text-2xl font-medium" id="stat-open"><span class="text-on-surface-variant">--</span></p>
+    <p class="text-[10px] text-on-surface-variant mt-1">上限 <span id="stat-max">20</span></p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">30 天平仓</p>
+    <p class="mono text-2xl font-medium" id="stat-closed">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">上轮 universe</p>
+    <p class="mono text-2xl font-medium" id="stat-universe">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">上轮开仓</p>
+    <p class="mono text-2xl font-medium" id="stat-trades">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">上轮时间 UTC</p>
+    <p class="mono text-xs font-medium pt-1" id="stat-lastrun">--</p>
+    <p class="text-[10px] mt-1" id="stat-laststatus">--</p>
+  </div>
+</section>
+
+<!-- 统计盈亏 (累计) -->
+<section class="px-8 pb-6 grid grid-cols-5 gap-4">
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">合计已实现盈亏</p>
+    <p class="mono text-2xl font-medium" id="e-stat-realized">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">当前浮盈</p>
+    <p class="mono text-2xl font-medium" id="e-stat-floating">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">总盈亏 (已实现+浮盈)</p>
+    <p class="mono text-2xl font-medium" id="e-stat-total">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">胜率 (30d)</p>
+    <p class="mono text-2xl font-medium" id="e-stat-winrate">--</p>
+    <p class="text-[10px] text-on-surface-variant mt-1" id="e-stat-wl">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">30天平仓数</p>
+    <p class="mono text-2xl font-medium" id="e-stat-closed2">--</p>
+  </div>
+</section>
+
+<!-- 当前持仓 -->
+<section class="px-8 pb-6">
+  <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant mb-3">当前持仓 (OPEN)</h2>
+  <div class="bg-surface-container-low rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
+      <table class="w-full text-xs">
+        <thead class="bg-surface-container-low sticky top-0 z-10">
+          <tr class="border-b border-outline-variant/20">
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">Symbol</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">方向</th>
+            <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">开仓价</th>
+            <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">当前价</th>
+            <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">浮盈</th>
+            <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">SL</th>
+            <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">TP</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">开仓时间 UTC</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">计划平仓</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">催化剂</th>
+          </tr>
+        </thead>
+        <tbody id="open-tbody">
+          <tr><td colspan="10" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 最近 DeepSeek 探索运行 -->
+<section class="px-8 pb-6">
+  <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant mb-3">最近 DeepSeek 探索运行</h2>
+  <div class="bg-surface-container-low rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[480px] overflow-y-auto">
+      <table class="w-full text-xs">
+        <thead class="bg-surface-container-low sticky top-0 z-10">
+          <tr class="border-b border-outline-variant/20">
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">#</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">UTC 时间</th>
+            <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">universe</th>
+            <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">开仓</th>
+            <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">耗时</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">状态</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">来源</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">摘要</th>
+          </tr>
+        </thead>
+        <tbody id="runs-tbody">
+          <tr><td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 历史平仓 -->
+<section class="px-8 pb-10">
+  <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant mb-3">历史平仓 (近 30 天)</h2>
+  <div class="bg-surface-container-low rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
+      <table class="w-full text-xs">
+        <thead class="bg-surface-container-low sticky top-0 z-10">
+          <tr class="border-b border-outline-variant/20">
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">Symbol</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">方向</th>
+            <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">开仓价</th>
+            <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">平仓价</th>
+            <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">已实现盈亏</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">开仓 UTC</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">平仓 UTC</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">备注</th>
+          </tr>
+        </thead>
+        <tbody id="closed-tbody">
+          <tr><td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+// ============================================================
+// UTILS
+// ============================================================
+function fmt(v, dec) {
+  if (v === null || v === undefined || v === '') return '--';
+  var n = parseFloat(v);
+  if (isNaN(n)) return '--';
+  return n.toFixed(dec !== undefined ? dec : 2);
+}
+function fmtSigned(v, dec) {
+  if (v === null || v === undefined || v === '') return '--';
+  var n = parseFloat(v);
+  if (isNaN(n)) return '--';
+  return (n >= 0 ? '+' : '') + n.toFixed(dec !== undefined ? dec : 2);
+}
+function pCls(v) {
+  var n = parseFloat(v);
+  if (isNaN(n)) return '';
+  return n >= 0 ? 'pp' : 'pn';
+}
+function shortUTC(s) {
+  if (!s) return '--';
+  return s.replace('T', ' ').replace(/\.\d+/, '').replace(/Z$/, '').slice(0, 16);
+}
+function statusBadge(st) {
+  if (st === 'ok') return '<span class="chip chip-on">OK</span>';
+  if (st === 'partial') return '<span class="chip chip-action-big4">PARTIAL</span>';
+  if (st === 'error') return '<span class="chip" style="background:rgba(255,113,108,0.12);color:#ff716c">ERROR</span>';
+  if (st === 'skipped') return '<span class="chip chip-off">SKIP</span>';
+  return '<span class="chip chip-off">' + st + '</span>';
+}
+function dirBadge(side) {
+  if (side === 'LONG') return '<span class="chip chip-long">LONG</span>';
+  if (side === 'SHORT') return '<span class="chip chip-short">SHORT</span>';
+  return side;
+}
+function escapeHtml(s) {
+  if (s === null || s === undefined) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ============================================================
+// STATUS + TOGGLE
+// ============================================================
+function loadStatus() {
+  fetch('/api/deepseek-explore/status')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var s = d.data || {};
+      var enabled = !!s.enabled;
+      document.getElementById('enable-toggle').checked = enabled;
+      var chip = document.getElementById('status-chip');
+      var label = document.getElementById('status-label');
+      if (enabled) {
+        chip.className = 'chip chip-on';
+        chip.querySelector('span.material-symbols-outlined').textContent = 'power';
+        label.textContent = '已启用';
+      } else {
+        chip.className = 'chip chip-off';
+        chip.querySelector('span.material-symbols-outlined').textContent = 'power_off';
+        label.textContent = '已禁用';
+      }
+      document.getElementById('stat-open').textContent = s.open_positions ?? '--';
+      document.getElementById('stat-max').textContent = s.max_positions ?? 20;
+      document.getElementById('stat-closed').textContent = s.closed_positions_30d ?? '--';
+      var lr = s.last_run || {};
+      document.getElementById('stat-universe').textContent = lr.universe_size ?? '--';
+      document.getElementById('stat-trades').textContent = lr.trades_opened ?? '--';
+      document.getElementById('stat-lastrun').textContent = lr.asof_utc ? shortUTC(lr.asof_utc) : '--';
+      document.getElementById('stat-laststatus').innerHTML = lr.status ? statusBadge(lr.status) : '--';
+    })
+    .catch(function(e){ console.error('status error', e); });
+}
+
+function onToggle(checked) {
+  fetch('/api/deepseek-explore/toggle', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ enabled: checked })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (!d.success) { alert('切换失败'); }
+    setTimeout(loadStatus, 200);
+  })
+  .catch(function(e){ alert('切换失败: ' + e); });
+}
+
+// ============================================================
+// POSITIONS
+// ============================================================
+function loadOpenPositions() {
+  fetch('/api/deepseek-explore/positions/live')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var rows = d.data || [];
+      var summary = d.summary || {};
+      var tbody = document.getElementById('open-tbody');
+
+      var openEl = document.getElementById('stat-open');
+      if (openEl) openEl.innerHTML = summary.open_count !== undefined
+          ? (summary.open_count + ' <span class="text-xs text-on-surface-variant">仓</span>')
+          : '--';
+
+      var statTrades = document.getElementById('stat-trades');
+      if (statTrades && summary.total_unrealized_pnl !== undefined) {
+        var t = summary.total_unrealized_pnl;
+        var tPct = summary.total_unrealized_pnl_pct;
+        var cls = t >= 0 ? 'pp' : 'pn';
+        statTrades.innerHTML = '<span class="' + cls + '">' + fmtSigned(t) + ' U</span> <span class="text-xs ' + cls + '">(' + fmtSigned(tPct, 2) + '%)</span>';
+        var lbl = statTrades.parentElement.querySelector('p');
+        if (lbl) lbl.textContent = '当前浮盈合计';
+      }
+
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无 OPEN 持仓</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(function(p){
+        var pnl = p.unrealized_pnl;
+        var pnlPct = p.unrealized_pnl_pct;
+        var markCls = '';
+        if (p.mark_price != null && p.entry_price > 0) {
+          var d = p.mark_price - p.entry_price;
+          var favorable = (p.position_side === 'LONG' && d >= 0) || (p.position_side === 'SHORT' && d <= 0);
+          markCls = favorable ? 'pp' : 'pn';
+        }
+        return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container/40 transition-colors">' +
+          '<td class="px-4 py-3 mono">' + escapeHtml(p.symbol) + '</td>' +
+          '<td class="px-4 py-3">' + dirBadge(p.position_side) + '</td>' +
+          '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.entry_price, 6) + '</td>' +
+          '<td class="px-4 py-3 text-right mono ' + markCls + '">' + fmt(p.mark_price, 6) + '</td>' +
+          '<td class="px-4 py-3 text-right mono ' + pCls(pnl) + '">' + fmtSigned(pnl) + ' <span class="text-[10px] opacity-70">(' + fmtSigned(pnlPct, 2) + '%)</span></td>' +
+          '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.stop_loss_price, 6) + '</td>' +
+          '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.take_profit_price, 6) + '</td>' +
+          '<td class="px-4 py-3 mono text-on-surface-variant text-[11px]">' + shortUTC(p.open_time) + '</td>' +
+          '<td class="px-4 py-3 mono text-on-surface-variant text-[11px]">' + shortUTC(p.planned_close_time) + '</td>' +
+          '<td class="px-4 py-3 text-on-surface-variant text-[11px] max-w-xs truncate" title="' + escapeHtml(p.entry_reason || '') + '">' + escapeHtml(p.entry_reason || '') + '</td>' +
+          '</tr>';
+      }).join('');
+    })
+    .catch(function(e){
+      document.getElementById('open-tbody').innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载失败: ' + e + '</td></tr>';
+    });
+}
+
+function loadClosedPositions() {
+  fetch('/api/deepseek-explore/positions?status=closed&limit=200')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var rows = d.data || [];
+      var tbody = document.getElementById('closed-tbody');
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-xs">近 30 天无平仓</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(function(p){
+        var pnl = p.realized_pnl;
+        return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container/40 transition-colors">' +
+          '<td class="px-4 py-3 mono">' + escapeHtml(p.symbol) + '</td>' +
+          '<td class="px-4 py-3">' + dirBadge(p.position_side) + '</td>' +
+          '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.entry_price, 6) + '</td>' +
+          '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.mark_price, 6) + '</td>' +
+          '<td class="px-4 py-3 text-right mono ' + pCls(pnl) + '">' + fmtSigned(pnl) + '</td>' +
+          '<td class="px-4 py-3 mono text-on-surface-variant text-[11px]">' + shortUTC(p.open_time) + '</td>' +
+          '<td class="px-4 py-3 mono text-on-surface-variant text-[11px]">' + shortUTC(p.close_time) + '</td>' +
+          '<td class="px-4 py-3 text-on-surface-variant text-[11px] max-w-xs truncate" title="' + escapeHtml((p.notes || p.entry_reason) || '') + '">' + escapeHtml((p.notes || p.entry_reason) || '') + '</td>' +
+          '</tr>';
+      }).join('');
+    })
+    .catch(function(e){
+      document.getElementById('closed-tbody').innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载失败: ' + e + '</td></tr>';
+    });
+}
+
+// ============================================================
+// STATS (盈亏统计)
+// ============================================================
+function loadExploreStats() {
+  fetch('/api/deepseek-explore/stats?days=30')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.success) return;
+      var s = d.data || {};
+      var pCls = function(v){ return (v || 0) >= 0 ? 'pp' : 'pn'; };
+      document.getElementById('e-stat-realized').innerHTML = '<span class="' + pCls(s.total_realized_pnl) + '">' + fmtSigned(s.total_realized_pnl) + ' U</span>';
+      document.getElementById('e-stat-floating').innerHTML = '<span class="' + pCls(s.floating_pnl) + '">' + fmtSigned(s.floating_pnl) + ' U</span>';
+      document.getElementById('e-stat-total').innerHTML = '<span class="' + pCls(s.total_pnl) + '">' + fmtSigned(s.total_pnl) + ' U</span>';
+      document.getElementById('e-stat-winrate').innerHTML = '<span class="' + ((s.win_rate || 0) >= 50 ? 'pp' : 'pn') + '">' + fmt(s.win_rate, 1) + '%</span>';
+      document.getElementById('e-stat-wl').textContent = s.wins + '胜 ' + s.losses + '负';
+      document.getElementById('e-stat-closed2').textContent = s.total_trades;
+    })
+    .catch(function(e){ console.error('explore stats error', e); });
+}
+
+// ============================================================
+// RUNS + VERDICTS (expandable)
+// ============================================================
+var _verdictsCache = {};
+
+function loadRuns() {
+  fetch('/api/deepseek-explore/runs?limit=20')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var rows = d.data || [];
+      var tbody = document.getElementById('runs-tbody');
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无运行记录</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map(function(r){
+        return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container/40 transition-colors cursor-pointer" onclick="toggleVerdicts(' + r.id + ')">' +
+          '<td class="px-4 py-3 mono text-on-surface-variant">' + r.id + '</td>' +
+          '<td class="px-4 py-3 mono text-[11px]">' + shortUTC(r.asof_utc) + '</td>' +
+          '<td class="px-4 py-3 text-right mono">' + (r.universe_size || 0) + '</td>' +
+          '<td class="px-4 py-3 text-right mono ' + ((r.trades_opened || 0) > 0 ? 'pp' : 'text-on-surface-variant') + '">' + (r.trades_opened || 0) + '</td>' +
+          '<td class="px-4 py-3 text-right mono text-on-surface-variant text-[11px]">' + fmt(r.elapsed_s, 1) + 's</td>' +
+          '<td class="px-4 py-3">' + statusBadge(r.status) + '</td>' +
+          '<td class="px-4 py-3 text-on-surface-variant text-[11px]">' + escapeHtml(r.triggered_by || '') + '</td>' +
+          '<td class="px-4 py-3 text-on-surface-variant text-[11px] max-w-md truncate" title="' + escapeHtml(r.summary_short || '') + '">' + escapeHtml(r.summary_short || (r.error_msg ? '[err] ' + r.error_msg : '')) + '</td>' +
+          '</tr>' +
+          '<tr id="verdict-row-' + r.id + '" class="hidden row-expand"><td colspan="8" class="px-6 py-4" id="verdict-cell-' + r.id + '"></td></tr>';
+      }).join('');
+    })
+    .catch(function(e){
+      document.getElementById('runs-tbody').innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载失败: ' + e + '</td></tr>';
+    });
+}
+
+function toggleVerdicts(runId) {
+  var row = document.getElementById('verdict-row-' + runId);
+  if (!row) return;
+  if (!row.classList.contains('hidden')) {
+    row.classList.add('hidden');
+    return;
+  }
+  document.querySelectorAll('[id^="verdict-row-"]').forEach(function(r){ if (r !== row) r.classList.add('hidden'); });
+
+  var cell = document.getElementById('verdict-cell-' + runId);
+  if (_verdictsCache[runId]) {
+    cell.innerHTML = _verdictsCache[runId];
+    row.classList.remove('hidden');
+    return;
+  }
+  cell.innerHTML = '<p class="text-on-surface-variant text-xs">加载 verdicts...</p>';
+  row.classList.remove('hidden');
+
+  fetch('/api/deepseek-explore/verdicts?run_id=' + runId)
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var vs = d.data || [];
+      if (!vs.length) { cell.innerHTML = '<p class="text-on-surface-variant text-xs">无 verdicts</p>'; return; }
+      var html = '<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="border-b border-outline-variant/20 text-on-surface-variant"><th class="px-2 py-2 text-left">Symbol</th><th class="px-2 py-2 text-left">类别</th><th class="px-2 py-2 text-right">置信</th><th class="px-2 py-2 text-left">动作</th><th class="px-2 py-2 text-left">催化剂</th><th class="px-2 py-2 text-left">数据信号</th><th class="px-2 py-2 text-left">跳过原因</th></tr></thead><tbody>';
+      vs.forEach(function(v){
+        var catRaw = (v.category || '').toLowerCase();
+        var catChip = (catRaw === 'bullish' || catRaw === 'red_swan') ? '<span class="chip chip-long">看多</span>'
+                    : (catRaw === 'bearish' || catRaw === 'black_swan') ? '<span class="chip chip-short">看空</span>'
+                    : '<span class="chip chip-skip">SKIP</span>';
+        var act = v.action_taken || 'skipped_other';
+        var actClass = act === 'opened' ? 'chip-action-opened'
+                    : act === 'skipped_big4' ? 'chip-action-big4'
+                    : act === 'skipped_dedup' ? 'chip-action-dedup'
+                    : act === 'skipped_confidence' ? 'chip-action-confidence'
+                    : 'chip-action-other';
+        var actLabel = act === 'opened' ? ('已开仓 #' + (v.position_id || '?'))
+                    : act === 'skipped_big4' ? 'Big4 闸门'
+                    : act === 'skipped_dedup' ? '已有同向'
+                    : act === 'skipped_max_positions' ? '已达上限'
+                    : act === 'skipped_confidence' ? '低置信度'
+                    : '其他';
+        html += '<tr class="border-b border-outline-variant/10">' +
+                '<td class="px-2 py-2 mono">' + escapeHtml(v.symbol) + '</td>' +
+                '<td class="px-2 py-2">' + catChip + '</td>' +
+                '<td class="px-2 py-2 text-right mono">' + fmt(v.confidence, 2) + '</td>' +
+                '<td class="px-2 py-2"><span class="chip ' + actClass + '">' + actLabel + '</span></td>' +
+                '<td class="px-2 py-2 text-on-surface-variant text-[11px] max-w-xs">' + escapeHtml(v.catalyst || '') + '</td>' +
+                '<td class="px-2 py-2 text-on-surface-variant text-[11px] max-w-xs">' + escapeHtml(v.data_signal || '') + '</td>' +
+                '<td class="px-2 py-2 text-on-surface-variant text-[11px]">' + escapeHtml(v.skip_reason || '') + '</td>' +
+                '</tr>';
+      });
+      html += '</tbody></table></div>';
+      _verdictsCache[runId] = html;
+      cell.innerHTML = html;
+    })
+    .catch(function(e){
+      cell.innerHTML = '<p class="text-on-surface-variant text-xs">加载失败: ' + e + '</p>';
+    });
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function loadAll() {
+  loadStatus();
+  loadOpenPositions();
+  loadRuns();
+  loadClosedPositions();
+  loadExploreStats();
+}
+loadAll();
+// 持仓 + 实时盈亏: 每 3 秒刷
+setInterval(loadOpenPositions, 3000);
+// status + 顶部统计卡: 每 30 秒刷
+setInterval(loadStatus, 30000);
+// 盈亏统计: 每 30 秒刷
+setInterval(loadExploreStats, 30000);
+</script>
+
+</body>
+</html>

@@ -97,3 +97,6 @@ pytest-cov==4.1.0
 
 # ==================== Web Frontend (If needed) ====================
 # Already included above in Web Framework section
+
+# ==================== AI / LLM Integration ====================
+openai>=1.0.0              # OpenAI-compatible API client (DeepSeek, OpenAI, etc.)

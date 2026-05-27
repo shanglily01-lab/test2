@@ -698,7 +698,7 @@ async function initLock() {
 }
 
 // 绑定所有 toggle 点击事件
-['usdtToggle','coinToggle','liveToggle','liveCloseToggle','btcMomentumToggle','predictorToggle','trendFollowingToggle','geminiExploreToggle','geminiPredictToggle','uCoinStyleToggle','s8TopshortToggle','s9GeminiToggle','geminiAdvisorToggle','spotTradingToggle'].forEach(id => bindToggle(id, 'services'));
+['usdtToggle','coinToggle','liveToggle','liveCloseToggle','btcMomentumToggle','predictorToggle','trendFollowingToggle','geminiExploreToggle','geminiPredictToggle','uCoinStyleToggle','s1Toggle','s2Toggle','s3Toggle','s4Toggle','s5Toggle','s6Toggle','s7Toggle','s8TopshortToggle','s9GeminiToggle','geminiAdvisorToggle','spotTradingToggle'].forEach(id => bindToggle(id, 'services'));
 ['longToggle','shortToggle'].forEach(id => bindToggle(id, 'direction', updateDirectionSummary));
 bindToggle('big4Toggle', 'big4');
 

@@ -111,7 +111,8 @@ class UnifiedDataScheduler:
             'bitcointreasuries_daily': {'count': 0, 'last_run': None, 'last_error': None},
             'futures_equity_update': {'count': 0, 'last_run': None, 'last_error': None},
             'binance_news': {'count': 0, 'last_run': None, 'last_error': None},
-            'correct_live_trades': {'count': 0, 'last_run': None, 'last_error': None}
+            'correct_live_trades': {'count': 0, 'last_run': None, 'last_error': None},
+            'deepseek_explore': {'count': 0, 'last_run': None, 'last_error': None}
         }
 
         logger.info(f"调度器初始化完成 - 监控币种: {len(self.symbols)} 个")
@@ -1300,6 +1301,20 @@ class UnifiedDataScheduler:
         schedule.every(6).hours.do(_run_gemini_explore)
         logger.info("  ✓ gemini_explore - 每 6 小时 (后台线程, kill switch 默认 OFF)")
 
+        # DeepSeek 探索 - 每 6h 调一轮 DeepSeek 检测短时方向异动, 模拟开仓
+        # kill switch = system_settings.deepseek_explore_enabled
+        def _run_deepseek_explore():
+            def wrapper():
+                try:
+                    from app.services.deepseek_explore_worker import run_explore_round
+                    run_explore_round(triggered_by='scheduler')
+                except Exception as e:
+                    logger.error(f"[DeepSeek探索] 调度异常: {e}", exc_info=True)
+            threading.Thread(target=wrapper, daemon=True, name="DeepSeekExplore").start()
+
+        schedule.every(6).hours.do(_run_deepseek_explore)
+        logger.info("  ✓ deepseek_explore - 每 6 小时 (后台线程, kill switch 默认 OFF)")
+
         # Gemini 预测 - 每 12h 调一次 Gemini 预测 TOP50 方向
         def _run_gemini_predict():
             def wrapper():
@@ -1471,6 +1486,11 @@ class UnifiedDataScheduler:
                     run_sentiment_round(triggered_by='scheduler_init')
                 except Exception as e:
                     logger.error(f"[Gemini情绪分析] 初始化运行失败: {e}")
+                try:
+                    from app.services.deepseek_explore_worker import run_explore_round
+                    run_explore_round(triggered_by='scheduler_init')
+                except Exception as e:
+                    logger.error(f"[DeepSeek探索] 初始化运行失败: {e}")
             threading.Thread(target=wrapper, daemon=True, name="GeminiInit").start()
         _run_gemini_init()
 

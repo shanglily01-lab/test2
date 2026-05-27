@@ -171,6 +171,16 @@ class SmartEntryExecutor:
         symbol = signal['symbol']
         direction = signal['direction']
 
+        # ========== 深度防御：执行前检查趋势策略是否仍启用 ==========
+        try:
+            from app.services.system_settings_loader import get_setting as _get_cached_setting
+            _tf = str(_get_cached_setting('trend_following_enabled', '0')).lower() in ('1', 'true')
+            if not _tf:
+                logger.info(f"[SKIP-EXEC] {symbol} 趋势策略已禁用(trend_following_enabled=0)，取消价格采样建仓")
+                return {'success': False, 'reason': '趋势策略禁用'}
+        except Exception:
+            pass
+
         # 使用真实的信号触发时间
         signal_time = signal.get('signal_time', datetime.now())
         if isinstance(signal_time, str):

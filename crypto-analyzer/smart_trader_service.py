@@ -1991,6 +1991,11 @@ class SmartTraderService:
 
                 async def _run_entry_and_release(sig):
                     try:
+                        # 执行前再次确认趋势策略未被禁用（用户在采样15分钟内可能已禁用）
+                        if not getattr(self, 'trend_following_enabled', False):
+                            logger.info(f"[SKIP] {sig.get('symbol', '?')} "
+                                        f"趋势策略已在采样期间禁用(trend_following_enabled=0)，取消开仓")
+                            return
                         await self.smart_entry_executor.execute_entry(sig)
                     finally:
                         self._pending_entry_count = max(0, self._pending_entry_count - 1)
