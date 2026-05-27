@@ -1233,6 +1233,18 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册操作手册API路由
+try:
+    from app.api.trading_manual_api import router as trading_manual_router
+    from app.api.trading_manual_api import init_tables
+    app.include_router(trading_manual_router)
+    init_tables()  # 建表 + 初始数据（幂等）
+    logger.info("✅ 操作手册API路由已注册（/api/trading-manual）")
+except Exception as e:
+    logger.warning("⚠️  操作手册API路由注册失败: %s", e)
+    import traceback
+    traceback.print_exc()
+
 # 注册 data_cache API 路由 (性能优化缓存)
 try:
     from app.api.data_cache_api import router as data_cache_router
@@ -1512,6 +1524,15 @@ async def mobile_live_page(request: Request):
     return HTMLResponse(html)
 
 
+@app.get("/m/manual")
+async def mobile_manual_page():
+    """手机端交易操作手册页面"""
+    p = project_root / "templates" / "trading_manual.html"
+    if p.exists():
+        return FileResponse(str(p))
+    raise HTTPException(status_code=404, detail="trading_manual.html not found")
+
+
 @app.get("/health")
 async def health_check():
     """健康检查"""
@@ -1695,6 +1716,16 @@ async def binance_news_page():
     if p.exists():
         return FileResponse(str(p))
     raise HTTPException(status_code=404, detail="Binance news page not found")
+
+
+@app.get("/trading-manual")
+@app.get("/trading_manual")
+async def trading_manual_page():
+    """交易操作手册页面"""
+    p = project_root / "templates" / "trading_manual.html"
+    if p.exists():
+        return FileResponse(str(p))
+    raise HTTPException(status_code=404, detail="Trading manual page not found")
 
 
 @app.get("/spot_trading")

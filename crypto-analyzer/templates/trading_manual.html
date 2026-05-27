@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>操作手册 · 超级大脑</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+tailwind.config = {
+    darkMode: "class",
+    theme: { extend: { colors: {
+        "on-surface": "#ebeef5", "surface": "#0a0f14",
+        "surface-container-low": "#0f1419", "surface-container": "#151a20",
+        "surface-container-high": "#1a2027", "surface-container-highest": "#20262e",
+        "primary": "#49f4c8", "primary-container": "#00d4aa",
+        "secondary": "#3b8ef8", "tertiary": "#a78bfa",
+        "on-surface-variant": "#a8abb2",
+        "outline-variant": "#44484e", "error": "#ff4d6a", "warning": "#f59e0b",
+        "background": "#070b10"
+    }, fontFamily: { "headline": ["Space Grotesk"], "body": ["Manrope"], "mono": ["JetBrains Mono"] } } }
+}
+</script>
+<style>
+body { background:#070b10; color:#ebeef5; font-family:'Manrope',sans-serif;
+    -webkit-font-smoothing:antialiased; min-height:100vh; }
+.material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
+::-webkit-scrollbar { width:4px; }
+::-webkit-scrollbar-track { background:transparent; }
+::-webkit-scrollbar-thumb { background:#44484e; border-radius:4px; }
+.nav-item.active { color:#49f4c8; background:#151a20; border-right:2px solid #49f4c8; font-weight:600; }
+/* 折叠面板 */
+.accordion-content { max-height:0; overflow:hidden; transition:max-height 0.4s ease, opacity 0.3s ease; opacity:0; }
+.accordion-content.open { max-height:5000px; opacity:1; }
+.accordion-trigger .arrow { transition:transform 0.3s ease; }
+.accordion-trigger.open .arrow { transform:rotate(180deg); }
+/* 规则卡片 */
+.rule-card { border-left:3px solid; transition:transform 0.15s ease; }
+.rule-card:hover { transform:translateX(4px); }
+.rule-card.danger { border-left-color:#ff4d6a; }
+.rule-card.success { border-left-color:#49f4c8; }
+.rule-card.warning { border-left-color:#f59e0b; }
+.rule-card.info { border-left-color:#3b8ef8; }
+.rule-card.tertiary { border-left-color:#a78bfa; }
+.header-blur { backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); }
+/* 编辑区 */
+.editor-area { display:none; }
+.editor-area.show { display:block; }
+.editor-area textarea { font-family:'JetBrains Mono',monospace; font-size:13px; line-height:1.7; }
+/* 侧边栏移动端 */
+@media (max-width:768px) {
+    #app-sidebar { transform:translateX(-100%); transition:transform 0.3s ease; }
+    #app-sidebar.show { transform:translateX(0); }
+}
+/* AI 对话框 */
+#aiDialog { display:none; }
+#aiDialog.show { display:flex; }
+/* 打字动画 */
+.typing-dot { display:inline-block; width:6px; height:6px; background:#49f4c8; border-radius:50%; margin:0 2px; animation:typing 1.4s infinite ease-in-out; }
+.typing-dot:nth-child(2) { animation-delay:0.2s; }
+.typing-dot:nth-child(3) { animation-delay:0.4s; }
+@keyframes typing { 0%,80%,100%{transform:scale(0.6);opacity:0.3} 40%{transform:scale(1);opacity:1} }
+/* Toast */
+#toast { position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:500;
+    background:#1a2235;color:#ebeef5;padding:8px 18px;border-radius:20px;
+    font-size:13px;font-weight:600;opacity:0;transition:opacity .2s;
+    border:1px solid #44484e;white-space:nowrap;pointer-events:none; }
+#toast.show { opacity:1; }
+#toast.err { border-color:rgba(255,77,106,.3);color:#ff4d6a; }
+</style>
+</head>
+<body>
+
+<div id="toast"></div>
+
+<!-- SideNavBar -->
+<aside id="app-sidebar" class="fixed left-0 top-0 h-screen w-[240px] bg-[#0a0f14] border-r border-slate-800 flex flex-col py-6 z-[60]">
+<div class="px-5 mb-6">
+<a href="/" class="block group">
+<h1 class="text-xl font-black tracking-tighter text-[#49f4c8] group-hover:opacity-80">NEURAL OBSIDIAN</h1>
+<p class="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">Quant Terminal</p>
+</a>
+</div>
+<nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto">
+<a href="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
+<a href="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>U本位合约</span></a>
+<a href="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_bitcoin</span><span>币本位合约</span></a>
+<a href="/gemini_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>Gemini 探索</span></a>
+<a href="/deepseek_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">psychology</span><span>DeepSeek 探索</span></a>
+<a href="/live_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">precision_manufacturing</span><span>Live Trading</span></a>
+<a href="/futures_review" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>复盘分析</span></a>
+<a href="/technical-signals" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">sensors</span><span>信号分析</span></a>
+<a href="/market_regime" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">pulse_alert</span><span>行情识别</span></a>
+<a href="/top50" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">workspace_premium</span><span>TOP 50</span></a>
+<a href="/symbol_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">block</span><span>交易对黑名单</span></a>
+<a href="/signal_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">do_not_disturb_on</span><span>信号黑名单</span></a>
+<a href="/spot_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_exchange</span><span>现货交易</span></a>
+<a href="/etf_data" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">candlestick_chart</span><span>ETF 数据</span></a>
+<a href="/blockchain_gas" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Gas 监控</span></a>
+<a href="/corporate_treasury" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">account_balance</span><span>企业金库</span></a>
+<a href="/data_management" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">storage</span><span>数据管理</span></a>
+<a href="/api-keys" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">api</span><span>API Keys</span></a>
+<a href="/system-settings" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">settings</span><span>Settings</span></a>
+<a href="/binance-news" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">campaign</span><span>公告监控</span></a>
+<a href="/trading-manual" id="navManual" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#49f4c8] bg-[#151a20] border-r-2 border-[#49f4c8] font-semibold transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">menu_book</span><span>操作手册</span></a>
+</nav>
+</aside>
+
+<!-- 主内容 -->
+<div class="md:ml-[240px] min-h-screen">
+    <header class="sticky top-0 z-50 flex items-center justify-between px-6 h-16 bg-[#0a0f14]/80 header-blur border-b border-slate-800/50">
+        <div class="flex items-center gap-3">
+            <button id="menuBtn" class="md:hidden p-2 -ml-2 rounded-lg hover:bg-[#151a20]" onclick="document.getElementById('app-sidebar').classList.toggle('show')">
+                <span class="material-symbols-outlined text-on-surface-variant">menu</span>
+            </button>
+            <h1 class="text-lg font-bold font-headline tracking-tight text-on-surface">
+                <span class="text-primary">操作手册</span>
+                <span class="text-on-surface-variant/40 font-normal text-sm ml-2">Trading Manual</span>
+            </h1>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="openAiDialog()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors border border-primary/20">
+                <span class="material-symbols-outlined text-[16px]">smart_toy</span>
+                AI 问答
+            </button>
+            <span class="text-[10px] text-on-surface-variant/50 px-2 py-1 bg-[#151a20] rounded-full">v1.0</span>
+        </div>
+    </header>
+
+    <main class="max-w-4xl mx-auto px-6 py-8 space-y-6">
+        <!-- 加载中 -->
+        <div id="loadingSkeleton" class="space-y-4">
+            <div class="h-24 bg-[#151a20] rounded-xl animate-pulse"></div>
+            <div class="h-16 bg-[#151a20] rounded-xl animate-pulse"></div>
+            <div class="h-16 bg-[#151a20] rounded-xl animate-pulse"></div>
+            <div class="h-16 bg-[#151a20] rounded-xl animate-pulse"></div>
+        </div>
+        <!-- 章节容器 -->
+        <div id="chaptersContainer" style="display:none"></div>
+        <!-- 底部格言 -->
+        <div id="footerQuote" class="text-center py-8" style="display:none">
+            <div class="inline-block bg-[#0f1419] border border-slate-800 rounded-2xl px-8 py-6">
+                <p class="text-sm text-on-surface-variant/60 italic leading-relaxed">
+                    "交易不是关于对错，而是关于<br class="hidden md:block">
+                    当你对的时候赚了多少，错的时候亏了多少。"
+                </p>
+                <p class="text-xs text-primary mt-3 font-medium">— 交易员的第一课</p>
+            </div>
+            <p class="text-[10px] text-on-surface-variant/30 mt-4">祝你在交易之路上不断成长</p>
+        </div>
+    </main>
+</div>
+
+<!-- ============================================================ -->
+<!-- AI 问答对话框 -->
+<!-- ============================================================ -->
+<div id="aiDialog" class="fixed inset-0 z-[100] bg-black/60 items-center justify-center p-4">
+    <div class="w-full max-w-3xl max-h-[90vh] bg-[#0f1419] border border-slate-800 rounded-2xl flex flex-col overflow-hidden shadow-2xl">
+        <!-- 标题栏 -->
+        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">smart_toy</span>
+                <h2 class="font-bold text-on-surface">AI 交易问答</h2>
+                <span class="text-[10px] text-on-surface-variant/50 px-2 py-0.5 bg-[#151a20] rounded-full">Gemini / DeepSeek</span>
+            </div>
+            <button onclick="closeAiDialog()" class="p-1.5 rounded-lg hover:bg-[#151a20] text-on-surface-variant">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+
+        <!-- Q&A 记录区 -->
+        <div id="qaList" class="flex-1 overflow-y-auto px-5 py-4 space-y-4 min-h-[300px] max-h-[400px]">
+            <div class="text-center text-sm text-on-surface-variant/50 py-10">加载中...</div>
+        </div>
+
+        <!-- 快捷问题 -->
+        <div class="px-5 py-2 border-t border-slate-800/50">
+            <div class="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                <button onclick="quickAsk('什么是顶背离？怎么识别？')" class="flex-shrink-0 text-[11px] px-3 py-1.5 rounded-full bg-[#151a20] text-on-surface-variant hover:text-primary hover:bg-[#1a2027] border border-outline-variant/20 transition-colors whitespace-nowrap">什么是顶背离？</button>
+                <button onclick="quickAsk('合约交易有哪些风险？新手应该注意什么？')" class="flex-shrink-0 text-[11px] px-3 py-1.5 rounded-full bg-[#151a20] text-on-surface-variant hover:text-primary hover:bg-[#1a2027] border border-outline-variant/20 transition-colors whitespace-nowrap">合约风险</button>
+                <button onclick="quickAsk('如何正确设置止损？有哪些止损策略？')" class="flex-shrink-0 text-[11px] px-3 py-1.5 rounded-full bg-[#151a20] text-on-surface-variant hover:text-primary hover:bg-[#1a2027] border border-outline-variant/20 transition-colors whitespace-nowrap">止损策略</button>
+                <button onclick="quickAsk('我被套牢了怎么办？要不要补仓？')" class="flex-shrink-0 text-[11px] px-3 py-1.5 rounded-full bg-[#151a20] text-on-surface-variant hover:text-primary hover:bg-[#1a2027] border border-outline-variant/20 transition-colors whitespace-nowrap">被套牢怎么办？</button>
+                <button onclick="quickAsk('怎么判断市场是牛市还是熊市？')" class="flex-shrink-0 text-[11px] px-3 py-1.5 rounded-full bg-[#151a20] text-on-surface-variant hover:text-primary hover:bg-[#1a2027] border border-outline-variant/20 transition-colors whitespace-nowrap">判断牛熊</button>
+            </div>
+        </div>
+
+        <!-- 输入区 -->
+        <div class="px-5 py-3 border-t border-slate-800/50">
+            <div class="flex gap-2">
+                <select id="aiSource" class="bg-[#151a20] border border-outline-variant/30 text-xs text-on-surface-variant rounded-lg px-2 py-2 focus:ring-1 focus:ring-primary/30 flex-shrink-0">
+                    <option value="gemini">Gemini</option>
+                    <option value="deepseek">DeepSeek</option>
+                </select>
+                <input id="qaInput" type="text" placeholder="输入你的交易问题..." class="flex-1 bg-[#151a20] border border-outline-variant/30 rounded-lg px-4 py-2 text-sm text-on-surface focus:outline-none focus:border-primary/50 placeholder:text-on-surface-variant/30" onkeydown="if(event.key==='Enter')submitQuestion()">
+                <button onclick="submitQuestion()" class="flex items-center gap-1 px-4 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors border border-primary/20 text-sm font-semibold flex-shrink-0">
+                    <span class="material-symbols-outlined text-[18px]">send</span>
+                    提问
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================ -->
+<!-- 编辑章节对话框 -->
+<!-- ============================================================ -->
+<div id="editorDialog" class="fixed inset-0 z-[90] bg-black/60 items-center justify-center p-4" style="display:none">
+    <div class="w-full max-w-3xl max-h-[90vh] bg-[#0f1419] border border-slate-800 rounded-2xl flex flex-col overflow-hidden shadow-2xl">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">edit</span>
+                <h2 id="editorTitle" class="font-bold text-on-surface">编辑章节</h2>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="saveChapter()" class="flex items-center gap-1 px-4 py-1.5 bg-primary/10 text-primary rounded-lg hover:bg-primary/20 transition-colors border border-primary/20 text-xs font-semibold">
+                    <span class="material-symbols-outlined text-[16px]">save</span>
+                    保存
+                </button>
+                <button onclick="closeEditor()" class="p-1.5 rounded-lg hover:bg-[#151a20] text-on-surface-variant">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+        </div>
+        <div class="flex-1 overflow-y-auto p-5">
+            <textarea id="editorContent" class="w-full h-[60vh] bg-[#0a0f14] border border-outline-variant/20 rounded-xl p-4 text-on-surface focus:outline-none focus:border-primary/30 resize-none"></textarea>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================================
+// 工具函数
+// ============================================================
+const API = '/api/trading-manual';
+
+function toast(msg, type) {
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'show ' + (type === 'err' ? 'err' : '');
+    setTimeout(function(){ el.className = ''; }, 2500);
+}
+
+// ============================================================
+// 颜色映射
+// ============================================================
+const COLOR_MAP = {
+    'danger': { bg: 'bg-error/5', border: 'danger', icon: 'error', text: 'text-error' },
+    'warning': { bg: 'bg-warning/5', border: 'warning', icon: 'warning', text: 'text-warning' },
+    'success': { bg: 'bg-primary/5', border: 'success', icon: 'success', text: 'text-primary' },
+    'info': { bg: 'bg-secondary/5', border: 'info', icon: 'info', text: 'text-secondary' },
+    'tertiary': { bg: 'bg-tertiary/5', border: 'tertiary', icon: 'info', text: 'text-tertiary' },
+    'primary': { bg: 'bg-primary/5', border: 'success', icon: 'info', text: 'text-primary' },
+};
+
+// ============================================================
+// 加载章节
+// ============================================================
+let chapters = [];
+
+async function loadChapters() {
+    try {
+        const r = await fetch(API + '/chapters').then(r => r.json());
+        if (!r.success) throw new Error(r.detail || '加载失败');
+        chapters = r.data;
+        renderChapters(chapters);
+        document.getElementById('loadingSkeleton').style.display = 'none';
+        document.getElementById('chaptersContainer').style.display = '';
+        document.getElementById('footerQuote').style.display = '';
+    } catch(e) {
+        document.getElementById('loadingSkeleton').innerHTML =
+            '<div class="text-center py-10 text-error">加载失败: ' + e.message + '</div>';
+    }
+}
+
+function renderChapters(data) {
+    const container = document.getElementById('chaptersContainer');
+    container.innerHTML = data.map(function(ch) {
+        const colors = COLOR_MAP[ch.color] || COLOR_MAP.primary;
+        const icon = ch.icon || 'menu_book';
+        const hasContent = ch.content && ch.content.trim().length > 0;
+        return `
+        <div class="accordion">
+            <button class="accordion-trigger w-full flex items-center justify-between px-5 py-4 bg-[#0f1419] border border-slate-800 rounded-xl hover:border-primary/30 transition-colors text-left"
+                onclick="toggleAccordion(this)">
+                <div class="flex items-center gap-3">
+                    <span class="flex items-center justify-center w-8 h-8 rounded-lg ${colors.bg} ${colors.text} text-sm font-bold">
+                        <span class="material-symbols-outlined text-[18px]">${icon}</span>
+                    </span>
+                    <div>
+                        <h3 class="font-bold text-on-surface text-sm">${ch.title}</h3>
+                        <p class="text-[11px] text-on-surface-variant">${ch.subtitle || ''}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-on-surface-variant/40">${ch.updated_at || ''}</span>
+                    <span class="arrow material-symbols-outlined text-on-surface-variant">expand_more</span>
+                </div>
+            </button>
+            <div class="accordion-content">
+                <div class="px-5 py-4">
+                    ${hasContent ? ch.content :
+                        `<div class="text-center py-8 text-on-surface-variant/40 text-sm">
+                            <span class="material-symbols-outlined text-3xl block mb-2">edit_note</span>
+                            暂无内容，点击右上角编辑按钮添加
+                        </div>`
+                    }
+                    <div class="flex justify-end mt-3">
+                        <button onclick="openEditor(${ch.id},'${ch.title}')" class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#151a20] text-on-surface-variant hover:text-primary hover:bg-[#1a2027] border border-outline-variant/20 transition-colors text-xs">
+                            <span class="material-symbols-outlined text-[14px]">edit</span>
+                            编辑
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+
+    // 如果有内容，默认展开第一章
+    if (data.length > 0) {
+        const firstTrigger = container.querySelector('.accordion-trigger');
+        if (firstTrigger) {
+            firstTrigger.classList.add('open');
+            firstTrigger.nextElementSibling.classList.add('open');
+        }
+    }
+}
+
+// ============================================================
+// 折叠面板
+// ============================================================
+function toggleAccordion(btn) {
+    btn.classList.toggle('open');
+    btn.nextElementSibling.classList.toggle('open');
+}
+
+// ============================================================
+// 编辑器
+// ============================================================
+let editingChapterId = null;
+
+function openEditor(chapterId, title) {
+    editingChapterId = chapterId;
+    document.getElementById('editorTitle').textContent = '编辑：' + title;
+    const ch = chapters.find(function(c) { return c.id === chapterId; });
+    document.getElementById('editorContent').value = ch && ch.content ? ch.content : '';
+    document.getElementById('editorDialog').style.display = 'flex';
+}
+
+function closeEditor() {
+    document.getElementById('editorDialog').style.display = 'none';
+    editingChapterId = null;
+}
+
+async function saveChapter() {
+    if (!editingChapterId) return;
+    const content = document.getElementById('editorContent').value;
+    try {
+        const r = await fetch(API + '/chapters/' + editingChapterId, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ content: content }),
+        }).then(r => r.json());
+        if (r.success) {
+            toast('保存成功');
+            closeEditor();
+            loadChapters(); // 刷新
+        } else {
+            toast(r.detail || '保存失败', 'err');
+        }
+    } catch(e) {
+        toast('保存失败: ' + e.message, 'err');
+    }
+}
+
+// ============================================================
+// AI 问答对话框
+// ============================================================
+let currentQaId = null;
+
+function openAiDialog() {
+    document.getElementById('aiDialog').classList.add('show');
+    loadQaHistory();
+    setTimeout(function(){
+        document.getElementById('qaInput').focus();
+    }, 300);
+}
+
+function closeAiDialog() {
+    document.getElementById('aiDialog').classList.remove('show');
+}
+
+async function submitQuestion() {
+    const input = document.getElementById('qaInput');
+    const question = input.value.trim();
+    if (!question) return;
+
+    const source = document.getElementById('aiSource').value;
+    input.value = '';
+    currentQaId = null;
+
+    // 添加用户消息
+    appendMessage('user', question);
+
+    // 添加加载中
+    const loadingHtml = '<div id="qaLoading" class="flex items-start gap-3"><div class="w-7 h-7 rounded-full bg-tertiary/20 flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined text-tertiary text-[14px]">smart_toy</span></div><div class="flex items-center gap-1 py-2"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div></div>';
+    document.getElementById('qaList').insertAdjacentHTML('beforeend', loadingHtml);
+    document.getElementById('qaList').scrollTop = document.getElementById('qaList').scrollHeight;
+
+    try {
+        const r = await fetch(API + '/ask', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ question: question, source: source }),
+        }).then(r => r.json());
+
+        document.getElementById('qaLoading')?.remove();
+
+        if (r.success) {
+            currentQaId = r.data.id;
+            // 尝试展示为漂亮的卡片
+            let answerHtml = '';
+            if (r.data.parsed && typeof r.data.parsed === 'object') {
+                answerHtml = renderParsedAnswer(r.data.parsed);
+            } else {
+                answerHtml = '<div class="text-sm text-on-surface leading-relaxed whitespace-pre-wrap">' + escapeHtml(r.data.answer) + '</div>';
+            }
+            appendMessage('ai', answerHtml, r.data.id);
+        } else {
+            appendMessage('ai', '<div class="text-sm text-error">AI 响应失败: ' + (r.detail || '未知错误') + '</div>');
+        }
+    } catch(e) {
+        document.getElementById('qaLoading')?.remove();
+        appendMessage('ai', '<div class="text-sm text-error">请求失败: ' + e.message + '</div>');
+    }
+
+    document.getElementById('qaList').scrollTop = document.getElementById('qaList').scrollHeight;
+}
+
+function appendMessage(role, html, qaId) {
+    const container = document.getElementById('qaList');
+    const isUser = role === 'user';
+    const div = document.createElement('div');
+    div.className = 'flex items-start gap-3 ' + (isUser ? 'flex-row-reverse' : '');
+    div.innerHTML = `
+        <div class="w-7 h-7 rounded-full ${isUser ? 'bg-primary/20' : 'bg-tertiary/20'} flex items-center justify-center flex-shrink-0">
+            <span class="material-symbols-outlined ${isUser ? 'text-primary' : 'text-tertiary'} text-[14px]">${isUser ? 'person' : 'smart_toy'}</span>
+        </div>
+        <div class="max-w-[85%] ${isUser ? 'bg-primary/10 border border-primary/20' : 'bg-[#151a20] border border-outline-variant/20'} rounded-xl p-3.5">
+            ${html}
+            ${qaId ? `<div class="flex items-center gap-2 mt-2 pt-2 border-t border-outline-variant/10">
+                <button onclick="editQa(${qaId})" class="text-[10px] text-on-surface-variant/50 hover:text-primary flex items-center gap-0.5">
+                    <span class="material-symbols-outlined text-[12px]">edit</span>编辑
+                </button>
+                <button onclick="deleteQa(${qaId})" class="text-[10px] text-on-surface-variant/50 hover:text-error flex items-center gap-0.5">
+                    <span class="material-symbols-outlined text-[12px]">delete</span>删除
+                </button>
+            </div>` : ''}
+        </div>
+    `;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+}
+
+function renderParsedAnswer(p) {
+    let html = '<div class="space-y-3">';
+    if (p.summary) {
+        html += '<div class="bg-primary/5 border border-primary/20 rounded-lg p-2.5"><p class="text-xs font-semibold text-primary mb-0.5">核心观点</p><p class="text-sm text-on-surface font-bold">' + escapeHtml(p.summary) + '</p></div>';
+    }
+    if (p.analysis) {
+        html += '<div><p class="text-xs font-semibold text-on-surface-variant mb-1">详细分析</p><p class="text-sm text-on-surface-variant leading-relaxed">' + escapeHtml(p.analysis) + '</p></div>';
+    }
+    if (p.advice) {
+        if (Array.isArray(p.advice)) {
+            html += '<div><p class="text-xs font-semibold text-primary mb-1">具体建议</p><ul class="space-y-1">';
+            p.advice.forEach(function(a) {
+                html += '<li class="text-sm text-on-surface-variant flex items-start gap-2"><span class="text-primary mt-1">•</span>' + escapeHtml(a) + '</li>';
+            });
+            html += '</ul></div>';
+        } else {
+            html += '<div><p class="text-xs font-semibold text-primary mb-1">具体建议</p><p class="text-sm text-on-surface-variant">' + escapeHtml(p.advice) + '</p></div>';
+        }
+    }
+    if (p.risk_note) {
+        html += '<div class="bg-error/5 border border-error/20 rounded-lg p-2.5"><p class="text-xs font-semibold text-error mb-0.5">风险提示</p><p class="text-sm text-on-surface-variant">' + escapeHtml(p.risk_note) + '</p></div>';
+    }
+    html += '</div>';
+    return html;
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// ============================================================
+// Q&A 历史记录
+// ============================================================
+async function loadQaHistory() {
+    const container = document.getElementById('qaList');
+    try {
+        const r = await fetch(API + '/qa?limit=50').then(r => r.json());
+        if (!r.success || !r.data.length) {
+            container.innerHTML = '<div class="text-center text-sm text-on-surface-variant/50 py-10">还没有问答记录，开始提问吧！</div>';
+            return;
+        }
+        container.innerHTML = r.data.map(function(qa) {
+            const isPublished = qa.status === 'published';
+            return `
+            <div class="bg-[#151a20] border border-outline-variant/20 rounded-xl p-3.5 space-y-2">
+                <div class="flex items-start justify-between gap-2">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="material-symbols-outlined text-primary text-[16px]">question_answer</span>
+                        <p class="text-sm font-semibold text-on-surface truncate">${escapeHtml(qa.question)}</p>
+                    </div>
+                    <span class="text-[10px] text-on-surface-variant/40 flex-shrink-0">${qa.created_at || ''}</span>
+                </div>
+                <p class="text-xs text-on-surface-variant/70 line-clamp-2">${escapeHtml(qa.answer ? qa.answer.substring(0, 200) : '等待编辑...')}</p>
+                <div class="flex items-center gap-2 pt-1">
+                    <span class="text-[10px] px-1.5 py-0.5 rounded ${qa.source === 'gemini' ? 'bg-primary/10 text-primary' : 'bg-tertiary/10 text-tertiary'}">${qa.source}</span>
+                    ${isPublished ? '<span class="text-[10px] text-primary/60">已发布</span>' : '<span class="text-[10px] text-warning/60">草稿</span>'}
+                    <button onclick="editQa(${qa.id})" class="ml-auto text-[10px] text-on-surface-variant/50 hover:text-primary flex items-center gap-0.5">
+                        <span class="material-symbols-outlined text-[12px]">edit</span>编辑
+                    </button>
+                    <button onclick="deleteQa(${qa.id})" class="text-[10px] text-on-surface-variant/50 hover:text-error flex items-center gap-0.5">
+                        <span class="material-symbols-outlined text-[12px]">delete</span>
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        container.innerHTML = '<div class="text-center text-sm text-error py-10">加载失败: ' + e.message + '</div>';
+    }
+}
+
+async function editQa(qaId) {
+    // 简单实现：弹窗编辑答案
+    try {
+        const r = await fetch(API + '/qa?limit=200').then(r => r.json());
+        const qa = r.data ? r.data.find(function(q) { return q.id === qaId; }) : null;
+        if (!qa) { toast('未找到记录', 'err'); return; }
+        const newAnswer = prompt('编辑回答：', qa.answer || '');
+        if (newAnswer !== null) {
+            const res = await fetch(API + '/qa/' + qaId, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ answer: newAnswer, status: 'published' }),
+            }).then(r => r.json());
+            if (res.success) {
+                toast('更新成功');
+                loadQaHistory();
+            } else {
+                toast(res.detail || '更新失败', 'err');
+            }
+        }
+    } catch(e) {
+        toast('操作失败: ' + e.message, 'err');
+    }
+}
+
+async function deleteQa(qaId) {
+    if (!confirm('确定删除这条问答记录吗？')) return;
+    try {
+        const r = await fetch(API + '/qa/' + qaId, { method: 'DELETE' }).then(r => r.json());
+        if (r.success) {
+            toast('已删除');
+            loadQaHistory();
+        } else {
+            toast(r.detail || '删除失败', 'err');
+        }
+    } catch(e) {
+        toast('删除失败: ' + e.message, 'err');
+    }
+}
+
+// ============================================================
+// 快捷提问
+// ============================================================
+function quickAsk(question) {
+    document.getElementById('qaInput').value = question;
+    submitQuestion();
+}
+
+// ============================================================
+// 初始化
+// ============================================================
+loadChapters();
+</script>
+
+</body>
+</html>
