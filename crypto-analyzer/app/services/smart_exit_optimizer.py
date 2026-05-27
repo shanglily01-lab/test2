@@ -217,10 +217,10 @@ class SmartExitOptimizer:
                     break
 
                 # === K线强度衰减检测 (新增 - 每15分钟检查一次) ===
-                # 多策略持仓 (S1-S7 + Gemini 探索/预测) 依赖计划平仓时间和固定止损止盈, 跳过K线衰减检测
+                # 多策略持仓 (S1/S5/S6 + Gemini 探索/预测) 依赖计划平仓时间和固定止损止盈, 跳过K线衰减检测
                 _MULTI_STRATEGY_SOURCES = (
-                    's1_early_long', 's2_pullback_long', 's3_top_short',
-                    's4_rebound_short', 's5_large_oversold', 's6_vol_spike', 's7_ma_support',
+                    's1_early_long',
+                    's5_large_oversold', 's6_vol_spike',
                     'gemini_explore',      # Gemini 探索: 只走 SL/TP/72h
                     'gemini_predict',      # Gemini 预测: 只走 SL/TP/72h
                 )
@@ -509,10 +509,10 @@ class SmartExitOptimizer:
         leverage = float(position.get('leverage', 1))
         roi_pct = profit_pct * leverage
 
-        # 多策略持仓（S1-S7 + Gemini探索/预测）跳过所有动态平仓逻辑，只走硬SL/TP和planned_close_time
+        # 多策略持仓（S1/S5/S6 + Gemini探索/预测）跳过所有动态平仓逻辑，只走硬SL/TP和planned_close_time
         _MULTI_STRATEGY_SOURCES = (
-            's1_early_long', 's2_pullback_long', 's3_top_short',
-            's4_rebound_short', 's5_large_oversold', 's6_vol_spike', 's7_ma_support',
+            's1_early_long',
+            's5_large_oversold', 's6_vol_spike',
             'gemini_explore',
             'gemini_predict',
         )

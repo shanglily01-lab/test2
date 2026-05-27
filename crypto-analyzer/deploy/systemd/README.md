@@ -9,15 +9,16 @@
 
 ---
 
-## 🔄 S8/S9 集成后的部署变化 (2026-05-16)
+## 🔄 S9 集成后的部署变化 (2026-05-16)
 
-`strategy_live` 和 `strategy_bigmid` 已集成进 `smart_trader_service` 当 S8/S9:
-- **S8 = topshort** (顶部反转做空) - 由 multi_strategy_service.scan_s8_topshort 调度
+`strategy_bigmid` 已集成进 `smart_trader_service` 当 S9:
 - **S9 = Gemini AI** (抄底反转 LONG) - 由 multi_strategy_service.scan_s9_gemini_ai 调度
+
+> S8 (topshort) 已于 2026-05-28 随 S2/S3/S4/S7 一起被清理（从未有效开仓）。
 
 **正常部署只需启动 4 个服务**:
 1. crypto-app-main
-2. crypto-smart-trader  (内含 S1-S9 多策略 + BTC动量 + 主策略)
+2. crypto-smart-trader  (内含 S1/S5/S6/S9 多策略 + BTC动量 + 主策略)
 3. crypto-coin-futures
 4. crypto-fast-collector
 

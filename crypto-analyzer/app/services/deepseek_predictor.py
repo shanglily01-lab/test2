@@ -730,14 +730,14 @@ def _open_simulated_position(
                    stop_loss_price, take_profit_price,
                    stop_loss_pct, take_profit_pct,
                    max_hold_minutes, planned_close_time,
-                   status, source, entry_reason, open_time,
+                   status, source, entry_signal_type, entry_reason, open_time,
                    unrealized_pnl, unrealized_pnl_pct)
                 VALUES (%s,%s,%s,%s,%s,%s,
                         %s,%s,%s,
                         %s,%s,
                         %s,%s,
                         %s,%s,
-                        'open', %s, %s, NOW(),
+                        'open', %s, %s, %s, NOW(),
                         0, 0)
                 """,
                 (
@@ -746,7 +746,7 @@ def _open_simulated_position(
                     sl_price, tp_price,
                     PREDICT_SL_PCT, PREDICT_TP_PCT,
                     max_hold_minutes, planned_close,
-                    PREDICT_SOURCE, entry_reason,
+                    PREDICT_SOURCE, 'deepseek_predict', entry_reason,
                 ),
             )
             position_id = cur.lastrowid

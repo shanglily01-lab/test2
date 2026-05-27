@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-六策略量化交易服务 (v2 — 2026-05-22 精简确认层版)
+六策略量化交易服务 (v3 — 2026-05-28 清理无效策略版)
 
-核心改动: 去掉所有滞后确认层, 每个策略保留 2-3 个前置信号, 提前入场。
-- S1: 早期做多 — 去掉 4H MACD (滞后 8h), 保留 RSI+MA20
-- S2: 回调做多 — 降低门槛 15%→8%, 去掉 15m RSI 上升确认
-- S3: 顶部做空 — 去掉"已从高点回落 3-15%"(等跌了才空=灾难), 阴线需求 2→1
-- S4: 反弹衰竭做空 — 去掉"反弹 5%+", 三选二→三选一
-- S5: 大币超卖 — 去掉 RSI 下降过滤 (RSI<32 本身已足够)
-- S6: 小币量能异动 — 去掉 RSI 28-55 (量能先行, 不需要 RSI 再确认)
-- S7: MA 支撑反弹 — 去掉量能确认 (等量确认=错过反弹)
+已清理策略（从未有效开仓，移除代码+系统设置控件）:
+- S2 回调做多
+- S3 顶部做空
+- S4 反弹衰竭做空
+- S7 MA支撑反弹
+- S8 顶部反转做空
+
+保留策略:
+- S1: 早期做多 — RSI+MA20
+- S5: 大币超卖 — RSI<32 止损反弹
+- S6: 小币量能异动 — 量能先行
+- S9: Gemini AI 抄底反转做多 — 每6h
 
 调度方式: 在 smart_trader_service.py 主循环中调用
-- run_fast(): 每5分钟, 负责 S2+S4+S7
-- run_slow(): 每30分钟, 负责 S1+S3+S5+S6 (内部限速)
+- run_slow(): 每30分钟, 负责 S1+S5+S6+S9 (内部限速)
 """
 
 import sys
@@ -47,24 +50,6 @@ class MultiStrategyService:
     S1_MAX_POSITIONS = 999  # 测试阶段不限制，上线后改回 3
     S1_SOURCE = 's1_early_long'
 
-    # 策略2: 无量回调做多
-    S2_LEVERAGE = 5  # 2026-05-17 从 10x 统一为 5x
-    S2_MARGIN = 500
-    S2_MAX_POSITIONS = 999  # 测试阶段不限制，上线后改回 3
-    S2_SOURCE = 's2_pullback_long'
-
-    # 策略3: 顶部做空
-    S3_LEVERAGE = 5
-    S3_MARGIN = 500
-    S3_MAX_POSITIONS = 999  # 测试阶段不限制，上线后改回 3
-    S3_SOURCE = 's3_top_short'
-
-    # 策略4: 反弹动能衰竭做空
-    S4_LEVERAGE = 5
-    S4_MARGIN = 500
-    S4_MAX_POSITIONS = 999  # 测试阶段不限制，上线后改回 3
-    S4_SOURCE = 's4_rebound_short'
-
     # 策略5: 大币4H超卖反弹做多 (BTC/ETH/SOL/BNB/XRP)
     S5_LEVERAGE = 5
     S5_MARGIN = 500
@@ -86,31 +71,6 @@ class MultiStrategyService:
         'FIO/USDT',  # 回测验证: 量能信号对极低价格币失真，10天8%胜率
     }
 
-    # 策略7: 小币均线支撑反弹做多 (MA20下方82-95%区间反弹)
-    S7_LEVERAGE = 5
-    S7_MARGIN = 500
-    S7_MAX_POSITIONS = 5
-    S7_SOURCE = 's7_ma_support'
-
-    # ═════════════════════════════════════════════════════════════════
-    # 策略8: 顶部反转做空 (S8) — 自 strategy_live.py topshort 迁入 2026-05-15
-    #   原 strategy_live.py 用 HTTP /api/futures/open + 限价单, 此处简化为市价
-    #   入场条件: 48h 涨幅 >= 80% + 6 根 1h 无新高 + 12 天上市历史
-    #             + 24h 未跌过 15% + 3h 入场位置 > 10% (不在低点接刀)
-    # ═════════════════════════════════════════════════════════════════
-    S8_LEVERAGE = 5
-    S8_MARGIN = 500
-    S8_MAX_POSITIONS = 3
-    S8_SOURCE = 's8_topshort'
-    S8_PUMP_THRESH = 0.80    # 48h 涨 >= 80%
-    S8_NO_NEW_H = 6          # 之后 6 根 1h 无新高
-    S8_LOOKBACK_H = 48       # pump 检测窗口
-    S8_MIN_HISTORY_DAYS = 12 # 上市最低天数
-    S8_MAX_24H_DROP = -15.0  # 24h 跌幅 < -15% 跳过
-    S8_MAX_PEAK_DRAWDOWN = 0.50  # 从峰值已跌 50%+ 跳过
-    S8_SIGNAL_AGE_HOURS = 6  # 信号最长生效时间
-    S8_ENTRY_POS_MIN = 10.0  # 3h 15m 区间位置 >= 10%
-
     # ═════════════════════════════════════════════════════════════════
     # 策略9: Gemini AI 抄底反转做多 (S9) — 自 strategy_bigmid.py 迁入
     #   每 6h 调用 Google Gemini API, 对成交额达标的 USDT 交易对判 long/skip
@@ -128,8 +88,7 @@ class MultiStrategyService:
     S9_PER_SYMBOL_DELAY_S = 1.0  # 每个 symbol 调 Gemini 间隔, 防 rate limit
 
     ALL_SOURCES = (
-        S1_SOURCE, S2_SOURCE, S3_SOURCE, S4_SOURCE, S5_SOURCE, S6_SOURCE, S7_SOURCE,
-        S8_SOURCE, S9_SOURCE,
+        S1_SOURCE, S5_SOURCE, S6_SOURCE, S9_SOURCE,
     )
     SLOW_SCAN_INTERVAL_SEC = 1800  # 30 分钟
 
@@ -138,8 +97,6 @@ class MultiStrategyService:
         self.ws_service = ws_price_service
         self.ti = TechnicalIndicators()
         self._last_slow_scan: Optional[datetime] = None
-        # S8 上市历史缓存 (sym -> (ok, ts)),15 分钟 TTL
-        self._s8_history_cache: dict = {}
         # S9 限速器: 上次跑 Gemini 的时间
         self._last_s9_run: Optional[datetime] = None
         # S9 Gemini client (lazy init)
@@ -609,268 +566,6 @@ class MultiStrategyService:
             logger.info(f"[S1] 本轮新开 {opened} 单")
 
     # ─────────────────────────────────────────
-    # 策略2: 无量回调做多
-    # ─────────────────────────────────────────
-
-    def scan_s2_pullback_long(self):
-        """S2: 48H涨>12%后回调8-38%，15m RSI 30-58（低位即可，不要求上升）"""
-        if not self._read_setting_bool('s2_pullback_long_enabled', default=False):
-            return
-        if self._strategy_position_count(self.S2_SOURCE) >= self.S2_MAX_POSITIONS:
-            return
-
-        big4 = self._get_big4_signal()
-        if big4 in ('BEARISH', 'STRONG_BEARISH'):
-            return
-
-        symbols = self._get_candidate_symbols(min_abs_change=8.0)
-        opened = 0
-
-        for symbol in symbols:
-            if self._strategy_position_count(self.S2_SOURCE) + opened >= self.S2_MAX_POSITIONS:
-                break
-            if self._has_multi_strategy_position(symbol):
-                continue
-
-            try:
-                df_1h = self._get_klines(symbol, '1h', 52)
-                if df_1h is None or len(df_1h) < 48:
-                    continue
-
-                closes = df_1h['close'].values
-                recent_high = float(closes[-48:].max())
-                current_close = float(closes[-1])
-
-                # 48H价格区间 > 8%（降低门槛，更多机会）
-                price_range_pct = max(closes[-48:]) / min(closes[-48:]) - 1 if min(closes[-48:]) > 0 else 0
-                if price_range_pct < 0.08:
-                    continue
-
-                # 从48H高点回调8-38%（降低门槛，提前入场）
-                drawdown_pct = (recent_high - current_close) / recent_high if recent_high > 0 else 0
-                if not (0.08 <= drawdown_pct <= 0.38):
-                    continue
-
-                # 15m RSI 30-58 即可（不要求上升，避免等RSI回升的延迟）
-                df_15m = self._get_klines(symbol, '15m', 30)
-                if df_15m is None or len(df_15m) < 15:
-                    continue
-                rsi_15m = self.ti.calculate_rsi(df_15m)
-                if len(rsi_15m) < 2:
-                    continue
-                last_rsi = float(rsi_15m.iloc[-1])
-                if not (30 <= last_rsi <= 58):
-                    continue
-
-                reason = (
-                    f"S2:48H涨={price_range_pct * 100:.1f}%,"
-                    f"回调={drawdown_pct * 100:.1f}%,"
-                    f"15m_RSI={last_rsi:.1f}(低位)"
-                )
-                _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
-                if self._open_position(
-                    symbol, 'LONG', self.S2_MARGIN, self.S2_LEVERAGE,
-                    _tp, _sl, _hold, self.S2_SOURCE, reason
-                ):
-                    opened += 1
-
-            except Exception as e:
-                logger.warning(f"[S2] 扫描 {symbol} 异常: {e}")
-
-        if opened:
-            logger.info(f"[S2] 本轮新开 {opened} 单")
-
-    # ─────────────────────────────────────────
-    # 策略3: 顶部做空
-    # ─────────────────────────────────────────
-
-    def scan_s3_top_short(self):
-        """S3: RSI>=70顶背离 + 48H涨>20% + 4H MACD下行 + 近3根有阴线
-        精简: 去掉"已从高点回落3-15%"(最致命的滞后确认,等跌了才空=灾难)
-        """
-        if not self._read_setting_bool('s3_top_short_enabled', default=False):
-            return
-        if self._strategy_position_count(self.S3_SOURCE) >= self.S3_MAX_POSITIONS:
-            return
-
-        big4 = self._get_big4_signal()
-        if big4 == 'STRONG_BULLISH':
-            logger.info("[S3] Big4 强牛市，跳过顶部做空")
-            return
-
-        symbols = self._get_candidate_symbols(min_abs_change=15.0)
-        opened = 0
-
-        for symbol in symbols:
-            if self._strategy_position_count(self.S3_SOURCE) + opened >= self.S3_MAX_POSITIONS:
-                break
-            if self._has_multi_strategy_position(symbol):
-                continue
-
-            try:
-                df_1h = self._get_klines(symbol, '1h', 52)
-                if df_1h is None or len(df_1h) < 40:
-                    continue
-
-                # 1H RSI > 70（超买）
-                rsi_series = self.ti.calculate_rsi(df_1h)
-                if len(rsi_series) < 6:
-                    continue
-                last_rsi = float(rsi_series.iloc[-1])
-                if last_rsi <= 70:
-                    continue
-
-                # RSI顶背离：当前RSI不是最近6根的最高点（说明动量衰减）
-                recent_rsi_max = float(rsi_series.iloc[-6:].max())
-                if last_rsi >= recent_rsi_max:
-                    continue
-
-                # 48H涨幅 > 20%（确认有可跌空间）
-                current_price = float(df_1h['close'].iloc[-1])
-                high_48h = float(df_1h['high'].iloc[-48:].max()) if len(df_1h) >= 48 else float(df_1h['high'].max())
-                price_48h_ago = float(df_1h['close'].iloc[-48]) if len(df_1h) >= 48 else float(df_1h['close'].iloc[0])
-                gain_48h = (high_48h - price_48h_ago) / price_48h_ago if price_48h_ago > 0 else 0
-                if gain_48h <= 0.20:
-                    continue
-
-                # 4H MACD histogram 开始下行（多时间框架确认弱势）
-                df_4h = self._get_klines(symbol, '4h', 40)
-                if df_4h is None or len(df_4h) < 30:
-                    continue
-                _, _, hist_4h = self.ti.calculate_macd(df_4h)
-                if len(hist_4h) < 3:
-                    continue
-                h4_1 = float(hist_4h.iloc[-3])
-                h4_2 = float(hist_4h.iloc[-2])
-                h4_3 = float(hist_4h.iloc[-1])
-                if not (h4_3 < h4_2 or h4_2 < h4_1):
-                    continue
-
-                # 近3根1H至少1根阴线（简化: 从2根改为1根, 不必等完全确认转弱）
-                bearish_count = sum(
-                    1 for k in range(-3, 0)
-                    if float(df_1h['close'].iloc[k]) < float(df_1h['open'].iloc[k])
-                )
-                if bearish_count < 1:
-                    continue
-
-                retreat_pct = (high_48h - current_price) / high_48h if high_48h > 0 else 0
-                reason = (
-                    f"S3:1H_RSI={last_rsi:.1f}(顶背离,max={recent_rsi_max:.1f}),"
-                    f"从高点已回={retreat_pct * 100:.1f}%,"
-                    f"4H_MACD下行,48H涨={gain_48h * 100:.1f}%"
-                )
-                _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
-                if self._open_position(
-                    symbol, 'SHORT', self.S3_MARGIN, self.S3_LEVERAGE,
-                    _tp, _sl, _hold, self.S3_SOURCE, reason
-                ):
-                    opened += 1
-
-            except Exception as e:
-                logger.warning(f"[S3] 扫描 {symbol} 异常: {e}")
-
-        if opened:
-            logger.info(f"[S3] 本轮新开 {opened} 单")
-
-    # ─────────────────────────────────────────
-    # 策略4: 反弹动能衰竭做空
-    # ─────────────────────────────────────────
-
-    def scan_s4_rebound_short(self):
-        """S4: 14日高点50-85%反弹+曾下跌15%+ 1个指标确认（三选一）"""
-        if not self._read_setting_bool('s4_rebound_short_enabled', default=False):
-            return
-        if self._strategy_position_count(self.S4_SOURCE) >= self.S4_MAX_POSITIONS:
-            return
-
-        symbols = self._get_candidate_symbols(min_abs_change=8.0)
-        opened = 0
-
-        for symbol in symbols:
-            if self._strategy_position_count(self.S4_SOURCE) + opened >= self.S4_MAX_POSITIONS:
-                break
-            if self._has_multi_strategy_position(symbol):
-                continue
-
-            try:
-                df_1h_14d = self._get_klines(symbol, '1h', 14 * 24 + 2)
-                if df_1h_14d is None or len(df_1h_14d) < 52:
-                    continue
-
-                two_week_high = float(df_1h_14d['high'].max())
-                current_price = float(df_1h_14d['close'].iloc[-1])
-
-                # 当前价格在14日高点的50-85%（大幅回落后反弹）
-                rebound_pct = current_price / two_week_high if two_week_high > 0 else 0
-                if not (0.50 <= rebound_pct <= 0.85):
-                    continue
-
-                # 曾经从14日高点下跌超过15%（有实质性回落，不是横盘）
-                low_7d = float(df_1h_14d['low'].iloc[-7 * 24:].min())
-                max_drop = (two_week_high - low_7d) / two_week_high if two_week_high > 0 else 0
-                if max_drop < 0.15:
-                    continue
-
-                # 取最近52根K线做指标分析
-                df_1h = df_1h_14d.iloc[-52:].reset_index(drop=True)
-
-                # 三选一（之前三选二：减少确认延迟）
-                # 条件1: MACD histogram 任意一段下降
-                _, _, hist_1h = self.ti.calculate_macd(df_1h)
-                macd_bearish = False
-                if len(hist_1h) >= 3:
-                    h3 = float(hist_1h.iloc[-1])
-                    h2 = float(hist_1h.iloc[-2])
-                    if h3 < h2:
-                        macd_bearish = True
-
-                # 条件2: RSI < 65 且最后一根在下降
-                rsi_1h = self.ti.calculate_rsi(df_1h)
-                rsi_bearish = False
-                r3 = 50.0
-                if len(rsi_1h) >= 2:
-                    r2 = float(rsi_1h.iloc[-2])
-                    r3 = float(rsi_1h.iloc[-1])
-                    if r3 < 65 and r3 < r2:
-                        rsi_bearish = True
-
-                # 条件3: 上涨K均量 < 下跌K均量（量能萎缩）
-                vol_shrink = False
-                closes = df_1h['close'].values
-                vols = df_1h['volume'].values
-                up_vols = [vols[j] for j in range(-10, -1) if closes[j] > closes[j - 1]]
-                dn_vols = [vols[j] for j in range(-10, -1) if closes[j] < closes[j - 1]]
-                if len(up_vols) >= 2 and len(dn_vols) >= 2:
-                    avg_up = sum(up_vols) / len(up_vols)
-                    avg_dn = sum(dn_vols) / len(dn_vols)
-                    if avg_dn > 0 and avg_up < avg_dn:
-                        vol_shrink = True
-
-                # 三选一
-                if not (macd_bearish or rsi_bearish or vol_shrink):
-                    continue
-
-                reason = (
-                    f"S4:14日高={two_week_high:.4g},反弹={rebound_pct * 100:.1f}%,"
-                    f"1H_RSI={r3:.1f},"
-                    f"MACD={'空' if macd_bearish else '-'},"
-                    f"量萎缩={'是' if vol_shrink else '-'}"
-                )
-                _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
-                if self._open_position(
-                    symbol, 'SHORT', self.S4_MARGIN, self.S4_LEVERAGE,
-                    _tp, _sl, _hold, self.S4_SOURCE, reason
-                ):
-                    opened += 1
-
-            except Exception as e:
-                logger.warning(f"[S4] 扫描 {symbol} 异常: {e}")
-
-        if opened:
-            logger.info(f"[S4] 本轮新开 {opened} 单")
-
-    # ─────────────────────────────────────────
     # 策略5: 大币4H超卖反弹做多
     # ─────────────────────────────────────────
 
@@ -1041,237 +736,6 @@ class MultiStrategyService:
 
         if opened:
             logger.info(f"[S6] 本轮新开 {opened} 单")
-
-    # ─────────────────────────────────────────
-    # 策略7: 小币均线支撑反弹做多
-    # ─────────────────────────────────────────
-
-    def scan_s7_ma_support(self):
-        """S7: 价格跌至20H均线82-95%区间 + 阳线反弹（移除量能确认: 等量=错过反弹）"""
-        if not self._read_setting_bool('s7_ma_support_enabled', default=False):
-            return
-        if self._strategy_position_count(self.S7_SOURCE) >= self.S7_MAX_POSITIONS:
-            return
-
-        big4 = self._get_big4_signal()
-        if big4 in ('BEARISH', 'STRONG_BEARISH'):
-            logger.info("[S7] Big4熊市，跳过均线支撑反弹")
-            return
-
-        symbols = self._get_small_cap_symbols()
-        opened = 0
-
-        for symbol in symbols:
-            if self._strategy_position_count(self.S7_SOURCE) + opened >= self.S7_MAX_POSITIONS:
-                break
-            if self._has_multi_strategy_position(symbol):
-                continue
-
-            try:
-                df_1h = self._get_klines(symbol, '1h', 30)
-                if df_1h is None or len(df_1h) < 22:
-                    continue
-
-                # 20H简单均线
-                ma20 = float(df_1h['close'].iloc[-21:-1].mean())
-                if ma20 <= 0:
-                    continue
-
-                close_v = float(df_1h['close'].iloc[-1])
-                open_v = float(df_1h['open'].iloc[-1])
-                prev_close = float(df_1h['close'].iloc[-2])
-
-                # 价格在MA20的82-95%区间
-                ratio = close_v / ma20
-                if not (0.82 <= ratio <= 0.95):
-                    continue
-
-                # 当前是阳线且高于前一根收盘（核心信号：MA20附近获得支撑反弹）
-                if not (close_v > open_v and close_v > prev_close):
-                    continue
-
-                reason = (
-                    f"S7:价格/20H_MA={ratio * 100:.1f}%,"
-                    f"阳线反弹"
-                )
-                _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
-                if self._open_position(
-                    symbol, 'LONG', self.S7_MARGIN, self.S7_LEVERAGE,
-                    _tp, _sl, _hold, self.S7_SOURCE, reason
-                ):
-                    opened += 1
-
-            except Exception as e:
-                logger.warning(f"[S7] 扫描 {symbol} 异常: {e}")
-
-        if opened:
-            logger.info(f"[S7] 本轮新开 {opened} 单")
-
-    # ═════════════════════════════════════════════════════════════════
-    # 策略8: 顶部反转做空 (topshort) - 自 strategy_live.py 迁入 2026-05-15
-    # ═════════════════════════════════════════════════════════════════
-
-    def _s8_has_min_listed_history(self, symbol: str) -> bool:
-        """检查上市历史 >= S8_MIN_HISTORY_DAYS 天 (15 分钟缓存)"""
-        import time as _t
-        now = _t.time()
-        ent = self._s8_history_cache.get(symbol)
-        if ent and (now - ent[1]) < 15 * 60:
-            return ent[0]
-        try:
-            conn = self._get_conn()
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT MIN(open_time) AS tmin FROM kline_data "
-                "WHERE timeframe='1h' AND symbol=%s",
-                (symbol,)
-            )
-            r = cur.fetchone() or {}
-            cur.close(); conn.close()
-            tmin = r.get('tmin')
-            if tmin is None:
-                self._s8_history_cache[symbol] = (False, now)
-                return False
-            min_ms = self.S8_MIN_HISTORY_DAYS * 24 * 60 * 60 * 1000
-            now_ms = int(now * 1000)
-            ok = (now_ms - int(tmin)) >= min_ms
-            self._s8_history_cache[symbol] = (ok, now)
-            return ok
-        except Exception as e:
-            logger.warning(f"[S8] 上市历史检查失败 {symbol}: {e}")
-            return False
-
-    def _s8_entry_position_check(self, symbol: str, cur_price: float) -> bool:
-        """3h 内 15m K 线的位置检查: 价格百分位 >= S8_ENTRY_POS_MIN (不在低位接刀)"""
-        try:
-            df = self._get_klines(symbol, '15m', 12)
-            if df is None or len(df) < 12:
-                return True  # 数据不足放行
-            hi = float(df['high'].max())
-            lo = float(df['low'].min())
-            if hi <= lo:
-                return True
-            pos_pct = (cur_price - lo) / (hi - lo) * 100
-            return pos_pct >= self.S8_ENTRY_POS_MIN
-        except Exception as e:
-            logger.warning(f"[S8] 入场位置检查失败 {symbol}: {e}")
-            return True
-
-    def scan_s8_topshort(self):
-        """S8: 48h涨>=80% + 6根1h无新高 + 12天上市 + 24h未跌过15% 做空"""
-        # 独立 kill switch (default OFF, 需 system_settings 显式开启)
-        if not self._read_setting_bool('s8_topshort_enabled', default=False):
-            return
-
-        if self._strategy_position_count(self.S8_SOURCE) >= self.S8_MAX_POSITIONS:
-            return
-
-        big4 = self._get_big4_signal()
-        if big4 == 'STRONG_BULLISH':
-            logger.info("[S8] Big4 强牛市,跳过顶部反转做空")
-            return
-
-        # 24h 涨跌 >= 15% 的候选币种 (48h pump >= 80% 在 1h 数据里再精筛)
-        symbols = self._get_candidate_symbols(min_abs_change=15.0)
-        opened = 0
-        now_ms = int(datetime.utcnow().timestamp() * 1000)
-        signal_age_max_ms = self.S8_SIGNAL_AGE_HOURS * 3600 * 1000
-
-        for symbol in symbols:
-            if self._strategy_position_count(self.S8_SOURCE) + opened >= self.S8_MAX_POSITIONS:
-                break
-            if self._has_multi_strategy_position(symbol):
-                continue
-            if not self._s8_has_min_listed_history(symbol):
-                continue
-
-            try:
-                # 1h K 线: 含 48h 窗口 + 6 根观察期 + 余量
-                df = self._get_klines(symbol, '1h', self.S8_LOOKBACK_H + self.S8_NO_NEW_H + 20)
-                if df is None or len(df) < self.S8_LOOKBACK_H + self.S8_NO_NEW_H + 2:
-                    continue
-
-                highs = df['high'].astype(float).tolist()
-                lows = df['low'].astype(float).tolist()
-                opens_ts = [int(t) for t in df['open_time'].tolist()]
-                n = len(df)
-
-                # 倒序找最近一个满足 pump 条件的 i
-                for i in range(n - self.S8_NO_NEW_H - 2,
-                               max(0, n - self.S8_LOOKBACK_H - self.S8_NO_NEW_H - 10) - 1, -1):
-                    lo_window = lows[max(0, i - self.S8_LOOKBACK_H):i]
-                    if not lo_window:
-                        continue
-                    lo_win = min(lo_window)
-                    if lo_win == 0:
-                        continue
-                    pump = (highs[i] - lo_win) / lo_win
-                    if pump < self.S8_PUMP_THRESH:
-                        continue
-                    peak = highs[i]
-                    if i + self.S8_NO_NEW_H >= n:
-                        continue
-                    if not all(highs[i + j] < peak for j in range(1, self.S8_NO_NEW_H + 1)):
-                        continue
-                    # 信号年龄检查
-                    entry_ts = opens_ts[i + self.S8_NO_NEW_H]
-                    if now_ms - entry_ts > signal_age_max_ms:
-                        continue
-
-                    cur_price = self._get_current_price(symbol)
-                    if not cur_price:
-                        continue
-
-                    # 现价 > pump 启动低 (信号未失效)
-                    if cur_price <= lo_win:
-                        continue
-                    # 从峰值回落 < 50%
-                    drawdown = (peak - cur_price) / peak
-                    if drawdown > self.S8_MAX_PEAK_DRAWDOWN:
-                        continue
-
-                    # 24h 已跌过 15% 跳过
-                    ch24_val = None
-                    try:
-                        conn = self._get_conn()
-                        cur = conn.cursor()
-                        cur.execute(
-                            "SELECT change_24h FROM price_stats_24h WHERE symbol=%s LIMIT 1",
-                            (symbol,)
-                        )
-                        r24 = cur.fetchone()
-                        cur.close(); conn.close()
-                        if r24 and r24.get('change_24h') is not None:
-                            ch24_val = float(r24['change_24h'])
-                    except Exception:
-                        pass
-                    if ch24_val is not None and ch24_val < self.S8_MAX_24H_DROP:
-                        continue
-
-                    # 入场位置检查
-                    if not self._s8_entry_position_check(symbol, cur_price):
-                        continue
-
-                    ch24_str = f"{ch24_val:.1f}%" if ch24_val is not None else "NA"
-                    reason = (
-                        f"S8:48h_pump={pump * 100:.0f}%,peak={peak:.5g},"
-                        f"cur={cur_price:.5g},dd={drawdown * 100:.0f}%,"
-                        f"24h={ch24_str}"
-                    )
-                    _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
-                    if self._open_position(
-                        symbol, 'SHORT', self.S8_MARGIN, self.S8_LEVERAGE,
-                        _tp, _sl, _hold,
-                        self.S8_SOURCE, reason
-                    ):
-                        opened += 1
-                    break  # 该 symbol 找到信号即结束
-
-            except Exception as e:
-                logger.warning(f"[S8] 扫描 {symbol} 异常: {e}")
-
-        if opened:
-            logger.info(f"[S8] 本轮新开 {opened} 单")
 
     # ═════════════════════════════════════════════════════════════════
     # 策略9: Gemini AI 抄底反转做多 - 自 strategy_bigmid.py 迁入
@@ -1629,37 +1093,18 @@ Output ONLY a single valid JSON object, no markdown fence, no extra text:
     # 调度入口
     # ─────────────────────────────────────────
 
-    def run_fast(self):
-        """每5分钟调度：S2 + S4 + S7"""
-        try:
-            self.scan_s2_pullback_long()
-        except Exception as e:
-            logger.error(f"[S2] 扫描异常: {e}")
-        try:
-            self.scan_s4_rebound_short()
-        except Exception as e:
-            logger.error(f"[S4] 扫描异常: {e}")
-        try:
-            self.scan_s7_ma_support()
-        except Exception as e:
-            logger.error(f"[S7] 扫描异常: {e}")
-
     def run_slow(self):
-        """每30分钟调度：S1+S3+S5+S6+S8+S9；内部限速防重复"""
+        """每30分钟调度：S1+S5+S6+S9；内部限速防重复"""
         now = datetime.utcnow()
         if (self._last_slow_scan and
                 (now - self._last_slow_scan).total_seconds() < self.SLOW_SCAN_INTERVAL_SEC):
             return
         self._last_slow_scan = now
-        logger.info("[多策略] S1+S3+S5+S6+S8+S9 慢速扫描开始")
+        logger.info("[多策略] S1+S5+S6+S9 慢速扫描开始")
         try:
             self.scan_s1_early_long()
         except Exception as e:
             logger.error(f"[S1] 扫描异常: {e}")
-        try:
-            self.scan_s3_top_short()
-        except Exception as e:
-            logger.error(f"[S3] 扫描异常: {e}")
         try:
             self.scan_s5_large_oversold()
         except Exception as e:
@@ -1668,10 +1113,6 @@ Output ONLY a single valid JSON object, no markdown fence, no extra text:
             self.scan_s6_vol_spike()
         except Exception as e:
             logger.error(f"[S6] 扫描异常: {e}")
-        try:
-            self.scan_s8_topshort()
-        except Exception as e:
-            logger.error(f"[S8] 扫描异常: {e}")
         try:
             self.scan_s9_gemini_ai()
         except Exception as e:

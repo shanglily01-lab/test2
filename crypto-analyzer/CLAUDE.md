@@ -77,9 +77,17 @@
 - sell 时通过 `BinanceFuturesEngine.close_position_direct()` 平实盘，再同步关模拟仓
 - 需 `live_close_enabled=1`（实盘平仓开关）才能操作实盘
 
-### S9 (multi_strategy_service 内)
-- 每 6h, kill switch: `s9_gemini_ai_enabled`
-- LONG-only 抄底反转
+## 多策略服务 (multi_strategy_service)
+
+保留策略:
+- **S1** 早期做多 (5x, RSI+MA20)
+- **S5** 大币超卖 (5x, BTC/ETH/BNB/SOL/XRP, RSI<32)
+- **S6** 小币量能异动 (5x, 量能先行)
+- **S9** Gemini AI 抄底反转 (5x, LONG-only, 每6h)
+
+已清理策略 (2026-05-28, 从未有效开仓, 移除代码+系统设置控件):
+- S2 回调做多 / S3 顶部做空 / S4 反弹做空 / S7 MA支撑 / S8 顶部反转做空
+- `run_fast()` 方法已删除, `run_slow()` 只调 S1/S5/S6/S9
 
 ## 实盘控制
 

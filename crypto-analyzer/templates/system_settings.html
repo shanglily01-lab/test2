@@ -362,15 +362,6 @@
 </div>
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#ff6b6b] text-xl shrink-0">trending_down</span>
-<div><div class="text-sm font-medium text-slate-200">S8 顶部反转做空</div><p class="text-[11px] text-slate-500">48h涨80% + 6根无新高 + 12天上市</p></div>
-</div>
-<div id="s8TopshortToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#9b59ff] text-xl shrink-0">smart_toy</span>
 <div><div class="text-sm font-medium text-slate-200">S9 Gemini AI 抄底</div><p class="text-[11px] text-slate-500">每 6h 调 Gemini · 收费 API · LONG-only</p></div>
 </div>
@@ -389,33 +380,6 @@
 </div>
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#ff9800] text-xl shrink-0">swap_vert</span>
-<div><div class="text-sm font-medium text-slate-200">S2 回调做多</div><p class="text-[11px] text-slate-500">48H涨&gt;12%后回调 8-38%</p></div>
-</div>
-<div id="s2Toggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#f44336] text-xl shrink-0">trending_down</span>
-<div><div class="text-sm font-medium text-slate-200">S3 顶部做空</div><p class="text-[11px] text-slate-500">RSI≥70顶背离 + 48H涨&gt;20%</p></div>
-</div>
-<div id="s3Toggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#ff5722] text-xl shrink-0">arrow_downward</span>
-<div><div class="text-sm font-medium text-slate-200">S4 反弹做空</div><p class="text-[11px] text-slate-500">14日高点50-85%反弹衰竭</p></div>
-</div>
-<div id="s4Toggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#4caf50] text-xl shrink-0">bubble_chart</span>
 <div><div class="text-sm font-medium text-slate-200">S5 大币超卖</div><p class="text-[11px] text-slate-500">BTC/ETH/BNB/SOL/XRP 4H RSI&lt;32</p></div>
 </div>
@@ -429,15 +393,6 @@
 <div><div class="text-sm font-medium text-slate-200">S6 量能异动</div><p class="text-[11px] text-slate-500">12H量峰&gt;3.5x + 当前量1.2-5x</p></div>
 </div>
 <div id="s6Toggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#00bcd4] text-xl shrink-0">support</span>
-<div><div class="text-sm font-medium text-slate-200">S7 MA支撑</div><p class="text-[11px] text-slate-500">20H均线82-95%区间 + 阳线反弹</p></div>
-</div>
-<div id="s7Toggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
 </div>
 </div>
@@ -796,15 +751,10 @@
                 setToggle('trendFollowingToggle', !!svc.trend_following_enabled);
                 setToggle('geminiExploreToggle', !!svc.gemini_explore_enabled);
                 setToggle('geminiPredictToggle', !!svc.gemini_predict_enabled);
-                setToggle('s8TopshortToggle',  !!svc.s8_topshort_enabled);
                 setToggle('s9GeminiToggle',    !!svc.s9_gemini_ai_enabled);
                 setToggle('s1Toggle',   !!svc.s1_early_long_enabled);
-                setToggle('s2Toggle',   !!svc.s2_pullback_long_enabled);
-                setToggle('s3Toggle',   !!svc.s3_top_short_enabled);
-                setToggle('s4Toggle',   !!svc.s4_rebound_short_enabled);
                 setToggle('s5Toggle',   !!svc.s5_large_oversold_enabled);
                 setToggle('s6Toggle',   !!svc.s6_vol_spike_enabled);
-                setToggle('s7Toggle',   !!svc.s7_ma_support_enabled);
                 setToggle('geminiAdvisorToggle', !!svc.gemini_position_advisor_enabled);
                 setToggle('spotTradingToggle',  !!svc.spot_trading_enabled);
                 setToggle('big4Toggle',
@@ -965,17 +915,6 @@
             }
         });
 
-        // S8 顶部反转做空
-        bindToggle('s8TopshortToggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { s8_topshort_enabled: enabled });
-                showToast('S8 顶部反转做空已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
         // S9 Gemini AI 抄底反转
         bindToggle('s9GeminiToggle', async function (enabled) {
             try {
@@ -998,39 +937,6 @@
             }
         });
 
-        // S2 回调做多
-        bindToggle('s2Toggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { s2_pullback_long_enabled: enabled });
-                showToast('S2 回调做多已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
-        // S3 顶部做空
-        bindToggle('s3Toggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { s3_top_short_enabled: enabled });
-                showToast('S3 顶部做空已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
-        // S4 反弹做空
-        bindToggle('s4Toggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { s4_rebound_short_enabled: enabled });
-                showToast('S4 反弹做空已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
         // S5 大币超卖
         bindToggle('s5Toggle', async function (enabled) {
             try {
@@ -1047,17 +953,6 @@
             try {
                 await apiPut('/trading-services', { s6_vol_spike_enabled: enabled });
                 showToast('S6 量能异动已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
-        // S7 MA支撑
-        bindToggle('s7Toggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { s7_ma_support_enabled: enabled });
-                showToast('S7 MA支撑已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;

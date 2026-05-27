@@ -867,7 +867,7 @@ async def get_reason_analysis(
         cursor.execute("""
             SELECT
                 entry_reason, entry_signal_type, notes as close_reason,
-                realized_pnl, position_side
+                realized_pnl, position_side, source
             FROM futures_positions
             WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
         """, (account_id, time_threshold))
@@ -893,6 +893,17 @@ async def get_reason_analysis(
 
             # 开仓原因统计（使用新的解析函数,区分多空方向）
             entry_code, entry_cn = parse_entry_reason(pos['entry_reason'], pos['entry_signal_type'])
+            # 如果 entry_signal_type 为空且原因无法识别,使用 source 兜底
+            if entry_code == 'unknown' and pos.get('source'):
+                source = pos['source']
+                source_label_map = {
+                    'gemini_predict': ('gemini_predict_label', 'Gemini预测'),
+                    'gemini_explore': ('gemini_explore_label', 'Gemini探索'),
+                    'deepseek_predict': ('deepseek_predict_label', 'DeepSeek预测'),
+                    'deepseek_explore': ('deepseek_explore_label', 'DeepSeek探索'),
+                }
+                if source in source_label_map:
+                    entry_code, entry_cn = source_label_map[source]
             side = pos['position_side']
             side_cn = "做多" if side == 'LONG' else "做空"
 
@@ -2115,13 +2126,8 @@ async def get_strategy_performance(
 
         STRATEGY_NAMES = {
             's1_early_long': 'S1 早期做多',
-            's2_pullback_long': 'S2 回调做多',
-            's3_top_short': 'S3 顶部做空',
-            's4_rebound_short': 'S4 反弹衰竭做空',
             's5_large_oversold': 'S5 大币超卖做多',
             's6_vol_spike': 'S6 放量异动做多',
-            's7_ma_support': 'S7 MA支撑做多',
-            's8_topshort': 'S8 顶部做空',
             's9_gemini_ai': 'S9 Gemini AI',
             'gemini_explore': 'Gemini 探索',
             'BTC_MOMENTUM': 'BTC 动量',
@@ -2129,13 +2135,8 @@ async def get_strategy_performance(
 
         STRATEGY_SHORT = {
             's1_early_long': 'S1',
-            's2_pullback_long': 'S2',
-            's3_top_short': 'S3',
-            's4_rebound_short': 'S4',
             's5_large_oversold': 'S5',
             's6_vol_spike': 'S6',
-            's7_ma_support': 'S7',
-            's8_topshort': 'S8',
             's9_gemini_ai': 'S9',
             'gemini_explore': '探索',
             'BTC_MOMENTUM': 'BTC',

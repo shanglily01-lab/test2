@@ -2,20 +2,9 @@
 strategy_live - 实盘/paper 策略运行器, 真实下单到 localhost:9020
 
 ═══════════════════════════════════════════════════════════════════════
-⚠️  DEPRECATED (2026-05-16):
-    本文件的 topshort 策略已迁入 multi_strategy_service.py 当 S8 (scan_s8_topshort)
-    源 source 改为 's8_topshort', 由 smart_trader_service 主循环调度 (run_slow 每 30 min)
-
-    本文件保留作为 rollback fallback,正常情况不应启动:
-    - systemctl stop crypto-strategy-live
-    - systemctl disable crypto-strategy-live
-
-    如发现 S8 有 bug,可临时启动本文件回滚:
-    - 临时禁用 S8: sed -i 's/self.scan_s8_topshort()/pass # disabled/'
-                    app/services/multi_strategy_service.py 的 run_slow
-    - systemctl start crypto-strategy-live
-
-    最终删除时机: S8 稳定运行 30 天后,移到 deprecated/ 目录或删除
+⚠️  DEPRECATED (2026-05-28):
+    S8 (topshort) 已随 S2/S3/S4/S7 一起被清理（从未有效开仓）。
+    本文件仅保留作为历史参考。
 ═══════════════════════════════════════════════════════════════════════
 
 2026-05-15 极简化重构: 仅保留 topshort 子策略 (顶部反转做空).
