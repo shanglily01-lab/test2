@@ -361,23 +361,7 @@ Output ONLY a single valid JSON object, no markdown fence:
                 close_price = result.get('close_price', 0)
                 live_pnl = result.get('realized_pnl', 0)
 
-                # ---- 3. 更新实盘 DB 记录 ----
-                conn2 = self._get_conn()
-                cur2 = conn2.cursor()
-                cur2.execute(
-                    """UPDATE live_futures_positions
-                       SET status='CLOSED', close_time=NOW(),
-                           close_price=%s, realized_pnl=%s, close_reason=%s,
-                           notes=CONCAT(IFNULL(notes,''),'|gemini_advisor:',%s)
-                       WHERE id=%s""",
-                    (close_price, live_pnl, reason, reason, live_row['id'])
-                )
-                logger.info(
-                    f"[Gemini顾问] 实盘已平 id={live_row['id']} {position['symbol']} "
-                    f"{position['position_side']} pnl={live_pnl}"
-                )
-
-                # ---- 4. 同步关闭模拟仓 ----
+                # ---- 3. 同步关闭模拟仓 (实盘记录由定时任务每15M同步) ----
                 cur2.execute(
                     """UPDATE futures_positions
                        SET status='closed',

@@ -352,6 +352,15 @@
 </div>
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-[#f97316] text-xl shrink-0">waves</span>
+<div><div class="text-sm font-medium text-slate-200">趋势策略</div><p class="text-[11px] text-slate-500">smart_trader 趋势跟随 · 仅模拟盘</p></div>
+</div>
+<div id="trendFollowingToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
+</div>
+</div>
+<div class="cfg-row">
+<div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#ff6b6b] text-xl shrink-0">trending_down</span>
 <div><div class="text-sm font-medium text-slate-200">S8 顶部反转做空</div><p class="text-[11px] text-slate-500">48h涨80% + 6根无新高 + 12天上市</p></div>
 </div>
@@ -365,6 +374,24 @@
 <div><div class="text-sm font-medium text-slate-200">S9 Gemini AI 抄底</div><p class="text-[11px] text-slate-500">每 6h 调 Gemini · 收费 API · LONG-only</p></div>
 </div>
 <div id="s9GeminiToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
+</div>
+</div>
+<div class="cfg-row">
+<div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-[#00e676] text-xl shrink-0">auto_awesome</span>
+<div><div class="text-sm font-medium text-slate-200">Gemini 探索</div><p class="text-[11px] text-slate-500">每 6h 检测红/黑天鹅，开模拟单</p></div>
+</div>
+<div id="geminiExploreToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
+</div>
+</div>
+<div class="cfg-row">
+<div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-[#7c4dff] text-xl shrink-0">psychology</span>
+<div><div class="text-sm font-medium text-slate-200">Gemini 预测</div><p class="text-[11px] text-slate-500">每 12h 预测 TOP50 方向</p></div>
+</div>
+<div id="geminiPredictToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
 </div>
 </div>
@@ -702,6 +729,9 @@
                 // 策略开关
                 setToggle('btcMomentumToggle', !!svc.btc_momentum_enabled);
                 setToggle('predictorToggle',   !!svc.predictor_enabled);
+                setToggle('trendFollowingToggle', !!svc.trend_following_enabled);
+                setToggle('geminiExploreToggle', !!svc.gemini_explore_enabled);
+                setToggle('geminiPredictToggle', !!svc.gemini_predict_enabled);
                 setToggle('s8TopshortToggle',  !!svc.s8_topshort_enabled);
                 setToggle('s9GeminiToggle',    !!svc.s9_gemini_ai_enabled);
                 setToggle('geminiAdvisorToggle', !!svc.gemini_position_advisor_enabled);
@@ -825,6 +855,39 @@
             try {
                 await apiPut('/trading-services', { predictor_enabled: enabled });
                 showToast('市场预测器已' + (enabled ? '开启' : '关闭'), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
+        // 趋势策略
+        bindToggle('trendFollowingToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { trend_following_enabled: enabled });
+                showToast('趋势策略已' + (enabled ? '开启' : '关闭'), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
+        // Gemini 探索
+        bindToggle('geminiExploreToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { gemini_explore_enabled: enabled });
+                showToast('Gemini 探索已' + (enabled ? '开启' : '关闭'), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
+        // Gemini 预测
+        bindToggle('geminiPredictToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { gemini_predict_enabled: enabled });
+                showToast('Gemini 预测已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;

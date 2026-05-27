@@ -393,15 +393,7 @@ class MarketPredictor:
             if not live_enabled:
                 cur.close(); conn.close()
                 return
-            # 更新DB记录
-            cur.execute("""
-                UPDATE live_futures_positions
-                SET status='CLOSED', close_time=NOW(),
-                    notes=CONCAT(IFNULL(notes,''), '|predictor_expire_close')
-                WHERE paper_position_id=%s AND status='OPEN'
-            """, (paper_id,))
-            conn.commit()
-            cur.close(); conn.close()
+            # 不再手动更新 live_futures_positions — 由定时任务每15M从币安全量同步
             # 调用交易引擎真实平仓
             from app.services.api_key_service import APIKeyService
             from app.trading.binance_futures_engine import BinanceFuturesEngine

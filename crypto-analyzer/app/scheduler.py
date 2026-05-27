@@ -110,7 +110,8 @@ class UnifiedDataScheduler:
             'etf_daily': {'count': 0, 'last_run': None, 'last_error': None},
             'bitcointreasuries_daily': {'count': 0, 'last_run': None, 'last_error': None},
             'futures_equity_update': {'count': 0, 'last_run': None, 'last_error': None},
-            'binance_news': {'count': 0, 'last_run': None, 'last_error': None}
+            'binance_news': {'count': 0, 'last_run': None, 'last_error': None},
+            'correct_live_trades': {'count': 0, 'last_run': None, 'last_error': None}
         }
 
         logger.info(f"调度器初始化完成 - 监控币种: {len(self.symbols)} 个")
@@ -1327,6 +1328,21 @@ class UnifiedDataScheduler:
 
         logger.info("\n所有定时任务设置完成")
 
+        # ============================================================
+        # 10. 实盘交易记录同步 — 每 15 分钟从币安拉取完整持仓数据
+        #     先 sync_positions_from_binance 全量同步, 再 correct_live_trade_records 修正
+        # ============================================================
+        def _run_correct_live_trades():
+            def wrapper():
+                try:
+                    self.correct_live_trade_records_all_accounts()
+                except Exception as e:
+                    logger.error(f"[实盘记录同步] 调度异常: {e}", exc_info=True)
+            threading.Thread(target=wrapper, daemon=True, name="CorrectLiveTrades").start()
+
+        schedule.every(15).minutes.do(_run_correct_live_trades)
+        logger.info("  ✓ correct_live_trades - 每 15 分钟 (后台线程)")
+
     async def run_initial_collection(self):
         """首次启动时执行一次缓存更新.
 
@@ -1511,6 +1527,61 @@ class UnifiedDataScheduler:
             
         except Exception as e:
             logger.error(f"更新模拟合约总权益失败: {e}")
+            self.task_stats[task_name]['last_error'] = str(e)
+
+    def correct_live_trade_records_all_accounts(self):
+        """遍历所有活跃API Key，全量从币安同步持仓数据。
+        1. sync_positions_from_binance — 同步结构 (新开/已平/PENDING 状态)
+        2. correct_live_trade_records — 修正字段 (mark_price/liquidation_price/unrealized_pnl 等)
+        """
+        task_name = 'correct_live_trades'
+        try:
+            from app.services.api_key_service import APIKeyService
+            from app.trading.binance_futures_engine import BinanceFuturesEngine
+            _mysql_cfg = self.config.get("database", {}).get("mysql", {})
+            key_service = APIKeyService(_mysql_cfg)
+            api_keys = key_service.get_all_active_api_keys(exchange='binance')
+
+            if not api_keys:
+                logger.debug("[实盘记录同步] 无活跃API Key，跳过")
+                return
+
+            for ak in api_keys:
+                try:
+                    engine = BinanceFuturesEngine(
+                        _mysql_cfg,
+                        api_key=ak['api_key'],
+                        api_secret=ak['api_secret'],
+                    )
+                    # Step 1: 全量同步持仓结构 (Binance-app 开的单、已平的、PENDING 的)
+                    sync_result = engine.sync_positions_from_binance(account_id=ak['id'])
+                    if sync_result.get('success'):
+                        details = f"new={sync_result.get('new',0)} closed={sync_result.get('closed',0)} canceled={sync_result.get('canceled',0)}"
+                        if sync_result.get('total', 0) > 0:
+                            logger.info(
+                                f"[实盘记录同步] 账号[{ak['account_name']}] "
+                                f"sync={sync_result.get('total', 0)} ({details})"
+                            )
+
+                    # Step 2: 修正字段 (mark_price, liquidation_price, unrealized_pnl 等)
+                    result = engine.correct_live_trade_records(account_id=ak['id'])
+                    if result.get('success'):
+                        total = result.get('total_corrected', 0)
+                        if total > 0:
+                            logger.info(
+                                f"[实盘记录同步] 账号[{ak['account_name']}] "
+                                f"修正 {total} 条 (OPEN={result.get('open_corrected', 0)}, "
+                                f"CLOSED={result.get('closed_corrected', 0)})"
+                            )
+                except Exception as e:
+                    logger.warning(f"[实盘记录同步] 账号[{ak['account_name']}] 失败: {e}")
+                    continue
+
+            self.task_stats[task_name]['count'] += 1
+            self.task_stats[task_name]['last_run'] = datetime.utcnow()
+            self.task_stats[task_name]['last_error'] = None
+        except Exception as e:
+            logger.error(f"[实盘记录同步] 任务失败: {e}")
             self.task_stats[task_name]['last_error'] = str(e)
 
     def monitor_binance_news(self):

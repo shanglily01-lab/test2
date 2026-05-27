@@ -763,37 +763,9 @@ class BinanceFuturesEngine:
             if entry_ema_diff is not None:
                 logger.info(f"[实盘EMA差值] {symbol} {position_side} 开仓EMA差值: {entry_ema_diff:.6f}")
 
-            # 10. 保存到本地数据库
-            position_id = self._save_position_to_db(
-                account_id=account_id,
-                symbol=symbol,
-                position_side=position_side,
-                quantity=executed_qty if executed_qty > 0 else quantity,
-                entry_price=entry_price,
-                leverage=leverage,
-                stop_loss_price=stop_loss_price,
-                take_profit_price=take_profit_price,
-                source=source,
-                signal_id=signal_id,
-                strategy_id=strategy_id,
-                binance_order_id=order_id,
-                status='OPEN' if status == 'FILLED' else 'PENDING',
-                entry_ema_diff=entry_ema_diff,
-                paper_position_id=paper_position_id
-            )
-
-            # 更新止盈止损订单ID到数据库（防止 LiveOrderMonitor 重复设置）
-            if position_id and (sl_order_id or tp_order_id):
-                try:
-                    cursor = self._get_cursor()
-                    cursor.execute("""
-                        UPDATE live_futures_positions
-                        SET sl_order_id = %s, tp_order_id = %s
-                        WHERE id = %s
-                    """, (sl_order_id, tp_order_id, position_id))
-                    logger.debug(f"[实盘] 止盈止损订单ID已保存: SL={sl_order_id}, TP={tp_order_id}")
-                except Exception as e:
-                    logger.warning(f"[实盘] 保存止盈止损订单ID失败: {e}")
+            # 10. 不再写入本地 DB — 实盘交易记录由定时任务每 15M 从币安全量拉取
+            #     通过 BinanceFuturesEngine.sync_positions_from_binance() 统一管理
+            position_id = 0
 
             # 发送Telegram通知
             try:
@@ -1144,22 +1116,8 @@ class BinanceFuturesEngine:
 
             logger.info(f"[实盘] 平仓成功: {symbol} {executed_qty} @ {avg_price}, PnL={pnl:.2f} USDT, ROI={roi:.2f}%")
 
-            # 6. 更新数据库
-            remaining_qty = quantity - executed_qty
-            new_status = 'CLOSED' if remaining_qty <= 0 else 'OPEN'
-
-            update_sql = """UPDATE live_futures_positions
-                SET quantity = %s,
-                    status = %s,
-                    realized_pnl = COALESCE(realized_pnl, 0) + %s,
-                    close_price = %s,
-                    close_time = %s,
-                    close_reason = %s
-                WHERE id = %s"""
-            update_params = (float(remaining_qty), new_status, float(pnl),
-                 float(avg_price), datetime.utcnow(), reason, position_id)
-
-            cursor.execute(update_sql, update_params)
+            # 6. 不再更新本地 DB — 实盘交易记录由定时任务每 15M 从币安同步
+            #     这里只负责在交易所完成平仓操作
 
             # 7. 取消相关止盈止损单
             self._cancel_position_orders(position)
@@ -1964,7 +1922,10 @@ class BinanceFuturesEngine:
                 'position_side': position_side,
                 'quantity': abs(position_amt),
                 'entry_price': entry_price,
-                'leverage': leverage
+                'leverage': leverage,
+                'mark_price': Decimal(str(pos.get('markPrice', '0'))) if pos.get('markPrice') else Decimal('0'),
+                'liquidation_price': Decimal(str(pos.get('liquidationPrice', '0'))) if pos.get('liquidationPrice') else Decimal('0'),
+                'unrealized_pnl': Decimal(str(pos.get('unRealizedProfit', '0'))) if pos.get('unRealizedProfit') else Decimal('0'),
             })
 
         return positions
@@ -1984,6 +1945,214 @@ class BinanceFuturesEngine:
         except Exception as e:
             logger.error(f"获取成交记录失败: {e}")
             return []
+
+    # ==================== 获取成交记录 ====================
+
+    def get_trade_history(self, symbol: str, start_time: int = None, end_time: int = None, limit: int = 200) -> List[Dict]:
+        """
+        获取币安合约成交历史记录（公开方法）
+
+        Args:
+            symbol: 交易对 (格式: BTC/USDT)
+            start_time: 开始时间戳（毫秒）
+            end_time: 结束时间戳（毫秒）
+            limit: 返回条数 (默认200，最大1000)
+
+        Returns:
+            成交记录列表，每项包含 price, qty, realizedPnl, side, time 等
+        """
+        try:
+            binance_symbol = self._convert_symbol(symbol)
+            params = {'symbol': binance_symbol, 'limit': limit}
+            if start_time:
+                params['startTime'] = start_time
+            if end_time:
+                params['endTime'] = end_time
+
+            result = self._request('GET', '/fapi/v1/userTrades', params)
+            if isinstance(result, dict) and result.get('success') == False:
+                return []
+            return result
+        except Exception as e:
+            logger.error(f"获取成交记录失败 {symbol}: {e}")
+            return []
+
+    def get_position_history(self, symbol: str = None, limit: int = 50) -> List[Dict]:
+        """
+        获取币安合约历史持仓记录
+        调用 /fapi/v1/positionRisk/history 端点（部分币安API版本支持）。
+        如果不支持，回退到 get_trade_history + get_open_positions 推断。
+
+        Args:
+            symbol: 可选，指定交易对
+            limit: 返回条数
+
+        Returns:
+            历史持仓记录列表
+        """
+        try:
+            params = {'limit': limit}
+            if symbol:
+                params['symbol'] = self._convert_symbol(symbol)
+            result = self._request('GET', '/fapi/v1/positionRisk/history', params)
+            if isinstance(result, dict) and result.get('success') == False:
+                return []
+            positions = []
+            for pos in result if isinstance(result, list) else []:
+                position_amt = Decimal(str(pos.get('positionAmt', '0')))
+                if position_amt == 0:
+                    continue
+                positions.append({
+                    'symbol': self._reverse_symbol(pos.get('symbol', '')),
+                    'position_side': 'LONG' if position_amt > 0 else 'SHORT',
+                    'quantity': abs(position_amt),
+                    'entry_price': Decimal(str(pos.get('entryPrice', '0'))),
+                    'close_price': Decimal(str(pos.get('closePrice', '0'))) if pos.get('closePrice') else None,
+                    'realized_pnl': Decimal(str(pos.get('realizedPnl', '0'))) if pos.get('realizedPnl') else None,
+                    'leverage': int(pos.get('leverage', 1)),
+                    'status': pos.get('positionStatus', ''),
+                    'update_time': pos.get('updateTime'),
+                })
+            return positions
+        except Exception as e:
+            logger.debug(f"获取历史持仓记录失败 (可能不支持此API): {e}")
+            return []
+
+    def correct_live_trade_records(self, account_id: int = 1) -> Dict:
+        """
+        从币安拉取正确的交易数据，纠正 live_futures_positions 表中的错误记录。
+
+        修正以下字段：
+        - 未平仓 (OPEN) 持仓：entry_price, mark_price, unrealized_pnl, liquidation_price
+        - 已平仓 (CLOSED) 持仓：close_price, realized_pnl, close_time
+
+        Args:
+            account_id: 账户ID
+
+        Returns:
+            修正统计结果
+        """
+        try:
+            cursor = self._get_cursor()
+            corrected_count = 0
+            closed_corrected = 0
+            open_corrected = 0
+
+            # ---- 1. 从币安获取当前所有持仓 ----
+            binance_positions = self._get_binance_positions()
+            binance_pos_map = {}
+            for pos in binance_positions:
+                key = f"{pos['symbol']}_{pos['position_side']}"
+                binance_pos_map[key] = pos
+
+            # ---- 2. 修正 OPEN 持仓的 entry_price / mark_price ----
+            cursor.execute("""
+                SELECT id, symbol, position_side, entry_price, mark_price
+                FROM live_futures_positions
+                WHERE status = 'OPEN' AND account_id = %s
+            """, (account_id,))
+            open_positions = cursor.fetchall()
+
+            for local_pos in open_positions:
+                key = f"{local_pos['symbol']}_{local_pos['position_side']}"
+                if key in binance_pos_map:
+                    real_pos = binance_pos_map[key]
+                    updates = []
+                    params = []
+
+                    # 修正 entry_price
+                    if float(real_pos['entry_price']) != float(local_pos['entry_price']):
+                        updates.append("entry_price = %s")
+                        params.append(float(real_pos['entry_price']))
+
+                    # 修正 mark_price
+                    if real_pos['mark_price'] > 0:
+                        updates.append("mark_price = %s")
+                        params.append(float(real_pos['mark_price']))
+
+                    # 修正 liquidation_price
+                    if real_pos['liquidation_price'] > 0:
+                        updates.append("liquidation_price = %s")
+                        params.append(float(real_pos['liquidation_price']))
+
+                    # 修正 unrealized_pnl
+                    updates.append("unrealized_pnl = %s")
+                    params.append(float(real_pos['unrealized_pnl']))
+
+                    if len(updates) > 1:
+                        updates.append("updated_at = NOW()")
+                        cursor.execute(
+                            f"UPDATE live_futures_positions SET {', '.join(updates)} WHERE id = %s",
+                            params + [local_pos['id']]
+                        )
+                        open_corrected += 1
+
+            # ---- 3. 修正 CLOSED 持仓的 close_price / realized_pnl ----
+            # 查找近7天内已平仓且数据有误的记录，从币安成交记录中获取准确的平仓数据
+
+            cursor.execute("""
+                SELECT id, symbol, position_side, close_price, realized_pnl, close_time
+                FROM live_futures_positions
+                WHERE status = 'CLOSED' AND account_id = %s
+                  AND (close_price IS NULL OR close_price = 0 OR realized_pnl IS NULL OR realized_pnl = 0)
+                  AND close_time IS NOT NULL
+                  AND close_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+                ORDER BY close_time DESC
+            """, (account_id,))
+            closed_positions = cursor.fetchall()
+            if closed_positions:
+                # 计算需要查询的最早时间
+                earliest_close = min(p['close_time'] for p in closed_positions if p['close_time'])
+                if isinstance(earliest_close, datetime):
+                    earliest_ms = int(earliest_close.timestamp() * 1000)
+                else:
+                    earliest_ms = int(datetime.now(timezone.utc).timestamp() * 1000) - 7 * 86400 * 1000
+
+                # 按 symbol 分组获取成交记录（取最多1000条）
+                symbol_trades_cache = {}
+                for local_pos in closed_positions:
+                    sym = local_pos['symbol']
+                    if sym not in symbol_trades_cache:
+                        symbol_trades_cache[sym] = self.get_trade_history(sym, start_time=earliest_ms, limit=1000)
+
+                for local_pos in closed_positions:
+                    trades = symbol_trades_cache.get(local_pos['symbol'], [])
+                    if not trades:
+                        continue
+
+                    expected_side = 'SELL' if local_pos['position_side'] == 'LONG' else 'BUY'
+                    close_price = Decimal('0')
+                    realized_pnl = Decimal('0')
+
+                    for trade in trades:
+                        if trade.get('side') == expected_side:
+                            close_price = Decimal(str(trade.get('price', '0')))
+                            realized_pnl += Decimal(str(trade.get('realizedPnl', '0')))
+
+                    if close_price > 0:
+                        cursor.execute("""
+                            UPDATE live_futures_positions
+                            SET close_price = %s, realized_pnl = %s, updated_at = NOW()
+                            WHERE id = %s
+                        """, (float(close_price), float(realized_pnl), local_pos['id']))
+                        corrected_count += 1
+                        closed_corrected += 1
+
+            cursor.connection.commit()
+            logger.info(f"[修正持仓] 账号[{account_id}] 修正完成: OPEN={open_corrected}, CLOSED={closed_corrected}, 总计={corrected_count}")
+
+            return {
+                'success': True,
+                'account_id': account_id,
+                'open_corrected': open_corrected,
+                'closed_corrected': closed_corrected,
+                'total_corrected': corrected_count
+            }
+
+        except Exception as e:
+            logger.error(f"[修正持仓] 账号[{account_id}] 修正失败: {e}")
+            return {'success': False, 'error': str(e)}
+
 
     # ==================== 测试连接 ====================
 

@@ -996,23 +996,7 @@ class SmartExitOptimizer:
                         )
                         if result.get('success'):
                             logger.info(f"[实盘平仓] {key_info.get('account_name',account_id)} {symbol} {direction} 平仓成功")
-                            # 交易所平仓成功，立即更新该条记录
-                            try:
-                                _uc = pymysql.connect(**self.db_config, autocommit=True)
-                                _ucur = _uc.cursor()
-                                close_p = result.get('close_price', 0)
-                                live_pnl = result.get('realized_pnl', 0)
-                                _ucur.execute("""
-                                    UPDATE live_futures_positions
-                                    SET status='CLOSED', close_time=NOW(),
-                                        close_price=%s, close_reason=%s,
-                                        realized_pnl=%s,
-                                        notes=CONCAT(IFNULL(notes,''), '|exit_sync:', %s)
-                                    WHERE id=%s AND status='OPEN'
-                                """, (close_p, reason, live_pnl, reason, row['id']))
-                                _ucur.close(); _uc.close()
-                            except Exception as _dbe:
-                                logger.error(f"[实盘平仓] 更新live_futures_positions失败 id={row['id']}: {_dbe}")
+                            # 交易所平仓成功 — 不再更新本地DB，由每15M定时同步覆盖
                         else:
                             logger.error(f"[实盘平仓] {key_info.get('account_name',account_id)} {symbol} {direction} 平仓失败: {result.get('error')}")
                     except Exception as e:
