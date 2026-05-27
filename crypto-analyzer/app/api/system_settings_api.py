@@ -691,6 +691,13 @@ async def update_trading_services(data: TradingServicesUpdate):
         cursor.close()
         conn.close()
 
+        # 立即同步 data_cache，避免策略侧最多60秒的延迟
+        try:
+            from app.services.data_cache_service import sync_settings_cache
+            sync_settings_cache()
+        except Exception as e:
+            logger.warning(f"[settings] data_cache 同步失败(不影响主库): {e}")
+
         update_msg = ', '.join(updates)
         logger.info(f"[OK] 交易服务状态已更新: {update_msg}")
 

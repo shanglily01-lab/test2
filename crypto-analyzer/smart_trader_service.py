@@ -1367,7 +1367,7 @@ class SmartTraderService:
             new_sc = str(val).lower() in ('1', 'true')
             self.brain.signal_confirmation_enabled = new_sc
             logger.info(f"[TRADING-MODE] 主策略(启动): 信号确认={'ON' if new_sc else 'OFF'}")
-            tf_val = _get_cached_setting('trend_following_enabled', '1')
+            tf_val = _get_cached_setting('trend_following_enabled', '0')
             self.trend_following_enabled = str(tf_val).lower() in ('1', 'true')
             logger.info(f"[TRADING-MODE] 主策略(启动): 趋势策略={'ON' if self.trend_following_enabled else 'OFF'}")
         except Exception as e:
@@ -1840,7 +1840,7 @@ class SmartTraderService:
         """开仓 - 支持做多和做空，支持分批建仓，使用 WebSocket 实时价格"""
 
         # ========== 第零步-0：趋势策略 kill switch ==========
-        if not getattr(self, 'trend_following_enabled', True):
+        if not getattr(self, 'trend_following_enabled', False):
             logger.info(f"[SKIP] {opp.get('symbol', '?')} 趋势策略已禁用(trend_following_enabled=0)，拒绝开仓")
             return False
 
@@ -3641,7 +3641,7 @@ class SmartTraderService:
                         if new_sc != self.brain.signal_confirmation_enabled:
                             logger.info(f"[TRADING-MODE] 模式更新: 信号确认={'ON' if new_sc else 'OFF'}")
                             self.brain.signal_confirmation_enabled = new_sc
-                        new_tf = str(_get_cached_setting('trend_following_enabled', '1')).lower() in ('1', 'true')
+                        new_tf = str(_get_cached_setting('trend_following_enabled', '0')).lower() in ('1', 'true')
                         if new_tf != getattr(self, 'trend_following_enabled', True):
                             logger.info(f"[TRADING-MODE] 模式更新: 趋势策略={'ON' if new_tf else 'OFF'}")
                             self.trend_following_enabled = new_tf
@@ -3721,7 +3721,7 @@ class SmartTraderService:
                     continue
 
                 # 4.5. 趋势策略开关检查（kill switch）
-                if not getattr(self, 'trend_following_enabled', True):
+                if not getattr(self, 'trend_following_enabled', False):
                     logger.info("[SKIP] trend_following_enabled=0，趋势策略已禁用，跳过本轮扫描")
                     time.sleep(self.scan_interval)
                     continue
