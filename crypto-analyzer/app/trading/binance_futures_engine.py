@@ -763,9 +763,39 @@ class BinanceFuturesEngine:
             if entry_ema_diff is not None:
                 logger.info(f"[实盘EMA差值] {symbol} {position_side} 开仓EMA差值: {entry_ema_diff:.6f}")
 
-            # 10. 不再写入本地 DB — 实盘交易记录由定时任务每 15M 从币安全量拉取
-            #     通过 BinanceFuturesEngine.sync_positions_from_binance() 统一管理
-            position_id = 0
+            # 10. 保存到本地数据库（建立 paper_position_id 链接，平仓同步时需要）
+            #     定时任务每15M从币安全量同步会覆盖 fields，
+            #     但 paper_position_id 链接必须在此建立，否则平仓同步查不到关联。
+            position_id = self._save_position_to_db(
+                account_id=account_id,
+                symbol=symbol,
+                position_side=position_side,
+                quantity=executed_qty if executed_qty > 0 else quantity,
+                entry_price=entry_price,
+                leverage=leverage,
+                stop_loss_price=stop_loss_price,
+                take_profit_price=take_profit_price,
+                source=source,
+                signal_id=signal_id,
+                strategy_id=strategy_id,
+                binance_order_id=order_id,
+                status='OPEN' if status == 'FILLED' else 'PENDING',
+                entry_ema_diff=entry_ema_diff,
+                paper_position_id=paper_position_id
+            )
+
+            # 更新止盈止损订单ID到数据库（防止 LiveOrderMonitor 重复设置）
+            if position_id and (sl_order_id or tp_order_id):
+                try:
+                    cursor = self._get_cursor()
+                    cursor.execute("""
+                        UPDATE live_futures_positions
+                        SET sl_order_id = %s, tp_order_id = %s
+                        WHERE id = %s
+                    """, (sl_order_id, tp_order_id, position_id))
+                    logger.debug(f"[实盘] 止盈止损订单ID已保存: SL={sl_order_id}, TP={tp_order_id}")
+                except Exception as e:
+                    logger.warning(f"[实盘] 保存止盈止损订单ID失败: {e}")
 
             # 发送Telegram通知
             try:
