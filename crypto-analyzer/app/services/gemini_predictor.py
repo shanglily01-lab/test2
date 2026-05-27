@@ -115,10 +115,13 @@ def _connect():
 # 数据查询 — TOP 50
 # ============================================================
 def _get_top50_symbols(conn) -> List[str]:
-    """从 top_performing_symbols 获取 TOP 50 交易对."""
+    """从 top_performing_symbols 获取 TOP 50 交易对, 排除黑名单3级."""
     with conn.cursor() as cur:
         cur.execute(
             "SELECT symbol FROM top_performing_symbols "
+            "WHERE symbol NOT IN ("
+            "  SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3"
+            ") "
             "ORDER BY rank_score DESC LIMIT %s",
             (PREDICT_TOP_N,),
         )
@@ -706,6 +709,16 @@ def _open_simulated_position(
     catalyst: str,
 ) -> Optional[int]:
     """INSERT 到 futures_positions, 模拟单, 返回 position_id."""
+    # 黑名单3级防御性检查
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT 1 FROM trading_symbol_rating WHERE (symbol=%s OR symbol=%s) AND rating_level >= 3 LIMIT 1",
+            (symbol, symbol.replace('/', '')),
+        )
+        if cur.fetchone() is not None:
+            logger.warning(f"[Gemini预测] {symbol} 黑名单3级, 禁止开仓模拟单")
+            return None
+
     try:
         notional = PREDICT_MARGIN_USD * PREDICT_LEVERAGE
         qty = round(notional / price, 6)
@@ -1019,7 +1032,24 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 predictions_made += 1
                 continue
 
-            # 7e. 取实时价开仓
+            # 7e. 黑名单3级检查 (永久禁止交易)
+            with conn.cursor() as _cur:
+                _cur.execute(
+                    "SELECT 1 FROM trading_symbol_rating WHERE (symbol=%s OR symbol=%s) AND rating_level >= 3 LIMIT 1",
+                    (symbol, symbol.replace('/', '')),
+                )
+                _is_level3 = _cur.fetchone() is not None
+            if _is_level3:
+                verdict_rows.append((
+                    run_id, symbol, category, confidence,
+                    catalyst, data_signal, risk_note,
+                    price_at_pred, 'skipped_blacklist', None,
+                    "黑名单3级, 永久禁止交易",
+                ))
+                predictions_made += 1
+                continue
+
+            # 7f. 取实时价开仓
             price = _get_current_price(conn, symbol)
             if price is None or price <= 0:
                 verdict_rows.append((
@@ -1031,7 +1061,7 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 predictions_made += 1
                 continue
 
-            # 7f. 开仓
+            # 7g. 开仓
             position_id = _open_simulated_position(conn, symbol, side, price, catalyst)
             if position_id is None:
                 verdict_rows.append((

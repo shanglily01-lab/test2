@@ -332,7 +332,7 @@ class MultiStrategyService:
             return default
 
     def _get_candidate_symbols(self, min_abs_change: float = 5.0) -> List[str]:
-        """从 price_stats_24h 过滤出有明显波动的 USDT 交易对, 同时包含白名单(rating_level=0)"""
+        """从 price_stats_24h 过滤出有明显波动的 USDT 交易对, 同时包含白名单(rating_level=0), 排除黑名单3级"""
         try:
             conn = self._get_conn()
             cur = conn.cursor()
@@ -341,6 +341,9 @@ class MultiStrategyService:
                   SELECT symbol, ABS(change_24h) AS score FROM price_stats_24h
                   WHERE symbol LIKE '%%/USDT'
                     AND ABS(change_24h) >= %s
+                    AND symbol NOT IN (
+                        SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3
+                    )
                   UNION
                   SELECT symbol, 999 AS score FROM trading_symbol_rating
                   WHERE rating_level = 0 AND symbol LIKE '%%/USDT'
@@ -913,13 +916,16 @@ class MultiStrategyService:
     # ─────────────────────────────────────────
 
     def _get_small_cap_symbols(self) -> List[str]:
-        """从 price_stats_24h 获取小中市值 USDT 交易对（排除大市值）, 同时包含白名单(rating_level=0)"""
+        """从 price_stats_24h 获取小中市值 USDT 交易对（排除大市值）, 同时包含白名单(rating_level=0), 排除黑名单3级"""
         try:
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute("""
                 SELECT DISTINCT symbol FROM (
                   SELECT symbol FROM price_stats_24h WHERE symbol LIKE '%/USDT'
+                    AND symbol NOT IN (
+                        SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3
+                    )
                   UNION
                   SELECT symbol FROM trading_symbol_rating
                   WHERE rating_level = 0 AND symbol LIKE '%/USDT'
@@ -1283,6 +1289,9 @@ class MultiStrategyService:
                   SELECT symbol, volume_24h AS score FROM price_stats_24h
                   WHERE symbol LIKE '%%/USDT'
                     AND volume_24h >= %s
+                    AND symbol NOT IN (
+                        SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3
+                    )
                   UNION
                   SELECT symbol, 999999999 AS score FROM trading_symbol_rating
                   WHERE rating_level = 0 AND symbol LIKE '%%/USDT'

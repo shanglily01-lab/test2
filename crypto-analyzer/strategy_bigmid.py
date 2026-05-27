@@ -638,7 +638,22 @@ def gemini_round(conn, model):
 
     log.info("=== Gemini 一轮开始, 当前 active=%d, 上限 %d ===", active, GEMINI_MAX_OPEN_POSITIONS)
     skipped, opened = 0, 0
+    # 加载黑名单3级 (永久禁止交易)
+    _level3_symbols = set()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3")
+            for r in cur.fetchall():
+                sym = r['symbol'].upper().replace('USDT', '/USDT') if 'USDT' in r['symbol'] and '/' not in r['symbol'] else r['symbol'].upper()
+                _level3_symbols.add(sym)
+    except Exception as e:
+        log.warning("读取黑名单3级失败: %s", e)
+
     for sym in GEMINI_TOP30:
+        if sym in _level3_symbols:
+            log.info("[GEMINI] %s 黑名单3级, 跳过", sym)
+            skipped += 1
+            continue
         if _has_any_open(sym):
             continue
         # 同 symbol cooldown 检查 (gemini stype 单独维护)

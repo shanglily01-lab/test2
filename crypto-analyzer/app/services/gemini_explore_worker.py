@@ -394,16 +394,31 @@ def _build_universe(conn) -> dict:
     global EXCLUDED_EXTREME_SYMBOLS
     EXCLUDED_EXTREME_SYMBOLS = set()
 
+    # ── 加载黑名单3级 (永久禁止交易) ──
+    _level3_set = set()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3")
+            for r in cur.fetchall():
+                _level3_set.add(r['symbol'])
+    except Exception as e:
+        logger.warning(f"[Gemini探索] 读取黑名单3级失败: {e}")
+
     # ── 尝试从缓存取 ──
     cached = _try_candidate_pool(min_volume=1000000, limit=200)
     if cached:
+        # 过滤黑名单3级
+        before = len(cached)
+        cached = [r for r in cached if r['symbol'] not in _level3_set]
+        if len(cached) < before:
+            logger.info(f"[Gemini探索] 黑名单3级过滤: {before - len(cached)} 个交易对")
         logger.info("[Gemini探索] 从 data_cache.candidate_pool_snapshot 读取候选池 "
                      f"({len(cached)} 个 symbol)")
         return _build_universe_from_cache(cached)
 
     # ── 回退: 原逻辑 ──
     logger.info("[Gemini探索] data_cache 不可用, 回退 kline_data 多层 JOIN")
-    return _build_universe_fallback(conn)
+    return _build_universe_fallback(conn, _level3_set)
 
 
 def _build_universe_from_cache(cached_rows: List[Dict]) -> dict:
@@ -467,8 +482,8 @@ def _build_universe_from_cache(cached_rows: List[Dict]) -> dict:
     return universe
 
 
-def _build_universe_fallback(conn) -> dict:
-    """回退: 原 kline_data 多层 JOIN 逻辑."""
+def _build_universe_fallback(conn, level3_set: set = set()) -> dict:
+    """回退: 原 kline_data 多层 JOIN 逻辑, 排除黑名单3级."""
     with conn.cursor() as cur:
         # 1. 极端涨跌
         gainers, losers = _fetch_movers_24h(cur, TOP_MOVER)
@@ -495,6 +510,16 @@ def _build_universe_fallback(conn) -> dict:
                         universe[sym].setdefault('triggers', []).append(t)
                 if universe[sym].get('current_rate') is None:
                     universe[sym]['current_rate'] = data.get('current_rate')
+
+    # 排除黑名单3级
+    if level3_set:
+        before = len(universe)
+        for sym in list(universe.keys()):
+            _clean = sym.replace('/', '')
+            if sym in level3_set or _clean in level3_set:
+                del universe[sym]
+        if len(universe) < before:
+            logger.info(f"[Gemini探索] 黑名单3级过滤(fallback): {before - len(universe)} 个交易对")
 
     return universe
 
@@ -1339,6 +1364,20 @@ def _open_simulated_position(
 
     硬 SL 由 PositionSLTPMonitor 兜底检查, 此处写入 DB.
     """
+    # 黑名单3级防御性检查
+    try:
+        _clean_sym = symbol.replace('/', '')
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM trading_symbol_rating WHERE (symbol=%s OR symbol=%s) AND rating_level >= 3 LIMIT 1",
+                (symbol, _clean_sym),
+            )
+            if cur.fetchone() is not None:
+                logger.warning(f"[Gemini探索] {symbol} 黑名单3级, 禁止开仓模拟单")
+                return None
+    except Exception as e:
+        logger.warning(f"[Gemini探索] 检查黑名单3级失败 {symbol}: {e}")
+
     try:
         notional = EXPLORE_MARGIN_USD * EXPLORE_LEVERAGE
         qty = round(notional / price, 6)
@@ -1731,7 +1770,24 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            # 5g. 取价
+            # 5g. 黑名单3级检查 (永久禁止交易)
+            _level3_cur = conn.cursor()
+            _level3_cur.execute(
+                "SELECT 1 FROM trading_symbol_rating WHERE (symbol=%s OR symbol=%s) AND rating_level >= 3 LIMIT 1",
+                (symbol, symbol.replace('/', '')),
+            )
+            _is_level3 = _level3_cur.fetchone() is not None
+            _level3_cur.close()
+            if _is_level3:
+                verdict_rows.append((
+                    run_id, symbol, db_category, confidence,
+                    catalyst, data_signal, risk_note,
+                    'skipped_blacklist', None,
+                    "黑名单3级, 永久禁止交易",
+                ))
+                continue
+
+            # 5h. 取价
             price = _get_current_price(conn, symbol)
             if price is None or price <= 0:
                 verdict_rows.append((
@@ -1742,7 +1798,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            # 5h. 开仓 (SL 5%, 杠杆 3x)
+            # 5i. 开仓 (SL 5%, 杠杆 3x)
             position_id = _open_simulated_position(conn, symbol, side, price, catalyst)
             if position_id is None:
                 verdict_rows.append((
