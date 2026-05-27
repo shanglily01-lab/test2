@@ -1791,18 +1791,26 @@ class BinanceFuturesEngine:
 
                     # 尝试找到平仓的成交记录
                     for trade in trades:
-                        # 平仓方向：做多平仓是SELL，做空平仓是BUY
-                        expected_side = 'SELL' if local_pos['position_side'] == 'LONG' else 'BUY'
-                        if trade.get('side') == expected_side:
-                            close_price = Decimal(str(trade.get('price', '0')))
-                            realized_pnl = Decimal(str(trade.get('realizedPnl', '0')))
-                            break
+                        # 双向持仓模式：必须同时匹配 side + positionSide
+                        # 平 LONG: side=SELL, positionSide=LONG
+                        # 平 SHORT: side=BUY, positionSide=SHORT
+                        # 开 SHORT: side=SELL, positionSide=SHORT (不能匹配!)
+                        trade_side = trade.get('side', '')
+                        trade_pos_side = trade.get('positionSide', 'BOTH')
+                        if local_pos['position_side'] == 'LONG':
+                            if trade_side == 'SELL' and trade_pos_side == 'LONG':
+                                close_price = Decimal(str(trade.get('price', '0')))
+                                realized_pnl += Decimal(str(trade.get('realizedPnl', '0')))
+                        elif local_pos['position_side'] == 'SHORT':
+                            if trade_side == 'BUY' and trade_pos_side == 'SHORT':
+                                close_price = Decimal(str(trade.get('price', '0')))
+                                realized_pnl += Decimal(str(trade.get('realizedPnl', '0')))
 
                     # 如果没找到成交记录，使用当前价格
                     if close_price == 0:
                         close_price = self.get_current_price(local_pos['symbol'])
 
-                    # 计算盈亏
+                    # 如果 realized_pnl 仍为 0（取到的成交 realizedPnl 都为 0），用量价差估算
                     if realized_pnl == 0 and close_price > 0:
                         entry_price = Decimal(str(local_pos['entry_price']))
                         quantity = Decimal(str(local_pos['quantity']))
@@ -2109,7 +2117,7 @@ class BinanceFuturesEngine:
                     updates.append("unrealized_pnl = %s")
                     params.append(float(real_pos['unrealized_pnl']))
 
-                    if len(updates) > 1:
+                    if len(updates) > 0:
                         updates.append("updated_at = NOW()")
                         cursor.execute(
                             f"UPDATE live_futures_positions SET {', '.join(updates)} WHERE id = %s",
@@ -2118,13 +2126,14 @@ class BinanceFuturesEngine:
                         open_corrected += 1
 
             # ---- 3. 修正 CLOSED 持仓的 close_price / realized_pnl ----
-            # 查找近7天内已平仓且数据有误的记录，从币安成交记录中获取准确的平仓数据
+            # 查找近7天内已平仓的所有记录，从币安成交记录中获取准确的平仓数据。
+            # 注意：不限制 realized_pnl=0，因为 sync_positions_from_binance 可能已写入
+            # 错误的估算值（缺少 positionSide 过滤），需要覆盖修正。
 
             cursor.execute("""
                 SELECT id, symbol, position_side, close_price, realized_pnl, close_time
                 FROM live_futures_positions
                 WHERE status = 'CLOSED' AND account_id = %s
-                  AND (close_price IS NULL OR close_price = 0 OR realized_pnl IS NULL OR realized_pnl = 0)
                   AND close_time IS NOT NULL
                   AND close_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
                 ORDER BY close_time DESC
@@ -2150,14 +2159,21 @@ class BinanceFuturesEngine:
                     if not trades:
                         continue
 
-                    expected_side = 'SELL' if local_pos['position_side'] == 'LONG' else 'BUY'
                     close_price = Decimal('0')
                     realized_pnl = Decimal('0')
 
                     for trade in trades:
-                        if trade.get('side') == expected_side:
-                            close_price = Decimal(str(trade.get('price', '0')))
-                            realized_pnl += Decimal(str(trade.get('realizedPnl', '0')))
+                        # 双向持仓模式：必须同时匹配 side + positionSide
+                        trade_side = trade.get('side', '')
+                        trade_pos_side = trade.get('positionSide', 'BOTH')
+                        if local_pos['position_side'] == 'LONG':
+                            if trade_side == 'SELL' and trade_pos_side == 'LONG':
+                                close_price = Decimal(str(trade.get('price', '0')))
+                                realized_pnl += Decimal(str(trade.get('realizedPnl', '0')))
+                        elif local_pos['position_side'] == 'SHORT':
+                            if trade_side == 'BUY' and trade_pos_side == 'SHORT':
+                                close_price = Decimal(str(trade.get('price', '0')))
+                                realized_pnl += Decimal(str(trade.get('realizedPnl', '0')))
 
                     if close_price > 0:
                         cursor.execute("""

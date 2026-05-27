@@ -3680,14 +3680,6 @@ class SmartTraderService:
                 except Exception as _e:
                     logger.warning(f"[BTC动量] 检测异常: {_e}")
 
-                # 0.66. 多策略服务: 仅 run_slow (S1/S3/S5/S6/S8/S9, 内部限速 30 min/次)
-                # run_fast 已取消(5月数据 S1-S9 一笔未开,且高频扫描浪费 CPU + 易触发误开仓)
-                if self.multi_strategy_svc:
-                    try:
-                        self.multi_strategy_svc.run_slow()
-                    except Exception as _e:
-                        logger.warning(f"[多策略-慢] 异常: {_e}")
-
                 # 0.7. 🔒 提前检查交易开关（最高优先级）
                 # 如果U本位交易已关闭，直接跳过本轮所有扫描和开仓逻辑
                 if not self.check_trading_enabled():
@@ -3725,6 +3717,15 @@ class SmartTraderService:
                     logger.info("[SKIP] trend_following_enabled=0，趋势策略已禁用，跳过本轮扫描")
                     time.sleep(self.scan_interval)
                     continue
+
+                # 0.66. 多策略服务: 仅 run_slow (S1/S3/S5/S6/S8/S9, 内部限速 30 min/次)
+                # run_fast 已取消(5月数据 S1-S9 一笔未开,且高频扫描浪费 CPU + 易触发误开仓)
+                # 放在 trend_following_enabled 检查之后，随趋势开关一同禁用
+                if self.multi_strategy_svc:
+                    try:
+                        self.multi_strategy_svc.run_slow()
+                    except Exception as _e:
+                        logger.warning(f"[多策略-慢] 异常: {_e}")
 
                 # 5. 🔥 强制只做趋势单,不再做震荡市场的单
                 logger.info(f"[SCAN] 模式: TREND (只做趋势) | 扫描 {len(self.brain.whitelist)} 个币种...")
