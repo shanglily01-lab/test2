@@ -1304,7 +1304,9 @@ def _open_simulated_position(
             f"id={position_id}"
         )
 
-        _sync_to_live(position_id, symbol, side, price, sl_price, tp_price, qty, catalyst)
+        # DeepSeek 暂时不同步实盘
+        # _sync_to_live(position_id, symbol, side, price, sl_price, tp_price, qty, catalyst)
+        logger.info(f"[DeepSeek探索] 模拟仓 #{position_id} {symbol} {side} 已开, 暂不同步实盘")
 
         return position_id
     except Exception as e:
