@@ -1360,13 +1360,16 @@ class SmartTraderService:
         return self.connection
 
     def _load_trading_mode_flags_from_db(self):
-        """启动时从缓存同步信号确认开关。"""
+        """启动时从缓存同步信号确认开关和趋势策略开关。"""
         try:
             from app.services.system_settings_loader import get_setting as _get_cached_setting
             val = _get_cached_setting('signal_confirmation_enabled', '0')
             new_sc = str(val).lower() in ('1', 'true')
             self.brain.signal_confirmation_enabled = new_sc
             logger.info(f"[TRADING-MODE] 主策略(启动): 信号确认={'ON' if new_sc else 'OFF'}")
+            tf_val = _get_cached_setting('trend_following_enabled', '1')
+            self.trend_following_enabled = str(tf_val).lower() in ('1', 'true')
+            logger.info(f"[TRADING-MODE] 主策略(启动): 趋势策略={'ON' if self.trend_following_enabled else 'OFF'}")
         except Exception as e:
             logger.warning(f"[TRADING-MODE] 启动时读取主策略开关失败，保持默认关: {e}")
 
@@ -1835,6 +1838,12 @@ class SmartTraderService:
 
     def open_position(self, opp: dict):
         """开仓 - 支持做多和做空，支持分批建仓，使用 WebSocket 实时价格"""
+
+        # ========== 第零步-0：趋势策略 kill switch ==========
+        if not getattr(self, 'trend_following_enabled', True):
+            logger.info(f"[SKIP] {opp.get('symbol', '?')} 趋势策略已禁用(trend_following_enabled=0)，拒绝开仓")
+            return False
+
         symbol = opp['symbol']
         side = opp['side']  # 'LONG' 或 'SHORT'
         strategy = opp.get('strategy', 'default')  # 获取策略类型
@@ -3632,6 +3641,10 @@ class SmartTraderService:
                         if new_sc != self.brain.signal_confirmation_enabled:
                             logger.info(f"[TRADING-MODE] 模式更新: 信号确认={'ON' if new_sc else 'OFF'}")
                             self.brain.signal_confirmation_enabled = new_sc
+                        new_tf = str(_get_cached_setting('trend_following_enabled', '1')).lower() in ('1', 'true')
+                        if new_tf != getattr(self, 'trend_following_enabled', True):
+                            logger.info(f"[TRADING-MODE] 模式更新: 趋势策略={'ON' if new_tf else 'OFF'}")
+                            self.trend_following_enabled = new_tf
                         _tmp_mp = _get_cached_setting('max_positions', '50')
                         if _tmp_mp is not None:
                             new_mp = int(float(str(_tmp_mp)))
@@ -3704,6 +3717,12 @@ class SmartTraderService:
 
                 if current_positions >= self.max_positions:
                     logger.info("[SKIP] 已达最大持仓,跳过扫描")
+                    time.sleep(self.scan_interval)
+                    continue
+
+                # 4.5. 趋势策略开关检查（kill switch）
+                if not getattr(self, 'trend_following_enabled', True):
+                    logger.info("[SKIP] trend_following_enabled=0，趋势策略已禁用，跳过本轮扫描")
                     time.sleep(self.scan_interval)
                     continue
 
