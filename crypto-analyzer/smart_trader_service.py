@@ -3125,7 +3125,8 @@ class SmartTraderService:
                     conn = self._get_connection()
                     cur = conn.cursor(pymysql.cursors.DictCursor)
                     cur.execute(
-                        "SELECT id, symbol, position_side, paper_position_id "
+                        "SELECT id, symbol, position_side, paper_position_id, "
+                        "  entry_price, quantity "
                         "FROM live_futures_positions "
                         "WHERE account_id=%s AND status='OPEN'",
                         (ak['id'],)
