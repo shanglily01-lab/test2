@@ -797,23 +797,13 @@ async def lifespan(app: FastAPI):
                                     f"可能 WS 卡死, 请检查 ws_kline_collector_service 日志"
                                 )
                                 logger.warning(msg)
-                                try:
-                                    notifier = _get_notifier()
-                                    if notifier:
-                                        notifier.send_message(msg)
-                                except Exception as e:
-                                    logger.error(f"[WS HEALTH] TG 告警发送失败: {e}")
+                                # 不再发送 TG 通知，避免过多告警
                             in_alert_state[tf] = True
                         else:
                             if in_alert_state.get(tf):
                                 msg = f"[WS 恢复] kline_data {tf} 数据已恢复 (stale={stale_min:.1f}min)"
                                 logger.info(msg)
-                                try:
-                                    notifier = _get_notifier()
-                                    if notifier:
-                                        notifier.send_message(msg)
-                                except Exception as e:
-                                    logger.error(f"[WS HEALTH] TG 恢复通知失败: {e}")
+                                # 不再发送 TG 通知
                                 in_alert_state[tf] = False
 
                     # 完全没查到记录的 timeframe (2 小时内零数据) 也算告警
@@ -827,12 +817,7 @@ async def lifespan(app: FastAPI):
                                     f"WS 可能完全未连接, 请检查 ws_kline_collector_service"
                                 )
                                 logger.warning(msg)
-                                try:
-                                    notifier = _get_notifier()
-                                    if notifier:
-                                        notifier.send_message(msg)
-                                except Exception as e:
-                                    logger.error(f"[WS HEALTH] TG 告警发送失败: {e}")
+                                # 不再发送 TG 通知
                             in_alert_state[tf] = True
 
                 except Exception as e:
