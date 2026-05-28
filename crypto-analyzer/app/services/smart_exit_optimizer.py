@@ -223,18 +223,8 @@ class SmartExitOptimizer:
                     break
 
                 # === K线强度衰减检测 (新增 - 每15分钟检查一次) ===
-                # 多策略持仓 (S1/S5/S6 + Gemini/DeepSeek 探索/预测) 依赖计划平仓时间和固定止损止盈, 跳过K线衰减检测
-                _MULTI_STRATEGY_SOURCES = (
-                    's1_early_long',
-                    's5_large_oversold', 's6_vol_spike',
-                    'gemini_explore',      # Gemini 探索/预测: 只走 SL/TP/到期
-                    'gemini_predict',
-                    'deepseek_explore',    # DeepSeek 探索/预测: 只走 SL/TP/到期
-                    'deepseek_predict',
-                )
-                _is_multi_strategy = position.get('source') in _MULTI_STRATEGY_SOURCES
                 should_check_kline = await self._should_check_kline_strength(position_id)
-                if should_check_kline and self.enable_kline_monitoring and not _is_multi_strategy:
+                if should_check_kline and self.enable_kline_monitoring:
                     kline_exit_signal = await self._check_kline_strength_decay(
                         position, current_price, profit_info
                     )
@@ -516,18 +506,6 @@ class SmartExitOptimizer:
         # 计算ROI（考虑杠杆后的真实收益率）
         leverage = float(position.get('leverage', 1))
         roi_pct = profit_pct * leverage
-
-        # 多策略持仓（S1/S5/S6 + Gemini/DeepSeek 探索/预测）跳过所有动态平仓逻辑，只走硬SL/TP和planned_close_time
-        _MULTI_STRATEGY_SOURCES = (
-            's1_early_long',
-            's5_large_oversold', 's6_vol_spike',
-            'gemini_explore',
-            'gemini_predict',
-            'deepseek_explore',
-            'deepseek_predict',
-        )
-        if position.get('source') in _MULTI_STRATEGY_SOURCES:
-            return False, ""
 
         # === 优先级1: 极端亏损兜底止损 ===
         # 阈值 ROI <= -15%（原 -10% 在 5x 杠杆下容易被山寨币 2% 日常波动触发）

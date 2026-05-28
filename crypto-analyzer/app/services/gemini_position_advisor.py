@@ -337,7 +337,6 @@ Output ONLY a single valid JSON object, no markdown fence:
                     logger.error(
                         f"[Gemini顾问] account_id={live_row['account_id']} 无活跃 API key,无法平实盘"
                     )
-                    # 关不了实盘就等于失败
                     return False
 
                 engine = BinanceFuturesEngine(
@@ -361,28 +360,46 @@ Output ONLY a single valid JSON object, no markdown fence:
                 close_price = result.get('close_price', 0)
                 live_pnl = result.get('realized_pnl', 0)
 
-                # ---- 3. 同步关闭模拟仓 (实盘记录由定时任务每15M同步) ----
+                # ---- 3. 立即更新 live_futures_positions + 模拟仓 ----
+                conn2 = self._get_conn()
+                cur2 = conn2.cursor()
+                cur2.execute(
+                    """UPDATE live_futures_positions
+                       SET status='CLOSED',
+                           close_time=NOW(),
+                           close_price=%s,
+                           realized_pnl=%s,
+                           close_reason='gemini_advisor',
+                           notes=CONCAT(IFNULL(notes,''),'|gemini_advisor:',%s)
+                       WHERE id=%s AND status='OPEN'""",
+                    (close_price, live_pnl, reason, live_row['id'])
+                )
+                if cur2.rowcount > 0:
+                    logger.info(
+                        f"[Gemini顾问] live_futures_positions 已关闭 id={live_row['id']} "
+                        f"{position['symbol']} pnl={live_pnl}"
+                    )
+
                 cur2.execute(
                     """UPDATE futures_positions
                        SET status='closed',
                            close_time=NOW(),
                            mark_price=%s,
-                           realized_pnl=ROUND((%s * quantity) - (entry_price * quantity), 2),
+                           realized_pnl=%s,
                            unrealized_pnl=0,
                            unrealized_pnl_pct=0,
                            notes=CONCAT(IFNULL(notes,''),'|gemini_advisor:',%s)
                        WHERE id=%s AND status='open'""",
-                    (close_price, close_price, reason, position['id'])
+                    (close_price, live_pnl, reason, position['id'])
                 )
                 if cur2.rowcount > 0:
                     logger.info(
                         f"[Gemini顾问] 模拟仓已同步关闭 id={position['id']} "
                         f"{position['symbol']} {position['position_side']}"
                     )
-
                 cur2.close(); conn2.close()
 
-                # ---- 5. Telegram ----
+                # ---- 4. Telegram ----
                 try:
                     from app.services.trade_notifier import get_trade_notifier
                     notif = get_trade_notifier()
