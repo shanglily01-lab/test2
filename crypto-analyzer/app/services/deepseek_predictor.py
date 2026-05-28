@@ -891,7 +891,7 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
         logger.info(f"[DeepSeek预测] kill switch=0, 跳过 (triggered_by={triggered_by})")
         return None
 
-    # 防重: 上次成功 run 距今 < 11h 则跳过
+    # 防重: 上次成功距今 >= 12h 才执行 (统一所有触发来源)
     try:
         with _connect() as conn_chk:
             with conn_chk.cursor() as cur:
@@ -902,10 +902,10 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 if row and row.get('last_run'):
                     elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
                     if elapsed_h < 12:
-                        logger.info(f"[DeepSeek预测] 上次成功运行距今 {elapsed_h:.1f}h < 12h, 尚未超期, 跳过 (由正常调度触发)")
+                        logger.info(f"[DeepSeek预测] 上次成功距今 {elapsed_h:.1f}h < 12h, 跳过")
                         return None
     except Exception as e:
-        logger.warning(f"[DeepSeek预测] 启动防重检查失败, 继续: {e}")
+        logger.warning(f"[DeepSeek预测] 防重检查失败, 继续: {e}")
 
     logger.info(f"[DeepSeek预测] === 一轮开始 (triggered_by={triggered_by}) ===")
 
