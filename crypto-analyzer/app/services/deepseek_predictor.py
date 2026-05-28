@@ -439,11 +439,11 @@ def _count_open_positions(conn) -> int:
 # ============================================================
 # Prompt 构建
 # ============================================================
-PREDICT_PROMPT_TEMPLATE = """你是超级交易大师. 预测每个币种在未来 1 天内的方向走势概率.
+PREDICT_PROMPT_TEMPLATE = """你是超级交易大师. 预测每个币种在未来 12 小时内的方向走势概率.
 
-持仓期 1 天 (24h), SL=5%, TP=15%, 杠杆 3x, 不做中途干预.
+持仓期 12 小时 (12h), SL=5%, TP=10%, 杠杆 5x, 不做中途干预.
 
-选中的币种需要能在 1 天内到达 15% 的涨幅/跌幅空间, 或至少抗住 1 天不跌/不涨过 5%.
+选中的币种需要能在 12 小时内到达 10% 的涨幅/跌幅空间, 或至少抗住 12 小时不跌/不涨过 5%.
 不要选"只波动 2-3%"的标的.
 
 # 全局市场环境
@@ -470,23 +470,45 @@ Big4 (BTC/ETH/BNB/SOL 综合趋势): BEARISH/STRONG_BEARISH 时严禁做多, BUL
 - risk_note: 反向风险一句
 
 # 置信度校准
-| confidence | 意义 |
+| confidence | 需要的信号强度 |
 |---|---|
-| 0.80-1.00 | 多周期共振 + 成交量确认, 方向明确 |
-| 0.65-0.79 | 日线趋势 + 1h 方向一致, Big4 不矛盾 |
-| 0.50-0.64 | 仅小时级别支持, 日线中性 — 可开但有限 |
-| 0.00-0.49 | 方向模糊/震荡 — 跳过 |
+| 0.80-1.00 | 1h 级别强趋势 + 成交量确认, 方向明确, 距极值还有 4%+ 空间 |
+| 0.65-0.79 | 1h 趋势 + 15m 方向一致, Big4 不矛盾 |
+| 0.50-0.64 | 仅 15m 级别支持, 1h 中性 — 可开但有限 |
+| 0.00-0.49 | 方向模糊/震荡/数据不足 — 跳过 |
 
-# 判定原则
-## 适合开仓
-- 日线趋势清晰 + 1h 同向 + 成交量放大
-- 资金费率极值与价格严重背离 + 日线拐点确认
-- 突破后回踩确认
+# 判定原则 — 12 小时持仓
 
-## 必须跳过
-- 暴涨暴跌后的报复性反弹 (Dead Cat Bounce)
-- 震荡区间 / 成交量萎缩
-- 仅因"跌多了"做多 或 "涨多了"做空
+## ✅ 适合开仓 (应该输出 bullish/bearish)
+
+**A. 趋势延续 — 最可靠**
+- 1h 级别已走出清晰方向趋势 (连续 3+ 根同向), 15m 节奏同向, 成交量放量支持
+- 现价在趋势中段, 距 7d 极值还有 4%+ 空间
+
+**B. 资金费率与价格严重背离 — 次可靠**
+- 资金费极端 + RSI 走到反向极值
+- 前提: 1h 级别已经确认了拐点 (至少 1h K 线形态转势)
+
+**C. 突破后回踩确认**
+- 刚突破关键阻力/支撑, 回踩确认后有望延续
+- 成交量在突破时放大, 回踩时缩量
+
+## ❌ 必须跳过
+
+**D. 暴涨暴跌后的报复性反弹 (Dead Cat Bounce)**
+- 24h 涨/跌 20%+ 且成交量异常放大: 大概率一日游
+
+**E. 震荡区间 / 成交量萎缩**
+- 价格在 1h 级别窄幅震荡, 成交量萎缩 — 12 小时难以走出趋势
+
+**F. 单纯因为跌多了就做多 / 涨多了就做空**
+- 仅凭"超跌"做多 = 接飞刀, 必须等 1h 确认拐点
+- 仅凭"超涨"做空 = 左侧摸顶, 必须等 RSI 顶背离 + 资金费严重正
+
+# 输出要求
+仅一个合法 JSON, 不要 markdown 围栏.
+优先 quality 而非 quantity.
+如果最多只看到 2-3 个靠谱机会, 只出这 2-3 个, 不需要填满候选池.
 
 # 输出要求
 仅一个合法 JSON, 不要 markdown 围栏.
@@ -535,8 +557,14 @@ def _call_deepseek_predict(symbols_data: List[Dict], global_ctx: dict) -> Option
     try:
         resp = client.chat.completions.create(
             model=DEEPSEEK_MODEL,
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "system", "content": "You are a professional crypto trading analyst. Output ONLY valid JSON."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.1,
+            max_tokens=4096,
             timeout=DEEPSEEK_TIMEOUT_S,
+            response_format={"type": "json_object"},
         )
     except Exception as e:
         logger.error(f"[DeepSeek预测] DeepSeek 调用失败: {e}")
