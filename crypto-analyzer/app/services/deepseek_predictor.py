@@ -901,8 +901,8 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 row = cur.fetchone()
                 if row and row.get('last_run'):
                     elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
-                    if elapsed_h < 11:
-                        logger.info(f"[DeepSeek预测] 上次成功运行距今 {elapsed_h:.1f}h < 11h, 跳过 (防重启重复)")
+                    if elapsed_h < 12:
+                        logger.info(f"[DeepSeek预测] 上次成功运行距今 {elapsed_h:.1f}h < 12h, 尚未超期, 跳过 (由正常调度触发)")
                         return None
     except Exception as e:
         logger.warning(f"[DeepSeek预测] 启动防重检查失败, 继续: {e}")
