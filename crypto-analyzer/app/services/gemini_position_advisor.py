@@ -3,7 +3,7 @@ Gemini 持仓顾问 (2026-05-26 改为模拟仓)
 
 功能:
   - 扫描 futures_positions 中 U本位
-    status=open 且持仓 >= 2 小时 的模拟单
+    status=open 且持仓 >= 3 小时 的模拟单
   - 喂给 Gemini: 持仓数据 + 近 4h 15m K线 + Big4 当前评分
   - Gemini 三选一: hold / observe / sell
   - "sell" 关闭模拟仓，同步机制自动同步到实盘平仓
@@ -28,7 +28,7 @@ from loguru import logger
 
 GEMINI_TIMEOUT_MS = 180_000
 PER_POSITION_INTERVAL_S = 3600  # 同 position 1 小时内不重复问
-MIN_HOLD_HOURS = 2              # 持仓不满 2h 不查
+MIN_HOLD_HOURS = 3              # 持仓不满 3h 不查
 GEMINI_PER_CALL_DELAY_S = 1.0   # 防 Gemini rate limit
 
 
@@ -102,7 +102,7 @@ class GeminiPositionAdvisor:
 
     def get_eligible_positions(self) -> List[Dict]:
         """
-        查模拟仓 (futures_positions) U本位 OPEN >= 2h 的所有单。
+        查模拟仓 (futures_positions) U本位 OPEN >= 3h 的所有单。
         只查 account_id=2 (U本位模拟盘)。
         """
         try:
