@@ -543,12 +543,10 @@ function pCls(v) {
 }
 function shortUTC(s) {
   if (!s) return '--';
-  var d = new Date(s);
+  var d = new Date(s + (s.indexOf('Z') === -1 && s.indexOf('+') === -1 ? 'Z' : ''));
   if (isNaN(d.getTime())) return s.replace('T', ' ').slice(0, 16);
-  // UTC -> UTC+8 (CST)
-  d = new Date(d.getTime() + 8 * 3600 * 1000);
   var pad = function(n){ return n < 10 ? '0'+n : ''+n; };
-  return d.getUTCFullYear() + '-' + pad(d.getUTCMonth()+1) + '-' + pad(d.getUTCDate()) + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+  return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
 function statusBadge(st) {
   if (st === 'ok') return '<span class="chip chip-on">OK</span>';
