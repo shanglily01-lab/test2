@@ -808,10 +808,14 @@ def _insert_verdicts(conn, run_id: int, verdict_rows: List[Tuple]) -> None:
     safe_rows = []
     for row in verdict_rows:
         row_list = list(row)
-        row_list[2] = (row_list[2] or 'skip')[:20]
-        row_list[8] = (row_list[8] or '')[:30]
+        row_list[2] = (row_list[2] or 'skip')[:20]       # category
+        row_list[4] = (str(row_list[4]) or '')[:500]     # catalyst
+        row_list[5] = (str(row_list[5]) or '')[:500]     # data_signal
+        row_list[6] = (str(row_list[6]) or '')[:500]     # risk_note
+        row_list[8] = (row_list[8] or '')[:30]           # action_taken
         if row_list[10] is not None:
-            row_list[10] = str(row_list[10])[:255]
+            row_list[10] = str(row_list[10])[:255]       # skip_reason
+        safe_rows.append(tuple(row_list))
     with conn.cursor() as cur:
         try:
             cur.executemany(
