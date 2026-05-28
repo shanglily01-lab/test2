@@ -177,8 +177,14 @@ class SmartExitOptimizer:
                 # Gemini 探索/预测：检查 planned_close_time 到期后强制平仓
                 # 其余智能平仓逻辑（SL/TP/趋势反转等）与普通持仓一致
                 # ────────────────────────────────────────────────────────────
-                if position.get('source') in ('gemini_explore', 'gemini_predict'):
-                    src_name = 'Gemini探索' if position.get('source') == 'gemini_explore' else 'Gemini预测'
+                if position.get('source') in ('gemini_explore', 'gemini_predict', 'deepseek_explore', 'deepseek_predict'):
+                    _src_name_map = {
+                        'gemini_explore': 'Gemini探索',
+                        'gemini_predict': 'Gemini预测',
+                        'deepseek_explore': 'DeepSeek探索',
+                        'deepseek_predict': 'DeepSeek预测',
+                    }
+                    src_name = _src_name_map.get(position.get('source'), position.get('source'))
                     if position.get('planned_close_time') and datetime.now() >= position['planned_close_time']:
                         hold_hours = 24
                         logger.warning(
@@ -217,12 +223,14 @@ class SmartExitOptimizer:
                     break
 
                 # === K线强度衰减检测 (新增 - 每15分钟检查一次) ===
-                # 多策略持仓 (S1/S5/S6 + Gemini 探索/预测) 依赖计划平仓时间和固定止损止盈, 跳过K线衰减检测
+                # 多策略持仓 (S1/S5/S6 + Gemini/DeepSeek 探索/预测) 依赖计划平仓时间和固定止损止盈, 跳过K线衰减检测
                 _MULTI_STRATEGY_SOURCES = (
                     's1_early_long',
                     's5_large_oversold', 's6_vol_spike',
-                    'gemini_explore',      # Gemini 探索: 只走 SL/TP/72h
-                    'gemini_predict',      # Gemini 预测: 只走 SL/TP/72h
+                    'gemini_explore',      # Gemini 探索/预测: 只走 SL/TP/到期
+                    'gemini_predict',
+                    'deepseek_explore',    # DeepSeek 探索/预测: 只走 SL/TP/到期
+                    'deepseek_predict',
                 )
                 _is_multi_strategy = position.get('source') in _MULTI_STRATEGY_SOURCES
                 should_check_kline = await self._should_check_kline_strength(position_id)
@@ -509,12 +517,14 @@ class SmartExitOptimizer:
         leverage = float(position.get('leverage', 1))
         roi_pct = profit_pct * leverage
 
-        # 多策略持仓（S1/S5/S6 + Gemini探索/预测）跳过所有动态平仓逻辑，只走硬SL/TP和planned_close_time
+        # 多策略持仓（S1/S5/S6 + Gemini/DeepSeek 探索/预测）跳过所有动态平仓逻辑，只走硬SL/TP和planned_close_time
         _MULTI_STRATEGY_SOURCES = (
             's1_early_long',
             's5_large_oversold', 's6_vol_spike',
             'gemini_explore',
             'gemini_predict',
+            'deepseek_explore',
+            'deepseek_predict',
         )
         if position.get('source') in _MULTI_STRATEGY_SOURCES:
             return False, ""
