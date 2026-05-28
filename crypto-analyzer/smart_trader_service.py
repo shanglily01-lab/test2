@@ -3199,9 +3199,10 @@ class SmartTraderService:
                             if row['paper_position_id']:
                                 cur.execute(
                                     "UPDATE futures_positions SET status='closed', close_time=NOW(), "
+                                    "close_price=%s, realized_pnl=%s, unrealized_pnl=0, unrealized_pnl_pct=0, "
                                     "notes=CONCAT(IFNULL(notes,''), '|reconcile_closed') "
                                     "WHERE id=%s AND status='open'",
-                                    (row['paper_position_id'],)
+                                    (close_p, live_pnl, row['paper_position_id'])
                                 )
                             closed_count += 1
 
