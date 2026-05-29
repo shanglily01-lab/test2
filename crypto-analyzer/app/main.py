@@ -614,55 +614,9 @@ async def lifespan(app: FastAPI):
         schedule.every().day.at("02:00").do(run_top50_update)
         logger.info("[OK] TOP 100 更新任务已注册 (每天 02:00 本地)")
 
-        # Gemini 探索 - 每 4h 调一轮 Gemini 检测红黑天鹅, 模拟单开仓
-        # kill switch system_settings.gemini_explore_enabled 默认 0,
-        # worker 内部自己读, 关时早返回, 不调 Gemini 不开仓
-        def run_gemini_explore():
-            try:
-                from app.services.gemini_explore_worker import run_explore_round
-                run_explore_round(triggered_by='scheduler')
-            except Exception as e:
-                logger.error(f"[Gemini探索] 调度异常: {e}")
-                import traceback
-                traceback.print_exc()
-        schedule.every(4).hours.do(run_gemini_explore)
-        logger.info("[Gemini探索] 调度已注册, 每 4h 跑一次 (kill switch 默认 OFF)")
-
-        # DeepSeek 探索 - 每 4h 调一轮 DeepSeek 检测短时方向异动, 模拟单开仓
-        def run_deepseek_explore():
-            try:
-                from app.services.deepseek_explore_worker import run_explore_round
-                run_explore_round(triggered_by='scheduler')
-            except Exception as e:
-                logger.error(f"[DeepSeek探索] 调度异常: {e}")
-                import traceback
-                traceback.print_exc()
-        schedule.every(4).hours.do(run_deepseek_explore)
-        logger.info("[DeepSeek探索] 调度已注册, 每 4h 跑一次 (kill switch 默认 OFF)")
-
-        # Gemini 预测 - 每 6h 调一次 Gemini 预测 TOP50 方向
-        def run_gemini_predict():
-            try:
-                from app.services.gemini_predictor import run_predict_round
-                run_predict_round(triggered_by='scheduler')
-            except Exception as e:
-                logger.error(f"[Gemini预测] 调度异常: {e}")
-                import traceback
-                traceback.print_exc()
-        schedule.every(6).hours.do(run_gemini_predict)
-        logger.info("[Gemini预测] 调度已注册, 每 6h 跑一次 (kill switch 默认 ON)")
-
-        # Gemini 市场情绪 + 川普分析 - 每 6h 调一次
-        def run_gemini_sentiment():
-            try:
-                from app.services.gemini_sentiment_analyzer import run_sentiment_round
-                run_sentiment_round(triggered_by='scheduler')
-            except Exception as e:
-                logger.error(f"[Gemini情绪分析] 调度异常: {e}")
-                import traceback
-                traceback.print_exc()
-        schedule.every(6).hours.do(run_gemini_sentiment)
-        logger.info("[Gemini情绪分析] 调度已注册, 每 6h 跑一次 (kill switch 默认 ON)")
+        # ── AI 任务已移至 scheduler.py（统一调度引擎），每任务用独立后台线程运行 ──
+        # 不在 main.py 重复注册，避免双重触发 + 阻塞 schedule_runner 主循环
+        logger.info("[AI任务] Gemini/DeepSeek 探索/预测/情绪 由 scheduler.py 统一调度")
 
 
         # ── 独立子进程周期任务（与 FastAPI 主进程完全隔离）──────────────────────────
@@ -830,10 +784,13 @@ async def lifespan(app: FastAPI):
 
         # schedule 仅保留用于定时点任务（每天00:00和12:00的复盘分析）
         async def schedule_runner():
-            """运行 schedule 中的定时点任务（复盘分析），在线程池执行避免阻塞"""
+            """运行 schedule 中的定时点任务（复盘分析等），在线程池执行避免阻塞"""
             loop = asyncio.get_event_loop()
             while True:
-                await loop.run_in_executor(None, schedule.run_pending)
+                try:
+                    await loop.run_in_executor(None, schedule.run_pending)
+                except Exception as e:
+                    logger.error(f"[调度主循环] run_pending 异常: {e}", exc_info=True)
                 await asyncio.sleep(60)  # 每 1 分钟检查一次; worker 内部有防重, 不怕重复触发
 
         asyncio.create_task(schedule_runner())
