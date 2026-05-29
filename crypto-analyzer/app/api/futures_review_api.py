@@ -195,11 +195,12 @@ def parse_close_reason(notes: str) -> tuple:
     return 'other', display
 
 
-def parse_entry_reason(entry_reason: str, entry_signal_type: str) -> tuple:
+def parse_entry_reason(entry_reason: str, entry_signal_type: str, source: str = None) -> tuple:
     """
     解析开仓原因，返回 (代码, 中文名称)
 
     优先使用 entry_signal_type 字段，如果为空则解析 entry_reason
+    如果都为空或无法识别，使用 source 字段兜底
     """
     # 优先使用 entry_signal_type (跳过 "unknown" 字符串)
     if entry_signal_type and entry_signal_type.strip().lower() != 'unknown':
@@ -333,6 +334,22 @@ def parse_entry_reason(entry_reason: str, entry_signal_type: str) -> tuple:
             return 'manual', '手动开仓'
         if '限价' in reason or 'limit' in reason.lower():
             return 'limit_order', '限价单'
+
+    # 使用 source 字段兜底
+    if source:
+        source_label_map = {
+            'smart_trader': '智能交易(S1)',
+            's5_large_oversold': 'S5大币超卖',
+            's6_vol_spike': 'S6放量异动',
+            's9_gemini_ai': 'S9 Gemini AI',
+            'gemini_explore': 'Gemini探索',
+            'gemini_predict': 'Gemini预测',
+            'PREDICTOR': '预测神器',
+            'deepseek_explore': 'DeepSeek探索',
+            'deepseek_predict': 'DeepSeek预测',
+        }
+        if source in source_label_map:
+            return source, source_label_map[source]
 
     return 'unknown', '未知'
 
@@ -651,7 +668,7 @@ async def get_review_trades(
                 quantity, entry_price, mark_price as close_price,
                 realized_pnl, margin,
                 holding_hours, entry_reason, notes as close_reason,
-                open_time, close_time, entry_signal_type, status
+                open_time, close_time, entry_signal_type, source, status
             FROM futures_positions
             WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
             {filter_condition}
@@ -671,7 +688,8 @@ async def get_review_trades(
             close_reason_code, close_reason_cn = parse_close_reason(pos['close_reason'])
             entry_reason_code, entry_reason_cn = parse_entry_reason(
                 pos['entry_reason'],
-                pos['entry_signal_type']
+                pos['entry_signal_type'],
+                pos.get('source')
             )
 
             # 计算实际持仓时长（分钟）
@@ -699,6 +717,7 @@ async def get_review_trades(
                 "holding_minutes": holding_minutes,
                 "entry_reason_code": entry_reason_code,
                 "entry_reason_cn": entry_reason_cn,
+                "source": pos.get('source'),
                 "close_reason_code": close_reason_code,
                 "close_reason_cn": close_reason_cn,
                 "close_reason_detail": pos['close_reason'],
@@ -892,18 +911,7 @@ async def get_reason_analysis(
             is_profit = pnl > 0
 
             # 开仓原因统计（使用新的解析函数,区分多空方向）
-            entry_code, entry_cn = parse_entry_reason(pos['entry_reason'], pos['entry_signal_type'])
-            # 如果 entry_signal_type 为空且原因无法识别,使用 source 兜底
-            if entry_code == 'unknown' and pos.get('source'):
-                source = pos['source']
-                source_label_map = {
-                    'gemini_predict': ('gemini_predict_label', 'Gemini预测'),
-                    'gemini_explore': ('gemini_explore_label', 'Gemini探索'),
-                    'deepseek_predict': ('deepseek_predict_label', 'DeepSeek预测'),
-                    'deepseek_explore': ('deepseek_explore_label', 'DeepSeek探索'),
-                }
-                if source in source_label_map:
-                    entry_code, entry_cn = source_label_map[source]
+            entry_code, entry_cn = parse_entry_reason(pos['entry_reason'], pos['entry_signal_type'], pos.get('source'))
             side = pos['position_side']
             side_cn = "做多" if side == 'LONG' else "做空"
 
