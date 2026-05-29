@@ -1077,6 +1077,19 @@ class SmartExitOptimizer:
                 WHERE id = %s
             """, (now, close_price, round(realized_pnl, 4), round(profit_pct_at_close, 2),
                   close_reason, position_id))
+
+            # 🔥 同步更新 futures_trades 的 close_price 和 realized_pnl
+            # close_position_by_side() 先一步用重取的价格写入了 trade 表,
+            # 这里用止损触发的真实价格覆盖，确保结平价正确
+            cursor.execute("""
+                UPDATE futures_trades
+                SET close_price = %s,
+                    realized_pnl = %s,
+                    pnl_pct = %s
+                WHERE position_id = %s
+            """, (close_price, round(realized_pnl, 4), round(profit_pct_at_close, 2),
+                  position_id))
+
             # live_futures_positions 由 _close_live_positions_on_exchange 在交易所平仓成功后逐条更新
             # 不在此处无条件更新，避免交易所未平仓时 DB 被错误标为 CLOSED
 
