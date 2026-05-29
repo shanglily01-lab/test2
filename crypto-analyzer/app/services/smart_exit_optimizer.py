@@ -68,7 +68,7 @@ class SmartExitOptimizer:
         self.last_5m_check: Dict[int, datetime] = {}  # position_id -> 上次检查5M的时间
         self.last_15m_check: Dict[int, datetime] = {}  # position_id -> 上次检查15M的时间
 
-        # 价格采样器（用于180分钟后的最优价格评估）
+        # 价格采样器（用于60分钟后的最优价格评估）
         self.price_samples: Dict[int, List[float]] = {}  # position_id -> 价格采样列表
 
         # 分阶段超时 - 亏损持续时间追踪（生物学负反馈：需持续亏损才平仓，非瞬时亏损）
@@ -500,7 +500,7 @@ class SmartExitOptimizer:
         entry_time = position.get('entry_signal_time') or position.get('open_time') or datetime.now()
         hold_minutes = (datetime.now() - entry_time).total_seconds() / 60
 
-        MIN_HOLD_MINUTES = 180  # 180分钟最小持仓时间（3小时内不干预，让策略逻辑自然运行）
+        MIN_HOLD_MINUTES = 60  # 60分钟最小持仓时间（1小时内不干预，让策略逻辑自然运行）
 
         # 计算ROI（考虑杠杆后的真实收益率）
         leverage = float(position.get('leverage', 1))
@@ -1360,7 +1360,7 @@ class SmartExitOptimizer:
 
     async def _update_price_samples(self, position_id: int, current_price: float):
         """
-        更新价格采样（用于180分钟后的最优价格评估）
+        更新价格采样（用于60分钟后的最优价格评估）
 
         Args:
             position_id: 持仓ID
@@ -1377,7 +1377,7 @@ class SmartExitOptimizer:
 
     async def _find_optimal_exit_price(self, position_id: int, position_side: str, current_price: float, profit_pct: float) -> bool:
         """
-        寻找最优平仓价格（180分钟后启动）
+        寻找最优平仓价格（60分钟后启动）
 
         Args:
             position_id: 持仓ID
@@ -1502,7 +1502,7 @@ class SmartExitOptimizer:
         1. 极端亏损兜底止损（ROI≤-10%）
         2. 固定止盈检查（兜底）
         3. 智能顶底识别（30分钟后）
-        4. 最优价格评估（180分钟后）
+        4. 最优价格评估（60分钟后）
         5. 动态超时检查
         6. 分阶段超时检查
         7. 绝对时间强制平仓
@@ -1532,10 +1532,10 @@ class SmartExitOptimizer:
             hold_hours = hold_minutes / 60
 
             # ============================================================
-            # === 优先级0: 最小持仓时间限制 (30分钟) ===
+            # === 优先级0: 最小持仓时间限制 (60分钟) ===
             # ============================================================
             # 开仓60分钟内只允许止损和止盈,不允许其他原因平仓
-            MIN_HOLD_MINUTES = 180  # 180分钟最小持仓时间（3小时内不干预，让策略逻辑自然运行）
+            MIN_HOLD_MINUTES = 60  # 60分钟最小持仓时间（1小时内不干预，让策略逻辑自然运行）
 
             # ============================================================
             # === 优先级1: 极端亏损兜底止损（风控底线） ===
@@ -1581,17 +1581,17 @@ class SmartExitOptimizer:
                         return ('固定止盈', 1.0)
 
             # ============================================================
-            # === 在此之后的所有平仓检查都需要满足最小持仓时间(30分钟) ===
+            # === 在此之后的所有平仓检查都需要满足最小持仓时间(60分钟) ===
             # ============================================================
-            # 开仓30分钟内不平仓(除了止损和止盈)
+            # 开仓60分钟内不平仓(除了止损和止盈)
             if hold_minutes < MIN_HOLD_MINUTES:
-                # 30分钟内只允许止损和止盈,不进行其他平仓检查
+                # 60分钟内只允许止损和止盈,不进行其他平仓检查
                 return None
 
             # ============================================================
             # === 优先级4: 智能顶底识别 ===
             # ============================================================
-            # 注: 已满足30分钟最小持仓时间,现在可以检查顶底
+            # 注: 已满足60分钟最小持仓时间,现在可以检查顶底
             is_top_bottom, tb_reason = await self._check_top_bottom(symbol, position_side, entry_price, leverage)
             if is_top_bottom:
                 logger.info(
@@ -1601,10 +1601,10 @@ class SmartExitOptimizer:
                 return (tb_reason, 1.0)
 
             # ============================================================
-            # === 优先级4.5: 最优价格评估（180分钟后启动）===
+            # === 优先级4.5: 最优价格评估（60分钟后启动）===
             # ============================================================
-            # 接近3小时持仓时间（180分钟后），启动价格评估系统寻找最优平仓点
-            if hold_minutes >= 180:
+            # 持仓满1小时（60分钟后），启动价格评估系统寻找最优平仓点
+            if hold_minutes >= MIN_HOLD_MINUTES:
                 pnl_pct = profit_info.get('profit_pct', 0)
                 optimal_found = await self._find_optimal_exit_price(
                     position_id, position_side, float(current_price), pnl_pct
