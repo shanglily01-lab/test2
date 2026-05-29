@@ -409,6 +409,24 @@
 </div>
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-[#49f4c8] text-xl shrink-0">psychology</span>
+<div><div class="text-sm font-medium text-slate-200">DeepSeek 探索</div><p class="text-[11px] text-slate-500">每 2h 检测红/黑天鹅，开模拟单</p></div>
+</div>
+<div id="deepseekExploreToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
+</div>
+</div>
+<div class="cfg-row">
+<div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-[#7c4dff] text-xl shrink-0">psychology</span>
+<div><div class="text-sm font-medium text-slate-200">DeepSeek 预测</div><p class="text-[11px] text-slate-500">每 4h 预测 TOP50 方向</p></div>
+</div>
+<div id="deepseekPredictToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
+</div>
+</div>
+<div class="cfg-row">
+<div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#ff9500] text-xl shrink-0">visibility</span>
 <div><div class="text-sm font-medium text-slate-200">Gemini 持仓顾问</div><p class="text-[11px] text-slate-500">实盘持仓 ≥4h 每 1h 让 Gemini 判 持有/观察/卖掉 (可触发实盘平仓!)</p></div>
 </div>
@@ -744,6 +762,8 @@
                 setToggle('trendFollowingToggle', !!svc.trend_following_enabled);
                 setToggle('geminiExploreToggle', !!svc.gemini_explore_enabled);
                 setToggle('geminiPredictToggle', !!svc.gemini_predict_enabled);
+                setToggle('deepseekExploreToggle', !!svc.deepseek_explore_enabled);
+                setToggle('deepseekPredictToggle', !!svc.deepseek_predict_enabled);
                 setToggle('s9GeminiToggle',    !!svc.s9_gemini_ai_enabled);
                 setToggle('s1Toggle',   !!svc.s1_early_long_enabled);
                 setToggle('s5Toggle',   !!svc.s5_large_oversold_enabled);
@@ -897,6 +917,28 @@
             try {
                 await apiPut('/trading-services', { gemini_predict_enabled: enabled });
                 showToast('Gemini 预测已' + (enabled ? '开启' : '关闭'), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
+        // DeepSeek 探索
+        bindToggle('deepseekExploreToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { deepseek_explore_enabled: enabled });
+                showToast('DeepSeek 探索已' + (enabled ? '开启' : '关闭'), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
+        // DeepSeek 预测
+        bindToggle('deepseekPredictToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { deepseek_predict_enabled: enabled });
+                showToast('DeepSeek 预测已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;

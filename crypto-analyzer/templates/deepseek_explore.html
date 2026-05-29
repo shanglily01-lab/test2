@@ -140,10 +140,7 @@
   </div>
   <div class="flex items-center gap-4">
     <span id="status-chip" class="chip chip-off"><span class="material-symbols-outlined text-[14px]">power_off</span><span id="status-label">已禁用</span></span>
-    <label class="toggle" title="启用 / 禁用 DeepSeek 探索 (开关后台自动跑)">
-      <input type="checkbox" id="enable-toggle" onchange="onToggle(this.checked)"/>
-      <span class="slider"></span>
-    </label>
+    <a href="/system_settings" class="text-[11px] text-on-surface-variant hover:text-primary transition-colors">系统设置开关</a>
     <button onclick="loadAll()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-highest text-xs text-on-surface-variant transition-colors">
       <span class="material-symbols-outlined text-[14px]">refresh</span>刷新
     </button>
@@ -297,10 +294,7 @@
   </div>
   <div class="flex items-center gap-4">
     <span id="p-status-chip" class="chip chip-off"><span class="material-symbols-outlined text-[14px]">power_off</span><span id="p-status-label">已禁用</span></span>
-    <label class="toggle" title="启用 / 禁用 DeepSeek 预测 (开关后台自动跑)">
-      <input type="checkbox" id="p-enable-toggle" onchange="onPredictToggle(this.checked)"/>
-      <span class="slider"></span>
-    </label>
+    <a href="/system_settings" class="text-[11px] text-on-surface-variant hover:text-primary transition-colors">系统设置开关</a>
     <button onclick="loadPredictAll()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-highest text-xs text-on-surface-variant transition-colors">
       <span class="material-symbols-outlined text-[14px]">refresh</span>刷新
     </button>
@@ -642,7 +636,7 @@ function buildVerdictsTable(vs, includePrice) {
 }
 
 // ============================================================
-// STATUS + TOGGLE
+// STATUS
 // ============================================================
 function loadStatus() {
   fetch('/api/deepseek-explore/status')
@@ -650,7 +644,6 @@ function loadStatus() {
     .then(function(d){
       var s = d.data || {};
       var enabled = !!s.enabled;
-      document.getElementById('enable-toggle').checked = enabled;
       var chip = document.getElementById('status-chip');
       var label = document.getElementById('status-label');
       if (enabled) {
@@ -672,20 +665,6 @@ function loadStatus() {
       document.getElementById('stat-laststatus').innerHTML = lr.status ? statusBadge(lr.status) : '--';
     })
     .catch(function(e){ console.error('status error', e); });
-}
-
-function onToggle(checked) {
-  fetch('/api/deepseek-explore/toggle', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ enabled: checked })
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(d){
-    if (!d.success) { alert('切换失败'); }
-    setTimeout(loadStatus, 200);
-  })
-  .catch(function(e){ alert('切换失败: ' + e); });
 }
 
 // ============================================================
@@ -896,7 +875,7 @@ setInterval(loadStatus, 30000);
 setInterval(loadExploreStats, 30000);
 
 // ============================================================
-// DEEPSEEK PREDICT - STATUS + TOGGLE
+// DEEPSEEK PREDICT - STATUS
 // ============================================================
 function loadPredictStatus() {
   fetch('/api/deepseek-predict/status')
@@ -904,7 +883,6 @@ function loadPredictStatus() {
     .then(function(d){
       var s = d.data || {};
       var enabled = !!s.enabled;
-      document.getElementById('p-enable-toggle').checked = enabled;
       var chip = document.getElementById('p-status-chip');
       var label = document.getElementById('p-status-label');
       if (enabled) {
@@ -926,20 +904,6 @@ function loadPredictStatus() {
       document.getElementById('p-stat-laststatus').innerHTML = lr.status ? statusBadge(lr.status) : '--';
     })
     .catch(function(e){ console.error('predict status error', e); });
-}
-
-function onPredictToggle(checked) {
-  fetch('/api/deepseek-predict/toggle', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ enabled: checked })
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(d){
-    if (!d.success) { alert('切换失败'); }
-    setTimeout(loadPredictStatus, 200);
-  })
-  .catch(function(e){ alert('切换失败: ' + e); });
 }
 
 // ============================================================

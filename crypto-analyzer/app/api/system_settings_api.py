@@ -49,6 +49,8 @@ class TradingServicesUpdate(BaseModel):
     trend_following_enabled: Optional[bool] = None
     gemini_explore_enabled: Optional[bool] = None   # 2026-05-27 Gemini 探索
     gemini_predict_enabled: Optional[bool] = None   # 2026-05-27 Gemini 预测
+    deepseek_explore_enabled: Optional[bool] = None   # DeepSeek 探索
+    deepseek_predict_enabled: Optional[bool] = None   # DeepSeek 预测
     s1_early_long_enabled: Optional[bool] = None     # 2026-05-27 S1 早期做多
     s5_large_oversold_enabled: Optional[bool] = None   # 2026-05-27 S5 大币超卖
     s6_vol_spike_enabled: Optional[bool] = None         # 2026-05-27 S6 小币量能异动
@@ -375,6 +377,7 @@ async def get_trading_services():
                                   'btc_momentum_enabled', 'u_coin_style_enabled',
                                   'signal_confirmation_enabled', 'trend_following_enabled',
                                   'gemini_explore_enabled', 'gemini_predict_enabled',
+                                  'deepseek_explore_enabled', 'deepseek_predict_enabled',
                                   's1_early_long_enabled',
                                   's5_large_oversold_enabled', 's6_vol_spike_enabled',
                                   's9_gemini_ai_enabled',
@@ -399,6 +402,8 @@ async def get_trading_services():
             'trend_following_enabled': 'trend_following_enabled',
             'gemini_explore_enabled': 'gemini_explore_enabled',
             'gemini_predict_enabled': 'gemini_predict_enabled',
+            'deepseek_explore_enabled': 'deepseek_explore_enabled',
+            'deepseek_predict_enabled': 'deepseek_predict_enabled',
             's9_gemini_ai_enabled': 's9_gemini_ai_enabled',
             'gemini_position_advisor_enabled': 'gemini_position_advisor_enabled',
             's1_early_long_enabled': 's1_early_long_enabled',
@@ -419,6 +424,8 @@ async def get_trading_services():
             'trend_following_enabled': False,
             'gemini_explore_enabled': False,
             'gemini_predict_enabled': True,
+            'deepseek_explore_enabled': False,
+            'deepseek_predict_enabled': False,
             's9_gemini_ai_enabled': False,
             'gemini_position_advisor_enabled': False,
             's1_early_long_enabled': False,
@@ -656,6 +663,30 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (value,))
             updates.append(f"Gemini预测: {'启用' if data.gemini_predict_enabled else '禁用'}")
+
+        if data.deepseek_explore_enabled is not None:
+            value = '1' if data.deepseek_explore_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('deepseek_explore_enabled', %s, 'DeepSeek 探索开关 (1=启用, 0=禁用)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"DeepSeek探索: {'启用' if data.deepseek_explore_enabled else '禁用'}")
+
+        if data.deepseek_predict_enabled is not None:
+            value = '1' if data.deepseek_predict_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('deepseek_predict_enabled', %s, 'DeepSeek 预测开关 (1=启用, 0=禁用)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"DeepSeek预测: {'启用' if data.deepseek_predict_enabled else '禁用'}")
 
         if data.s9_gemini_ai_enabled is not None:
             value = '1' if data.s9_gemini_ai_enabled else '0'

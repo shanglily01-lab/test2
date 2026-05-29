@@ -204,6 +204,20 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
                 <div class="toggle-wrap"><div id="geminiPredictToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
+                <div class="flex flex-col py-3 pr-4">
+                    <span class="text-sm font-medium">DeepSeek 探索</span>
+                    <span class="text-[10px] text-on-surface-variant mt-0.5">每 2h 检测黑天鹅</span>
+                </div>
+                <div class="toggle-wrap"><div id="deepseekExploreToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
+            </div>
+            <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
+                <div class="flex flex-col py-3 pr-4">
+                    <span class="text-sm font-medium">DeepSeek 预测</span>
+                    <span class="text-[10px] text-on-surface-variant mt-0.5">每 4h 预测 TOP50</span>
+                </div>
+                <div class="toggle-wrap"><div id="deepseekPredictToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
+            </div>
+            <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <span class="text-sm font-medium">Gemini 持仓顾问 <span class="text-[10px] text-red-400">(实盘可平仓)</span></span>
                 <div class="toggle-wrap"><div id="geminiAdvisorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
@@ -536,6 +550,8 @@ async function loadAll() {
             setToggle('trendFollowingToggle', d.trend_following_enabled);
             setToggle('geminiExploreToggle', d.gemini_explore_enabled);
             setToggle('geminiPredictToggle', d.gemini_predict_enabled);
+            setToggle('deepseekExploreToggle', d.deepseek_explore_enabled);
+            setToggle('deepseekPredictToggle', d.deepseek_predict_enabled);
             setToggle('s1Toggle', d.s1_early_long_enabled);
             setToggle('s5Toggle', d.s5_large_oversold_enabled);
             setToggle('s6Toggle', d.s6_vol_spike_enabled);
@@ -587,6 +603,8 @@ async function save(type) {
             trend_following_enabled: getToggle('trendFollowingToggle'),
             gemini_explore_enabled:  getToggle('geminiExploreToggle'),
             gemini_predict_enabled:  getToggle('geminiPredictToggle'),
+            deepseek_explore_enabled: getToggle('deepseekExploreToggle'),
+            deepseek_predict_enabled: getToggle('deepseekPredictToggle'),
             s1_early_long_enabled:  getToggle('s1Toggle'),
             s5_large_oversold_enabled: getToggle('s5Toggle'),
             s6_vol_spike_enabled:    getToggle('s6Toggle'),
@@ -661,7 +679,7 @@ async function initLock() {
 }
 
 // 绑定所有 toggle 点击事件
-['usdtToggle','liveToggle','liveCloseToggle','btcMomentumToggle','predictorToggle','trendFollowingToggle','geminiExploreToggle','geminiPredictToggle','uCoinStyleToggle','s1Toggle','s2Toggle','s3Toggle','s4Toggle','s5Toggle','s6Toggle','s7Toggle','s8TopshortToggle','s9GeminiToggle','geminiAdvisorToggle','spotTradingToggle'].forEach(id => bindToggle(id, 'services'));
+['usdtToggle','liveToggle','liveCloseToggle','btcMomentumToggle','predictorToggle','trendFollowingToggle','geminiExploreToggle','geminiPredictToggle','deepseekExploreToggle','deepseekPredictToggle','uCoinStyleToggle','s1Toggle','s2Toggle','s3Toggle','s4Toggle','s5Toggle','s6Toggle','s7Toggle','s8TopshortToggle','s9GeminiToggle','geminiAdvisorToggle','spotTradingToggle'].forEach(id => bindToggle(id, 'services'));
 ['longToggle','shortToggle'].forEach(id => bindToggle(id, 'direction', updateDirectionSummary));
 bindToggle('big4Toggle', 'big4');
 
