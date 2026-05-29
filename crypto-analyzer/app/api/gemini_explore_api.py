@@ -40,6 +40,112 @@ def _connect():
     )
 
 
+def _get_price_hub():
+    try:
+        from app.services.binance_data_hub import get_global_data_hub
+        return get_global_data_hub()
+    except Exception:
+        return None
+
+
+def _live_price(symbol: str, hub) -> Optional[float]:
+    if hub is not None:
+        try:
+            lp = hub.get_price_sync(symbol, max_age_seconds=90)
+            if lp is not None and lp > 0:
+                return float(lp)
+        except Exception:
+            pass
+    try:
+        conn = _connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT close_price FROM kline_data "
+                    "WHERE symbol=%s AND timeframe='5m' AND exchange='binance_futures' "
+                    "ORDER BY open_time DESC LIMIT 1",
+                    (symbol,),
+                )
+                row = cur.fetchone()
+                if row and row.get('close_price'):
+                    return float(row['close_price'])
+        finally:
+            conn.close()
+    except Exception:
+        pass
+    return None
+
+
+def _build_live_positions(positions):
+    """用实时价现场算浮盈, 不用 DB 里可能过期的 unrealized_pnl."""
+    if not positions:
+        return [], {
+            "total_unrealized_pnl": 0.0,
+            "total_margin_used": 0.0,
+            "total_unrealized_pnl_pct": 0.0,
+            "open_count": 0,
+        }
+
+    hub = _get_price_hub()
+    result = []
+    for p in positions:
+        symbol = p['symbol']
+        side = p['position_side']
+        entry = float(p['entry_price'])
+        qty = float(p['quantity'])
+        margin = float(p['margin'])
+        live_price = _live_price(symbol, hub)
+
+        unrealized_pnl = None
+        unrealized_pnl_pct = None
+        if live_price is not None and live_price > 0:
+            if side == 'LONG':
+                unrealized_pnl = (live_price - entry) * qty
+            else:
+                unrealized_pnl = (entry - live_price) * qty
+            unrealized_pnl_pct = (unrealized_pnl / margin * 100) if margin > 0 else 0
+
+        result.append({
+            'id': p['id'],
+            'symbol': symbol,
+            'position_side': side,
+            'leverage': p['leverage'],
+            'quantity': qty,
+            'entry_price': entry,
+            'mark_price': live_price,
+            'margin': margin,
+            'stop_loss_price': float(p['stop_loss_price']) if p['stop_loss_price'] else None,
+            'take_profit_price': float(p['take_profit_price']) if p['take_profit_price'] else None,
+            'unrealized_pnl': round(unrealized_pnl, 4) if unrealized_pnl is not None else None,
+            'unrealized_pnl_pct': round(unrealized_pnl_pct, 2) if unrealized_pnl_pct is not None else None,
+            'open_time': p['open_time'].isoformat() if p['open_time'] else None,
+            'planned_close_time': p['planned_close_time'].isoformat() if p['planned_close_time'] else None,
+            'entry_reason': p['entry_reason'],
+        })
+
+    total_pnl = sum((r['unrealized_pnl'] or 0) for r in result)
+    total_margin = sum(r['margin'] for r in result)
+    total_pnl_pct = (total_pnl / total_margin * 100) if total_margin > 0 else 0
+    summary = {
+        "total_unrealized_pnl": round(total_pnl, 2),
+        "total_margin_used": round(total_margin, 2),
+        "total_unrealized_pnl_pct": round(total_pnl_pct, 2),
+        "open_count": len(result),
+    }
+    return result, summary
+
+
+_OPEN_POSITIONS_SQL = (
+    "SELECT id, symbol, position_side, leverage, quantity, "
+    "       entry_price, margin, "
+    "       stop_loss_price, take_profit_price, "
+    "       open_time, planned_close_time, entry_reason "
+    "FROM futures_positions "
+    "WHERE source='gemini_explore' AND status='open' AND account_id=2 "
+    "ORDER BY open_time DESC"
+)
+
+
 # ============================================================
 # 状态 + 开关
 # ============================================================
@@ -302,112 +408,17 @@ async def list_positions_live():
         conn = _connect()
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, symbol, position_side, leverage, quantity, "
-                    "       entry_price, margin, "
-                    "       stop_loss_price, take_profit_price, "
-                    "       open_time, planned_close_time, entry_reason "
-                    "FROM futures_positions "
-                    "WHERE source='gemini_explore' AND status='open' AND account_id=2 "
-                    "ORDER BY open_time DESC"
-                )
+                cur.execute(_OPEN_POSITIONS_SQL)
                 positions = cur.fetchall()
         finally:
             conn.close()
 
-        if not positions:
-            return {"success": True, "data": [], "count": 0}
-
-        # 拿 Hub 实时价
-        try:
-            from app.services.binance_data_hub import get_global_data_hub
-            hub = get_global_data_hub()
-        except Exception as e:
-            logger.warning(f"[Gemini探索 API] /positions/live Hub 获取失败: {e}")
-            hub = None
-
-        from decimal import Decimal
-        result = []
-        for p in positions:
-            symbol = p['symbol']
-            side = p['position_side']
-            entry = float(p['entry_price'])
-            qty = float(p['quantity'])
-            margin = float(p['margin'])
-
-            # 实时价
-            live_price = None
-            if hub is not None:
-                try:
-                    lp = hub.get_price_sync(symbol, max_age_seconds=90)
-                    if lp is not None and lp > 0:
-                        live_price = float(lp)
-                except Exception as e:
-                    logger.debug(f"[Gemini探索 API] hub 取 {symbol} 实时价失败: {e}")
-
-            # 兜底: 5m close
-            if live_price is None:
-                try:
-                    conn2 = _connect()
-                    with conn2.cursor() as cur2:
-                        cur2.execute(
-                            "SELECT close_price FROM kline_data "
-                            "WHERE symbol=%s AND timeframe='5m' AND exchange='binance_futures' "
-                            "ORDER BY open_time DESC LIMIT 1",
-                            (symbol,)
-                        )
-                        row = cur2.fetchone()
-                        if row and row.get('close_price'):
-                            live_price = float(row['close_price'])
-                    conn2.close()
-                except Exception:
-                    pass
-
-            # 算实时盈亏
-            unrealized_pnl = None
-            unrealized_pnl_pct = None
-            if live_price is not None and live_price > 0:
-                if side == 'LONG':
-                    unrealized_pnl = (live_price - entry) * qty
-                else:
-                    unrealized_pnl = (entry - live_price) * qty
-                # ROI on margin (跟 UI 显示一致, 含杠杆)
-                unrealized_pnl_pct = (unrealized_pnl / margin * 100) if margin > 0 else 0
-
-            row = {
-                'id': p['id'],
-                'symbol': symbol,
-                'position_side': side,
-                'leverage': p['leverage'],
-                'quantity': qty,
-                'entry_price': entry,
-                'mark_price': live_price,
-                'margin': margin,
-                'stop_loss_price': float(p['stop_loss_price']) if p['stop_loss_price'] else None,
-                'take_profit_price': float(p['take_profit_price']) if p['take_profit_price'] else None,
-                'unrealized_pnl': round(unrealized_pnl, 4) if unrealized_pnl is not None else None,
-                'unrealized_pnl_pct': round(unrealized_pnl_pct, 2) if unrealized_pnl_pct is not None else None,
-                'open_time': p['open_time'].isoformat() if p['open_time'] else None,
-                'planned_close_time': p['planned_close_time'].isoformat() if p['planned_close_time'] else None,
-                'entry_reason': p['entry_reason'],
-            }
-            result.append(row)
-
-        # 汇总
-        total_pnl = sum((r['unrealized_pnl'] or 0) for r in result)
-        total_margin = sum(r['margin'] for r in result)
-        total_pnl_pct = (total_pnl / total_margin * 100) if total_margin > 0 else 0
-
+        result, summary = _build_live_positions(positions)
         return {
             "success": True,
             "data": result,
             "count": len(result),
-            "summary": {
-                "total_unrealized_pnl": round(total_pnl, 2),
-                "total_margin_used": round(total_margin, 2),
-                "total_unrealized_pnl_pct": round(total_pnl_pct, 2),
-                "open_count": len(result),
-            },
+            "summary": summary,
         }
     except Exception as e:
         logger.error(f"[Gemini探索 API] /positions/live 失败: {e}", exc_info=True)
@@ -443,18 +454,13 @@ async def stats(days: int = Query(30, ge=1, le=365)):
                 wins = int(row['wins'] or 0)
                 losses = int(row['losses'] or 0)
 
-                # 当前浮盈
-                cur.execute(
-                    """
-                    SELECT COALESCE(SUM(unrealized_pnl), 0) AS floating_pnl
-                    FROM futures_positions
-                    WHERE source='gemini_explore' AND status='open' AND account_id=2
-                    """
-                )
-                float_row = cur.fetchone()
-                floating_pnl = float(float_row['floating_pnl'] or 0)
+                cur.execute(_OPEN_POSITIONS_SQL)
+                open_positions = cur.fetchall()
         finally:
             conn.close()
+
+        _, live_summary = _build_live_positions(open_positions)
+        floating_pnl = float(live_summary['total_unrealized_pnl'])
 
         win_rate = round(wins / total * 100, 2) if total > 0 else 0
         total_pnl = float(row['total_pnl'] or 0)

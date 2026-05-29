@@ -549,6 +549,25 @@ function pCls(v) {
   if (isNaN(n)) return '';
   return n >= 0 ? 'pp' : 'pn';
 }
+var _exploreRealizedPnl = 0;
+var _lastExploreFloating = 0;
+var _predictRealizedPnl = 0;
+var _lastPredictFloating = 0;
+function liveFloatingFromResponse(summary, rows) {
+  if (summary && summary.total_unrealized_pnl !== undefined) return summary.total_unrealized_pnl;
+  var sum = 0;
+  (rows || []).forEach(function(p){ sum += (p.unrealized_pnl || 0); });
+  return sum;
+}
+function applyFloatingCards(prefix, realized, floating) {
+  var floatEl = document.getElementById(prefix + '-stat-floating');
+  var totalEl = document.getElementById(prefix + '-stat-total');
+  if (floatEl) floatEl.innerHTML = '<span class="' + pCls(floating) + '">' + fmtSigned(floating) + ' U</span>';
+  if (totalEl) {
+    var tp = (realized || 0) + floating;
+    totalEl.innerHTML = '<span class="' + pCls(tp) + '">' + fmtSigned(tp) + ' U</span>';
+  }
+}
 function shortUTC(s) {
   if (!s) return '--';
   var d = new Date(s + (s.indexOf('Z') === -1 && s.indexOf('+') === -1 ? 'Z' : ''));
@@ -773,6 +792,9 @@ function loadOpenPositions() {
           ? (summary.open_count + ' <span class="text-xs text-on-surface-variant">仓</span>')
           : '--';
 
+      _lastExploreFloating = liveFloatingFromResponse(summary, rows);
+      applyFloatingCards('e', _exploreRealizedPnl, _lastExploreFloating);
+
       if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无 OPEN 持仓</td></tr>';
         return;
@@ -844,10 +866,10 @@ function loadExploreStats() {
     .then(function(d){
       if (!d.success) return;
       var s = d.data || {};
-      var pCls = function(v){ return (v || 0) >= 0 ? 'pp' : 'pn'; };
-      document.getElementById('e-stat-realized').innerHTML = '<span class="' + pCls(s.total_realized_pnl) + '">' + fmtSigned(s.total_realized_pnl) + ' U</span>';
-      document.getElementById('e-stat-floating').innerHTML = '<span class="' + pCls(s.floating_pnl) + '">' + fmtSigned(s.floating_pnl) + ' U</span>';
-      document.getElementById('e-stat-total').innerHTML = '<span class="' + pCls(s.total_pnl) + '">' + fmtSigned(s.total_pnl) + ' U</span>';
+      var pClsLocal = function(v){ return (v || 0) >= 0 ? 'pp' : 'pn'; };
+      _exploreRealizedPnl = s.total_realized_pnl || 0;
+      document.getElementById('e-stat-realized').innerHTML = '<span class="' + pClsLocal(s.total_realized_pnl) + '">' + fmtSigned(s.total_realized_pnl) + ' U</span>';
+      applyFloatingCards('e', _exploreRealizedPnl, _lastExploreFloating);
       document.getElementById('e-stat-winrate').innerHTML = '<span class="' + ((s.win_rate || 0) >= 50 ? 'pp' : 'pn') + '">' + fmt(s.win_rate, 1) + '%</span>';
       document.getElementById('e-stat-wl').textContent = s.wins + '胜 ' + s.losses + '负';
       document.getElementById('e-stat-closed2').textContent = s.total_trades;
@@ -1037,16 +1059,8 @@ function loadPredictOpenPositions() {
       if (openEl) openEl.innerHTML = summary.open_count !== undefined
           ? (summary.open_count + ' <span class="text-xs text-on-surface-variant">仓</span>')
           : '--';
-      var floatEl = document.getElementById('p-stat-floating');
-      if (floatEl && summary.total_unrealized_pnl !== undefined) {
-        var fp = summary.total_unrealized_pnl;
-        floatEl.innerHTML = '<span class="' + pCls(fp) + '">' + fmtSigned(fp) + ' U</span>';
-        var totalEl = document.getElementById('p-stat-total');
-        if (totalEl) {
-          var tp = _predictRealizedPnl + fp;
-          totalEl.innerHTML = '<span class="' + pCls(tp) + '">' + fmtSigned(tp) + ' U</span>';
-        }
-      }
+      _lastPredictFloating = liveFloatingFromResponse(summary, rows);
+      applyFloatingCards('p', _predictRealizedPnl, _lastPredictFloating);
       if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无 OPEN 持仓</td></tr>';
         return;
@@ -1111,19 +1125,16 @@ function loadPredictClosedPositions() {
 // ============================================================
 // GEMINI PREDICT - STATS (盈亏统计)
 // ============================================================
-var _predictRealizedPnl = 0;
-
 function loadPredictStats() {
   fetch('/api/gemini-predict/stats?days=30')
     .then(function(r){ return r.json(); })
     .then(function(d){
       if (!d.success) return;
       var s = d.data || {};
-      var pCls = function(v){ return (v || 0) >= 0 ? 'pp' : 'pn'; };
+      var pClsLocal = function(v){ return (v || 0) >= 0 ? 'pp' : 'pn'; };
       _predictRealizedPnl = s.total_realized_pnl || 0;
-      document.getElementById('p-stat-realized').innerHTML = '<span class="' + pCls(s.total_realized_pnl) + '">' + fmtSigned(s.total_realized_pnl) + ' U</span>';
-      document.getElementById('p-stat-floating').innerHTML = '<span class="' + pCls(s.floating_pnl) + '">' + fmtSigned(s.floating_pnl) + ' U</span>';
-      document.getElementById('p-stat-total').innerHTML = '<span class="' + pCls(s.total_pnl) + '">' + fmtSigned(s.total_pnl) + ' U</span>';
+      document.getElementById('p-stat-realized').innerHTML = '<span class="' + pClsLocal(s.total_realized_pnl) + '">' + fmtSigned(s.total_realized_pnl) + ' U</span>';
+      applyFloatingCards('p', _predictRealizedPnl, _lastPredictFloating);
       document.getElementById('p-stat-winrate').innerHTML = '<span class="' + ((s.win_rate || 0) >= 50 ? 'pp' : 'pn') + '">' + fmt(s.win_rate, 1) + '%</span>';
       document.getElementById('p-stat-wl').textContent = s.wins + '胜 ' + s.losses + '负';
       document.getElementById('p-stat-closed2').textContent = s.total_trades;
