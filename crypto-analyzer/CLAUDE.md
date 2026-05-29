@@ -47,15 +47,39 @@
 | data_cache.market_snapshot | 每 1 分钟 |
 | data_cache.market_movers_snapshot | 每 5 分钟 |
 | data_cache.position_stats_snapshot | 每 30 分钟 |
-| data_cache.candidate_pool_snapshot | 每 30 分钟 |
+| data_cache.candidate_pool_snapshot | 每 **6 分钟** (UPSERT, 单次约 3–5min/302币) |
 | data_cache.settings_cache | 每 1 分钟 |
-| Gemini 探索 | 每 2 小时 |
-| Gemini 预测 | 每 4 小时 |
-| DeepSeek 探索 | 每 2 小时 |
-| DeepSeek 预测 | 每 4 小时 |
+| Gemini 探索 | 每 **2h** + **10min 轮询** (worker 内 2h 防重) |
+| Gemini 预测 | 每 **4h** + **10min 轮询** |
+| DeepSeek 探索 | 每 **2h** + **10min 轮询** |
+| DeepSeek 预测 | 每 **4h** + **10min 轮询** |
 | 市场情绪分析 | 每 6 小时 |
 | ETF 同步 | 每天 06:45 |
 | 金库同步 | 每天 07:30 |
+
+### scheduler AI 运维备忘 (2026-05-30)
+
+**生产 DB**: MariaDB 10.5（非 MySQL 8）；`INSERT ... ON DUPLICATE KEY UPDATE` 可用。
+
+**探索/预测别混淆「延时」**:
+- 正常: 日志 `上次成功距今 Xh < 2h/4h, 跳过` — 防重，不是 scheduler 坏了。
+- 异常: `上一轮还未结束` 持续 >15min — 探索线程卡死或占锁（常因回退 `kline_data` 多层 JOIN）。
+- `schedule.every(N).hours` 在 **restart 后从 0 计时**；靠 **10min 轮询 + worker DB 防重** 补位。勿频繁 `systemctl restart crypto-scheduler`。
+
+**candidate_pool_snapshot** (`data_cache_service.refresh_candidate_pool`):
+- **禁止** refresh 开头 `DELETE` 全表（会导致探索读空表 → 慢路径）。已改为 **UPSERT + 本轮结束后删下架币**。
+- 探索读缓存: `load_candidate_pool_for_explore()`；`get_candidate_pool` 默认**不再**限制 `change_24h` 0–100%。
+
+**gemini_explore_runs.status**: ENUM `ok` / `partial` / `error` / `skipped` — **无 `running`**。进行中登记用 **`partial`**，结束 `_finish_run` 改为 `ok`/`skipped`/`error`（commit `15bdfc0`）。`status='running'` 会 1265 Data truncated。
+
+**启动 init 错峰** (`scheduler_init`): Gemini探索 +15s, 预测 +20s, 情绪 +25s, DeepSeek探索 +90s, DeepSeek预测 +95s。
+
+**日志** (非 journalctl): `logs/scheduler_YYYY-MM-DD.log`；排查:
+`grep -E "一轮开始|一轮结束|candidate_pool_snapshot 读取|回退 kline|上一轮还未结束" logs/scheduler_$(date -u +%Y-%m-%d).log`
+
+**相关 commits**: `211990b` (UPSERT+探索读缓存+锁修复), `15bdfc0` (partial 替代 running)。
+
+详见 `.cursor/rules/scheduler-ai-ops.mdc`。
 
 ## Gemini AI 模块
 
