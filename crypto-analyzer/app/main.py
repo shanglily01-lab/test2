@@ -791,7 +791,15 @@ async def lifespan(app: FastAPI):
                     await loop.run_in_executor(None, schedule.run_pending)
                 except Exception as e:
                     logger.error(f"[调度主循环] run_pending 异常: {e}", exc_info=True)
-                await asyncio.sleep(60)  # 每 1 分钟检查一次; worker 内部有防重, 不怕重复触发
+                # 智能休眠: 用 idle_seconds 动态调节
+                _idle = schedule.idle_seconds()
+                if _idle is None or _idle <= 0:
+                    _sleep = 30
+                elif _idle > 120:
+                    _sleep = 120
+                else:
+                    _sleep = max(int(_idle) + 1, 5)
+                await asyncio.sleep(_sleep)
 
         asyncio.create_task(schedule_runner())
         logger.info("✅ 超级大脑自我优化服务已启动（每4小时执行一次）")

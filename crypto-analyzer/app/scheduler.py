@@ -1480,38 +1480,26 @@ class UnifiedDataScheduler:
         # 首次采集 — 后台线程执行, 不阻塞 schedule 主循环
         self._run_async_in_thread(self.run_initial_collection)
 
-        # Gemini 系列首次启动立即执行 (scheduler 启动时就跑)
-        def _run_gemini_init():
-            def wrapper():
+        # AI 首次启动 — 各任务独立线程并行触发，不互相等待
+        def _launch_ai_init_task(name, module_path, func_name):
+            """在独立后台线程执行一次 AI 初始化任务."""
+            def _run():
                 import time
                 time.sleep(15)  # 等 initial_collection 完成
                 try:
-                    from app.services.gemini_explore_worker import run_explore_round
-                    run_explore_round(triggered_by='scheduler_init')
+                    import importlib
+                    mod = importlib.import_module(module_path)
+                    func = getattr(mod, func_name)
+                    func(triggered_by='scheduler_init')
                 except Exception as e:
-                    logger.error(f"[Gemini探索] 初始化运行失败: {e}")
-                try:
-                    from app.services.gemini_predictor import run_predict_round
-                    run_predict_round(triggered_by='scheduler_init')
-                except Exception as e:
-                    logger.error(f"[Gemini预测] 初始化运行失败: {e}")
-                try:
-                    from app.services.gemini_sentiment_analyzer import run_sentiment_round
-                    run_sentiment_round(triggered_by='scheduler_init')
-                except Exception as e:
-                    logger.error(f"[Gemini情绪分析] 初始化运行失败: {e}")
-                try:
-                    from app.services.deepseek_explore_worker import run_explore_round
-                    run_explore_round(triggered_by='scheduler_init')
-                except Exception as e:
-                    logger.error(f"[DeepSeek探索] 初始化运行失败: {e}")
-                try:
-                    from app.services.deepseek_predictor import run_predict_round
-                    run_predict_round(triggered_by='scheduler_init')
-                except Exception as e:
-                    logger.error(f"[DeepSeek预测] 初始化运行失败: {e}")
-            threading.Thread(target=wrapper, daemon=True, name="GeminiInit").start()
-        _run_gemini_init()
+                    logger.error(f"[{name}] 初始化运行失败: {e}", exc_info=True)
+            threading.Thread(target=_run, daemon=True, name=f"AIInit_{name}").start()
+
+        _launch_ai_init_task("Gemini探索",   "app.services.gemini_explore_worker",   "run_explore_round")
+        _launch_ai_init_task("Gemini预测",   "app.services.gemini_predictor",        "run_predict_round")
+        _launch_ai_init_task("Gemini情绪",   "app.services.gemini_sentiment_analyzer","run_sentiment_round")
+        _launch_ai_init_task("DeepSeek探索","app.services.deepseek_explore_worker",  "run_explore_round")
+        _launch_ai_init_task("DeepSeek预测","app.services.deepseek_predictor",       "run_predict_round")
 
         # 定期打印状态 (每小时)
         schedule.every(1).hours.do(self.print_status)
@@ -1526,7 +1514,16 @@ class UnifiedDataScheduler:
                 except Exception as e:
                     # 捕获定时任务中的异常，防止整个调度器崩溃
                     logger.error(f"定时任务执行异常: {e}", exc_info=True)
-                time.sleep(60)  # 每 1 分钟检查一次; worker 内部有防重机制, 不怕重复触发
+                # 智能休眠: 当下个任务距现在 > 2 分钟时最长睡 2 分钟,
+                # 否则睡到下次检查前, 兼顾实时性和 CPU 开销
+                _idle = schedule.idle_seconds()
+                if _idle is None or _idle <= 0:
+                    _sleep = 30  # 无定时任务或已到期, 每30秒检查一次
+                elif _idle > 120:
+                    _sleep = 120  # 上限 2 分钟
+                else:
+                    _sleep = max(int(_idle) + 1, 5)  # 稍早唤醒, 最小 5 秒
+                time.sleep(_sleep)
 
         except KeyboardInterrupt:
             logger.info("\n\n收到停止信号，正在关闭...")
