@@ -3707,10 +3707,9 @@ class SmartTraderService:
                         logger.warning(f"[Gemini顾问] tick 异常: {_ge}")
                     last_gemini_advisor = now
 
-                # 0.65. BTC动量跟随策略检测（需趋势开关开启，内部也检查各自杀开关）
+                # 0.65. BTC动量跟随策略检测（每轮都跑，内部自带冷却控制）
                 try:
-                    if getattr(self, 'trend_following_enabled', False):
-                        self.btc_momentum_trader.check_and_execute()
+                    self.btc_momentum_trader.check_and_execute()
                 except Exception as _e:
                     logger.warning(f"[BTC动量] 检测异常: {_e}")
 

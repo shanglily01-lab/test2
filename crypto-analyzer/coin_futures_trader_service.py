@@ -1233,6 +1233,8 @@ class CoinFuturesTraderService:
         self.running = True
         self.event_loop = None  # 事件循环引用，在async_main中设置
 
+        self.trend_following_enabled = False  # 趋势策略开关，启动时从system_settings加载
+
         # WebSocket 价格服务 (币本位合约)
         self.ws_service: BinanceWSPriceService = get_ws_price_service(market_type='coin_futures')
 
@@ -1265,6 +1267,14 @@ class CoinFuturesTraderService:
             big4_enabled_from_db = get_big4_filter_enabled()
             self.big4_filter_config = {'enabled': big4_enabled_from_db}
             logger.info(f"📊 从数据库加载Big4过滤器配置: {'启用' if big4_enabled_from_db else '禁用'}")
+
+        # 从DB加载趋势策略开关
+        try:
+            from app.services.system_settings_loader import get_setting as _get_cached_setting
+            self.trend_following_enabled = str(_get_cached_setting('trend_following_enabled', '0')).lower() in ('1', 'true')
+            logger.info(f"[TRADING-MODE] 币本位(启动): 趋势策略={'ON' if self.trend_following_enabled else 'OFF'}")
+        except Exception as e:
+            logger.warning(f"[TRADING-MODE] 币本位(启动) 读取趋势开关失败: {e}")
 
         # 初始化智能平仓优化器
         if self.smart_exit_config.get('enabled'):
@@ -3268,6 +3278,7 @@ class CoinFuturesTraderService:
         """主循环"""
         last_smart_exit_check = datetime.now()
         last_config_reload = datetime.now()
+        last_big4_reload = datetime.now()
 
         while self.running:
             try:
@@ -3290,8 +3301,20 @@ class CoinFuturesTraderService:
                     self._check_and_restart_smart_exit_optimizer()
                     last_smart_exit_check = now
 
-                # 3.6. 定期重新加载Big4配置（每5分钟检查）
-                if (now - last_config_reload).total_seconds() >= 300:
+                # 3.6. 趋势策略开关定期刷新（每分钟）
+                if (now - last_config_reload).total_seconds() >= 60:
+                    try:
+                        from app.services.system_settings_loader import get_setting as _get_cached_setting
+                        new_tf = str(_get_cached_setting('trend_following_enabled', '0')).lower() in ('1', 'true')
+                        if new_tf != self.trend_following_enabled:
+                            logger.info(f"[TRADING-MODE] 币本位模式更新: 趋势策略={'ON' if new_tf else 'OFF'}")
+                            self.trend_following_enabled = new_tf
+                    except Exception as e:
+                        logger.warning(f"[TRADING-MODE] 币本位刷新趋势开关失败: {e}")
+                    last_config_reload = now
+
+                # 3.7. 定期重新加载Big4配置（每5分钟检查）
+                if (now - last_big4_reload).total_seconds() >= 300:
                     try:
                         from app.services.system_settings_loader import get_big4_filter_enabled
                         old_big4_enabled = self.big4_filter_config.get('enabled', True)
@@ -3302,8 +3325,14 @@ class CoinFuturesTraderService:
                             logger.info(f"[BIG4-CONFIG-UPDATE] Big4过滤器配置已更新: {'启用' if new_big4_enabled else '禁用'}")
                     except Exception as e:
                         logger.warning(f"[CONFIG-RELOAD] 重新加载Big4配置失败: {e}")
-                    last_config_reload = now
+                    last_big4_reload = now
 
+
+                # 4.5. 趋势策略开关检查（kill switch）
+                if not self.trend_following_enabled:
+                    logger.info("[SKIP] coin_futures trend_following_enabled=0，趋势策略已禁用，跳过本轮扫描")
+                    time.sleep(self.scan_interval)
+                    continue
 
                 # 5. 检查持仓
                 current_positions = self.get_open_positions_count()
