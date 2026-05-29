@@ -704,16 +704,7 @@ function loadOpenPositions() {
           ? (summary.open_count + ' <span class="text-xs text-on-surface-variant">仓</span>')
           : '--';
 
-      var statTrades = document.getElementById('stat-trades');
       _lastExploreFloating = liveFloatingFromResponse(summary, rows);
-      if (statTrades && summary.total_unrealized_pnl !== undefined) {
-        var t = _lastExploreFloating;
-        var tPct = summary.total_unrealized_pnl_pct;
-        var cls = t >= 0 ? 'pp' : 'pn';
-        statTrades.innerHTML = '<span class="' + cls + '">' + fmtSigned(t) + ' U</span> <span class="text-xs ' + cls + '">(' + fmtSigned(tPct, 2) + '%)</span>';
-        var lbl = statTrades.parentElement.querySelector('p');
-        if (lbl) lbl.textContent = '当前浮盈合计';
-      }
       applyFloatingCards('e', _exploreRealizedPnl, _lastExploreFloating);
 
       if (!rows.length) {
