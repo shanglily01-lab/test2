@@ -15,7 +15,7 @@ DeepSeek 探索 worker (v1 — 2026-05-28)
 
 闸门:
   - system_settings.deepseek_explore_enabled (默认 0, 关时早返回)
-  - Big4 趋势: BEARISH/STRONG_BEARISH 禁 LONG, BULLISH/STRONG_BULLISH 禁 SHORT
+  - Big4: 仅宏观参考；非极端行情须多空独立评估 (见 prompt / big4_trading_hint)
   - 同 symbol+side 已有 OPEN deepseek_explore 仓位 -> 跳过
 """
 from __future__ import annotations
@@ -30,6 +30,11 @@ import pymysql
 import pymysql.cursors
 from loguru import logger
 
+from app.services.ai_big4_prompt import (
+    BIG4_PROMPT_BLOCK_EXPLORE,
+    big4_conflict_risk_note,
+    enrich_global_context,
+)
 from app.services.gemini_swan_worker import (
     GEMINI_MODEL,
     GEMINI_API_KEY,
@@ -739,7 +744,7 @@ def _build_global_context(conn) -> dict:
             ctx['market_regime'] = "温和趋势 (BTC 24h 1.5-4%) — 正常交易环境"
         else:
             ctx['market_regime'] = "低波动盘整 (BTC 24h < 1.5%) — 适合小周期震荡策略"
-        return ctx
+        return enrich_global_context(ctx)
 
     ctx['big4_signal'] = _get_big4_signal(conn)
     market_desc = _describe_market_regime(conn)
@@ -783,7 +788,7 @@ def _build_global_context(conn) -> dict:
                 ctx[f'{base}_price'] = float(r['current_price']) if r['current_price'] else None
                 ctx[f'{base}_change_24h'] = float(r['change_24h']) if r['change_24h'] is not None else None
 
-    return ctx
+    return enrich_global_context(ctx)
 
 
 def _describe_market_regime(conn) -> str:
@@ -846,11 +851,9 @@ EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 4h, SL=3%, TP=5
 - 4 小时到期按市价强制平仓, 期间不提前止盈止损 — 你选的方向必须能**涨 5% 或至少抗住 4 小时不跌 3%**
 - 所以不要选"只涨 1-2%"的标的, 也不要把 SL 只看做"3% 容错"而随意开仓
 
-# 全局市场环境
+# 全局市场环境 (含 big4_signal / market_regime / big4_trading_hint)
 {global_context_json}
-
-Big4 (BTC/ETH/BNB/SOL 综合趋势): BEARISH/STRONG_BEARISH 时禁 LONG, BULLISH/STRONG_BULLISH 时禁 SHORT
-
+""" + BIG4_PROMPT_BLOCK_EXPLORE + """
 # 历史表现 (供你校准判断尺度)
 {historical_stats_json}
 
@@ -878,7 +881,7 @@ Big4 (BTC/ETH/BNB/SOL 综合趋势): BEARISH/STRONG_BEARISH 时禁 LONG, BULLISH
 | confidence | 需要的信号强度 |
 |---|---|
 | 0.80-1.00 | 日线强趋势 + 多周期共振 + 成交量确认 + 同方向上还有空间 (非超买/超卖) |
-| 0.65-0.79 | 日线趋势明确 + 1h 方向一致 + Big4 不矛盾 + 无明显背离风险 |
+| 0.65-0.79 | 日线趋势明确 + 1h 方向一致 + 个股 catalyst 充分 (与 Big4 冲突须在 risk_note 说明) |
 | 0.50-0.64 | 仅小时级别方向支持, 日线中性 — **此区间可以开, 但只开 1-2 个** |
 | 0.00-0.49 | 方向模糊 / 震荡区间 / 数据不足 — **跳过** |
 
@@ -909,6 +912,9 @@ Big4 (BTC/ETH/BNB/SOL 综合趋势): BEARISH/STRONG_BEARISH 时禁 LONG, BULLISH
 **F. 单纯因为跌多了就做多 / 涨多了就做空**
 - 仅凭"超跌"做多 = 接飞刀, 必须等日线确认拐点
 - 仅凭"超涨"做空 = 左侧摸顶, 必须等 RSI 顶背离 + 资金费严重正
+
+**G. 禁止 Big4 单边偏见**
+- 不得因 Big4=BEARISH 就把多数标的标 bearish；低波动盘整时应多空均衡筛选。
 
 # 输出要求
 **仅** 一个合法 JSON, 不要 markdown 围栏.
@@ -1618,7 +1624,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 continue
 
             if _big4_blocks(big4, side):
-                big4_warning = f"⚠️ Big4={big4} 与方向冲突"
+                big4_warning = big4_conflict_risk_note(big4, side)
                 risk_note = (risk_note + ' | ' + big4_warning) if risk_note else big4_warning
 
             if _has_open_position(conn, symbol):
