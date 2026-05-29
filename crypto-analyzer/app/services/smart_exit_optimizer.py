@@ -861,12 +861,13 @@ class SmartExitOptimizer:
                 f"{position['direction']} | 价格{current_price} | {reason}"
             )
 
-            # 调用实盘引擎执行平仓
+            # 调用实盘引擎执行平仓（传入当前价格，避免内部重新取价失败）
             close_result = await self.live_engine.close_position(
                 symbol=position['symbol'],
                 direction=position['direction'],
                 position_size=float(position['position_size']),
-                reason=reason
+                reason=reason,
+                price=float(current_price)
             )
 
             if close_result['success']:

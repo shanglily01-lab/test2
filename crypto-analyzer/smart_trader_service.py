@@ -11,6 +11,7 @@ import os
 import asyncio
 from datetime import datetime, time as dt_time, timezone, timedelta
 from decimal import Decimal
+from typing import Optional
 from loguru import logger
 import pymysql
 from dotenv import load_dotenv, dotenv_values
@@ -2895,10 +2896,28 @@ class SmartTraderService:
             logger.warning(f"检查Top 100/白名单列表失败: {e}, 默认允许开仓")
             return True
 
-    def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal", sync_live: bool = True):
-        """关闭指定交易对和方向的持仓。sync_live=False时只更新模拟单DB，不同步实盘。"""
+    def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal", sync_live: bool = True, price: Optional[float] = None):
+        """关闭指定交易对和方向的持仓。sync_live=False时只更新模拟单DB，不同步实盘。
+        
+        Args:
+            price: 平仓价格。如果提供则直接用，不提供则从WS/K线获取，获取失败时从DB mark_price兜底。
+        """
         try:
-            current_price = self.get_current_price(symbol)
+            current_price = price
+            if not current_price:
+                current_price = self.get_current_price(symbol)
+            if not current_price:
+                # 终极兜底：从DB查 mark_price
+                try:
+                    conn2 = self._get_connection()
+                    c2 = conn2.cursor()
+                    c2.execute("SELECT mark_price FROM futures_positions WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s LIMIT 1", (symbol, side, self.account_id))
+                    r2 = c2.fetchone()
+                    c2.close(); conn2.close()
+                    if r2 and r2[0]:
+                        current_price = float(r2[0])
+                except Exception:
+                    pass
             if not current_price:
                 return False
 
@@ -3223,14 +3242,14 @@ class SmartTraderService:
         except Exception as e:
             logger.error(f"[对账] 整体异常: {e}")
 
-    async def close_position(self, symbol: str, direction: str, position_size: float, reason: str = "smart_exit"):
+    async def close_position(self, symbol: str, direction: str, position_size: float, reason: str = "smart_exit", price: Optional[float] = None):
         """
         异步平仓方法（供SmartExitOptimizer调用）
         只更新模拟单DB，不触发实盘同步。
         实盘同步由SmartExitOptimizer._close_live_positions_on_exchange()负责。
         """
         try:
-            success = self.close_position_by_side(symbol, direction, reason, sync_live=False)
+            success = self.close_position_by_side(symbol, direction, reason, sync_live=False, price=price)
             if success:
                 return {'success': True}
             else:
