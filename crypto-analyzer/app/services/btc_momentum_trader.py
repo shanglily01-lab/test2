@@ -426,17 +426,21 @@ class BTCMomentumTrader:
             return 4
 
     def _is_momentum_enabled(self) -> bool:
-        """从 system_settings 读取 btc_momentum_enabled + u_futures_trading_enabled，任一关闭则停止"""
+        """从 system_settings 读取 btc_momentum_enabled + u_futures_trading_enabled + trend_following_enabled，任一关闭则停止"""
         try:
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute(
                 "SELECT setting_key, setting_value FROM system_settings "
-                "WHERE setting_key IN ('btc_momentum_enabled', 'u_futures_trading_enabled')"
+                "WHERE setting_key IN ('btc_momentum_enabled', 'u_futures_trading_enabled', 'trend_following_enabled')"
             )
             rows = {r['setting_key']: str(r['setting_value']).strip() for r in cur.fetchall()}
             cur.close(); conn.close()
             if rows.get('u_futures_trading_enabled') not in ('1', 'true', 'True', None):
+                return False
+            # 趋势跟随总开关关闭时，BTC动量也不执行
+            tf = rows.get('trend_following_enabled', '0')
+            if tf not in ('1', 'true', 'True'):
                 return False
             if 'btc_momentum_enabled' not in rows:
                 return True  # 未配置时默认启用
