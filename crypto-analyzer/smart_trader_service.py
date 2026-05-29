@@ -1631,16 +1631,14 @@ class SmartTraderService:
             cursor = conn.cursor()
 
             if side:
-                # 检查特定方向的持仓（包括正在建仓的持仓）
                 cursor.execute("""
                     SELECT COUNT(*) FROM futures_positions
-                    WHERE symbol = %s AND position_side = %s AND status IN ('open', 'building') AND account_id = %s
+                    WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
                 """, (symbol, side, self.account_id))
             else:
-                # 检查任意方向的持仓（包括正在建仓的持仓）
                 cursor.execute("""
                     SELECT COUNT(*) FROM futures_positions
-                    WHERE symbol = %s AND status IN ('open', 'building') AND account_id = %s
+                    WHERE symbol = %s AND status = 'open' AND account_id = %s
                 """, (symbol, self.account_id))
 
             result = cursor.fetchone()
@@ -1661,16 +1659,14 @@ class SmartTraderService:
             cursor = conn.cursor()
 
             if side:
-                # 统计特定方向的持仓数量
                 cursor.execute("""
                     SELECT COUNT(*) FROM futures_positions
-                    WHERE symbol = %s AND position_side = %s AND status IN ('open', 'building') AND account_id = %s
+                    WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
                 """, (symbol, side, self.account_id))
             else:
-                # 统计任意方向的持仓数量
                 cursor.execute("""
                     SELECT COUNT(*) FROM futures_positions
-                    WHERE symbol = %s AND status IN ('open', 'building') AND account_id = %s
+                    WHERE symbol = %s AND status = 'open' AND account_id = %s
                 """, (symbol, self.account_id))
 
             result = cursor.fetchone()
@@ -3474,18 +3470,9 @@ class SmartTraderService:
                 except Exception as e:
                     logger.error(f"[HEALTH-CHECK] 停止冗余监控失败: 持仓{pid} | {e}")
 
-            # 只有超时持仓才是真正异常，才发告警
+            # 只有超时持仓才是真正异常，才记录日志
             if timeout_count > 0:
                 logger.error(f"❌ 发现{timeout_count}个超时未平仓持仓，SmartExitOptimizer可能异常")
-                if hasattr(self, 'telegram_notifier') and self.telegram_notifier:
-                    try:
-                        self.telegram_notifier.send_message(
-                            f"⚠️ 发现{timeout_count}个超时未平仓持仓\n\n"
-                            f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                            f"请人工检查SmartExitOptimizer是否正常运行！"
-                        )
-                    except Exception as e:
-                        logger.warning(f"发送Telegram告警失败: {e}")
 
             # 打印健康状态
             if to_add or to_remove:

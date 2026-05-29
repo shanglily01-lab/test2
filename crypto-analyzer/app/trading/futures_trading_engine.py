@@ -902,9 +902,8 @@ class FuturesTradingEngine:
 
         try:
             # 1. 获取持仓信息（使用新连接确保获取最新数据）
-            # 支持平仓 'open' 和 'building' 状态的持仓
             cursor.execute(
-                """SELECT * FROM futures_positions WHERE id = %s AND status IN ('open', 'building')""",
+                """SELECT * FROM futures_positions WHERE id = %s AND status = 'open'""",
                 (position_id,)
             )
             position = cursor.fetchone()
@@ -1548,13 +1547,15 @@ class FuturesTradingEngine:
                     unrealized_pnl_pct = (unrealized_pnl / margin * 100) if margin > 0 else Decimal('0')
 
                     # 更新数据库中的 mark_price 和未实现盈亏
+                    # 🔥 只更新 open 持仓，防止竞态条件覆盖已平仓记录的 close_price
                     cursor_update.execute(
                         """UPDATE futures_positions
                         SET mark_price = %s,
                             unrealized_pnl = %s,
                             unrealized_pnl_pct = %s,
                             last_update_time = NOW()
-                        WHERE id = %s""",
+                        WHERE id = %s
+                          AND status = 'open'""",
                         (float(current_price), float(unrealized_pnl), float(unrealized_pnl_pct), pos['id'])
                     )
 

@@ -160,7 +160,7 @@ class SmartExitOptimizer:
                     break
 
                 # 支持monitoring status='open'
-                if position['status'] not in ('open', 'building'):
+                if position['status'] != 'open':
                     logger.info(f"持仓 {position_id} 已关闭 (status={position['status']})，停止监控")
                     break
 

@@ -665,7 +665,7 @@ async def get_review_trades(
         cursor.execute(f"""
             SELECT
                 id, symbol, position_side, leverage,
-                quantity, entry_price, mark_price as close_price,
+                quantity, entry_price,
                 realized_pnl, margin,
                 holding_hours, entry_reason, notes as close_reason,
                 open_time, close_time, entry_signal_type, source, status
@@ -703,15 +703,25 @@ async def get_review_trades(
             margin = float(pos['margin'] or 0)
             pnl_pct = (realized_pnl / margin * 100) if margin > 0 else 0
 
+            # 从 realized_pnl 反算实际平仓价（比 mark_price 可靠，避免被价格刷新覆盖）
+            entry_price = float(pos['entry_price'])
+            quantity = float(pos['quantity'])
+            close_price = None
+            if quantity > 0:
+                if pos['position_side'] == 'LONG':
+                    close_price = entry_price + realized_pnl / quantity
+                else:
+                    close_price = entry_price - realized_pnl / quantity
+
             trades.append({
                 "id": pos['id'],
                 "symbol": pos['symbol'],
                 "position_side": pos['position_side'],
                 "position_side_cn": "做多" if pos['position_side'] == 'LONG' else "做空",
                 "leverage": pos['leverage'],
-                "quantity": float(pos['quantity']),
-                "entry_price": float(pos['entry_price']),
-                "close_price": float(pos['close_price']) if pos['close_price'] else None,
+                "quantity": quantity,
+                "entry_price": entry_price,
+                "close_price": close_price,
                 "realized_pnl": realized_pnl,
                 "pnl_pct": pnl_pct,
                 "holding_minutes": holding_minutes,
@@ -1750,7 +1760,7 @@ async def get_realtime_opportunity_analysis(
                 entry_reason
             FROM futures_positions
             WHERE account_id = %s
-            AND status IN ('open', 'building')
+            AND status = 'open'
         """, (account_id,))
 
         current_positions = cursor.fetchall()
