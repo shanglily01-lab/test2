@@ -1013,14 +1013,8 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 continue
 
             if _big4_blocks(big4, side):
-                verdict_rows.append((
-                    run_id, symbol, category, confidence,
-                    catalyst, data_signal, risk_note,
-                    price_at_pred, 'skipped_big4', None,
-                    f"Big4={big4} 禁 {side}",
-                ))
-                predictions_made += 1
-                continue
+                big4_warning = f"⚠️ Big4={big4} 与方向冲突"
+                risk_note = (risk_note + ' | ' + big4_warning) if risk_note else big4_warning
 
             if _has_open_position(conn, symbol):
                 verdict_rows.append((

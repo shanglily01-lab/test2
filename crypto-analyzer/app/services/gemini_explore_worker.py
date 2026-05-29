@@ -1743,15 +1743,10 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            # 5d. Big4 闸门
+            # 5d. Big4 闸门 (软提醒, 不硬拦)
             if _big4_blocks(big4, side):
-                verdict_rows.append((
-                    run_id, symbol, db_category, confidence,
-                    catalyst, data_signal, risk_note,
-                    'skipped_big4', None,
-                    f"Big4={big4} 禁 {side}",
-                ))
-                continue
+                big4_warning = f"⚠️ Big4={big4} 与方向冲突"
+                risk_note = (risk_note + ' | ' + big4_warning) if risk_note else big4_warning
 
             # 5e. 同 symbol 去重 (不管方向)
             if _has_open_position(conn, symbol):
