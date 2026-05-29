@@ -330,14 +330,10 @@
 </section>
 
 <!-- 统计盈亏 (累计) -->
-<section class="px-8 pb-6 grid grid-cols-5 gap-4">
+<section class="px-8 pb-6 grid grid-cols-4 gap-4">
   <div class="bg-surface-container-low rounded-xl p-4">
     <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">合计已实现盈亏</p>
     <p class="mono text-2xl font-medium" id="p-stat-realized">--</p>
-  </div>
-  <div class="bg-surface-container-low rounded-xl p-4">
-    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">当前浮盈</p>
-    <p class="mono text-2xl font-medium" id="p-stat-floating">--</p>
   </div>
   <div class="bg-surface-container-low rounded-xl p-4">
     <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">总盈亏 (已实现+浮盈)</p>
@@ -1009,7 +1005,6 @@ function loadPredictStats() {
       var s = d.data || {};
       var pCls = function(v){ return (v || 0) >= 0 ? 'pp' : 'pn'; };
       document.getElementById('p-stat-realized').innerHTML = '<span class="' + pCls(s.total_realized_pnl) + '">' + fmtSigned(s.total_realized_pnl) + ' U</span>';
-      document.getElementById('p-stat-floating').innerHTML = '<span class="' + pCls(s.floating_pnl) + '">' + fmtSigned(s.floating_pnl) + ' U</span>';
       document.getElementById('p-stat-total').innerHTML = '<span class="' + pCls(s.total_pnl) + '">' + fmtSigned(s.total_pnl) + ' U</span>';
       document.getElementById('p-stat-winrate').innerHTML = '<span class="' + ((s.win_rate || 0) >= 50 ? 'pp' : 'pn') + '">' + fmt(s.win_rate, 1) + '%</span>';
       document.getElementById('p-stat-wl').textContent = s.wins + '胜 ' + s.losses + '负';
