@@ -2084,6 +2084,216 @@ async def get_daily_pnl_stats(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/holding-analysis")
+async def get_holding_analysis(
+    hours: int = Query(default=168, ge=1, le=720, description="统计时间范围（小时）"),
+    account_id: int = Query(default=2, description="账户ID"),
+    source: str = Query(default=None, description="策略来源筛选（如 smart_trader, PREDICTOR, 不传则查全部）")
+):
+    """
+    获取持仓时长与盈亏关系分析，支持按策略筛选
+
+    返回:
+    - strategies: 各策略的汇总统计（用于下拉选择器）
+    - current_source: 当前筛选的策略
+    - 按持仓时长的分组统计（每个区间的交易数、胜率、平均盈亏、总盈亏）
+    - 散点图数据（每个持仓的 holding_minutes 和 pnl）
+    - 最优持仓区间
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        time_threshold = datetime.utcnow() - timedelta(hours=hours)
+
+        # 先获取所有策略的汇总统计（用于前端下拉列表）
+        cursor.execute("""
+            SELECT
+                source,
+                COUNT(*) AS total_trades,
+                SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
+                SUM(realized_pnl) AS total_pnl,
+                AVG(CASE WHEN realized_pnl > 0 THEN realized_pnl ELSE NULL END) AS avg_win_pnl,
+                AVG(CASE WHEN realized_pnl < 0 THEN realized_pnl ELSE NULL END) AS avg_loss_pnl
+            FROM futures_positions
+            WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
+              AND source IS NOT NULL AND source != ''
+            GROUP BY source
+            ORDER BY COUNT(*) DESC
+        """, (account_id, time_threshold))
+        strategy_rows = cursor.fetchall()
+
+        STRATEGY_NAMES = {
+            'smart_trader': 'smart_trader',
+            'PREDICTOR': '预测神器',
+            'gemini_predict': 'Gemini预测',
+            'gemini_explore': 'Gemini探索',
+            's6_vol_spike': 'S6放量异动',
+            'deepseek_predict': 'DeepSeek预测',
+            'deepseek_explore': 'DeepSeek探索',
+            's9_gemini_ai': 'S9 Gemini AI',
+            's5_large_oversold': 'S5大币超卖',
+        }
+
+        strategies = []
+        for r in strategy_rows:
+            src = r['source']
+            total = int(r['total_trades'] or 0)
+            wins = int(r['wins'] or 0)
+            tp = float(r['total_pnl'] or 0)
+            win_rate = (wins / total * 100) if total > 0 else 0
+            strategies.append({
+                "source": src,
+                "display_name": STRATEGY_NAMES.get(src, src),
+                "total_trades": total,
+                "wins": wins,
+                "win_rate": round(win_rate, 1),
+                "total_pnl": round(tp, 2),
+                "avg_win_pnl": round(float(r['avg_win_pnl'] or 0), 2),
+                "avg_loss_pnl": round(float(r['avg_loss_pnl'] or 0), 2),
+            })
+
+        # 构建过滤条件
+        source_filter = ""
+        params = [account_id, time_threshold]
+        if source:
+            source_filter = "AND source = %s"
+            params.append(source)
+
+        cursor.execute(f"""
+            SELECT
+                open_time, close_time, realized_pnl, position_side, source,
+                entry_price, close_price, entry_signal_type, entry_reason
+            FROM futures_positions
+            WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
+              {source_filter}
+            ORDER BY close_time DESC
+        """, params)
+
+        positions = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        if not positions:
+            return {
+                "success": True,
+                "data": {
+                    "strategies": strategies,
+                    "current_source": source,
+                    "total_trades": 0,
+                    "buckets": [],
+                    "scatter": [],
+                    "summary": {"best_bucket": None, "worst_bucket": None}
+                }
+            }
+
+        # 按持仓时长分桶
+        BUCKETS = [
+            (0, 15, '0-15分钟'),
+            (15, 30, '15-30分钟'),
+            (30, 60, '30-60分钟'),
+            (60, 120, '1-2小时'),
+            (120, 240, '2-4小时'),
+            (240, 480, '4-8小时'),
+            (480, 1440, '8-24小时'),
+            (1440, 99999, '24小时以上'),
+        ]
+
+        buckets_map = {}
+        scatter = []
+        total_win = 0
+        total_loss = 0
+        win_count = 0
+        loss_count = 0
+
+        for pos in positions:
+            pnl = float(pos['realized_pnl'] or 0)
+            if pos['open_time'] and pos['close_time']:
+                delta = pos['close_time'] - pos['open_time']
+                holding_minutes = int(delta.total_seconds() / 60)
+            else:
+                holding_minutes = 0
+
+            if pnl >= 0:
+                total_win += pnl
+                win_count += 1
+            else:
+                total_loss += pnl
+                loss_count += 1
+
+            bucket_key = None
+            for lo, hi, label in BUCKETS:
+                if lo <= holding_minutes < hi:
+                    bucket_key = f"{lo}-{hi}"
+                    bucket_label = label
+                    break
+
+            if bucket_key not in buckets_map:
+                buckets_map[bucket_key] = {
+                    "label": bucket_label, "range_min": lo, "range_max": hi,
+                    "count": 0, "wins": 0, "losses": 0, "total_pnl": 0.0, "pnl_list": []
+                }
+            b = buckets_map[bucket_key]
+            b['count'] += 1
+            b['total_pnl'] += pnl
+            b['pnl_list'].append(pnl)
+            if pnl >= 0:
+                b['wins'] += 1
+            else:
+                b['losses'] += 1
+
+            scatter.append({
+                "holding_minutes": holding_minutes,
+                "pnl": round(pnl, 2),
+                "side": pos['position_side']
+            })
+
+        buckets = []
+        for key in sorted(buckets_map.keys(), key=lambda k: int(k.split('-')[0])):
+            b = buckets_map[key]
+            wr = (b['wins'] / b['count'] * 100) if b['count'] > 0 else 0
+            avg = b['total_pnl'] / b['count'] if b['count'] > 0 else 0
+            buckets.append({
+                "label": b['label'], "range_min": b['range_min'], "range_max": b['range_max'],
+                "count": b['count'], "wins": b['wins'], "losses": b['losses'],
+                "win_rate": round(wr, 1), "total_pnl": round(b['total_pnl'], 2), "avg_pnl": round(avg, 2)
+            })
+
+        valid_buckets = [b for b in buckets if b['count'] >= 2]
+        best_bucket = max(valid_buckets, key=lambda x: x['avg_pnl']) if valid_buckets else None
+        worst_bucket = min(valid_buckets, key=lambda x: x['avg_pnl']) if valid_buckets else None
+
+        total_trades = len(positions)
+        overall_win_rate = (win_count / total_trades * 100) if total_trades > 0 else 0
+
+        return {
+            "success": True,
+            "data": {
+                "strategies": strategies,
+                "current_source": source,
+                "total_trades": total_trades,
+                "win_count": win_count,
+                "loss_count": loss_count,
+                "overall_win_rate": round(overall_win_rate, 1),
+                "total_win_pnl": round(total_win, 2),
+                "total_loss_pnl": round(total_loss, 2),
+                "avg_pnl_all": round((total_win + total_loss) / total_trades, 2) if total_trades > 0 else 0,
+                "buckets": buckets,
+                "scatter": scatter,
+                "summary": {
+                    "best_bucket": best_bucket,
+                    "worst_bucket": worst_bucket
+                }
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"获取持仓时长分析失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/strategy-performance")
 async def get_strategy_performance(
     hours: int = Query(default=24, ge=1, le=168, description="统计时间范围（小时）"),

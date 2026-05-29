@@ -191,6 +191,7 @@
   <button id="tab-analysis"    onclick="switchTab('analysis')"    class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">原因分析</button>
   <button id="tab-suggestions" onclick="switchTab('suggestions')" class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">智能建议</button>
   <button id="tab-strategy"    onclick="switchTab('strategy')"    class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">策略胜率</button>
+  <button id="tab-holding"     onclick="switchTab('holding')"     class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">持仓分析</button>
   <button id="tab-dailypnl"    onclick="switchTab('dailypnl')"    class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">每日盈亏</button>
   <button id="tab-retro"       onclick="switchTab('retro')"       class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">历史复盘</button>
 </div>
@@ -263,8 +264,10 @@
         <table class="w-full text-xs">
           <thead class="sticky top-0 bg-surface-container-low z-10">
             <tr class="border-b border-outline-variant/20">
-              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">交易对 / 时间</th>
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">交易对</th>
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">开仓时间</th>
               <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">方向</th>
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">开仓信号</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">开仓价</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">平仓价</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">盈亏(U)</th>
@@ -273,7 +276,7 @@
             </tr>
           </thead>
           <tbody id="trades-tbody">
-            <tr><td colspan="7" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
+            <tr><td colspan="9" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
           </tbody>
         </table>
       </div>
@@ -412,6 +415,105 @@
             </tr>
           </thead>
           <tbody id="sp-table-body">
+            <tr><td colspan="8" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ HOLDING ANALYSIS ============ -->
+  <div id="pane-holding" class="tab-pane space-y-6">
+    <div class="flex items-center gap-6 flex-wrap">
+      <div class="flex items-center gap-2">
+        <span class="text-[10px] uppercase text-on-surface-variant tracking-wider">统计范围</span>
+        <select id="ha-hours-select" onchange="loadHoldingAnalysis()" class="bg-surface-container text-on-surface text-xs rounded-lg px-3 py-1.5 border border-outline-variant/30 focus:outline-none focus:border-primary/50 font-['Space_Grotesk']">
+          <option value="24">24小时</option>
+          <option value="72">72小时</option>
+          <option value="168" selected>7天</option>
+          <option value="336">14天</option>
+          <option value="720">30天</option>
+        </select>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-[10px] uppercase text-on-surface-variant tracking-wider">策略</span>
+        <select id="ha-strategy-select" onchange="loadHoldingAnalysis()" class="bg-surface-container text-on-surface text-xs rounded-lg px-3 py-1.5 border border-outline-variant/30 focus:outline-none focus:border-primary/50 font-['Space_Grotesk']">
+          <option value="">全部策略</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 策略汇总对比卡片 -->
+    <div class="bg-surface-container-low rounded-xl p-6">
+      <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">各策略汇总</h3>
+      <div id="ha-strategy-grid" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+        <p class="text-xs text-on-surface-variant col-span-full">加载中...</p>
+      </div>
+    </div>
+
+    <!-- 概览卡片 -->
+    <div class="grid grid-cols-5 gap-4">
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">总交易</p>
+        <p class="mono text-2xl font-medium text-on-surface" id="ha-total-trades">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">整体胜率</p>
+        <p class="mono text-2xl font-medium text-secondary" id="ha-overall-wr">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">总盈利(U)</p>
+        <p class="mono text-2xl font-medium text-primary" id="ha-total-win">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">总亏损(U)</p>
+        <p class="mono text-2xl font-medium text-error" id="ha-total-loss">--</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">平均笔盈亏</p>
+        <p class="mono text-2xl font-medium" id="ha-avg-pnl">--</p>
+      </div>
+    </div>
+
+    <!-- 图表行 -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div class="bg-surface-container-low rounded-xl p-6">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">各区间总盈亏</h3>
+        <canvas id="holding-bar-chart" height="220"></canvas>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-6">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">各区间胜率</h3>
+        <canvas id="holding-wr-chart" height="220"></canvas>
+      </div>
+    </div>
+
+    <!-- 散点图 -->
+    <div class="bg-surface-container-low rounded-xl p-6">
+      <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">持仓时长 vs 盈亏分布</h3>
+      <canvas id="holding-scatter-chart" height="180"></canvas>
+      <p class="text-[10px] text-on-surface-variant mt-2 text-center">横轴: 持仓分钟 | 纵轴: 盈亏(U) | 绿=盈利 红=亏损</p>
+    </div>
+
+    <!-- 详情表 -->
+    <div class="bg-surface-container-low rounded-xl overflow-hidden">
+      <div class="px-6 py-4 border-b border-outline-variant/20">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">持仓时段明细</h3>
+      </div>
+      <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
+        <table class="w-full text-xs">
+          <thead class="bg-surface-container-low sticky top-0 z-10">
+            <tr class="border-b border-outline-variant/20">
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">持仓区间</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">交易数</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">盈利</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">亏损</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">胜率</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总盈亏(U)</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">平均盈亏</th>
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">表现</th>
+            </tr>
+          </thead>
+          <tbody id="ha-table-body">
             <tr><td colspan="8" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
           </tbody>
         </table>
@@ -681,6 +783,7 @@ function loadTabData(name) {
   else if (name === 'analysis') { loadAnalysis(); }
   else if (name === 'suggestions') { loadSuggestions(); }
   else if (name === 'strategy') { loadStrategyPerformance(); }
+  else if (name === 'holding') { loadHoldingAnalysis(); }
   else if (name === 'dailypnl') { initMonthSelector(); loadDailyPnl(); }
   else if (name === 'retro') { loadRetro(); }
 }
@@ -862,7 +965,7 @@ function renderTradesTable() {
   var cntEl = document.getElementById('trades-count');
   if (cntEl) cntEl.textContent = filtered.length;
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无数据</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无数据</td></tr>';
     return;
   }
   var html = '';
@@ -873,12 +976,13 @@ function renderTradesTable() {
     var pnl = t.realized_pnl !== undefined ? t.realized_pnl : t.pnl;
     var dur = t.holding_minutes !== undefined ? fmtHours(t.holding_minutes) : (t.hold_minutes !== undefined ? fmtHours(t.hold_minutes) : (t.duration || '--'));
     var reason = t.close_reason_cn || fmtCloseReason(t.close_reason || t.exit_reason);
+    var entrySignal = t.entry_reason_cn || '--';
+    var openTs = fmtTime(t.open_time || t.created_at);
     html += '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
-      '<td class="px-4 py-3">' +
-        '<div class="font-medium text-on-surface">' + shortSym(sym) + '</div>' +
-        '<div class="text-on-surface-variant text-[10px] mono">' + fmtTime(t.open_time || t.created_at) + '</div>' +
-      '</td>' +
+      '<td class="px-4 py-3"><div class="font-medium text-on-surface">' + shortSym(sym) + '</div></td>' +
+      '<td class="px-4 py-3 text-on-surface-variant text-[10px] mono">' + openTs + '</td>' +
       '<td class="px-4 py-3 ' + sideColor + ' font-bold text-[10px] uppercase tracking-wider">' + side + '</td>' +
+      '<td class="px-4 py-3 text-xs text-on-surface-variant max-w-[120px] truncate" title="' + entrySignal + '">' + entrySignal + '</td>' +
       '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmtNum(t.entry_price || t.open_price, 4) + '</td>' +
       '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmtNum(t.exit_price || t.close_price, 4) + '</td>' +
       '<td class="px-4 py-3 text-right mono font-medium ' + pCls(pnl) + '">' + fmtPnl(pnl) + '</td>' +
@@ -1020,6 +1124,205 @@ function loadSuggestions() {
     .catch(function(e){ console.error('loadSuggestions error:', e); });
 }
 
+// ============================================================
+// HOLDING ANALYSIS
+// ============================================================
+var haBarChart = null;
+var haWrChart = null;
+var haScatterChart = null;
+
+function loadHoldingAnalysis() {
+  var sel = document.getElementById('ha-hours-select');
+  var hrs = sel ? parseInt(sel.value) : 168;
+  var stratSel = document.getElementById('ha-strategy-select');
+  var src = stratSel ? stratSel.value : '';
+  var url = '/api/futures/review/holding-analysis?account_id=' + accountId() + '&hours=' + hrs;
+  if (src) url += '&source=' + encodeURIComponent(src);
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      var s = d.data || d || {};
+      var buckets = s.buckets || [];
+      var scatter = s.scatter || [];
+      var strategies = s.strategies || [];
+
+      // 填充策略下拉
+      if (stratSel && strategies.length) {
+        var currentVal = stratSel.value;
+        stratSel.innerHTML = '<option value="">全部策略</option>';
+        strategies.forEach(function(st) {
+          var opt = document.createElement('option');
+          opt.value = st.source;
+          opt.textContent = st.display_name + ' (' + st.total_trades + '笔)';
+          if (st.source === currentVal) opt.selected = true;
+          stratSel.appendChild(opt);
+        });
+      }
+
+      // 策略汇总卡片
+      renderHaStrategyGrid(strategies, s.current_source);
+
+      // 概览卡片
+      var setT = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v !== undefined && v !== null ? v : '--'; };
+      setT('ha-total-trades', s.total_trades);
+      var wrEl = document.getElementById('ha-overall-wr');
+      if (wrEl) wrEl.textContent = s.overall_win_rate !== undefined ? s.overall_win_rate + '%' : '--';
+      var twEl = document.getElementById('ha-total-win');
+      if (twEl) { twEl.textContent = fmtPnl(s.total_win_pnl); twEl.className = 'mono text-2xl font-medium ' + pCls(s.total_win_pnl); }
+      var tlEl = document.getElementById('ha-total-loss');
+      if (tlEl) { tlEl.textContent = fmtPnl(s.total_loss_pnl); tlEl.className = 'mono text-2xl font-medium ' + pCls(s.total_loss_pnl); }
+      var apEl = document.getElementById('ha-avg-pnl');
+      if (apEl) { apEl.textContent = fmtPnl(s.avg_pnl_all); apEl.className = 'mono text-2xl font-medium ' + pCls(s.avg_pnl_all); }
+
+      renderHoldingCharts(buckets, scatter);
+      renderHoldingTable(buckets);
+    })
+    .catch(function(e){ console.error('loadHoldingAnalysis error:', e); });
+}
+
+function renderHaStrategyGrid(strategies, currentSource) {
+  var grid = document.getElementById('ha-strategy-grid');
+  if (!grid) return;
+  if (!strategies || !strategies.length) {
+    grid.innerHTML = '<p class="text-xs text-on-surface-variant col-span-full">暂无策略数据</p>';
+    return;
+  }
+  grid.innerHTML = strategies.map(function(st) {
+    var isActive = st.source === currentSource;
+    var borderCls = isActive ? 'border-primary/50 bg-primary/5' : 'border-outline-variant/10';
+    var activeBadge = isActive ? '<span class="text-[9px] text-primary ml-1">&#9679; 当前</span>' : '';
+    return '<div class="bg-surface-container rounded-lg p-3 border ' + borderCls + ' hover:border-primary/30 transition-all cursor-pointer" onclick="document.getElementById(\'ha-strategy-select\').value=\'' + st.source + '\';loadHoldingAnalysis()">' +
+      '<div class="flex items-center justify-between mb-2">' +
+        '<span class="text-xs font-medium text-on-surface truncate max-w-[120px]">' + st.display_name + activeBadge + '</span>' +
+        '<span class="mono text-[11px] ' + pCls(st.total_pnl) + '">' + fmtPnl(st.total_pnl) + '</span>' +
+      '</div>' +
+      '<div class="flex items-center justify-between text-[10px] text-on-surface-variant">' +
+        '<span>' + st.total_trades + '笔</span>' +
+        '<span>' + st.win_rate + '%</span>' +
+        '<span>均盈 ' + fmtPnl(st.avg_win_pnl) + ' / 均亏 ' + fmtPnl(st.avg_loss_pnl) + '</span>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderHoldingCharts(buckets, scatter) {
+  if (haBarChart) { haBarChart.destroy(); haBarChart = null; }
+  var barCanvas = document.getElementById('holding-bar-chart');
+  if (barCanvas && buckets.length) {
+    var labels = buckets.map(function(b){ return b.label; });
+    var values = buckets.map(function(b){ return b.total_pnl; });
+    var colors = values.map(function(v){ return v >= 0 ? 'rgba(73,244,200,0.7)' : 'rgba(255,113,108,0.7)'; });
+    var borders = values.map(function(v){ return v >= 0 ? '#49f4c8' : '#ff716c'; });
+    haBarChart = new Chart(barCanvas, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: '总盈亏 (U)',
+          data: values,
+          backgroundColor: colors,
+          borderColor: borders,
+          borderWidth: 1,
+          borderRadius: 3
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return fmtPnl(c.parsed.y) + ' U'; } } } },
+        scales: {
+          x: { ticks: { color: '#a8abb2', font: { size: 9 }, maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+          y: { ticks: { color: '#a8abb2', font: { size: 10 }, callback: function(v){ return v.toFixed(1); } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+        }
+      }
+    });
+  }
+
+  if (haWrChart) { haWrChart.destroy(); haWrChart = null; }
+  var wrCanvas = document.getElementById('holding-wr-chart');
+  if (wrCanvas && buckets.length) {
+    var wrLabels = buckets.map(function(b){ return b.label; });
+    var wrValues = buckets.map(function(b){ return b.win_rate; });
+    var wrColors = wrValues.map(function(v){ return v >= 60 ? 'rgba(73,244,200,0.7)' : v >= 40 ? 'rgba(255,176,0,0.7)' : 'rgba(255,113,108,0.7)'; });
+    var wrBorders = wrValues.map(function(v){ return v >= 60 ? '#49f4c8' : v >= 40 ? '#FFD700' : '#ff716c'; });
+    haWrChart = new Chart(wrCanvas, {
+      type: 'bar',
+      data: {
+        labels: wrLabels,
+        datasets: [{
+          label: '胜率 (%)',
+          data: wrValues,
+          backgroundColor: wrColors,
+          borderColor: wrBorders,
+          borderWidth: 1,
+          borderRadius: 3
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return c.parsed.y.toFixed(1) + '%'; } } } },
+        scales: {
+          x: { ticks: { color: '#a8abb2', font: { size: 9 }, maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+          y: { min: 0, max: 100, ticks: { color: '#a8abb2', font: { size: 10 }, callback: function(v){ return v + '%'; } }, grid: { color: 'rgba(255,255,255,0.04)' } }
+        }
+      }
+    });
+  }
+
+  if (haScatterChart) { haScatterChart.destroy(); haScatterChart = null; }
+  var scCanvas = document.getElementById('holding-scatter-chart');
+  if (scCanvas && scatter.length) {
+    var pts = scatter.slice(0, 500);
+    var scData = pts.map(function(p){ return { x: p.holding_minutes, y: p.pnl }; });
+    var scColors = pts.map(function(p){ return p.pnl >= 0 ? 'rgba(73,244,200,0.5)' : 'rgba(255,113,108,0.5)'; });
+    haScatterChart = new Chart(scCanvas, {
+      type: 'scatter',
+      data: {
+        datasets: [{
+          label: '每笔交易',
+          data: scData,
+          backgroundColor: scColors,
+          pointRadius: 3,
+          pointHoverRadius: 5
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: function(c){ return '持仓 ' + c.parsed.x + 'min, 盈亏 ' + fmtPnl(c.parsed.y); } } }
+        },
+        scales: {
+          x: { type: 'linear', ticks: { color: '#a8abb2', font: { size: 10 }, callback: function(v){ return v + 'min'; } }, grid: { color: 'rgba(255,255,255,0.04)' }, title: { display: true, text: '持仓时长 (分钟)', color: '#a8abb2', font: { size: 10 } } },
+          y: { ticks: { color: '#a8abb2', font: { size: 10 }, callback: function(v){ return v.toFixed(1); } }, grid: { color: 'rgba(255,255,255,0.04)' }, title: { display: true, text: '盈亏 (U)', color: '#a8abb2', font: { size: 10 } } }
+        }
+      }
+    });
+  }
+}
+
+function renderHoldingTable(buckets) {
+  var tbody = document.getElementById('ha-table-body');
+  if (!tbody) return;
+  if (!buckets || !buckets.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>';
+    return;
+  }
+  tbody.innerHTML = buckets.map(function(b) {
+    var wr = b.win_rate;
+    var badge = wr >= 70 ? '最佳' : (wr >= 50 ? '良好' : (wr >= 35 ? '一般' : '较差'));
+    var badgeColor = wr >= 70 ? 'text-primary bg-primary/10' : wr >= 50 ? 'text-secondary bg-secondary/10' : wr >= 35 ? 'text-yellow-400 bg-yellow-500/10' : 'text-error bg-error/10';
+    return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
+      '<td class="px-4 py-3 text-on-surface font-medium">' + b.label + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + b.count + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-primary">' + b.wins + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-error">' + b.losses + '</td>' +
+      '<td class="px-4 py-3 text-right mono ' + (wr >= 50 ? 'text-primary' : 'text-error') + '">' + wr + '%</td>' +
+      '<td class="px-4 py-3 text-right mono font-medium ' + pCls(b.total_pnl) + '">' + fmtPnl(b.total_pnl) + '</td>' +
+      '<td class="px-4 py-3 text-right mono ' + pCls(b.avg_pnl) + '">' + fmtPnl(b.avg_pnl) + '</td>' +
+      '<td class="px-4 py-3"><span class="text-[10px] px-2 py-0.5 rounded-full ' + badgeColor + '">' + badge + '</span></td>' +
+      '</tr>';
+  }).join('');
+}
 
 // ============================================================
 // STRATEGY PERFORMANCE
