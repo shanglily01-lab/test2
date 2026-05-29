@@ -61,6 +61,7 @@ try:
         get_market_movers,
         get_position_stats,
         get_setting,
+        load_candidate_pool_for_explore,
     )
     _DATA_CACHE_AVAILABLE = True
 except ImportError:
@@ -72,8 +73,14 @@ def _try_candidate_pool(min_volume: float = 1000000, limit: int = 100) -> Option
     if not _DATA_CACHE_AVAILABLE:
         return None
     try:
-        return get_candidate_pool(min_volume=min_volume, limit=limit)
-    except Exception:
+        return load_candidate_pool_for_explore(
+            tag="[DeepSeek探索]",
+            min_volume=min_volume,
+            limit=limit,
+            min_rows=20,
+        )
+    except Exception as e:
+        logger.warning(f"[DeepSeek探索] 读取 candidate_pool 失败: {e}")
         return None
 
 
@@ -406,7 +413,10 @@ def _build_universe(conn) -> dict:
             logger.info(f"[DeepSeek探索] 从 cache 读取候选池 ({len(cached)} 个 symbol)")
             return _build_universe_from_cache(cached)
 
-    logger.info("[DeepSeek探索] data_cache 不可用, 回退 kline_data 多层 JOIN")
+    logger.warning(
+        "[DeepSeek探索] 无法从 candidate_pool_snapshot 读取候选池, "
+        "回退 kline_data 多层 JOIN (较慢, 请耐心等待)"
+    )
     return _build_universe_fallback(conn, _level3_set)
 
 
@@ -1426,10 +1436,12 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 enabled_raw = _read_setting(cur, 'deepseek_explore_enabled', '0').strip().lower()
     except Exception as e:
         logger.error(f"[DeepSeek探索] 读 kill switch 失败,保守跳过: {e}")
+        _explore_running_lock.release()
         return None
 
     if enabled_raw not in ('1', 'true', 'yes', 'on'):
         logger.info(f"[DeepSeek探索] kill switch=0, 跳过 (triggered_by={triggered_by})")
+        _explore_running_lock.release()
         return None
 
     # 防重: 上次成功距今 >= 2h 才执行 (仅 manual 不拦截)
@@ -1445,6 +1457,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                         elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
                         if elapsed_h < 2:
                             logger.info(f"[DeepSeek探索] 上次成功距今 {elapsed_h:.1f}h < 2h, 跳过")
+                            _explore_running_lock.release()
                             return None
         except Exception as e:
             logger.warning(f"[DeepSeek探索] 防重检查失败, 继续: {e}")
@@ -1455,6 +1468,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         conn = _connect()
     except Exception as e:
         logger.error(f"[DeepSeek探索] DB 连接失败: {e}")
+        _explore_running_lock.release()
         return None
 
     try:

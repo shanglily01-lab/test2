@@ -363,6 +363,35 @@ def _make_kline_narrative(k_rows: List[Dict], timeframe_label: str) -> str:
 # ============================================================
 # 3.4 候选交易对池 (6min)
 # ============================================================
+_CANDIDATE_POOL_UPSERT_SQL = """
+INSERT INTO data_cache.candidate_pool_snapshot
+  (symbol, exchange, current_price, change_24h, quote_volume_24h,
+   funding_rate, rsi_14, ema_9, ema_21,
+   kline_1h_json, kline_15m_json, kline_1d_json,
+   narrative_1h, narrative_15m, narrative_1d,
+   above_7d_low_pct, below_7d_high_pct)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s,
+        %s, %s, %s, %s, %s, %s, %s, %s)
+ON DUPLICATE KEY UPDATE
+  current_price=VALUES(current_price),
+  change_24h=VALUES(change_24h),
+  quote_volume_24h=VALUES(quote_volume_24h),
+  funding_rate=VALUES(funding_rate),
+  rsi_14=VALUES(rsi_14),
+  ema_9=VALUES(ema_9),
+  ema_21=VALUES(ema_21),
+  kline_1h_json=VALUES(kline_1h_json),
+  kline_15m_json=VALUES(kline_15m_json),
+  kline_1d_json=VALUES(kline_1d_json),
+  narrative_1h=VALUES(narrative_1h),
+  narrative_15m=VALUES(narrative_15m),
+  narrative_1d=VALUES(narrative_1d),
+  above_7d_low_pct=VALUES(above_7d_low_pct),
+  below_7d_high_pct=VALUES(below_7d_high_pct),
+  updated_at=CURRENT_TIMESTAMP
+"""
+
+
 def refresh_candidate_pool() -> dict:
     """
     一次性刷新所有候选交易对的数据:
@@ -370,7 +399,9 @@ def refresh_candidate_pool() -> dict:
       - 资金费率 (从 funding_rate_data)
       - 技术指标 (1h RSI, EMA)
       - K 线 JSON + 叙事 (从 kline_data)
-    先清空再全量插入。
+
+    使用 UPSERT 就地更新, 刷新过程中表始终有上一版数据可供探索读取;
+    本轮结束后才删除已下架 symbol (避免先 DELETE 导致空窗)。
     """
     t0 = time.time()
     stat = {"status": "ok", "elapsed_ms": 0, "symbols": 0}
@@ -378,13 +409,10 @@ def refresh_candidate_pool() -> dict:
         _ensure_main_db()
         conn = _get_conn()
         with conn.cursor() as cur:
-
-            # 1) 清空旧池
-            cur.execute("DELETE FROM data_cache.candidate_pool_snapshot")
-
             main_db = MAIN_DB
+            refreshed_symbols: List[str] = []
 
-            # 2) 获取所有候选 symbol (有成交量的 /USDT 交易对)
+            # 1) 获取所有候选 symbol (有成交量的 /USDT 交易对)
             cur.execute(
                 f"SELECT symbol, current_price, change_24h, "
                 f"       quote_volume_24h "
@@ -409,7 +437,7 @@ def refresh_candidate_pool() -> dict:
             for r in cur.fetchall():
                 funding_map[r["symbol"]] = r.get("funding_rate")
 
-            inserted = 0
+            upserted = 0
             for c in candidates:
                 sym = c["symbol"]
                 if _is_excluded(sym):
@@ -460,14 +488,7 @@ def refresh_candidate_pool() -> dict:
                 fr = funding_map.get(sym) or funding_map.get(sym.replace("/", ""))
 
                 cur.execute(
-                    "INSERT INTO data_cache.candidate_pool_snapshot "
-                    "(symbol, exchange, current_price, change_24h, quote_volume_24h, "
-                    " funding_rate, rsi_14, ema_9, ema_21, "
-                    " kline_1h_json, kline_15m_json, kline_1d_json, "
-                    " narrative_1h, narrative_15m, narrative_1d, "
-                    " above_7d_low_pct, below_7d_high_pct) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, "
-                    " %s, %s, %s, %s, %s, %s, %s, %s)",
+                    _CANDIDATE_POOL_UPSERT_SQL,
                     (
                         sym, "binance_futures",
                         c.get("current_price"), c.get("change_24h"), c.get("quote_volume_24h"),
@@ -477,18 +498,32 @@ def refresh_candidate_pool() -> dict:
                         above_low, below_high,
                     ),
                 )
-                inserted += 1
+                refreshed_symbols.append(sym)
+                upserted += 1
 
                 # 每 200 个 symbol 提交一次
-                if inserted % 200 == 0:
+                if upserted % 200 == 0:
                     conn.commit()
+
+            # 2) 移除本轮未出现的 symbol (已下架/不再满足成交量), 不先删全表
+            if refreshed_symbols:
+                placeholders = ",".join(["%s"] * len(refreshed_symbols))
+                cur.execute(
+                    "DELETE FROM data_cache.candidate_pool_snapshot "
+                    "WHERE exchange='binance_futures' "
+                    f"AND symbol NOT IN ({placeholders})",
+                    refreshed_symbols,
+                )
 
             conn.commit()
 
         elapsed = int((time.time() - t0) * 1000)
-        stat["symbols"] = inserted
+        stat["symbols"] = upserted
         stat["elapsed_ms"] = elapsed
-        logger.info(f"[cache] candidate_pool_snapshot refreshed in {elapsed}ms ({inserted} symbols)")
+        logger.info(
+            f"[cache] candidate_pool_snapshot refreshed in {elapsed}ms "
+            f"({upserted} symbols, upsert)"
+        )
     except Exception as e:
         stat["status"] = f"error: {e}"
         logger.error(f"[cache] refresh_candidate_pool failed: {e}")
@@ -762,31 +797,92 @@ def get_market_movers(category: str = None, limit: int = 20) -> List[Dict]:
             pass
 
 
-def get_candidate_pool(
-    min_volume: float = 1000000,
-    min_change: float = 0,
-    max_change: float = 100,
-    limit: int = 100,
-) -> List[Dict]:
-    """读取候选交易对池."""
+def count_candidate_pool_snapshot() -> int:
+    """candidate_pool_snapshot 表行数."""
     try:
         conn = _get_conn(DATA_CACHE_DB)
         with conn.cursor() as cur:
-            cur.execute(
+            cur.execute("SELECT COUNT(*) AS c FROM candidate_pool_snapshot")
+            return int((cur.fetchone() or {}).get("c", 0))
+    except Exception as e:
+        logger.warning(f"[cache] count_candidate_pool_snapshot failed: {e}")
+        return 0
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def get_candidate_pool(
+    min_volume: float = 1000000,
+    min_change: Optional[float] = None,
+    max_change: Optional[float] = None,
+    limit: int = 100,
+) -> List[Dict]:
+    """读取候选交易对池. 默认不按涨跌幅上限过滤 (避免 >100%% 异动币被误排除)."""
+    try:
+        conn = _get_conn(DATA_CACHE_DB)
+        with conn.cursor() as cur:
+            where = ["quote_volume_24h >= %s"]
+            params: list = [min_volume]
+            if min_change is not None and max_change is not None:
+                where.append(
+                    "ABS(COALESCE(change_24h, 0)) BETWEEN %s AND %s"
+                )
+                params.extend([min_change, max_change])
+            params.append(limit)
+            sql = (
                 "SELECT * FROM candidate_pool_snapshot "
-                "WHERE quote_volume_24h >= %s "
-                "  AND ABS(change_24h) BETWEEN %s AND %s "
-                "ORDER BY ABS(change_24h) DESC LIMIT %s",
-                (min_volume, min_change, max_change, limit),
+                f"WHERE {' AND '.join(where)} "
+                "ORDER BY ABS(COALESCE(change_24h, 0)) DESC LIMIT %s"
             )
+            cur.execute(sql, params)
             return cur.fetchall()
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[cache] get_candidate_pool failed: {e}")
         return []
     finally:
         try:
             conn.close()
         except Exception:
             pass
+
+
+def load_candidate_pool_for_explore(
+    tag: str,
+    min_volume: float = 1_000_000,
+    limit: int = 200,
+    min_rows: int = 20,
+    wait_timeout_s: int = 180,
+    poll_s: int = 10,
+) -> Optional[List[Dict]]:
+    """探索/预测用候选池: 优先读缓存; 仅冷启动(表空)时短暂等待首次 refresh."""
+    deadline = time.time() + wait_timeout_s
+    while time.time() < deadline:
+        total = count_candidate_pool_snapshot()
+        rows = get_candidate_pool(min_volume=min_volume, limit=limit)
+        if len(rows) >= min_rows:
+            logger.info(f"{tag} 从 candidate_pool_snapshot 读取 {len(rows)} 个 symbol")
+            return rows
+        if total >= min_rows and len(rows) < min_rows:
+            logger.warning(
+                f"{tag} 缓存表 {total} 行但过滤后仅 {len(rows)} 个 "
+                f"(volume>={min_volume}), 继续等待 refresh"
+            )
+        elif total == 0:
+            logger.info(
+                f"{tag} candidate_pool 表为空 (等待首次 refresh), "
+                f"{poll_s}s 后重试..."
+            )
+        else:
+            logger.warning(
+                f"{tag} candidate_pool 仅 {total} 行 (<{min_rows}), "
+                f"{poll_s}s 后重试..."
+            )
+        time.sleep(poll_s)
+    logger.warning(f"{tag} 等待 candidate_pool 超时 ({wait_timeout_s}s)")
+    return None
 
 
 def get_position_stats(source: str, account_id: int = 2) -> Optional[Dict]:

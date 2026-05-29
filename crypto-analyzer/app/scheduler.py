@@ -1485,12 +1485,12 @@ class UnifiedDataScheduler:
         # 首次采集 — 后台线程执行, 不阻塞 schedule 主循环
         self._run_async_in_thread(self.run_initial_collection)
 
-        # AI 首次启动 — 各任务独立线程并行触发，不互相等待
-        def _launch_ai_init_task(name, module_path, func_name):
+        # AI 首次启动 — 各任务独立线程触发 (探索错峰, 避免同时打爆 kline_data)
+        def _launch_ai_init_task(name, module_path, func_name, delay_s: int = 15):
             """在独立后台线程执行一次 AI 初始化任务."""
             def _run():
                 import time
-                time.sleep(15)  # 等 initial_collection 完成
+                time.sleep(delay_s)
                 try:
                     import importlib
                     mod = importlib.import_module(module_path)
@@ -1500,11 +1500,11 @@ class UnifiedDataScheduler:
                     logger.error(f"[{name}] 初始化运行失败: {e}", exc_info=True)
             threading.Thread(target=_run, daemon=True, name=f"AIInit_{name}").start()
 
-        _launch_ai_init_task("Gemini探索",   "app.services.gemini_explore_worker",   "run_explore_round")
-        _launch_ai_init_task("Gemini预测",   "app.services.gemini_predictor",        "run_predict_round")
-        _launch_ai_init_task("Gemini情绪",   "app.services.gemini_sentiment_analyzer","run_sentiment_round")
-        _launch_ai_init_task("DeepSeek探索","app.services.deepseek_explore_worker",  "run_explore_round")
-        _launch_ai_init_task("DeepSeek预测","app.services.deepseek_predictor",       "run_predict_round")
+        _launch_ai_init_task("Gemini探索",   "app.services.gemini_explore_worker",   "run_explore_round", 15)
+        _launch_ai_init_task("Gemini预测",   "app.services.gemini_predictor",        "run_predict_round", 20)
+        _launch_ai_init_task("Gemini情绪",   "app.services.gemini_sentiment_analyzer","run_sentiment_round", 25)
+        _launch_ai_init_task("DeepSeek探索","app.services.deepseek_explore_worker",  "run_explore_round", 90)
+        _launch_ai_init_task("DeepSeek预测","app.services.deepseek_predictor",       "run_predict_round", 95)
 
         # 定期打印状态 (每小时)
         schedule.every(1).hours.do(self.print_status)

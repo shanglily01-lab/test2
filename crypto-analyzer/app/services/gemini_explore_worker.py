@@ -51,6 +51,7 @@ try:
         get_market_movers,
         get_position_stats,
         get_setting,
+        load_candidate_pool_for_explore,
     )
     _DATA_CACHE_AVAILABLE = True
 except ImportError:
@@ -62,8 +63,14 @@ def _try_candidate_pool(min_volume: float = 1000000, limit: int = 100) -> Option
     if not _DATA_CACHE_AVAILABLE:
         return None
     try:
-        return get_candidate_pool(min_volume=min_volume, limit=limit)
-    except Exception:
+        return load_candidate_pool_for_explore(
+            tag="[Gemini探索]",
+            min_volume=min_volume,
+            limit=limit,
+            min_rows=20,
+        )
+    except Exception as e:
+        logger.warning(f"[Gemini探索] 读取 candidate_pool 失败: {e}")
         return None
 
 
@@ -421,8 +428,11 @@ def _build_universe(conn) -> dict:
                          f"({len(cached)} 个 symbol)")
             return _build_universe_from_cache(cached)
 
-    # ── 回退: 原逻辑 ──
-    logger.info("[Gemini探索] data_cache 不可用, 回退 kline_data 多层 JOIN")
+    # ── 回退: 原逻辑 (慢, 可能数分钟) ──
+    logger.warning(
+        "[Gemini探索] 无法从 candidate_pool_snapshot 读取候选池, "
+        "回退 kline_data 多层 JOIN (较慢, 请耐心等待)"
+    )
     return _build_universe_fallback(conn, _level3_set)
 
 
@@ -1490,6 +1500,43 @@ def _update_run_trades_opened(conn, run_id: int, trades_opened: int) -> None:
         )
 
 
+def _finish_run(
+    conn,
+    run_id: Optional[int],
+    asof_utc: datetime,
+    universe_size: int,
+    summary_zh: str,
+    elapsed_s: float,
+    status: str,
+    error_msg: Optional[str],
+    triggered_by: str,
+    prompt_text: Optional[str] = None,
+    raw_response: Optional[str] = None,
+) -> int:
+    """更新已登记的 running 记录, 无 run_id 时退化为 INSERT."""
+    if run_id:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE gemini_explore_runs SET
+                  universe_size=%s, summary_zh=%s, elapsed_s=%s,
+                  status=%s, error_msg=%s, triggered_by=%s,
+                  prompt_text=%s, raw_response=%s
+                WHERE id=%s
+                """,
+                (
+                    universe_size, summary_zh, elapsed_s,
+                    status, error_msg, triggered_by,
+                    prompt_text, raw_response, run_id,
+                ),
+            )
+        return run_id
+    return _insert_run(
+        conn, asof_utc, universe_size, summary_zh, elapsed_s,
+        status, error_msg, triggered_by, prompt_text, raw_response,
+    )
+
+
 def _insert_verdicts(conn, run_id: int, verdict_rows: List[Tuple]) -> None:
     if not verdict_rows:
         return
@@ -1569,10 +1616,12 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 enabled_raw = _read_setting(cur, 'gemini_explore_enabled', '0').strip().lower()
     except Exception as e:
         logger.error(f"[Gemini探索] 读 kill switch 失败,保守跳过: {e}")
+        _explore_running_lock.release()
         return None
 
     if enabled_raw not in ('1', 'true', 'yes', 'on'):
         logger.info(f"[Gemini探索] kill switch=0, 跳过 (triggered_by={triggered_by})")
+        _explore_running_lock.release()
         return None
 
     # 防重: 上次成功距今 >= 2h 才执行 (仅 manual 不拦截; init/scheduler 走同一规则)
@@ -1588,6 +1637,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                         elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
                         if elapsed_h < 2:
                             logger.info(f"[Gemini探索] 上次成功距今 {elapsed_h:.1f}h < 2h, 跳过")
+                            _explore_running_lock.release()
                             return None
         except Exception as e:
             logger.warning(f"[Gemini探索] 防重检查失败, 继续: {e}")
@@ -1599,9 +1649,17 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         conn = _connect()
     except Exception as e:
         logger.error(f"[Gemini探索] DB 连接失败: {e}")
+        _explore_running_lock.release()
         return None
 
+    run_id = None
     try:
+        run_id = _insert_run(
+            conn, asof_utc, 0, '', 0.0,
+            'running', None, triggered_by,
+        )
+        logger.info(f"[Gemini探索] run_id={run_id} 已登记 (status=running)")
+
         # 2. 候选池 (中等波动币)
         universe = _build_universe(conn)
         universe_size = len(universe)
@@ -1633,10 +1691,9 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                     f"新鲜资金费率(30min内)={fresh_funding.get('cnt', -1)}"
                 )
             elapsed = time.time() - t0
-            run_id = _insert_run(
-                conn, asof_utc, 0, '', elapsed,
-                'skipped', '候选池为空',
-                triggered_by,
+            run_id = _finish_run(
+                conn, run_id, asof_utc, 0, '', elapsed,
+                'skipped', '候选池为空', triggered_by,
             )
             logger.warning("[Gemini探索] 候选池为空, 本轮结束")
             return run_id
@@ -1666,8 +1723,8 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         gemini_response = _call_gemini_explore(universe, global_ctx, historical_stats)
         if gemini_response is None:
             elapsed = time.time() - t0
-            run_id = _insert_run(
-                conn, asof_utc, universe_size, '', elapsed,
+            run_id = _finish_run(
+                conn, run_id, asof_utc, universe_size, '', elapsed,
                 'error', 'Gemini 调用失败', triggered_by,
             )
             logger.error("[Gemini探索] Gemini 调用失败, 本轮结束")
@@ -1680,12 +1737,12 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             f"summary={summary_zh[:80]}"
         )
 
-        # 4. 写 run 记录
+        # 4. 更新 run 记录
         elapsed = time.time() - t0
         prompt_text = gemini_response.get('_prompt')
         raw_response = gemini_response.get('_raw_response')
-        run_id = _insert_run(
-            conn, asof_utc, universe_size, summary_zh, elapsed,
+        run_id = _finish_run(
+            conn, run_id, asof_utc, universe_size, summary_zh, elapsed,
             'ok', None, triggered_by, prompt_text, raw_response,
         )
 
@@ -1840,13 +1897,13 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         logger.error(f"[Gemini探索] 一轮异常: {e}", exc_info=True)
         try:
             elapsed = time.time() - t0
-            _insert_run(
-                conn, asof_utc, 0, '', elapsed,
+            _finish_run(
+                conn, run_id, asof_utc, 0, '', elapsed,
                 'error', str(e)[:480], triggered_by,
             )
         except Exception:
             pass
-        return None
+        return run_id
     finally:
         try:
             conn.close()
