@@ -164,6 +164,25 @@ class SmartExitOptimizer:
                     logger.info(f"持仓 {position_id} 已关闭 (status={position['status']})，停止监控")
                     break
 
+                # ────────────────────────────────────────────────────────────
+                # 最高优先级：检查 planned_close_time 到期后强制平仓
+                # 不依赖实时价格，无论能否取价都要平仓
+                # ────────────────────────────────────────────────────────────
+                if position.get('planned_close_time') and datetime.now() >= position['planned_close_time']:
+                    # 尝试获取价格，如果拿不到就用 DB 中的 mark_price 或 entry_price 兜底
+                    close_price = await self._get_realtime_price(position['symbol'])
+                    if close_price is None:
+                        mp = position.get('mark_price')
+                        close_price = Decimal(str(mp)) if mp else Decimal(str(position.get('entry_price', 0)))
+                        if close_price == 0:
+                            logger.error(f"持仓{position_id} {position['symbol']} 既无实时价也无入库价，无法计算盈亏，但仍执行平仓")
+                            close_price = Decimal('0')
+                        else:
+                            logger.warning(f"持仓{position_id} {position['symbol']} 无实时价，使用入库价{close_price}平仓")
+                    logger.warning(f"[到期平仓] 持仓{position_id} {position['symbol']} 持有到期，强制平仓")
+                    await self._execute_close(position_id, close_price, f"计划平仓时间到期强制平仓")
+                    break
+
                 # 获取实时价格
                 current_price = await self._get_realtime_price(position['symbol'])
 
@@ -172,26 +191,6 @@ class SmartExitOptimizer:
                     logger.warning(f"持仓{position_id} {position['symbol']} 无法获取价格，跳过本次平仓检查")
                     await asyncio.sleep(2)  # 等待2秒后重试
                     continue
-
-                # ────────────────────────────────────────────────────────────
-                # Gemini 探索/预测：检查 planned_close_time 到期后强制平仓
-                # 其余智能平仓逻辑（SL/TP/趋势反转等）与普通持仓一致
-                # ────────────────────────────────────────────────────────────
-                if position.get('source') in ('gemini_explore', 'gemini_predict', 'deepseek_explore', 'deepseek_predict'):
-                    _src_name_map = {
-                        'gemini_explore': 'Gemini探索',
-                        'gemini_predict': 'Gemini预测',
-                        'deepseek_explore': 'DeepSeek探索',
-                        'deepseek_predict': 'DeepSeek预测',
-                    }
-                    src_name = _src_name_map.get(position.get('source'), position.get('source'))
-                    if position.get('planned_close_time') and datetime.now() >= position['planned_close_time']:
-                        hold_hours = 24
-                        logger.warning(
-                            f"[{src_name}] 持仓{position_id} {position['symbol']} 持有{hold_hours}h到期，强制平仓"
-                        )
-                        await self._execute_close(position_id, current_price, f"{src_name}持有{hold_hours}h到期")
-                        break
 
                 # 计算当前盈亏（如果avg_entry_price为空，使用entry_price作为备用）
                 try:
@@ -623,9 +622,16 @@ class SmartExitOptimizer:
                 f"计划: {planned_close_time.strftime('%H:%M:%S')}, "
                 f"当前: {now.strftime('%H:%M:%S')}"
             )
-            # 获取当前价格
-            current_price = await self._get_realtime_price(position['symbol'])
-            await self._execute_close(position_id, current_price, "超时强制平仓")
+            # 获取当前价格，拿不到就用 mark_price 或 entry_price 兜底
+            cp = await self._get_realtime_price(position['symbol'])
+            if cp is None:
+                mp = position.get('mark_price')
+                cp = Decimal(str(mp)) if mp else Decimal(str(position.get('entry_price', 0)))
+                if cp == 0:
+                    logger.error(f"{position['symbol']} 无实时价也无入库价，用0平仓（仅更新状态）")
+                else:
+                    logger.warning(f"{position['symbol']} 无实时价，使用入库价{cp}平仓")
+            await self._execute_close(position_id, cp, "超时强制平仓")
             return True
 
         # 如果还未到监控时间，直接返回
