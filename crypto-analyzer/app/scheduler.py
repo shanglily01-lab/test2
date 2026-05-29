@@ -1526,7 +1526,7 @@ class UnifiedDataScheduler:
                 except Exception as e:
                     # 捕获定时任务中的异常，防止整个调度器崩溃
                     logger.error(f"定时任务执行异常: {e}", exc_info=True)
-                time.sleep(900)  # 每 15 分钟检查一次; worker 内部有防重机制, 不怕重复触发
+                time.sleep(60)  # 每 1 分钟检查一次; worker 内部有防重机制, 不怕重复触发
 
         except KeyboardInterrupt:
             logger.info("\n\n收到停止信号，正在关闭...")

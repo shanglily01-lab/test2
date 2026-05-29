@@ -834,7 +834,7 @@ async def lifespan(app: FastAPI):
             loop = asyncio.get_event_loop()
             while True:
                 await loop.run_in_executor(None, schedule.run_pending)
-                await asyncio.sleep(900)  # 每 15 分钟检查一次; worker 内部有防重, 不怕重复触发
+                await asyncio.sleep(60)  # 每 1 分钟检查一次; worker 内部有防重, 不怕重复触发
 
         asyncio.create_task(schedule_runner())
         logger.info("✅ 超级大脑自我优化服务已启动（每4小时执行一次）")
