@@ -628,18 +628,6 @@ function loadOpenPositions() {
           ? (summary.open_count + ' <span class="text-xs text-on-surface-variant">仓</span>')
           : '--';
 
-      // 在统计行后加一个"浮盈"显示 (复用 stat-trades 那张卡)
-      var statTrades = document.getElementById('stat-trades');
-      if (statTrades && summary.total_unrealized_pnl !== undefined) {
-        var t = summary.total_unrealized_pnl;
-        var tPct = summary.total_unrealized_pnl_pct;
-        var cls = t >= 0 ? 'pp' : 'pn';
-        statTrades.innerHTML = '<span class="' + cls + '">' + fmtSigned(t) + ' U</span> <span class="text-xs ' + cls + '">(' + fmtSigned(tPct, 2) + '%)</span>';
-        // 同时改一下这张卡的标题
-        var lbl = statTrades.parentElement.querySelector('p');
-        if (lbl) lbl.textContent = '当前浮盈合计';
-      }
-
       if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无 OPEN 持仓</td></tr>';
         return;

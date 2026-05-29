@@ -143,7 +143,7 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
                     SELECT id, symbol, position_side,
                            stop_loss_price, take_profit_price,
                            source, entry_signal_type, entry_score,
-                           created_at, margin
+                           created_at, planned_close_time, margin
                     FROM futures_positions
                     WHERE account_id = %s AND status = 'open'
                 """, (account_id,))
@@ -159,6 +159,7 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
                     pos['entry_signal_type'] = db.get('entry_signal_type')
                     pos['entry_score'] = db.get('entry_score')
                     pos['created_at'] = str(db['created_at']) if db.get('created_at') else None
+                    pos['planned_close_time'] = db['planned_close_time'].isoformat() if db.get('planned_close_time') else None
                     if db.get('margin') and not pos.get('margin'):
                         pos['margin'] = float(db['margin'])
                     # 前端期望 current_price 字段, engine 返回的叫 mark_price (Binance 实时 markPrice)
