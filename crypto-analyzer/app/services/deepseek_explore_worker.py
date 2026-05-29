@@ -988,6 +988,8 @@ def _call_deepseek_explore(universe: dict, global_ctx: dict, historical_stats: d
         if not isinstance(parsed.get('verdicts'), list):
             logger.warning(f"[DeepSeek探索] DeepSeek 返回格式异常, verdicts 非 list, 重置为 []")
             parsed['verdicts'] = []
+        parsed['_prompt'] = prompt
+        parsed['_raw_response'] = text
         return parsed
     except json.JSONDecodeError as e:
         logger.error(f"[DeepSeek探索] JSON 解析失败: {e}; raw[:500]={text[:500]}")
@@ -1331,17 +1333,21 @@ def _insert_run(
     status: str,
     error_msg: Optional[str],
     triggered_by: str,
+    prompt_text: Optional[str] = None,
+    raw_response: Optional[str] = None,
 ) -> int:
     with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO deepseek_explore_runs
               (asof_utc, model, universe_size, summary_zh,
-               trades_opened, elapsed_s, status, error_msg, triggered_by)
-            VALUES (%s, %s, %s, %s, 0, %s, %s, %s, %s)
+               trades_opened, elapsed_s, status, error_msg, triggered_by,
+               prompt_text, raw_response)
+            VALUES (%s, %s, %s, %s, 0, %s, %s, %s, %s, %s, %s)
             """,
             (asof_utc, DEEPSEEK_MODEL, universe_size, summary_zh,
-             elapsed_s, status, error_msg, triggered_by),
+             elapsed_s, status, error_msg, triggered_by,
+             prompt_text, raw_response),
         )
         return cur.lastrowid
 
@@ -1531,9 +1537,11 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
 
         # 4. 写 run 记录
         elapsed = time.time() - t0
+        prompt_text = deepseek_response.get('_prompt')
+        raw_response = deepseek_response.get('_raw_response')
         run_id = _insert_run(
             conn, asof_utc, universe_size, summary_zh, elapsed,
-            'ok', None, triggered_by,
+            'ok', None, triggered_by, prompt_text, raw_response,
         )
 
         # 5. 逐 verdict 决策开仓

@@ -580,6 +580,8 @@ def _call_deepseek_predict(symbols_data: List[Dict], global_ctx: dict) -> Option
         if not isinstance(parsed.get('verdicts'), list):
             logger.warning("[DeepSeek预测] DeepSeek 返回格式异常, verdicts 非 list")
             parsed['verdicts'] = []
+        parsed['_prompt'] = prompt
+        parsed['_raw_response'] = text
         return parsed
     except json.JSONDecodeError as e:
         logger.error(f"[DeepSeek预测] JSON 解析失败: {e}; raw[:500]={text[:500]}")
@@ -808,16 +810,20 @@ def _insert_run(
     status: str,
     error_msg: Optional[str],
     triggered_by: str,
+    prompt_text: Optional[str] = None,
+    raw_response: Optional[str] = None,
 ) -> int:
     with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO deepseek_predict_runs
               (asof_utc, model, symbol_count, predictions_made, orders_opened,
-               elapsed_s, status, error_msg, triggered_by, summary_zh)
-            VALUES (%s, %s, %s, 0, 0, %s, %s, %s, %s, %s)
+               elapsed_s, status, error_msg, triggered_by, summary_zh,
+               prompt_text, raw_response)
+            VALUES (%s, %s, %s, 0, 0, %s, %s, %s, %s, %s, %s, %s)
             """,
-            (asof_utc, DEEPSEEK_MODEL, symbol_count, elapsed_s, status, error_msg, triggered_by, summary_zh),
+            (asof_utc, DEEPSEEK_MODEL, symbol_count, elapsed_s, status, error_msg,
+             triggered_by, summary_zh, prompt_text, raw_response),
         )
         return cur.lastrowid
 
@@ -964,9 +970,11 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
 
         # 6. 写 run 记录
         elapsed = time.time() - t0
+        prompt_text = ds_response.get('_prompt')
+        raw_response = ds_response.get('_raw_response')
         run_id = _insert_run(
             conn, asof_utc, len(symbols_data), summary_zh, elapsed,
-            'ok', None, triggered_by,
+            'ok', None, triggered_by, prompt_text, raw_response,
         )
 
         # 7. 逐 verdict 决策开仓
