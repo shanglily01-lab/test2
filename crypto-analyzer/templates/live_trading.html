@@ -374,26 +374,44 @@ function makeHeaders() {
     return { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' };
 }
 
+var _refreshInFlight = null;
+
+function clearAuthAndRedirectLogin() {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('auth_token');
+    window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+}
+
 async function refreshToken() {
-    try {
-        const refreshTok = localStorage.getItem('refresh_token');
-        if (!refreshTok) return false;
-        const resp = await fetch('/api/auth/refresh', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refresh_token: refreshTok })
-        });
-        if (resp.ok) {
-            const data = await resp.json();
-            if (data.access_token) {
-                localStorage.setItem('access_token', data.access_token);
-                return true;
+    if (_refreshInFlight) return _refreshInFlight;
+    _refreshInFlight = (async function() {
+        try {
+            const refreshTok = localStorage.getItem('refresh_token');
+            if (!refreshTok) return false;
+            const resp = await fetch('/api/auth/refresh', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: refreshTok })
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data.access_token) {
+                    localStorage.setItem('access_token', data.access_token);
+                    window.__ACCESS_TOKEN__ = data.access_token;
+                    return true;
+                }
             }
+        } catch (e) {
+            console.error('refreshToken failed:', e);
         }
-    } catch (e) {
-        console.error('refreshToken failed:', e);
+        return false;
+    })();
+    try {
+        return await _refreshInFlight;
+    } finally {
+        _refreshInFlight = null;
     }
-    return false;
 }
 
 async function apiFetch(url, options) {
@@ -403,8 +421,11 @@ async function apiFetch(url, options) {
     if (resp.status === 401) {
         const ok = await refreshToken();
         if (ok) {
-            options.headers = Object.assign(makeHeaders(), {});
+            options.headers = Object.assign(makeHeaders(), options.headers || {});
             resp = await fetch(url, options);
+        } else {
+            clearAuthAndRedirectLogin();
+            return resp;
         }
     }
     return resp;
@@ -973,8 +994,25 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Check token
     var token = window.__ACCESS_TOKEN__ || localStorage.getItem('auth_token') || localStorage.getItem('access_token');
     if (!token) {
-        window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+        clearAuthAndRedirectLogin();
         return;
+    }
+    if (token && !localStorage.getItem('access_token')) {
+        localStorage.setItem('access_token', token);
+    }
+
+    // 先验证 access token，过期则尝试 refresh
+    try {
+        var verifyResp = await fetch('/api/auth/verify', { headers: makeHeaders() });
+        if (!verifyResp.ok) {
+            var refreshed = await refreshToken();
+            if (!refreshed) {
+                clearAuthAndRedirectLogin();
+                return;
+            }
+        }
+    } catch (e) {
+        console.error('auth verify failed:', e);
     }
 
     // Restore saved api key id
