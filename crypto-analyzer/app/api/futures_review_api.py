@@ -2163,7 +2163,7 @@ async def get_holding_analysis(
         cursor.execute(f"""
             SELECT
                 open_time, close_time, realized_pnl, position_side, source,
-                entry_price, close_price, entry_signal_type, entry_reason
+                entry_price, entry_signal_type, entry_reason
             FROM futures_positions
             WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
               {source_filter}
