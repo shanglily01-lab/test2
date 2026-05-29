@@ -1,7 +1,7 @@
 """
-Gemini 预测 worker (v1 — 2026-05-22)
+Gemini 预测 worker (v2 — 2026-05-29)
 
-每 12h 对 TOP 50 交易对调用 Google Gemini 预测未来 12h 方向,
+每 6h 对 TOP 50 交易对调用 Google Gemini 预测未来 6h 方向,
 根据预测结果直接开模拟单.
 
 仓位参数:
@@ -9,9 +9,9 @@ Gemini 预测 worker (v1 — 2026-05-22)
   - margin    = 500U
   - leverage  = 5x
   - 最多 20 仓
-  - hold     = 12 小时
-  - SL       = 5%
-  - TP       = 10%
+  - hold     = 6 小时
+  - SL       = 4%
+  - TP       = 6%
 
 闸门:
   - system_settings.gemini_predict_enabled (默认 1, 关时早返回)
@@ -80,9 +80,9 @@ def _try_snapshot() -> Optional[Dict]:
 PREDICT_MARGIN_USD = 500.0
 PREDICT_LEVERAGE = 5
 PREDICT_MAX_POSITIONS = 20
-PREDICT_HOLD_HOURS = 12                         # 12 小时 (原 6h，改为12h)
-PREDICT_SL_PCT = 5.0                        # 硬 SL 5%
-PREDICT_TP_PCT = 10.0                        # 硬 TP 10%
+PREDICT_HOLD_HOURS = 6                         # 6 小时
+PREDICT_SL_PCT = 4.0                        # 硬 SL 4%
+PREDICT_TP_PCT = 6.0                        # 硬 TP 6%
 PREDICT_CONFIDENCE_THRESHOLD = 0.60
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'gemini_predict'
@@ -441,11 +441,11 @@ def _count_open_positions(conn) -> int:
 # ============================================================
 # Prompt 构建
 # ============================================================
-PREDICT_PROMPT_TEMPLATE = """你是超级交易大师. 预测每个币种在未来 12 小时内的方向走势概率.
+PREDICT_PROMPT_TEMPLATE = """你是超级交易大师. 预测每个币种在未来 6 小时内的方向走势概率.
 
-持仓期 12 小时 (12h), SL=5%, TP=10%, 杠杆 5x, 不做中途干预.
+持仓期 6 小时 (6h), SL=4%, TP=6%, 杠杆 5x, 不做中途干预.
 
-选中的币种需要能在 12 小时内到达 10% 的涨幅/跌幅空间, 或至少抗住 12 小时不跌/不涨过 5%.
+选中的币种需要能在 6 小时内到达 6% 的涨幅/跌幅空间, 或至少抗住 6 小时不跌/不涨过 4%.
 不要选"只波动 2-3%"的标的.
 
 # 全局市场环境
@@ -479,13 +479,13 @@ Big4 (BTC/ETH/BNB/SOL 综合趋势): BEARISH/STRONG_BEARISH 时严禁做多, BUL
 | 0.50-0.64 | 仅 15m 级别支持, 1h 中性 — 可开但有限 |
 | 0.00-0.49 | 方向模糊/震荡 — 跳过 |
 
-# 判定原则 — 12 小时持仓
+# 判定原则 — 6 小时持仓
 
 ## 适合开仓 (应该输出 bullish/bearish)
 
 **A. 趋势延续 — 最可靠**
 - 1h 级别已走出清晰方向趋势 (连续 3+ 根同向), 15m 节奏同向, 成交量放量支持
-- 现价在趋势中段, 距 7d 极值还有 4%+ 空间
+- 现价在趋势中段, 距 7d 极值还有 3%+ 空间
 
 **B. 资金费率与价格严重背离 — 次可靠**
 - 资金费极端 + RSI 走到反向极值
@@ -887,7 +887,7 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
         logger.info(f"[Gemini预测] kill switch=0, 跳过 (triggered_by={triggered_by})")
         return None
 
-    # 防重: 上次成功距今 >= 12h 才执行 (统一所有触发来源)
+    # 防重: 上次成功距今 >= 6h 才执行 (统一所有触发来源)
     try:
         with _connect() as conn_chk:
             with conn_chk.cursor() as cur:
@@ -897,8 +897,8 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 row = cur.fetchone()
                 if row and row.get('last_run'):
                     elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
-                    if elapsed_h < 12:
-                        logger.info(f"[Gemini预测] 上次成功距今 {elapsed_h:.1f}h < 12h, 跳过")
+                    if elapsed_h < 6:
+                        logger.info(f"[Gemini预测] 上次成功距今 {elapsed_h:.1f}h < 6h, 跳过")
                         return None
     except Exception as e:
         logger.warning(f"[Gemini预测] 防重检查失败, 继续: {e}")

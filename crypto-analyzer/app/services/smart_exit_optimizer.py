@@ -501,7 +501,7 @@ class SmartExitOptimizer:
         entry_time = position.get('entry_signal_time') or position.get('open_time') or datetime.now()
         hold_minutes = (datetime.now() - entry_time).total_seconds() / 60
 
-        MIN_HOLD_MINUTES = 60  # 60分钟最小持仓时间（原30分钟，延长以减少被假突破割肉）
+        MIN_HOLD_MINUTES = 180  # 180分钟最小持仓时间（3小时内不干预，让策略逻辑自然运行）
 
         # 计算ROI（考虑杠杆后的真实收益率）
         leverage = float(position.get('leverage', 1))
@@ -1515,7 +1515,7 @@ class SmartExitOptimizer:
             # === 优先级0: 最小持仓时间限制 (30分钟) ===
             # ============================================================
             # 开仓60分钟内只允许止损和止盈,不允许其他原因平仓
-            MIN_HOLD_MINUTES = 60  # 60分钟最小持仓时间（原30分钟，延长以减少假突破割肉）
+            MIN_HOLD_MINUTES = 180  # 180分钟最小持仓时间（3小时内不干预，让策略逻辑自然运行）
 
             # ============================================================
             # === 优先级1: 极端亏损兜底止损（风控底线） ===
@@ -1721,9 +1721,9 @@ class SmartExitOptimizer:
                             logger.info(f"✅ {symbol} [{hour_checkpoint}h档] 亏损已恢复，重置计时器")
 
             # ============================================================
-            # === 优先级7: 3小时绝对时间强制平仓 ===
+            # === 优先级7: 绝对时间强制平仓（默认8小时，让持仓充分运行） ===
             # ============================================================
-            max_hold_minutes = position.get('max_hold_minutes') or 180
+            max_hold_minutes = position.get('max_hold_minutes') or 480
             if hold_minutes >= max_hold_minutes:
                 hold_hours_cfg = max_hold_minutes / 60
                 logger.warning(f"⏰ 持仓{position_id} {symbol}已持有{hold_hours:.1f}小时，触发{hold_hours_cfg:.0f}小时强制平仓")

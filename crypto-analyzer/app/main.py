@@ -614,7 +614,7 @@ async def lifespan(app: FastAPI):
         schedule.every().day.at("02:00").do(run_top50_update)
         logger.info("[OK] TOP 100 更新任务已注册 (每天 02:00 本地)")
 
-        # Gemini 探索 - 每 6h 调一轮 Gemini 检测红黑天鹅, 模拟单开仓
+        # Gemini 探索 - 每 4h 调一轮 Gemini 检测红黑天鹅, 模拟单开仓
         # kill switch system_settings.gemini_explore_enabled 默认 0,
         # worker 内部自己读, 关时早返回, 不调 Gemini 不开仓
         def run_gemini_explore():
@@ -625,10 +625,10 @@ async def lifespan(app: FastAPI):
                 logger.error(f"[Gemini探索] 调度异常: {e}")
                 import traceback
                 traceback.print_exc()
-        schedule.every(6).hours.do(run_gemini_explore)
-        logger.info("[Gemini探索] 调度已注册, 每 6h 跑一次 (kill switch 默认 OFF)")
+        schedule.every(4).hours.do(run_gemini_explore)
+        logger.info("[Gemini探索] 调度已注册, 每 4h 跑一次 (kill switch 默认 OFF)")
 
-        # DeepSeek 探索 - 每 6h 调一轮 DeepSeek 检测短时方向异动, 模拟单开仓
+        # DeepSeek 探索 - 每 4h 调一轮 DeepSeek 检测短时方向异动, 模拟单开仓
         def run_deepseek_explore():
             try:
                 from app.services.deepseek_explore_worker import run_explore_round
@@ -637,10 +637,10 @@ async def lifespan(app: FastAPI):
                 logger.error(f"[DeepSeek探索] 调度异常: {e}")
                 import traceback
                 traceback.print_exc()
-        schedule.every(6).hours.do(run_deepseek_explore)
-        logger.info("[DeepSeek探索] 调度已注册, 每 6h 跑一次 (kill switch 默认 OFF)")
+        schedule.every(4).hours.do(run_deepseek_explore)
+        logger.info("[DeepSeek探索] 调度已注册, 每 4h 跑一次 (kill switch 默认 OFF)")
 
-        # Gemini 预测 - 每 12h 调一次 Gemini 预测 TOP50 方向
+        # Gemini 预测 - 每 6h 调一次 Gemini 预测 TOP50 方向
         def run_gemini_predict():
             try:
                 from app.services.gemini_predictor import run_predict_round
@@ -649,8 +649,8 @@ async def lifespan(app: FastAPI):
                 logger.error(f"[Gemini预测] 调度异常: {e}")
                 import traceback
                 traceback.print_exc()
-        schedule.every(12).hours.do(run_gemini_predict)
-        logger.info("[Gemini预测] 调度已注册, 每 12h 跑一次 (kill switch 默认 ON)")
+        schedule.every(6).hours.do(run_gemini_predict)
+        logger.info("[Gemini预测] 调度已注册, 每 6h 跑一次 (kill switch 默认 ON)")
 
         # Gemini 市场情绪 + 川普分析 - 每 6h 调一次
         def run_gemini_sentiment():
@@ -834,7 +834,7 @@ async def lifespan(app: FastAPI):
             loop = asyncio.get_event_loop()
             while True:
                 await loop.run_in_executor(None, schedule.run_pending)
-                await asyncio.sleep(60)
+                await asyncio.sleep(900)  # 每 15 分钟检查一次; worker 内部有防重, 不怕重复触发
 
         asyncio.create_task(schedule_runner())
         logger.info("✅ 超级大脑自我优化服务已启动（每4小时执行一次）")

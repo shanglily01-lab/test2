@@ -1,17 +1,17 @@
 """
 Gemini 探索 worker (v3 — 2026-05-21 长持仓版)
 
-每 6h 调用 Google Gemini 检测加密货币短时方向异动, 根据 verdict 直接开模拟单。
-现在改为长持仓模式: 持仓 3 天, TP=15%, 跳过一切智能平仓, 只走硬 SL/TP。
+每 4h 调用 Google Gemini 检测加密货币短时方向异动, 根据 verdict 直接开模拟单。
+现在改为4小时持仓模式: 持仓 4 小时, SL=3%, TP=5%, 跳过一切智能平仓, 只走硬 SL/TP。
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
   - margin    = 500U
-  - leverage  = 3x
+  - leverage  = 5x
   - 最多 20 仓
-  - hold     = 72 小时 (3 天)
-  - SL       = 5%
-  - TP       = 15%
+  - hold     = 4 小时
+  - SL       = 3%
+  - TP       = 5%
 
 闸门:
   - system_settings.gemini_explore_enabled (默认 0, 关时早返回)
@@ -93,9 +93,9 @@ def _try_position_stats(source: str, account_id: int = 2) -> Optional[Dict]:
 EXPLORE_MARGIN_USD = 500.0
 EXPLORE_LEVERAGE = 5
 EXPLORE_MAX_POSITIONS = 20
-EXPLORE_HOLD_HOURS = 6                         # 6 小时 (原 24h，过长准确度下降)
-EXPLORE_SL_PCT = 5.0
-EXPLORE_TP_PCT = 10.0                          # 原 8%
+EXPLORE_HOLD_HOURS = 4                         # 4 小时
+EXPLORE_SL_PCT = 3.0
+EXPLORE_TP_PCT = 5.0
 EXPLORE_CONFIDENCE_THRESHOLD = 0.5      # 校准表 0.50+ 可开
 EXPLORE_ACCOUNT_ID = 2
 EXPLORE_SOURCE = 'gemini_explore'
@@ -887,14 +887,14 @@ def _describe_market_regime(conn) -> str:
 # ============================================================
 # Prompt — 置信度校准 + 长持仓判定
 # ============================================================
-EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 6 小时 (6h), SL=5%, TP=10%, 杠杆 5x, 不做任何中途干预.
+EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 4 小时 (4h), SL=3%, TP=5%, 杠杆 5x, 不做任何中途干预.
 
-你的任务是判断每个候选币种在未来 6 小时内, 是否有延续/反转的趋势行情, 值得持有 6 小时.
+你的任务是判断每个候选币种在未来 4 小时内, 是否有延续/反转的趋势行情, 值得持有 4 小时.
 
 # 仓位设置 (供你理解容错空间)
-- 杠杆 5x, 名义本金 ~2500U, SL=5% 价格跌幅 (约 -250U), TP=10% 涨幅 (约 +250U)
-- 6 小时到期按市价强制平仓, 期间不提前止盈止损 — 你选的方向必须能**涨 10% 或至少抗住 6 小时不跌 5%**
-- 所以不要选"只涨 2-3%"的标的, 也不要把 SL 只看做"5% 容错"而随意开仓
+- 杠杆 5x, 名义本金 ~2500U, SL=3% 价格跌幅 (约 -150U), TP=5% 涨幅 (约 +125U)
+- 4 小时到期按市价强制平仓, 期间不提前止盈止损 — 你选的方向必须能**涨 5% 或至少抗住 4 小时不跌 3%**
+- 所以不要选"只涨 1-2%"的标的, 也不要把 SL 只看做"3% 容错"而随意开仓
 
 # 全局市场环境
 {global_context_json}
@@ -932,13 +932,13 @@ Big4 (BTC/ETH/BNB/SOL 综合趋势): BEARISH/STRONG_BEARISH 时禁 LONG, BULLISH
 | 0.50-0.64 | 仅小时级别方向支持, 日线中性 — **此区间可以开, 但只开 1-2 个** |
 | 0.00-0.49 | 方向模糊 / 震荡区间 / 数据不足 — **跳过** |
 
-# 判定原则 — 6 小时持仓 vs 短线异动的关键区别
+# 判定原则 — 4 小时持仓 vs 短线异动的关键区别
 
-## ✅ 适合 6 小时持有 (应该输出 bullish/bearish)
+## ✅ 适合 4 小时持有 (应该输出 bullish/bearish)
 
 **A. 趋势延续 — 最可靠**
 - 1h 级别已走出清晰方向趋势 (连续 3+ 根同向), 15m 节奏同向, 成交量放量支持
-- 现价在趋势中段, 距 7d 极值还有 4%+ 空间
+- 现价在趋势中段, 距 7d 极值还有 2%+ 空间
 - 例如: BTC 强牛市 → 选强势山寨做多; BTC 瀑布 → 选跟跌山寨做空
 
 **B. 资金费率与价格严重背离 — 次可靠**
@@ -949,18 +949,17 @@ Big4 (BTC/ETH/BNB/SOL 综合趋势): BEARISH/STRONG_BEARISH 时禁 LONG, BULLISH
 - 刚突破关键阻力/支撑, 回踩确认后有望延续
 - 成交量在突破时放大, 回踩时缩量
 
-## ❌ 不适合 6 小时持有 (必须 skip)
+## ❌ 不适合 4 小时持有 (必须 skip)
 
 **D. 暴涨暴跌后的报复性反弹 (Dead Cat Bounce)**
-- 24h 涨/跌 20%+ 且成交量异常放大: 大概率一日游, 6 小时内会反转
+- 24h 涨/跌 20%+ 且成交量异常放大: 大概率一日游, 4 小时内会反转
 - 典型反例: BIO/USDT +79U 亏损 — 暴涨后追多被 SL 打掉
 
 **E. 同一品种近期开仓亏损过 (历史数据已提供)**
 - 如果历史表现显示某品种你之前开过方向错了, 这次谨慎对待
-- 典型反例: JTO/USDT 连续 3 次做多全亏 -151U, ZEC/USDT 连续 3 次全亏 -144U
 
 **F. 震荡区间 / 成交量萎缩**
-- 价格在 1h 级别窄幅震荡, 成交量日均缩量 — 6 小时难以走出趋势
+- 价格在 1h 级别窄幅震荡, 成交量日均缩量 — 4 小时难以走出趋势
 
 **G. 单纯因为跌多了就做多 / 涨多了就做空**
 - 仅凭"超跌"做多 = 接飞刀, 必须等 1h 确认拐点
@@ -973,8 +972,8 @@ GOOD EXAMPLE 1 (趋势延续 → bullish, 适合 6 小时):
   "symbol": "NEAR/USDT",
   "category": "bullish",
   "confidence": 0.75,
-  "catalyst": "1h 连续 4 阳放量上攻, 15m 沿 MA9 稳步攀升, RSI 1h=58 未超买仍有空间, 距 7d 高点 6% 空间足够 TP=10%. 资金费率 +0.003% 正常, 无明显拥挤",
-  "data_signal": "1h 4 连阳, 15m 沿 MA9, RSI=58, 距 7d 高点 6%",
+  "catalyst": "1h 连续 4 阳放量上攻, 15m 沿 MA9 稳步攀升, RSI 1h=58 未超买仍有空间, 距 7d 高点 4% 空间足够 TP=5%. 资金费率 +0.003% 正常, 无明显拥挤",
+  "data_signal": "1h 4 连阳, 15m 沿 MA9, RSI=58, 距 7d 高点 4%",
   "risk_note": "BTC 若回调可能带崩山寨"
 }}
 
@@ -983,7 +982,7 @@ GOOD EXAMPLE 2 (资金费率背离 → bearish, 适合 6 小时):
   "symbol": "PEPE/USDT",
   "category": "bearish",
   "confidence": 0.70,
-  "catalyst": "1h 连续 3 阴跌破支撑, RSI 1h=72 超买但价格在跌 (顶背离), 资金费率 +0.08% 极度正 (多头拥挤). 距 7d 低点 15% 空间足够 TP=10% 下跌",
+  "catalyst": "1h 连续 3 阴跌破支撑, RSI 1h=72 超买但价格在跌 (顶背离), 资金费率 +0.08% 极度正 (多头拥挤). 距 7d 低点 10% 空间足够 TP=5% 下跌",
   "data_signal": "RSI顶背离, 资金费率+0.08%, 跌破支撑",
   "risk_note": "meme 币波动大, 若 BTC 反弹可能短暂拉升"
 }}
@@ -1023,7 +1022,7 @@ GOOD EXAMPLE 3 (skip!):
 # Gemini 调用 (含历史表现)
 # ============================================================
 def _call_gemini_explore(universe: dict, global_ctx: dict, historical_stats: dict) -> Optional[dict]:
-    """调用 Gemini — 按 6 小时持仓趋势判断, 多周期 K 线叙事 + Big4 + 技术指标 + 历史表现."""
+    """调用 Gemini — 按 4 小时持仓趋势判断, 多周期 K 线叙事 + Big4 + 技术指标 + 历史表现."""
     if not GEMINI_API_KEY:
         logger.error("[Gemini探索] GEMINI_API_KEY 未设置")
         return None
@@ -1535,12 +1534,12 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
     """跑一轮 Gemini 探索 (v2 优化版). 成功返回 run_id, 失败/跳过返回 None.
 
     新增/修改:
-      1. SL 3%→5%, 杠杆 5x→3x
+      1. SL 3%, TP 5%, 杠杆 5x
       2. 候选池加入中等波动币 (NORMAL_MOVER)
       3. K 线用自然语言描述替代纯数组
       4. 新 prompt: 去天鹅化 + Few-shot + 置信度校准 + 鼓励空 verdicts
       5+6. 传递历史表现数据给 Gemini
-      7. SL 缓冲: 硬 SL 5% (原 3%) + 入场保护 30min
+      7. SL 缓冲: 硬 SL 3% + 入场保护 30min
       8. 置信度判定沿用 EXPLORE_CONFIDENCE_THRESHOLD=0.6
       9+10. 新增 _get_historical_stats 并注入 prompt
     """
@@ -1565,7 +1564,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         logger.info(f"[Gemini探索] kill switch=0, 跳过 (triggered_by={triggered_by})")
         return None
 
-    # 防重: 上次成功距今 >= 6h 才执行 (统一所有触发来源)
+    # 防重: 上次成功距今 >= 4h 才执行 (统一所有触发来源)
     try:
         with _connect() as conn_chk:
             with conn_chk.cursor() as cur:
@@ -1575,8 +1574,8 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 row = cur.fetchone()
                 if row and row.get('last_run'):
                     elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
-                    if elapsed_h < 6:
-                        logger.info(f"[Gemini探索] 上次成功距今 {elapsed_h:.1f}h < 6h, 跳过")
+                    if elapsed_h < 4:
+                        logger.info(f"[Gemini探索] 上次成功距今 {elapsed_h:.1f}h < 4h, 跳过")
                         return None
     except Exception as e:
         logger.warning(f"[Gemini探索] 防重检查失败, 继续: {e}")
@@ -1798,7 +1797,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            # 5i. 开仓 (SL 5%, 杠杆 3x)
+            # 5i. 开仓 (SL 3%, 杠杆 5x)
             position_id = _open_simulated_position(conn, symbol, side, price, catalyst)
             if position_id is None:
                 verdict_rows.append((

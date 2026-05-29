@@ -1288,7 +1288,7 @@ class UnifiedDataScheduler:
         # ============================================================
         logger.info("\n  🤖 Gemini 系列: AI 交易任务")
 
-        # Gemini 探索 - 每 6h 调一轮 Gemini 检测方向异动, 模拟开仓
+        # Gemini 探索 - 每 4h 调一轮 Gemini 检测方向异动, 模拟开仓
         # kill switch = system_settings.gemini_explore_enabled
         def _run_gemini_explore():
             def wrapper():
@@ -1299,10 +1299,10 @@ class UnifiedDataScheduler:
                     logger.error(f"[Gemini探索] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="GeminiExplore").start()
 
-        schedule.every(6).hours.do(_run_gemini_explore)
-        logger.info("  ✓ gemini_explore - 每 6 小时 (后台线程, kill switch 默认 OFF)")
+        schedule.every(4).hours.do(_run_gemini_explore)
+        logger.info("  ✓ gemini_explore - 每 4 小时 (后台线程, kill switch 默认 OFF)")
 
-        # DeepSeek 探索 - 每 6h 调一轮 DeepSeek 检测短时方向异动, 模拟开仓
+        # DeepSeek 探索 - 每 4h 调一轮 DeepSeek 检测短时方向异动, 模拟开仓
         # kill switch = system_settings.deepseek_explore_enabled
         def _run_deepseek_explore():
             def wrapper():
@@ -1313,10 +1313,10 @@ class UnifiedDataScheduler:
                     logger.error(f"[DeepSeek探索] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="DeepSeekExplore").start()
 
-        schedule.every(6).hours.do(_run_deepseek_explore)
-        logger.info("  ✓ deepseek_explore - 每 6 小时 (后台线程, kill switch 默认 OFF)")
+        schedule.every(4).hours.do(_run_deepseek_explore)
+        logger.info("  ✓ deepseek_explore - 每 4 小时 (后台线程, kill switch 默认 OFF)")
 
-        # DeepSeek 预测 - 每 12h 调一次 DeepSeek 预测 TOP50 方向
+        # DeepSeek 预测 - 每 6h 调一次 DeepSeek 预测 TOP50 方向
         def _run_deepseek_predict():
             def wrapper():
                 try:
@@ -1326,10 +1326,10 @@ class UnifiedDataScheduler:
                     logger.error(f"[DeepSeek预测] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="DeepSeekPredict").start()
 
-        schedule.every(12).hours.do(_run_deepseek_predict)
-        logger.info("  ✓ deepseek_predict - 每 12 小时 (后台线程, kill switch 默认 OFF)")
+        schedule.every(6).hours.do(_run_deepseek_predict)
+        logger.info("  ✓ deepseek_predict - 每 6 小时 (后台线程, kill switch 默认 OFF)")
 
-        # Gemini 预测 - 每 12h 调一次 Gemini 预测 TOP50 方向
+        # Gemini 预测 - 每 6h 调一次 Gemini 预测 TOP50 方向
         def _run_gemini_predict():
             def wrapper():
                 try:
@@ -1339,8 +1339,8 @@ class UnifiedDataScheduler:
                     logger.error(f"[Gemini预测] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="GeminiPredict").start()
 
-        schedule.every(12).hours.do(_run_gemini_predict)
-        logger.info("  ✓ gemini_predict - 每 12 小时 (后台线程, kill switch 默认 OFF)")
+        schedule.every(6).hours.do(_run_gemini_predict)
+        logger.info("  ✓ gemini_predict - 每 6 小时 (后台线程, kill switch 默认 OFF)")
 
         # Gemini 市场情绪 + 川普分析 - 每 8h 调一次
         def _run_gemini_sentiment():
@@ -1526,7 +1526,7 @@ class UnifiedDataScheduler:
                 except Exception as e:
                     # 捕获定时任务中的异常，防止整个调度器崩溃
                     logger.error(f"定时任务执行异常: {e}", exc_info=True)
-                time.sleep(1)
+                time.sleep(900)  # 每 15 分钟检查一次; worker 内部有防重机制, 不怕重复触发
 
         except KeyboardInterrupt:
             logger.info("\n\n收到停止信号，正在关闭...")

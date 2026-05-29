@@ -1,7 +1,7 @@
 """
 DeepSeek 探索 worker (v1 — 2026-05-28)
 
-每 6h 调用 DeepSeek (OpenAI-compatible API) 检测加密货币短时方向异动,
+每 4h 调用 DeepSeek (OpenAI-compatible API) 检测加密货币短时方向异动,
 根据 verdict 直接开模拟单。(功能与 gemini_explore_worker 完全对齐)
 
 仓位参数:
@@ -9,9 +9,9 @@ DeepSeek 探索 worker (v1 — 2026-05-28)
   - margin    = 500U
   - leverage  = 5x
   - 最多 20 仓
-  - hold     = 6 小时
-  - SL       = 5%
-  - TP       = 10%
+  - hold     = 4 小时
+  - SL       = 3%
+  - TP       = 5%
 
 闸门:
   - system_settings.deepseek_explore_enabled (默认 0, 关时早返回)
@@ -103,9 +103,9 @@ def _try_position_stats(source: str, account_id: int = 2) -> Optional[Dict]:
 EXPLORE_MARGIN_USD = 500.0
 EXPLORE_LEVERAGE = 5
 EXPLORE_MAX_POSITIONS = 20
-EXPLORE_HOLD_HOURS = 6
-EXPLORE_SL_PCT = 5.0
-EXPLORE_TP_PCT = 10.0
+EXPLORE_HOLD_HOURS = 4
+EXPLORE_SL_PCT = 3.0
+EXPLORE_TP_PCT = 5.0
 EXPLORE_CONFIDENCE_THRESHOLD = 0.5
 EXPLORE_ACCOUNT_ID = 2
 EXPLORE_SOURCE = DEEPSEEK_SOURCE
@@ -822,14 +822,14 @@ def _describe_market_regime(conn) -> str:
 # ============================================================
 # Prompt — 完全复用 Gemini 探索的 prompt，仅修改模型名提示
 # ============================================================
-EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 6h, SL=5%, TP=10%, 不做任何中途干预.
+EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 4h, SL=3%, TP=5%, 不做任何中途干预.
 
-你的任务是判断每个候选币种在未来 6 小时内, 是否有延续/反转的结构性趋势行情, 值得持有 6 小时.
+你的任务是判断每个候选币种在未来 4 小时内, 是否有延续/反转的结构性趋势行情, 值得持有 4 小时.
 
 # 仓位设置 (供你理解容错空间)
-- 杠杆 5x, 名义本金 ~2500U, SL=5% 价格跌幅 (约 -250U), TP=10% 涨幅 (约 +250U)
-- 6 小时到期按市价强制平仓, 期间不提前止盈止损 — 你选的方向必须能**涨 10% 或至少抗住 6 小时不跌 5%**
-- 所以不要选"只涨 2-3%"的标的, 也不要把 SL 只看做"5% 容错"而随意开仓
+- 杠杆 5x, 名义本金 ~2500U, SL=3% 价格跌幅 (约 -150U), TP=5% 涨幅 (约 +125U)
+- 4 小时到期按市价强制平仓, 期间不提前止盈止损 — 你选的方向必须能**涨 5% 或至少抗住 4 小时不跌 3%**
+- 所以不要选"只涨 1-2%"的标的, 也不要把 SL 只看做"3% 容错"而随意开仓
 
 # 全局市场环境
 {global_context_json}
@@ -867,13 +867,13 @@ Big4 (BTC/ETH/BNB/SOL 综合趋势): BEARISH/STRONG_BEARISH 时禁 LONG, BULLISH
 | 0.50-0.64 | 仅小时级别方向支持, 日线中性 — **此区间可以开, 但只开 1-2 个** |
 | 0.00-0.49 | 方向模糊 / 震荡区间 / 数据不足 — **跳过** |
 
-# 判定原则 — 6 小时持仓 vs 短线异动的关键区别
+# 判定原则 — 4 小时持仓 vs 短线异动的关键区别
 
-## ✅ 适合 6 小时持有 (应该输出 bullish/bearish)
+## ✅ 适合 4 小时持有 (应该输出 bullish/bearish)
 
 **A. 趋势延续 — 最可靠**
 - 日线已走出清晰趋势 (连续 3+ 根同向阳/阴), 1h 节奏同向, 成交量放量支持
-- 现价在趋势中段, 距 7d 极值还有 5%+ 空间 (不是刚打到极值就跑)
+- 现价在趋势中段, 距 7d 极值还有 2%+ 空间 (不是刚打到极值就跑)
 
 **B. 资金费率与价格严重背离 — 次可靠**
 - 资金费极端 + RSI 走到反向极值
@@ -883,13 +883,13 @@ Big4 (BTC/ETH/BNB/SOL 综合趋势): BEARISH/STRONG_BEARISH 时禁 LONG, BULLISH
 - 刚突破关键阻力/支撑, 回踩确认后有望延续
 - 成交量在突破时放大, 回踩时缩量
 
-## ❌ 不适合 6 小时持有 (必须 skip)
+## ❌ 不适合 4 小时持有 (必须 skip)
 
 **D. 暴涨暴跌后的报复性反弹 (Dead Cat Bounce)**
-- 24h 涨/跌 20%+ 且成交量异常放大: 大概率一日游, 6 小时内会反转
+- 24h 涨/跌 20%+ 且成交量异常放大: 大概率一日游, 4 小时内会反转
 
 **E. 震荡区间 / 成交量萎缩**
-- 价格在窄幅震荡 (7d 高低差 < 10%), 成交量日均缩量 — 6 小时难以走出趋势
+- 价格在窄幅震荡 (7d 高低差 < 5%), 成交量日均缩量 — 4 小时难以走出趋势
 
 **F. 单纯因为跌多了就做多 / 涨多了就做空**
 - 仅凭"超跌"做多 = 接飞刀, 必须等日线确认拐点
@@ -1421,7 +1421,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         logger.info(f"[DeepSeek探索] kill switch=0, 跳过 (triggered_by={triggered_by})")
         return None
 
-    # 防重: 上次成功距今 >= 6h 才执行 (统一所有触发来源)
+    # 防重: 上次成功距今 >= 4h 才执行 (统一所有触发来源)
     try:
         with _connect() as conn_chk:
             with conn_chk.cursor() as cur:
@@ -1431,8 +1431,8 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 row = cur.fetchone()
                 if row and row.get('last_run'):
                     elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
-                    if elapsed_h < 6:
-                        logger.info(f"[DeepSeek探索] 上次成功距今 {elapsed_h:.1f}h < 6h, 跳过")
+                    if elapsed_h < 4:
+                        logger.info(f"[DeepSeek探索] 上次成功距今 {elapsed_h:.1f}h < 4h, 跳过")
                         return None
     except Exception as e:
         logger.warning(f"[DeepSeek探索] 防重检查失败, 继续: {e}")
