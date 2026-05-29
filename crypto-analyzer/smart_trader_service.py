@@ -3413,7 +3413,7 @@ class SmartTraderService:
             logger.error(traceback.format_exc())
 
     def _check_and_restart_smart_exit_optimizer(self):
-        """SmartExitOptimizer健康检查 - 增量对账（不再全量重启，避免竞争条件）"""
+        """SmartExitOptimizer健康检查 - 增量对账 + 兜底平仓超时持仓"""
         try:
             if not self.smart_exit_optimizer or not self.event_loop:
                 logger.warning("⚠️ SmartExitOptimizer未初始化")
@@ -3431,17 +3431,41 @@ class SmartTraderService:
             """, (self.account_id,))
             db_position_ids = {row[0] for row in cursor.fetchall()}
 
-            # 检查超时未平仓持仓（真正的异常）
+            # 检查超时未平仓持仓并执行兜底平仓
             cursor.execute("""
-                SELECT COUNT(*) as count
+                SELECT id, symbol, position_side
                 FROM futures_positions
                 WHERE status = 'open'
                 AND account_id = %s
                 AND planned_close_time IS NOT NULL
                 AND NOW() > planned_close_time
             """, (self.account_id,))
-            timeout_count = cursor.fetchone()[0]
+            timeout_rows = cursor.fetchall()
+            timeout_count = len(timeout_rows)
             cursor.close()
+
+            # ========== 兜底：对超时持仓直接强制平仓 ==========
+            if timeout_count > 0:
+                logger.error(f"❌ 发现{timeout_count}个超时未平仓持仓，执行兜底强制平仓")
+                for to_id, to_symbol, to_side in timeout_rows:
+                    try:
+                        # 获取实时价格（同步方式，get_current_price 是同步方法）
+                        price_val = self.get_current_price(to_symbol)
+                        if price_val:
+                            price = Decimal(str(price_val))
+                            asyncio.run_coroutine_threadsafe(
+                                self.smart_exit_optimizer._execute_close(
+                                    to_id,
+                                    price,
+                                    "健康检查兜底平仓(超时)"
+                                ),
+                                self.event_loop
+                            )
+                            logger.warning(f"[HEALTH-CHECK] 兜底平仓: 持仓{to_id} {to_symbol} {to_side}")
+                        else:
+                            logger.error(f"[HEALTH-CHECK] 兜底平仓失败: 持仓{to_id} 无法获取价格")
+                    except Exception as ee:
+                        logger.error(f"[HEALTH-CHECK] 兜底平仓失败: 持仓{to_id} | {ee}")
 
             monitoring_ids = set(self.smart_exit_optimizer.monitoring_tasks.keys())
 
@@ -3470,12 +3494,8 @@ class SmartTraderService:
                 except Exception as e:
                     logger.error(f"[HEALTH-CHECK] 停止冗余监控失败: 持仓{pid} | {e}")
 
-            # 只有超时持仓才是真正异常，才记录日志
-            if timeout_count > 0:
-                logger.error(f"❌ 发现{timeout_count}个超时未平仓持仓，SmartExitOptimizer可能异常")
-
             # 打印健康状态
-            if to_add or to_remove:
+            if to_add or to_remove or timeout_count > 0:
                 logger.info(
                     f"[HEALTH-CHECK] 对账完成: +{len(to_add)}补充 -{len(to_remove)}移除 "
                     f"| DB={len(db_position_ids)}, 监控={len(monitoring_ids)}"
