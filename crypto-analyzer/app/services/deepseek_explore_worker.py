@@ -1692,6 +1692,19 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         _insert_verdicts(conn, run_id, verdict_rows)
         _update_run_trades_opened(conn, run_id, trades_opened)
 
+        try:
+            from app.services.ai_shadow_explore import run_shadow_after_teacher_explore
+            run_shadow_after_teacher_explore(
+                teacher_source="deepseek_explore",
+                teacher_run_id=run_id,
+                universe=universe,
+                global_ctx=global_ctx,
+                teacher_verdicts=verdicts,
+                conn=conn,
+            )
+        except Exception as _shadow_err:
+            logger.warning(f"[DeepSeek探索] Shadow 对比跳过: {_shadow_err}")
+
         logger.info(
             f"[DeepSeek探索] === 一轮结束 run_id={run_id} 开仓={trades_opened} "
             f"跳过={len(verdict_rows) - trades_opened} "

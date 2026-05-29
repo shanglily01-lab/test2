@@ -1067,6 +1067,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册 AI Shadow 对比 API 路由
+try:
+    from app.api.ai_shadow_api import router as ai_shadow_router
+    app.include_router(ai_shadow_router)
+    logger.info("[AI Shadow] API路由已注册")
+except Exception as e:
+    logger.warning(f"[AI Shadow] API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册企业金库监控API路由
 ENABLE_CORPORATE_TREASURY = True  # 启用企业金库API
 
@@ -1777,6 +1787,15 @@ async def deepseek_explore_page():
         return FileResponse(str(page_path))
     else:
         raise HTTPException(status_code=404, detail="DeepSeek explore page not found")
+
+
+@app.get("/ai_shadow_compare")
+async def ai_shadow_compare_page():
+    """AI Shadow 对比 — Teacher vs 规则引擎 (不开仓)."""
+    page_path = project_root / "templates" / "ai_shadow_compare.html"
+    if page_path.exists():
+        return FileResponse(str(page_path))
+    raise HTTPException(status_code=404, detail="AI Shadow compare page not found")
 
 
 @app.get("/deepseek_predict")

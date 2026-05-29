@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI Shadow 对比 | Neural Obsidian</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  body { font-family: 'Manrope', sans-serif; }
+  h1, h2 { font-family: 'Space Grotesk', sans-serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .chip { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .chip-bull { background: rgba(73,244,200,0.12); color: #49f4c8; }
+  .chip-bear { background: rgba(255,113,108,0.12); color: #ff716c; }
+  .chip-skip { background: rgba(168,171,178,0.1); color: #a8abb2; }
+  .row-click { cursor: pointer; }
+  .row-click:hover { background: rgba(73,244,200,0.04); }
+  .row-active { background: rgba(73,244,200,0.08); border-left: 2px solid #49f4c8; }
+</style>
+<script>
+  tailwind.config = { darkMode: "class", theme: { extend: { colors: {
+    primary: "#49f4c8", surface: "#0a0f14", "on-surface": "#ebeef5",
+    "on-surface-variant": "#a8abb2", "surface-container": "#151a20",
+    "outline-variant": "#44484e"
+  }}}};
+</script>
+</head>
+<body class="bg-[#0a0f14] text-[#ebeef5]">
+
+<aside class="fixed left-0 top-0 h-screen w-[240px] bg-[#0a0f14] border-r border-slate-800 flex flex-col py-6 z-50">
+<div class="px-5 mb-6">
+<a href="/" class="block"><h1 class="text-xl font-black tracking-tighter text-[#49f4c8]">NEURAL OBSIDIAN</h1>
+<p class="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">Quant Terminal</p></a>
+</div>
+<nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto">
+<a href="/dashboard" data-path="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
+<a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>合约交易</span></a>
+<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">history</span><span>合约交易记录</span></a>
+<a href="/gemini_explore" data-path="/gemini_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>Gemini 探索</span></a>
+<a href="/deepseek_explore" data-path="/deepseek_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">psychology</span><span>DeepSeek 探索</span></a>
+<a href="/live_trading" data-path="/live_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">precision_manufacturing</span><span>Live Trading</span></a>
+<a href="/futures_review" data-path="/futures_review" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>复盘分析</span></a>
+<a href="/technical-signals" data-path="/technical-signals" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">sensors</span><span>信号分析</span></a>
+<a href="/market_regime" data-path="/market_regime" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">pulse_alert</span><span>行情识别</span></a>
+<a href="/top50" data-path="/top50" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">workspace_premium</span><span>TOP 50</span></a>
+<a href="/symbol_blacklist" data-path="/symbol_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">block</span><span>交易对黑名单</span></a>
+<a href="/signal_blacklist" data-path="/signal_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">do_not_disturb_on</span><span>信号黑名单</span></a>
+<a href="/spot_trading" data-path="/spot_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">currency_exchange</span><span>现货交易</span></a>
+<a href="/etf_data" data-path="/etf_data" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">candlestick_chart</span><span>ETF 数据</span></a>
+<a href="/blockchain_gas" data-path="/blockchain_gas" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Gas 监控</span></a>
+<a href="/corporate_treasury" data-path="/corporate_treasury" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">account_balance</span><span>企业金库</span></a>
+<a href="/data_management" data-path="/data_management" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">storage</span><span>数据管理</span></a>
+<a href="/api-keys" data-path="/api-keys" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">api</span><span>API Keys</span></a>
+<a href="/system-settings" data-path="/system-settings" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">settings</span><span>Settings</span></a>
+<a href="/binance-news" data-path="/binance-news" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">campaign</span><span>公告监控</span></a>
+<a href="/trading-manual" data-path="/trading-manual" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">menu_book</span><span>操作手册</span></a>
+<a href="/ai_shadow_compare" data-path="/ai_shadow_compare" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] text-sm"><span class="material-symbols-outlined text-[18px]">compare_arrows</span><span>AI Shadow 对比</span></a>
+</nav>
+<script>
+(function(){
+  var path = window.location.pathname.replace(/\/$/, '') || '/';
+  document.querySelectorAll('#sidebar-nav .nav-item').forEach(function(a){
+    if (a.getAttribute('data-path') === path) {
+      a.classList.remove('text-slate-400');
+      a.classList.add('text-[#49f4c8]','bg-[#151a20]','border-r-2','border-[#49f4c8]','font-semibold');
+    }
+  });
+})();
+</script>
+</aside>
+
+<main class="ml-[240px] min-h-screen px-8 py-6">
+<header class="flex items-center justify-between mb-6 pb-4 border-b border-[#44484e]/40">
+  <div>
+    <h1 class="text-2xl font-bold">AI Shadow 对比</h1>
+    <p class="text-xs text-[#a8abb2] mt-1">Teacher (Gemini/DeepSeek) vs 本地规则引擎 · 不开仓 · 规则 <span class="mono text-primary">v1</span></p>
+  </div>
+  <div class="flex items-center gap-3">
+    <select id="filterSource" onchange="loadRuns()" class="text-xs bg-[#151a20] border border-[#44484e] rounded-lg px-3 py-2 text-[#ebeef5]">
+      <option value="">全部来源</option>
+      <option value="gemini_explore">gemini_explore</option>
+      <option value="deepseek_explore">deepseek_explore</option>
+    </select>
+    <button onclick="loadAll()" class="flex items-center gap-1 px-3 py-2 rounded-lg bg-[#151a20] hover:bg-[#1a2027] text-xs">
+      <span class="material-symbols-outlined text-[16px]">refresh</span>刷新
+    </button>
+  </div>
+</header>
+
+<div id="notReady" class="hidden mb-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm"></div>
+
+<!-- 汇总卡片 -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <div class="bg-[#151a20] rounded-xl p-4 border border-[#44484e]/30">
+    <div class="text-[10px] uppercase tracking-wider text-[#a8abb2]">对比轮数</div>
+    <div id="statRuns" class="text-2xl font-bold mt-1 mono">—</div>
+  </div>
+  <div class="bg-[#151a20] rounded-xl p-4 border border-[#44484e]/30">
+    <div class="text-[10px] uppercase tracking-wider text-[#a8abb2]">平均一致率</div>
+    <div id="statAgree" class="text-2xl font-bold mt-1 mono text-primary">—</div>
+  </div>
+  <div class="bg-[#151a20] rounded-xl p-4 border border-[#44484e]/30">
+    <div class="text-[10px] uppercase tracking-wider text-[#a8abb2]">对比 symbol 总数</div>
+    <div id="statCompared" class="text-2xl font-bold mt-1 mono">—</div>
+  </div>
+  <div class="bg-[#151a20] rounded-xl p-4 border border-[#44484e]/30">
+    <div class="text-[10px] uppercase tracking-wider text-[#a8abb2]">按来源</div>
+    <div id="statBySource" class="text-xs mt-2 space-y-1 text-[#a8abb2]">—</div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+  <!-- 运行列表 -->
+  <section class="bg-[#151a20] rounded-xl border border-[#44484e]/30 overflow-hidden">
+    <div class="px-4 py-3 border-b border-[#44484e]/30 text-sm font-semibold">最近对比轮次</div>
+    <div class="overflow-x-auto max-h-[520px] overflow-y-auto">
+      <table class="w-full text-xs">
+        <thead class="sticky top-0 bg-[#1a2027] text-[#a8abb2]">
+          <tr>
+            <th class="text-left px-3 py-2">ID</th>
+            <th class="text-left px-3 py-2">来源</th>
+            <th class="text-left px-3 py-2">Teacher#</th>
+            <th class="text-right px-3 py-2">一致率</th>
+            <th class="text-right px-3 py-2">可交易</th>
+            <th class="text-left px-3 py-2">时间</th>
+          </tr>
+        </thead>
+        <tbody id="runsBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 差异明细 -->
+  <section class="bg-[#151a20] rounded-xl border border-[#44484e]/30 overflow-hidden">
+    <div class="px-4 py-3 border-b border-[#44484e]/30 flex items-center justify-between">
+      <span class="text-sm font-semibold">差异明细</span>
+      <span id="detailTitle" class="text-[10px] text-[#a8abb2]">点击左侧一行查看</span>
+    </div>
+    <div class="overflow-x-auto max-h-[520px] overflow-y-auto">
+      <table class="w-full text-xs">
+        <thead class="sticky top-0 bg-[#1a2027] text-[#a8abb2]">
+          <tr>
+            <th class="text-left px-3 py-2">Symbol</th>
+            <th class="text-left px-3 py-2">Teacher</th>
+            <th class="text-left px-3 py-2">Shadow</th>
+            <th class="text-left px-3 py-2">原因</th>
+          </tr>
+        </thead>
+        <tbody id="verdictsBody">
+          <tr><td colspan="4" class="px-4 py-8 text-center text-[#a8abb2]">请选择一轮对比</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+</main>
+
+<script>
+var selectedRunId = null;
+
+function catChip(cat) {
+  var c = (cat || 'skip').toLowerCase();
+  var cls = c === 'bullish' ? 'chip-bull' : (c === 'bearish' ? 'chip-bear' : 'chip-skip');
+  return '<span class="chip ' + cls + '">' + c + '</span>';
+}
+
+function fmtConf(v) {
+  if (v == null) return '—';
+  return Number(v).toFixed(2);
+}
+
+async function loadSummary() {
+  var res = await fetch('/api/ai-shadow/summary');
+  var data = await res.json();
+  var box = document.getElementById('notReady');
+  if (!data.ready) {
+    box.textContent = data.message || '数据表未就绪';
+    box.classList.remove('hidden');
+    return;
+  }
+  box.classList.add('hidden');
+  document.getElementById('statRuns').textContent = data.total_runs;
+  document.getElementById('statAgree').textContent = data.avg_agree_pct + '%';
+  document.getElementById('statCompared').textContent = data.total_compared;
+  var srcHtml = '';
+  (data.by_source || []).forEach(function(s) {
+    srcHtml += '<div>' + s.teacher_source + ': ' + s.runs + '轮 · ' + s.avg_agree_pct + '%</div>';
+  });
+  document.getElementById('statBySource').innerHTML = srcHtml || '—';
+}
+
+async function loadRuns() {
+  var src = document.getElementById('filterSource').value;
+  var url = '/api/ai-shadow/runs?limit=40' + (src ? '&teacher_source=' + encodeURIComponent(src) : '');
+  var res = await fetch(url);
+  var data = await res.json();
+  var tbody = document.getElementById('runsBody');
+  tbody.innerHTML = '';
+  if (!data.runs || !data.runs.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-[#a8abb2]">暂无对比数据 (需 explore 跑完且 migration 005 已执行)</td></tr>';
+    return;
+  }
+  data.runs.forEach(function(r) {
+    var tr = document.createElement('tr');
+    tr.className = 'row-click border-t border-[#44484e]/20' + (selectedRunId === r.id ? ' row-active' : '');
+    tr.onclick = function() { selectRun(r.id, r.teacher_source, r.teacher_run_id); };
+    var agree = r.agree_pct != null ? r.agree_pct + '%' : '—';
+    var trade = (r.tradeable_agree || 0) + ' / T' + (r.teacher_tradeable||0) + ' S' + (r.shadow_tradeable||0);
+    tr.innerHTML =
+      '<td class="px-3 py-2 mono">' + r.id + '</td>' +
+      '<td class="px-3 py-2">' + r.teacher_source + '</td>' +
+      '<td class="px-3 py-2 mono">' + r.teacher_run_id + '</td>' +
+      '<td class="px-3 py-2 text-right mono text-primary">' + agree + '</td>' +
+      '<td class="px-3 py-2 text-right mono text-[#a8abb2]">' + trade + '</td>' +
+      '<td class="px-3 py-2 text-[#a8abb2]">' + (r.created_at || '') + '</td>';
+    tbody.appendChild(tr);
+  });
+  if (!selectedRunId && data.runs[0]) {
+    selectRun(data.runs[0].id, data.runs[0].teacher_source, data.runs[0].teacher_run_id);
+  }
+}
+
+async function selectRun(id, source, teacherRunId) {
+  selectedRunId = id;
+  document.getElementById('detailTitle').textContent = '#' + id + ' · ' + source + ' run ' + teacherRunId;
+  document.querySelectorAll('#runsBody tr').forEach(function(tr) {
+    tr.classList.remove('row-active');
+  });
+  loadRuns();
+  var res = await fetch('/api/ai-shadow/verdicts?shadow_run_id=' + id + '&disagreements_only=true&limit=100');
+  var data = await res.json();
+  var tbody = document.getElementById('verdictsBody');
+  tbody.innerHTML = '';
+  if (!data.verdicts || !data.verdicts.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-6 text-center text-primary">本轮 category 全部一致 🎉</td></tr>';
+    return;
+  }
+  data.verdicts.forEach(function(v) {
+    var tr = document.createElement('tr');
+    tr.className = 'border-t border-[#44484e]/20';
+    var reason = (v.diff_reason || '').slice(0, 120);
+    if (v.shadow_signals && v.shadow_signals.length) {
+      reason += ' [' + v.shadow_signals.join(',') + ']';
+    }
+    tr.innerHTML =
+      '<td class="px-3 py-2 font-medium">' + v.symbol + '</td>' +
+      '<td class="px-3 py-2">' + catChip(v.teacher_category) + ' <span class="mono text-[#a8abb2]">' + fmtConf(v.teacher_confidence) + '</span></td>' +
+      '<td class="px-3 py-2">' + catChip(v.shadow_category) + ' <span class="mono text-[#a8abb2]">' + fmtConf(v.shadow_confidence) + '</span></td>' +
+      '<td class="px-3 py-2 text-[#a8abb2] text-[10px]">' + reason + '</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function loadAll() {
+  loadSummary();
+  loadRuns();
+}
+
+loadAll();
+setInterval(loadAll, 120000);
+</script>
+</body></html>

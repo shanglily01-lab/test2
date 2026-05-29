@@ -126,6 +126,7 @@
 <a href="/system-settings" data-path="/system-settings" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">settings</span><span>Settings</span></a>
     <a href="/binance-news" data-path="/binance-news" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">campaign</span><span>公告监控</span></a>
 <a href="/trading-manual" data-path="/trading-manual" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">menu_book</span><span>操作手册</span></a>
+<a href="/ai_shadow_compare" data-path="/ai_shadow_compare" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">compare_arrows</span><span>AI Shadow 对比</span></a>
 </nav>
 <script>
 (function(){
@@ -408,7 +409,9 @@ async function loadPositions() {
             'u_coin_style': 'U本位破位', 'manual': '手动',
             's1_early_long': 'S1 早期做多',
             's5_large_oversold': 'S5 大币超卖', 's6_vol_spike': 'S6 量能异动',
-            's9_gemini_ai': 'S9 Gemini抄底'
+            's9_gemini_ai': 'S9 Gemini抄底',
+            'gemini_explore': 'Gemini 探索', 'deepseek_explore': 'DeepSeek 探索',
+            'gemini_predict': 'Gemini 预测', 'deepseek_predict': 'DeepSeek 预测'
         };
         var srcLabel = sourceLabels[pos.source] || pos.source || '';
         var signalType = pos.entry_signal_type || '--';

@@ -147,11 +147,11 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
                     FROM futures_positions
                     WHERE account_id = %s AND status = 'open'
                 """, (account_id,))
-                db_rows = {(r['symbol'], r['position_side']): r for r in cursor.fetchall()}
+                db_rows = {r['id']: r for r in cursor.fetchall()}
                 cursor.close()
                 for pos in positions:
-                    key = (pos.get('symbol', ''), pos.get('position_side', ''))
-                    db = db_rows.get(key, {})
+                    pid = pos.get('id') or pos.get('position_id')
+                    db = db_rows.get(pid, {}) if pid else {}
                     pos['id'] = db.get('id')
                     pos['stop_loss_price'] = float(db['stop_loss_price']) if db.get('stop_loss_price') else None
                     pos['take_profit_price'] = float(db['take_profit_price']) if db.get('take_profit_price') else None
