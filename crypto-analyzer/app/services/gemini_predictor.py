@@ -1,7 +1,7 @@
 """
 Gemini 预测 worker (v2 — 2026-05-29)
 
-每 6h 对 TOP 50 交易对调用 Google Gemini 预测未来 6h 方向,
+每 4h 对 TOP 50 交易对调用 Google Gemini 预测未来 6h 方向,
 根据预测结果直接开模拟单.
 
 仓位参数:
@@ -893,7 +893,7 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
         logger.info(f"[Gemini预测] kill switch=0, 跳过 (triggered_by={triggered_by})")
         return None
 
-    # 防重: 上次成功距今 >= 6h 才执行 (统一切触发来源, 手动触发不拦截)
+    # 防重: 上次成功距今 >= 4h 才执行 (统一切触发来源, 手动触发不拦截)
     if triggered_by != 'manual':
         try:
             with _connect() as conn_chk:
@@ -904,8 +904,8 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
                     row = cur.fetchone()
                     if row and row.get('last_run'):
                         elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
-                        if elapsed_h < 6:
-                            logger.info(f"[Gemini预测] 上次成功距今 {elapsed_h:.1f}h < 6h, 跳过")
+                        if elapsed_h < 4:
+                            logger.info(f"[Gemini预测] 上次成功距今 {elapsed_h:.1f}h < 4h, 跳过")
                             return None
         except Exception as e:
             logger.warning(f"[Gemini预测] 防重检查失败, 继续: {e}")

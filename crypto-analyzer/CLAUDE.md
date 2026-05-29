@@ -48,8 +48,10 @@
 | data_cache.position_stats_snapshot | 每 30 分钟 |
 | data_cache.candidate_pool_snapshot | 每 30 分钟 |
 | data_cache.settings_cache | 每 1 分钟 |
-| Gemini 探索 | 每 6 小时 |
-| Gemini 预测 | 每 6 小时 |
+| Gemini 探索 | 每 2 小时 |
+| Gemini 预测 | 每 4 小时 |
+| DeepSeek 探索 | 每 2 小时 |
+| DeepSeek 预测 | 每 4 小时 |
 | 市场情绪分析 | 每 6 小时 |
 | ETF 同步 | 每天 06:45 |
 | 金库同步 | 每天 07:30 |
@@ -57,12 +59,12 @@
 ## Gemini AI 模块
 
 ### gemini_explore_worker (探索)
-- 每 6h, kill switch: `gemini_explore_enabled`
+- 每 2h, kill switch: `gemini_explore_enabled`
 - 检测红/黑天鹅,开模拟单 (SL=3%/TP=8%/3x/6h/500U)
 - v3.5 接入实盘: `live_trading_enabled=1` 时同步到所有 active API Key
 
 ### gemini_predictor (预测)
-- 每 6h, kill switch: `gemini_predict_enabled`
+- 每 4h, kill switch: `gemini_predict_enabled`
 - 预测 TOP50 方向,持仓 6h,SL=3%/TP=8%
 - 不实盘接入
 

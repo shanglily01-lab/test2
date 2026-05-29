@@ -1,7 +1,7 @@
 """
 DeepSeek 探索 worker (v1 — 2026-05-28)
 
-每 4h 调用 DeepSeek (OpenAI-compatible API) 检测加密货币短时方向异动,
+每 2h 调用 DeepSeek (OpenAI-compatible API) 检测加密货币短时方向异动,
 根据 verdict 直接开模拟单。(功能与 gemini_explore_worker 完全对齐)
 
 仓位参数:
@@ -1432,7 +1432,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         logger.info(f"[DeepSeek探索] kill switch=0, 跳过 (triggered_by={triggered_by})")
         return None
 
-    # 防重: 上次成功距今 >= 4h 才执行 (统一切触发来源, 手动触发不拦截)
+    # 防重: 上次成功距今 >= 2h 才执行 (统一切触发来源, 手动触发不拦截)
     if triggered_by != 'manual':
         try:
             with _connect() as conn_chk:
@@ -1443,8 +1443,8 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                     row = cur.fetchone()
                     if row and row.get('last_run'):
                         elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
-                        if elapsed_h < 4:
-                            logger.info(f"[DeepSeek探索] 上次成功距今 {elapsed_h:.1f}h < 4h, 跳过")
+                        if elapsed_h < 2:
+                            logger.info(f"[DeepSeek探索] 上次成功距今 {elapsed_h:.1f}h < 2h, 跳过")
                             return None
         except Exception as e:
             logger.warning(f"[DeepSeek探索] 防重检查失败, 继续: {e}")
