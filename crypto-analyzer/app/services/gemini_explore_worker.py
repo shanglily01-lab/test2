@@ -1513,7 +1513,7 @@ def _finish_run(
     prompt_text: Optional[str] = None,
     raw_response: Optional[str] = None,
 ) -> int:
-    """更新已登记的 running 记录, 无 run_id 时退化为 INSERT."""
+    """更新已登记的 partial(进行中) 记录, 无 run_id 时退化为 INSERT."""
     if run_id:
         with conn.cursor() as cur:
             cur.execute(
@@ -1654,11 +1654,12 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
 
     run_id = None
     try:
+        # status 列为 ENUM(ok/partial/error/skipped), 无 running; partial=本轮进行中
         run_id = _insert_run(
             conn, asof_utc, 0, '', 0.0,
-            'running', None, triggered_by,
+            'partial', None, triggered_by,
         )
-        logger.info(f"[Gemini探索] run_id={run_id} 已登记 (status=running)")
+        logger.info(f"[Gemini探索] run_id={run_id} 已登记 (status=partial, 进行中)")
 
         # 2. 候选池 (中等波动币)
         universe = _build_universe(conn)
