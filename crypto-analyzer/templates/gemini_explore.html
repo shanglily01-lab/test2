@@ -36,6 +36,11 @@
   .toggle input:checked + .slider { background: #49f4c8; }
   .toggle input:checked + .slider:before { transform: translateX(20px); background: #002045; }
   .row-expand { background: #0f1419; }
+  .run-tab { padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; color: #a8abb2; background: transparent; border: 1px solid transparent; cursor: pointer; transition: .15s; }
+  .run-tab:hover { color: #ebeef5; background: rgba(73,244,200,0.06); }
+  .run-tab.active { color: #49f4c8; border-color: rgba(73,244,200,0.35); background: rgba(73,244,200,0.1); }
+  .code-block { max-height: 480px; overflow: auto; padding: 12px 14px; border-radius: 8px; background: #0a0f14; border: 1px solid #334155; font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.55; color: #c8cdd5; white-space: pre-wrap; word-break: break-word; }
+  .ai-log-badge { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; font-size: 10px; color: #5b9eff; opacity: 0.85; }
 </style>
 <script id="tailwind-config">
   tailwind.config = {
@@ -73,10 +78,12 @@
 </div>
 <nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto">
 <a href="/dashboard" data-path="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
-<a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>U本位合约</span></a>
-<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_bitcoin</span><span>币本位合约</span></a>
+<a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>合约交易</span></a>
+<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history</span><span>合约交易记录</span></a>
 <a href="/gemini_explore" data-path="/gemini_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>Gemini 探索</span></a>
+<a href="/gemini_explore?tab=predict" data-path="/gemini_predict" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">psychology</span><span>Gemini 预测</span></a>
 <a href="/deepseek_explore" data-path="/deepseek_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">psychology</span><span>DeepSeek 探索</span></a>
+<a href="/deepseek_explore?tab=predict" data-path="/deepseek_predict" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">auto_graph</span><span>DeepSeek 预测</span></a>
 <a href="/live_trading" data-path="/live_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">precision_manufacturing</span><span>Live Trading</span></a>
 <a href="/futures_review" data-path="/futures_review" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>复盘分析</span></a>
 <a href="/technical-signals" data-path="/technical-signals" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">sensors</span><span>信号分析</span></a>
@@ -97,8 +104,13 @@
 <script>
 (function(){
   var path = window.location.pathname.replace(/\/$/, '') || '/';
+  var tab = new URLSearchParams(window.location.search).get('tab');
+  if (path === '/gemini_predict') path = '/gemini_explore';
   document.querySelectorAll('#sidebar-nav .nav-item').forEach(function(a){
-    if(a.getAttribute('data-path') === path){
+    var href = a.getAttribute('href') || '';
+    var matchExplore = !tab && a.getAttribute('data-path') === path && href.indexOf('tab=predict') === -1;
+    var matchPredict = tab === 'predict' && href.indexOf('tab=predict') !== -1 && href.indexOf('gemini') !== -1;
+    if (matchExplore || matchPredict) {
       a.classList.remove('text-slate-400');
       a.classList.add('text-[#49f4c8]','bg-[#151a20]','border-r-2','border-[#49f4c8]','font-semibold');
     }
@@ -228,7 +240,8 @@
 
 <!-- 最近 Gemini 探索运行 -->
 <section class="px-8 pb-6">
-  <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant mb-3">最近 Gemini 探索运行</h2>
+  <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant mb-1">最近 Gemini 探索运行</h2>
+  <p class="text-[10px] text-on-surface-variant mb-3">点击行展开 · Verdicts / Prompt / 原始 JSON · <span class="material-symbols-outlined text-[11px] align-text-bottom">description</span> 表示已存档</p>
   <div class="bg-surface-container-low rounded-xl overflow-hidden">
     <div class="overflow-x-auto max-h-[480px] overflow-y-auto">
       <table class="w-full text-xs">
@@ -380,7 +393,8 @@
 
 <!-- 最近 Gemini 预测运行 -->
 <section class="px-8 pb-6">
-  <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant mb-3">最近 Gemini 预测运行</h2>
+  <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant mb-1">最近 Gemini 预测运行</h2>
+  <p class="text-[10px] text-on-surface-variant mb-3">点击行展开 · Verdicts / Prompt / 原始 JSON · <span class="material-symbols-outlined text-[11px] align-text-bottom">description</span> 表示已存档</p>
   <div class="bg-surface-container-low rounded-xl overflow-hidden">
     <div class="overflow-x-auto max-h-[480px] overflow-y-auto">
       <table class="w-full text-xs">
@@ -561,6 +575,139 @@ function escapeHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+var _runDetailCache = {};
+
+function aiLogBadge(r) {
+  if (!r.has_prompt && !r.has_raw) return '';
+  return '<span class="ai-log-badge" title="已保存 Prompt / 原始响应"><span class="material-symbols-outlined text-[12px]">description</span></span>';
+}
+
+function formatRawJson(text) {
+  if (!text) return '<p class="text-on-surface-variant text-xs">无数据（此轮可能在开启记录功能之前运行）</p>';
+  try {
+    return buildCodeBlock(JSON.stringify(JSON.parse(text), null, 2));
+  } catch (e) {
+    return buildCodeBlock(text);
+  }
+}
+
+function buildCodeBlock(text) {
+  return '<pre class="code-block">' + escapeHtml(text) + '</pre>' +
+    '<button type="button" class="mt-2 text-[11px] text-primary hover:underline" onclick="copyCodeBlock(this)">复制</button>';
+}
+
+function copyCodeBlock(btn) {
+  var pre = btn.previousElementSibling;
+  if (!pre || pre.tagName !== 'PRE') return;
+  navigator.clipboard.writeText(pre.textContent).then(function(){
+    var old = btn.textContent;
+    btn.textContent = '已复制';
+    setTimeout(function(){ btn.textContent = old; }, 1500);
+  }).catch(function(){ alert('复制失败'); });
+}
+
+function buildRunDetailShell(runId, prefix, apiPrefix, verdictsHtml) {
+  return '<div class="run-detail-wrap" id="run-wrap-' + prefix + runId + '" data-api="' + apiPrefix + '">' +
+    '<div class="flex flex-wrap gap-2 mb-3">' +
+    '<button type="button" class="run-tab active" data-tab="verdicts" onclick="switchRunTab(\'' + prefix + '\',' + runId + ',\'verdicts\')">Verdicts</button>' +
+    '<button type="button" class="run-tab" data-tab="prompt" onclick="switchRunTab(\'' + prefix + '\',' + runId + ',\'prompt\')">Prompt</button>' +
+    '<button type="button" class="run-tab" data-tab="raw" onclick="switchRunTab(\'' + prefix + '\',' + runId + ',\'raw\')">原始 JSON</button>' +
+    '</div>' +
+    '<div class="run-tab-panel" id="run-panel-' + prefix + runId + '-verdicts">' + verdictsHtml + '</div>' +
+    '<div class="run-tab-panel hidden" id="run-panel-' + prefix + runId + '-prompt"><p class="text-on-surface-variant text-xs">加载中...</p></div>' +
+    '<div class="run-tab-panel hidden" id="run-panel-' + prefix + runId + '-raw"><p class="text-on-surface-variant text-xs">加载中...</p></div>' +
+    '</div>';
+}
+
+function switchRunTab(prefix, runId, tab) {
+  var wrap = document.getElementById('run-wrap-' + prefix + runId);
+  if (!wrap) return;
+  wrap.querySelectorAll('.run-tab').forEach(function(btn){
+    btn.classList.toggle('active', btn.getAttribute('data-tab') === tab);
+  });
+  ['verdicts', 'prompt', 'raw'].forEach(function(name){
+    var panel = document.getElementById('run-panel-' + prefix + runId + '-' + name);
+    if (panel) panel.classList.toggle('hidden', name !== tab);
+  });
+  if (tab === 'prompt' || tab === 'raw') {
+    loadRunDetail(prefix, runId, tab);
+  }
+}
+
+function loadRunDetail(prefix, runId, tab) {
+  var cacheKey = prefix + runId + ':' + tab;
+  var panel = document.getElementById('run-panel-' + prefix + runId + '-' + tab);
+  if (!panel) return;
+  if (_runDetailCache[cacheKey]) {
+    panel.innerHTML = _runDetailCache[cacheKey];
+    return;
+  }
+  var wrap = document.getElementById('run-wrap-' + prefix + runId);
+  var apiPrefix = wrap ? wrap.getAttribute('data-api') : '';
+  fetch(apiPrefix + '/runs/' + runId + '/detail')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if (!d.success) throw new Error(d.detail || 'load failed');
+      var data = d.data || {};
+      var html;
+      if (tab === 'prompt') {
+        html = buildCodeBlock(data.prompt_text || '');
+        if (data.summary_zh) {
+          html = '<p class="text-xs text-on-surface-variant mb-2"><span class="text-primary">summary_zh:</span> ' + escapeHtml(data.summary_zh) + '</p>' + html;
+        }
+      } else {
+        html = formatRawJson(data.raw_response || '');
+        if (data.summary_zh) {
+          html = '<p class="text-xs text-on-surface-variant mb-2"><span class="text-primary">summary_zh:</span> ' + escapeHtml(data.summary_zh) + '</p>' + html;
+        }
+      }
+      _runDetailCache[cacheKey] = html;
+      panel.innerHTML = html;
+    })
+    .catch(function(e){
+      panel.innerHTML = '<p class="text-on-surface-variant text-xs">加载失败: ' + escapeHtml(String(e)) + '</p>';
+    });
+}
+
+function buildVerdictsTable(vs, includePrice) {
+  if (!vs.length) return '<p class="text-on-surface-variant text-xs">无 verdicts</p>';
+  var html = '<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="border-b border-outline-variant/20 text-on-surface-variant">' +
+    '<th class="px-2 py-2 text-left">Symbol</th><th class="px-2 py-2 text-left">类别</th><th class="px-2 py-2 text-right">置信</th>';
+  if (includePrice) html += '<th class="px-2 py-2 text-right">预测价</th>';
+  html += '<th class="px-2 py-2 text-left">动作</th><th class="px-2 py-2 text-left">催化剂</th>';
+  if (!includePrice) html += '<th class="px-2 py-2 text-left">数据信号</th>';
+  html += '<th class="px-2 py-2 text-left">跳过原因</th></tr></thead><tbody>';
+  vs.forEach(function(v){
+    var catRaw = (v.category || '').toLowerCase();
+    var catChip = (catRaw === 'bullish' || catRaw === 'red_swan') ? '<span class="chip chip-long">看多</span>'
+                : (catRaw === 'bearish' || catRaw === 'black_swan') ? '<span class="chip chip-short">看空</span>'
+                : '<span class="chip chip-skip">SKIP</span>';
+    var act = v.action_taken || 'skipped_other';
+    var actClass = act === 'opened' ? 'chip-action-opened'
+                : act === 'skipped_big4' ? 'chip-action-big4'
+                : act === 'skipped_dedup' ? 'chip-action-dedup'
+                : act === 'skipped_confidence' ? 'chip-action-confidence'
+                : 'chip-action-other';
+    var actLabel = act === 'opened' ? ('已开仓 #' + (v.position_id || '?'))
+                : act === 'skipped_big4' ? 'Big4 闸门'
+                : act === 'skipped_dedup' ? '已有同向'
+                : act === 'skipped_max_positions' ? '已达上限'
+                : act === 'skipped_confidence' ? '低置信度'
+                : '其他';
+    html += '<tr class="border-b border-outline-variant/10">' +
+            '<td class="px-2 py-2 mono">' + escapeHtml(v.symbol) + '</td>' +
+            '<td class="px-2 py-2">' + catChip + '</td>' +
+            '<td class="px-2 py-2 text-right mono">' + fmt(v.confidence, 2) + '</td>';
+    if (includePrice) html += '<td class="px-2 py-2 text-right mono text-on-surface-variant">' + fmt(v.price_at_pred, 6) + '</td>';
+    html += '<td class="px-2 py-2"><span class="chip ' + actClass + '">' + actLabel + '</span></td>' +
+            '<td class="px-2 py-2 text-on-surface-variant text-[11px] max-w-xs">' + escapeHtml(v.catalyst || '') + '</td>';
+    if (!includePrice) html += '<td class="px-2 py-2 text-on-surface-variant text-[11px] max-w-xs">' + escapeHtml(v.data_signal || '') + '</td>';
+    html += '<td class="px-2 py-2 text-on-surface-variant text-[11px]">' + escapeHtml(v.skip_reason || '') + '</td></tr>';
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
 // ============================================================
 // STATUS + TOGGLE
 // ============================================================
@@ -727,7 +874,7 @@ function loadRuns() {
       }
       tbody.innerHTML = rows.map(function(r){
         return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container/40 transition-colors cursor-pointer" onclick="toggleVerdicts(' + r.id + ')">' +
-          '<td class="px-4 py-3 mono text-on-surface-variant">' + r.id + '</td>' +
+          '<td class="px-4 py-3 mono text-on-surface-variant">' + r.id + aiLogBadge(r) + '</td>' +
           '<td class="px-4 py-3 mono text-[11px]">' + shortUTC(r.asof_utc) + '</td>' +
           '<td class="px-4 py-3 text-right mono">' + (r.universe_size || 0) + '</td>' +
           '<td class="px-4 py-3 text-right mono ' + ((r.trades_opened || 0) > 0 ? 'pp' : 'text-on-surface-variant') + '">' + (r.trades_opened || 0) + '</td>' +
@@ -751,7 +898,6 @@ function toggleVerdicts(runId) {
     row.classList.add('hidden');
     return;
   }
-  // collapse others
   document.querySelectorAll('[id^="verdict-row-"]').forEach(function(r){ if (r !== row) r.classList.add('hidden'); });
 
   var cell = document.getElementById('verdict-cell-' + runId);
@@ -767,36 +913,8 @@ function toggleVerdicts(runId) {
     .then(function(r){ return r.json(); })
     .then(function(d){
       var vs = d.data || [];
-      if (!vs.length) { cell.innerHTML = '<p class="text-on-surface-variant text-xs">无 verdicts</p>'; return; }
-      var html = '<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="border-b border-outline-variant/20 text-on-surface-variant"><th class="px-2 py-2 text-left">Symbol</th><th class="px-2 py-2 text-left">类别</th><th class="px-2 py-2 text-right">置信</th><th class="px-2 py-2 text-left">动作</th><th class="px-2 py-2 text-left">催化剂</th><th class="px-2 py-2 text-left">数据信号</th><th class="px-2 py-2 text-left">跳过原因</th></tr></thead><tbody>';
-      vs.forEach(function(v){
-        var catRaw = (v.category || '').toLowerCase();
-        var catChip = (catRaw === 'bullish' || catRaw === 'red_swan') ? '<span class="chip chip-long">看多</span>'
-                    : (catRaw === 'bearish' || catRaw === 'black_swan') ? '<span class="chip chip-short">看空</span>'
-                    : '<span class="chip chip-skip">SKIP</span>';
-        var act = v.action_taken || 'skipped_other';
-        var actClass = act === 'opened' ? 'chip-action-opened'
-                    : act === 'skipped_big4' ? 'chip-action-big4'
-                    : act === 'skipped_dedup' ? 'chip-action-dedup'
-                    : act === 'skipped_confidence' ? 'chip-action-confidence'
-                    : 'chip-action-other';
-        var actLabel = act === 'opened' ? ('已开仓 #' + (v.position_id || '?'))
-                    : act === 'skipped_big4' ? 'Big4 闸门'
-                    : act === 'skipped_dedup' ? '已有同向'
-                    : act === 'skipped_max_positions' ? '已达上限'
-                    : act === 'skipped_confidence' ? '低置信度'
-                    : '其他';
-        html += '<tr class="border-b border-outline-variant/10">' +
-                '<td class="px-2 py-2 mono">' + escapeHtml(v.symbol) + '</td>' +
-                '<td class="px-2 py-2">' + catChip + '</td>' +
-                '<td class="px-2 py-2 text-right mono">' + fmt(v.confidence, 2) + '</td>' +
-                '<td class="px-2 py-2"><span class="chip ' + actClass + '">' + actLabel + '</span></td>' +
-                '<td class="px-2 py-2 text-on-surface-variant text-[11px] max-w-xs">' + escapeHtml(v.catalyst || '') + '</td>' +
-                '<td class="px-2 py-2 text-on-surface-variant text-[11px] max-w-xs">' + escapeHtml(v.data_signal || '') + '</td>' +
-                '<td class="px-2 py-2 text-on-surface-variant text-[11px]">' + escapeHtml(v.skip_reason || '') + '</td>' +
-                '</tr>';
-      });
-      html += '</tbody></table></div>';
+      var verdictsHtml = buildVerdictsTable(vs, false);
+      var html = buildRunDetailShell(runId, '', '/api/gemini-explore', verdictsHtml);
       _verdictsCache[runId] = html;
       cell.innerHTML = html;
     })
@@ -1018,7 +1136,7 @@ function loadPredictRuns() {
       }
       tbody.innerHTML = rows.map(function(r){
         return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container/40 transition-colors cursor-pointer" onclick="togglePredictVerdicts(' + r.id + ')">' +
-          '<td class="px-4 py-3 mono text-on-surface-variant">' + r.id + '</td>' +
+          '<td class="px-4 py-3 mono text-on-surface-variant">' + r.id + aiLogBadge(r) + '</td>' +
           '<td class="px-4 py-3 mono text-[11px]">' + shortUTC(r.asof_utc) + '</td>' +
           '<td class="px-4 py-3 text-right mono">' + (r.symbol_count || 0) + '</td>' +
           '<td class="px-4 py-3 text-right mono">' + (r.predictions_made || 0) + '</td>' +
@@ -1058,36 +1176,8 @@ function togglePredictVerdicts(runId) {
     .then(function(r){ return r.json(); })
     .then(function(d){
       var vs = d.data || [];
-      if (!vs.length) { cell.innerHTML = '<p class="text-on-surface-variant text-xs">无 verdicts</p>'; return; }
-      var html = '<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="border-b border-outline-variant/20 text-on-surface-variant"><th class="px-2 py-2 text-left">Symbol</th><th class="px-2 py-2 text-left">类别</th><th class="px-2 py-2 text-right">置信</th><th class="px-2 py-2 text-right">预测价</th><th class="px-2 py-2 text-left">动作</th><th class="px-2 py-2 text-left">催化剂</th><th class="px-2 py-2 text-left">跳过原因</th></tr></thead><tbody>';
-      vs.forEach(function(v){
-        var catRaw = (v.category || '').toLowerCase();
-        var catChip = (catRaw === 'bullish' || catRaw === 'red_swan') ? '<span class="chip chip-long">看多</span>'
-                    : (catRaw === 'bearish' || catRaw === 'black_swan') ? '<span class="chip chip-short">看空</span>'
-                    : '<span class="chip chip-skip">SKIP</span>';
-        var act = v.action_taken || 'skipped_other';
-        var actClass = act === 'opened' ? 'chip-action-opened'
-                    : act === 'skipped_big4' ? 'chip-action-big4'
-                    : act === 'skipped_dedup' ? 'chip-action-dedup'
-                    : act === 'skipped_confidence' ? 'chip-action-confidence'
-                    : 'chip-action-other';
-        var actLabel = act === 'opened' ? ('已开仓 #' + (v.position_id || '?'))
-                    : act === 'skipped_big4' ? 'Big4 闸门'
-                    : act === 'skipped_dedup' ? '已有同向'
-                    : act === 'skipped_max_positions' ? '已达上限'
-                    : act === 'skipped_confidence' ? '低置信度'
-                    : '其他';
-        html += '<tr class="border-b border-outline-variant/10">' +
-                '<td class="px-2 py-2 mono">' + escapeHtml(v.symbol) + '</td>' +
-                '<td class="px-2 py-2">' + catChip + '</td>' +
-                '<td class="px-2 py-2 text-right mono">' + fmt(v.confidence, 2) + '</td>' +
-                '<td class="px-2 py-2 text-right mono text-on-surface-variant">' + fmt(v.price_at_pred, 6) + '</td>' +
-                '<td class="px-2 py-2"><span class="chip ' + actClass + '">' + actLabel + '</span></td>' +
-                '<td class="px-2 py-2 text-on-surface-variant text-[11px] max-w-xs">' + escapeHtml(v.catalyst || '') + '</td>' +
-                '<td class="px-2 py-2 text-on-surface-variant text-[11px]">' + escapeHtml(v.skip_reason || '') + '</td>' +
-                '</tr>';
-      });
-      html += '</tbody></table></div>';
+      var verdictsHtml = buildVerdictsTable(vs, true);
+      var html = buildRunDetailShell(runId, 'p-', '/api/gemini-predict', verdictsHtml);
       _pVerdictsCache[runId] = html;
       cell.innerHTML = html;
     })
@@ -1118,12 +1208,20 @@ setInterval(function(){
     loadPredictStatus();
   }
 }, 30000);
-// Predict tab: 每 30 秒刷盈亏统计
+// Predict tab: 每 30 秒刷盈亏统计 + 运行记录
 setInterval(function(){
   if (!document.getElementById('tab-predict').classList.contains('hidden')) {
     loadPredictStats();
+    loadPredictRuns();
   }
 }, 30000);
+
+// URL ?tab=predict / ?tab=sentiment 直达
+(function(){
+  var tab = new URLSearchParams(window.location.search).get('tab');
+  if (tab === 'predict') switchTab('predict');
+  else if (tab === 'sentiment') switchTab('sentiment');
+})();
 
 // ============================================================
 // GEMINI SENTIMENT - STATUS + TOGGLE
@@ -1221,7 +1319,7 @@ function loadSentimentRuns() {
       tbody.innerHTML = rows.map(function(r){
         var cls = 'class="border-b border-outline-variant/10 hover:bg-surface-container/40 transition-colors cursor-pointer"';
         return '<tr ' + cls + ' onclick="toggleSentimentDetail(' + r.id + ')">' +
-          '<td class="px-4 py-3 mono text-on-surface-variant">' + r.id + '</td>' +
+          '<td class="px-4 py-3 mono text-on-surface-variant">' + r.id + aiLogBadge(r) + '</td>' +
           '<td class="px-4 py-3 mono text-[11px]">' + shortUTC(r.asof_utc) + '</td>' +
           '<td class="px-4 py-3">' + sentimentBadge(r.market_sentiment_label) + '</td>' +
           '<td class="px-4 py-3 text-right mono">' + fmt(r.market_sentiment_score, 2) + '</td>' +

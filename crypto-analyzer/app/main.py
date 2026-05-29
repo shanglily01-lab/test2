@@ -1691,7 +1691,7 @@ async def spot_trading_page():
 @app.get("/futures_trading")
 async def futures_trading_page():
     """
-    U本位合约交易页面
+    合约交易页面（U本位模拟盘持仓监控）
     """
     futures_path = project_root / "templates" / "futures_trading.html"
     if futures_path.exists():
@@ -1703,7 +1703,7 @@ async def futures_trading_page():
 @app.get("/coin_futures_trading")
 async def coin_futures_trading_page():
     """
-    币本位合约交易页面
+    合约交易记录页面（U本位历史成交）
     """
     coin_futures_path = project_root / "templates" / "coin_futures_trading.html"
     if coin_futures_path.exists():
@@ -1775,6 +1775,13 @@ async def gemini_explore_page():
         raise HTTPException(status_code=404, detail="Gemini explore page not found")
 
 
+@app.get("/gemini_predict")
+async def gemini_predict_page():
+    """Gemini 预测页面 (与 gemini_explore 同模板, 默认打开预测 Tab)."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/gemini_explore?tab=predict")
+
+
 @app.get("/deepseek_explore")
 async def deepseek_explore_page():
     """
@@ -1785,6 +1792,13 @@ async def deepseek_explore_page():
         return FileResponse(str(page_path))
     else:
         raise HTTPException(status_code=404, detail="DeepSeek explore page not found")
+
+
+@app.get("/deepseek_predict")
+async def deepseek_predict_page():
+    """DeepSeek 预测页面 (与 deepseek_explore 同模板, 默认打开预测 Tab)."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/deepseek_explore?tab=predict")
 
 
 @app.get("/market_regime")

@@ -1,95 +1,39 @@
 <!DOCTYPE html>
-
-<html class="dark" lang="zh"><head>
+<html class="dark" lang="zh-CN"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Neural Obsidian - Coin-Margined Futures</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@200;300;400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<title>Neural Obsidian - 合约交易记录</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <script id="tailwind-config">
-      tailwind.config = {
-        darkMode: "class",
-        theme: {
-          extend: {
-            colors: {
-              "tertiary-fixed": "#ff909a",
-              "primary": "#49f4c8",
-              "on-primary-fixed-variant": "#00624d",
-              "secondary": "#5b9eff",
-              "secondary-fixed-dim": "#a4c5ff",
-              "primary-fixed-dim": "#33e5ba",
-              "on-surface-variant": "#a8abb2",
-              "tertiary-container": "#fa4966",
-              "on-error": "#490006",
-              "background": "#0a0f14",
-              "on-tertiary-container": "#100001",
-              "error-dim": "#d7383b",
-              "surface-bright": "#262d35",
-              "surface-container": "#151a20",
-              "tertiary-fixed-dim": "#ff7987",
-              "tertiary-dim": "#ff6e80",
-              "error-container": "#9f0519",
-              "on-tertiary": "#490011",
-              "surface-dim": "#0a0f14",
-              "inverse-primary": "#006c55",
-              "inverse-on-surface": "#51555c",
-              "on-primary": "#005745",
-              "surface-container-lowest": "#000000",
-              "error": "#ff716c",
-              "surface-variant": "#20262e",
-              "secondary-fixed": "#bbd2ff",
-              "on-secondary-fixed": "#003469",
-              "on-secondary-fixed-variant": "#00509c",
-              "surface-container-highest": "#20262e",
-              "outline": "#72767c",
-              "tertiary": "#ff6e80",
-              "surface-container-low": "#0f1419",
-              "primary-fixed": "#49f4c8",
-              "on-tertiary-fixed": "#39000b",
-              "on-secondary-container": "#f6f7ff",
-              "outline-variant": "#44484e",
-              "on-error-container": "#ffa8a3",
-              "on-primary-container": "#004132",
-              "secondary-dim": "#5b9eff",
-              "secondary-container": "#005eb5",
-              "on-background": "#ebeef5",
-              "inverse-surface": "#f8f9ff",
-              "on-secondary": "#002045",
-              "surface": "#0a0f14",
-              "primary-dim": "#33e5ba",
-              "surface-tint": "#49f4c8",
-              "on-tertiary-fixed-variant": "#780022",
-              "on-primary-fixed": "#004334",
-              "surface-container-high": "#1a2027",
-              "on-surface": "#ebeef5",
-              "primary-container": "#00d4aa"
-            },
-            fontFamily: {
-              "headline": ["Space Grotesk"],
-              "body": ["Manrope"],
-              "label": ["Manrope"],
-              "mono": ["JetBrains Mono"]
-            },
-            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
-          },
-        },
-      }
-    </script>
+tailwind.config = {
+  darkMode: "class",
+  theme: {
+    extend: {
+      colors: {
+        "primary": "#49f4c8", "secondary": "#5b9eff", "tertiary": "#ff6e80",
+        "background": "#0a0f14", "surface": "#0a0f14", "on-surface": "#ebeef5",
+        "on-surface-variant": "#a8abb2", "surface-container": "#151a20",
+        "surface-container-low": "#0f1419", "surface-container-highest": "#20262e",
+        "outline-variant": "#44484e", "error": "#ff716c"
+      },
+      fontFamily: { "headline": ["Space Grotesk"], "body": ["Manrope"], "mono": ["JetBrains Mono"] }
+    }
+  }
+}
+</script>
 <style>
-        body { font-family: 'Manrope', sans-serif; background-color: #0a0f14; color: #ebeef5; }
-        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
-        .tabular-nums { font-variant-numeric: tabular-nums; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #0f1520; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #49f4c8; }
-    </style>
-<script src="/static/js/modal.js"></script>
+  body { font-family: 'Manrope', sans-serif; background: #0a0f14; color: #ebeef5; }
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
+  .monospace { font-family: 'JetBrains Mono', monospace; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #0f1520; }
+  ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #49f4c8; }
+</style>
 </head>
-<body class="dark overflow-x-hidden">
-<!-- SideNavBar -->
+<body class="flex min-h-screen overflow-hidden">
 <aside class="fixed left-0 top-0 h-screen w-[240px] bg-[#0a0f14] border-r border-slate-800 flex flex-col py-6 z-50">
 <div class="px-5 mb-6">
 <a href="/" class="block group">
@@ -99,32 +43,19 @@
 </div>
 <nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto">
 <a href="/dashboard" data-path="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
-<a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>U本位合约</span></a>
-<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_bitcoin</span><span>币本位合约</span></a>
+<a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>合约交易</span></a>
+<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history</span><span>合约交易记录</span></a>
 <a href="/gemini_explore" data-path="/gemini_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>Gemini 探索</span></a>
 <a href="/deepseek_explore" data-path="/deepseek_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">psychology</span><span>DeepSeek 探索</span></a>
 <a href="/live_trading" data-path="/live_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">precision_manufacturing</span><span>Live Trading</span></a>
 <a href="/futures_review" data-path="/futures_review" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>复盘分析</span></a>
-<a href="/technical-signals" data-path="/technical-signals" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">sensors</span><span>信号分析</span></a>
-<a href="/market_regime" data-path="/market_regime" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">pulse_alert</span><span>行情识别</span></a>
-<a class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm" data-path="/top50" href="/top50"><span class="material-symbols-outlined text-lg">workspace_premium</span><span>TOP 50</span></a>
-    <a href="/symbol_blacklist" data-path="/symbol_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">block</span><span>交易对黑名单</span></a>
-    <a href="/signal_blacklist" data-path="/signal_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">do_not_disturb_on</span><span>信号黑名单</span></a>
-<a href="/spot_trading" data-path="/spot_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_exchange</span><span>现货交易</span></a>
-<a href="/etf_data" data-path="/etf_data" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">candlestick_chart</span><span>ETF 数据</span></a>
-<a href="/blockchain_gas" data-path="/blockchain_gas" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Gas 监控</span></a>
-<a href="/corporate_treasury" data-path="/corporate_treasury" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">account_balance</span><span>企业金库</span></a>
-<a href="/data_management" data-path="/data_management" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">storage</span><span>数据管理</span></a>
-<a href="/api-keys" data-path="/api-keys" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">api</span><span>API Keys</span></a>
 <a href="/system-settings" data-path="/system-settings" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">settings</span><span>Settings</span></a>
-    <a href="/binance-news" data-path="/binance-news" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">campaign</span><span>公告监控</span></a>
-<a href="/trading-manual" data-path="/trading-manual" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">menu_book</span><span>操作手册</span></a>
 </nav>
 <script>
 (function(){
   var path = window.location.pathname.replace(/\/$/, '') || '/';
   document.querySelectorAll('#sidebar-nav .nav-item').forEach(function(a){
-    if(a.getAttribute('data-path') === path){
+    if (a.getAttribute('data-path') === path) {
       a.classList.remove('text-slate-400');
       a.classList.add('text-[#49f4c8]','bg-[#151a20]','border-r-2','border-[#49f4c8]','font-semibold');
     }
@@ -132,665 +63,259 @@
 })();
 </script>
 </aside>
-<!-- TopNavBar -->
-<header class="fixed top-0 right-0 left-[240px] h-16 z-40 bg-[#0a0f14] border-b border-[#44484e]/20 flex justify-between items-center px-8 w-auto">
-<div class="flex items-center gap-6">
-<div class="flex items-center gap-2">
-<div class="w-1.5 h-1.5 rounded-full bg-primary"></div>
-<span class="font-['Manrope'] text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">System Status: Optimal</span>
-</div>
-</div>
-<div class="flex items-center gap-6">
-<div class="flex items-center gap-4">
-<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors" data-icon="rss_feed">rss_feed</span>
-<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors" data-icon="notifications">notifications</span>
-</div>
-<div class="h-8 w-px bg-outline-variant/20"></div>
-<div class="flex items-center gap-3 cursor-pointer group">
-<div class="text-right">
-<div class="text-xs font-bold text-on-surface group-hover:text-primary transition-colors">Super Brain Admin</div>
-<div class="text-[10px] text-on-surface-variant">Pro Tier Account</div>
-</div>
-<div class="w-8 h-8 rounded-full overflow-hidden border border-primary/20">
-<img alt="User Avatar" class="w-full h-full object-cover" data-alt="minimalist 3d character avatar with cybernetic neural interface details and neon accents on dark background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA3M-TDDJGdtFJzIZyUm09IjUT21rJ6ct6ppOhLAJqRSfT1TSh6QpfMEzuOIg9Bd8hbTD-g_U68dxpaYZ3zNYqy8BZjhv7jEtbNeoH3O8QK9RVsS8XFIqFzE0rdTxa1Jmfu4e-b4CEoKEWOUcXC7-o9MgXBRfoTaZkZX2BHGOQkB0K3CsdBFvEdshVeYRLwoeh64XYHo1GfBMUSi-Gm_WGyI7UTxAFFCSqGO9o-UCPMhU2F1FogF_W0ZvYoz-7JoN9wW6UzMjamjSDj"/>
-</div>
-</div>
-</div>
+
+<main class="ml-[240px] flex-1 h-screen flex flex-col bg-background overflow-hidden">
+<header class="fixed top-0 right-0 left-[240px] h-16 bg-[#0a0f14]/80 backdrop-blur-xl flex items-center justify-between px-8 z-40 border-b border-outline-variant/10">
+<h2 class="font-headline font-bold text-lg tracking-tight">合约交易记录</h2>
+<a href="/futures_trading" class="text-xs text-primary hover:underline flex items-center gap-1">
+  <span class="material-symbols-outlined text-[16px]">arrow_back</span>返回合约交易
+</a>
 </header>
-<!-- Main Content Canvas -->
-<main class="ml-[240px] pt-16 min-h-screen p-8 bg-surface">
-<!-- Page Header -->
-<div class="flex justify-between items-end mb-8">
+
+<div class="mt-16 p-8 flex-1 overflow-y-auto space-y-6">
 <div>
-<h1 class="font-headline text-3xl font-bold tracking-tight text-on-surface mb-2">币本位合约</h1>
-<p class="text-on-surface-variant text-sm">Coin-Margined Futures Trading Dashboard</p>
+<h3 class="font-headline text-3xl font-bold tracking-tighter">U本位 · 历史交易记录</h3>
+<p class="text-on-surface-variant text-sm mt-1">模拟盘 account_id=2 · 已平仓成交明细</p>
 </div>
-<div class="flex bg-surface-container-low p-1 rounded-lg">
-<button class="px-6 py-2 rounded-md text-sm font-bold bg-primary text-on-primary shadow-[0_0_15px_rgba(73,244,200,0.2)]">模拟盘</button>
-<button class="px-6 py-2 rounded-md text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors">实盘</button>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<div class="bg-surface-container p-5 rounded-xl border-l-2 border-primary/30">
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">总交易数</p>
+<p id="stat-total-trades" class="text-2xl font-headline font-bold monospace">--</p>
 </div>
+<div class="bg-surface-container p-5 rounded-xl">
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">胜率</p>
+<p id="stat-win-rate" class="text-2xl font-headline font-bold monospace">--</p>
 </div>
-<!-- Stats Row -->
-<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-<div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
-<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">持仓数</div>
-<div id="stat-position-count" class="font-mono text-2xl font-medium text-on-surface">--</div>
+<div class="bg-surface-container p-5 rounded-xl border-l-2 border-primary">
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">总已实现</p>
+<p id="stat-total-pnl" class="text-2xl font-headline font-bold monospace">--</p>
 </div>
-<div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
-<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">账户余额 (USDT)</div>
-<div id="stat-total-margin" class="font-mono text-2xl font-medium text-on-surface">--</div>
-</div>
-<div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
-<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">总已实现 (USDT)</div>
-<div id="stat-total-pnl" class="font-mono text-2xl font-medium text-primary">--</div>
-</div>
-<div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
-<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">24H 盈亏</div>
-<div id="stat-24h-pnl" class="font-mono text-2xl font-medium text-primary">--</div>
-</div>
-<div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
-<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">胜率</div>
-<div id="stat-win-rate" class="font-mono text-2xl font-medium text-secondary">--</div>
-</div>
-<div class="bg-surface-container-low p-5 rounded-xl border border-transparent hover:border-outline-variant/20 transition-all">
-<div class="text-on-surface-variant text-[10px] uppercase tracking-widest font-bold mb-2">总交易数</div>
-<div id="stat-total-trades" class="font-mono text-2xl font-medium text-on-surface">--</div>
+<div class="bg-surface-container p-5 rounded-xl">
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">账户余额</p>
+<p id="stat-balance" class="text-2xl font-headline font-bold monospace">--</p>
 </div>
 </div>
-<!-- Middle Section -->
-<div class="mb-8">
-<!-- Current Positions -->
-<div class="col-span-12 bg-surface-container-low rounded-xl overflow-hidden">
-<div class="px-6 py-4 flex flex-wrap justify-between items-center gap-3 border-b border-outline-variant/10">
-<h3 class="font-headline text-lg font-bold flex items-center gap-2">
-  当前持仓
-  <span id="pos-count-badge" class="text-[10px] font-mono text-on-surface-variant">-- 笔</span>
-</h3>
-<div class="flex items-center gap-4">
-  <div class="text-right">
-    <p class="text-[10px] text-on-surface-variant uppercase tracking-widest">总浮盈</p>
-    <p id="pos-header-pnl" class="font-mono text-sm font-bold text-on-surface-variant">--</p>
-  </div>
-  <button onclick="closeAllPositions()" id="close-all-btn"
-    class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#ff716c]/10 border border-[#ff716c]/30 text-[#ff716c] text-xs font-bold hover:bg-[#ff716c]/20 transition-colors active:scale-95">
-    <span class="material-symbols-outlined text-[14px]">close_fullscreen</span>
-    一键平仓
-  </button>
-</div>
-</div>
-<div class="overflow-x-auto overflow-y-auto max-h-[420px]">
-<table class="w-full text-left border-collapse">
-<thead class="sticky top-0 z-10">
-<tr class="text-[10px] uppercase tracking-[0.15em] text-on-surface-variant border-b border-outline-variant/5 bg-surface-container-low">
-<th class="px-6 py-4 font-bold whitespace-nowrap">交易对</th>
-<th class="px-6 py-4 font-bold whitespace-nowrap">方向</th>
-<th class="px-6 py-4 font-bold whitespace-nowrap">保证金 / 开仓时间</th>
-<th class="px-6 py-4 font-bold whitespace-nowrap">开仓 → 当前价</th>
-<th class="px-6 py-4 font-bold whitespace-nowrap">浮盈 (USDT)</th>
-<th class="px-6 py-4 font-bold whitespace-nowrap">止损 / 止盈</th>
-<th class="px-6 py-4 font-bold whitespace-nowrap">操作</th>
-</tr>
-</thead>
-<tbody id="positions-tbody" class="text-sm font-medium">
-<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
-</tbody>
-</table>
-</div>
-</div>
-</div>
-<!-- Bottom Section: History -->
-<div class="bg-surface-container-low rounded-xl overflow-hidden mb-12">
-<div class="px-6 py-4 flex justify-between items-center border-b border-outline-variant/10">
-<h3 class="font-headline text-lg font-bold">历史交易记录</h3>
-<div class="flex gap-4">
-<input class="bg-surface-container-highest border-none rounded-md text-xs px-3 py-1.5 focus:ring-1 focus:ring-primary/50 text-on-surface" placeholder="搜索交易对..." type="text"/>
-<div class="h-8 w-px bg-outline-variant/20"></div>
-<button class="text-xs text-on-surface-variant hover:text-primary flex items-center gap-1">
-<span class="material-symbols-outlined text-sm">filter_list</span> 筛选
-                    </button>
+
+<div class="bg-surface-container-low rounded-2xl overflow-hidden shadow-2xl">
+<div class="p-5 flex flex-wrap gap-3 items-end justify-between bg-surface-container border-b border-outline-variant/10">
+<h4 class="font-headline font-bold flex items-center gap-2">
+<span class="w-1 h-4 bg-primary rounded-full"></span>成交记录
+</h4>
+<div class="flex flex-wrap items-end gap-2">
+<input id="history-search" type="text" placeholder="交易对，如 BTC/USDT" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-2 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 w-40"/>
+<select id="history-side-filter" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-2 text-xs text-on-surface focus:outline-none focus:border-primary/50">
+<option value="">全部方向</option>
+<option value="LONG">LONG</option>
+<option value="SHORT">SHORT</option>
+</select>
+<select id="history-limit" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-2 text-xs text-on-surface focus:outline-none focus:border-primary/50">
+<option value="30">每页 30 条</option>
+<option value="50">每页 50 条</option>
+<option value="100">每页 100 条</option>
+</select>
+<button id="history-query-btn" onclick="loadHistory(1)" class="px-4 py-2 bg-primary text-background rounded-lg text-xs font-bold hover:opacity-90 transition-opacity flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">search</span>查询
+</button>
+<button onclick="loadHistory(_historyPage)" class="px-3 py-2 bg-primary/10 hover:bg-primary/20 border border-primary/20 text-primary rounded-lg text-xs font-bold transition-colors">刷新</button>
 </div>
 </div>
 <div class="overflow-x-auto">
 <table class="w-full text-left border-collapse">
 <thead>
-<tr class="text-[10px] uppercase tracking-[0.15em] text-on-surface-variant border-b border-outline-variant/5">
-<th class="px-6 py-4 font-bold whitespace-nowrap">开仓时间</th>
-<th class="px-6 py-4 font-bold whitespace-nowrap">平仓时间</th>
-<th class="px-6 py-4 font-bold whitespace-nowrap">持仓时长</th>
-<th class="px-6 py-4 font-bold">交易对</th>
-<th class="px-6 py-4 font-bold">类型</th>
-<th class="px-6 py-4 font-bold">开仓价</th>
-<th class="px-6 py-4 font-bold">结平价</th>
-<th class="px-6 py-4 font-bold">开仓原因</th>
-<th class="px-6 py-4 font-bold">平仓原因</th>
-<th class="px-6 py-4 font-bold">保证金</th>
-<th class="px-6 py-4 font-bold">实现盈亏 (PNL)</th>
-<th class="px-6 py-4 font-bold">手续费</th>
+<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-outline-variant/10 bg-surface-container">
+<th class="px-5 py-4 font-semibold whitespace-nowrap">开仓 / 平仓时间</th>
+<th class="px-5 py-4 font-semibold whitespace-nowrap">持仓时长</th>
+<th class="px-5 py-4 font-semibold whitespace-nowrap">交易对</th>
+<th class="px-5 py-4 font-semibold whitespace-nowrap">方向</th>
+<th class="px-5 py-4 font-semibold whitespace-nowrap">开仓价</th>
+<th class="px-5 py-4 font-semibold whitespace-nowrap">结平价</th>
+<th class="px-5 py-4 font-semibold whitespace-nowrap">开仓信号</th>
+<th class="px-5 py-4 font-semibold whitespace-nowrap">平仓原因</th>
+<th class="px-5 py-4 font-semibold text-right whitespace-nowrap">保证金</th>
+<th class="px-5 py-4 font-semibold text-right whitespace-nowrap">手续费</th>
+<th class="px-5 py-4 font-semibold text-right whitespace-nowrap">实现盈亏</th>
+<th class="px-5 py-4 font-semibold text-right whitespace-nowrap">收益率</th>
 </tr>
 </thead>
-<tbody id="history-tbody" class="text-sm font-medium">
-<tr><td colspan="12" class="px-6 py-8 text-center text-on-surface-variant">加载中...</td></tr>
+<tbody id="history-tbody" class="text-xs divide-y divide-outline-variant/5">
+<tr><td colspan="12" class="px-6 py-8 text-center text-on-surface-variant text-xs">点击「查询」加载记录</td></tr>
 </tbody>
 </table>
 </div>
-<div class="px-6 py-3 bg-surface-container border-t border-outline-variant/10 flex items-center justify-between flex-wrap gap-3">
-  <div class="flex items-center gap-3">
-    <select id="history-limit" onchange="loadHistory(1)" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:outline-none focus:border-primary/50">
-      <option value="30">每页 30 条</option>
-      <option value="50">每页 50 条</option>
-      <option value="100">每页 100 条</option>
-    </select>
-    <span id="history-count-label" class="text-xs text-on-surface-variant font-mono">--</span>
-  </div>
-  <div id="history-pagination" class="flex items-center gap-1"></div>
+<div class="px-5 py-3 bg-surface-container border-t border-outline-variant/10 flex items-center justify-between flex-wrap gap-3">
+<span id="history-count-label" class="text-xs text-on-surface-variant font-mono">--</span>
+<div id="history-pagination" class="flex items-center gap-1"></div>
+</div>
 </div>
 </div>
 </main>
-<!-- Ambient Glow Effects -->
-<div class="fixed top-[20%] right-[10%] w-[400px] h-[400px] bg-primary/5 rounded-full blur-[120px] pointer-events-none -z-10"></div>
-<div class="fixed bottom-[10%] left-[300px] w-[300px] h-[300px] bg-secondary/5 rounded-full blur-[100px] pointer-events-none -z-10"></div>
-<script>
-// ==========================================
-// Coin-Margined Futures Monitor - Functional JS
-// account_id=3 (币本位合约)
-// ==========================================
 
-var ACCOUNT_ID = 3;
-/** 币本位合约 API（勿用 /api/futures，那是 U 本位引擎） */
-var API_BASE = '/api/coin-futures';
-var _refreshTimer = null;
+<script>
+var ACCOUNT_ID = 2;
 var _historyAllTrades = [];
 var _historyPage = 1;
 var _historyPageSize = 30;
 var _historyTotalCount = 0;
 
-// ---- 工具函数 ----
-
 function fmtPrice(p) {
-    if (p === null || p === undefined || p === '') return '--';
-    var n = parseFloat(p);
-    if (isNaN(n)) return '--';
-    if (n >= 1000) return n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-    if (n >= 1) return n.toFixed(4);
-    return n.toFixed(6);
+  if (p === null || p === undefined || p === '') return '--';
+  var n = parseFloat(p);
+  if (isNaN(n)) return '--';
+  if (n >= 1000) return n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  if (n >= 1) return n.toFixed(4);
+  return n.toFixed(6);
 }
-
-function fmtUsdt(n) {
-    if (n === null || n === undefined || isNaN(parseFloat(n))) return '--';
-    var v = parseFloat(n);
-    if (isNaN(v)) return '--';
-    return v.toFixed(2) + ' USDT';
-}
-
 function fmtPnl(n) {
-    if (n === null || n === undefined) return '--';
-    var v = parseFloat(n);
-    if (isNaN(v)) return '--';
-    var sign = v >= 0 ? '+' : '';
-    return sign + v.toFixed(2) + ' USDT';
+  if (n === null || n === undefined || isNaN(n)) return '--';
+  var sign = n >= 0 ? '+' : '';
+  return sign + n.toFixed(2);
 }
-
+function fmtUsdt(n) {
+  if (n === null || n === undefined || isNaN(parseFloat(n))) return '--';
+  return parseFloat(n).toFixed(2);
+}
 function fmtTime(t) {
-    if (!t) return '--';
-    try {
-        var ts = (typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t)) ? t + 'Z' : t;
-        var d = new Date(ts);
-        if (isNaN(d.getTime())) return '--';
-        var u = new Date(d.getTime() + 8 * 3600000);
-        var pad = function(x) { return String(x).padStart(2, '0'); };
-        return (u.getUTCMonth()+1) + '-' + pad(u.getUTCDate()) + ' ' + pad(u.getUTCHours()) + ':' + pad(u.getUTCMinutes());
-    } catch(e) { return '--'; }
+  if (!t) return '--';
+  try {
+    var ts = (typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t)) ? t + 'Z' : t;
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) return '--';
+    var u = new Date(d.getTime() + 8 * 3600000);
+    var pad = function(x) { return String(x).padStart(2, '0'); };
+    return (u.getUTCMonth()+1) + '-' + pad(u.getUTCDate()) + ' ' + pad(u.getUTCHours()) + ':' + pad(u.getUTCMinutes());
+  } catch(e) { return '--'; }
+}
+function fmtDuration(openT, closeT) {
+  if (!openT || !closeT) return '--';
+  try {
+    var toMs = function(t) {
+      var ts = (typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t)) ? t + 'Z' : t;
+      return new Date(ts).getTime();
+    };
+    var ms = toMs(closeT) - toMs(openT);
+    if (isNaN(ms) || ms < 0) return '--';
+    var totalMin = Math.floor(ms / 60000);
+    var h = Math.floor(totalMin / 60);
+    var m = totalMin % 60;
+    return h > 0 ? (h + 'h ' + m + 'm') : (m + 'm');
+  } catch(e) { return '--'; }
 }
 
-/** 与 fmtTime 一致解析 API 返回的本地时间字符串，用于计算持仓时长 */
-function parseDbTimeMs(t) {
-    if (!t) return NaN;
-    try {
-        var ts = (typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t)) ? t + 'Z' : t;
-        var d = new Date(ts);
-        return isNaN(d.getTime()) ? NaN : d.getTime();
-    } catch (e) { return NaN; }
-}
+function applyHistoryFilter(resetPage) {
+  if (resetPage) _historyPage = 1;
+  var tbody = document.getElementById('history-tbody');
+  var countEl = document.getElementById('history-count-label');
+  var pagEl = document.getElementById('history-pagination');
+  var search = ((document.getElementById('history-search') || {}).value || '').trim().toLowerCase();
+  var side = (document.getElementById('history-side-filter') || {}).value || '';
 
-function fmtHoldDuration(openTime, closeTime) {
-    var o = parseDbTimeMs(openTime);
-    var c = parseDbTimeMs(closeTime);
-    if (isNaN(o) || isNaN(c)) return '--';
-    var ms = Math.max(0, c - o);
-    var sec = Math.floor(ms / 1000);
-    var days = Math.floor(sec / 86400);
-    sec %= 86400;
-    var hours = Math.floor(sec / 3600);
-    sec %= 3600;
-    var minutes = Math.floor(sec / 60);
-    if (days > 0) return days + ' 天 ' + hours + ' 小时';
-    if (hours > 0) return hours + ' 小时 ' + minutes + ' 分';
-    if (minutes > 0) return minutes + ' 分钟';
-    return '<1 分钟';
-}
+  var filtered = _historyAllTrades.filter(function(t) {
+    var sym = (t.symbol || '').toLowerCase();
+    var matchSearch = !search || sym.includes(search);
+    var isLong = t.side === 'CLOSE_LONG';
+    var matchSide = !side || (side === 'LONG' && isLong) || (side === 'SHORT' && !isLong);
+    return matchSearch && matchSide;
+  });
 
-/** 安全解析 JSON，避免空 body 时 response.json() 抛 Unexpected end of JSON input */
-async function parseJsonResponse(res) {
-    var text = await res.text();
-    if (text == null || String(text).trim() === '') {
-        throw new Error('HTTP ' + res.status + ' 空响应，无法解析 JSON');
-    }
-    try {
-        return JSON.parse(text);
-    } catch (e) {
-        throw new Error('HTTP ' + res.status + ' 非 JSON: ' + String(text).slice(0, 240));
-    }
-}
-
-function showToast(msg, type) {
-    var el = document.createElement('div');
-    var colors = {success: '#49f4c8', error: '#ff716c', info: '#5b9eff', warning: '#f59e0b'};
-    var c = colors[type] || colors.info;
-    el.style.cssText = 'position:fixed;top:20px;right:20px;z-index:9999;padding:12px 18px;border-radius:10px;background:#1a2027;border-left:3px solid ' + c + ';color:#ebeef5;font-size:13px;max-width:320px;box-shadow:0 4px 20px rgba(0,0,0,0.4);';
-    el.textContent = msg;
-    document.body.appendChild(el);
-    setTimeout(function() { el.remove(); }, 4000);
-}
-
-// ---- 加载持仓 ----
-
-async function loadPositions() {
-    var tbody = document.getElementById('positions-tbody');
-    if (!tbody) return null;
-
-    var positions = [];
-    try {
-        var res = await fetch(API_BASE + '/positions?account_id=' + ACCOUNT_ID + '&status=open');
-        var data = await parseJsonResponse(res);
-        positions = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
-    } catch(e) {
-        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败: ' + e.message + '</td></tr>';
-        return null;
-    }
-
-    if (positions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无持仓</td></tr>';
-        return {count: 0, totalMargin: 0, totalPnl: 0};
-    }
-
-    // 批量获取实时价格
-    var symbols = positions.map(function(p) { return p.symbol; }).filter(function(v, i, a) { return a.indexOf(v) === i; });
-    var priceMap = {};
-    try {
-        var pr = await fetch(API_BASE + '/prices/batch', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({symbols: symbols})
-        });
-        if (pr.ok) {
-            var pd = await parseJsonResponse(pr);
-            priceMap = pd.prices || pd || {};
-        }
-    } catch(e) { /* 使用 entry_price 作为回退 */ }
-
-    var totalMargin = 0, totalPnl = 0;
-    _lastPositions = positions;
-
-    var rows = positions.map(function(pos) {
-        var isLong = pos.position_side === 'LONG';
-        var entry = parseFloat(pos.entry_price) || 0;
-        var qty = parseFloat(pos.quantity) || 0;
-        var margin = parseFloat(pos.margin) || 0;
-        totalMargin += margin;
-
-        // 获取当前价
-        var curPrice = parseFloat(pos.current_price) || entry;
-        var pm = priceMap[pos.symbol];
-        if (pm) {
-            var pp = (typeof pm === 'object' && pm !== null) ? (pm.price || pm) : pm;
-            var pv = parseFloat(pp);
-            if (pv > 0) curPrice = pv;
-        }
-
-        // 浮盈：始终用本行展示的 entry / 现价 / 数量重算，与「开仓→当前价」一致（OP/APT 等币种单 symbol dapi 与 USDT 价差大时后端可能仍存旧值）
-        var pnl = parseFloat(pos.unrealized_pnl) || 0;
-        if (curPrice > 0 && entry > 0 && qty > 0) {
-            pnl = isLong ? (curPrice - entry) * qty : (entry - curPrice) * qty;
-        }
-        totalPnl += pnl;
-
-        var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
-        var rowBg = isLong ? 'bg-[#49f4c8]/[0.02] hover:bg-[#49f4c8]/5' : 'bg-[#ff716c]/[0.02] hover:bg-[#ff716c]/5';
-        var dirBg = isLong ? 'bg-[#49f4c8]/20 text-[#49f4c8] border border-[#49f4c8]/30' : 'bg-[#ff716c]/20 text-[#ff716c] border border-[#ff716c]/30';
-        var dirLabel = isLong ? 'Long' : 'Short';
-        var posId = pos.id || pos.position_id;
-        var sym = pos.symbol || '--';
-        var abbr = sym.replace('USD_PERP','').replace('USDT','').replace('USD','').substring(0,4);
-        var lvg = pos.leverage || 1;
-        var sl = pos.stop_loss_price ? fmtPrice(pos.stop_loss_price) : '--';
-        var tp = pos.take_profit_price ? fmtPrice(pos.take_profit_price) : '--';
-        var openTime = fmtTime(pos.created_at || pos.open_time);
-        var curPriceClass = curPrice > entry ? 'text-[#49f4c8]' : (curPrice < entry ? 'text-[#ff716c]' : 'text-on-surface-variant');
-
-        return '<tr data-pos-id="' + posId + '" class="' + rowBg + ' transition-colors border-b border-outline-variant/5">' +
-            '<td class="px-6 py-4">' +
-                '<div class="flex items-center gap-2">' +
-                    '<div class="w-6 h-6 rounded-full bg-surface-bright flex items-center justify-center text-[10px] font-bold text-on-surface-variant">' + abbr + '</div>' +
-                    '<div>' +
-                        '<p class="font-headline font-semibold">' + sym + '</p>' +
-                        '<p class="text-[10px] text-on-surface-variant">' + lvg + 'x lever</p>' +
-                    '</div>' +
-                '</div>' +
-            '</td>' +
-            '<td class="px-6 py-4">' +
-                '<span class="px-2 py-0.5 rounded text-[10px] ' + dirBg + ' uppercase">' + dirLabel + '</span>' +
-            '</td>' +
-            '<td class="px-6 py-4 font-mono">' +
-                '<div class="text-on-surface text-xs font-medium">' + (margin > 0 ? margin.toFixed(0) + ' U' : '--') + '</div>' +
-                '<div class="text-on-surface-variant text-[10px]">' + openTime + '</div>' +
-            '</td>' +
-            '<td class="px-6 py-4 font-mono">' +
-                '<div class="text-on-surface-variant text-xs">' + fmtPrice(entry) + '</div>' +
-                '<div class="pos-ws-price ' + curPriceClass + ' font-medium text-xs">' + fmtPrice(curPrice) + '</div>' +
-            '</td>' +
-            '<td class="pos-ws-pnl px-6 py-4 font-mono ' + pnlClass + '">' + fmtPnl(pnl) + '</td>' +
-            '<td class="px-6 py-4">' +
-                '<div class="text-xs font-mono text-[#ff716c]">SL ' + sl + '</div>' +
-                '<div class="text-xs font-mono text-[#49f4c8]">TP ' + tp + '</div>' +
-            '</td>' +
-            '<td class="px-6 py-4">' +
-                '<button onclick="closePosition(' + posId + ', \'' + sym + '\')" ' +
-                    'class="text-on-surface-variant hover:text-[#ff716c] transition-colors px-2 py-1 rounded bg-surface-container/50 text-xs">平仓</button>' +
-            '</td>' +
+  var totalPages = Math.max(1, Math.ceil(_historyTotalCount / _historyPageSize));
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="12" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无符合条件的记录</td></tr>';
+  } else {
+    tbody.innerHTML = filtered.map(function(t) {
+      var isLong = t.side === 'CLOSE_LONG';
+      var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+      var pnl = parseFloat(t.realized_pnl) || 0;
+      var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+      var pnlPct = t.pnl_pct != null ? parseFloat(t.pnl_pct) : null;
+      return '<tr class="hover:bg-surface-container/50 transition-colors">' +
+        '<td class="px-5 py-3.5 text-on-surface-variant monospace whitespace-nowrap text-xs leading-5">' +
+          '<div>' + fmtTime(t.open_time) + '</div>' +
+          '<div class="text-[#49f4c8]/70">' + fmtTime(t.close_time || t.trade_time) + '</div></td>' +
+        '<td class="px-5 py-3.5 text-on-surface-variant monospace whitespace-nowrap text-xs">' + fmtDuration(t.open_time, t.close_time || t.trade_time) + '</td>' +
+        '<td class="px-5 py-3.5 font-bold font-headline uppercase whitespace-nowrap">' + (t.symbol || '--') + '</td>' +
+        '<td class="px-5 py-3.5 font-bold text-xs ' + sideClass + '">' + (isLong ? 'LONG' : 'SHORT') + '</td>' +
+        '<td class="px-5 py-3.5 monospace whitespace-nowrap">' + fmtPrice(t.entry_price) + '</td>' +
+        '<td class="px-5 py-3.5 monospace whitespace-nowrap">' + fmtPrice(t.price) + '</td>' +
+        '<td class="px-5 py-3.5 text-xs text-on-surface-variant max-w-[140px] truncate" title="' + (t.entry_source || t.entry_reason || '') + '">' + (t.entry_source || t.entry_reason || '--') + '</td>' +
+        '<td class="px-5 py-3.5 text-xs text-on-surface-variant max-w-[140px] truncate" title="' + (t.close_reason || '') + '">' + (t.close_reason || '--') + '</td>' +
+        '<td class="px-5 py-3.5 monospace text-right whitespace-nowrap text-on-surface-variant">' + (t.margin != null ? fmtUsdt(t.margin) : '--') + '</td>' +
+        '<td class="px-5 py-3.5 monospace text-right whitespace-nowrap text-on-surface-variant">' + (t.fee != null ? fmtUsdt(t.fee) : '--') + '</td>' +
+        '<td class="px-5 py-3.5 monospace text-right whitespace-nowrap ' + pnlClass + '">' + fmtPnl(pnl) + ' U</td>' +
+        '<td class="px-5 py-3.5 monospace text-right whitespace-nowrap ' + pnlClass + '">' + (pnlPct != null ? pnlPct.toFixed(2) + '%' : '--') + '</td>' +
         '</tr>';
+    }).join('');
+  }
+
+  if (countEl) countEl.textContent = '共 ' + _historyTotalCount + ' 条  第 ' + _historyPage + ' / ' + totalPages + ' 页';
+  if (pagEl) {
+    var btnClass = 'px-3 py-1 rounded text-xs font-mono border transition-colors ';
+    var html = '';
+    html += '<button ' + (_historyPage <= 1 ? 'disabled ' : '') + 'onclick="loadHistory(' + (_historyPage - 1) + ')" class="' + btnClass + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&lsaquo;</button>';
+    var pages = [];
+    if (totalPages <= 7) { for (var i = 1; i <= totalPages; i++) pages.push(i); }
+    else {
+      pages = [1, 2];
+      if (_historyPage > 4) pages.push('...');
+      for (var p = Math.max(3, _historyPage - 1); p <= Math.min(totalPages - 2, _historyPage + 1); p++) pages.push(p);
+      if (_historyPage < totalPages - 3) pages.push('...');
+      pages.push(totalPages - 1, totalPages);
+    }
+    pages.forEach(function(p) {
+      if (p === '...') html += '<span class="px-2 text-on-surface-variant text-xs">...</span>';
+      else {
+        var active = p === _historyPage;
+        html += '<button onclick="loadHistory(' + p + ')" class="' + btnClass + (active ? 'bg-primary text-background border-primary font-bold' : 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container') + '">' + p + '</button>';
+      }
     });
-
-    tbody.innerHTML = rows.join('');
-    _lastPositions = positions;
-
-    // Update header stats
-    var badge = document.getElementById('pos-count-badge');
-    var pnlEl = document.getElementById('pos-header-pnl');
-    if (badge) badge.textContent = positions.length + ' 笔';
-    if (pnlEl) {
-        pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(2) + ' U';
-        pnlEl.className = 'font-mono text-sm font-bold ' + (totalPnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
-    }
-
-    if (positions.length > 0) {
-        setTimeout(connectCoinFuturesPnlWs, 300);
-    } else if (_coinFuturesWs && _coinFuturesWs.readyState === WebSocket.OPEN) {
-        try { _coinFuturesWs.close(); } catch (e) {}
-    }
-
-    return {count: positions.length, totalMargin: totalMargin, totalPnl: totalPnl};
-}
-
-// ---- 一键平仓 ----
-
-var _lastPositions = [];
-
-async function closeAllPositions() {
-    var cnt = _lastPositions.length;
-    if (cnt === 0) { await showAlert('当前无持仓', 'info'); return; }
-    if (!(await showConfirm('将市价关闭所有 ' + cnt + ' 笔持仓，操作不可撤销！', {title: '确认一键平仓', confirmText: '确认平仓', type: 'warning'}))) return;
-    var btn = document.getElementById('close-all-btn');
-    if (btn) { btn.disabled = true; btn.textContent = '平仓中...'; }
-    try {
-        var ids = _lastPositions.map(function(p) { return p.id || p.position_id; }).filter(Boolean);
-        var resp = await fetch(API_BASE + '/close-batch', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('auth_token') || localStorage.getItem('access_token') || '')},
-            body: JSON.stringify({position_ids: ids, reason: 'manual_close_all'})
-        });
-        var data = await parseJsonResponse(resp);
-        await showAlert(data.message || '一键平仓完成', 'success');
-        setTimeout(loadAll, 800);
-    } catch(e) {
-        await showAlert('请求失败: ' + e.message, 'error');
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-symbols-outlined text-[14px]">close_fullscreen</span> 一键平仓'; }
-    }
-}
-
-// ---- 加载历史交易 ----
-
-function renderHistoryPage() {
-    var tbody   = document.getElementById('history-tbody');
-    var countEl = document.getElementById('history-count-label');
-    var pagEl   = document.getElementById('history-pagination');
-    var totalPages = Math.max(1, Math.ceil(_historyTotalCount / _historyPageSize));
-
-    if (_historyAllTrades.length === 0) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
-    } else {
-        tbody.innerHTML = _historyAllTrades.map(function(t) {
-            var isLong = t.side === 'CLOSE_LONG';
-            var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
-            var pnl = parseFloat(t.realized_pnl) || 0;
-            var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
-            var closeAt = t.close_time || t.trade_time;
-            return '<tr class="hover:bg-surface-container/50 border-b border-outline-variant/5 transition-colors">' +
-                '<td class="px-6 py-4 font-mono text-xs text-on-surface-variant whitespace-nowrap">' + fmtTime(t.open_time) + '</td>' +
-                '<td class="px-6 py-4 font-mono text-xs text-on-surface-variant whitespace-nowrap">' + fmtTime(closeAt) + '</td>' +
-                '<td class="px-6 py-4 font-mono text-xs text-on-surface-variant whitespace-nowrap">' + fmtHoldDuration(t.open_time, closeAt) + '</td>' +
-                '<td class="px-6 py-4 font-bold font-headline">' + (t.symbol || '--') + '</td>' +
-                '<td class="px-6 py-4 text-xs ' + sideClass + '">' + (isLong ? 'BUY/LONG' : 'SELL/SHORT') + '</td>' +
-                '<td class="px-6 py-4 font-mono text-on-surface">' + fmtPrice(t.entry_price) + '</td>' +
-                '<td class="px-6 py-4 font-mono text-on-surface">' + fmtPrice(t.price) + '</td>' +
-                '<td class="px-6 py-4 text-xs text-on-surface-variant max-w-[140px] truncate" title="' + (t.entry_source || t.entry_reason || '') + '">' + (t.entry_source || t.entry_reason || '--') + '</td>' +
-                '<td class="px-6 py-4 text-xs text-on-surface-variant max-w-[140px] truncate" title="' + (t.close_reason || '') + '">' + (t.close_reason || '--') + '</td>' +
-                '<td class="px-6 py-4 font-mono text-on-surface-variant">' + (t.margin != null ? fmtUsdt(t.margin) : '--') + '</td>' +
-                '<td class="px-6 py-4 font-mono ' + pnlClass + '">' + fmtPnl(pnl) + '</td>' +
-                '<td class="px-6 py-4 font-mono text-on-surface-variant text-xs">' + (t.fee != null ? parseFloat(t.fee).toFixed(2) + ' USDT' : '--') + '</td>' +
-            '</tr>';
-        }).join('');
-    }
-
-    if (countEl) countEl.textContent = '共 ' + _historyTotalCount + ' 条  第 ' + _historyPage + ' / ' + totalPages + ' 页';
-
-    if (pagEl) {
-        var bc = 'px-3 py-1 rounded text-xs font-mono border transition-colors ';
-        var html = '<button ' + (_historyPage <= 1 ? 'disabled ' : '') + 'onclick="loadHistory(' + (_historyPage - 1) + ')" class="' + bc + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&lsaquo;</button>';
-        var pages = [];
-        if (totalPages <= 7) { for (var i = 1; i <= totalPages; i++) pages.push(i); }
-        else {
-            pages = [1, 2];
-            if (_historyPage > 4) pages.push('...');
-            for (var p = Math.max(3, _historyPage - 1); p <= Math.min(totalPages - 2, _historyPage + 1); p++) pages.push(p);
-            if (_historyPage < totalPages - 3) pages.push('...');
-            pages.push(totalPages - 1, totalPages);
-        }
-        pages.forEach(function(p) {
-            if (p === '...') { html += '<span class="px-2 text-on-surface-variant text-xs">...</span>'; return; }
-            var active = p === _historyPage;
-            html += '<button onclick="loadHistory(' + p + ')" class="' + bc + (active ? 'bg-primary text-background border-primary font-bold' : 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container') + '">' + p + '</button>';
-        });
-        html += '<button ' + (_historyPage >= totalPages ? 'disabled ' : '') + 'onclick="loadHistory(' + (_historyPage + 1) + ')" class="' + bc + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&rsaquo;</button>';
-        pagEl.innerHTML = html;
-    }
+    html += '<button ' + (_historyPage >= totalPages ? 'disabled ' : '') + 'onclick="loadHistory(' + (_historyPage + 1) + ')" class="' + btnClass + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&rsaquo;</button>';
+    pagEl.innerHTML = html;
+  }
 }
 
 async function loadHistory(page) {
-    if (page !== undefined) _historyPage = page;
-    var tbody = document.getElementById('history-tbody');
-    var limitEl = document.getElementById('history-limit');
-    _historyPageSize = limitEl ? parseInt(limitEl.value) || 30 : 30;
+  if (page !== undefined) _historyPage = page;
+  var tbody = document.getElementById('history-tbody');
+  var limitEl = document.getElementById('history-limit');
+  _historyPageSize = limitEl ? parseInt(limitEl.value) || 30 : 30;
+  if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>';
 
-    if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>';
-
-    var trades = [];
-    try {
-        var res = await fetch(API_BASE + '/trades?account_id=' + ACCOUNT_ID + '&page=' + _historyPage + '&page_size=' + _historyPageSize);
-        var data = await parseJsonResponse(res);
-        trades = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
-        _historyTotalCount = data.total_count || 0;
-    } catch(e) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败</td></tr>';
-        return [];
-    }
-    _historyAllTrades = trades;
-
-    renderHistoryPage();
-    return trades;
+  try {
+    var res = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&page=' + _historyPage + '&page_size=' + _historyPageSize);
+    var data = await res.json();
+    _historyAllTrades = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+    _historyTotalCount = data.total_count || 0;
+  } catch(e) {
+    if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败</td></tr>';
+    return;
+  }
+  applyHistoryFilter(false);
 }
-
-// ---- 加载统计数据 ----
-
-function loadStats(posResult, trades) {
-    var elCount = document.getElementById('stat-position-count');
-    var elMargin = document.getElementById('stat-total-margin');
-    var elPnl = document.getElementById('stat-total-pnl');
-    var el24h = document.getElementById('stat-24h-pnl');
-    var elWin = document.getElementById('stat-win-rate');
-    var elTotal = document.getElementById('stat-total-trades');
-
-    if (posResult) {
-        if (elCount) elCount.textContent = posResult.count;
-        // elMargin and elPnl are populated by loadAccountInfo() from account DB
-    }
-
-    // 24H 盈亏 — computed from current page's trades
-    if (trades && trades.length > 0) {
-        var cutoff = Date.now() - 24 * 3600000;
-        var pnl24h = trades
-            .filter(function(t) {
-                var ct = t.close_time || t.trade_time;
-                if (!ct) return false;
-                var ts = new Date((typeof ct === 'string' && !ct.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(ct)) ? ct + 'Z' : ct).getTime();
-                return ts >= cutoff;
-            })
-            .reduce(function(s, t) { return s + (parseFloat(t.realized_pnl) || 0); }, 0);
-
-        if (el24h) {
-            el24h.textContent = fmtPnl(pnl24h);
-            el24h.className = 'font-mono text-2xl font-medium ' + (pnl24h >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
-        }
-    } else if (trades !== undefined) {
-        if (el24h) el24h.textContent = '0.00 USDT';
-    }
-    // win_rate and total_trades loaded from account API in loadAccountInfo()
-}
-
-// ---- 加载账户统计 ----
 
 async function loadAccountInfo() {
-    try {
-        var res = await fetch(API_BASE + '/account/' + ACCOUNT_ID);
-        if (!res.ok) return;
-        var data = await parseJsonResponse(res);
-        var acc = data.data || data;
-        var elWin    = document.getElementById('stat-win-rate');
-        var elTotal  = document.getElementById('stat-total-trades');
-        var elMargin = document.getElementById('stat-total-margin');
-        var elPnl    = document.getElementById('stat-total-pnl');
-        if (elWin    && acc.win_rate     != null) elWin.textContent    = parseFloat(acc.win_rate).toFixed(1) + '%';
-        if (elTotal  && acc.total_trades != null) elTotal.textContent  = acc.total_trades;
-        if (elMargin && acc.current_balance != null) elMargin.textContent = fmtUsdt(acc.current_balance);
-        if (elPnl    && acc.realized_pnl    != null) {
-            var rpnl = parseFloat(acc.realized_pnl);
-            elPnl.textContent = fmtPnl(rpnl);
-            elPnl.className = 'font-mono text-2xl font-medium ' + (rpnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
-        }
-    } catch(e) {}
-}
-
-// ---- 平仓 ----
-
-async function closePosition(id, symbol) {
-    if (!id || isNaN(parseInt(id))) { showToast('持仓ID无效', 'error'); return; }
-    var ok = await showConfirm('确定要平仓 ' + symbol + ' ?', {title: '确认平仓', confirmText: '确认平仓', type: 'warning'});
-    if (!ok) return;
-    try {
-        var res = await fetch(API_BASE + '/close/' + id, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({})
-        });
-        var data = await parseJsonResponse(res);
-        if (data.success || res.ok) {
-            showToast(symbol + ' 平仓成功', 'success');
-            setTimeout(loadAll, 500);
-        } else {
-            throw new Error(data.message || data.detail || '平仓失败');
-        }
-    } catch(e) {
-        showToast('平仓失败: ' + e.message, 'error');
+  try {
+    var res = await fetch('/api/futures/account/' + ACCOUNT_ID);
+    if (!res.ok) return;
+    var data = await res.json();
+    var acc = data.data || data;
+    if (acc.win_rate != null) document.getElementById('stat-win-rate').textContent = parseFloat(acc.win_rate).toFixed(1) + '%';
+    if (acc.total_trades != null) document.getElementById('stat-total-trades').textContent = acc.total_trades;
+    if (acc.current_balance != null) document.getElementById('stat-balance').textContent = fmtUsdt(acc.current_balance);
+    if (acc.realized_pnl != null) {
+      var rpnl = parseFloat(acc.realized_pnl);
+      var el = document.getElementById('stat-total-pnl');
+      el.textContent = fmtPnl(rpnl);
+      el.className = 'text-2xl font-headline font-bold monospace ' + (rpnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
     }
-}
-
-// ---- 主加载函数 ----
-
-async function loadAll() {
-    var results = await Promise.all([loadPositions(), loadHistory(1), loadAccountInfo()]);
-    var posResult = results[0];
-    var trades = results[1];
-    loadStats(posResult, trades);
-}
-
-// ---- 初始化 ----
-
-var _posRefreshTimer = null;
-var _coinFuturesWs = null;
-
-function applyCoinFuturesWsTick(payload) {
-    if (!payload || payload.type !== 'tick') return;
-    var items = payload.items || [];
-    var total = payload.total_unrealized_pnl;
-    for (var i = 0; i < items.length; i++) {
-        var it = items[i];
-        var row = document.querySelector('tr[data-pos-id="' + it.position_id + '"]');
-        if (!row) continue;
-        var priceEl = row.querySelector('.pos-ws-price');
-        var pnlEl = row.querySelector('.pos-ws-pnl');
-        if (priceEl) priceEl.textContent = fmtPrice(it.current_price);
-        if (pnlEl) {
-            pnlEl.textContent = fmtPnl(it.unrealized_pnl);
-            pnlEl.className = 'pos-ws-pnl px-6 py-4 font-mono ' + (it.unrealized_pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
-        }
-    }
-    var pnlHdr = document.getElementById('pos-header-pnl');
-    if (pnlHdr && total != null && !isNaN(parseFloat(total))) {
-        var tv = parseFloat(total);
-        pnlHdr.textContent = (tv >= 0 ? '+' : '') + tv.toFixed(2) + ' U';
-        pnlHdr.className = 'font-mono text-sm font-bold ' + (tv >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
-    }
-}
-
-function connectCoinFuturesPnlWs() {
-    try {
-        if (_coinFuturesWs && (_coinFuturesWs.readyState === WebSocket.OPEN || _coinFuturesWs.readyState === WebSocket.CONNECTING)) {
-            return;
-        }
-        var wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        var wsUrl = wsProto + '//' + location.host + API_BASE + '/ws/positions-pnl?account_id=' + ACCOUNT_ID;
-        var ws = new WebSocket(wsUrl);
-        _coinFuturesWs = ws;
-        ws.onopen = function() {
-            if (_posRefreshTimer) { clearInterval(_posRefreshTimer); _posRefreshTimer = null; }
-            _posRefreshTimer = setInterval(loadPositions, 30000);
-        };
-        ws.onmessage = function(ev) {
-            try {
-                var data = JSON.parse(ev.data);
-                if (data.type === 'empty') return;
-                if (data.type === 'ready') return;
-                applyCoinFuturesWsTick(data);
-            } catch (e) { /* ignore */ }
-        };
-        ws.onerror = function() { /* 回退由 onclose 处理 */ };
-        ws.onclose = function() {
-            _coinFuturesWs = null;
-            if (_posRefreshTimer) { clearInterval(_posRefreshTimer); _posRefreshTimer = null; }
-            _posRefreshTimer = setInterval(loadPositions, 5000);
-            if (_lastPositions && _lastPositions.length > 0) {
-                setTimeout(connectCoinFuturesPnlWs, 3000);
-            }
-        };
-    } catch (e) {
-        console.warn('WS 盈亏连接失败', e);
-    }
+  } catch(e) {}
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    loadAll();
-    _posRefreshTimer = setInterval(loadPositions, 5000);
-    _refreshTimer = setInterval(function() { loadHistory(1); loadAccountInfo(); }, 300000);
+  loadAccountInfo();
+  loadHistory(1);
+  document.getElementById('history-search').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') loadHistory(1);
+  });
 });
 </script>
 </body></html>

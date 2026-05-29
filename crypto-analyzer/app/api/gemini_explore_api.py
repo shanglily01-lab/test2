@@ -144,7 +144,9 @@ async def list_runs(limit: int = Query(20, ge=1, le=200)):
                 cur.execute(
                     "SELECT id, asof_utc, model, universe_size, trades_opened, "
                     "       elapsed_s, status, error_msg, triggered_by, "
-                    "       LEFT(summary_zh, 200) AS summary_short, created_at "
+                    "       LEFT(summary_zh, 200) AS summary_short, created_at, "
+                    "       (prompt_text IS NOT NULL AND prompt_text != '') AS has_prompt, "
+                    "       (raw_response IS NOT NULL AND raw_response != '') AS has_raw "
                     "FROM gemini_explore_runs "
                     "ORDER BY id DESC LIMIT %s",
                     (limit,),
@@ -155,6 +157,31 @@ async def list_runs(limit: int = Query(20, ge=1, le=200)):
         return {"success": True, "data": runs, "count": len(runs)}
     except Exception as e:
         logger.error(f"[Gemini探索 API] /runs 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/runs/{run_id}/detail")
+async def get_run_detail(run_id: int):
+    """返回某轮的完整 prompt 与模型原始 JSON 响应."""
+    try:
+        conn = _connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, prompt_text, raw_response, summary_zh "
+                    "FROM gemini_explore_runs WHERE id=%s",
+                    (run_id,),
+                )
+                row = cur.fetchone()
+        finally:
+            conn.close()
+        if not row:
+            raise HTTPException(status_code=404, detail="run not found")
+        return {"success": True, "data": row}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Gemini探索 API] /runs/{run_id}/detail 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

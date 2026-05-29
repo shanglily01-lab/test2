@@ -3,7 +3,7 @@
 <html class="dark" lang="zh-CN"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Neural Obsidian - Futures Trading Monitor</title>
+<title>Neural Obsidian - 合约交易</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
@@ -106,8 +106,8 @@
 </div>
 <nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto">
 <a href="/dashboard" data-path="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
-<a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>U本位合约</span></a>
-<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_bitcoin</span><span>币本位合约</span></a>
+<a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>合约交易</span></a>
+<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history</span><span>合约交易记录</span></a>
 <a href="/gemini_explore" data-path="/gemini_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>Gemini 探索</span></a>
 <a href="/deepseek_explore" data-path="/deepseek_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">psychology</span><span>DeepSeek 探索</span></a>
 <a href="/live_trading" data-path="/live_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">precision_manufacturing</span><span>Live Trading</span></a>
@@ -144,7 +144,7 @@
 <!-- Top Navbar -->
 <header class="fixed top-0 right-0 left-[240px] h-16 bg-[#0a0f14]/80 backdrop-blur-xl flex items-center justify-between px-8 z-40">
 <div class="flex items-center gap-6">
-<h2 class="font-headline font-bold text-lg tracking-tight">Futures Trading Monitor</h2>
+<h2 class="font-headline font-bold text-lg tracking-tight">合约交易</h2>
 <div class="flex bg-surface-container rounded-lg p-1">
 <button class="px-4 py-1 text-xs font-bold text-primary bg-primary/10 rounded-md">模拟盘</button>
 <button class="px-4 py-1 text-xs font-bold text-on-surface-variant hover:text-on-surface transition-colors">实盘</button>
@@ -170,8 +170,8 @@
 <!-- Header section -->
 <div class="flex justify-between items-end">
 <div>
-<h3 class="font-headline text-3xl font-bold tracking-tighter">U本位合约</h3>
-<p class="text-on-surface-variant text-sm mt-1">实时多维度持仓监控与执行终端</p>
+<h3 class="font-headline text-3xl font-bold tracking-tighter">合约交易</h3>
+<p class="text-on-surface-variant text-sm mt-1">U本位模拟盘 · 实时持仓监控与执行</p>
 </div>
 </div>
 <!-- Stats Row -->
@@ -246,53 +246,6 @@
 </tbody>
 </table>
 </div>
-</div>
-<!-- Bottom Section: History -->
-<div class="bg-surface-container-low rounded-2xl overflow-hidden shadow-2xl mb-12">
-<div class="p-5 flex flex-wrap gap-3 items-center justify-between bg-surface-container border-b border-outline-variant/10">
-  <h4 class="font-headline font-bold flex items-center gap-2">
-    <span class="w-1 h-4 bg-outline rounded-full"></span>
-    历史交易记录
-  </h4>
-  <div class="flex flex-wrap items-center gap-2">
-    <input id="history-search" type="text" placeholder="搜索交易对..." oninput="applyHistoryFilter(true)" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 w-36"/>
-    <select id="history-side-filter" onchange="applyHistoryFilter(true)" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:outline-none focus:border-primary/50">
-      <option value="">全部方向</option>
-      <option value="LONG">LONG</option>
-      <option value="SHORT">SHORT</option>
-    </select>
-    <select id="history-limit" onchange="loadHistory(1)" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:outline-none focus:border-primary/50">
-      <option value="30">每页 30 条</option>
-      <option value="50">每页 50 条</option>
-      <option value="100">每页 100 条</option>
-    </select>
-    <button id="history-refresh-btn" onclick="loadHistory()" class="px-3 py-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/20 text-primary rounded-lg text-xs font-bold transition-colors">刷新</button>
-  </div>
-</div>
-<div class="overflow-x-auto">
-<table class="w-full text-left border-collapse">
-<thead>
-<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-outline-variant/10 bg-surface-container">
-<th class="px-5 py-4 font-semibold whitespace-nowrap">开仓 / 平仓时间</th>
-<th class="px-5 py-4 font-semibold whitespace-nowrap">持仓时长</th>
-<th class="px-5 py-4 font-semibold whitespace-nowrap">交易对</th>
-<th class="px-5 py-4 font-semibold whitespace-nowrap">方向</th>
-<th class="px-5 py-4 font-semibold whitespace-nowrap">开仓价</th>
-<th class="px-5 py-4 font-semibold whitespace-nowrap">结平价</th>
-<th class="px-5 py-4 font-semibold whitespace-nowrap">开仓信号</th>
-<th class="px-5 py-4 font-semibold whitespace-nowrap">平仓原因</th>
-<th class="px-5 py-4 font-semibold text-right whitespace-nowrap">保证金</th>
-<th class="px-5 py-4 font-semibold text-right whitespace-nowrap">手续费</th>
-<th class="px-5 py-4 font-semibold text-right whitespace-nowrap">实现盈亏</th>
-<th class="px-5 py-4 font-semibold text-right whitespace-nowrap">收益率</th>
-</tr>
-</thead>
-<tbody id="history-tbody" class="text-xs divide-y divide-outline-variant/5"><tr><td colspan="11" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr></tbody>
-</table>
-</div>
-<div class="px-5 py-3 bg-surface-container border-t border-outline-variant/10 flex items-center justify-between flex-wrap gap-3">
-  <span id="history-count-label" class="text-xs text-on-surface-variant font-mono">--</span>
-  <div id="history-pagination" class="flex items-center gap-1"></div>
 </div>
 </div>
 </div>
@@ -551,190 +504,11 @@ async function closeAllPositions() {
     }
 }
 
-// ---- 加载历史交易 ----
-
-var _historyAllTrades = [];
-var _historyPage = 1;
-var _historyPageSize = 30;
-var _historyTotalCount = 0;
-
-function applyHistoryFilter(resetPage) {
-    if (resetPage) _historyPage = 1;
-    var tbody   = document.getElementById('history-tbody');
-    var countEl = document.getElementById('history-count-label');
-    var pagEl   = document.getElementById('history-pagination');
-    var search  = (document.getElementById('history-search') || {}).value || '';
-    var side    = (document.getElementById('history-side-filter') || {}).value || '';
-    search = search.trim().toLowerCase();
-
-    var filtered = _historyAllTrades.filter(function(t) {
-        var sym = (t.symbol || '').toLowerCase();
-        var matchSearch = !search || sym.includes(search);
-        var isLong = t.side === 'CLOSE_LONG';
-        var matchSide = !side || (side === 'LONG' && isLong) || (side === 'SHORT' && !isLong);
-        return matchSearch && matchSide;
-    });
-
-    // Pagination based on server-side total count; page buttons trigger new API fetch
-    var totalPages = Math.max(1, Math.ceil(_historyTotalCount / _historyPageSize));
-    var pageRows = filtered;
-
-    if (pageRows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="12" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无符合条件的记录</td></tr>';
-    } else {
-        tbody.innerHTML = pageRows.map(function(t) {
-            var isLong = t.side === 'CLOSE_LONG';
-            var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
-            var pnl = parseFloat(t.realized_pnl) || 0;
-            var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
-            var pnlPct = t.pnl_pct != null ? parseFloat(t.pnl_pct) : null;
-            return '<tr class="hover:bg-surface-container/50 transition-colors">' +
-                '<td class="px-5 py-3.5 text-on-surface-variant monospace whitespace-nowrap text-xs leading-5">' +
-                    '<div>' + fmtTime(t.open_time) + '</div>' +
-                    '<div class="text-[#49f4c8]/70">' + fmtTime(t.close_time || t.trade_time) + '</div>' +
-                '</td>' +
-                '<td class="px-5 py-3.5 text-on-surface-variant monospace whitespace-nowrap text-xs">' + fmtDuration(t.open_time, t.close_time || t.trade_time) + '</td>' +
-                '<td class="px-5 py-3.5 font-bold font-headline uppercase whitespace-nowrap">' + (t.symbol || '--') + '</td>' +
-                '<td class="px-5 py-3.5 font-bold text-xs ' + sideClass + '">' + (isLong ? 'LONG' : 'SHORT') + '</td>' +
-                '<td class="px-5 py-3.5 monospace whitespace-nowrap">' + fmtPrice(t.entry_price) + '</td>' +
-                '<td class="px-5 py-3.5 monospace whitespace-nowrap">' + fmtPrice(t.price) + '</td>' +
-                '<td class="px-5 py-3.5 text-xs text-on-surface-variant max-w-[140px] truncate" title="' + (t.entry_source || t.entry_reason || '') + '">' + (t.entry_source || t.entry_reason || '--') + '</td>' +
-                '<td class="px-5 py-3.5 text-xs text-on-surface-variant max-w-[140px] truncate" title="' + (t.close_reason || '') + '">' + (t.close_reason || '--') + '</td>' +
-                '<td class="px-5 py-3.5 monospace text-right whitespace-nowrap text-on-surface-variant">' + (t.margin != null ? fmtUsdt(t.margin) : '--') + '</td>' +
-                '<td class="px-5 py-3.5 monospace text-right whitespace-nowrap text-on-surface-variant">' + (t.fee != null ? fmtUsdt(t.fee) : '--') + '</td>' +
-                '<td class="px-5 py-3.5 monospace text-right whitespace-nowrap ' + pnlClass + '">' + fmtPnl(pnl) + ' U</td>' +
-                '<td class="px-5 py-3.5 monospace text-right whitespace-nowrap ' + pnlClass + '">' + (pnlPct != null ? pnlPct.toFixed(2) + '%' : '--') + '</td>' +
-                '</tr>';
-        }).join('');
-    }
-
-    if (countEl) {
-        countEl.textContent = '共 ' + _historyTotalCount + ' 条  第 ' + _historyPage + ' / ' + totalPages + ' 页';
-    }
-
-    // Render pagination buttons — page navigation triggers server fetch
-    if (pagEl) {
-        var btnClass = 'px-3 py-1 rounded text-xs font-mono border transition-colors ';
-        var html = '';
-        html += '<button ' + (_historyPage <= 1 ? 'disabled ' : '') + 'onclick="loadHistory(' + (_historyPage - 1) + ')" class="' + btnClass + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&lsaquo;</button>';
-        var pages = [];
-        if (totalPages <= 7) {
-            for (var i = 1; i <= totalPages; i++) pages.push(i);
-        } else {
-            pages = [1, 2];
-            if (_historyPage > 4) pages.push('...');
-            for (var p = Math.max(3, _historyPage - 1); p <= Math.min(totalPages - 2, _historyPage + 1); p++) pages.push(p);
-            if (_historyPage < totalPages - 3) pages.push('...');
-            pages.push(totalPages - 1, totalPages);
-        }
-        pages.forEach(function(p) {
-            if (p === '...') {
-                html += '<span class="px-2 text-on-surface-variant text-xs">...</span>';
-            } else {
-                var active = p === _historyPage;
-                html += '<button onclick="loadHistory(' + p + ')" class="' + btnClass + (active ? 'bg-primary text-background border-primary font-bold' : 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container') + '">' + p + '</button>';
-            }
-        });
-        html += '<button ' + (_historyPage >= totalPages ? 'disabled ' : '') + 'onclick="loadHistory(' + (_historyPage + 1) + ')" class="' + btnClass + 'border-outline-variant/20 text-on-surface-variant hover:bg-surface-container disabled:opacity-30">&rsaquo;</button>';
-        pagEl.innerHTML = html;
-    }
-}
-
-async function loadHistory(page) {
-    if (page !== undefined) _historyPage = page;
-    var tbody = document.getElementById('history-tbody');
-    var recentList = document.getElementById('recent-trades-list');
-    var limitEl = document.getElementById('history-limit');
-    var pageSize = limitEl ? parseInt(limitEl.value) || 30 : 30;
-    _historyPageSize = pageSize;
-
-    if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>';
-
-    var trades = [];
-    try {
-        var res = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&page=' + _historyPage + '&page_size=' + _historyPageSize);
-        var data = await res.json();
-        trades = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
-        _historyTotalCount = data.total_count || 0;
-    } catch(e) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败</td></tr>';
-        return [];
-    }
-    _historyAllTrades = trades;
-
-    // 更新最近成交 panel
-    if (recentList) {
-        if (trades.length === 0) {
-            recentList.innerHTML = '<div class="py-4 text-center text-on-surface-variant text-xs">暂无记录</div>';
-        } else {
-            recentList.innerHTML = trades.slice(0, 5).map(function(t) {
-                var isLong = t.side === 'CLOSE_LONG';
-                var sideClass = isLong ? 'text-[#49f4c8]' : 'text-[#ff716c]';
-                var sideLabel = isLong ? 'LONG' : 'SHORT';
-                var pnl = parseFloat(t.realized_pnl) || 0;
-                var pnlClass = pnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]';
-                return '<div class="flex items-center justify-between py-2 border-b border-outline-variant/10">' +
-                    '<div class="flex items-center gap-3">' +
-                        '<span class="text-xs font-bold ' + sideClass + '">' + sideLabel + '</span>' +
-                        '<span class="text-sm font-headline">' + (t.symbol || '--') + '</span>' +
-                    '</div>' +
-                    '<div class="text-right">' +
-                        '<p class="text-sm monospace ' + pnlClass + '">' + fmtPnl(pnl) + '</p>' +
-                        '<p class="text-[10px] text-on-surface-variant">' + fmtTime(t.close_time || t.trade_time) + '</p>' +
-                    '</div>' +
-                '</div>';
-            }).join('');
-        }
-    }
-
-    // 更新历史记录表格（通过统一的过滤函数渲染）
-    if (!tbody) return trades;
-    if (trades.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无历史记录</td></tr>';
-        var countEl = document.getElementById('history-count-label');
-        if (countEl) countEl.textContent = '共 0 条';
-        return trades;
-    }
-
-    applyHistoryFilter(true);
-    return trades;
-}
-
 // ---- 加载统计数据 ----
 
-function loadStats(posResult, trades) {
+function loadStats(posResult) {
     var elCount = document.getElementById('stat-position-count');
-    var elMargin = document.getElementById('stat-total-margin');
-    var elPnl = document.getElementById('stat-total-pnl');
-    var el24h = document.getElementById('stat-24h-pnl');
-    var elWin = document.getElementById('stat-win-rate');
-    var elTotal = document.getElementById('stat-total-trades');
-
-    if (posResult) {
-        if (elCount) elCount.textContent = posResult.count;
-        // elMargin and elPnl are populated by loadAccountInfo() from account DB
-    }
-
-    // 24H 盈亏 — computed from current page's trades (most recent page)
-    if (trades && trades.length > 0) {
-        var cutoff = Date.now() - 24 * 3600000;
-        var pnl24h = trades
-            .filter(function(t) {
-                var ct = t.close_time || t.created_at;
-                if (!ct) return false;
-                var ts = new Date((typeof ct === 'string' && !ct.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(ct)) ? ct + 'Z' : ct).getTime();
-                return ts >= cutoff;
-            })
-            .reduce(function(s, t) { return s + (parseFloat(t.realized_pnl) || 0); }, 0);
-
-        if (el24h) {
-            el24h.textContent = fmtPnl(pnl24h);
-            el24h.className = 'text-2xl font-headline font-bold monospace ' + (pnl24h >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
-        }
-    } else if (trades !== undefined) {
-        if (el24h) el24h.textContent = '0.00';
-    }
-    // win_rate and total_trades are loaded from account API in loadAccountInfo()
+    if (posResult && elCount) elCount.textContent = posResult.count;
 }
 
 // ---- 加载账户统计 ----
@@ -864,10 +638,9 @@ async function closePosition(id, symbol) {
 // ---- 主加载函数 ----
 
 async function loadAll() {
-    var results = await Promise.all([loadPositions(), loadHistory(1), loadAccountInfo()]);
-    var posResult = results[0];
-    var trades = results[1];
-    loadStats(posResult, trades);
+    var posResult = await loadPositions();
+    loadStats(posResult);
+    await loadAccountInfo();
     await loadTradingStatus();
 }
 
@@ -877,19 +650,8 @@ var _posRefreshTimer = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     loadAll();
-    // 持仓+价格 5s 刷新
     _posRefreshTimer = setInterval(loadPositions, 5000);
-    // 余额/历史 5分钟刷新
-    _refreshTimer = setInterval(function() { loadHistory(1); loadAccountInfo(); }, 300000);
-
-    // 搜索 / 筛选实时过滤（不重新请求接口）
-    var searchEl = document.getElementById('history-search');
-    var sideEl   = document.getElementById('history-side-filter');
-    var limitEl  = document.getElementById('history-limit');
-    if (searchEl) searchEl.addEventListener('input', applyHistoryFilter);
-    if (sideEl)   sideEl.addEventListener('change', applyHistoryFilter);
-    // 切换 limit 时重新拉取
-    // history-limit onchange is handled inline (loadHistory(1))
+    _refreshTimer = setInterval(loadAccountInfo, 300000);
 });
 </script>
 </body></html>
