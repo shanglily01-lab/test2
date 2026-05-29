@@ -32,35 +32,6 @@ backtest:
   end_date: '2023-12-31'
   initial_capital: 10000
   start_date: '2023-01-01'
-coin_futures_symbols:
-- BTCUSD_PERP
-- ETHUSD_PERP
-- SOLUSD_PERP
-- BNBUSD_PERP
-- XRPUSD_PERP
-- DOGEUSD_PERP
-- UNIUSD_PERP
-- ADAUSD_PERP
-- SUIUSD_PERP
-- LINKUSD_PERP
-- BCHUSD_PERP
-- FILUSD_PERP
-- LTCUSD_PERP
-- WIFUSD_PERP
-- AAVEUSD_PERP
-- DOTUSD_PERP
-- AVAXUSD_PERP
-- TRXUSD_PERP
-- OPUSD_PERP
-- ETCUSD_PERP
-- NEARUSD_PERP
-- XLMUSD_PERP
-- APTUSD_PERP
-- WLDUSD_PERP
-- ENSUSD_PERP
-- ATOMUSD_PERP
-- ALGOUSD_PERP
-- SANDUSD_PERP
 collector:
   historical_days: 30
   price_interval: 5
@@ -453,6 +424,7 @@ smart_money:
     large_tx_threshold: 1000000
     min_addresses: 2
     min_net_flow: 500000
+# U 本位合约监控列表 (仅 /USDT). 币本位 coin_futures_symbols 已移除, fast_collector 不再采集币本位 K 线.
 symbols:
 - BTC/USDT
 - ETH/USDT

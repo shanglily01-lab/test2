@@ -64,7 +64,6 @@ WHITELIST = {
     "app/services/binance_news_monitor.py",
     # 纯注释引用 (无实际请求)
     "app/services/position_sl_tp_monitor.py",
-    "app/trading/dapi_coin_margined_price.py",
     # 本地一次性 K 线回填工具 (在本地机器跑, 不消耗服务器 IP 配额)
     "scripts/backfill_klines.py",
 }
@@ -72,7 +71,6 @@ WHITELIST = {
 SCAN_ROOTS = ["app", "scripts"]
 SCAN_TOP_LEVEL_FILES = [
     "smart_trader_service.py",
-    "coin_futures_trader_service.py",
     "u_coin_style_trader_service.py",
     "fast_collector_service.py",
     "ws_kline_collector_service.py",

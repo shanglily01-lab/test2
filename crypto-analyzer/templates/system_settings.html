@@ -265,7 +265,7 @@
 <span class="cfg-l1-num" aria-hidden="true">1</span>
 <div class="cfg-l1-text">
 <div class="cfg-l1-title">交易权限</div>
-<p class="cfg-l1-desc">最外层：总开关与方向、实盘、币本位。</p>
+<p class="cfg-l1-desc">最外层：总开关与方向、实盘权限。</p>
 </div>
 </div>
 <div class="rounded-xl bg-[#070b10]/90 border border-[#49f4c8]/20 p-4 mb-4">
@@ -297,14 +297,6 @@
 <p class="text-xs text-slate-500 mt-0.5">同步平仓 · 仅控制平仓</p>
 </div>
 <div id="liveCloseToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="min-w-0">
-<div class="text-sm font-medium text-slate-200">币本位交易</div>
-</div>
-<div id="coinFuturesToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div>
 </div>
 </div>
@@ -765,11 +757,6 @@
                 );
                 var scCb = document.getElementById('signalConfirmCheckbox');
                 if (scCb) scCb.checked = !!svc.signal_confirmation_enabled;
-                // 币本位：如果后端有 coin_futures_enabled 字段则读取
-                if ('coin_futures_enabled' in svc) {
-                    setToggle('coinFuturesToggle', !!svc.coin_futures_enabled);
-                }
-
                 // 最大持仓时长
                 const sel = document.getElementById('maxHoldHoursSelect');
                 if (sel) {
@@ -971,17 +958,6 @@
             }
         });
 
-        // 币本位交易
-        bindToggle('coinFuturesToggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { coin_futures_enabled: enabled });
-                showToast('币本位交易已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
         // 现货交易
         bindToggle('spotTradingToggle', async function (enabled) {
             try {
@@ -1073,7 +1049,6 @@
                         apiPut('/trading-services', {
                             live_trading_enabled: getToggle('liveToggle'),
                             usdt_futures_enabled: getToggle('usdtToggle'),
-                            coin_futures_enabled: getToggle('coinFuturesToggle'),
                             btc_momentum_enabled: getToggle('btcMomentumToggle'),
                             predictor_enabled: getToggle('predictorToggle'),
                             signal_confirmation_enabled: document.getElementById('signalConfirmCheckbox')?.checked ?? false,

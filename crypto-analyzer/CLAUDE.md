@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-基于技术信号、市场趋势和智能风控的全自动加密货币量化交易平台,在 Binance 合约市场自动执行交易。支持 U 本位合约、币本位合约,提供 Web 管理界面。
+基于技术信号、市场趋势和智能风控的全自动加密货币量化交易平台,在 Binance U 本位合约市场自动执行交易,提供 Web 管理界面。
 
 ## 技术栈
 
@@ -17,12 +17,13 @@
 | 通知 | Telegram Bot API |
 | 配置 | dotenv_values 读 .env |
 
-## 进程架构 (4 个独立进程)
+## 进程架构 (3 个核心交易/调度进程 + Web)
 
-1. **smart_trader_service.py** — U 本位合约主交易 (4100 行)
-2. **coin_futures_trader_service.py** — 币本位合约交易
-3. **app/scheduler.py** (crypto-scheduler, systemd) — 统一调度引擎
-4. **app/main.py** (FastAPI) — Web 服务 + REST API
+1. **smart_trader_service.py** — U 本位合约主交易
+2. **app/scheduler.py** (crypto-scheduler, systemd) — 统一调度引擎
+3. **app/main.py** (FastAPI) — Web 服务 + REST API
+
+辅助进程: fast_collector / ws_kline_collector / multi_strategy 等
 
 ## 数据库
 
@@ -109,7 +110,7 @@
 
 ## 进程间关系
 
-- `smart_trader_service.py` (U本位) 和 `coin_futures_trader_service.py` (币本位) 各自独立
+- `smart_trader_service.py` (U本位) 负责主策略与多策略实盘
 - `app/scheduler.py` (crypto-scheduler) 统一调度价格采集、Gemini 等
 - `app/main.py` (FastAPI) 提供 Web 界面
-- 四个进程必须全部启动。某个挂了其他仍能运行，但对应功能会缺失
+- 核心进程需全部启动。某个挂了其他仍能运行，但对应功能会缺失

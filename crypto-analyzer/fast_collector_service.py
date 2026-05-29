@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-智能数据采集服务（分层采集策略）
+智能数据采集服务（分层采集策略，仅 U 本位）
 采集超级大脑需要的多时间周期K线数据: 5m, 15m, 1h, 1d
 每5分钟检查一次，根据K线周期智能决定是否采集
 
@@ -68,7 +68,7 @@ class SmartCollectorService:
         # 2026-05-26: WS 现在覆盖 5m+15m+1h, REST 降为兜底只做长周期补漏
         self.interval = 600  # 10 分钟
 
-        logger.info("🧠 智能数据采集服务初始化完成")
+        logger.info("🧠 智能数据采集服务初始化完成 (仅 U 本位, 不采集币本位)")
         logger.info(f"检查间隔: {self.interval}秒 (5分钟)")
         logger.info("采集策略: 分层智能采集，节省93.5%资源")
 

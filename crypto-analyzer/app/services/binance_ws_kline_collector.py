@@ -7,7 +7,7 @@ Binance WebSocket K线采集器
 设计:
 - 多个 WS 连接, 按"市场 + 周期"分片
   Phase 1: 仅 U本位 5m + 15m, ~500 streams, 2-3 个连接
-  后续扩展: 加 1h/1d 和币本位
+  后续扩展: 加 1h/1d
 - 只处理 k.x == true (K 线 closed) 的消息, 进行中的 K 线丢弃
 - 启动顺序: 连 WS (进 buffer) -> REST hydration -> drain buffer 落盘
 - 落盘用 run_in_executor 隔离, 不阻塞 WS event loop
@@ -28,9 +28,8 @@ from loguru import logger
 
 
 WS_BASE_USDT = "wss://fstream.binance.com/stream"
-WS_BASE_COIN = "wss://dstream.binance.com/stream"
 
-MAX_STREAMS_PER_CONN = 15           # 单连接上限 (2026-05-26: 降到 15, Binance 在多 streams 时容易静默不推)
+MAX_STREAMS_PER_CONN = 15
                                     # 5m+15m × 249 symbols / 15 ≈ 34 连接, 在 300/IP 上限内安全
 SUBSCRIBE_RATE_PER_SEC = 5          # 币安建连速率限制
 PING_INTERVAL = 20                  # 主动 ping 间隔
@@ -75,7 +74,7 @@ class WSKlineConnection:
         ws_url: str,
         streams: list[str],
         on_kline_closed: OnKlineClosed,
-        market: str,  # 'usdt' or 'coin'
+        market: str,  # 'usdt'
         name: str,
     ) -> None:
         self.ws_url = ws_url
@@ -211,19 +210,16 @@ class WSKlineCollector:
         self,
         db_config: dict,
         usdt_symbols: list[str],
-        coin_symbols: list[str],
         intervals: list[str],
     ) -> None:
         """
         Args:
             db_config: MySQL 连接配置
             usdt_symbols: U本位 symbols (Binance 格式, 如 ['BTCUSDT', ...])
-            coin_symbols: 币本位 symbols (Binance 格式, 如 ['BTCUSD_PERP', ...])
             intervals: K线周期列表 (如 ['5m', '15m'])
         """
         self.db_config = db_config
         self.usdt_symbols = usdt_symbols
-        self.coin_symbols = coin_symbols
         self.intervals = intervals
         self.buffer: list[dict] = []
         self.buffer_lock = asyncio.Lock()
@@ -246,15 +242,6 @@ class WSKlineCollector:
             # 单连接 streams 超限时再切片
             for i in range(0, len(streams), MAX_STREAMS_PER_CONN):
                 shards.append(('usdt', interval, streams[i:i + MAX_STREAMS_PER_CONN]))
-        # 币本位: 单连接通常够 (5 symbols * 4 周期 = 20 streams)
-        if self.coin_symbols:
-            coin_streams = [
-                f"{s.lower()}@kline_{i}"
-                for s in self.coin_symbols
-                for i in self.intervals
-            ]
-            for i in range(0, len(coin_streams), MAX_STREAMS_PER_CONN):
-                shards.append(('coin', 'mixed', coin_streams[i:i + MAX_STREAMS_PER_CONN]))
         return shards
 
     async def _on_kline_closed(
@@ -344,16 +331,12 @@ class WSKlineCollector:
 
         kline = item['kline']
         symbol_raw = item['symbol']
-        market = item['market']
 
-        if market == 'coin':
-            symbol_norm = symbol_raw.replace('USD_PERP', '/USD')
-        else:
-            symbol_norm = f"{symbol_raw[:-4]}/USDT"
+        symbol_norm = f"{symbol_raw[:-4]}/USDT"
 
         return {
             'symbol': symbol_norm,
-            'contract_type': 'coin_futures' if market == 'coin' else 'usdt_futures',
+            'contract_type': 'usdt_futures',
             'timeframe': item['interval'],
             'open_time': kline['open_time'],
             'close_time': kline['close_time'],
@@ -392,20 +375,6 @@ class WSKlineCollector:
                     saved = hydrator.save_klines(klines)
                     logger.info(f"  U本位 {interval} hydration 落盘: {saved} 条")
 
-        # 币本位历史
-        if self.coin_symbols:
-            for interval in self.intervals:
-                limit = 200 if interval in ('5m', '15m') else 50
-                logger.info(
-                    f"REST hydration: 币本位 {interval} x {len(self.coin_symbols)} symbols (limit={limit})"
-                )
-                klines = await hydrator.collect_coin_batch(
-                    self.coin_symbols, interval=interval, limit=limit
-                )
-                if klines:
-                    saved = hydrator.save_klines(klines)
-                    logger.info(f"  币本位 {interval} hydration 落盘: {saved} 条")
-
     async def start(self) -> None:
         """
         启动顺序 (重要, 不要改):
@@ -420,7 +389,7 @@ class WSKlineCollector:
         logger.info(f"准备启动 {len(shards)} 个 WS 连接")
 
         for idx, (market, interval, streams) in enumerate(shards):
-            ws_url = WS_BASE_USDT if market == 'usdt' else WS_BASE_COIN
+            ws_url = WS_BASE_USDT
             name = f"ws_{market}_{interval}_#{idx}"
             conn = WSKlineConnection(
                 ws_url=ws_url,
@@ -456,7 +425,6 @@ class WSKlineCollector:
         logger.info(
             f"WS K线采集已启动: {len(self.connections)} 连接, "
             f"U本位 {len(self.usdt_symbols)} symbols, "
-            f"币本位 {len(self.coin_symbols)} symbols, "
             f"intervals={self.intervals}"
         )
 
@@ -499,14 +467,14 @@ class WSKlineCollector:
             else:
                 consecutive_all_dead = 0
 
-    async def _check_and_backfill(self, market: str, interval: str) -> None:
-        """检查单个市场+周期的 DB 新鲜度, 落后则 REST 回填"""
+    async def _check_and_backfill(self, interval: str) -> None:
+        """检查 U本位 DB 新鲜度, 落后则 REST 回填"""
         try:
             import pymysql
             conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor, autocommit=True)
             try:
                 with conn.cursor() as cur:
-                    exchange = 'binance_futures' if market == 'usdt' else 'binance_coin_futures'
+                    exchange = 'binance_futures'
                     cur.execute(
                         "SELECT MAX(open_time) AS ot FROM kline_data "
                         "WHERE timeframe=%s AND exchange=%s",
@@ -517,7 +485,7 @@ class WSKlineCollector:
                 conn.close()
 
             if not row or not row['ot']:
-                logger.info(f"[回填] {market} {interval}: DB 无数据, 跳过回填检查")
+                logger.info(f"[回填] usdt {interval}: DB 无数据, 跳过回填检查")
                 return
 
             latest_ot = row['ot'] / 1000  # ms → s
@@ -528,35 +496,29 @@ class WSKlineCollector:
                 return  # 数据够新, 不需要回填
 
             logger.warning(
-                f"[回填] {market} {interval} 数据滞后 {age_seconds/60:.0f} 分钟 "
+                f"[回填] usdt {interval} 数据滞后 {age_seconds/60:.0f} 分钟 "
                 f"(阈值 {threshold/60:.0f} 分钟), 触发 REST 回填"
             )
 
-            # 计算需要拉多少历史
             lookback_minutes = BACKFILL_LOOKBACK_MINUTES.get(interval, 60)
             limit = max(2, int(lookback_minutes / self._interval_to_minutes(interval)) + 1)
 
-            symbols = self.usdt_symbols if market == 'usdt' else self.coin_symbols
-            if not symbols:
+            if not self.usdt_symbols:
                 return
 
             from app.collectors.smart_futures_collector import SmartFuturesCollector
             hydrator = SmartFuturesCollector(self.db_config)
             loop = asyncio.get_event_loop()
 
-            if market == 'usdt':
-                klines = await hydrator.collect_batch(symbols, interval=interval, limit=limit)
-            else:
-                klines = await hydrator.collect_coin_batch(symbols, interval=interval, limit=limit)
+            klines = await hydrator.collect_batch(self.usdt_symbols, interval=interval, limit=limit)
 
             if klines:
-                # save_klines 是同步 DB 操作, 放 executor 避免阻塞 event loop
                 saved = await loop.run_in_executor(None, hydrator.save_klines, klines)
-                logger.info(f"[回填] {market} {interval}: REST 采集 {len(klines)} 条, 落盘 {saved} 条")
+                logger.info(f"[回填] usdt {interval}: REST 采集 {len(klines)} 条, 落盘 {saved} 条")
             else:
-                logger.warning(f"[回填] {market} {interval}: REST 采集返回空")
+                logger.warning(f"[回填] usdt {interval}: REST 采集返回空")
         except Exception as e:
-            logger.error(f"[回填] {market} {interval} 异常: {e}")
+            logger.error(f"[回填] usdt {interval} 异常: {e}")
 
     @staticmethod
     def _interval_to_minutes(interval: str) -> int:
@@ -576,12 +538,8 @@ class WSKlineCollector:
         while True:
             try:
                 tasks = []
-                markets = ['usdt']
-                if self.coin_symbols:
-                    markets.append('coin')
-                for market in markets:
-                    for interval in BACKFILL_ALLOWED_INTERVALS:
-                        tasks.append(self._check_and_backfill(market, interval))
+                for interval in BACKFILL_ALLOWED_INTERVALS:
+                    tasks.append(self._check_and_backfill(interval))
                 if tasks:
                     await asyncio.gather(*tasks)
             except Exception as e:

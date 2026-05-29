@@ -3,7 +3,7 @@
 
 进程内唯一对外打 Binance REST 的入口。所有业务代码必须通过本模块获取
 币安行情数据 (价格 / K 线 / 资金费率), 不允许再直接 import requests 或
-aiohttp 调用 fapi/dapi/api.binance.com。
+aiohttp 调用 fapi/api.binance.com。
 
 设计目标:
 1. 把"每秒 x N 持仓"的 REST 暴露面收敛成"60 秒 x 全市场 1 次"
@@ -81,15 +81,11 @@ class BinanceDataHub:
     # 全市场批量端点 (1 个请求拿全部 symbol)
     FAPI_TICKER_PRICE_ALL = "https://fapi.binance.com/fapi/v1/ticker/price"
     FAPI_PREMIUM_INDEX_ALL = "https://fapi.binance.com/fapi/v1/premiumIndex"
-    DAPI_TICKER_PRICE_ALL = "https://dapi.binance.com/dapi/v1/ticker/price"
-    DAPI_PREMIUM_INDEX_ALL = "https://dapi.binance.com/dapi/v1/premiumIndex"
     SPOT_TICKER_PRICE_ALL = "https://api.binance.com/api/v3/ticker/price"
 
     # 单拉端点 (兜底)
     FAPI_KLINES = "https://fapi.binance.com/fapi/v1/klines"
-    DAPI_KLINES = "https://dapi.binance.com/dapi/v1/klines"
     FAPI_TICKER_PRICE = "https://fapi.binance.com/fapi/v1/ticker/price"
-    DAPI_TICKER_PRICE = "https://dapi.binance.com/dapi/v1/ticker/price"
 
     # 全市场刷新周期 (秒) - 60s 是设计目标, 见模块 docstring
     PERIODIC_FETCH_INTERVAL = 60
@@ -112,7 +108,6 @@ class BinanceDataHub:
 
         # 延迟拿 WS 单例, 避免循环 import
         self._ws_futures = None
-        self._ws_coin_futures = None
 
         # 进程内缓存
         # ticker_cache: symbol_clean -> {price: Decimal, ts: float, source: str}
@@ -132,7 +127,7 @@ class BinanceDataHub:
         # 异步 session 复用 (用于业务侧 async get_price 路径)
         self._aiohttp_session: Optional[aiohttp.ClientSession] = None
 
-        # 同步 session 复用 (用于业务侧 sync 路径, 比如 coin_futures_trading_engine)
+        # 同步 session 复用 (用于业务侧 sync 路径)
         self._sync_session: Optional[requests.Session] = None
         self._sync_session_lock = threading.Lock()
 
@@ -190,16 +185,6 @@ class BinanceDataHub:
                 return None
         return self._ws_futures
 
-    def _get_ws_coin_futures(self):
-        if self._ws_coin_futures is None:
-            try:
-                from app.services.binance_ws_price import get_ws_price_service
-                self._ws_coin_futures = get_ws_price_service("coin_futures")
-            except Exception as e:
-                logger.warning(f"[DataHub] 获取 coin_futures WS 服务失败: {e}")
-                return None
-        return self._ws_coin_futures
-
     # -------------------------------------------------------------------
     # 业务侧公开接口: 价格
     # -------------------------------------------------------------------
@@ -221,11 +206,13 @@ class BinanceDataHub:
         Returns:
             Decimal 价格, 全部失败返回 None
         """
-        is_coin = symbol.endswith("/USD")
+        is_coin = symbol.endswith("/USD") and not symbol.endswith("/USDT")
+        if is_coin:
+            return None
+
         symbol_clean = symbol.replace("/", "").upper()
 
-        # L1: WS
-        ws = self._get_ws_coin_futures() if is_coin else self._get_ws_futures()
+        ws = self._get_ws_futures()
         if ws is not None:
             try:
                 p = ws.get_price(symbol, max_age_seconds=max_age_seconds)
@@ -239,22 +226,14 @@ class BinanceDataHub:
         if cached is not None:
             return cached
 
-        # L2.5: 币本位特殊 fallback - dapi 没挂的币用 U 本位 BASE/USDT 参考价
-        # 与 coin_futures_trading_engine 原有降级链保持兼容
-        if is_coin:
-            usdt_ref = self._coin_to_usdt_ref_cached(symbol_clean, max_age_seconds)
-            if usdt_ref is not None:
-                return usdt_ref
-
         # L3: DB 5m K 线兜底
         db_price = self._db_kline_fallback(symbol)
         if db_price is not None:
             return db_price
 
-        # L4: 同步 REST 单拉 (受熔断 + 令牌桶)
         if not allow_rest_fallback:
             return None
-        return await self._rest_single_price(symbol, symbol_clean, is_coin)
+        return await self._rest_single_price(symbol, symbol_clean)
 
     def get_price_sync(
         self,
@@ -263,14 +242,17 @@ class BinanceDataHub:
         allow_rest_fallback: bool = True,
     ) -> Optional[Decimal]:
         """
-        同步版 get_price - 给非协程上下文用 (比如 coin_futures_trading_engine).
+        同步版 get_price - 给非协程上下文用.
 
         逻辑与 get_price 一致, 但 L4 使用 requests 同步调用.
         """
-        is_coin = symbol.endswith("/USD")
+        is_coin = symbol.endswith("/USD") and not symbol.endswith("/USDT")
+        if is_coin:
+            return None
+
         symbol_clean = symbol.replace("/", "").upper()
 
-        ws = self._get_ws_coin_futures() if is_coin else self._get_ws_futures()
+        ws = self._get_ws_futures()
         if ws is not None:
             try:
                 p = ws.get_price(symbol, max_age_seconds=max_age_seconds)
@@ -283,48 +265,19 @@ class BinanceDataHub:
         if cached is not None:
             return cached
 
-        if is_coin:
-            usdt_ref = self._coin_to_usdt_ref_cached(symbol_clean, max_age_seconds)
-            if usdt_ref is not None:
-                return usdt_ref
-
         db_price = self._db_kline_fallback(symbol)
         if db_price is not None:
             return db_price
 
         if not allow_rest_fallback:
             return None
-        return self._rest_single_price_sync(symbol, symbol_clean, is_coin)
-
-    def _coin_to_usdt_ref_cached(
-        self, symbol_clean: str, max_age_seconds: int
-    ) -> Optional[Decimal]:
-        """
-        币本位 -> U 本位参考价 fallback (仅查 ticker 缓存, 不打 REST).
-
-        symbol_clean 形如 'APTUSD' (内部 'APT/USD' 去斜杠). 当 dapi 全量没挂
-        APTUSD_PERP 时, 用 fapi 的 APTUSDT 价格作参考 - 与 coin_futures_trading_engine
-        原降级链保持兼容.
-        """
-        if not symbol_clean.endswith("USD") or symbol_clean.endswith("USDT"):
-            return None
-        base = symbol_clean[:-3]
-        if not base:
-            return None
-        usdt_key = base + "USDT"
-        with self._cache_lock:
-            entry = self._ticker_cache.get(usdt_key)
-            if not entry or entry.get("source") != "fapi":
-                return None
-            if (time.time() - entry["ts"]) > max_age_seconds:
-                return None
-            return entry["price"]
+        return self._rest_single_price_sync(symbol, symbol_clean)
 
     async def get_prices_batch(
         self, symbols: List[str], max_age_seconds: int = 90
     ) -> Dict[str, Decimal]:
         """
-        批量价格 - 用于 coin_futures_trading_engine 等批量更新场景.
+        批量价格 - 用于批量更新场景.
 
         全部命中缓存 = 0 REST. 缓存 miss 也不发单拉 REST, 由 60s 后台任务负责.
 
@@ -343,18 +296,14 @@ class BinanceDataHub:
         返回整个 ticker 缓存的快照 (symbol_clean -> price), 用于批量场景.
 
         Args:
-            market: 'futures' (U本位) / 'coin_futures' (币本位) / 'spot'
+            market: 'futures' (U本位) / 'spot'
 
         Note:
             缓存数据来自 60s 后台拉取, 不保证非常新鲜, 不主动触发 REST.
         """
         with self._cache_lock:
             if market == "futures":
-                # 简化: 当前实现 ticker_cache 不区分 market, 由 _periodic_fetch_loop
-                # 同时填充 fapi 和 dapi 数据. 这里返回不带斜杠 key 的全集
                 return {k: v["price"] for k, v in self._ticker_cache.items() if v.get("source") == "fapi"}
-            elif market == "coin_futures":
-                return {k: v["price"] for k, v in self._ticker_cache.items() if v.get("source") == "dapi"}
             else:
                 return {k: v["price"] for k, v in self._ticker_cache.items() if v.get("source") == "spot"}
 
@@ -363,8 +312,7 @@ class BinanceDataHub:
         with self._cache_lock:
             if market == "futures":
                 return {k: v["mark_price"] for k, v in self._premium_cache.items() if v.get("source") == "fapi"}
-            else:
-                return {k: v["mark_price"] for k, v in self._premium_cache.items() if v.get("source") == "dapi"}
+            return {}
 
     # -------------------------------------------------------------------
     # 业务侧公开接口: K 线
@@ -389,7 +337,10 @@ class BinanceDataHub:
             List[{open, high, low, close, open_time(datetime), close_time(datetime), volume}]
             为空表示全部失败.
         """
-        is_coin = symbol.endswith("/USD")
+        is_coin = symbol.endswith("/USD") and not symbol.endswith("/USDT")
+        if is_coin:
+            return []
+
         symbol_clean = symbol.replace("/", "").upper()
 
         # L1: DB
@@ -408,7 +359,7 @@ class BinanceDataHub:
         # L3: REST 单拉
         if not allow_rest_fallback:
             return []
-        rows = await self._rest_klines(symbol, symbol_clean, interval, limit, is_coin)
+        rows = await self._rest_klines(symbol, symbol_clean, interval, limit)
         if rows:
             with self._cache_lock:
                 self._kline_cache[key] = {"rows": rows, "ts": time.time()}
@@ -431,14 +382,6 @@ class BinanceDataHub:
             "https://fapi.binance.com" + path, params, timeout, src="fapi"
         )
 
-    async def dapi_request_get(
-        self, path: str, params: Optional[dict] = None, timeout: float = 8.0
-    ) -> Optional[Any]:
-        """通用 dapi GET 请求 (异步)."""
-        return await self._rest_get_generic(
-            "https://dapi.binance.com" + path, params, timeout, src="dapi"
-        )
-
     async def spot_request_get(
         self, path: str, params: Optional[dict] = None, timeout: float = 8.0
     ) -> Optional[Any]:
@@ -453,14 +396,6 @@ class BinanceDataHub:
         """同步版 fapi GET. 给非协程上下文使用 (例如 schedule 库的 sync 任务)."""
         return self._rest_get_generic_sync(
             "https://fapi.binance.com" + path, params, timeout, src="fapi"
-        )
-
-    def dapi_request_get_sync(
-        self, path: str, params: Optional[dict] = None, timeout: float = 8.0
-    ) -> Optional[Any]:
-        """同步版 dapi GET."""
-        return self._rest_get_generic_sync(
-            "https://dapi.binance.com" + path, params, timeout, src="dapi"
         )
 
     def spot_request_get_sync(
@@ -553,8 +488,6 @@ class BinanceDataHub:
                 else:
                     await self._fetch_all_tickers_fapi()
                     await self._fetch_all_premium_index_fapi()
-                    await self._fetch_all_tickers_dapi()
-                    await self._fetch_all_premium_index_dapi()
                     self._log_stats()
             except asyncio.CancelledError:
                 break
@@ -568,10 +501,6 @@ class BinanceDataHub:
     async def _fetch_all_tickers_fapi(self) -> None:
         """拉 U 本位全市场价格 (1 个 REST 取所有 symbol)."""
         await self._fetch_all_tickers_generic(self.FAPI_TICKER_PRICE_ALL, source="fapi")
-
-    async def _fetch_all_tickers_dapi(self) -> None:
-        """拉 币本位全市场价格."""
-        await self._fetch_all_tickers_generic(self.DAPI_TICKER_PRICE_ALL, source="dapi")
 
     async def _fetch_all_tickers_generic(self, url: str, source: str) -> None:
         if not self._rate_limiter.try_acquire(1):
@@ -623,9 +552,6 @@ class BinanceDataHub:
 
     async def _fetch_all_premium_index_fapi(self) -> None:
         await self._fetch_all_premium_index_generic(self.FAPI_PREMIUM_INDEX_ALL, source="fapi")
-
-    async def _fetch_all_premium_index_dapi(self) -> None:
-        await self._fetch_all_premium_index_generic(self.DAPI_PREMIUM_INDEX_ALL, source="dapi")
 
     async def _fetch_all_premium_index_generic(self, url: str, source: str) -> None:
         if not self._rate_limiter.try_acquire(1):
@@ -798,7 +724,7 @@ class BinanceDataHub:
         return m.get(interval, 30)
 
     async def _rest_single_price(
-        self, symbol: str, symbol_clean: str, is_coin: bool
+        self, symbol: str, symbol_clean: str
     ) -> Optional[Decimal]:
         """REST 单 symbol 拉价 (异步, 受熔断 + 令牌桶)."""
         if rate_guard.is_banned():
@@ -810,12 +736,8 @@ class BinanceDataHub:
             logger.debug(f"[DataHub] {symbol} REST 单拉被令牌桶拒绝")
             return None
 
-        if is_coin:
-            url = self.DAPI_TICKER_PRICE
-            api_sym = symbol_clean + "_PERP"
-        else:
-            url = self.FAPI_TICKER_PRICE
-            api_sym = symbol_clean
+        url = self.FAPI_TICKER_PRICE
+        api_sym = symbol_clean
 
         session = await self._get_aiohttp_session()
         try:
@@ -843,7 +765,7 @@ class BinanceDataHub:
                 with self._cache_lock:
                     self._ticker_cache[symbol_clean] = {
                         "price": dec, "ts": time.time(),
-                        "source": "dapi" if is_coin else "fapi",
+                        "source": "fapi",
                     }
                 return dec
         except Exception:
@@ -851,7 +773,7 @@ class BinanceDataHub:
         return None
 
     def _rest_single_price_sync(
-        self, symbol: str, symbol_clean: str, is_coin: bool
+        self, symbol: str, symbol_clean: str
     ) -> Optional[Decimal]:
         """REST 单 symbol 拉价 (同步版)."""
         if rate_guard.is_banned():
@@ -861,12 +783,8 @@ class BinanceDataHub:
             self._stat_rest_rejected_by_bucket += 1
             return None
 
-        if is_coin:
-            url = self.DAPI_TICKER_PRICE
-            api_sym = symbol_clean + "_PERP"
-        else:
-            url = self.FAPI_TICKER_PRICE
-            api_sym = symbol_clean
+        url = self.FAPI_TICKER_PRICE
+        api_sym = symbol_clean
 
         sess = self._get_sync_session()
         try:
@@ -889,7 +807,7 @@ class BinanceDataHub:
                 with self._cache_lock:
                     self._ticker_cache[symbol_clean] = {
                         "price": dec, "ts": time.time(),
-                        "source": "dapi" if is_coin else "fapi",
+                        "source": "fapi",
                     }
                 return dec
         except Exception:
@@ -897,7 +815,7 @@ class BinanceDataHub:
         return None
 
     async def _rest_klines(
-        self, symbol: str, symbol_clean: str, interval: str, limit: int, is_coin: bool
+        self, symbol: str, symbol_clean: str, interval: str, limit: int
     ) -> List[Dict[str, Any]]:
         if rate_guard.is_banned():
             self._stat_rest_rejected_by_ban += 1
@@ -906,12 +824,8 @@ class BinanceDataHub:
             self._stat_rest_rejected_by_bucket += 1
             return []
 
-        if is_coin:
-            url = self.DAPI_KLINES
-            api_sym = symbol_clean + "_PERP"
-        else:
-            url = self.FAPI_KLINES
-            api_sym = symbol_clean
+        url = self.FAPI_KLINES
+        api_sym = symbol_clean
 
         session = await self._get_aiohttp_session()
         try:
@@ -996,7 +910,7 @@ class BinanceDataHub:
 #
 # 设计动机:
 #   BinanceDataHub 是进程内单例, 但项目有多个独立 Python 进程
-#   (app/main.py / smart_trader_service / coin_futures_trader_service / 等).
+#   (app/main.py / smart_trader_service / 等).
 #   如果每个进程各 init 一个 hub, 会出现:
 #     - 多个 hub 并发打币安 (违背 "单源" 原则)
 #     - token bucket 跨进程无法共享
@@ -1196,15 +1110,6 @@ class HubHttpProxy:
         )
         return data.get("data") if data else None
 
-    async def dapi_request_get(
-        self, path: str, params: Optional[dict] = None, timeout: float = 8.0
-    ) -> Optional[Any]:
-        data = await self._apost(
-            "/api/datahub/rest/dapi/get",
-            {"path": path, "params": params, "timeout": timeout},
-        )
-        return data.get("data") if data else None
-
     async def spot_request_get(
         self, path: str, params: Optional[dict] = None, timeout: float = 8.0
     ) -> Optional[Any]:
@@ -1219,15 +1124,6 @@ class HubHttpProxy:
     ) -> Optional[Any]:
         data = self._spost(
             "/api/datahub/rest/fapi/get",
-            {"path": path, "params": params, "timeout": timeout},
-        )
-        return data.get("data") if data else None
-
-    def dapi_request_get_sync(
-        self, path: str, params: Optional[dict] = None, timeout: float = 8.0
-    ) -> Optional[Any]:
-        data = self._spost(
-            "/api/datahub/rest/dapi/get",
             {"path": path, "params": params, "timeout": timeout},
         )
         return data.get("data") if data else None

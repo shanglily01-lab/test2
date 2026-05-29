@@ -987,21 +987,6 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
-# 注册币本位合约交易API路由
-try:
-    from app.api.coin_futures_api import router as coin_futures_router
-    app.include_router(coin_futures_router)
-    logger.info("✅ 币本位合约交易API路由已注册")
-except Exception as e:
-    logger.warning(f"⚠️  币本位合约交易API路由注册失败: {e}")
-    import traceback
-    traceback.print_exc()
-
-# 🔥 trading_control_api 已废弃，功能已整合到 system_settings_api
-# 交易开关现在通过 /api/system/settings 接口管理
-# - u_futures_trading_enabled: U本位开仓开关
-# - coin_futures_trading_enabled: 币本位开仓开关
-
 # 注册系统配置API路由
 try:
     from app.api.system_settings_api import router as system_settings_router

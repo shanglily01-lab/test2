@@ -30,7 +30,6 @@ from app.utils.pid_lock import is_running  # noqa: E402
 # 6 个被监控的服务 (名字必须跟入口脚本里 acquire_pid_lock 的参数一致)
 SERVICES = [
     "smart_trader_service",
-    "coin_futures_trader_service",
     "fast_collector_service",
     "strategy_live",
     "strategy_bigmid",

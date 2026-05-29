@@ -16,11 +16,10 @@
 
 > S8 (topshort) 已于 2026-05-28 随 S2/S3/S4/S7 一起被清理（从未有效开仓）。
 
-**正常部署只需启动 4 个服务**:
+**正常部署只需启动 3 个核心服务**:
 1. crypto-app-main
 2. crypto-smart-trader  (内含 S1/S5/S6/S9 多策略 + BTC动量 + 主策略)
-3. crypto-coin-futures
-4. crypto-fast-collector
+3. crypto-fast-collector
 
 `crypto-strategy-live` 和 `crypto-strategy-bigmid` 仅作 **rollback fallback** 保留,
 **正常情况不应 enable**。如 S8/S9 出 bug,临时启用方法见这两个 .py 文件顶部注释。
@@ -33,7 +32,6 @@
 |--------|------|------|------|
 | crypto-app-main | uvicorn app.main:app --port 9020 | **运行** | mysql |
 | crypto-smart-trader | smart_trader_service.py | **运行** (含 S8/S9) | crypto-app-main |
-| crypto-coin-futures | coin_futures_trader_service.py | **运行** | crypto-app-main |
 | crypto-fast-collector | fast_collector_service.py | **运行** | mysql |
 | **crypto-scheduler** | **app/scheduler.py** | **运行** (ETF / 金库 / 新闻 / K线采集) | **mysql** |
 | crypto-strategy-live | strategy_live.py (DEPRECATED) | **fallback** 不启用 | crypto-app-main |

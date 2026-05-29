@@ -7,7 +7,7 @@ WebSocket K线采集服务入口 (独立进程)
 fast_collector_service.py 不删，降频到 1 小时做兜底/校准。
 
 Phase 1: 仅 U本位 5m + 15m, ~500 streams, 2-3 个 WS 连接
-Phase 2 (本服务后续扩展): 加 1h/1d + 币本位
+Phase 2 (本服务后续扩展): 加 1h/1d
 
 启动:
     python ws_kline_collector_service.py
@@ -31,7 +31,6 @@ from app.utils.pid_lock import acquire_pid_lock
 # Phase 1: 采 U本位 5m 和 15m
 # 1h 由 REST 回填兜底 (1h K 线 1 小时才闭一次, WS 订阅只产生僵尸重连)
 PHASE1_INTERVALS = ['5m', '15m']
-PHASE1_INCLUDE_COIN = False  # Phase 1 不采币本位
 HEARTBEAT_INTERVAL_S = 3600  # 主循环 sleep 间隔
 
 
@@ -70,7 +69,6 @@ async def main_async() -> None:
     # 用 SmartFuturesCollector 提供的方法读 symbols, 保持一致性
     helper = SmartFuturesCollector(db_config)
     usdt_symbols = helper.get_trading_symbols()
-    coin_symbols = helper.get_coin_futures_symbols() if PHASE1_INCLUDE_COIN else []
 
     if not usdt_symbols:
         logger.error("config.yaml 中没有 U本位 symbols, 退出")
@@ -79,14 +77,12 @@ async def main_async() -> None:
     logger.info("=" * 60)
     logger.info("WS K线采集服务启动")
     logger.info(f"U本位 symbols: {len(usdt_symbols)}")
-    logger.info(f"币本位 symbols: {len(coin_symbols)}")
     logger.info(f"周期: {PHASE1_INTERVALS}")
     logger.info("=" * 60)
 
     collector = WSKlineCollector(
         db_config=db_config,
         usdt_symbols=usdt_symbols,
-        coin_symbols=coin_symbols,
         intervals=PHASE1_INTERVALS,
     )
     await collector.start()

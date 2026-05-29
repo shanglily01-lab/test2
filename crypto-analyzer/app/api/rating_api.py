@@ -95,9 +95,8 @@ async def get_current_ratings(trading_type: Optional[str] = None):
     获取当前所有评级
 
     Args:
-        trading_type: 可选的交易类型过滤 ('usdt_futures' 或 'coin_futures')
+        trading_type: 可选的交易类型过滤 (仅 'usdt_futures')
                      usdt_futures: 只返回USDT结尾的交易对
-                     coin_futures: 只返回USD结尾的交易对
                      None: 返回所有交易对
     """
     try:
@@ -117,14 +116,9 @@ async def get_current_ratings(trading_type: Optional[str] = None):
         for rating in ratings:
             symbol = rating['symbol']
 
-            # 根据 trading_type 过滤
             if trading_type == 'usdt_futures':
                 # U本位: 只显示USDT结尾的交易对
                 if not symbol.endswith('USDT'):
-                    continue
-            elif trading_type == 'coin_futures':
-                # 币本位: 只显示USD结尾的交易对(排除USDT)
-                if not symbol.endswith('USD') or symbol.endswith('USDT'):
                     continue
 
             level = rating['rating_level']

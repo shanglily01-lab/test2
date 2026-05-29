@@ -26,7 +26,6 @@ class BinanceWSPriceService:
 
     # 币安 WebSocket 地址
     WS_FUTURES_URL = "wss://fstream.binance.com/ws"  # U本位合约
-    WS_COIN_FUTURES_URL = "wss://dstream.binance.com/ws"  # 币本位合约
     WS_SPOT_URL = "wss://stream.binance.com:9443/ws"  # 现货
 
     def __init__(self, market_type: str = 'futures'):
@@ -34,7 +33,7 @@ class BinanceWSPriceService:
         初始化 WebSocket 服务
 
         Args:
-            market_type: 市场类型 'futures'(U本位), 'coin_futures'(币本位), 或 'spot'(现货)
+            market_type: 市场类型 'futures'(U本位) 或 'spot'(现货)
         """
         self.market_type = market_type
         self.prices: Dict[str, float] = {}  # symbol -> price
@@ -147,30 +146,16 @@ class BinanceWSPriceService:
         if self.market_type == 'futures':
             # U本位合约: 使用 markPrice 流获取实时标记价格（避免操纵）
             return f"{stream_symbol}@markPrice@1s"  # 每秒更新
-        elif self.market_type == 'coin_futures':
-            # 币本位合约: BTC/USD -> btcusd_perp@markPrice@1s
-            # 🔥 修复: 确保所有币本位交易对都添加 _perp 后缀
-            if not stream_symbol.endswith('_perp'):
-                stream_symbol = stream_symbol + '_perp'
-            return f"{stream_symbol}@markPrice@1s"  # 每秒更新
         else:
             # 现货: 使用 ticker 流获取实时价格
             return f"{stream_symbol}@ticker"  # 实时推送
 
     def _stream_to_symbol(self, stream: str) -> str:
-        """转换流名称回交易对格式：btcusdt -> BTC/USDT, btcusd_perp -> BTC/USD"""
+        """转换流名称回交易对格式：btcusdt -> BTC/USDT"""
         # 从 btcusdt@markPrice 或 btcusdt@ticker 提取 btcusdt
         base = stream.split('@')[0].upper()
 
-        # 🔥 修复: 添加币本位合约符号转换
-        if self.market_type == 'coin_futures':
-            # 币本位: BTCUSD_PERP -> BTC/USD
-            if base.endswith('_PERP'):
-                base = base[:-5]  # 移除 _PERP
-            if base.endswith('USD'):
-                return base[:-3] + '/USD'
-            return base
-        elif base.endswith('USDT'):
+        if base.endswith('USDT'):
             # U本位/现货: BTCUSDT -> BTC/USDT
             return base[:-4] + '/USDT'
         else:
@@ -265,9 +250,8 @@ class BinanceWSPriceService:
             if 'result' in data or 'id' in data:
                 return
 
-            # 🔥 修复: 币本位合约也使用 markPriceUpdate 事件
-            if self.market_type in ('futures', 'coin_futures'):
-                # 处理 U本位/币本位合约 markPrice 消息
+            if self.market_type == 'futures':
+                # 处理 U本位合约 markPrice 消息
                 if 'e' in data and data['e'] == 'markPriceUpdate':
                     stream_symbol = data['s'].lower()  # BTCUSDT or BTCUSD_PERP -> btcusdt or btcusd_perp
                     symbol = self._stream_to_symbol(stream_symbol)
@@ -297,8 +281,6 @@ class BinanceWSPriceService:
                 # 选择正确的 WebSocket URL
                 if self.market_type == 'futures':
                     base_url = self.WS_FUTURES_URL
-                elif self.market_type == 'coin_futures':
-                    base_url = self.WS_COIN_FUTURES_URL
                 else:
                     base_url = self.WS_SPOT_URL
 
@@ -309,7 +291,7 @@ class BinanceWSPriceService:
                 else:
                     url = base_url
 
-                market_label = "U本位合约" if self.market_type == 'futures' else ("币本位合约" if self.market_type == 'coin_futures' else "现货")
+                market_label = "U本位合约" if self.market_type == 'futures' else "现货"
                 logger.info(f"WebSocket [{market_label}] 连接中: {url[:80]}...")
 
                 async with websockets.connect(url, ping_interval=20, ping_timeout=10) as ws:
@@ -404,7 +386,6 @@ class BinanceWSPriceService:
 
 # 全局单例
 _ws_price_service_futures: Optional[BinanceWSPriceService] = None
-_ws_price_service_coin_futures: Optional[BinanceWSPriceService] = None
 _ws_price_service_spot: Optional[BinanceWSPriceService] = None
 
 
@@ -413,21 +394,17 @@ def get_ws_price_service(market_type: str = 'futures') -> BinanceWSPriceService:
     获取 WebSocket 价格服务单例
 
     Args:
-        market_type: 市场类型 'futures'(U本位), 'coin_futures'(币本位), 或 'spot'(现货)
+        market_type: 市场类型 'futures'(U本位) 或 'spot'(现货)
 
     Returns:
         对应市场的 WebSocket 服务实例
     """
-    global _ws_price_service_futures, _ws_price_service_coin_futures, _ws_price_service_spot
+    global _ws_price_service_futures, _ws_price_service_spot
 
     if market_type == 'futures':
         if _ws_price_service_futures is None:
             _ws_price_service_futures = BinanceWSPriceService(market_type='futures')
         return _ws_price_service_futures
-    elif market_type == 'coin_futures':
-        if _ws_price_service_coin_futures is None:
-            _ws_price_service_coin_futures = BinanceWSPriceService(market_type='coin_futures')
-        return _ws_price_service_coin_futures
     else:
         if _ws_price_service_spot is None:
             _ws_price_service_spot = BinanceWSPriceService(market_type='spot')

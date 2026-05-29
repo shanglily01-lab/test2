@@ -23,7 +23,7 @@ class TradingModeSwitcher:
 
         Args:
             account_id: 账户ID (2=U本位, 3=币本位)
-            trading_type: 交易类型 (usdt_futures/coin_futures)
+            trading_type: 交易类型 (usdt_futures)
 
         Returns:
             模式配置字典或None

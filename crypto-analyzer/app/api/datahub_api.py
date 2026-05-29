@@ -4,7 +4,7 @@ BinanceDataHub HTTP 接口 (内部用)
 
 设计目标:
     BinanceDataHub 是单一的币安 REST 抓取源, 只在 app/main.py 进程内运行.
-    其他独立进程 (smart_trader_service / coin_futures_trader_service /
+    其他独立进程 (smart_trader_service /
     multi_strategy 等) 通过本路由暴露的 HTTP 端点访问 hub 数据, 而不是各自
     init 一个 hub - 否则会出现多个进程并发打币安, 违背 "单源" 原则.
 
@@ -132,7 +132,6 @@ async def datahub_get_funding_rate(symbol: str):
 # -----------------------------------------------------------------------------
 
 _ALLOWED_PREFIXES_FAPI = ("/fapi/", "/futures/data/")
-_ALLOWED_PREFIXES_DAPI = ("/dapi/",)
 _ALLOWED_PREFIXES_SPOT = ("/api/v3/",)
 
 
@@ -154,19 +153,6 @@ async def datahub_fapi_get(
     _validate_path(path, _ALLOWED_PREFIXES_FAPI)
     hub = _hub_or_503()
     data = await hub.fapi_request_get(path, params, timeout=timeout)
-    return {"data": data}
-
-
-@router.post("/rest/dapi/get")
-async def datahub_dapi_get(
-    path: str = Body(...),
-    params: Optional[dict] = Body(None),
-    timeout: float = Body(8.0),
-):
-    """通用 dapi GET 转发."""
-    _validate_path(path, _ALLOWED_PREFIXES_DAPI)
-    hub = _hub_or_503()
-    data = await hub.dapi_request_get(path, params, timeout=timeout)
     return {"data": data}
 
 

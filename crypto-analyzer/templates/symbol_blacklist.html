@@ -59,7 +59,7 @@
   <nav class="flex-1 overflow-y-auto space-y-0.5 px-3" id="sidebar-nav">
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/dashboard" href="/dashboard"><span class="material-symbols-outlined text-lg">dashboard</span><span>Dashboard</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/futures_trading" href="/futures_trading"><span class="material-symbols-outlined text-lg">show_chart</span><span>合约交易</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/coin_futures_trading" href="/coin_futures_trading"><span class="material-symbols-outlined text-lg">currency_bitcoin</span><span>合约交易记录</span></a>
+    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/coin_futures_trading" href="/coin_futures_trading"><span class="material-symbols-outlined text-lg">history</span><span>合约交易记录</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/gemini_explore" href="/gemini_explore"><span class="material-symbols-outlined text-lg">auto_awesome</span><span>Gemini 探索</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/live_trading" href="/live_trading"><span class="material-symbols-outlined text-lg">precision_manufacturing</span><span>Live Trading</span></a>
     <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/futures_review" href="/futures_review"><span class="material-symbols-outlined text-lg">history_edu</span><span>复盘分析</span></a>
@@ -87,10 +87,9 @@
       <div class="flex items-center gap-4">
         <h2 class="text-lg font-bold text-white">黑名单管理</h2>
         <span id="total-badge" class="px-3 py-1 bg-gray-800 text-gray-400 rounded-full text-xs">加载中...</span>
-        <!-- Market toggle -->
+        <!-- U本位 -->
         <div class="flex items-center bg-[#0d1117] rounded-md p-0.5 border border-gray-800">
-          <button id="btn-usdt" onclick="setMarket('usdt_futures')" class="px-4 py-1 text-[#49f4c8] bg-[#49f4c8]/10 rounded font-medium text-xs transition-all">U本位</button>
-          <button id="btn-coin" onclick="setMarket('coin_futures')" class="px-4 py-1 text-gray-400 hover:text-white rounded text-xs transition-all">币本位</button>
+          <button id="btn-usdt" class="px-4 py-1 text-[#49f4c8] bg-[#49f4c8]/10 rounded font-medium text-xs transition-all">U本位</button>
         </div>
       </div>
       <div class="flex items-center gap-3">
@@ -223,18 +222,6 @@ var LEVEL_COLORS = [
   { text:'text-status-orange',  border:'border-orange-500/20', bg:'bg-orange-500/5', hover:'hover:border-orange-500/50' },
   { text:'text-status-danger',  border:'border-red-500/20',    bg:'bg-red-500/5',    hover:'hover:border-red-500/50' },
 ];
-
-function setMarket(market) {
-  currentMarket = market;
-  var isUsdt = market === 'usdt_futures';
-  document.getElementById('btn-usdt').className = isUsdt
-    ? 'px-4 py-1 text-[#49f4c8] bg-[#49f4c8]/10 rounded font-medium text-xs transition-all'
-    : 'px-4 py-1 text-gray-400 hover:text-white rounded text-xs transition-all';
-  document.getElementById('btn-coin').className = !isUsdt
-    ? 'px-4 py-1 text-[#49f4c8] bg-[#49f4c8]/10 rounded font-medium text-xs transition-all'
-    : 'px-4 py-1 text-gray-400 hover:text-white rounded text-xs transition-all';
-  loadData();
-}
 
 function setTab(tab) {
   currentTab = tab;

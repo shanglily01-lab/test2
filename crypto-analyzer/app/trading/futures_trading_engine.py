@@ -211,32 +211,6 @@ class FuturesTradingEngine:
             except:
                 raise
 
-    @staticmethod
-    def _dapi_coin_margined_price(symbol: str) -> Optional[Decimal]:
-        """
-        币本位永续 ADA/USD 等取价 - 委托 BinanceDataHub.
-
-        Hub 内部按 WS -> dapi ticker 缓存 -> dapi REST 单拉 (受熔断) 多级降级.
-        """
-        try:
-            from app.services.binance_data_hub import get_global_data_hub
-        except Exception:
-            return None
-        hub = get_global_data_hub()
-        if hub is None:
-            return None
-        return hub.get_price_sync(symbol)
-
-    @staticmethod
-    def _spot_usdt_proxy_for_coin_margined(symbol: str) -> Optional[Decimal]:
-        """
-        现货近似价 fallback. hub 已经在 get_price_sync 内做了 /USD -> BASEUSDT
-        参考价 fallback (见 binance_data_hub._coin_to_usdt_ref_cached),
-        所以本方法在 _dapi_coin_margined_price 失败后通常也不会再有命中.
-        保留接口兼容旧调用方.
-        """
-        return None
-
     def get_current_price(self, symbol: str, use_realtime: bool = False) -> Decimal:
         """
         获取当前市场价格
@@ -248,14 +222,6 @@ class FuturesTradingEngine:
         Returns:
             当前价格
         """
-        # 币本位 /USD：优先 dapi，避免误用 U本位 API（ADAUSD 无效）
-        cm = self._dapi_coin_margined_price(symbol)
-        if cm is not None:
-            return cm
-        cm_spot = self._spot_usdt_proxy_for_coin_margined(symbol)
-        if cm_spot is not None:
-            return cm_spot
-
         # 如果要求使用实时价格, 走 BinanceDataHub (WS / 60s ticker 缓存 / DB / 限速 REST)
         if use_realtime:
             try:

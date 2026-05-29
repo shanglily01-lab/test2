@@ -155,8 +155,7 @@
     <h1 class="font-['Space_Grotesk'] text-xl font-bold tracking-tighter text-[#49f4c8]">24H 合约复盘</h1>
     <div class="h-4 w-[1px] bg-outline-variant/30"></div>
     <div class="flex items-center gap-1 bg-surface-container rounded-lg p-1">
-      <button id="btn-usdt" onclick="switchMarginType('usdt')" class="px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider transition-all af">U本位</button>
-      <button id="btn-coin" onclick="switchMarginType('coin')" class="px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider text-on-surface-variant hover:text-on-surface transition-all">币本位</button>
+      <button id="btn-usdt" class="px-3 py-1 rounded text-xs font-['Space_Grotesk'] font-bold uppercase tracking-wider transition-all af">U本位</button>
     </div>
     <select id="hours-select" onchange="onHoursChange(this.value)" class="bg-surface-container text-on-surface text-xs rounded-lg px-3 py-1.5 border border-outline-variant/30 focus:outline-none focus:border-primary/50 font-['Space_Grotesk']">
       <option value="12">12小时</option>
@@ -681,7 +680,6 @@
 // ============================================================
 // STATE
 // ============================================================
-var currentMarginType = 'usdt';
 var currentHours = 24;
 var tradeDir = 'all';
 var tradePnl = 'all';
@@ -757,7 +755,7 @@ function updateTimestamp() {
 }
 
 function accountId() {
-  return currentMarginType === 'usdt' ? 2 : 3;
+  return 2;
 }
 
 // ============================================================
@@ -798,19 +796,6 @@ function refreshCurrentTab() {
   tabLoaded[currentTab] = false;
   loadTabData(currentTab);
   updateTimestamp();
-}
-
-function switchMarginType(t) {
-  currentMarginType = t;
-  var baseClass = "px-3 py-1 rounded text-xs font-bold uppercase tracking-wider transition-all";
-  var btnU = document.getElementById('btn-usdt');
-  var btnC = document.getElementById('btn-coin');
-  if (btnU) btnU.className = baseClass + (t === 'usdt' ? ' af' : ' text-on-surface-variant hover:text-on-surface');
-  if (btnC) btnC.className = baseClass + (t === 'coin' ? ' af' : ' text-on-surface-variant hover:text-on-surface');
-  Object.keys(tabLoaded).forEach(function(k){ tabLoaded[k] = false; });
-  loadTabData(currentTab);
-  tabLoaded[currentTab] = true;
-  if (currentTab === 'dailypnl') { initMonthSelector(); loadDailyPnl(); }
 }
 
 function onHoursChange(v) {
@@ -1425,7 +1410,7 @@ function loadDailyPnl() {
   var sel = document.getElementById('month-selector');
   var month = sel ? sel.value : '';
   if (!month) return;
-  fetch('/api/futures/review/daily-pnl?month=' + month + '&margin_type=' + currentMarginType)
+  fetch('/api/futures/review/daily-pnl?month=' + month)
     .then(function(r){ return r.json(); })
     .then(function(d) {
       var s = d.data || d || {};

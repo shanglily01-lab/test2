@@ -1957,7 +1957,6 @@ async def get_realtime_opportunity_analysis(
 @router.get('/daily-pnl')
 async def get_daily_pnl_stats(
     month: str = Query(..., description="月份，格式: YYYY-MM"),
-    margin_type: str = Query('usdt', description="合约类型: usdt=U本位, coin=币本位")
 ):
     """
     获取每日盈亏统计
@@ -1986,8 +1985,7 @@ async def get_daily_pnl_stats(
         last_day = calendar.monthrange(year, month_num)[1]
         month_end = date(year, month_num, last_day)
 
-        # 确定account_id
-        account_id = 2 if margin_type == 'usdt' else 3
+        account_id = 2
 
         conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor)
         cursor = conn.cursor()
