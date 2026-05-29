@@ -897,8 +897,8 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
         logger.info(f"[DeepSeek预测] kill switch=0, 跳过 (triggered_by={triggered_by})")
         return None
 
-    # 防重: 上次成功距今 >= 4h 才执行 (统一切触发来源, 手动触发不拦截)
-    if triggered_by != 'manual':
+    # 防重: 上次成功距今 >= 4h 才执行 (manual / scheduler_init 不拦截)
+    if triggered_by not in ('manual', 'scheduler_init'):
         try:
             with _connect() as conn_chk:
                 with conn_chk.cursor() as cur:

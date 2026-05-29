@@ -1300,7 +1300,9 @@ class UnifiedDataScheduler:
             threading.Thread(target=wrapper, daemon=True, name="GeminiExplore").start()
 
         schedule.every(2).hours.do(_run_gemini_explore)
-        logger.info("  ✓ gemini_explore - 每 2 小时 (后台线程, kill switch 默认 OFF)")
+        # 兜底: every(N).hours 在 restart 后从 0 计时, 易错过周期; 10min 轮询由 worker 2h 防重
+        schedule.every(10).minutes.do(_run_gemini_explore)
+        logger.info("  ✓ gemini_explore - 每 2 小时 + 10 分钟到期轮询 (后台线程)")
 
         # DeepSeek 探索 - 每 2h 调一轮 DeepSeek 检测短时方向异动, 模拟开仓
         # kill switch = system_settings.deepseek_explore_enabled
@@ -1314,7 +1316,8 @@ class UnifiedDataScheduler:
             threading.Thread(target=wrapper, daemon=True, name="DeepSeekExplore").start()
 
         schedule.every(2).hours.do(_run_deepseek_explore)
-        logger.info("  ✓ deepseek_explore - 每 2 小时 (后台线程, kill switch 默认 OFF)")
+        schedule.every(10).minutes.do(_run_deepseek_explore)
+        logger.info("  ✓ deepseek_explore - 每 2 小时 + 10 分钟到期轮询 (后台线程)")
 
         # DeepSeek 预测 - 每 4h 调一次 DeepSeek 预测 TOP50 方向
         def _run_deepseek_predict():
@@ -1327,7 +1330,8 @@ class UnifiedDataScheduler:
             threading.Thread(target=wrapper, daemon=True, name="DeepSeekPredict").start()
 
         schedule.every(4).hours.do(_run_deepseek_predict)
-        logger.info("  ✓ deepseek_predict - 每 4 小时 (后台线程, kill switch 默认 OFF)")
+        schedule.every(10).minutes.do(_run_deepseek_predict)
+        logger.info("  ✓ deepseek_predict - 每 4 小时 + 10 分钟到期轮询 (后台线程)")
 
         # Gemini 预测 - 每 4h 调一次 Gemini 预测 TOP50 方向
         def _run_gemini_predict():
@@ -1340,7 +1344,8 @@ class UnifiedDataScheduler:
             threading.Thread(target=wrapper, daemon=True, name="GeminiPredict").start()
 
         schedule.every(4).hours.do(_run_gemini_predict)
-        logger.info("  ✓ gemini_predict - 每 4 小时 (后台线程, kill switch 默认 OFF)")
+        schedule.every(10).minutes.do(_run_gemini_predict)
+        logger.info("  ✓ gemini_predict - 每 4 小时 + 10 分钟到期轮询 (后台线程)")
 
         # Gemini 市场情绪 + 川普分析 - 每 8h 调一次
         def _run_gemini_sentiment():
