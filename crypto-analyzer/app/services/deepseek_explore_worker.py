@@ -398,8 +398,13 @@ def _build_universe(conn) -> dict:
         cached = [r for r in cached if r['symbol'] not in _level3_set]
         if len(cached) < before:
             logger.info(f"[DeepSeek探索] 黑名单3级过滤: {before - len(cached)} 个交易对")
-        logger.info(f"[DeepSeek探索] 从 cache 读取候选池 ({len(cached)} 个 symbol)")
-        return _build_universe_from_cache(cached)
+
+        # 缓存数据太少时回退 fallback（防止进程重启后缓存表刚清空或数据不全）
+        if len(cached) < 20:
+            logger.warning(f"[DeepSeek探索] 缓存候选池仅 {len(cached)} 个 (<20)，回退 kline_data JOIN")
+        else:
+            logger.info(f"[DeepSeek探索] 从 cache 读取候选池 ({len(cached)} 个 symbol)")
+            return _build_universe_from_cache(cached)
 
     logger.info("[DeepSeek探索] data_cache 不可用, 回退 kline_data 多层 JOIN")
     return _build_universe_fallback(conn, _level3_set)
