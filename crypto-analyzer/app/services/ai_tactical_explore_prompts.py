@@ -98,28 +98,40 @@ def tactical_catalyst_ok(
 
 def _pullback_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -> Tuple[bool, str]:
     text = f"{catalyst} {data_signal}".lower()
-    if not any(x in text for x in ("回调", "回踩", "支撑", "止跌", "下影", "反弹", "ma", "ema")):
+    if not any(x in text for x in (
+        "回调", "回踩", "支撑", "止跌", "下影", "反弹", "ma", "ema",
+        "pullback", "retrace", "support", "bounce", "lower shadow", "wick",
+    )):
         return False, "回调做多须写明回踩/支撑/下影/止跌等结构"
     return True, ""
 
 
 def _rebound_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -> Tuple[bool, str]:
     text = f"{catalyst} {data_signal}".lower()
-    if not any(x in text for x in ("反弹", "受阻", "阻力", "上影", "回落", "滞涨", "ma", "ema")):
+    if not any(x in text for x in (
+        "反弹", "受阻", "阻力", "上影", "回落", "滞涨", "ma", "ema",
+        "rebound", "resistance", "reject", "upper shadow", "wick", "stall",
+    )):
         return False, "反弹做空须写明受阻/阻力/上影/滞涨等结构"
     return True, ""
 
 
 def _chase_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -> Tuple[bool, str]:
     text = f"{catalyst} {data_signal}".lower()
-    if not any(x in text for x in ("突破", "放量", "连阳", "趋势", "上攻", "新高", "动能")):
+    if not any(x in text for x in (
+        "突破", "放量", "连阳", "趋势", "上攻", "新高", "动能",
+        "breakout", "volume", "momentum", "uptrend", "rally", "surge",
+    )):
         return False, "追涨做多须写明突破/放量/连阳/趋势延续等"
     return True, ""
 
 
 def _dump_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -> Tuple[bool, str]:
     text = f"{catalyst} {data_signal}".lower()
-    if not any(x in text for x in ("跌破", "放量", "连阴", "下杀", "新低", "动能", "趋势")):
+    if not any(x in text for x in (
+        "跌破", "放量", "连阴", "下杀", "新低", "动能", "趋势",
+        "breakdown", "break down", "volume", "downtrend", "selloff", "new low",
+    )):
         return False, "杀跌做空须写明跌破/放量/连阴/趋势延续等"
     return True, ""
 

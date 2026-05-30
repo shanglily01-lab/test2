@@ -357,6 +357,13 @@ def run_tactical_explore_round(
         universe, global_ctx, _cache_hit = get_explore_prepared_bundle(
             conn, cfg.log_tag, allow_rebuild=allow_rebuild,
         )
+        if len(universe) == 0 and not allow_rebuild:
+            logger.warning(
+                f"[{cfg.log_tag}] 共用探索包为空/过期, 现场构建 universe (scheduler)"
+            )
+            universe, global_ctx, _cache_hit = get_explore_prepared_bundle(
+                conn, cfg.log_tag, allow_rebuild=True,
+            )
         universe_size = len(universe)
         if universe_size == 0:
             elapsed = time.time() - t0
@@ -477,7 +484,7 @@ def run_tactical_explore_round(
                 ))
                 continue
 
-            price = _get_current_price(conn, symbol)
+            price = _get_current_price(conn, symbol, universe.get(symbol))
             if price is None or price <= 0:
                 verdict_rows.append((
                     run_id, symbol, category[:20], confidence,

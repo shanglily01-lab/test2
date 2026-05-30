@@ -39,6 +39,7 @@ from app.services.ai_explore_prompt import (
     explore_catalyst_technical_ok,
     parse_explore_llm_json,
 )
+from app.services.gemini_explore_worker import _get_current_price
 from app.services.gemini_swan_worker import (
     GEMINI_MODEL,
     GEMINI_API_KEY,
@@ -924,53 +925,6 @@ def _has_open_position(conn, symbol: str) -> bool:
 
 
 # ============================================================
-# 价格获取
-# ============================================================
-def _get_current_price(conn, symbol: str) -> Optional[float]:
-    try:
-        from app.services.binance_data_hub import get_global_data_hub
-        hub = get_global_data_hub()
-        if hub is not None:
-            p = hub.get_price_sync(symbol, max_age_seconds=90)
-            if p is not None and p > 0:
-                return float(p)
-    except Exception as e:
-        logger.debug(f"[DeepSeek探索] Hub 取价失败 {symbol}, 走 L2 兜底: {e}")
-
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT close_price, FROM_UNIXTIME(open_time/1000) AS open_dt "
-                "FROM kline_data "
-                "WHERE symbol=%s AND timeframe='5m' "
-                "ORDER BY open_time DESC LIMIT 1",
-                (symbol,),
-            )
-            row = cur.fetchone()
-            if not row or row.get('close_price') is None:
-                return None
-            open_dt = row.get('open_dt')
-            if open_dt is None:
-                return None
-            if isinstance(open_dt, str):
-                try:
-                    open_dt = datetime.strptime(open_dt, '%Y-%m-%d %H:%M:%S')
-                except Exception:
-                    return None
-            age = (datetime.now() - open_dt).total_seconds()
-            if age > 900:
-                logger.warning(
-                    f"[DeepSeek探索] {symbol} L1 失败 L2 兜底 5m K线也过时 "
-                    f"({age:.0f}s, open={open_dt}), 跳过"
-                )
-                return None
-            return float(row['close_price'])
-    except Exception as e:
-        logger.warning(f"[DeepSeek探索] L2 兜底取价失败 {symbol}: {e}")
-        return None
-
-
-# ============================================================
 # 开仓
 # ============================================================
 _CATEGORY_MAP = {
@@ -1507,7 +1461,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            price = _get_current_price(conn, symbol)
+            price = _get_current_price(conn, symbol, universe.get(symbol))
             if price is None or price <= 0:
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,

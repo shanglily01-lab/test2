@@ -1006,11 +1006,70 @@ def _has_open_position(conn, symbol: str) -> bool:
 
 
 # ============================================================
-# 价格获取 (保持不变)
+# 价格获取 (探索/战术开仓)
 # ============================================================
-def _get_current_price(conn, symbol: str) -> Optional[float]:
-    """实时取当前价, 用于开仓. (同原逻辑)"""
-    # L1: Hub (主路径)
+_KLINE_5M_MAX_AGE_S = 1800   # scheduler 无 WS 时允许 30min 内的 5m 收盘
+_KLINE_1H_MAX_AGE_S = 3900   # 与 BACKFILL 1h 滞后一致 (~65min)
+
+
+def _parse_kline_open_dt(open_dt) -> Optional[datetime]:
+    if open_dt is None:
+        return None
+    if isinstance(open_dt, datetime):
+        return open_dt
+    if isinstance(open_dt, str):
+        try:
+            return datetime.strptime(open_dt, '%Y-%m-%d %H:%M:%S')
+        except Exception:
+            return None
+    return None
+
+
+def _price_from_kline_row(row: dict, max_age_s: int, symbol: str, tag: str) -> Optional[float]:
+    if not row or row.get('close_price') is None:
+        return None
+    open_dt = _parse_kline_open_dt(row.get('open_dt'))
+    if open_dt is None:
+        return None
+    age = (datetime.now() - open_dt).total_seconds()
+    if age > max_age_s:
+        return None
+    price = float(row['close_price'])
+    if price <= 0:
+        return None
+    logger.info(f"[{tag}] {symbol} kline 兜底 close={price} age={age:.0f}s")
+    return price
+
+
+def _price_from_candidate_pool(conn, symbol: str) -> Optional[float]:
+    try:
+        from app.services.data_cache_service import DATA_CACHE_DB
+        with conn.cursor() as cur:
+            cur.execute(
+                f"SELECT current_price FROM {DATA_CACHE_DB}.candidate_pool_snapshot "
+                "WHERE symbol=%s AND current_price > 0 LIMIT 1",
+                (symbol,),
+            )
+            row = cur.fetchone()
+            if row and row.get('current_price'):
+                return float(row['current_price'])
+    except Exception as e:
+        logger.debug(f"[探索取价] candidate_pool {symbol}: {e}")
+    return None
+
+
+def _get_current_price(
+    conn,
+    symbol: str,
+    sym_data: Optional[dict] = None,
+) -> Optional[float]:
+    """探索/战术模拟开仓取价.
+
+    crypto-scheduler 常无 DataHub(main 未起) → 须用探索包/candidate_pool/kline 兜底.
+    """
+    tag = "探索取价"
+
+    # L1: Hub / HubHttpProxy
     try:
         from app.services.binance_data_hub import get_global_data_hub
         hub = get_global_data_hub()
@@ -1019,41 +1078,41 @@ def _get_current_price(conn, symbol: str) -> Optional[float]:
             if p is not None and p > 0:
                 return float(p)
     except Exception as e:
-        logger.debug(f"[Gemini探索] Hub 取价失败 {symbol}, 走 L2 兜底: {e}")
+        logger.debug(f"[{tag}] Hub 失败 {symbol}: {e}")
 
-    # L2: 5m kline close 兜底
+    # L2: 本轮 universe / 探索预计算包里的 current_price (6~15min 刷新)
+    if sym_data:
+        p = sym_data.get('current_price')
+        if p is not None and float(p) > 0:
+            logger.info(f"[{tag}] {symbol} 用探索包 current_price={p}")
+            return float(p)
+
+    # L3: data_cache.candidate_pool_snapshot
+    p = _price_from_candidate_pool(conn, symbol)
+    if p is not None and p > 0:
+        logger.info(f"[{tag}] {symbol} 用 candidate_pool current_price={p}")
+        return p
+
+    # L4: kline_data (须 binance_futures; 先 5m 再 1h)
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT close_price, FROM_UNIXTIME(open_time/1000) AS open_dt "
-                "FROM kline_data "
-                "WHERE symbol=%s AND timeframe='5m' "
-                "ORDER BY open_time DESC LIMIT 1",
-                (symbol,),
-            )
-            row = cur.fetchone()
-            if not row or row.get('close_price') is None:
-                return None
-            open_dt = row.get('open_dt')
-            if open_dt is None:
-                return None
-            if isinstance(open_dt, str):
-                try:
-                    open_dt = datetime.strptime(open_dt, '%Y-%m-%d %H:%M:%S')
-                except Exception:
-                    return None
-            age = (datetime.now() - open_dt).total_seconds()
-            if age > 900:
-                logger.warning(
-                    f"[Gemini探索] {symbol} L1 失败 L2 兜底 5m K线也过时 "
-                    f"({age:.0f}s, open={open_dt}), 跳过"
+            for tf, max_age in (('5m', _KLINE_5M_MAX_AGE_S), ('1h', _KLINE_1H_MAX_AGE_S)):
+                cur.execute(
+                    "SELECT close_price, FROM_UNIXTIME(open_time/1000) AS open_dt "
+                    "FROM kline_data "
+                    "WHERE symbol=%s AND timeframe=%s AND exchange='binance_futures' "
+                    "ORDER BY open_time DESC LIMIT 1",
+                    (symbol, tf),
                 )
-                return None
-            logger.info(f"[Gemini探索] {symbol} L1 失败 L2 兜底 5m close={row['close_price']}")
-            return float(row['close_price'])
+                row = cur.fetchone()
+                price = _price_from_kline_row(row, max_age, symbol, tag)
+                if price is not None:
+                    return price
     except Exception as e:
-        logger.warning(f"[Gemini探索] L2 兜底取价失败 {symbol}: {e}")
-        return None
+        logger.warning(f"[{tag}] kline 兜底失败 {symbol}: {e}")
+
+    logger.warning(f"[{tag}] {symbol} 所有取价路径失败")
+    return None
 
 
 # ============================================================
@@ -1684,7 +1743,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 continue
 
             # 5h. 取价
-            price = _get_current_price(conn, symbol)
+            price = _get_current_price(conn, symbol, universe.get(symbol))
             if price is None or price <= 0:
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,
