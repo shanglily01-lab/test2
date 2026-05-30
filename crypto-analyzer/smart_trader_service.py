@@ -1937,9 +1937,12 @@ class SmartTraderService:
             live_enabled = str(_get_cached_setting('live_trading_enabled', '0')).lower() in ('1', 'true')
         except Exception:
             live_enabled = False
-        if live_enabled and not self.is_symbol_in_top_performers(symbol):
-            logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 实盘模式：不在TOP50也非白名单")
-            return False
+        if live_enabled:
+            from app.services.trading_gates import check_live_symbol_allowed
+            allowed, reason = check_live_symbol_allowed(symbol)
+            if not allowed:
+                logger.warning(f"[SIGNAL_REJECT] {symbol} {side} - 实盘模式：{reason}")
+                return False
 
         # 🔥 V5.1优化: 移除防追高/防杀跌过滤
         # 原因: Big4触底检测已提供全局保护（禁止做空2小时）
@@ -1947,8 +1950,9 @@ class SmartTraderService:
         # 移除日期: 2026-02-09
 
         # ========== 第二步：提前检查黑名单 ==========
+        from app.services.trading_gates import is_symbol_blocked_level3
         rating_level = self.opt_config.get_symbol_rating_level(symbol)
-        if rating_level == 3:
+        if is_symbol_blocked_level3(symbol, rating_level):
             logger.warning(f"[BLACKLIST_LEVEL3] {symbol} 已被永久禁止交易")
             return False
 
@@ -2866,35 +2870,10 @@ class SmartTraderService:
             return {'long_max': 0.1, 'short_min': -0.1}
 
     def is_symbol_in_top_performers(self, symbol: str) -> bool:
-        """
-        检查交易对是否在盈利Top 100列表中或白名单中
-        返回True表示允许开仓
-        """
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor()
-            _clean_sym = symbol.replace('/', '')
-
-            cursor.execute("""
-                SELECT
-                  (SELECT 1 FROM top_performing_symbols WHERE symbol = %s LIMIT 1) AS in_top100,
-                  (SELECT rating_level FROM trading_symbol_rating WHERE symbol = %s OR symbol = %s LIMIT 1) AS rating_level
-            """, (symbol, symbol, _clean_sym))
-
-            result = cursor.fetchone()
-            cursor.close()
-            conn.close()
-
-            if result:
-                in_top100 = result[0] == 1 if len(result) > 0 else False
-                rating_level = int(result[1]) if result[1] is not None else None
-                is_whitelist = rating_level == 0
-                return in_top100 or is_whitelist
-            return False
-        except Exception as e:
-            # 如果表不存在或查询失败，默认允许开仓（向后兼容）
-            logger.warning(f"检查Top 100/白名单列表失败: {e}, 默认允许开仓")
-            return True
+        """检查交易对是否满足实盘 TOP50/白名单闸门 (委托 trading_gates)."""
+        from app.services.trading_gates import check_live_symbol_allowed
+        allowed, _ = check_live_symbol_allowed(symbol)
+        return allowed
 
     def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal", sync_live: bool = True, price: Optional[float] = None):
         """关闭指定交易对和方向的持仓。sync_live=False时只更新模拟单DB，不同步实盘。

@@ -381,96 +381,79 @@ class SmartEntryExecutor:
             logger.info(f"✅ {symbol} 一次性开仓完成 | 持仓ID:{position_id} | 价格:${entry_price:.4f} | 保证金:{margin}U")
 
             # ========== 同步实盘开仓 ==========
-            # 从 data_cache 缓存读 live_trading_enabled（独立于 DB 查询，避免被异常覆盖）
             try:
                 from app.services.system_settings_loader import get_setting as _get_cached_setting
                 live_trading_enabled = str(_get_cached_setting('live_trading_enabled', '0')).lower() in ('1', 'true', 'yes')
             except Exception:
                 live_trading_enabled = False
-            _allowed = False
-            try:
-                # 实盘同步必须是 TOP 50 或白名单交易对
-                _c = pymysql.connect(**self.db_config, autocommit=True)
-                _cur = _c.cursor(pymysql.cursors.DictCursor)
-                _clean_sym = symbol.replace('/', '')
-                _cur.execute(
-                    "SELECT "
-                    "  (SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1) AS in_top100,"
-                    "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s OR symbol=%s LIMIT 1) AS rating_level",
-                    (symbol, symbol, _clean_sym),
-                )
-                _row = _cur.fetchone()
-                _in_top100 = _row and _row.get('in_top100') == 1
-                _is_whitelist = _row and _row.get('rating_level') is not None and int(_row['rating_level']) == 0
-                _allowed = _in_top100 or _is_whitelist
-                _cur.close(); _c.close()
-            except Exception as _ex:
-                logger.error(f"[同步实盘] TOP50/白名单查询失败 {symbol}: {_ex}")
 
             if not live_trading_enabled:
                 logger.info(f"[同步实盘] {symbol} live_trading_enabled=0，跳过实盘同步")
-            elif not _allowed:
-                logger.info(f"[同步实盘] {symbol} 不在TOP50也非白名单，跳过实盘同步")
             else:
-                try:
-                    from app.services.api_key_service import APIKeyService
-                    from app.trading.binance_futures_engine import BinanceFuturesEngine
-                    from decimal import Decimal as _D
-                    svc = APIKeyService(self.db_config)
-                    active_keys = svc.get_all_active_api_keys('binance')
-                    if not active_keys:
-                        logger.warning(f"[同步实盘] {symbol} 无活跃API密钥，跳过实盘同步")
-                    for ak in active_keys:
-                        try:
-                            _engine = BinanceFuturesEngine(self.db_config, api_key=ak['api_key'], api_secret=ak['api_secret'])
-                            _bal = _engine.get_account_balance()
-                            if not _bal or not _bal.get('success'):
-                                logger.warning(f"[同步实盘] 账号{ak['account_name']} 获取余额失败，跳过")
-                                continue
-                            _available = float(_bal.get('available', 0))
-                            _max_margin = float(ak['max_position_value'])
-                            _lev = int(ak['max_leverage'])
-                            _margin = min(_max_margin, _available * 0.9)
-                            if _margin < 5:
-                                logger.warning(f"[同步实盘] 账号{ak['account_name']} 可用余额不足(margin={_margin:.2f}U)，跳过")
-                                continue
-                            # 实盘持仓由 BinanceFuturesEngine.open_position 内部统一控制上限 (MAX_LIVE_POSITIONS=20)
-                            _ak_id = ak['id']
-                            if _ak_id not in _live_sync_locks:
-                                _live_sync_locks[_ak_id] = asyncio.Lock()
-                            async with _live_sync_locks[_ak_id]:
-                                _qty = _D(str(_margin * _lev / entry_price))
-                            _result = _engine.open_position(
-                                account_id=ak['id'],
-                                symbol=symbol,
-                                position_side=direction,
-                                quantity=_qty,
-                                leverage=_lev,
-                                stop_loss_price=_D(str(stop_loss_price)) if stop_loss_price else None,
-                                take_profit_price=_D(str(take_profit_price)) if take_profit_price else None,
-                                source='smart_trader_sync',
-                                paper_position_id=position_id
-                            )
-                            if _result.get('success'):
-                                logger.info(f"[同步实盘] ✅ {symbol} {direction} 账号[{ak['account_name']}] 同步开仓成功 保证金={_margin:.2f}U 杠杆={_lev}x")
-                                try:
-                                    _notifier = getattr(self.live_engine, 'telegram_notifier', None)
-                                    if _notifier:
-                                        _notifier.notify_open_position(
-                                            symbol=symbol, direction=direction,
-                                            quantity=float(_qty), entry_price=entry_price,
-                                            leverage=_lev, margin=_margin,
-                                            stop_loss_price=float(stop_loss_price) if stop_loss_price else None,
-                                            take_profit_price=float(take_profit_price) if take_profit_price else None,
-                                            strategy_name=f'实盘同步[{ak["account_name"]}]'
-                                        )
-                                except Exception: pass
-                            else:
-                                logger.error(f"[同步实盘] ❌ {symbol} {direction} 账号[{ak['account_name']}] 失败: {_result.get('error', _result.get('message', ''))}")
-                        except Exception as _ex:
-                            logger.error(f"[同步实盘] ❌ 账号[{ak.get('account_name','')}] 异常: {_ex}")
-                except Exception as sync_ex:
-                    logger.error(f"[同步实盘] 整体异常: {sync_ex}")
+                from app.services.trading_gates import check_live_symbol_allowed
+                _allowed, _reason = check_live_symbol_allowed(symbol)
+                if not _allowed:
+                    logger.info(f"[同步实盘] {symbol} {_reason}，跳过实盘同步")
+                else:
+                    try:
+                        from app.services.api_key_service import APIKeyService
+                        from app.trading.binance_futures_engine import BinanceFuturesEngine
+                        from decimal import Decimal as _D
+                        svc = APIKeyService(self.db_config)
+                        active_keys = svc.get_all_active_api_keys('binance')
+                        if not active_keys:
+                            logger.warning(f"[同步实盘] {symbol} 无活跃API密钥，跳过实盘同步")
+                        for ak in active_keys:
+                            try:
+                                _engine = BinanceFuturesEngine(self.db_config, api_key=ak['api_key'], api_secret=ak['api_secret'])
+                                _bal = _engine.get_account_balance()
+                                if not _bal or not _bal.get('success'):
+                                    logger.warning(f"[同步实盘] 账号{ak['account_name']} 获取余额失败，跳过")
+                                    continue
+                                _available = float(_bal.get('available', 0))
+                                _max_margin = float(ak['max_position_value'])
+                                _lev = int(ak['max_leverage'])
+                                _margin = min(_max_margin, _available * 0.9)
+                                if _margin < 5:
+                                    logger.warning(f"[同步实盘] 账号{ak['account_name']} 可用余额不足(margin={_margin:.2f}U)，跳过")
+                                    continue
+                                _ak_id = ak['id']
+                                if _ak_id not in _live_sync_locks:
+                                    _live_sync_locks[_ak_id] = asyncio.Lock()
+                                async with _live_sync_locks[_ak_id]:
+                                    _qty = _D(str(_margin * _lev / entry_price))
+                                _result = _engine.open_position(
+                                    account_id=ak['id'],
+                                    symbol=symbol,
+                                    position_side=direction,
+                                    quantity=_qty,
+                                    leverage=_lev,
+                                    stop_loss_price=_D(str(stop_loss_price)) if stop_loss_price else None,
+                                    take_profit_price=_D(str(take_profit_price)) if take_profit_price else None,
+                                    source='smart_trader_sync',
+                                    paper_position_id=position_id
+                                )
+                                if _result.get('success'):
+                                    logger.info(f"[同步实盘] ✅ {symbol} {direction} 账号[{ak['account_name']}] 同步开仓成功 保证金={_margin:.2f}U 杠杆={_lev}x")
+                                    try:
+                                        _notifier = getattr(self.live_engine, 'telegram_notifier', None)
+                                        if _notifier:
+                                            _notifier.notify_open_position(
+                                                symbol=symbol, direction=direction,
+                                                quantity=float(_qty), entry_price=entry_price,
+                                                leverage=_lev, margin=_margin,
+                                                stop_loss_price=float(stop_loss_price) if stop_loss_price else None,
+                                                take_profit_price=float(take_profit_price) if take_profit_price else None,
+                                                strategy_name=f'实盘同步[{ak["account_name"]}]'
+                                            )
+                                    except Exception:
+                                        pass
+                                else:
+                                    logger.error(f"[同步实盘] ❌ {symbol} {direction} 账号[{ak['account_name']}] 失败: {_result.get('error', _result.get('message', ''))}")
+                            except Exception as _ex:
+                                logger.error(f"[同步实盘] ❌ 账号[{ak.get('account_name','')}] 异常: {_ex}")
+                    except Exception as sync_ex:
+                        logger.error(f"[同步实盘] 整体异常: {sync_ex}")
             # ========== 同步实盘开仓结束 ==========
 
             # 启动智能平仓监控

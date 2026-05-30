@@ -127,22 +127,6 @@ EXPLORE_SOURCE = DEEPSEEK_SOURCE
 
 
 # ============================================================
-# TOP 50 检查 (实盘同步闸门)
-# ============================================================
-def _is_in_top50(conn, symbol: str) -> bool:
-    """检查 symbol 是否在 top_performing_symbols TOP 50 内."""
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1",
-                (symbol,),
-            )
-            return cur.fetchone() is not None
-    except Exception as e:
-        logger.warning(f"[DeepSeek探索][TOP50] 检查失败: {e}")
-        return False
-
-
 # 数据新鲜度门槛
 EXPLORE_PRICE_FRESH_MIN = 20
 EXPLORE_FUNDING_FRESH_MIN = 30
@@ -398,14 +382,8 @@ def _build_universe(conn) -> dict:
     global EXCLUDED_EXTREME_SYMBOLS
     EXCLUDED_EXTREME_SYMBOLS = set()
 
-    _level3_set = set()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3")
-            for r in cur.fetchall():
-                _level3_set.add(r['symbol'])
-    except Exception as e:
-        logger.warning(f"[DeepSeek探索] 读取黑名单3级失败: {e}")
+    from app.services.trading_gates import load_blacklist_level3_symbols
+    _level3_set = load_blacklist_level3_symbols(conn)
 
     cached = _try_candidate_pool(min_volume=1000000, limit=200)
     if cached:
@@ -1061,19 +1039,11 @@ def _sync_to_live(
                 conn.close()
                 return
 
-            _clean_sym = symbol.replace('/', '')
-            cur.execute(
-                "SELECT "
-                "  (SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1) AS in_top100,"
-                "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s OR symbol=%s LIMIT 1) AS rating_level",
-                (symbol, symbol, _clean_sym),
-            )
-            row = cur.fetchone()
-            in_top100 = row and row.get('in_top100') == 1
-            is_whitelist = row and row.get('rating_level') is not None and int(row['rating_level']) == 0
-            if not in_top100 and not is_whitelist:
+            from app.services.trading_gates import check_live_symbol_allowed
+            allowed, reason = check_live_symbol_allowed(symbol, cursor=cur)
+            if not allowed:
                 logger.warning(
-                    f"[DeepSeek探索] {symbol} 不在 TOP 50 也非白名单, 跳过实盘同步"
+                    f"[DeepSeek探索] {symbol} {reason}, 跳过实盘同步"
                 )
                 conn.close()
                 return
@@ -1164,18 +1134,10 @@ def _open_simulated_position(
     price: float,
     catalyst: str,
 ) -> Optional[int]:
-    try:
-        _clean_sym = symbol.replace('/', '')
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT 1 FROM trading_symbol_rating WHERE (symbol=%s OR symbol=%s) AND rating_level >= 3 LIMIT 1",
-                (symbol, _clean_sym),
-            )
-            if cur.fetchone() is not None:
-                logger.warning(f"[DeepSeek探索] {symbol} 黑名单3级, 禁止开仓")
-                return None
-    except Exception as e:
-        logger.warning(f"[DeepSeek探索] 检查黑名单3级失败 {symbol}: {e}")
+    from app.services.trading_gates import is_symbol_blocked_level3
+    if is_symbol_blocked_level3(symbol):
+        logger.warning(f"[DeepSeek探索] {symbol} 黑名单3级, 禁止开仓")
+        return None
 
     try:
         notional = EXPLORE_MARGIN_USD * EXPLORE_LEVERAGE
@@ -1563,14 +1525,8 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            _level3_cur = conn.cursor()
-            _level3_cur.execute(
-                "SELECT 1 FROM trading_symbol_rating WHERE (symbol=%s OR symbol=%s) AND rating_level >= 3 LIMIT 1",
-                (symbol, symbol.replace('/', '')),
-            )
-            _is_level3 = _level3_cur.fetchone() is not None
-            _level3_cur.close()
-            if _is_level3:
+            from app.services.trading_gates import is_symbol_blocked_level3
+            if is_symbol_blocked_level3(symbol):
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,
                     catalyst, data_signal, risk_note,

@@ -601,26 +601,11 @@ class MarketPredictor:
                 cur.close(); conn.close()
                 logger.debug(f"[预测下单] {symbol} live_trading_enabled 未开启，跳过实盘同步")
                 return
-            # 实盘开仓仅限 TOP 50 或 白名单交易对
-            _clean_sym = symbol.replace('/', '')
-            cur.execute(
-                "SELECT "
-                "  (SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1) AS in_top100,"
-                "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s OR symbol=%s LIMIT 1) AS rating_level",
-                (symbol, symbol, _clean_sym),
-            )
-            row = cur.fetchone()
+            from app.services.trading_gates import check_live_symbol_allowed
+            allowed, reason = check_live_symbol_allowed(symbol, cursor=cur)
             cur.close(); conn.close()
-            if row:
-                in_top100 = row.get('in_top100') == 1
-                is_whitelist = row.get('rating_level') is not None and int(row['rating_level']) == 0
-                if in_top100 or is_whitelist:
-                    pass  # 允许同步
-                else:
-                    logger.debug(f"[预测下单] {symbol} 不在TOP50也非白名单，跳过实盘同步")
-                    return
-            else:
-                logger.debug(f"[预测下单] {symbol} 不在TOP50也非白名单，跳过实盘同步")
+            if not allowed:
+                logger.debug(f"[预测下单] {symbol} {reason}，跳过实盘同步")
                 return
         except Exception as e:
             logger.warning(f"[预测下单] 查询实盘开关/TOP50失败: {e}")

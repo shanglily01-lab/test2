@@ -122,16 +122,24 @@ def _connect():
 # 数据查询 — TOP 50
 # ============================================================
 def _get_top50_symbols(conn) -> List[str]:
-    """从 top_performing_symbols 获取 TOP 50 交易对, 排除黑名单3级."""
+    """从 top_performing_symbols 获取 TOP 50 交易对, 可配置排除黑名单3级."""
+    from app.services.trading_gates import is_blacklist_level3_enforced
     with conn.cursor() as cur:
-        cur.execute(
-            "SELECT symbol FROM top_performing_symbols "
-            "WHERE symbol NOT IN ("
-            "  SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3"
-            ") "
-            "ORDER BY rank_score DESC LIMIT %s",
-            (PREDICT_TOP_N,),
-        )
+        if is_blacklist_level3_enforced():
+            cur.execute(
+                "SELECT symbol FROM top_performing_symbols "
+                "WHERE symbol NOT IN ("
+                "  SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3"
+                ") "
+                "ORDER BY rank_score DESC LIMIT %s",
+                (PREDICT_TOP_N,),
+            )
+        else:
+            cur.execute(
+                "SELECT symbol FROM top_performing_symbols "
+                "ORDER BY rank_score DESC LIMIT %s",
+                (PREDICT_TOP_N,),
+            )
         return [r['symbol'] for r in cur.fetchall()]
 
 
@@ -624,18 +632,9 @@ def _sync_to_live(
                 conn.close()
                 return
 
-            # 1b. 实盘开仓仅限 TOP 50 或 白名单交易对
-            cur.execute(
-                "SELECT "
-                "  (SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1) AS in_top100,"
-                "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s LIMIT 1) AS rating_level",
-                (symbol, symbol),
-            )
-            row = cur.fetchone()
-            in_top100 = row and row.get('in_top100') == 1
-            is_whitelist = row and row.get('rating_level') is not None and int(row['rating_level']) == 0
-            if not in_top100 and not is_whitelist:
-                reason = "不在 TOP 50 也非白名单"
+            from app.services.trading_gates import check_live_symbol_allowed
+            allowed, reason = check_live_symbol_allowed(symbol, cursor=cur)
+            if not allowed:
                 logger.warning(
                     f"[Gemini预测] {symbol} {reason}, 跳过实盘同步 "
                     f"(模拟单已开, 但不同步到实盘)"
@@ -733,14 +732,10 @@ def _open_simulated_position(
 ) -> Optional[int]:
     """INSERT 到 futures_positions, 模拟单, 返回 position_id."""
     # 黑名单3级防御性检查
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT 1 FROM trading_symbol_rating WHERE (symbol=%s OR symbol=%s) AND rating_level >= 3 LIMIT 1",
-            (symbol, symbol.replace('/', '')),
-        )
-        if cur.fetchone() is not None:
-            logger.warning(f"[Gemini预测] {symbol} 黑名单3级, 禁止开仓模拟单")
-            return None
+    from app.services.trading_gates import is_symbol_blocked_level3
+    if is_symbol_blocked_level3(symbol):
+        logger.warning(f"[Gemini预测] {symbol} 黑名单3级, 禁止开仓模拟单")
+        return None
 
     try:
         notional = PREDICT_MARGIN_USD * PREDICT_LEVERAGE
@@ -1056,14 +1051,9 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 predictions_made += 1
                 continue
 
-            # 7e. 黑名单3级检查 (永久禁止交易)
-            with conn.cursor() as _cur:
-                _cur.execute(
-                    "SELECT 1 FROM trading_symbol_rating WHERE (symbol=%s OR symbol=%s) AND rating_level >= 3 LIMIT 1",
-                    (symbol, symbol.replace('/', '')),
-                )
-                _is_level3 = _cur.fetchone() is not None
-            if _is_level3:
+            # 7e. 黑名单3级检查 (system_settings.blacklist_level3_enabled)
+            from app.services.trading_gates import is_symbol_blocked_level3
+            if is_symbol_blocked_level3(symbol):
                 verdict_rows.append((
                     run_id, symbol, category, confidence,
                     catalyst, data_signal, risk_note,

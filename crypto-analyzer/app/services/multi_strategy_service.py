@@ -214,28 +214,12 @@ class MultiStrategyService:
             return False
 
     def _is_allowed_for_live(self, symbol: str) -> bool:
-        """白名单或 TOP50 才允许同步实盘。"""
-        try:
-            conn = self._get_conn()
-            cur = conn.cursor()
-            _clean_sym = symbol.replace('/', '')
-            cur.execute(
-                "SELECT "
-                "  (SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1) AS in_top100,"
-                "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s OR symbol=%s LIMIT 1) AS rating_level",
-                (symbol, symbol, _clean_sym),
-            )
-            row = cur.fetchone()
-            cur.close(); conn.close()
-            if row:
-                in_top100 = row.get('in_top100') == 1
-                is_whitelist = row.get('rating_level') is not None and int(row['rating_level']) == 0
-                if in_top100 or is_whitelist:
-                    return True
-            return False
-        except Exception as e:
-            logger.warning(f"[多策略] 检查白名单/TOP50失败 {symbol}: {e}, 默认允许")
-            return True
+        """白名单或 TOP50 才允许同步实盘 (system_settings 可配置)."""
+        from app.services.trading_gates import check_live_symbol_allowed
+        allowed, reason = check_live_symbol_allowed(symbol)
+        if not allowed:
+            logger.info(f"[多策略] {symbol} 实盘闸门: {reason}")
+        return allowed
 
     def _get_runtime_sl_tp_hold(self) -> tuple:
         """从 system_settings 读 (sl_pct, tp_pct, hold_hours). 2026-05-17 起 S1-S9 统一用此值,
@@ -291,16 +275,16 @@ class MultiStrategyService:
     def _get_candidate_symbols(self, min_abs_change: float = 5.0) -> List[str]:
         """从 price_stats_24h 过滤出有明显波动的 USDT 交易对, 同时包含白名单(rating_level=0), 排除黑名单3级"""
         try:
+            from app.services.trading_gates import sql_exclude_level3_filter
+            _l3 = sql_exclude_level3_filter("symbol")
             conn = self._get_conn()
             cur = conn.cursor()
-            cur.execute("""
+            cur.execute(f"""
                 SELECT DISTINCT symbol FROM (
                   SELECT symbol, ABS(change_24h) AS score FROM price_stats_24h
                   WHERE symbol LIKE '%%/USDT'
                     AND ABS(change_24h) >= %s
-                    AND symbol NOT IN (
-                        SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3
-                    )
+                    {_l3}
                   UNION
                   SELECT symbol, 999 AS score FROM trading_symbol_rating
                   WHERE rating_level = 0 AND symbol LIKE '%%/USDT'
@@ -365,18 +349,10 @@ class MultiStrategyService:
         """开模拟仓位；live_trading_enabled=1 时同步实盘"""
         try:
             # 黑名单3级防御性检查
-            _clean_sym = symbol.replace('/', '')
-            conn = self._get_conn()
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT 1 FROM trading_symbol_rating WHERE (symbol=%s OR symbol=%s) AND rating_level >= 3 LIMIT 1",
-                (symbol, _clean_sym),
-            )
-            if cur.fetchone() is not None:
-                cur.close(); conn.close()
+            from app.services.trading_gates import is_symbol_blocked_level3
+            if is_symbol_blocked_level3(symbol):
                 logger.warning(f"[{source}] {symbol} 黑名单3级, 禁止开仓模拟单")
                 return False
-            cur.close(); conn.close()
 
             price = self._get_current_price(symbol)
             if not price or price <= 0:
@@ -637,14 +613,14 @@ class MultiStrategyService:
     def _get_small_cap_symbols(self) -> List[str]:
         """从 price_stats_24h 获取小中市值 USDT 交易对（排除大市值）, 同时包含白名单(rating_level=0), 排除黑名单3级"""
         try:
+            from app.services.trading_gates import sql_exclude_level3_filter
+            _l3 = sql_exclude_level3_filter("symbol")
             conn = self._get_conn()
             cur = conn.cursor()
-            cur.execute("""
+            cur.execute(f"""
                 SELECT DISTINCT symbol FROM (
                   SELECT symbol FROM price_stats_24h WHERE symbol LIKE '%/USDT'
-                    AND symbol NOT IN (
-                        SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3
-                    )
+                    {_l3}
                   UNION
                   SELECT symbol FROM trading_symbol_rating
                   WHERE rating_level = 0 AND symbol LIKE '%/USDT'
@@ -774,16 +750,16 @@ class MultiStrategyService:
                 return False
 
         try:
+            from app.services.trading_gates import sql_exclude_level3_filter
+            _l3 = sql_exclude_level3_filter("symbol")
             conn = self._get_conn()
             cur = conn.cursor()
-            cur.execute("""
+            cur.execute(f"""
                 SELECT DISTINCT symbol, score FROM (
                   SELECT symbol, volume_24h AS score FROM price_stats_24h
                   WHERE symbol LIKE '%%/USDT'
                     AND volume_24h >= %s
-                    AND symbol NOT IN (
-                        SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3
-                    )
+                    {_l3}
                   UNION
                   SELECT symbol, 999999999 AS score FROM trading_symbol_rating
                   WHERE rating_level = 0 AND symbol LIKE '%%/USDT'

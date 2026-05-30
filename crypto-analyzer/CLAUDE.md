@@ -119,7 +119,11 @@
 ## 实盘控制
 
 - **统一闸门**: `system_settings.live_trading_enabled` (1=开启)
-- 实盘开仓需在 Top50 名单内
+- **TOP50 实仓闸门**: `system_settings.live_top50_required` (默认 1，TOP50 内可开实仓)
+- **白名单实仓闸门**: `system_settings.live_whitelist_enabled` (默认 1，rating_level=0 可开实仓)
+- 两者为 **或** 关系；**都关** 则即使 `live_trading_enabled=1` 也不同步实盘
+- **黑名单3级**: `system_settings.blacklist_level3_enabled` (默认 1，关闭后 L3 可开仓)
+- 各闸门由 `app/services/trading_gates.py` 统一读取，**不在 config.yaml**
 - 每账号 OPEN 上限 20 仓
 - 各策略通过 `_sync_live()` / `_sync_to_live()` 同步到 BinanceFuturesEngine
 

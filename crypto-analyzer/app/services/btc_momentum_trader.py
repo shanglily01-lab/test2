@@ -135,14 +135,14 @@ class BTCMomentumTrader:
     # ──────────────────────────────────────────
 
     def _get_top100(self) -> List[str]:
-        """从 top_performing_symbols 获取TOP50列表（排除Level3禁止交易对）"""
+        """从 top_performing_symbols 获取TOP50列表（可配置排除 L3）"""
         try:
+            from app.services.trading_gates import load_blacklist_level3_symbols
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute("SELECT symbol FROM top_performing_symbols ORDER BY rank_score DESC LIMIT 50")
             rows = cur.fetchall()
-            cur.execute("SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3")
-            banned = {r['symbol'] for r in cur.fetchall()}
+            banned = load_blacklist_level3_symbols(conn)
             cur.close(); conn.close()
             if rows:
                 return [r['symbol'] for r in rows if r['symbol'] not in banned]

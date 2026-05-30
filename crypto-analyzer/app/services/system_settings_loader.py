@@ -113,3 +113,21 @@ def get_setting(key: str, default: Any = None) -> Any:
     """获取单个配置项。"""
     settings = _reload_cache()
     return settings.get(key, default)
+
+
+def get_blacklist_level3_enabled() -> bool:
+    """黑名单3级禁止开仓 (默认 True)."""
+    from app.services.trading_gates import is_blacklist_level3_enforced
+    return is_blacklist_level3_enforced()
+
+
+def get_live_top50_required() -> bool:
+    """TOP50 内是否允许开实仓 (默认 True)."""
+    from app.services.trading_gates import is_live_top50_required
+    return is_live_top50_required()
+
+
+def get_live_whitelist_enabled() -> bool:
+    """白名单是否允许开实仓 (默认 True)."""
+    from app.services.trading_gates import is_live_whitelist_enabled
+    return is_live_whitelist_enabled()

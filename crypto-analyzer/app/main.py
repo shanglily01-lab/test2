@@ -597,9 +597,8 @@ async def lifespan(app: FastAPI):
                 logger.error(f"[FAIL] 市场预测分析失败: {e}")
         schedule.every(4).hours.do(run_market_prediction)
 
-        # TOP 100 盈利交易对更新 (每天 02:00 本地, 仅 U 本位 account_id=2)
-        # 实盘 live_trading_enabled=1 时, 所有开仓必须在 top_performing_symbols 内,
-        # 该列表每天根据 futures_positions 历史持仓表现重新统计.
+        # TOP 50 盈利交易对更新 (每天 02:00 本地, 仅 U 本位 account_id=2)
+        # live_top50_required=1 时实盘同步须在 top_performing_symbols 内 (见 trading_gates.py)
         def run_top50_update():
             """每天更新 top_performing_symbols 表的 Top 50 盈利交易对."""
             try:
