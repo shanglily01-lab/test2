@@ -1120,7 +1120,7 @@ def _get_open_price(
         )
 
     cached = None
-    if sym_data and sym_data.get("current_price"):
+    if isinstance(sym_data, dict) and sym_data.get("current_price"):
         cached = float(sym_data["current_price"])
     if not cached:
         cached = _price_from_candidate_pool(conn, symbol)

@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from app.services.ai_big4_prompt import BIG4_PROMPT_BLOCK_EXPLORE
 from app.services.ai_explore_prompt import (
     _KBAR_COUNT_RE,
     explore_catalyst_technical_ok,
+    normalize_explore_llm_payload,
     parse_explore_llm_json,
     prepare_universe_for_llm,
 )
@@ -65,6 +66,20 @@ def _build_prompt(definition: TacticalStrategyDef, universe: dict, global_ctx: d
     return prompt, meta
 
 
+def _coerce_verdict_fields(v: dict) -> dict:
+    out = dict(v)
+    for key in ("catalyst", "data_signal", "risk_note", "category"):
+        val = out.get(key)
+        if isinstance(val, list):
+            out[key] = " ".join(str(x) for x in val if x is not None)
+        elif val is not None and not isinstance(val, str):
+            out[key] = str(val)
+    sym = out.get("symbol")
+    if sym is not None:
+        out["symbol"] = str(sym).upper().replace("/", "")
+    return out
+
+
 def parse_tactical_llm_json(
     text: str,
     tag: str,
@@ -73,9 +88,17 @@ def parse_tactical_llm_json(
     parsed, err = parse_explore_llm_json(text, tag)
     if parsed is None:
         return parsed, err
+    parsed = normalize_explore_llm_payload(parsed) or parsed
+    flat: List[dict] = []
     for v in parsed.get("verdicts") or []:
-        if not isinstance(v, dict):
-            continue
+        if isinstance(v, dict):
+            flat.append(_coerce_verdict_fields(v))
+        elif isinstance(v, list):
+            for sub in v:
+                if isinstance(sub, dict):
+                    flat.append(_coerce_verdict_fields(sub))
+    parsed["verdicts"] = flat
+    for v in parsed["verdicts"]:
         v["category"] = normalize_tactical_category(v, fixed_side)
         v["confidence"] = parse_tactical_confidence(v)
     return parsed, err

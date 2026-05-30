@@ -200,8 +200,13 @@
     fetch(st(cfg).api + '/run-now', { method: 'POST' })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (x) {
-        if (!x.ok) { alert(x.j.detail || '启动失败'); return; }
-        alert(x.j.message || '已启动');
+        if (!x.ok) {
+          if (typeof exploreNotify === 'function') exploreNotify(x.j.detail || '启动失败', 'error');
+          else alert(x.j.detail || '启动失败');
+          return;
+        }
+        if (typeof exploreNotify === 'function') exploreNotify(x.j.message || '已启动，后台运行中', 'success');
+        else alert(x.j.message || '已启动');
         setTimeout(function () { loadAll(cfg); }, 3000);
       });
   }

@@ -56,6 +56,77 @@ def _quantified_technical_ok(text: str) -> bool:
     return False
 
 
+def _as_sym_dict(sym_data: Optional[Any]) -> dict:
+    return sym_data if isinstance(sym_data, dict) else {}
+
+
+def _flatten_verdict_items(raw: Any) -> List[dict]:
+    """verdicts 可能是 list / dict / 嵌套 list，统一摊平为 dict 列表."""
+    out: List[dict] = []
+    if isinstance(raw, dict):
+        if raw and all(isinstance(v, dict) for v in raw.values()):
+            for sym, detail in raw.items():
+                item = dict(detail)
+                if not item.get("symbol"):
+                    item["symbol"] = str(sym).upper()
+                out.append(item)
+            return out
+        for key in ("entries", "items", "results", "signals", "verdicts"):
+            nested = raw.get(key)
+            if isinstance(nested, (list, dict)):
+                return _flatten_verdict_items(nested)
+        return out
+    if not isinstance(raw, list):
+        return out
+    for item in raw:
+        if isinstance(item, dict):
+            nested = item.get("verdicts")
+            if isinstance(nested, list):
+                out.extend(_flatten_verdict_items(nested))
+            elif "symbol" in item or "category" in item or "confidence" in item:
+                out.append(item)
+            else:
+                out.extend(_flatten_verdict_items(item))
+        elif isinstance(item, list):
+            out.extend(_flatten_verdict_items(item))
+    return out
+
+
+def normalize_explore_llm_payload(parsed: Any) -> Optional[dict]:
+    """LLM 偶发 list 顶层 / verdicts 为 dict / 单元素 wrapper → 标准 {summary_zh, verdicts}."""
+    if parsed is None:
+        return None
+    if isinstance(parsed, list):
+        if len(parsed) == 1 and isinstance(parsed[0], dict):
+            inner = parsed[0]
+            if "verdicts" in inner or "summary_zh" in inner or "summary" in inner:
+                parsed = inner
+            else:
+                parsed = {"summary_zh": "", "verdicts": _flatten_verdict_items(parsed)}
+        else:
+            parsed = {"summary_zh": "", "verdicts": _flatten_verdict_items(parsed)}
+    if not isinstance(parsed, dict):
+        return None
+    for key in ("response", "data", "result", "output", "content"):
+        inner = parsed.get(key)
+        if isinstance(inner, dict) and (
+            "verdicts" in inner or "summary_zh" in inner or "summary" in inner
+        ):
+            parsed = inner
+            break
+        if isinstance(inner, list):
+            parsed = {
+                "summary_zh": parsed.get("summary_zh") or parsed.get("summary") or "",
+                "verdicts": _flatten_verdict_items(inner),
+            }
+            break
+    summary = parsed.get("summary_zh") or parsed.get("summary") or ""
+    if not isinstance(summary, str):
+        summary = str(summary)
+    verdicts = _flatten_verdict_items(parsed.get("verdicts"))
+    return {"summary_zh": summary, "verdicts": verdicts}
+
+
 def explore_catalyst_technical_ok(
     catalyst: str,
     data_signal: str = "",
@@ -69,7 +140,8 @@ def explore_catalyst_technical_ok(
         return False, "catalyst 须写明至少两个周期(1h/15m/1d)的 K 线形态"
 
     if not _quantified_technical_ok(text):
-        rsi = (sym_data or {}).get("tech") or {}
+        sym = _as_sym_dict(sym_data)
+        rsi = sym.get("tech") or {}
         rsi_v = rsi.get("rsi_14_1h")
         if rsi_v is not None:
             return False, f"catalyst 须含 RSI 1h={rsi_v} 或 EMA/7d/阳阴根数等量化描述"
@@ -137,6 +209,47 @@ def build_explore_prompt(
     return prompt, meta
 
 
+def _sanitize_json_string_literals(raw: str) -> str:
+    """LLM 常在 catalyst 等字段里写真实换行/制表符，导致 json.loads Invalid control character."""
+    out: List[str] = []
+    in_string = False
+    escape = False
+    for ch in raw:
+        if escape:
+            out.append(ch)
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            out.append(ch)
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            out.append(ch)
+            continue
+        if in_string and ord(ch) < 32:
+            if ch == "\n":
+                out.append("\\n")
+            elif ch == "\r":
+                out.append("\\r")
+            elif ch == "\t":
+                out.append("\\t")
+            else:
+                out.append(f"\\u{ord(ch):04x}")
+            continue
+        out.append(ch)
+    return "".join(out)
+
+
+def _try_parse_json(raw: str) -> Tuple[Optional[Any], Optional[str]]:
+    for candidate in (raw, _sanitize_json_string_literals(raw)):
+        try:
+            return json.loads(candidate), None
+        except json.JSONDecodeError as e:
+            last_err = str(e)
+    return None, last_err
+
+
 def parse_explore_llm_json(text: str, tag: str = "Explore") -> Tuple[Optional[dict], Optional[str]]:
     """解析 LLM JSON; 截断时尝试抢救已完整的 verdict 对象."""
     raw = (text or "").strip()
@@ -144,35 +257,24 @@ def parse_explore_llm_json(text: str, tag: str = "Explore") -> Tuple[Optional[di
         raw = raw.strip("`").lstrip("json").strip()
 
     err: Optional[str] = None
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as e:
-        err = str(e)
+    parsed, parse_err = _try_parse_json(raw)
+    if parsed is None:
+        err = parse_err
         parsed = _salvage_truncated_explore_json(raw)
         if parsed is None:
-            logger.error(f"[{tag}] JSON 解析失败: {e}; raw[:500]={raw[:500]}")
+            parsed = _salvage_truncated_explore_json(_sanitize_json_string_literals(raw))
+        if parsed is None:
+            logger.error(f"[{tag}] JSON 解析失败: {err}; raw[:500]={raw[:500]}")
             return None, err
-        logger.warning(f"[{tag}] JSON 被截断, 已抢救 {len(parsed.get('verdicts') or [])} 条 verdict: {e}")
+        logger.warning(f"[{tag}] JSON 需抢救/清洗, 已恢复 {len(parsed.get('verdicts') or [])} 条 verdict: {err}")
 
-    # LLM 偶发返回顶层数组 [{symbol,...}, ...] 而非 {summary_zh, verdicts}
+    normalized = normalize_explore_llm_payload(parsed)
+    if normalized is None:
+        logger.error(f"[{tag}] JSON 结构无法规范化; raw[:500]={raw[:500]}")
+        return None, err or "invalid JSON payload"
     if isinstance(parsed, list):
-        logger.warning(f"[{tag}] JSON 顶层为 array, 已包装为 verdicts ({len(parsed)} 项)")
-        parsed = {"summary_zh": "", "verdicts": parsed}
-    elif not isinstance(parsed, dict):
-        logger.error(f"[{tag}] JSON 顶层类型异常: {type(parsed).__name__}")
-        return None, f"unexpected JSON type: {type(parsed).__name__}"
-
-    raw_verdicts = parsed.get("verdicts")
-    if isinstance(raw_verdicts, list):
-        verdicts = [v for v in raw_verdicts if isinstance(v, dict)]
-        dropped = len(raw_verdicts) - len(verdicts)
-        if dropped:
-            logger.warning(f"[{tag}] 丢弃 {dropped} 条非 object verdict")
-        parsed["verdicts"] = verdicts
-    else:
-        parsed["verdicts"] = []
-    if "summary_zh" not in parsed:
-        parsed["summary_zh"] = ""
+        logger.warning(f"[{tag}] JSON 顶层为 array, 已规范化 ({len(normalized.get('verdicts') or [])} 条 verdict)")
+    parsed = normalized
     return parsed, err
 
 

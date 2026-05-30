@@ -38,6 +38,7 @@ from app.services.ai_tactical_explore_schedule import (
     tactical_round_is_due,
 )
 from app.services.ai_tactical_explore_prompts import parse_tactical_confidence
+from app.services.ai_explore_prompt import normalize_explore_llm_payload
 
 # 各 teacher 独立锁
 _locks: Dict[str, threading.Lock] = {}
@@ -398,8 +399,19 @@ def run_tactical_explore_round(
             )
             return run_id
 
+        llm_response = normalize_explore_llm_payload(llm_response)
+        if not isinstance(llm_response, dict):
+            elapsed = time.time() - t0
+            _finish_run(
+                conn, cfg, run_id, asof_utc, universe_size, "", elapsed,
+                "error", "LLM JSON 结构无效", triggered_by,
+            )
+            return run_id
+
         summary_zh = (llm_response.get("summary_zh") or "")[:1000]
         verdicts = llm_response.get("verdicts") or []
+        if not isinstance(verdicts, list):
+            verdicts = []
         elapsed = time.time() - t0
         _finish_run(
             conn,
