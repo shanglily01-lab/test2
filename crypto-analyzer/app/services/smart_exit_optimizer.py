@@ -87,6 +87,11 @@ class SmartExitOptimizer:
             self.gemini_advisor = None
             logger.warning(f"[SmartExit] Gemini 持仓顾问初始化失败: {e}")
 
+    def _is_smart_exit_enabled(self) -> bool:
+        """智能平仓总开关 (到期/SL/TP 不受此开关影响)."""
+        from app.services.system_settings_loader import get_smart_exit_enabled
+        return get_smart_exit_enabled()
+
     def _get_pool_connection(self):
         """从连接池获取连接，并设置InnoDB锁等待超时"""
         conn = self.db_pool.get_connection()
@@ -221,25 +226,26 @@ class SmartExitOptimizer:
                     await self._execute_close(position_id, current_price, reason)
                     break
 
-                # === K线强度衰减检测 (新增 - 每15分钟检查一次) ===
-                should_check_kline = await self._should_check_kline_strength(position_id)
-                if should_check_kline and self.enable_kline_monitoring:
-                    kline_exit_signal = await self._check_kline_strength_decay(
-                        position, current_price, profit_info
-                    )
-                    if kline_exit_signal:
-                        reason, ratio = kline_exit_signal
-                        logger.info(
-                            f"📊 K线强度衰减触发平仓: 持仓{position_id} {position['symbol']} | {reason}"
+                # === K线强度衰减 / 智能平仓窗口 (需 smart_exit_enabled) ===
+                if self._is_smart_exit_enabled():
+                    should_check_kline = await self._should_check_kline_strength(position_id)
+                    if should_check_kline and self.enable_kline_monitoring:
+                        kline_exit_signal = await self._check_kline_strength_decay(
+                            position, current_price, profit_info
                         )
-                        # 统一全部平仓，不再分批
-                        await self._execute_close(position_id, current_price, reason)
-                        break
+                        if kline_exit_signal:
+                            reason, ratio = kline_exit_signal
+                            logger.info(
+                                f"📊 K线强度衰减触发平仓: 持仓{position_id} {position['symbol']} | {reason}"
+                            )
+                            await self._execute_close(position_id, current_price, reason)
+                            break
 
-                # 检查智能平仓
-                exit_completed = await self._smart_exit(
-                    position_id, position, current_price, profit_info
-                )
+                    exit_completed = await self._smart_exit(
+                        position_id, position, current_price, profit_info
+                    )
+                else:
+                    exit_completed = False
 
                 if exit_completed:
                     logger.info(f"✅ 智能平仓完成: 持仓{position_id}")
@@ -494,86 +500,62 @@ class SmartExitOptimizer:
                 if current_price <= take_profit_price:
                     return True, f"止盈(价格{current_price:.8f} <= 止盈价{take_profit_price:.8f}, 价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
-        # ========== 智能监控逻辑（开仓30分钟后启动，每秒实时检查）==========
+        if not self._is_smart_exit_enabled():
+            return False, ""
+
+        # ========== 智能监控逻辑（需 smart_exit_enabled）==========
         position_id = position['id']
         position_side = position.get('position_side', position['direction'])
         entry_time = position.get('entry_signal_time') or position.get('open_time') or datetime.now()
         hold_minutes = (datetime.now() - entry_time).total_seconds() / 60
 
-        MIN_HOLD_MINUTES = 60  # 60分钟最小持仓时间（1小时内不干预，让策略逻辑自然运行）
-
-        # 计算ROI（考虑杠杆后的真实收益率）
         leverage = float(position.get('leverage', 1))
         roi_pct = profit_pct * leverage
 
-        # === 优先级1: 极端亏损兜底止损 ===
-        # 阈值 ROI <= -15%（原 -10% 在 5x 杠杆下容易被山寨币 2% 日常波动触发）
-        # 豁免: 开仓 30 分钟内豁免，避免开仓初期插针误杀
+        # === 极端亏损兜底止损 (开仓 30 分钟后豁免插针误杀) ===
         if hold_minutes >= 30 and roi_pct <= -15.0:
             return True, f"极端亏损止损(ROI{roi_pct:.2f}%<=-15%, 价格变化{profit_pct:.2f}%, 持仓{hold_minutes:.0f}min)"
 
-        # === 开仓60分钟后启动智能监控 ===
-        if hold_minutes >= MIN_HOLD_MINUTES:
-
-            # === 优先级2: 趋势反转止损（基于16根5M K线方向投票）===
-            # LONG: ≥11/16逆向 → 趋势反转（多头市场短周期震荡多，需更高确信度）
-            # SHORT: ≥9/16逆向 → 趋势反转（空单对反弹更敏感，保持原门槛）
-            #        7~8根逆向 → 趋势不明朗 → 继续等待
-            #        < 7根逆向 → 方向仍合理 → 不干预
-            if profit_pct < 0:
-                against_count = await self._count_against_direction_5m(position_id, position_side)
-                reversal_threshold = 11
-                if against_count >= reversal_threshold:
-                    logger.info(
-                        f"📊 持仓{position_id} {position_side} 趋势反转: "
-                        f"{against_count}/16根5M K线逆向(阈值{reversal_threshold}), 价格{profit_pct:.2f}%, ROI{roi_pct:.2f}%"
-                    )
-                    return True, f"趋势反转({against_count}/16根K线逆向,价格{profit_pct:.2f}%,ROI{roi_pct:.2f}%)"
-                elif against_count >= 7:
-                    logger.debug(
-                        f"持仓{position_id} {position_side} 趋势不明朗({against_count}/16逆向)，继续等待"
-                    )
-
-            # === 优先级3: 移动止盈（价格百分比，不含杠杆）===
-            # 激活: 峰值价格收益 >= 6%
-            # 平仓: 从峰值回撤 >= 1% 价格
-            # 与固定 TP=8% 同单位; 5x 杠杆下激活 ROI 30%，回撤触发 ROI 5%
-            TRAILING_TP_PRICE_ACTIVATE = 6.0  # 价格 %
-            TRAILING_TP_PRICE_DRAWDOWN = 1.0  # 价格 %
-            if max_profit_pct >= TRAILING_TP_PRICE_ACTIVATE and drawback >= TRAILING_TP_PRICE_DRAWDOWN:
-                return True, (
-                    f"移动止盈(峰值价格收益{max_profit_pct:.2f}% 回撤{drawback:.2f}%, "
-                    f"当前{profit_pct:.2f}%, ROI{roi_pct:.2f}%)"
+        # === 趋势反转止损（基于16根5M K线方向投票）===
+        if profit_pct < 0:
+            against_count = await self._count_against_direction_5m(position_id, position_side)
+            reversal_threshold = 11
+            if against_count >= reversal_threshold:
+                logger.info(
+                    f"📊 持仓{position_id} {position_side} 趋势反转: "
+                    f"{against_count}/16根5M K线逆向(阈值{reversal_threshold}), 价格{profit_pct:.2f}%, ROI{roi_pct:.2f}%"
+                )
+                return True, f"趋势反转({against_count}/16根K线逆向,价格{profit_pct:.2f}%,ROI{roi_pct:.2f}%)"
+            elif against_count >= 7:
+                logger.debug(
+                    f"持仓{position_id} {position_side} 趋势不明朗({against_count}/16逆向)，继续等待"
                 )
 
-        # ========== 智能平仓逻辑（计划平仓前30分钟）==========
-        planned_close_time = position['planned_close_time']
+        # === 移动止盈 ===
+        TRAILING_TP_PRICE_ACTIVATE = 6.0
+        TRAILING_TP_PRICE_DRAWDOWN = 1.0
+        if max_profit_pct >= TRAILING_TP_PRICE_ACTIVATE and drawback >= TRAILING_TP_PRICE_DRAWDOWN:
+            return True, (
+                f"移动止盈(峰值价格收益{max_profit_pct:.2f}% 回撤{drawback:.2f}%, "
+                f"当前{profit_pct:.2f}%, ROI{roi_pct:.2f}%)"
+            )
 
-        # 如果没有设置计划平仓时间，只检查止损止盈，不执行智能平仓
+        # ========== 计划平仓前30分钟兜底 ==========
+        planned_close_time = position['planned_close_time']
         if planned_close_time is None:
             return False, ""
 
         now = datetime.now()
         monitoring_start_time = planned_close_time - timedelta(minutes=30)
-
-        # 如果还未到监控时间，继续其他检查（不再直接返回）
         if now < monitoring_start_time:
             return False, ""
 
-        # ========== 到达监控窗口，使用智能平仓 ==========
-        # 注意：这里不再直接返回平仓决策
-        # 而是在 _monitor_position 中调用 _smart_exit 处理平仓
-        # 这个方法现在主要用于兜底逻辑
-
-        # 兜底逻辑1: 超高盈利立即全部平仓（改为基于ROI）
         if roi_pct >= 25.0:
             return True, f"超高盈利全部平仓(ROI {roi_pct:.2f}%, 价格变化{profit_pct:.2f}%)"
 
-        # 兜底逻辑2: 巨额亏损立即全部平仓 (ROI <= -15%)
         if roi_pct <= -15.0:
             return True, f"巨额亏损全部平仓(ROI {roi_pct:.2f}%, 价格变化{profit_pct:.2f}%)"
 
-        # 默认：不平仓（由智能平仓处理）
         return False, ""
 
     async def _smart_exit(
@@ -1527,15 +1509,8 @@ class SmartExitOptimizer:
             margin = float(position.get('margin', 0))
             leverage = float(position.get('leverage', 1))
 
-            # 获取持仓时长（分钟）
             hold_minutes = (datetime.now() - entry_time).total_seconds() / 60
             hold_hours = hold_minutes / 60
-
-            # ============================================================
-            # === 优先级0: 最小持仓时间限制 (60分钟) ===
-            # ============================================================
-            # 开仓60分钟内只允许止损和止盈,不允许其他原因平仓
-            MIN_HOLD_MINUTES = 60  # 60分钟最小持仓时间（1小时内不干预，让策略逻辑自然运行）
 
             # ============================================================
             # === 优先级1: 极端亏损兜底止损（风控底线） ===
@@ -1581,17 +1556,8 @@ class SmartExitOptimizer:
                         return ('固定止盈', 1.0)
 
             # ============================================================
-            # === 在此之后的所有平仓检查都需要满足最小持仓时间(60分钟) ===
-            # ============================================================
-            # 开仓60分钟内不平仓(除了止损和止盈)
-            if hold_minutes < MIN_HOLD_MINUTES:
-                # 60分钟内只允许止损和止盈,不进行其他平仓检查
-                return None
-
-            # ============================================================
             # === 优先级4: 智能顶底识别 ===
             # ============================================================
-            # 注: 已满足60分钟最小持仓时间,现在可以检查顶底
             is_top_bottom, tb_reason = await self._check_top_bottom(symbol, position_side, entry_price, leverage)
             if is_top_bottom:
                 logger.info(
@@ -1601,20 +1567,18 @@ class SmartExitOptimizer:
                 return (tb_reason, 1.0)
 
             # ============================================================
-            # === 优先级4.5: 最优价格评估（60分钟后启动）===
+            # === 优先级4.5: 最优价格评估 ===
             # ============================================================
-            # 持仓满1小时（60分钟后），启动价格评估系统寻找最优平仓点
-            if hold_minutes >= MIN_HOLD_MINUTES:
-                pnl_pct = profit_info.get('profit_pct', 0)
-                optimal_found = await self._find_optimal_exit_price(
-                    position_id, position_side, float(current_price), pnl_pct
+            pnl_pct = profit_info.get('profit_pct', 0)
+            optimal_found = await self._find_optimal_exit_price(
+                position_id, position_side, float(current_price), pnl_pct
+            )
+            if optimal_found:
+                logger.info(
+                    f"💎 持仓{position_id} {symbol} {position_side} 找到最优平仓价格 | "
+                    f"持仓{hold_minutes:.0f}分钟 | 盈亏{pnl_pct:+.2f}%"
                 )
-                if optimal_found:
-                    logger.info(
-                        f"💎 持仓{position_id} {symbol} {position_side} 找到最优平仓价格 | "
-                        f"持仓{hold_minutes:.0f}分钟 | 盈亏{pnl_pct:+.2f}%"
-                    )
-                    return ('最优价格评估', 1.0)
+                return ('最优价格评估', 1.0)
 
             # ============================================================
             # === 优先级5: 动态超时检查（基于timeout_at字段） ===

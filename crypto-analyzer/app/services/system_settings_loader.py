@@ -90,6 +90,25 @@ def get_big4_filter_enabled() -> bool:
     return bool(val)
 
 
+def get_smart_exit_enabled() -> bool:
+    """智能平仓开关 (system_settings.smart_exit_enabled). 未配置时回退 config.yaml."""
+    settings = _reload_cache()
+    val = settings.get('smart_exit_enabled')
+    if val is not None:
+        if isinstance(val, str):
+            return val.lower() in ('1', 'true', 'yes')
+        return bool(val)
+    try:
+        import yaml
+        from pathlib import Path
+        cfg_path = Path(__file__).resolve().parents[2] / 'config.yaml'
+        with open(cfg_path, 'r', encoding='utf-8') as f:
+            cfg = yaml.safe_load(f) or {}
+        return bool(cfg.get('signals', {}).get('smart_exit', {}).get('enabled', False))
+    except Exception:
+        return False
+
+
 def get_setting(key: str, default: Any = None) -> Any:
     """获取单个配置项。"""
     settings = _reload_cache()

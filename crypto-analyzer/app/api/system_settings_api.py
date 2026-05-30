@@ -56,6 +56,7 @@ class TradingServicesUpdate(BaseModel):
     s6_vol_spike_enabled: Optional[bool] = None         # 2026-05-27 S6 小币量能异动
     s9_gemini_ai_enabled: Optional[bool] = None      # 2026-05-16 S9 Gemini AI 抄底反转
     gemini_position_advisor_enabled: Optional[bool] = None  # 2026-05-17 Gemini 实盘持仓顾问
+    smart_exit_enabled: Optional[bool] = None              # 智能平仓 (趋势反转/移动止盈/最优价等)
     stop_loss_pct: Optional[float] = None
     take_profit_pct: Optional[float] = None
 
@@ -382,6 +383,7 @@ async def get_trading_services():
                                   's5_large_oversold_enabled', 's6_vol_spike_enabled',
                                   's9_gemini_ai_enabled',
                                   'gemini_position_advisor_enabled',
+                                  'smart_exit_enabled',
                                   'stop_loss_pct', 'take_profit_pct')
         """)
 
@@ -406,6 +408,7 @@ async def get_trading_services():
             'deepseek_predict_enabled': 'deepseek_predict_enabled',
             's9_gemini_ai_enabled': 's9_gemini_ai_enabled',
             'gemini_position_advisor_enabled': 'gemini_position_advisor_enabled',
+            'smart_exit_enabled': 'smart_exit_enabled',
             's1_early_long_enabled': 's1_early_long_enabled',
             's5_large_oversold_enabled': 's5_large_oversold_enabled',
             's6_vol_spike_enabled': 's6_vol_spike_enabled',
@@ -428,6 +431,7 @@ async def get_trading_services():
             'deepseek_predict_enabled': False,
             's9_gemini_ai_enabled': False,
             'gemini_position_advisor_enabled': False,
+            'smart_exit_enabled': False,
             's1_early_long_enabled': False,
             's5_large_oversold_enabled': False,
             's6_vol_spike_enabled': False,
@@ -715,6 +719,20 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (value,))
             updates.append(f"Gemini持仓顾问: {'启用' if data.gemini_position_advisor_enabled else '禁用'}")
+
+        if data.smart_exit_enabled is not None:
+            value = '1' if data.smart_exit_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('smart_exit_enabled', %s,
+                        '智能平仓开关 (1=启用, 0=禁用). 关闭时仅保留到期/SL/TP 平仓',
+                        'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"智能平仓: {'启用' if data.smart_exit_enabled else '禁用'}")
 
         if data.stop_loss_pct is not None:
             cursor.execute("""

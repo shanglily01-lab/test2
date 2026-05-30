@@ -1252,17 +1252,17 @@ class SmartTraderService:
         except Exception as _aks_e:
             logger.error(f"api_key_service 初始化失败: {_aks_e}")
 
-        # 初始化智能平仓优化器
-        if self.smart_exit_config.get('enabled'):
-            self.smart_exit_optimizer = SmartExitOptimizer(
-                db_config=self.db_config,
-                live_engine=self,
-                price_service=self.ws_service
-            )
-            logger.info("✅ 智能平仓优化器已启动")
-        else:
-            self.smart_exit_optimizer = None
-            logger.info("⚠️ 智能平仓优化器未启用")
+        # 持仓监控 (到期/SL/TP 常开; 智能平仓由 system_settings.smart_exit_enabled 控制)
+        self.smart_exit_optimizer = SmartExitOptimizer(
+            db_config=self.db_config,
+            live_engine=self,
+            price_service=self.ws_service
+        )
+        from app.services.system_settings_loader import get_smart_exit_enabled
+        _se = get_smart_exit_enabled()
+        logger.info(
+            f"✅ 持仓监控已启动 (到期/SL/TP 常开; 智能平仓: {'开' if _se else '关'})"
+        )
 
         # 初始化BTC动量跟随策略
         from app.services.btc_momentum_trader import BTCMomentumTrader

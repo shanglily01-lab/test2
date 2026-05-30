@@ -539,6 +539,18 @@
 </div>
 </div>
 </div>
+<div class="cfg-row mt-4">
+<div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-[#49f4c8] text-xl shrink-0">exit_to_app</span>
+<div>
+<div class="text-sm font-medium text-slate-200">智能平仓</div>
+<p class="text-[11px] text-slate-500">趋势反转 / 移动止盈 / 最优价等 · 关闭时仍保留到期、SL、TP</p>
+</div>
+</div>
+<div id="smartExitToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
+</div>
+</div>
 </div>
 </section>
 
@@ -770,6 +782,7 @@
                 setToggle('s5Toggle',   !!svc.s5_large_oversold_enabled);
                 setToggle('s6Toggle',   !!svc.s6_vol_spike_enabled);
                 setToggle('geminiAdvisorToggle', !!svc.gemini_position_advisor_enabled);
+                setToggle('smartExitToggle', !!svc.smart_exit_enabled);
                 setToggle('spotTradingToggle',  !!svc.spot_trading_enabled);
                 setToggle('big4Toggle',
                     big4Setting.value === '1' ||
@@ -995,6 +1008,17 @@
             try {
                 await apiPut('/trading-services', { gemini_position_advisor_enabled: enabled });
                 showToast('Gemini 持仓顾问已' + (enabled ? '开启 (可能触发实盘平仓!)' : '关闭'), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
+        // 智能平仓
+        bindToggle('smartExitToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { smart_exit_enabled: enabled });
+                showToast('智能平仓已' + (enabled ? '开启' : '关闭 (仍保留到期/SL/TP)'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
