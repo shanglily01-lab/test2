@@ -291,7 +291,7 @@ async def get_run_detail(run_id: int):
 
 @router.get("/verdicts")
 async def list_verdicts(run_id: int = Query(..., ge=1)):
-    """某轮的所有 verdicts."""
+    """某轮已开仓 verdicts (未开仓的不返回)."""
     try:
         conn = _connect()
         try:
@@ -301,16 +301,8 @@ async def list_verdicts(run_id: int = Query(..., ge=1)):
                     "       catalyst, data_signal, risk_note, "
                     "       action_taken, position_id, skip_reason, created_at "
                     "FROM deepseek_explore_verdicts "
-                    "WHERE run_id=%s "
-                    "ORDER BY "
-                    "  CASE action_taken "
-                    "    WHEN 'opened' THEN 0 "
-                    "    WHEN 'skipped_big4' THEN 1 "
-                    "    WHEN 'skipped_dedup' THEN 2 "
-                    "    WHEN 'skipped_max_positions' THEN 3 "
-                    "    WHEN 'skipped_confidence' THEN 4 "
-                    "    ELSE 5 END, "
-                    "  confidence DESC",
+                    "WHERE run_id=%s AND action_taken='opened' "
+                    "ORDER BY confidence DESC, id ASC",
                     (run_id,),
                 )
                 verdicts = cur.fetchall()

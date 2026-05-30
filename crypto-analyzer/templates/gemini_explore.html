@@ -695,18 +695,25 @@ function loadRunDetail(prefix, runId, tab) {
     });
 }
 
-function buildVerdictsTable(vs, includePrice) {
-  if (!vs.length) return '<p class="text-on-surface-variant text-xs">无 verdicts</p>';
+function buildVerdictsTable(vs, includePrice, openedOnly) {
+  if (openedOnly) {
+    vs = (vs || []).filter(function (v) { return v.action_taken === 'opened'; });
+  }
+  if (!vs.length) {
+    return '<p class="text-on-surface-variant text-xs">' + (openedOnly ? '本轮无开仓' : '无 verdicts') + '</p>';
+  }
   var html = '<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="border-b border-outline-variant/20 text-on-surface-variant">' +
     '<th class="px-2 py-2 text-left">Symbol</th><th class="px-2 py-2 text-left">类别</th><th class="px-2 py-2 text-right">置信</th>';
   if (includePrice) html += '<th class="px-2 py-2 text-right">预测价</th>';
   html += '<th class="px-2 py-2 text-left">动作</th><th class="px-2 py-2 text-left">催化剂</th>';
   if (!includePrice) html += '<th class="px-2 py-2 text-left">数据信号</th>';
-  html += '<th class="px-2 py-2 text-left">跳过原因</th></tr></thead><tbody>';
+  if (!openedOnly) html += '<th class="px-2 py-2 text-left">跳过原因</th>';
+  html += '</tr></thead><tbody>';
   vs.forEach(function(v){
     var catRaw = (v.category || '').toLowerCase();
     var catChip = (catRaw === 'bullish' || catRaw === 'red_swan') ? '<span class="chip chip-long">看多</span>'
                 : (catRaw === 'bearish' || catRaw === 'black_swan') ? '<span class="chip chip-short">看空</span>'
+                : (catRaw === 'entry' || catRaw === 'signal') ? '<span class="chip chip-long">入场</span>'
                 : '<span class="chip chip-skip">SKIP</span>';
     var act = v.action_taken || 'skipped_other';
     var actClass = act === 'opened' ? 'chip-action-opened'
@@ -719,6 +726,7 @@ function buildVerdictsTable(vs, includePrice) {
                 : act === 'skipped_dedup' ? '已有同向'
                 : act === 'skipped_max_positions' ? '已达上限'
                 : act === 'skipped_confidence' ? '低置信度'
+                : act === 'skipped_weak_catalyst' ? '催化剂不足'
                 : '其他';
     html += '<tr class="border-b border-outline-variant/10">' +
             '<td class="px-2 py-2 mono">' + escapeHtml(v.symbol) + '</td>' +
@@ -728,7 +736,8 @@ function buildVerdictsTable(vs, includePrice) {
     html += '<td class="px-2 py-2"><span class="chip ' + actClass + '">' + actLabel + '</span></td>' +
             '<td class="px-2 py-2 text-on-surface-variant text-[11px] max-w-xs">' + escapeHtml(v.catalyst || '') + '</td>';
     if (!includePrice) html += '<td class="px-2 py-2 text-on-surface-variant text-[11px] max-w-xs">' + escapeHtml(v.data_signal || '') + '</td>';
-    html += '<td class="px-2 py-2 text-on-surface-variant text-[11px]">' + escapeHtml(v.skip_reason || '') + '</td></tr>';
+    if (!openedOnly) html += '<td class="px-2 py-2 text-on-surface-variant text-[11px]">' + escapeHtml(v.skip_reason || '') + '</td></tr>';
+    else html += '</tr>';
   });
   html += '</tbody></table></div>';
   return html;
@@ -926,7 +935,7 @@ function toggleVerdicts(runId) {
     .then(function(r){ return r.json(); })
     .then(function(d){
       var vs = d.data || [];
-      var verdictsHtml = buildVerdictsTable(vs, false);
+      var verdictsHtml = buildVerdictsTable(vs, false, true);
       var html = buildRunDetailShell(runId, '', '/api/gemini-explore', verdictsHtml);
       _verdictsCache[runId] = html;
       cell.innerHTML = html;

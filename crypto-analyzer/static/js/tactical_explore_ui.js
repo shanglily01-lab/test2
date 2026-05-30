@@ -161,7 +161,7 @@
     cell.innerHTML = '<p class="text-xs text-on-surface-variant">加载中...</p>';
     row.classList.remove('hidden');
     fetch(s.api + '/verdicts?run_id=' + runId).then(function (r) { return r.json(); }).then(function (d) {
-      var html = buildRunDetailShell(runId, p + '-', s.api, buildVerdictsTable(d.data || [], false));
+      var html = buildRunDetailShell(runId, p + '-', s.api, buildVerdictsTable(d.data || [], false, true));
       s.cache[runId] = html;
       cell.innerHTML = html;
     });

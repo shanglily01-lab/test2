@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 from app.services.ai_big4_prompt import BIG4_PROMPT_BLOCK_EXPLORE
 from app.services.ai_explore_prompt import (
+    _KBAR_COUNT_RE,
     explore_catalyst_technical_ok,
     parse_explore_llm_json,
     prepare_universe_for_llm,
@@ -17,18 +18,19 @@ TACTICAL_CONFIDENCE_THRESHOLD = 0.5
 _JSON_OUTPUT = """
 ## 输出 JSON (仅此结构，无 markdown)
 {{
-  "summary_zh": "本轮机会概况，1-3 句中文",
+  "summary_zh": "本轮机会概况，1-3 句中文；无机会时说明原因",
   "verdicts": [
     {{
-      "symbol": "BTCUSDT",
-      "category": "entry|skip",
-      "confidence": 0.0,
-      "catalyst": "多周期 K 线 + RSI/EMA 量化描述",
+      "symbol": "XXXUSDT",
+      "category": "entry",
+      "confidence": 0.68,
+      "catalyst": "1h/15m 多周期 K 线 + RSI/EMA/7d/阳阴根数量化描述",
       "data_signal": "可选",
       "risk_note": "可选"
     }}
   ]
 }}
+无符合策略的标的时 verdicts 用空数组 []，不要逐条输出 skip。
 """
 
 
@@ -50,9 +52,9 @@ def _build_prompt(definition: TacticalStrategyDef, universe: dict, global_ctx: d
         "## 硬性规则\n"
         "1. catalyst 须写明至少两个周期 (1h/15m/1d) 的 K 线形态 + 量化技术位 (RSI/EMA/7d/阳阴根数)。\n"
         "2. 禁止仅用 24h 涨跌幅或资金费率做主因。\n"
-        "3. 仅对下方 universe 中的 symbol 输出 verdict。\n"
-        "4. category 仅 `entry` 或 `skip`；confidence≥0.5 且结构清晰才用 entry。\n"
-        "5. 宁缺毋滥。\n\n"
+        "3. **只输出 category=entry 的标的**（最多 5 个）；不符合的不写入 verdicts。\n"
+        "4. entry 时 confidence 必填 0.50–0.85（一般 0.55–0.65，结构清晰 0.65–0.75）；勿填 0。\n"
+        "5. 无机会时 verdicts=[]，在 summary_zh 说明；结构基本符合即可 entry，不必等完美形态。\n\n"
         f"本列表为全池 {meta['universe_total']} 个中按 |24h涨跌| 取 TOP {meta['llm_symbol_count']}。\n\n"
         f"## Big4 / 宏观 (仅参考)\n{BIG4_PROMPT_BLOCK_EXPLORE}\n\n"
         f"## 全局市场\n{json.dumps(global_ctx, **compact)}\n\n"
@@ -63,8 +65,59 @@ def _build_prompt(definition: TacticalStrategyDef, universe: dict, global_ctx: d
     return prompt, meta
 
 
-def parse_tactical_llm_json(text: str, tag: str) -> Tuple[Optional[dict], Optional[str]]:
-    return parse_explore_llm_json(text, tag)
+def parse_tactical_llm_json(
+    text: str,
+    tag: str,
+    fixed_side: Optional[str] = None,
+) -> Tuple[Optional[dict], Optional[str]]:
+    parsed, err = parse_explore_llm_json(text, tag)
+    if parsed is None:
+        return parsed, err
+    for v in parsed.get("verdicts") or []:
+        if not isinstance(v, dict):
+            continue
+        v["category"] = normalize_tactical_category(v, fixed_side)
+        v["confidence"] = parse_tactical_confidence(v)
+    return parsed, err
+
+
+def parse_tactical_confidence(verdict: dict) -> float:
+    for key in ("confidence", "conf", "score", "prob", "probability"):
+        raw = verdict.get(key)
+        if raw is None:
+            continue
+        try:
+            c = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if c > 1.0 and c <= 100.0:
+            c /= 100.0
+        return max(0.0, min(1.0, c))
+    return 0.0
+
+
+def normalize_tactical_category(verdict: dict, fixed_side: Optional[str] = None) -> str:
+    for key in ("category", "cat", "action", "verdict"):
+        raw = verdict.get(key)
+        if not raw:
+            continue
+        cat = str(raw).lower().strip()
+        if cat in ("skip", "none", "hold", "wait", "neutral", "跳过"):
+            return "skip"
+        if cat in ("entry", "signal", "open", "trade", "入场", "开仓"):
+            return "entry"
+        if cat in ("long", "buy", "做多", "bullish", "bottom_reversal") and (
+            fixed_side in (None, "LONG")
+        ):
+            return "entry"
+        if cat in ("short", "sell", "做空", "bearish", "top_reversal") and (
+            fixed_side in (None, "SHORT")
+        ):
+            return "entry"
+        if cat in ("bullish", "bearish", "top_reversal", "bottom_reversal"):
+            return "entry"
+        return cat
+    return "skip"
 
 
 def tactical_category_to_side(
@@ -72,11 +125,19 @@ def tactical_category_to_side(
     category: str,
     confidence: float,
 ) -> Optional[str]:
-    cat = (category or "").lower().strip()
+    cat = normalize_tactical_category({"category": category}, definition.fixed_side)
     if confidence < TACTICAL_CONFIDENCE_THRESHOLD:
         return None
-    if cat in ("entry", "signal", "bullish", "bearish", "top_reversal", "bottom_reversal"):
+    if cat == "entry":
         return definition.fixed_side
+    if cat == "skip":
+        return None
+    if cat in ("signal", "bullish", "bearish", "top_reversal", "bottom_reversal"):
+        return definition.fixed_side
+    if cat == "long" and definition.fixed_side == "LONG":
+        return "LONG"
+    if cat == "short" and definition.fixed_side == "SHORT":
+        return "SHORT"
     return None
 
 
@@ -85,10 +146,14 @@ def tactical_catalyst_ok(
     catalyst: str,
     data_signal: str = "",
     sym_data: Optional[dict] = None,
+    confidence: float = 0.0,
 ) -> Tuple[bool, str]:
     ok, reason = explore_catalyst_technical_ok(catalyst, data_signal, sym_data)
     if not ok:
         return ok, reason
+    # 置信度≥0.65 且已通过多周期/量化校验 → 不再卡策略关键词 (LLM 措辞不一)
+    if confidence >= 0.65:
+        return True, ""
     if definition.extra_catalyst_check:
         return definition.extra_catalyst_check(catalyst, data_signal, sym_data)
     return True, ""
@@ -108,12 +173,18 @@ def _pullback_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -
 
 def _rebound_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -> Tuple[bool, str]:
     text = f"{catalyst} {data_signal}".lower()
-    if not any(x in text for x in (
-        "反弹", "受阻", "阻力", "上影", "回落", "滞涨", "ma", "ema",
-        "rebound", "resistance", "reject", "upper shadow", "wick", "stall",
-    )):
+    if "无反弹" in text or "没有反弹" in text:
         return False, "反弹做空须写明受阻/阻力/上影/滞涨等结构"
-    return True, ""
+    if any(x in text for x in (
+        "受阻", "阻力", "上影", "回落", "滞涨", "遇阻", "冲高回落", "反弹失败",
+        "ma", "ema", "rebound", "resistance", "reject", "upper shadow", "wick", "stall",
+    )):
+        return True, ""
+    if "反弹" in text and any(x in text for x in ("空", "跌", "阴", "下", "回落", "偏空", "下降")):
+        return True, ""
+    if _KBAR_COUNT_RE.search(text):
+        return True, ""
+    return False, "反弹做空须写明受阻/阻力/上影/滞涨等结构"
 
 
 def _chase_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -> Tuple[bool, str]:
@@ -128,12 +199,14 @@ def _chase_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -> T
 
 def _dump_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -> Tuple[bool, str]:
     text = f"{catalyst} {data_signal}".lower()
-    if not any(x in text for x in (
-        "跌破", "放量", "连阴", "下杀", "新低", "动能", "趋势",
+    if any(x in text for x in (
+        "跌破", "放量", "连阴", "下杀", "新低", "动能", "趋势", "下降", "下行", "偏空", "通道",
         "breakdown", "break down", "volume", "downtrend", "selloff", "new low",
     )):
-        return False, "杀跌做空须写明跌破/放量/连阴/趋势延续等"
-    return True, ""
+        return True, ""
+    if _KBAR_COUNT_RE.search(text):
+        return True, ""
+    return False, "杀跌做空须写明跌破/放量/连阴/趋势延续等"
 
 
 PULLBACK_LONG = TacticalStrategyDef(
@@ -155,7 +228,8 @@ REBOUND_SHORT = TacticalStrategyDef(
     prompt_body=(
         "## 策略\n"
         "下降趋势或震荡偏弱中，价格反弹至阻力 (EMA/前高/箱体上沿) 后受阻，**做空**。\n"
-        "典型：1h/15m 上影 + RSI 从超买区回落 + 缩量反弹后放量阴线。"
+        "典型：1h/15m 上影 + RSI 从超买区回落 + 缩量反弹后放量阴线。\n"
+        "1h/1d 偏空时，15m 小反弹碰 EMA/前高即受阻也可 entry (不必等大反弹)。"
     ),
     extra_catalyst_check=_rebound_extra,
 )

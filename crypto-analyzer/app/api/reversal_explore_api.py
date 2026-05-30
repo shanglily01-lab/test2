@@ -235,8 +235,8 @@ def create_tactical_explore_router(
                         f"SELECT id, run_id, symbol, category, confidence, "
                         f"       catalyst, data_signal, risk_note, "
                         f"       action_taken, position_id, skip_reason, created_at "
-                        f"FROM {verdicts_table} WHERE run_id=%s "
-                        f"ORDER BY CASE action_taken WHEN 'opened' THEN 0 ELSE 5 END, confidence DESC",
+                        f"FROM {verdicts_table} WHERE run_id=%s AND action_taken='opened' "
+                        f"ORDER BY confidence DESC, id ASC",
                         (run_id,),
                     )
                     verdicts = cur.fetchall()

@@ -39,7 +39,7 @@ from app.services.ai_explore_prompt import (
     explore_catalyst_technical_ok,
     parse_explore_llm_json,
 )
-from app.services.gemini_explore_worker import _get_current_price
+from app.services.gemini_explore_worker import _get_current_price, _would_instant_tp
 from app.services.gemini_swan_worker import (
     GEMINI_MODEL,
     GEMINI_API_KEY,
@@ -1467,7 +1467,20 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                     run_id, symbol, db_category, confidence,
                     catalyst, data_signal, risk_note,
                     'skipped_other', None,
-                    "无最新价格",
+                    "无有效开仓价",
+                ))
+                continue
+            if side == 'LONG':
+                tp_check = round(price * (1 + EXPLORE_TP_PCT / 100), 8)
+            else:
+                tp_check = round(price * (1 - EXPLORE_TP_PCT / 100), 8)
+            instant, ref_px = _would_instant_tp(conn, symbol, side, tp_check)
+            if instant:
+                verdict_rows.append((
+                    run_id, symbol, db_category, confidence,
+                    catalyst, data_signal, risk_note,
+                    'skipped_other', None,
+                    f"市价{ref_px:.6g}已越过TP{tp_check:.6g}(防开仓即止盈)",
                 ))
                 continue
 

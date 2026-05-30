@@ -33,7 +33,8 @@ _PCT_RE = re.compile(r"[-+]?\d+(\.\d+)?%")
 
 def _multi_tf_kline_ok(text: str) -> bool:
     """至少两个周期 (1h/15m/1d), 或单周期但有具体 K 线结构描述."""
-    tfs = set(m.lower() for m in _TF_RE.findall(text))
+    low = text.lower()
+    tfs = {tf for tf in ("1h", "15m", "1d") if tf in low}
     if len(tfs) >= 2:
         return True
     return bool(tfs) and any(m in text for m in _STRUCTURE_MARKERS)

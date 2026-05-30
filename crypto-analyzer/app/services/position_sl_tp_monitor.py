@@ -49,12 +49,28 @@ BREAKEVEN_SL_PCT         = -0.005 # 保本线 -0.5%
 # 2026-04-24：数据显示 38% early-sl 在 5m 内扎中（入场瞬间均值回归误杀）
 ENTRY_GRACE_MIN          = 45
 
-# AI 探索/预测：只走 DB 硬 SL/TP，不走 early-sl / breakeven / 移动止盈
+# AI 探索/预测/战术：只走 DB 硬 SL/TP，不走 early-sl / breakeven / 移动止盈
 _AI_HARD_SLTP_ONLY_SOURCES = frozenset({
     'gemini_explore', 'gemini_predict',
     'deepseek_explore', 'deepseek_predict',
     'gemini_reversal', 'deepseek_reversal',
+    'gemini_pullback', 'gemini_rebound', 'gemini_chase', 'gemini_dump',
+    'deepseek_pullback', 'deepseek_rebound', 'deepseek_chase', 'deepseek_dump',
 })
+# 硬 TP 开仓保护：避免 entry 价与 monitor 市价源不一致时秒平（SL 仍立即生效）
+_AI_TP_GRACE_MIN = 5
+
+
+def _is_ai_hard_sltp_source(src: str) -> bool:
+    if not src:
+        return False
+    if src in _AI_HARD_SLTP_ONLY_SOURCES:
+        return True
+    if src.startswith(("gemini_", "deepseek_")):
+        for key in ("explore", "predict", "reversal", "pullback", "rebound", "chase", "dump"):
+            if key in src:
+                return True
+    return False
 
 
 def _dynamic_trail_pullback(peak_pct: float) -> float:
@@ -172,10 +188,26 @@ class PositionSLTPMonitor:
             # AI 探索/预测/反转：跳过动态风控，只走硬 SL/TP
             # ────────────────────────────────────────────────────────────────
             src = pos.get('source') or ''
-            if src in _AI_HARD_SLTP_ONLY_SOURCES:
+            if _is_ai_hard_sltp_source(src):
+                in_tp_grace = False
+                age_s = 0.0
+                open_time = pos.get("open_time")
+                if open_time:
+                    import datetime as _dt
+                    if isinstance(open_time, _dt.datetime):
+                        age_s = time.time() - open_time.timestamp()
+                        in_tp_grace = age_s < _AI_TP_GRACE_MIN * 60
+
                 trig = self._check_trigger(side, price, sl, tp)
                 if trig:
                     reason, trigger_price = trig
+                    if reason == "take_profit" and in_tp_grace:
+                        logger.info(
+                            f"[AI硬SL/TP] pid={pid} {symbol} TP 保护期内跳过 "
+                            f"({age_s:.0f}s < {_AI_TP_GRACE_MIN}min) "
+                            f"price={price:.6f} TP={tp} entry={entry_price:.6f}"
+                        )
+                        continue
                     logger.info(
                         f"[AI硬SL/TP] pid={pid} {symbol} {side} source={src} "
                         f"reason={reason} price={price:.6f} SL={sl} TP={tp}"

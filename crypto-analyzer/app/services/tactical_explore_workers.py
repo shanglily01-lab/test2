@@ -71,7 +71,7 @@ def _call_gemini(defn: TacticalStrategyDef, strategy_key: str):
             return None, f"API: {e}"
         text = (resp.text or "").strip()
         logger.info(f"[Gemini{defn.title_zh}] {time.time()-t0:.1f}s out={len(text)}")
-        parsed, err = parse_tactical_llm_json(text, f"Gemini{defn.title_zh}")
+        parsed, err = parse_tactical_llm_json(text, f"Gemini{defn.title_zh}", defn.fixed_side)
         if parsed is None:
             return None, f"JSON: {err}"
         parsed["_prompt"] = prompt
@@ -107,7 +107,7 @@ def _call_deepseek(defn: TacticalStrategyDef, strategy_key: str):
             return None, f"API: {e}"
         text = (resp.choices[0].message.content or "").strip()
         logger.info(f"[DeepSeek{defn.title_zh}] {time.time()-t0:.1f}s out={len(text)}")
-        parsed, err = parse_tactical_llm_json(text, f"DeepSeek{defn.title_zh}")
+        parsed, err = parse_tactical_llm_json(text, f"DeepSeek{defn.title_zh}", defn.fixed_side)
         if parsed is None:
             return None, f"JSON: {err}"
         parsed["_prompt"] = prompt
@@ -127,7 +127,9 @@ def _make_runner(teacher: str, strategy_key: str) -> Callable[[str], Optional[in
             call_llm,
             triggered_by,
             category_to_side=lambda cat, conf, d=defn: tactical_category_to_side(d, cat, conf),
-            catalyst_ok=lambda cat, catl, sig, sym, d=defn: tactical_catalyst_ok(d, catl, sig, sym),
+            catalyst_ok=lambda cat, catl, sig, sym, conf=0.0, d=defn: tactical_catalyst_ok(
+                d, catl, sig, sym, conf,
+            ),
         )
     return run
 
