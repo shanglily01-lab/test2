@@ -31,9 +31,12 @@ import pymysql.cursors
 from loguru import logger
 
 from app.services.ai_big4_prompt import (
-    BIG4_PROMPT_BLOCK_EXPLORE,
     big4_conflict_risk_note,
     enrich_global_context,
+)
+from app.services.ai_explore_prompt import (
+    EXPLORE_PROMPT_TEMPLATE,
+    explore_catalyst_technical_ok,
 )
 from app.services.gemini_swan_worker import (
     GEMINI_MODEL,
@@ -839,103 +842,7 @@ def _describe_market_regime(conn) -> str:
     return "未知"
 
 
-# ============================================================
-# Prompt — 完全复用 Gemini 探索的 prompt，仅修改模型名提示
-# ============================================================
-EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 4h, SL=3%, TP=5%, 不做任何中途干预.
-
-你的任务是判断每个候选币种在未来 4 小时内, 是否有延续/反转的结构性趋势行情, 值得持有 4 小时.
-
-# 仓位设置 (供你理解容错空间)
-- 杠杆 5x, 名义本金 ~2500U, SL=3% 价格跌幅 (约 -150U), TP=5% 涨幅 (约 +125U)
-- 4 小时到期按市价强制平仓, 期间不提前止盈止损 — 你选的方向必须能**涨 5% 或至少抗住 4 小时不跌 3%**
-- 所以不要选"只涨 1-2%"的标的, 也不要把 SL 只看做"3% 容错"而随意开仓
-
-# 全局市场环境 (含 big4_signal / market_regime / big4_trading_hint)
-{global_context_json}
-""" + BIG4_PROMPT_BLOCK_EXPLORE + """
-# 历史表现 (供你校准判断尺度)
-{historical_stats_json}
-
-# 候选数据说明
-每个 symbol 包含:
-- triggers: 进入候选池原因
-- current_price / change_24h / quote_volume_24h
-- current_rate: 资金费率
-- kline_narrative: **自然语言描述的日/时/15m K 线形态** (含成交量趋势)
-- tech.rsi_14_1h: 1h RSI
-- tech.above_7d_low_pct / below_7d_high_pct: 现价距 7 日极值距离
-
-{universe_json}
-
-# 任务
-为**每个** symbol 标注:
-- category: 'bullish' / 'bearish' / 'skip'
-- confidence: 0.0-1.0 (见校准表)
-- catalyst: 判断依据, **必须引用具体数据**, 至少 2 句
-- data_signal: 最支持判断的关键数据点
-- risk_note: 反向风险一句
-
-# 置信度校准表 (重要 — 请严格按此表评分, 不要给礼貌分)
-
-| confidence | 需要的信号强度 |
-|---|---|
-| 0.80-1.00 | 日线强趋势 + 多周期共振 + 成交量确认 + 同方向上还有空间 (非超买/超卖) |
-| 0.65-0.79 | 日线趋势明确 + 1h 方向一致 + 个股 catalyst 充分 (与 Big4 冲突须在 risk_note 说明) |
-| 0.50-0.64 | 仅小时级别方向支持, 日线中性 — **此区间可以开, 但只开 1-2 个** |
-| 0.00-0.49 | 方向模糊 / 震荡区间 / 数据不足 — **跳过** |
-
-# 判定原则 — 4 小时持仓 vs 短线异动的关键区别
-
-## ✅ 适合 4 小时持有 (应该输出 bullish/bearish)
-
-**A. 趋势延续 — 最可靠**
-- 日线已走出清晰趋势 (连续 3+ 根同向阳/阴), 1h 节奏同向, 成交量放量支持
-- 现价在趋势中段, 距 7d 极值还有 2%+ 空间 (不是刚打到极值就跑)
-
-**B. 资金费率与价格严重背离 — 次可靠**
-- 资金费极端 + RSI 走到反向极值
-- 前提: 日线已经确认了拐点 (至少 1d K 线形态转势), 不只是 15m 级别反弹
-
-**C. 突破后回踩确认**
-- 刚突破关键阻力/支撑, 回踩确认后有望延续
-- 成交量在突破时放大, 回踩时缩量
-
-## ❌ 不适合 4 小时持有 (必须 skip)
-
-**D. 暴涨暴跌后的报复性反弹 (Dead Cat Bounce)**
-- 24h 涨/跌 20%+ 且成交量异常放大: 大概率一日游, 4 小时内会反转
-
-**E. 震荡区间 / 成交量萎缩**
-- 价格在窄幅震荡 (7d 高低差 < 5%), 成交量日均缩量 — 4 小时难以走出趋势
-
-**F. 单纯因为跌多了就做多 / 涨多了就做空**
-- 仅凭"超跌"做多 = 接飞刀, 必须等日线确认拐点
-- 仅凭"超涨"做空 = 左侧摸顶, 必须等 RSI 顶背离 + 资金费严重正
-
-**G. 禁止 Big4 单边偏见**
-- 不得因 Big4=BEARISH 就把多数标的标 bearish；低波动盘整时应多空均衡筛选。
-
-# 输出要求
-**仅** 一个合法 JSON, 不要 markdown 围栏.
-优先 quality 而非 quantity, 宁可不做也不要做错.
-如果最多只看到 2-3 个靠谱机会, 只出这 2-3 个, 不需要填满候选池.
-
-{{
-  "summary_zh": "整体市场氛围 1-2 句",
-  "verdicts": [
-    {{
-      "symbol": "FOO/USDT",
-      "category": "bullish",
-      "confidence": 0.72,
-      "catalyst": "具体依据, 引用数据...",
-      "data_signal": "...",
-      "risk_note": "..."
-    }}
-  ]
-}}
-"""
-
+# Prompt: app.services.ai_explore_prompt.EXPLORE_PROMPT_TEMPLATE (Gemini/DeepSeek 共用)
 
 # ============================================================
 # DeepSeek 调用 (OpenAI-compatible API)
@@ -1604,6 +1511,16 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                     'skipped_confidence', None,
                     f"category={category} confidence={confidence:.2f}",
                 ))
+                continue
+
+            tech_ok, tech_reason = explore_catalyst_technical_ok(catalyst, data_signal)
+            if not tech_ok:
+                verdict_rows.append((
+                    run_id, symbol, db_category, confidence,
+                    catalyst, data_signal, risk_note,
+                    'skipped_weak_catalyst', None, tech_reason,
+                ))
+                logger.info(f"[DeepSeek探索] {symbol} 跳过主观 catalyst: {tech_reason}")
                 continue
 
             if side == 'LONG' and not allow_long:
