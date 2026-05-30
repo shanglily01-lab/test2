@@ -122,6 +122,13 @@
     <button onclick="switchTab('explore')" id="tab-explore-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors">
       <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">auto_awesome</span>Gemini 探索
     </button>
+    <button onclick="switchTab('reversal')" id="tab-reversal-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
+      <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">swap_vert</span>顶空底多
+    </button>
+    <button onclick="switchTab('pullback')" id="tab-pullback-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">回调做多</button>
+    <button onclick="switchTab('rebound')" id="tab-rebound-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">反弹做空</button>
+    <button onclick="switchTab('chase')" id="tab-chase-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">追涨做多</button>
+    <button onclick="switchTab('dump')" id="tab-dump-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">杀跌做空</button>
     <button onclick="switchTab('predict')" id="tab-predict-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
       <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">psychology</span>Gemini 预测
     </button>
@@ -284,6 +291,12 @@
 </section>
 
 </div><!-- /tab-explore -->
+
+<div id="tab-reversal" class="hidden"></div>
+<div id="tab-pullback" class="hidden"></div>
+<div id="tab-rebound" class="hidden"></div>
+<div id="tab-chase" class="hidden"></div>
+<div id="tab-dump" class="hidden"></div>
 
 <!-- ============================================================ -->
 <!-- TAB: Gemini 预测 -->
@@ -523,6 +536,7 @@
 
 </main>
 
+<script src="/static/js/tactical_explore_ui.js"></script>
 <script>
 // ============================================================
 // UTILS
@@ -925,39 +939,41 @@ function toggleVerdicts(runId) {
 // ============================================================
 // TAB SWITCHING
 // ============================================================
+var GEMINI_TACTICAL_CFGS = [
+  { tab: 'reversal', prefix: 'rev', api: '/api/gemini-reversal-explore', pageTitle: 'Gemini 顶空底多', subtitle: '顶部做空 · 底部做多', sideHint: '双向反转' },
+  { tab: 'pullback', prefix: 'pb', api: '/api/gemini-pullback-explore', pageTitle: 'Gemini 回调做多', subtitle: '上升趋势回踩支撑', sideHint: '仅 LONG' },
+  { tab: 'rebound', prefix: 'rb', api: '/api/gemini-rebound-explore', pageTitle: 'Gemini 反弹做空', subtitle: '下降趋势反弹受阻', sideHint: '仅 SHORT' },
+  { tab: 'chase', prefix: 'ch', api: '/api/gemini-chase-explore', pageTitle: 'Gemini 追涨做多', subtitle: '突破后趋势延续', sideHint: '仅 LONG' },
+  { tab: 'dump', prefix: 'dm', api: '/api/gemini-dump-explore', pageTitle: 'Gemini 杀跌做空', subtitle: '跌破后趋势延续', sideHint: '仅 SHORT' }
+];
+var _tacTabIds = ['explore', 'reversal', 'pullback', 'rebound', 'chase', 'dump', 'predict', 'sentiment'];
+var _tacBtnIds = ['tab-explore-btn', 'tab-reversal-btn', 'tab-pullback-btn', 'tab-rebound-btn', 'tab-chase-btn', 'tab-dump-btn', 'tab-predict-btn', 'tab-sentiment-btn'];
+
 function switchTab(tab) {
-  var isExplorer = (tab === 'explore');
-  var isPredict = (tab === 'predict');
-  document.getElementById('tab-explore').classList.toggle('hidden', !isExplorer);
-  document.getElementById('tab-predict').classList.toggle('hidden', !isPredict);
-  document.getElementById('tab-sentiment').classList.toggle('hidden', tab !== 'sentiment');
-  var eBtn = document.getElementById('tab-explore-btn');
-  var pBtn = document.getElementById('tab-predict-btn');
-  var sBtn = document.getElementById('tab-sentiment-btn');
-  if (isExplorer) {
-    eBtn.className = 'px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors';
-    pBtn.className = 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
-    sBtn.className = 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
-  } else if (isPredict) {
-    eBtn.className = 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
-    pBtn.className = 'px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors';
-    sBtn.className = 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
-  } else {
-    eBtn.className = 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
-    pBtn.className = 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
-    sBtn.className = 'px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors';
-  }
-  // Load predict data on first switch
-  if (isPredict && !window._predictLoaded) {
+  _tacTabIds.forEach(function(id) {
+    var el = document.getElementById('tab-' + id);
+    if (el) el.classList.toggle('hidden', id !== tab);
+  });
+  var active = 'px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors';
+  var idle = 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
+  _tacBtnIds.forEach(function(btnId) {
+    var btn = document.getElementById(btnId);
+    if (!btn) return;
+    var t = btnId.replace('tab-', '').replace('-btn', '');
+    btn.className = (t === tab) ? active : idle;
+  });
+  if (tab === 'predict' && !window._predictLoaded) {
     window._predictLoaded = true;
     loadPredictAll();
   }
-  // Load sentiment data on first switch
   if (tab === 'sentiment' && !window._sentimentLoaded) {
     window._sentimentLoaded = true;
     loadSentimentAll();
   }
+  var tac = GEMINI_TACTICAL_CFGS.find(function(c) { return c.tab === tab; });
+  if (tac && window.TacticalExploreUI) TacticalExploreUI.onTabShow(tac);
 }
+if (window.TacticalExploreUI) TacticalExploreUI.init(GEMINI_TACTICAL_CFGS);
 
 // ============================================================
 // INIT
@@ -1208,6 +1224,7 @@ setInterval(function(){
   var tab = new URLSearchParams(window.location.search).get('tab');
   if (tab === 'predict') switchTab('predict');
   else if (tab === 'sentiment') switchTab('sentiment');
+  else if (tab) switchTab(tab);
 })();
 
 // ============================================================

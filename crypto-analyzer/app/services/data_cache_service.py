@@ -4,7 +4,8 @@
 定时任务（由 scheduler.py 注册）：
   - refresh_market_snapshot:   每 1 分钟
   - refresh_market_movers:     每 5 分钟
-  - refresh_candidate_pool:    每 6 分钟
+  - refresh_candidate_pool:    每 6 分钟 (底层行情/K线叙事)
+  - refresh_explore_prepared_only: 每 15 分钟 (探索/战术共用 universe, 只读此包)
   - refresh_position_stats:    每 30 分钟
   - sync_settings_cache:       写时触发（由 system_settings 修改时调用）
 
@@ -535,6 +536,75 @@ def refresh_candidate_pool() -> dict:
         except Exception:
             pass
     return stat
+
+
+def _candidate_pool_freshness_sec() -> Optional[float]:
+    """距 candidate_pool_snapshot 最近 updated_at 的秒数；无表/无数据返回 None."""
+    try:
+        conn = _get_conn(DATA_CACHE_DB)
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT MAX(updated_at) AS t FROM candidate_pool_snapshot"
+            )
+            row = cur.fetchone()
+        conn.close()
+        if not row or not row.get("t"):
+            return None
+        t = row["t"]
+        if isinstance(t, datetime):
+            return (datetime.now() - t).total_seconds()
+        return None
+    except Exception:
+        return None
+
+
+def refresh_explore_prepared_only() -> dict:
+    """
+    仅重建 explore_prepared_snapshot (~30–40s)。
+    依赖 candidate_pool_snapshot（由 6min 任务维护）已含 K 线叙事。
+    """
+    from app.services.explore_prepared_bundle import rebuild_and_persist
+
+    return rebuild_and_persist()
+
+
+def refresh_explore_shared_data(
+    *,
+    force_candidate_pool: bool = False,
+    pool_fresh_max_sec: int = 720,
+) -> dict:
+    """
+  探索链路全量刷新：必要时刷新候选池 + 重建共用包。
+  冷启动或 force 时跑完整 candidate_pool（较慢）。
+    """
+    t0 = time.time()
+    out = {"status": "ok", "elapsed_ms": 0}
+    try:
+        age = _candidate_pool_freshness_sec()
+        need_pool = force_candidate_pool or age is None or age > pool_fresh_max_sec
+        if need_pool:
+            out["candidate_pool"] = refresh_candidate_pool()
+        else:
+            out["candidate_pool"] = {
+                "status": "skipped",
+                "reason": "fresh",
+                "age_sec": int(age),
+            }
+            logger.info(
+                f"[cache] candidate_pool 仍新鲜 ({int(age)}s), 跳过全量 UPSERT"
+            )
+        out["explore_prepared"] = refresh_explore_prepared_only()
+        if out["explore_prepared"].get("status") != "ok":
+            out["status"] = "partial"
+    except Exception as e:
+        out["status"] = f"error: {e}"
+        logger.error(f"[cache] refresh_explore_shared_data failed: {e}", exc_info=True)
+    out["elapsed_ms"] = int((time.time() - t0) * 1000)
+    logger.info(
+        f"[cache] explore_shared_data done status={out['status']} "
+        f"elapsed={out['elapsed_ms']}ms"
+    )
+    return out
 
 
 def _fetch_klines(cur, main_db: str, symbol: str, timeframe: str, limit: int) -> List[Dict]:

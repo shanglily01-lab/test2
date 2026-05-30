@@ -1321,10 +1321,17 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         return None
 
     try:
-        # 2. 候选池
-        universe = _build_universe(conn)
+        from app.services.explore_prepared_bundle import get_explore_prepared_bundle
+
+        allow_rebuild = triggered_by in ("manual", "scheduler_init", "test")
+        universe, global_ctx, from_shared = get_explore_prepared_bundle(
+            conn, "DeepSeek探索", allow_rebuild=allow_rebuild,
+        )
         universe_size = len(universe)
-        logger.info(f"[DeepSeek探索] 候选池 universe_size={universe_size}")
+        logger.info(
+            f"[DeepSeek探索] universe_size={universe_size} "
+            f"({'共用包' if from_shared else '现场构建'})"
+        )
 
         if universe_size == 0:
             with conn.cursor() as cur:
@@ -1359,10 +1366,6 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             logger.warning("[DeepSeek探索] 候选池为空, 本轮结束")
             return run_id
 
-        # 3a. 加 K 线叙事
-        _enrich_universe(conn, universe)
-        # 3b. 全局上下文
-        global_ctx = _build_global_context(conn)
         logger.info(
             f"[DeepSeek探索] 全局: Big4={global_ctx.get('big4_signal')} "
             f"market={global_ctx.get('market_regime')} "

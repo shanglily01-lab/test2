@@ -658,8 +658,9 @@ def _enrich_symbol(cur, sym_data: dict) -> None:
     """
     symbol = sym_data['symbol']
 
-    # 如果缓存已经有叙事, 直接跳过
-    if sym_data.get('kline_narrative', {}).get('1d'):
+    # 候选池已写入 1h+1d 叙事则跳过逐币查 K 线
+    kn = sym_data.get('kline_narrative') or {}
+    if kn.get('1d') and kn.get('1h') and '无数据' not in str(kn.get('1h', '')):
         return
 
     k_1d = _fetch_klines(cur, symbol, '1d', 7)
@@ -704,18 +705,37 @@ def _enrich_symbol(cur, sym_data: dict) -> None:
     }
 
 
-def _enrich_universe(conn, universe: dict) -> None:
-    """同原逻辑: 加 K 线指标 + 剔除 stale symbol."""
+def _enrich_universe(conn, universe: dict, *, trust_pool_narratives: bool = False) -> None:
+    """加 K 线指标 + 剔除 stale symbol.
+
+    trust_pool_narratives: 候选池 snapshot 已带 narrative 时跳过逐币 MAX(open_time)
+    探针（战术多策略复用 universe 时用，可省数百次 SQL）。
+    """
     stale_syms = []
+    pool_trusted = 0
     with conn.cursor() as cur:
         for sym, sym_data in universe.items():
             try:
-                _enrich_symbol(cur, sym_data)
+                kn = sym_data.get('kline_narrative') or {}
+                has_pool_narr = bool(
+                    trust_pool_narratives
+                    and kn.get('1h')
+                    and kn.get('1d')
+                    and '无数据' not in str(kn.get('1h', ''))
+                    and '无数据' not in str(kn.get('1d', ''))
+                )
+                if not has_pool_narr:
+                    _enrich_symbol(cur, sym_data)
+                    kn = sym_data.get('kline_narrative') or {}
 
-                k_1h_narr = sym_data.get('kline_narrative', {}).get('1h', '')
-                k_1d_narr = sym_data.get('kline_narrative', {}).get('1d', '')
+                k_1h_narr = kn.get('1h', '')
+                k_1d_narr = kn.get('1d', '')
                 if not k_1h_narr or not k_1d_narr or '无数据' in str(k_1h_narr):
                     stale_syms.append((sym, 'missing_1h_or_1d_kline'))
+                    continue
+
+                if has_pool_narr:
+                    pool_trusted += 1
                     continue
 
                 # 1h 新鲜度门槛 4h
@@ -751,6 +771,10 @@ def _enrich_universe(conn, universe: dict) -> None:
                 logger.debug(f"[Gemini探索] enrich {sym} 失败: {e}")
                 stale_syms.append((sym, f'enrich_exception:{e}'))
 
+    if pool_trusted and trust_pool_narratives:
+        logger.info(
+            f"[Gemini探索] 候选池 narrative 直用 {pool_trusted} 个 symbol (跳过 freshness 探针)"
+        )
     if stale_syms:
         logger.warning(
             f"[Gemini探索] 剔除 {len(stale_syms)} 个 K 线断采的 symbol: "
@@ -1465,10 +1489,18 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         )
         logger.info(f"[Gemini探索] run_id={run_id} 已登记 (status=partial, 进行中)")
 
-        # 2. 候选池 (中等波动币)
-        universe = _build_universe(conn)
+        # 2. 共用预计算包 (scheduler 每 15min 刷新)
+        from app.services.explore_prepared_bundle import get_explore_prepared_bundle
+
+        allow_rebuild = triggered_by in ("manual", "scheduler_init", "test")
+        universe, global_ctx, from_shared = get_explore_prepared_bundle(
+            conn, "Gemini探索", allow_rebuild=allow_rebuild,
+        )
         universe_size = len(universe)
-        logger.info(f"[Gemini探索] 候选池 universe_size={universe_size}")
+        logger.info(
+            f"[Gemini探索] universe_size={universe_size} "
+            f"({'共用包' if from_shared else '现场构建'})"
+        )
 
         if universe_size == 0:
             # 诊断: 检查各数据源为何为空
@@ -1503,10 +1535,6 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             logger.warning("[Gemini探索] 候选池为空, 本轮结束")
             return run_id
 
-        # 3a. 加 K 线叙事 + 技术指标
-        _enrich_universe(conn, universe)
-        # 3b. 全局上下文: Big4 + BTC/ETH/SOL + 市场状态
-        global_ctx = _build_global_context(conn)
         logger.info(
             f"[Gemini探索] 全局: Big4={global_ctx.get('big4_signal')} "
             f"market={global_ctx.get('market_regime')} "

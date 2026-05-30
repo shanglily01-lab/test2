@@ -1259,6 +1259,7 @@ class UnifiedDataScheduler:
             refresh_market_snapshot,
             refresh_market_movers,
             refresh_candidate_pool,
+            refresh_explore_prepared_only,
             refresh_position_stats,
             sync_settings_cache,
         )
@@ -1271,9 +1272,17 @@ class UnifiedDataScheduler:
         schedule.every(5).minutes.do(lambda: _run_cache_task(refresh_market_movers))
         logger.info("  ✓ market_movers_snapshot - 每 5 分钟 (后台线程)")
 
-        # 候选交易对池 - 每6分钟
+        # 候选交易对池 (含 K 线叙事) — 每 6 分钟
         schedule.every(6).minutes.do(lambda: _run_cache_task(refresh_candidate_pool))
         logger.info("  ✓ candidate_pool_snapshot - 每 6 分钟 (后台线程)")
+
+        # 探索/战术共用 universe — 每 15 分钟，仅组装 (~35s)，不重复全量候选池
+        schedule.every(15).minutes.do(
+            lambda: _run_cache_task(refresh_explore_prepared_only)
+        )
+        logger.info(
+            "  ✓ explore_prepared_snapshot - 每 15 分钟 (全 Gemini/DeepSeek 策略只读)"
+        )
 
         # 持仓统计 - 每30分钟
         schedule.every(30).minutes.do(lambda: _run_cache_task(refresh_position_stats))
@@ -1318,6 +1327,29 @@ class UnifiedDataScheduler:
         schedule.every(2).hours.do(_run_deepseek_explore)
         schedule.every(10).minutes.do(_run_deepseek_explore)
         logger.info("  ✓ deepseek_explore - 每 2 小时 + 10 分钟到期轮询 (后台线程)")
+
+        # 战术探索 (顶空底多 + 四策略) × Gemini/DeepSeek — 4h 错峰槽位, 15min 轮询认领
+        def _run_tactical_explore_poll():
+            def wrapper():
+                try:
+                    from app.services.tactical_explore_scheduler import run_tactical_explore_poll
+                    run_tactical_explore_poll(triggered_by="scheduler")
+                except Exception as e:
+                    logger.error(f"[战术探索调度] 异常: {e}", exc_info=True)
+            threading.Thread(
+                target=wrapper, daemon=True, name="TacticalExplorePoll",
+            ).start()
+
+        schedule.every(15).minutes.do(_run_tactical_explore_poll)
+        try:
+            from app.services.tactical_explore_scheduler import format_schedule_plan
+            for line in format_schedule_plan().split("\n"):
+                logger.info(f"  {line}")
+        except Exception:
+            pass
+        logger.info(
+            "  ✓ tactical_explore (10 jobs) - 4h 周期 + 15 分钟槽位轮询 (后台线程, 无 system_settings 开关)"
+        )
 
         # DeepSeek 预测 - 每 4h 调一次 DeepSeek 预测 TOP50 方向
         def _run_deepseek_predict():
@@ -1424,6 +1456,7 @@ class UnifiedDataScheduler:
                 refresh_market_snapshot,
                 refresh_market_movers,
                 refresh_candidate_pool,
+                refresh_explore_shared_data,
                 refresh_position_stats,
                 sync_settings_cache,
             )
@@ -1436,8 +1469,8 @@ class UnifiedDataScheduler:
                 refresh_market_snapshot()
                 logger.info("[data_cache] 首次刷新 settings_cache (后台)...")
                 sync_settings_cache()
-                logger.info("[data_cache] 首次刷新 candidate_pool_snapshot (后台)...")
-                refresh_candidate_pool()
+                logger.info("[data_cache] 首次刷新 candidate_pool + explore_prepared (后台)...")
+                refresh_explore_shared_data(force_candidate_pool=True)
                 logger.info("[data_cache] 首次刷新 position_stats_snapshot (后台)...")
                 refresh_position_stats()
                 logger.info("[data_cache] 首次刷新完成")

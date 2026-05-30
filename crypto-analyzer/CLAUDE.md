@@ -47,7 +47,8 @@
 | data_cache.market_snapshot | 每 1 分钟 |
 | data_cache.market_movers_snapshot | 每 5 分钟 |
 | data_cache.position_stats_snapshot | 每 30 分钟 |
-| data_cache.candidate_pool_snapshot | 每 **6 分钟** (UPSERT, 单次约 3–5min/302币) |
+| data_cache.candidate_pool_snapshot | 每 **6 分钟** (行情+K线叙事) |
+| data_cache.explore_prepared_snapshot | 每 **15 分钟** (共用 universe，策略只读) |
 | data_cache.settings_cache | 每 1 分钟 |
 | Gemini 探索 | 每 **2h** + **10min 轮询** (worker 内 2h 防重) |
 | Gemini 预测 | 每 **4h 必跑** + **5min 轮询** (`system_settings.*_predict_next_due_utc`) |
@@ -84,6 +85,19 @@
 详见 `.cursor/rules/scheduler-ai-ops.mdc`。
 
 ## Gemini AI 模块
+
+### gemini_reversal_explore_worker / deepseek_reversal_explore_worker (顶空底多)
+- 无 kill switch，始终可跑；Web 页「顶空底多」Tab + `POST /api/*-reversal-explore/run-now`
+- `top_reversal` → SHORT，`bottom_reversal` → LONG；仅模拟仓 `source=gemini_reversal` / `deepseek_reversal`
+- 不同步实盘；表 `*_reversal_explore_runs` / `*_reversal_explore_verdicts`（migration 008）
+
+### gemini/deepseek 战术探索 (顶空底多 + 四策略)
+- 无 kill switch、无 `system_settings` 开关；探索页 Tab + `POST /api/*-explore/run-now`
+- **共用数据** (`explore_prepared_bundle` + `data_cache.explore_prepared_snapshot`): scheduler **每 15min** `refresh_explore_shared_data` 预计算 universe+global_ctx；主探索/战术策略**只读**，不再每轮 build/enrich
+- **调度** (`tactical_explore_scheduler`): 10 任务、4h 周期、错峰槽位、15min 轮询认领
+- 固定方向四策略：`pullback`/`chase` → LONG，`rebound`/`dump` → SHORT；顶空底多 `top_reversal`/`bottom_reversal`
+- 仅模拟仓 `source=gemini_*` / `deepseek_*`；SL 3% / TP 5% / 5x / 500U / 持仓 4h；不同步实盘
+- 表 migration 008 (reversal) + 009 (四策略)；校验 `scripts/validate_tactical_explore_db.py`
 
 ### gemini_explore_worker (探索)
 - 每 2h, kill switch: `gemini_explore_enabled`

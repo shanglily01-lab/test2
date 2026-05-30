@@ -122,6 +122,13 @@
     <button onclick="switchTab('explore')" id="tab-explore-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors">
       <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">psychology</span>DeepSeek 探索
     </button>
+    <button onclick="switchTab('reversal')" id="tab-reversal-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
+      <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">swap_vert</span>顶空底多
+    </button>
+    <button onclick="switchTab('pullback')" id="tab-pullback-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">回调做多</button>
+    <button onclick="switchTab('rebound')" id="tab-rebound-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">反弹做空</button>
+    <button onclick="switchTab('chase')" id="tab-chase-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">追涨做多</button>
+    <button onclick="switchTab('dump')" id="tab-dump-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">杀跌做空</button>
     <button onclick="switchTab('predict')" id="tab-predict-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
       <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">auto_graph</span>DeepSeek 预测
     </button>
@@ -282,6 +289,12 @@
 
 </div><!-- /tab-explore -->
 
+<div id="tab-reversal" class="hidden"></div>
+<div id="tab-pullback" class="hidden"></div>
+<div id="tab-rebound" class="hidden"></div>
+<div id="tab-chase" class="hidden"></div>
+<div id="tab-dump" class="hidden"></div>
+
 <!-- ============================================================ -->
 <!-- TAB: DeepSeek 预测 -->
 <!-- ============================================================ -->
@@ -439,6 +452,7 @@
 
 </main>
 
+<script src="/static/js/tactical_explore_ui.js"></script>
 <script>
 // ============================================================
 // UTILS
@@ -835,27 +849,39 @@ function toggleVerdicts(runId) {
 }
 
 // ============================================================
-// TAB SWITCHING
+// TAB SWITCHING (tactical tabs via tactical_explore_ui.js)
 // ============================================================
+var DEEPSEEK_TACTICAL_CFGS = [
+  { tab: 'reversal', prefix: 'rev', api: '/api/deepseek-reversal-explore', pageTitle: 'DeepSeek 顶空底多', subtitle: '顶部做空 · 底部做多', sideHint: '双向反转' },
+  { tab: 'pullback', prefix: 'pb', api: '/api/deepseek-pullback-explore', pageTitle: 'DeepSeek 回调做多', subtitle: '上升趋势回踩支撑', sideHint: '仅 LONG' },
+  { tab: 'rebound', prefix: 'rb', api: '/api/deepseek-rebound-explore', pageTitle: 'DeepSeek 反弹做空', subtitle: '下降趋势反弹受阻', sideHint: '仅 SHORT' },
+  { tab: 'chase', prefix: 'ch', api: '/api/deepseek-chase-explore', pageTitle: 'DeepSeek 追涨做多', subtitle: '突破后趋势延续', sideHint: '仅 LONG' },
+  { tab: 'dump', prefix: 'dm', api: '/api/deepseek-dump-explore', pageTitle: 'DeepSeek 杀跌做空', subtitle: '跌破后趋势延续', sideHint: '仅 SHORT' }
+];
+var _tacTabIds = ['explore', 'reversal', 'pullback', 'rebound', 'chase', 'dump', 'predict'];
+var _tacBtnIds = ['tab-explore-btn', 'tab-reversal-btn', 'tab-pullback-btn', 'tab-rebound-btn', 'tab-chase-btn', 'tab-dump-btn', 'tab-predict-btn'];
+
 function switchTab(tab) {
-  var isExplore = (tab === 'explore');
-  var isPredict = (tab === 'predict');
-  document.getElementById('tab-explore').classList.toggle('hidden', !isExplore);
-  document.getElementById('tab-predict').classList.toggle('hidden', !isPredict);
-  var eBtn = document.getElementById('tab-explore-btn');
-  var pBtn = document.getElementById('tab-predict-btn');
-  if (isExplore) {
-    eBtn.className = 'px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors';
-    pBtn.className = 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
-  } else {
-    eBtn.className = 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
-    pBtn.className = 'px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors';
-  }
-  if (isPredict && !window._predictLoaded) {
+  _tacTabIds.forEach(function(id) {
+    var el = document.getElementById('tab-' + id);
+    if (el) el.classList.toggle('hidden', id !== tab);
+  });
+  var active = 'px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors';
+  var idle = 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
+  _tacBtnIds.forEach(function(btnId) {
+    var btn = document.getElementById(btnId);
+    if (!btn) return;
+    var t = btnId.replace('tab-', '').replace('-btn', '');
+    btn.className = (t === tab) ? active : idle;
+  });
+  if (tab === 'predict' && !window._predictLoaded) {
     window._predictLoaded = true;
     loadPredictAll();
   }
+  var tac = DEEPSEEK_TACTICAL_CFGS.find(function(c) { return c.tab === tab; });
+  if (tac && window.TacticalExploreUI) TacticalExploreUI.onTabShow(tac);
 }
+if (window.TacticalExploreUI) TacticalExploreUI.init(DEEPSEEK_TACTICAL_CFGS);
 
 // ============================================================
 // INIT
@@ -1101,10 +1127,11 @@ setInterval(function(){
   }
 }, 30000);
 
-// URL ?tab=predict 直达
+// URL ?tab= 直达
 (function(){
   var tab = new URLSearchParams(window.location.search).get('tab');
   if (tab === 'predict') switchTab('predict');
+  else if (tab) switchTab(tab);
 })();
 </script>
 
