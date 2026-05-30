@@ -35,8 +35,10 @@ from app.services.ai_big4_prompt import (
     enrich_global_context,
 )
 from app.services.ai_explore_prompt import (
-    EXPLORE_PROMPT_TEMPLATE,
+    EXPLORE_LLM_MAX_OUTPUT_TOKENS,
+    build_explore_prompt,
     explore_catalyst_technical_ok,
+    parse_explore_llm_json,
 )
 from app.services.gemini_swan_worker import (
     GEMINI_MODEL,
@@ -825,31 +827,19 @@ def _describe_market_regime(conn) -> str:
 # ============================================================
 # DeepSeek 调用 (OpenAI-compatible API)
 # ============================================================
-def _call_deepseek_explore(universe: dict, global_ctx: dict, historical_stats: dict) -> Optional[dict]:
-    """调用 DeepSeek (OpenAI-compatible API)."""
+def _call_deepseek_explore(
+    universe: dict, global_ctx: dict, historical_stats: dict,
+) -> Tuple[Optional[dict], Optional[str]]:
+    """调用 DeepSeek (OpenAI-compatible API). 返回 (parsed, error_msg)."""
     if not DEEPSEEK_API_KEY:
         logger.error("[DeepSeek探索] DEEPSEEK_API_KEY 未设置")
-        return None
+        return None, "DEEPSEEK_API_KEY 未设置"
 
-    # universe 按 |change_24h| 排序
-    universe_list = sorted(
-        list(universe.values()),
-        key=lambda x: abs(x.get('change_24h') or 0),
-        reverse=True,
+    prompt, llm_meta = build_explore_prompt(universe, global_ctx, historical_stats)
+    logger.info(
+        f"[DeepSeek探索] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens), "
+        f"送模 {llm_meta['llm_symbol_count']}/{llm_meta['universe_total']} symbols"
     )
-
-    for item in universe_list:
-        item.pop('k_1d_ohlc', None)
-        item.pop('k_1h_ohlc', None)
-        item.pop('k_15m_ohlc', None)
-
-    prompt = EXPLORE_PROMPT_TEMPLATE.format(
-        global_context_json=json.dumps(global_ctx, ensure_ascii=False, indent=2),
-        universe_json=json.dumps(universe_list, ensure_ascii=False, indent=2, default=str),
-        historical_stats_json=json.dumps(historical_stats, ensure_ascii=False, indent=2),
-    )
-
-    logger.info(f"[DeepSeek探索] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens)")
 
     t0 = time.time()
     try:
@@ -865,36 +855,31 @@ def _call_deepseek_explore(universe: dict, global_ctx: dict, historical_stats: d
                 {"role": "user", "content": prompt},
             ],
             temperature=0.1,
-            max_tokens=4096,
+            max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
             timeout=DEEPSEEK_TIMEOUT_S,
             response_format={"type": "json_object"},
         )
     except ImportError:
         logger.error("[DeepSeek探索] 缺 openai 库, 请 pip install openai")
-        return None
+        return None, "缺 openai 库"
     except Exception as e:
         logger.error(f"[DeepSeek探索] DeepSeek API 调用失败: {e}")
-        return None
+        return None, f"API: {e}"
 
     text = (resp.choices[0].message.content or "").strip()
     if not text:
         logger.error("[DeepSeek探索] DeepSeek 返回空内容")
-        return None
-    if text.startswith("```"):
-        text = text.strip("`").lstrip("json").strip()
+        return None, "返回空内容"
     logger.info(f"[DeepSeek探索] deepseek 用时 {time.time()-t0:.1f}s, output_len={len(text)}")
 
-    try:
-        parsed = json.loads(text)
-        if not isinstance(parsed.get('verdicts'), list):
-            logger.warning(f"[DeepSeek探索] DeepSeek 返回格式异常, verdicts 非 list, 重置为 []")
-            parsed['verdicts'] = []
-        parsed['_prompt'] = prompt
-        parsed['_raw_response'] = text
-        return parsed
-    except json.JSONDecodeError as e:
-        logger.error(f"[DeepSeek探索] JSON 解析失败: {e}; raw[:500]={text[:500]}")
-        return None
+    parsed, parse_err = parse_explore_llm_json(text, "DeepSeek探索")
+    if parsed is None:
+        return None, f"JSON解析失败: {parse_err}"
+    parsed['_prompt'] = prompt
+    parsed['_raw_response'] = text
+    if parse_err:
+        parsed['_json_salvaged'] = True
+    return parsed, None
 
 
 # ============================================================
@@ -1407,14 +1392,17 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             logger.info(f"[DeepSeek探索] 历史: 样本不足 ({historical_stats['total_trades']}笔)")
 
         # 3d. 调 DeepSeek
-        deepseek_response = _call_deepseek_explore(universe, global_ctx, historical_stats)
+        deepseek_response, call_err = _call_deepseek_explore(
+            universe, global_ctx, historical_stats,
+        )
         if deepseek_response is None:
             elapsed = time.time() - t0
+            err_msg = (call_err or "DeepSeek 调用失败")[:500]
             run_id = _insert_run(
                 conn, asof_utc, universe_size, '', elapsed,
-                'error', 'DeepSeek 调用失败', triggered_by,
+                'error', err_msg, triggered_by,
             )
-            logger.error("[DeepSeek探索] DeepSeek 调用失败, 本轮结束")
+            logger.error(f"[DeepSeek探索] DeepSeek 调用失败: {err_msg}")
             return run_id
 
         summary_zh = (deepseek_response.get('summary_zh') or '')[:1000]
@@ -1475,7 +1463,9 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            tech_ok, tech_reason = explore_catalyst_technical_ok(catalyst, data_signal)
+            tech_ok, tech_reason = explore_catalyst_technical_ok(
+                catalyst, data_signal, universe.get(symbol),
+            )
             if not tech_ok:
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,

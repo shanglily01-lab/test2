@@ -35,8 +35,9 @@ from app.services.ai_big4_prompt import (
     enrich_global_context,
 )
 from app.services.ai_explore_prompt import (
-    EXPLORE_PROMPT_TEMPLATE,
+    build_explore_prompt,
     explore_catalyst_technical_ok,
+    parse_explore_llm_json,
 )
 from app.services.gemini_swan_worker import (
     GEMINI_MODEL,
@@ -890,38 +891,25 @@ def _describe_market_regime(conn) -> str:
 # ============================================================
 # Gemini 调用 (含历史表现)
 # ============================================================
-def _call_gemini_explore(universe: dict, global_ctx: dict, historical_stats: dict) -> Optional[dict]:
+def _call_gemini_explore(
+    universe: dict, global_ctx: dict, historical_stats: dict,
+) -> Tuple[Optional[dict], Optional[str]]:
     """调用 Gemini — 按 4 小时持仓趋势判断, 多周期 K 线叙事 + Big4 + 技术指标 + 历史表现."""
     if not GEMINI_API_KEY:
         logger.error("[Gemini探索] GEMINI_API_KEY 未设置")
-        return None
+        return None, "GEMINI_API_KEY 未设置"
     try:
         from google import genai
         from google.genai import types
     except ImportError:
         logger.error("[Gemini探索] 缺依赖, 请 pip install google-genai")
-        return None
+        return None, "缺 google-genai 依赖"
 
-    # universe 按 |change_24h| 排序
-    universe_list = sorted(
-        list(universe.values()),
-        key=lambda x: abs(x.get('change_24h') or 0),
-        reverse=True,
+    prompt, llm_meta = build_explore_prompt(universe, global_ctx, historical_stats)
+    logger.info(
+        f"[Gemini探索] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens), "
+        f"送模 {llm_meta['llm_symbol_count']}/{llm_meta['universe_total']} symbols"
     )
-
-    # 去掉旧的 ohlc 数组 (现在用 kline_narrative)
-    for item in universe_list:
-        item.pop('k_1d_ohlc', None)
-        item.pop('k_1h_ohlc', None)
-        item.pop('k_15m_ohlc', None)
-
-    prompt = EXPLORE_PROMPT_TEMPLATE.format(
-        global_context_json=json.dumps(global_ctx, ensure_ascii=False, indent=2),
-        universe_json=json.dumps(universe_list, ensure_ascii=False, indent=2, default=str),
-        historical_stats_json=json.dumps(historical_stats, ensure_ascii=False, indent=2),
-    )
-
-    logger.info(f"[Gemini探索] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens)")
 
     client = genai.Client(api_key=GEMINI_API_KEY)
     cfg = types.GenerateContentConfig(
@@ -936,25 +924,19 @@ def _call_gemini_explore(universe: dict, global_ctx: dict, historical_stats: dic
         )
     except Exception as e:
         logger.error(f"[Gemini探索] Gemini 调用失败: {e}")
-        return None
+        return None, f"API: {e}"
 
     text = (resp.text or "").strip()
-    if text.startswith("```"):
-        text = text.strip("`").lstrip("json").strip()
     logger.info(f"[Gemini探索] gemini 用时 {time.time()-t0:.1f}s, output_len={len(text)}")
 
-    try:
-        parsed = json.loads(text)
-        # 验证 format: verdicts 必须是 list
-        if not isinstance(parsed.get('verdicts'), list):
-            logger.warning(f"[Gemini探索] Gemini 返回格式异常, verdicts 非 list, 重置为 []")
-            parsed['verdicts'] = []
-        parsed['_prompt'] = prompt
-        parsed['_raw_response'] = text
-        return parsed
-    except json.JSONDecodeError as e:
-        logger.error(f"[Gemini探索] JSON 解析失败: {e}; raw[:500]={text[:500]}")
-        return None
+    parsed, parse_err = parse_explore_llm_json(text, "Gemini探索")
+    if parsed is None:
+        return None, f"JSON解析失败: {parse_err}"
+    parsed['_prompt'] = prompt
+    parsed['_raw_response'] = text
+    if parse_err:
+        parsed['_json_salvaged'] = True
+    return parsed, None
 
 
 # ============================================================
@@ -1556,14 +1538,17 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             logger.info(f"[Gemini探索] 历史: 样本不足 ({historical_stats['total_trades']}笔)")
 
         # 3d. 调 Gemini
-        gemini_response = _call_gemini_explore(universe, global_ctx, historical_stats)
+        gemini_response, call_err = _call_gemini_explore(
+            universe, global_ctx, historical_stats,
+        )
         if gemini_response is None:
             elapsed = time.time() - t0
+            err_msg = (call_err or "Gemini 调用失败")[:500]
             run_id = _finish_run(
                 conn, run_id, asof_utc, universe_size, '', elapsed,
-                'error', 'Gemini 调用失败', triggered_by,
+                'error', err_msg, triggered_by,
             )
-            logger.error("[Gemini探索] Gemini 调用失败, 本轮结束")
+            logger.error(f"[Gemini探索] Gemini 调用失败: {err_msg}")
             return run_id
 
         summary_zh = (gemini_response.get('summary_zh') or '')[:1000]
@@ -1627,7 +1612,9 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            tech_ok, tech_reason = explore_catalyst_technical_ok(catalyst, data_signal)
+            tech_ok, tech_reason = explore_catalyst_technical_ok(
+                catalyst, data_signal, universe.get(symbol),
+            )
             if not tech_ok:
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,
