@@ -1164,11 +1164,24 @@ async def get_account(account_id: int):
 
         cursor.execute(sql, (account_id,))
         account = cursor.fetchone()
-        cursor.close()
-        # connection.close()  # 复用连接，不关闭
 
         if not account:
+            cursor.close()
             raise HTTPException(status_code=404, detail=f'Account {account_id} not found')
+
+        cursor.execute(
+            """
+            SELECT COALESCE(SUM(realized_pnl), 0) AS pnl_24h
+            FROM futures_positions
+            WHERE account_id = %s AND status = 'closed'
+              AND close_time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+            """,
+            (account_id,),
+        )
+        pnl_row = cursor.fetchone() or {}
+        account['pnl_24h'] = float(pnl_row.get('pnl_24h') or 0)
+        cursor.close()
+        # connection.close()  # 复用连接，不关闭
 
         # 转换 Decimal
         for key, value in account.items():

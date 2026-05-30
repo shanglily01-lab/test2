@@ -562,6 +562,7 @@ async function loadAccountInfo() {
         var elTotal  = document.getElementById('stat-total-trades');
         var elMargin = document.getElementById('stat-total-margin');
         var elPnl    = document.getElementById('stat-total-pnl');
+        var el24h    = document.getElementById('stat-24h-pnl');
         if (elWin    && acc.win_rate     != null) elWin.textContent    = parseFloat(acc.win_rate).toFixed(1) + '%';
         if (elTotal  && acc.total_trades != null) elTotal.textContent  = acc.total_trades;
         if (elMargin && acc.current_balance != null) elMargin.textContent = fmtUsdt(acc.current_balance);
@@ -569,6 +570,11 @@ async function loadAccountInfo() {
             var rpnl = parseFloat(acc.realized_pnl);
             elPnl.textContent = fmtPnl(rpnl);
             elPnl.className = 'text-2xl font-headline font-bold monospace ' + (rpnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
+        }
+        if (el24h && acc.pnl_24h != null) {
+            var p24 = parseFloat(acc.pnl_24h);
+            el24h.textContent = fmtPnl(p24);
+            el24h.className = 'text-2xl font-headline font-bold monospace ' + (p24 >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
         }
     } catch(e) {}
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-全系统健康检查 — 检查所有 6 个进程是否在跑。
+全系统健康检查 — 检查核心进程是否在跑。
 
 用法:
     python scripts/healthcheck.py            # 简洁输出 + exit code
@@ -27,12 +27,10 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.utils.pid_lock import is_running  # noqa: E402
 
-# 6 个被监控的服务 (名字必须跟入口脚本里 acquire_pid_lock 的参数一致)
+# 被监控的服务 (名字必须跟入口脚本里 acquire_pid_lock 的参数一致)
 SERVICES = [
     "smart_trader_service",
     "fast_collector_service",
-    "strategy_live",
-    "strategy_bigmid",
     # app/main.py 用 uvicorn 启动,没走 acquire_pid_lock,改用 HTTP 检查
 ]
 
