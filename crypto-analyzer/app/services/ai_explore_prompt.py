@@ -16,6 +16,8 @@ from app.services.ai_big4_prompt import BIG4_PROMPT_BLOCK_EXPLORE
 # 送入 LLM 的 symbol 上限 (全池 ~200 时 prompt/output 都会爆)
 EXPLORE_LLM_MAX_SYMBOLS = 50
 EXPLORE_LLM_MAX_OUTPUT_TOKENS = 8192
+# 主探索 (gemini/deepseek_explore) scheduler + worker 防重间隔
+EXPLORE_MIN_INTERVAL_HOURS = 4.0
 
 _KLINE_MARKERS = (
     "1h", "15m", "1d", "连阳", "连阴", "形态", "放量", "缩量",

@@ -1,7 +1,7 @@
 """
 DeepSeek 探索 worker (v1 — 2026-05-28)
 
-每 2h 调用 DeepSeek (OpenAI-compatible API) 检测加密货币短时方向异动,
+每 4h 调用 DeepSeek (OpenAI-compatible API) 检测加密货币短时方向异动,
 根据 verdict 直接开模拟单。(功能与 gemini_explore_worker 完全对齐)
 
 仓位参数:
@@ -35,6 +35,7 @@ from app.services.ai_big4_prompt import (
 )
 from app.services.ai_explore_prompt import (
     EXPLORE_LLM_MAX_OUTPUT_TOKENS,
+    EXPLORE_MIN_INTERVAL_HOURS,
     build_explore_prompt,
     explore_catalyst_technical_ok,
     parse_explore_llm_json,
@@ -1247,7 +1248,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         _explore_running_lock.release()
         return None
 
-    # 防重: 上次成功距今 >= 2h 才执行 (仅 manual 不拦截)
+    # 防重: 上次成功距今 >= EXPLORE_MIN_INTERVAL_HOURS 才执行 (仅 manual 不拦截)
     if triggered_by != 'manual':
         try:
             with _connect() as conn_chk:
@@ -1258,8 +1259,11 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                     row = cur.fetchone()
                     if row and row.get('last_run'):
                         elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
-                        if elapsed_h < 2:
-                            logger.info(f"[DeepSeek探索] 上次成功距今 {elapsed_h:.1f}h < 2h, 跳过")
+                        if elapsed_h < EXPLORE_MIN_INTERVAL_HOURS:
+                            logger.info(
+                                f"[DeepSeek探索] 上次成功距今 {elapsed_h:.1f}h "
+                                f"< {EXPLORE_MIN_INTERVAL_HOURS:.0f}h, 跳过"
+                            )
                             _explore_running_lock.release()
                             return None
         except Exception as e:
