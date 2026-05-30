@@ -446,6 +446,11 @@ async def get_trading_services():
             elif db_key in ('stop_loss_pct', 'take_profit_pct'):
                 result[db_key] = float(setting['setting_value'])
 
+        # DB 无 smart_exit_enabled 行时与 smart_trader 运行时一致 (回退 config.yaml)
+        if not any(s['setting_key'] == 'smart_exit_enabled' for s in settings):
+            from app.services.system_settings_loader import get_smart_exit_enabled
+            result['smart_exit_enabled'] = get_smart_exit_enabled()
+
         return {
             'success': True,
             'data': result
