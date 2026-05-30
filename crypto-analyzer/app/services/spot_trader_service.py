@@ -210,7 +210,7 @@ def _buy(symbol: str, market_price: float, reason: str) -> bool:
             logger.warning(f"[现货] {symbol} 数量过小 {qty}, 跳过")
             return False
 
-        planned_close = datetime.utcnow() + timedelta(hours=MAX_HOLD_HOURS)
+        planned_close = datetime.now() + timedelta(hours=MAX_HOLD_HOURS)
         limit_price = round(market_price * (1 - LIMIT_SPREAD), 8)  # 低于市价 0.2%
         tp_price = round(market_price * (1 + TP_PCT), 8)
         sl_price = round(market_price * (1 - SL_PCT), 8)
@@ -452,7 +452,7 @@ def _check_open_positions():
             continue
 
         # 超时 14 天
-        if planned_close and datetime.utcnow() >= planned_close:
+        if planned_close and datetime.now() >= planned_close:
             _close_position(pid, symbol, f"超时平仓(profit={profit_pct*100:+.1f}%)")
             continue
 

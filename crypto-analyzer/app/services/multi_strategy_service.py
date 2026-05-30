@@ -148,7 +148,7 @@ class MultiStrategyService:
             # 新鲜度检查：最新K线不能太旧，否则信号已失效
             max_lag = self._TF_MAX_LAG_HOURS.get(timeframe, 3.0)
             last_ts_sec = int(df['open_time'].iloc[-1]) / 1000
-            age_hours = (datetime.utcnow().timestamp() - last_ts_sec) / 3600
+            age_hours = (datetime.now().timestamp() - last_ts_sec) / 3600
             if age_hours > max_lag:
                 logger.debug(f"[多策略] {symbol}/{timeframe} 数据过旧 {age_hours:.1f}H，跳过")
                 return None
@@ -360,7 +360,7 @@ class MultiStrategyService:
 
             notional = margin * leverage
             qty = round(notional / price, 6)
-            planned_close = datetime.utcnow() + timedelta(hours=hold_hours)
+            planned_close = datetime.now() + timedelta(hours=hold_hours)
 
             if side == 'LONG':
                 tp_price = round(price * (1 + tp_pct), 8) if tp_pct else None
@@ -446,7 +446,7 @@ class MultiStrategyService:
 
                 notional = margin * leverage
                 qty = Decimal(str(round(notional / entry_price, 6)))
-                planned_close = datetime.utcnow() + timedelta(hours=hold_hours)
+                planned_close = datetime.now() + timedelta(hours=hold_hours)
                 engine = BinanceFuturesEngine(
                     self.db_config,
                     api_key=ak['api_key'],
@@ -987,7 +987,7 @@ Output ONLY a single valid JSON object, no markdown fence, no extra text:
             return
 
         import time as _t
-        now = datetime.utcnow()
+        now = datetime.now()
         # 6h 限速
         if self._last_s9_run and (now - self._last_s9_run).total_seconds() < self.S9_INTERVAL_HOURS * 3600:
             return
@@ -1071,7 +1071,7 @@ Output ONLY a single valid JSON object, no markdown fence, no extra text:
 
     def run_slow(self):
         """每30分钟调度：S1+S5+S6+S9；内部限速防重复"""
-        now = datetime.utcnow()
+        now = datetime.now()
         if (self._last_slow_scan and
                 (now - self._last_slow_scan).total_seconds() < self.SLOW_SCAN_INTERVAL_SEC):
             return

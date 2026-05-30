@@ -57,7 +57,7 @@ def main():
     logger.add(sys.stdout, format="<green>{time:HH:mm:ss}</green> | <level>{level: <7}</level> | <level>{message}</level>", level="INFO")
 
     mysql_config = _build_mysql_config()
-    cutoff = datetime.utcnow() - timedelta(days=args.days)
+    cutoff = datetime.now() - timedelta(days=args.days)
     cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
     cutoff_ms = int(cutoff.timestamp() * 1000)
 

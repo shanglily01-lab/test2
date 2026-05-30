@@ -249,8 +249,8 @@ async def get_spot_history(
                 pnl_pct=pnl_pct,
                 close_reason=rec['close_reason'] or '',
                 signal_details=rec.get('signal_details', rec.get('entry_reason', '')) or '',
-                created_at=rec.get('open_time', datetime.utcnow()),
-                closed_at=rec.get('close_time', datetime.utcnow())
+                created_at=rec.get('open_time', datetime.now()),
+                closed_at=rec.get('close_time', datetime.now())
             ))
 
         # 手动记录
@@ -266,8 +266,8 @@ async def get_spot_history(
                 pnl_pct=float(rec['pnl_pct'] or 0),
                 close_reason=rec.get('close_reason', '') or '',
                 signal_details=rec.get('signal_details', '') or '',
-                created_at=rec.get('created_at', datetime.utcnow()),
-                closed_at=rec.get('closed_at', datetime.utcnow())
+                created_at=rec.get('created_at', datetime.now()),
+                closed_at=rec.get('closed_at', datetime.now())
             ))
 
         # 按闭仓时间降序
@@ -471,7 +471,7 @@ async def sell_spot_position(req: SellRequest):
         sell_amount  = exit_price * qty
         realized_pnl = sell_amount - total_cost
         pnl_pct      = (realized_pnl / total_cost * 100) if total_cost > 0 else 0
-        now          = dt.utcnow()
+        now          = dt.now()
         trade_id     = str(uuid.uuid4())[:16]
         order_id     = f"MANUAL_SELL_{req.position_id}_{int(now.timestamp())}"
 

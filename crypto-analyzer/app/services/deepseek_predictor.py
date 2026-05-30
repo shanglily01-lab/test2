@@ -378,7 +378,7 @@ def _build_global_context(conn) -> dict:
 
     优先从 data_cache.market_snapshot 读取.
     """
-    ctx = {'asof_utc': datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
+    ctx = {'asof_utc': datetime.now().strftime('%Y-%m-%d %H:%M UTC')}
 
     snap = _try_snapshot()
     if snap:
@@ -753,7 +753,7 @@ def _open_simulated_position(
             sl_price = round(price * (1 + PREDICT_SL_PCT / 100), 8)
             tp_price = round(price * (1 - PREDICT_TP_PCT / 100), 8)
 
-        planned_close = datetime.utcnow() + timedelta(hours=PREDICT_HOLD_HOURS)
+        planned_close = datetime.now() + timedelta(hours=PREDICT_HOLD_HOURS)
         max_hold_minutes = PREDICT_HOLD_HOURS * 60
 
         entry_reason = (catalyst or 'deepseek_predict')[:180]

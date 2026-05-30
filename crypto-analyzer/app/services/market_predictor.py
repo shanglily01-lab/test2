@@ -284,7 +284,7 @@ class MarketPredictor:
             )
             row = cursor.fetchone()
             if row:
-                age_minutes = (datetime.utcnow().timestamp() - row['open_time'] / 1000) / 60
+                age_minutes = (datetime.now().timestamp() - row['open_time'] / 1000) / 60
                 if age_minutes <= 30:
                     return float(row['close_price'])
         return None
@@ -689,7 +689,7 @@ class MarketPredictor:
         except Exception as e:
             logger.warning(f"[预测] 读取系统开关失败，默认继续: {e}")
 
-        now = datetime.utcnow()
+        now = datetime.now()
         valid_until = now + timedelta(hours=6)
         saved = 0
         all_results = []

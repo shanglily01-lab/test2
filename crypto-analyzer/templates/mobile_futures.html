@@ -176,6 +176,45 @@ function fmtPnl(n) {
     return (v >= 0 ? '+' : '') + v.toFixed(2) + 'U';
 }
 
+function parseUtcTime(t) {
+    if (!t) return null;
+    try {
+        const ts = (typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t)) ? t + 'Z' : t;
+        const d = new Date(ts);
+        return isNaN(d.getTime()) ? null : d;
+    } catch(e) { return null; }
+}
+
+function resolvePlannedClose(pos) {
+    let d = parseUtcTime(pos.planned_close_time);
+    if (d) return d;
+    const open = parseUtcTime(pos.open_time || pos.created_at);
+    const mins = parseInt(pos.max_hold_minutes, 10);
+    if (open && mins > 0) return new Date(open.getTime() + mins * 60000);
+    return null;
+}
+
+function fmtPlannedCloseTime(pos) {
+    const d = resolvePlannedClose(pos);
+    if (!d) return '--';
+    const u = new Date(d.getTime() + 8 * 3600000);
+    const pad = x => String(x).padStart(2, '0');
+    return `${u.getUTCMonth()+1}-${pad(u.getUTCDate())} ${pad(u.getUTCHours())}:${pad(u.getUTCMinutes())}`;
+}
+
+function fmtPlannedCloseRemain(pos) {
+    const d = resolvePlannedClose(pos);
+    if (!d) return '';
+    const ms = d.getTime() - Date.now();
+    if (ms <= 0) return '已到期';
+    const totalMin = Math.floor(ms / 60000);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    if (h >= 24) return `剩 ${Math.floor(h / 24)}天${h % 24}h`;
+    if (h > 0) return `剩 ${h}h${m}m`;
+    return `剩 ${m}m`;
+}
+
 async function loadTradingStatus() {
     try {
         const r = await fetch('/api/system/trading-services').then(r => r.json());
@@ -269,6 +308,7 @@ async function loadPositions() {
                         <div><p class="text-[10px] text-on-surface-variant uppercase mb-0.5">当前价</p><p class="mono-nums text-sm ${pnlCls}">${cp ? fmt(cp,4) : '--'}</p></div>
                         <div><p class="text-[10px] text-on-surface-variant uppercase mb-0.5">数量</p><p class="mono-nums text-sm">${fmt(qty,4)}</p></div>
                         <div><p class="text-[10px] text-on-surface-variant uppercase mb-0.5">盈亏%</p><p class="mono-nums text-sm font-bold ${pnlCls}">${upnlPct>=0?'+':''}${fmt(upnlPct,1)}%</p></div>
+                        <div class="col-span-2"><p class="text-[10px] text-on-surface-variant uppercase mb-0.5">计划平仓</p><p class="mono-nums text-sm">${fmtPlannedCloseTime(pos)} <span class="text-on-surface-variant/70 text-[10px]">${fmtPlannedCloseRemain(pos)}</span></p></div>
                         ${sl ? `<div><p class="text-[10px] text-on-surface-variant uppercase mb-0.5">止损</p><p class="mono-nums text-sm text-error">${fmt(sl,4)}</p></div>` : ''}
                         ${tp ? `<div><p class="text-[10px] text-on-surface-variant uppercase mb-0.5">止盈</p><p class="mono-nums text-sm text-primary">${fmt(tp,4)}</p></div>` : ''}
                     </div>

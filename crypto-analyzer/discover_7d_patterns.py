@@ -33,7 +33,7 @@ def mkconn():
 
 
 def load_symbols():
-    since_ms = int((datetime.utcnow() - timedelta(days=10)).timestamp() * 1000)
+    since_ms = int((datetime.now() - timedelta(days=10)).timestamp() * 1000)
     c = mkconn(); cur = c.cursor()
     cur.execute(
         "SELECT DISTINCT symbol FROM kline_data"
@@ -48,7 +48,7 @@ def load_symbols():
 
 
 def load_df(symbol):
-    since_ms = int((datetime.utcnow() - timedelta(days=12)).timestamp() * 1000)
+    since_ms = int((datetime.now() - timedelta(days=12)).timestamp() * 1000)
     c = mkconn(); cur = c.cursor()
     cur.execute("""
         SELECT open_time,
@@ -273,7 +273,7 @@ def r_accumulation(df, i):
 
 def main():
     # 近7天窗口起点（毫秒）
-    since_7d_ms = int((datetime.utcnow() - timedelta(days=7)).timestamp() * 1000)
+    since_7d_ms = int((datetime.now() - timedelta(days=7)).timestamp() * 1000)
 
     symbols = load_symbols()
     print(f'扫描 {len(symbols)} 个品种，近7天数据...')

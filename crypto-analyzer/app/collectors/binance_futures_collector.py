@@ -130,7 +130,7 @@ class BinanceFuturesCollector:
                 'symbol': symbol,
                 'funding_rate': float(data.get('lastFundingRate', 0)),
                 'funding_time': t,
-                'timestamp': datetime.fromtimestamp(t / 1000) if t else datetime.utcnow(),
+                'timestamp': datetime.fromtimestamp(t / 1000) if t else datetime.now(),
                 'mark_price': float(data.get('markPrice', 0)),
                 'index_price': float(data.get('indexPrice', 0)),
                 'next_funding_time': int(data.get('nextFundingTime', 0)),
@@ -155,7 +155,7 @@ class BinanceFuturesCollector:
                 'exchange': self.exchange_id,
                 'symbol': symbol,
                 'open_interest': float(data.get('openInterest', 0)),
-                'timestamp': datetime.fromtimestamp(t / 1000) if t else datetime.utcnow(),
+                'timestamp': datetime.fromtimestamp(t / 1000) if t else datetime.now(),
             }
         except (ValueError, TypeError) as e:
             logger.error(f"解析 {symbol} 持仓量失败: {e}")
@@ -182,7 +182,7 @@ class BinanceFuturesCollector:
                 'long_account': float(latest.get('longAccount', 0)),
                 'short_account': float(latest.get('shortAccount', 0)),
                 'long_short_ratio': float(latest.get('longShortRatio', 0)),
-                'timestamp': datetime.fromtimestamp(ts / 1000) if ts else datetime.utcnow(),
+                'timestamp': datetime.fromtimestamp(ts / 1000) if ts else datetime.now(),
             }
         except (ValueError, TypeError) as e:
             logger.error(f"解析 {symbol} 多空比失败: {e}")
@@ -209,7 +209,7 @@ class BinanceFuturesCollector:
                 'long_position': float(latest.get('longAccount', 0)),
                 'short_position': float(latest.get('shortAccount', 0)),
                 'long_short_position_ratio': float(latest.get('longShortRatio', 0)),
-                'timestamp': datetime.fromtimestamp(ts / 1000) if ts else datetime.utcnow(),
+                'timestamp': datetime.fromtimestamp(ts / 1000) if ts else datetime.now(),
             }
         except (ValueError, TypeError) as e:
             logger.error(f"解析 {symbol} 持仓量比失败: {e}")
@@ -247,7 +247,7 @@ class BinanceFuturesCollector:
 
             result = {
                 'symbol': symbol,
-                'timestamp': datetime.utcnow(),
+                'timestamp': datetime.now(),
                 'ticker': ticker if not isinstance(ticker, Exception) else None,
                 'kline': klines.iloc[-1].to_dict() if klines is not None and not isinstance(klines, Exception) and len(klines) > 0 else None,
                 'funding_rate': funding if not isinstance(funding, Exception) else None,

@@ -289,16 +289,51 @@ function fmtUsdt(n) {
     return n.toFixed(2);
 }
 
-function fmtTime(t) {
-    if (!t) return '--';
+function parseUtcTime(t) {
+    if (!t) return null;
     try {
         var ts = (typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t)) ? t + 'Z' : t;
         var d = new Date(ts);
-        if (isNaN(d.getTime())) return '--';
-        var u = new Date(d.getTime() + 8 * 3600000);
-        var pad = function(x) { return String(x).padStart(2, '0'); };
-        return (u.getUTCMonth()+1) + '-' + pad(u.getUTCDate()) + ' ' + pad(u.getUTCHours()) + ':' + pad(u.getUTCMinutes());
-    } catch(e) { return '--'; }
+        return isNaN(d.getTime()) ? null : d;
+    } catch(e) { return null; }
+}
+
+function fmtTime(t) {
+    var d = parseUtcTime(t);
+    if (!d) return '--';
+    var u = new Date(d.getTime() + 8 * 3600000);
+    var pad = function(x) { return String(x).padStart(2, '0'); };
+    return (u.getUTCMonth()+1) + '-' + pad(u.getUTCDate()) + ' ' + pad(u.getUTCHours()) + ':' + pad(u.getUTCMinutes());
+}
+
+function resolvePlannedClose(pos) {
+    var d = parseUtcTime(pos.planned_close_time);
+    if (d) return d;
+    var open = parseUtcTime(pos.open_time || pos.created_at);
+    var mins = parseInt(pos.max_hold_minutes, 10);
+    if (open && mins > 0) return new Date(open.getTime() + mins * 60000);
+    return null;
+}
+
+function fmtPlannedCloseTime(pos) {
+    var d = resolvePlannedClose(pos);
+    if (!d) return '--';
+    var u = new Date(d.getTime() + 8 * 3600000);
+    var pad = function(x) { return String(x).padStart(2, '0'); };
+    return (u.getUTCMonth()+1) + '-' + pad(u.getUTCDate()) + ' ' + pad(u.getUTCHours()) + ':' + pad(u.getUTCMinutes());
+}
+
+function fmtPlannedCloseRemain(pos) {
+    var d = resolvePlannedClose(pos);
+    if (!d) return '';
+    var ms = d.getTime() - Date.now();
+    if (ms <= 0) return '已到期';
+    var totalMin = Math.floor(ms / 60000);
+    var h = Math.floor(totalMin / 60);
+    var m = totalMin % 60;
+    if (h >= 24) return '剩 ' + Math.floor(h / 24) + '天' + (h % 24) + 'h';
+    if (h > 0) return '剩 ' + h + 'h' + m + 'm';
+    return '剩 ' + m + 'm';
 }
 function fmtDuration(openT, closeT) {
     if (!openT || !closeT) return '--';
@@ -441,8 +476,9 @@ async function loadPositions() {
                 '<div class="text-xs text-on-surface-variant">' + fmtPrice(entry) + '</div>' +
                 '<div class="' + curPriceClass + ' font-medium">' + fmtPrice(curPrice) + '</div>' +
             '</td>' +
-            '<td class="px-6 py-4 monospace text-xs text-on-surface-variant">' +
-                fmtTime(pos.planned_close_time) +
+            '<td class="px-6 py-4 monospace text-xs">' +
+                '<div class="text-on-surface-variant">' + fmtPlannedCloseTime(pos) + '</div>' +
+                '<div class="text-[10px] text-on-surface-variant/70">' + fmtPlannedCloseRemain(pos) + '</div>' +
             '</td>' +
             '<td class="px-6 py-4">' +
                 '<div class="' + pnlClass + ' font-bold monospace">' + fmtPnl(pnl) + '</div>' +

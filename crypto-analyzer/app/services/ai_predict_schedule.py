@@ -18,10 +18,6 @@ GEMINI_PREDICT_NEXT_DUE_KEY = "gemini_predict_next_due_utc"
 DEEPSEEK_PREDICT_NEXT_DUE_KEY = "deepseek_predict_next_due_utc"
 
 
-def _utc_now_naive() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
 def _parse_utc_naive(value: str) -> Optional[datetime]:
     if not value:
         return None
@@ -74,7 +70,7 @@ def predict_round_is_due(
     if manual:
         return True, "manual"
 
-    now = now or _utc_now_naive()
+    now = now or datetime.now()
     with conn.cursor() as cur:
         next_due = _read_setting_dt(cur, next_due_key)
         if next_due and now < next_due:
@@ -101,7 +97,7 @@ def predict_claim_next_slot(
     log_tag: str = "Predict",
 ) -> datetime:
     """认领下一 4h 窗口 (本轮开始后写入, 防止 5min 轮询重复触发)."""
-    now = now or _utc_now_naive()
+    now = now or datetime.now()
     next_due = now + timedelta(seconds=PREDICT_ROUND_INTERVAL_SECONDS)
     value = next_due.strftime("%Y-%m-%dT%H:%M:%S")
     with conn.cursor() as cur:

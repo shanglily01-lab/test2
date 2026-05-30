@@ -143,7 +143,7 @@ class GeminiPositionAdvisor:
             cur.close(); conn.close()
             if not row:
                 return None
-            age_min = (datetime.datetime.utcnow().timestamp() - row['open_time'] / 1000) / 60
+            age_min = (datetime.datetime.now().timestamp() - row['open_time'] / 1000) / 60
             if age_min > 15:
                 logger.warning(f"[Gemini顾问] {symbol} 5m K线 {age_min:.0f}min 旧,跳过")
                 return None

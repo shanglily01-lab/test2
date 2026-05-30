@@ -2183,7 +2183,7 @@ async def get_strategy_execution_list(
         import pymysql
         
         # 计算时间范围（如果没有指定或为空，默认查询最近30天）
-        now = datetime.utcnow()
+        now = datetime.now()
         time_delta_map = {
             '1h': timedelta(hours=1),
             '24h': timedelta(hours=24),
@@ -3298,7 +3298,7 @@ async def get_trend_analysis():
     # 检查缓存
     with _trend_analysis_cache_lock:
         if _trend_analysis_cache is not None and _trend_analysis_cache_time is not None:
-            cache_age = (datetime.utcnow() - _trend_analysis_cache_time).total_seconds()
+            cache_age = (datetime.now() - _trend_analysis_cache_time).total_seconds()
             if cache_age < TECHNICAL_SIGNALS_CACHE_TTL:
                 logger.debug(f"✅ 使用缓存的趋势分析数据 (缓存年龄: {cache_age:.0f}秒)")
                 return _trend_analysis_cache
@@ -3464,7 +3464,7 @@ async def get_trend_analysis():
             # 更新缓存
             with _trend_analysis_cache_lock:
                 _trend_analysis_cache = result
-                _trend_analysis_cache_time = datetime.utcnow()
+                _trend_analysis_cache_time = datetime.now()
                 logger.debug(f"✅ 趋势分析数据已缓存 ({len(trend_list)} 条记录)")
 
             return result
@@ -3896,7 +3896,7 @@ async def get_futures_signals():
     # 检查缓存
     with _futures_signals_cache_lock:
         if _futures_signals_cache is not None and _futures_signals_cache_time is not None:
-            cache_age = (datetime.utcnow() - _futures_signals_cache_time).total_seconds()
+            cache_age = (datetime.now() - _futures_signals_cache_time).total_seconds()
             if cache_age < TECHNICAL_SIGNALS_CACHE_TTL:
                 logger.debug(f"✅ 使用缓存的合约信号数据 (缓存年龄: {cache_age:.0f}秒)")
                 return _futures_signals_cache
@@ -4013,7 +4013,7 @@ async def get_futures_signals():
             # 更新缓存
             with _futures_signals_cache_lock:
                 _futures_signals_cache = result
-                _futures_signals_cache_time = datetime.utcnow()
+                _futures_signals_cache_time = datetime.now()
                 logger.debug(f"✅ 合约信号数据已缓存 ({len(futures_signals)} 条记录)")
 
             return result
@@ -4515,7 +4515,7 @@ def _analyze_futures_signal(
             'values': _extract_indicator_values(tech_data_1h)
         } if tech_data_1h else None,
         'kelly_advice': kelly_advice,  # 凯利公式建议
-        'updated_at': datetime.utcnow().isoformat()
+        'updated_at': datetime.now().isoformat()
     }
 
 
@@ -4589,7 +4589,7 @@ async def get_dashboard():
                     "bullish_count": bullish,
                     "bearish_count": bearish
                 },
-                "last_updated": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             },
             "message": "降级模式：仅显示价格数据"
         }
@@ -4613,7 +4613,7 @@ async def get_dashboard():
                         "bullish_count": 0,
                         "bearish_count": 0
                     },
-                    "last_updated": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                    "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 },
                 "error": str(e),
                 "message": "数据加载失败，请稍后重试"
@@ -4637,7 +4637,7 @@ async def get_dashboard():
     try:
         # 检查缓存
         from datetime import datetime, timedelta
-        now = datetime.utcnow()
+        now = datetime.now()
 
         if _dashboard_cache and _dashboard_cache_time:
             cache_age = (now - _dashboard_cache_time).total_seconds()
@@ -4687,7 +4687,7 @@ async def get_dashboard():
         _dashboard_cache = data
         _dashboard_cache_time = now
 
-        elapsed = (datetime.utcnow() - start_time).total_seconds()
+        elapsed = (datetime.now() - start_time).total_seconds()
         logger.info(f"✅ Dashboard 数据获取完成，耗时: {elapsed:.1f}秒")
 
         return data
@@ -4711,7 +4711,7 @@ async def get_dashboard():
                     "bullish_count": 0,
                     "bearish_count": 0
                 },
-                "last_updated": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                "last_updated": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             },
             "error": str(e),
             "message": "数据加载失败，请稍后重试"
@@ -4802,7 +4802,7 @@ async def get_latest_retrospective_analysis():
             cursorclass=pymysql.cursors.DictCursor
         )
         cursor = conn.cursor()
-        now_utc = datetime.utcnow()
+        now_utc = datetime.now()
         since_utc = now_utc - timedelta(hours=12)
         since_ts = int(since_utc.timestamp() * 1000)
 

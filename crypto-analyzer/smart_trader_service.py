@@ -1413,15 +1413,15 @@ class SmartTraderService:
         """
         # 每 check_interval_hours 小时检测一次，避免每次扫描都查询
         last_check = getattr(self, '_profit_guard_last_check', None)
-        if last_check and (datetime.utcnow() - last_check).total_seconds() < check_interval_hours * 3600:
+        if last_check and (datetime.now() - last_check).total_seconds() < check_interval_hours * 3600:
             return False
-        self._profit_guard_last_check = datetime.utcnow()
+        self._profit_guard_last_check = datetime.now()
 
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            since = datetime.utcnow() - timedelta(hours=window_hours)
+            since = datetime.now() - timedelta(hours=window_hours)
             cursor.execute("""
                 SELECT COALESCE(SUM(realized_pnl), 0)
                 FROM futures_positions
@@ -1441,7 +1441,7 @@ class SmartTraderService:
                 )
                 _last_notified = getattr(self, '_profit_guard_notified_at', None)
                 _cooldown_ok = (_last_notified is None or
-                                (datetime.utcnow() - _last_notified).total_seconds() >= 300)
+                                (datetime.now() - _last_notified).total_seconds() >= 300)
                 if _cooldown_ok and hasattr(self, 'telegram_notifier') and self.telegram_notifier:
                     try:
                         self.telegram_notifier.send_message(
@@ -1450,7 +1450,7 @@ class SmartTraderService:
                             f"阈值: {profit_threshold}U\n"
                             f"已跳过本轮扫描，系统设置未修改"
                         )
-                        self._profit_guard_notified_at = datetime.utcnow()
+                        self._profit_guard_notified_at = datetime.now()
                     except Exception:
                         pass
                 return True
@@ -1475,15 +1475,15 @@ class SmartTraderService:
             True = 已触发（调用方跳过本轮开仓）
         """
         last_check = getattr(self, '_loss_guard_last_check', None)
-        if last_check and (datetime.utcnow() - last_check).total_seconds() < check_interval_hours * 3600:
+        if last_check and (datetime.now() - last_check).total_seconds() < check_interval_hours * 3600:
             return False
-        self._loss_guard_last_check = datetime.utcnow()
+        self._loss_guard_last_check = datetime.now()
 
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            since = datetime.utcnow() - timedelta(hours=window_hours)
+            since = datetime.now() - timedelta(hours=window_hours)
             cursor.execute("""
                 SELECT COALESCE(SUM(realized_pnl), 0)
                 FROM futures_positions
@@ -1503,7 +1503,7 @@ class SmartTraderService:
                 )
                 _last_notified = getattr(self, '_loss_guard_notified_at', None)
                 _cooldown_ok = (_last_notified is None or
-                                (datetime.utcnow() - _last_notified).total_seconds() >= 300)
+                                (datetime.now() - _last_notified).total_seconds() >= 300)
                 if _cooldown_ok and hasattr(self, 'telegram_notifier') and self.telegram_notifier:
                     try:
                         self.telegram_notifier.send_message(
@@ -1512,7 +1512,7 @@ class SmartTraderService:
                             f"阈值: -{loss_threshold}U\n"
                             f"已跳过本轮扫描，系统设置未修改"
                         )
-                        self._loss_guard_notified_at = datetime.utcnow()
+                        self._loss_guard_notified_at = datetime.now()
                     except Exception:
                         pass
                 return True
@@ -2254,7 +2254,7 @@ class SmartTraderService:
                 base_timeout_minutes = _mh_hours * 60
 
             # 计算超时时间点 (UTC时间)
-            timeout_at = datetime.utcnow() + timedelta(minutes=base_timeout_minutes)
+            timeout_at = datetime.now() + timedelta(minutes=base_timeout_minutes)
 
             # 准备entry_reason
             entry_reason = opp.get('reason', '')
@@ -2569,7 +2569,7 @@ class SmartTraderService:
                                 current_price, long_pos['quantity'], long_pos['quantity'],
                                 notional_value, notional_value,
                                 fee, 0.0004,
-                                current_price, datetime.utcnow(),
+                                current_price, datetime.now(),
                                 long_pos['realized_pnl'], long_pos['pnl_pct'], '对冲止损平仓'
                             ))
 
@@ -2590,7 +2590,7 @@ class SmartTraderService:
                                 trade_id, long_pos['id'], self.account_id, symbol, 'CLOSE_LONG',
                                 current_price, long_pos['quantity'], notional_value, leverage, margin,
                                 fee, long_pos['realized_pnl'], long_pos['pnl_pct'], roi, long_pos['entry_price'],
-                                current_price, f"HEDGE-{long_pos['id']}", datetime.utcnow(), datetime.utcnow()
+                                current_price, f"HEDGE-{long_pos['id']}", datetime.now(), datetime.now()
                             ))
 
                             # 🔥 账户统计改为定时计算，避免并发更新死锁
@@ -2654,7 +2654,7 @@ class SmartTraderService:
                                 current_price, short_pos['quantity'], short_pos['quantity'],
                                 notional_value, notional_value,
                                 fee, 0.0004,
-                                current_price, datetime.utcnow(),
+                                current_price, datetime.now(),
                                 short_pos['realized_pnl'], short_pos['pnl_pct']
                             ))
 
@@ -2675,7 +2675,7 @@ class SmartTraderService:
                                 trade_id, short_pos['id'], self.account_id, symbol, 'CLOSE_SHORT',
                                 current_price, short_pos['quantity'], notional_value, leverage, margin,
                                 fee, short_pos['realized_pnl'], short_pos['pnl_pct'], roi, short_pos['entry_price'],
-                                current_price, order_id, datetime.utcnow(), datetime.utcnow()
+                                current_price, order_id, datetime.now(), datetime.now()
                             ))
 
                             # 🔥 账户统计改为定时计算，避免并发更新死锁
@@ -2875,11 +2875,22 @@ class SmartTraderService:
         allowed, _ = check_live_symbol_allowed(symbol)
         return allowed
 
-    def close_position_by_side(self, symbol: str, side: str, reason: str = "reverse_signal", sync_live: bool = True, price: Optional[float] = None):
+    def close_position_by_side(
+        self,
+        symbol: str,
+        side: str,
+        reason: str = "reverse_signal",
+        sync_live: bool = True,
+        price: Optional[float] = None,
+        position_id: Optional[int] = None,
+    ):
         """关闭指定交易对和方向的持仓。sync_live=False时只更新模拟单DB，不同步实盘。
-        
+
+        position_id 指定时只平该笔（SmartExit 到期/止损用）；未指定时平同 symbol+side 全部 OPEN 仓（逆向信号等场景）。
+
         Args:
             price: 平仓价格。如果提供则直接用，不提供则从WS/K线获取，获取失败时从DB mark_price兜底。
+            position_id: 可选，仅平指定持仓 ID。
         """
         try:
             current_price = price
@@ -2904,10 +2915,17 @@ class SmartTraderService:
             cursor = conn.cursor(pymysql.cursors.DictCursor)  # 使用字典游标
 
             # 获取持仓信息用于日志和计算盈亏
-            cursor.execute("""
-                SELECT id, entry_price, quantity, leverage, margin FROM futures_positions
-                WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
-            """, (symbol, side, self.account_id))
+            if position_id is not None:
+                cursor.execute("""
+                    SELECT id, entry_price, quantity, leverage, margin FROM futures_positions
+                    WHERE id = %s AND symbol = %s AND position_side = %s
+                      AND status = 'open' AND account_id = %s
+                """, (position_id, symbol, side, self.account_id))
+            else:
+                cursor.execute("""
+                    SELECT id, entry_price, quantity, leverage, margin FROM futures_positions
+                    WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
+                """, (symbol, side, self.account_id))
 
             positions = cursor.fetchall()
 
@@ -2978,7 +2996,7 @@ class SmartTraderService:
                     current_price, quantity, quantity,
                     notional_value, notional_value,
                     fee, 0.0004,
-                    current_price, datetime.utcnow(),
+                    current_price, datetime.now(),
                     realized_pnl, pnl_pct, reason
                 ))
 
@@ -2999,7 +3017,7 @@ class SmartTraderService:
                     trade_id, pos['id'], self.account_id, symbol, close_side,
                     current_price, quantity, notional_value, leverage, margin,
                     fee, realized_pnl, pnl_pct, roi, entry_price,
-                    current_price, order_id, datetime.utcnow(), datetime.utcnow()
+                    current_price, order_id, datetime.now(), datetime.now()
                 ))
 
                 # 🔥 账户统计改为定时计算，避免并发更新死锁
@@ -3155,7 +3173,7 @@ class SmartTraderService:
                                     kr = cur.fetchone()
                                     if kr and kr['close_price']:
                                         close_p = float(kr['close_price'])
-                                        age_min = (datetime.utcnow().timestamp() - kr['open_time'] / 1000) / 60
+                                        age_min = (datetime.now().timestamp() - kr['open_time'] / 1000) / 60
                                         logger.warning(
                                             f"[对账] {row['symbol']} 用陈旧5m K线兜底 "
                                             f"(age={age_min:.0f}min, close={close_p}),仍记录PnL避免0值"
@@ -3221,14 +3239,24 @@ class SmartTraderService:
         except Exception as e:
             logger.error(f"[对账] 整体异常: {e}")
 
-    async def close_position(self, symbol: str, direction: str, position_size: float, reason: str = "smart_exit", price: Optional[float] = None):
+    async def close_position(
+        self,
+        symbol: str,
+        direction: str,
+        position_size: float,
+        reason: str = "smart_exit",
+        price: Optional[float] = None,
+        position_id: Optional[int] = None,
+    ):
         """
         异步平仓方法（供SmartExitOptimizer调用）
         只更新模拟单DB，不触发实盘同步。
         实盘同步由SmartExitOptimizer._close_live_positions_on_exchange()负责。
         """
         try:
-            success = self.close_position_by_side(symbol, direction, reason, sync_live=False, price=price)
+            success = self.close_position_by_side(
+                symbol, direction, reason, sync_live=False, price=price, position_id=position_id
+            )
             if success:
                 return {'success': True}
             else:
@@ -3305,7 +3333,7 @@ class SmartTraderService:
     def check_and_run_daily_optimization(self):
         """检查是否需要运行每日优化 (凌晨2点)"""
         try:
-            now = datetime.utcnow()
+            now = datetime.now()
             current_date = now.date()
 
             # 检查是否是凌晨2点且今天还没运行过

@@ -152,16 +152,28 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
                 for pos in positions:
                     pid = pos.get('id') or pos.get('position_id')
                     db = db_rows.get(pid, {}) if pid else {}
-                    pos['id'] = db.get('id')
-                    pos['stop_loss_price'] = float(db['stop_loss_price']) if db.get('stop_loss_price') else None
-                    pos['take_profit_price'] = float(db['take_profit_price']) if db.get('take_profit_price') else None
-                    pos['source'] = db.get('source')
-                    pos['entry_signal_type'] = db.get('entry_signal_type')
-                    pos['entry_score'] = db.get('entry_score')
-                    pos['created_at'] = str(db['created_at']) if db.get('created_at') else None
-                    pos['planned_close_time'] = db['planned_close_time'].isoformat() if db.get('planned_close_time') else None
-                    if db.get('margin') and not pos.get('margin'):
-                        pos['margin'] = float(db['margin'])
+                    if db:
+                        if db.get('id') is not None:
+                            pos['id'] = db['id']
+                        if db.get('stop_loss_price') is not None:
+                            pos['stop_loss_price'] = float(db['stop_loss_price'])
+                        if db.get('take_profit_price') is not None:
+                            pos['take_profit_price'] = float(db['take_profit_price'])
+                        if db.get('source') is not None:
+                            pos['source'] = db['source']
+                        if db.get('entry_signal_type') is not None:
+                            pos['entry_signal_type'] = db['entry_signal_type']
+                        if db.get('entry_score') is not None:
+                            pos['entry_score'] = db['entry_score']
+                        if db.get('created_at') is not None:
+                            pos['created_at'] = str(db['created_at'])
+                        if db.get('planned_close_time') is not None:
+                            pct = db['planned_close_time']
+                            pos['planned_close_time'] = (
+                                pct.isoformat() if hasattr(pct, 'isoformat') else str(pct)
+                            )
+                        if db.get('margin') and not pos.get('margin'):
+                            pos['margin'] = float(db['margin'])
                     # 前端期望 current_price 字段, engine 返回的叫 mark_price (Binance 实时 markPrice)
                     # 不映射的话前端永远 fallback 到 entry_price (开仓价), 价格"不动"
                     if pos.get('mark_price') and not pos.get('current_price'):

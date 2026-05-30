@@ -81,7 +81,7 @@ class BTCMomentumTrader:
 
     def record_btc_price(self, price: float):
         """主循环每分钟调用，记录BTC当前价格"""
-        now = datetime.utcnow()
+        now = datetime.now()
         self._btc_history.append((now, price))
         cutoff = now - timedelta(minutes=90)
         self._btc_history = [(t, p) for t, p in self._btc_history if t >= cutoff]
@@ -106,7 +106,7 @@ class BTCMomentumTrader:
         """
         # 冷却期
         if self._last_trigger_time:
-            elapsed = (datetime.utcnow() - self._last_trigger_time).total_seconds()
+            elapsed = (datetime.now() - self._last_trigger_time).total_seconds()
             if elapsed < self.COOLDOWN_HOURS * 3600:
                 remaining = (self.COOLDOWN_HOURS * 3600 - elapsed) / 60
                 logger.debug(f"[BTC动量] 冷却中，剩余 {remaining:.0f} 分钟")
@@ -116,7 +116,7 @@ class BTCMomentumTrader:
         if not current or len(self._btc_history) < 5:
             return None
 
-        now = datetime.utcnow()
+        now = datetime.now()
         for window in self.WINDOWS_MIN:
             cutoff = now - timedelta(minutes=window)
             past_prices = [(t, p) for t, p in self._btc_history if t <= cutoff]
@@ -169,7 +169,7 @@ class BTCMomentumTrader:
             cur.close(); conn.close()
             if not row:
                 return None
-            age_min = (datetime.utcnow().timestamp() - row['open_time'] / 1000) / 60
+            age_min = (datetime.now().timestamp() - row['open_time'] / 1000) / 60
             if age_min > 15:
                 logger.warning(f"[BTC动量] {symbol} 5m K线数据 {age_min:.0f} 分钟旧，拒绝使用")
                 return None
@@ -265,7 +265,7 @@ class BTCMomentumTrader:
 
             conn = self._get_conn()
             cur = conn.cursor()
-            planned_close_time = datetime.utcnow() + timedelta(hours=self._get_max_hold_hours())
+            planned_close_time = datetime.now() + timedelta(hours=self._get_max_hold_hours())
             cur.execute("""
                 INSERT INTO futures_positions
                     (account_id, symbol, position_side, leverage, quantity, notional_value,
@@ -408,7 +408,7 @@ class BTCMomentumTrader:
                 except:
                     pass
 
-        self._last_trigger_time = datetime.utcnow()
+        self._last_trigger_time = datetime.now()
         logger.info(f"[BTC动量] 完成，共开仓 {opened}/{len(top100)} 个交易对，4小时内不再触发")
 
     def _get_max_hold_hours(self) -> int:

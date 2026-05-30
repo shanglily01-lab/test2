@@ -913,7 +913,7 @@ async def cancel_order(
 📋 订单ID: {request.order_id}
 💡 原因: 手动取消
 
-⏰ {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}
+⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
                     notifier._send_telegram(message)
             except Exception as notify_err:
@@ -1224,8 +1224,8 @@ async def get_trading_stats(
         db_config = service.db_config
         conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor)
         cur = conn.cursor()
-        since = (datetime.utcnow() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
-        today = datetime.utcnow().strftime('%Y-%m-%d')
+        since = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+        today = datetime.now().strftime('%Y-%m-%d')
         cur.execute("""
             SELECT
                 COUNT(*)                                              AS total_trades,

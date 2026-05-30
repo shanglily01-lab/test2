@@ -849,7 +849,8 @@ class SmartExitOptimizer:
                 direction=position['direction'],
                 position_size=float(position['position_size']),
                 reason=reason,
-                price=float(current_price)
+                price=float(current_price),
+                position_id=position_id,
             )
 
             if close_result['success']:
@@ -1585,7 +1586,7 @@ class SmartExitOptimizer:
             # ============================================================
             timeout_at = position.get('timeout_at')
             if timeout_at:
-                now_utc = datetime.utcnow()
+                now_utc = datetime.now()
                 if now_utc >= timeout_at:
                     max_hold_minutes = position.get('max_hold_minutes') or 240  # fallback 4小时
                     logger.warning(

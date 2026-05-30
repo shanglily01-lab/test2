@@ -645,7 +645,7 @@ def _insert_run_record(
     所有 varchar 字段做了截断保护，避免 Data too long 错误。
     """
     elapsed = time.time() - t0
-    asof_utc = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    asof_utc = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # 截断保护 (对应 DB 列长度)
     market_sentiment_label = (market_sentiment_label or '')[:20] or None

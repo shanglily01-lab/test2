@@ -324,7 +324,7 @@ class SmartEntryExecutor:
             _mh_val = self.opt_config._read_system_setting('max_hold_hours') if self.opt_config else None
             _mh_hours = max(3, min(8, int(_mh_val or 3)))
             max_hold_minutes = _mh_hours * 60
-            timeout_at = datetime.utcnow() + timedelta(minutes=max_hold_minutes)
+            timeout_at = datetime.now() + timedelta(minutes=max_hold_minutes)
             planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
 
             # 准备数据

@@ -639,7 +639,7 @@ class BinanceDataHub:
             finally:
                 conn.close()
             if row and row.get("close_price"):
-                age_min = (datetime.utcnow().timestamp() - row["open_time"] / 1000) / 60
+                age_min = (datetime.now().timestamp() - row["open_time"] / 1000) / 60
                 if age_min <= 15:  # 15 分钟内可信
                     return Decimal(str(row["close_price"]))
         except Exception as e:
@@ -693,7 +693,7 @@ class BinanceDataHub:
                 })
             # 检查最后一根新鲜度: 5m K 线超过 15 分钟视为不可信, 让上层走 REST
             last_ms = rows[-1]["open_time"]
-            age_min = (datetime.utcnow().timestamp() - last_ms / 1000) / 60
+            age_min = (datetime.now().timestamp() - last_ms / 1000) / 60
             stale_limit_min = self._stale_limit_minutes(interval)
             if age_min > stale_limit_min:
                 logger.debug(

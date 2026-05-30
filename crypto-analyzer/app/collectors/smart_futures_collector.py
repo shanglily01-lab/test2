@@ -76,7 +76,7 @@ class SmartFuturesCollector:
         Returns:
             True表示需要采集，False表示跳过
         """
-        now = datetime.utcnow()
+        now = datetime.now()
 
         # 如果从未采集过，则需要采集
         if interval not in self.last_collection_time:
@@ -433,10 +433,10 @@ class SmartFuturesCollector:
     async def collect_interval_data(self, symbols, interval, limit):
         """并行采集单个周期的 U 本位 K 线"""
         if not symbols:
-            self.last_collection_time[interval] = datetime.utcnow()
+            self.last_collection_time[interval] = datetime.now()
             return []
         klines = await self.collect_batch(symbols, interval, limit)
-        self.last_collection_time[interval] = datetime.utcnow()
+        self.last_collection_time[interval] = datetime.now()
         return klines or []
 
     async def run_collection_cycle(self):
@@ -445,7 +445,7 @@ class SmartFuturesCollector:
         根据时间判断需要采集哪些时间周期，避免重复采集
         各周期并行采集，大幅缩短总耗时
         """
-        start_time = datetime.utcnow()
+        start_time = datetime.now()
         logger.info("=" * 60)
         logger.info("🧠 开始智能数据采集周期（并行采集策略, 仅 U 本位）")
 
@@ -473,7 +473,7 @@ class SmartFuturesCollector:
         first_run = not self.last_collection_time
         if first_run:
             logger.info("🛡️  首轮启动: 只采 5m, 其它周期等下次整点自然触发")
-            now_utc = datetime.utcnow()
+            now_utc = datetime.now()
             for itv, _ in intervals:
                 if itv != '5m':
                     self.last_collection_time[itv] = now_utc
@@ -509,7 +509,7 @@ class SmartFuturesCollector:
             logger.info(f"✓ 保存 {len(all_klines)} 条K线数据，影响 {inserted} 行")
 
         # 统计
-        elapsed = (datetime.utcnow() - start_time).total_seconds()
+        elapsed = (datetime.now() - start_time).total_seconds()
 
         logger.info(f"✓ 采集周期完成，耗时 {elapsed:.2f} 秒")
         logger.info(f"  本次采集: {', '.join(collected_intervals) if collected_intervals else '无'}")
@@ -536,7 +536,7 @@ class SmartFuturesCollector:
         if interval not in self.last_collection_time:
             return "首次"
 
-        elapsed_seconds = (datetime.utcnow() - self.last_collection_time[interval]).total_seconds()
+        elapsed_seconds = (datetime.now() - self.last_collection_time[interval]).total_seconds()
 
         if elapsed_seconds < 60:
             return f"{int(elapsed_seconds)}秒"

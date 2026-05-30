@@ -261,7 +261,7 @@ def _fetch_movers_24h(cur, top_n: int):
             SELECT symbol, MAX(open_time) AS max_t
             FROM kline_data
             WHERE timeframe='5m' AND exchange='binance_futures'
-              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 10 MINUTE) * 1000)
+              AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 10 MINUTE) * 1000)
             GROUP BY symbol
         ) latest ON k.symbol = latest.symbol
                 AND k.open_time = latest.max_t
@@ -273,8 +273,8 @@ def _fetch_movers_24h(cur, top_n: int):
                 SELECT symbol, MAX(open_time) AS max_t
                 FROM kline_data
                 WHERE timeframe='1h' AND exchange='binance_futures'
-                  AND open_time <= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
-                  AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 HOUR) * 1000)
+                  AND open_time <= (UNIX_TIMESTAMP(NOW() - INTERVAL 24 HOUR) * 1000)
+                  AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 30 HOUR) * 1000)
                 GROUP BY symbol
             ) p24t ON k2.symbol = p24t.symbol
                    AND k2.open_time = p24t.max_t
@@ -284,7 +284,7 @@ def _fetch_movers_24h(cur, top_n: int):
             SELECT symbol, SUM(quote_volume) AS qvol
             FROM kline_data
             WHERE timeframe='5m' AND exchange='binance_futures'
-              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+              AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 24 HOUR) * 1000)
             GROUP BY symbol
         ) vol ON k.symbol = vol.symbol
         WHERE p24.p24_close > 0
@@ -312,7 +312,7 @@ def _fetch_normal_movers(cur, top_n: int) -> tuple:
             SELECT symbol, MAX(open_time) AS max_t
             FROM kline_data
             WHERE timeframe='5m' AND exchange='binance_futures'
-              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 10 MINUTE) * 1000)
+              AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 10 MINUTE) * 1000)
             GROUP BY symbol
         ) latest ON k.symbol = latest.symbol
                 AND k.open_time = latest.max_t
@@ -324,8 +324,8 @@ def _fetch_normal_movers(cur, top_n: int) -> tuple:
                 SELECT symbol, MAX(open_time) AS max_t
                 FROM kline_data
                 WHERE timeframe='1h' AND exchange='binance_futures'
-                  AND open_time <= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
-                  AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 HOUR) * 1000)
+                  AND open_time <= (UNIX_TIMESTAMP(NOW() - INTERVAL 24 HOUR) * 1000)
+                  AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 30 HOUR) * 1000)
                 GROUP BY symbol
             ) p24t ON k2.symbol = p24t.symbol
                    AND k2.open_time = p24t.max_t
@@ -335,7 +335,7 @@ def _fetch_normal_movers(cur, top_n: int) -> tuple:
             SELECT symbol, SUM(quote_volume) AS qvol
             FROM kline_data
             WHERE timeframe='5m' AND exchange='binance_futures'
-              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+              AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 24 HOUR) * 1000)
             GROUP BY symbol
         ) vol ON k.symbol = vol.symbol
         WHERE p24.p24_close > 0
@@ -364,7 +364,7 @@ def _fetch_extreme_funding(cur, top_n: int):
         INNER JOIN (
             SELECT symbol, MAX(funding_time) AS max_ft
             FROM funding_rate_data
-            WHERE timestamp >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL %s MINUTE)
+            WHERE timestamp >= DATE_SUB(NOW(), INTERVAL %s MINUTE)
             GROUP BY symbol
         ) latest ON t.symbol = latest.symbol AND t.funding_time = latest.max_ft
         ORDER BY t.funding_rate {order}
@@ -677,7 +677,7 @@ def _enrich_universe(conn, universe: dict) -> None:
                 row = cur.fetchone()
                 if row and row.get('m'):
                     latest_1h = datetime.utcfromtimestamp(int(row['m']) / 1000)
-                    age_h = (datetime.utcnow() - latest_1h).total_seconds() / 3600
+                    age_h = (datetime.now() - latest_1h).total_seconds() / 3600
                     if age_h > 4.0:
                         stale_syms.append((sym, f'1h_kline_stale_{age_h:.1f}h'))
                         continue
@@ -690,7 +690,7 @@ def _enrich_universe(conn, universe: dict) -> None:
                 row = cur.fetchone()
                 if row and row.get('m'):
                     latest_1d = datetime.utcfromtimestamp(int(row['m']) / 1000)
-                    age_d = (datetime.utcnow() - latest_1d).total_seconds() / 86400
+                    age_d = (datetime.now() - latest_1d).total_seconds() / 86400
                     if age_d > 2.0:
                         stale_syms.append((sym, f'1d_kline_stale_{age_d:.1f}d'))
                         continue
@@ -709,7 +709,7 @@ def _enrich_universe(conn, universe: dict) -> None:
 
 
 def _build_global_context(conn) -> dict:
-    ctx = {'asof_utc': datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}
+    ctx = {'asof_utc': datetime.now().strftime('%Y-%m-%d %H:%M UTC')}
 
     snap = _try_market_snapshot()
     if snap:
@@ -744,7 +744,7 @@ def _build_global_context(conn) -> dict:
                     SELECT symbol, MAX(open_time) AS max_t
                     FROM kline_data
                     WHERE timeframe='5m' AND exchange='binance_futures'
-                      AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 10 MINUTE) * 1000)
+                      AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 10 MINUTE) * 1000)
                     GROUP BY symbol
                 ) latest ON k.symbol = latest.symbol
                         AND k.open_time = latest.max_t
@@ -756,8 +756,8 @@ def _build_global_context(conn) -> dict:
                         SELECT symbol, MAX(open_time) AS max_t
                         FROM kline_data
                         WHERE timeframe='1h' AND exchange='binance_futures'
-                          AND open_time <= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
-                          AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 HOUR) * 1000)
+                          AND open_time <= (UNIX_TIMESTAMP(NOW() - INTERVAL 24 HOUR) * 1000)
+                          AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 30 HOUR) * 1000)
                         GROUP BY symbol
                     ) p24t ON k2.symbol = p24t.symbol
                            AND k2.open_time = p24t.max_t
@@ -784,7 +784,7 @@ def _describe_market_regime(conn) -> str:
                     SELECT symbol, MAX(open_time) AS max_t
                     FROM kline_data
                     WHERE timeframe='5m' AND exchange='binance_futures'
-                      AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 10 MINUTE) * 1000)
+                      AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 10 MINUTE) * 1000)
                     GROUP BY symbol
                 ) latest ON k.symbol = latest.symbol
                         AND k.open_time = latest.max_t
@@ -796,8 +796,8 @@ def _describe_market_regime(conn) -> str:
                         SELECT symbol, MAX(open_time) AS max_t
                         FROM kline_data
                         WHERE timeframe='1h' AND exchange='binance_futures'
-                          AND open_time <= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
-                          AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 HOUR) * 1000)
+                          AND open_time <= (UNIX_TIMESTAMP(NOW() - INTERVAL 24 HOUR) * 1000)
+                          AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 30 HOUR) * 1000)
                         GROUP BY symbol
                     ) p24t ON k2.symbol = p24t.symbol
                            AND k2.open_time = p24t.max_t
@@ -970,7 +970,7 @@ def _get_current_price(conn, symbol: str) -> Optional[float]:
                     open_dt = datetime.strptime(open_dt, '%Y-%m-%d %H:%M:%S')
                 except Exception:
                     return None
-            age = (datetime.utcnow() - open_dt).total_seconds()
+            age = (datetime.now() - open_dt).total_seconds()
             if age > 900:
                 logger.warning(
                     f"[DeepSeek探索] {symbol} L1 失败 L2 兜底 5m K线也过时 "
@@ -1138,8 +1138,9 @@ def _open_simulated_position(
             sl_price = round(price * (1 + EXPLORE_SL_PCT / 100), 8)
             tp_price = round(price * (1 - EXPLORE_TP_PCT / 100), 8)
 
-        planned_close = datetime.utcnow() + timedelta(hours=EXPLORE_HOLD_HOURS)
+        planned_close = datetime.now() + timedelta(hours=EXPLORE_HOLD_HOURS)
         max_hold_minutes = EXPLORE_HOLD_HOURS * 60
+        open_ts = datetime.now()
 
         entry_reason = (catalyst or 'deepseek_explore')[:180]
         entry_reason += f" | SL={EXPLORE_SL_PCT}% TP={EXPLORE_TP_PCT}% lev={EXPLORE_LEVERAGE}x hold={EXPLORE_HOLD_HOURS}h"
@@ -1160,7 +1161,7 @@ def _open_simulated_position(
                         %s,%s,
                         %s,%s,
                         %s,%s,
-                        'open', %s, %s, %s, NOW(),
+                        'open', %s, %s, %s, %s,
                         0, 0)
                 """,
                 (
@@ -1170,6 +1171,7 @@ def _open_simulated_position(
                     EXPLORE_SL_PCT, EXPLORE_TP_PCT,
                     max_hold_minutes, planned_close,
                     EXPLORE_SOURCE, 'deepseek_explore', entry_reason,
+                    open_ts,
                 ),
             )
             position_id = cur.lastrowid
@@ -1342,7 +1344,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 cur.execute(
                     "SELECT COUNT(DISTINCT symbol) AS cnt FROM kline_data "
                     "WHERE timeframe='5m' AND exchange='binance_futures' "
-                    "AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 10 MINUTE) * 1000)"
+                    "AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 10 MINUTE) * 1000)"
                 )
                 fresh_rows = cur.fetchone() or {}
                 cur.execute(
@@ -1352,7 +1354,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 total_rows = cur.fetchone() or {}
                 cur.execute(
                     "SELECT COUNT(*) AS cnt FROM funding_rate_data "
-                    "WHERE timestamp >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE)"
+                    "WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 30 MINUTE)"
                 )
                 fresh_funding = cur.fetchone() or {}
                 logger.warning(

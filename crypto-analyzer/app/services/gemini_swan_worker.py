@@ -137,7 +137,7 @@ def _fetch_movers_24h(cur, top_n: int):
         FROM price_stats_24h
         WHERE quote_volume_24h >= %s
           AND change_24h IS NOT NULL
-          AND updated_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 MINUTE)
+          AND updated_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)
         ORDER BY change_24h {order}
         LIMIT %s
     """
@@ -159,7 +159,7 @@ def _fetch_extreme_funding(cur, top_n: int):
         INNER JOIN (
             SELECT symbol, MAX(funding_time) AS max_ft
             FROM funding_rate_data
-            WHERE timestamp >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 30 MINUTE)
+            WHERE timestamp >= DATE_SUB(NOW(), INTERVAL 30 MINUTE)
             GROUP BY symbol
         ) latest ON t.symbol = latest.symbol AND t.funding_time = latest.max_ft
         ORDER BY t.funding_rate {order}

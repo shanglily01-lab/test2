@@ -644,7 +644,7 @@ async def get_current_price(symbol: str, force_refresh: bool = False, engine: Pa
                 return {
                     "symbol": symbol,
                     "price": price,
-                    "timestamp": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+                    "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                     "source": "realtime_api"
                 }
         
@@ -661,7 +661,7 @@ async def get_current_price(symbol: str, force_refresh: bool = False, engine: Pa
         return {
             "symbol": symbol,
             "price": float(price),
-            "timestamp": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             "source": "realtime_or_cache"
         }
     except HTTPException:
@@ -694,7 +694,7 @@ async def get_batch_prices(request: BatchPricesRequest, engine: PaperTradingEngi
                 price = engine.get_current_price(symbol, use_realtime=False)
                 result[symbol] = {
                     "price": float(price) if price else 0,
-                    "timestamp": datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+                    "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
             except Exception as e:
                 logger.warning(f"获取{symbol}价格失败: {e}")
@@ -1117,7 +1117,7 @@ async def get_ema_signals(limit: int = 10):
                                             'signal_type': 'BUY',
                                             'timeframe': '15m',
                                             'message': line.strip(),
-                                            'timestamp': datetime.utcnow().isoformat()
+                                            'timestamp': datetime.now().isoformat()
                                         })
 
                                         if len(signals) >= limit:

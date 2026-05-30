@@ -444,7 +444,7 @@ async def get_ema_signals(
                     ema_config, volume_ratio, volume_type, price_change_pct, ema_distance_pct,
                     created_at
                 FROM ema_signals
-                WHERE timestamp >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL :hours HOUR)
+                WHERE timestamp >= DATE_SUB(NOW(), INTERVAL :hours HOUR)
             """
             params = {'limit': limit, 'hours': hours}
         else:

@@ -44,7 +44,7 @@ class CacheUpdateService:
             symbols = self.config.get('symbols', ['BTC/USDT', 'ETH/USDT'])
 
         # logger.info(f"🔄 开始更新缓存 - {len(symbols)} 个币种")  # 减少日志输出
-        start_time = datetime.utcnow()
+        start_time = datetime.now()
 
         try:
             # 并行更新各个缓存表
@@ -65,9 +65,9 @@ class CacheUpdateService:
             success_count = sum(1 for r in results if not isinstance(r, Exception))
             failed_count = len(results) - success_count
 
-            elapsed = (datetime.utcnow() - start_time).total_seconds()
+            elapsed = (datetime.now() - start_time).total_seconds()
             # 只在有失败时输出日志，或者每小时输出一次
-            if failed_count > 0 or datetime.utcnow().minute == 0:
+            if failed_count > 0 or datetime.now().minute == 0:
                 logger.info(
                     f"✅ 缓存更新完成 - 成功: {success_count}, 失败: {failed_count}, "
                     f"耗时: {elapsed:.2f}秒"
@@ -126,7 +126,7 @@ class CacheUpdateService:
                             SELECT symbol, MAX(open_time) AS max_t
                             FROM kline_data
                             WHERE timeframe='5m' AND exchange='binance_futures'
-                              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 MINUTE) * 1000)
+                              AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 30 MINUTE) * 1000)
                             GROUP BY symbol
                         ) cap ON k.symbol=cap.symbol AND k.open_time=cap.max_t AND k.timeframe='5m'
                     ) latest5m ON p.symbol = latest5m.symbol
@@ -138,8 +138,8 @@ class CacheUpdateService:
                             SELECT symbol, MAX(open_time) AS max_t
                             FROM kline_data
                             WHERE timeframe='1h' AND exchange='binance_futures'
-                              AND open_time <= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
-                              AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 HOUR) * 1000)
+                              AND open_time <= (UNIX_TIMESTAMP(NOW() - INTERVAL 24 HOUR) * 1000)
+                              AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 30 HOUR) * 1000)
                             GROUP BY symbol
                         ) cap ON k.symbol=cap.symbol AND k.open_time=cap.max_t AND k.timeframe='1h'
                     ) ago24h ON p.symbol = ago24h.symbol
@@ -152,7 +152,7 @@ class CacheUpdateService:
                                SUM(quote_volume) AS qvol
                         FROM kline_data
                         WHERE timeframe='5m' AND exchange='binance_futures'
-                          AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 24 HOUR) * 1000)
+                          AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 24 HOUR) * 1000)
                         GROUP BY symbol
                     ) stat24h ON p.symbol = stat24h.symbol
                     SET p.current_price   = COALESCE(latest5m.cur_price, p.current_price),
@@ -187,7 +187,7 @@ class CacheUpdateService:
                             WHEN latest5m.cur_price IS NOT NULL AND ago24h.p24 IS NOT NULL AND ago24h.p24 > 0
                                  AND (latest5m.cur_price - ago24h.p24) / ago24h.p24 * 100 < -1 THEN 'down'
                             ELSE 'sideways' END,
-                        p.updated_at = UTC_TIMESTAMP()
+                        p.updated_at = NOW()
                 """)
                 affected = cur.rowcount
                 logger.info(f"[price_stats] 批量更新完成: {affected} 行")
@@ -199,13 +199,13 @@ class CacheUpdateService:
                          volume_24h, quote_volume_24h, updated_at)
                     SELECT
                         k.symbol, k.close_price, k.high_price, k.low_price,
-                        k.volume, k.quote_volume, UTC_TIMESTAMP()
+                        k.volume, k.quote_volume, NOW()
                     FROM kline_data k
                     INNER JOIN (
                         SELECT symbol, MAX(open_time) AS max_t
                         FROM kline_data
                         WHERE timeframe='5m' AND exchange='binance_futures'
-                          AND open_time >= (UNIX_TIMESTAMP(UTC_TIMESTAMP() - INTERVAL 30 MINUTE) * 1000)
+                          AND open_time >= (UNIX_TIMESTAMP(NOW() - INTERVAL 30 MINUTE) * 1000)
                         GROUP BY symbol
                     ) cap ON k.symbol=cap.symbol AND k.open_time=cap.max_t AND k.timeframe='5m'
                     LEFT JOIN price_stats_24h p ON k.symbol = p.symbol
@@ -247,7 +247,7 @@ class CacheUpdateService:
                 else:
                     # 回退到从K线数据计算
                     # 获取24小时前的价格
-                    past_time = datetime.utcnow() - timedelta(hours=24)
+                    past_time = datetime.now() - timedelta(hours=24)
                     past_kline = self.db_service.get_kline_at_time(symbol, '5m', past_time)
                     price_24h_ago = float(past_kline.close_price) if past_kline else current_price
 
@@ -255,7 +255,7 @@ class CacheUpdateService:
                     # 注意：数据库存储的是本地时间（UTC+8），不是UTC时间
                     klines_24h = self.db_service.get_klines(
                         symbol, '5m',  # 使用5分钟K线
-                        start_time=datetime.utcnow() - timedelta(hours=24),  # 使用本地时间
+                        start_time=datetime.now() - timedelta(hours=24),  # 使用本地时间
                         limit=288  # 5分钟 * 288 = 24小时
                     )
 
@@ -269,7 +269,7 @@ class CacheUpdateService:
                         )
                         # 只取最近24小时的数据
                         if klines_24h:
-                            cutoff_time = datetime.utcnow() - timedelta(hours=24)
+                            cutoff_time = datetime.now() - timedelta(hours=24)
                             klines_24h = [k for k in klines_24h if k.timestamp >= cutoff_time]
                     
                     # 如果仍然没有数据，使用最新价格作为默认值

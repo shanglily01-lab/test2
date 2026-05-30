@@ -52,7 +52,7 @@ def load_klines(symbol: str, days: int = DAYS) -> Optional[pd.DataFrame]:
     try:
         conn = get_conn()
         cur = conn.cursor()
-        since_ms = int((datetime.utcnow() - timedelta(days=days)).timestamp() * 1000)
+        since_ms = int((datetime.now() - timedelta(days=days)).timestamp() * 1000)
         cur.execute("""
             SELECT open_time, open_price, high_price, low_price, close_price, volume
             FROM kline_data

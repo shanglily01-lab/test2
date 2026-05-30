@@ -499,7 +499,7 @@ class FuturesTradingEngine:
                         float(limit_fee), float(Decimal('0.0004')),
                         float(limit_stop_loss_price) if limit_stop_loss_price else None,
                         float(limit_take_profit_price) if limit_take_profit_price else None,
-                        source, entry_signal_type, signal_id, strategy_id, datetime.utcnow()
+                        source, entry_signal_type, signal_id, strategy_id, datetime.now()
                     ))
                     
                     # 更新总权益（限价单时还没有持仓，未实现盈亏为0）
@@ -683,7 +683,7 @@ class FuturesTradingEngine:
                 float(stop_loss_pct) if stop_loss_pct else None,
                 float(take_profit_pct) if take_profit_pct else None,
                 entry_ema_diff, entry_signal_type, entry_score, entry_reason,
-                datetime.utcnow(), source, signal_id, strategy_id
+                datetime.now(), source, signal_id, strategy_id
             ))
 
             position_id = cursor.lastrowid
@@ -721,7 +721,7 @@ class FuturesTradingEngine:
                 float(entry_price), float(quantity), float(quantity),
                 float(margin_required), float(notional_value), float(notional_value),
                 float(fee), float(fee_rate),
-                float(entry_price), datetime.utcnow(),
+                float(entry_price), datetime.now(),
                 source, signal_id, strategy_id
             ))
 
@@ -746,7 +746,7 @@ class FuturesTradingEngine:
                 account_id, order_id, position_id, trade_id,
                 symbol, side, float(entry_price), float(quantity), float(notional_value),
                 leverage, float(margin_required), float(fee), float(fee_rate),
-                float(entry_price), datetime.utcnow()
+                float(entry_price), datetime.now()
             ))
 
             # 9. 更新账户余额
@@ -779,7 +779,7 @@ class FuturesTradingEngine:
             self.connection.commit()
 
             # 记录当前时间（本地时间）
-            current_time_str = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+            current_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             # 根据交易对确定数量显示精度
             qty_precision = get_quantity_precision(symbol)
             logger.info(
@@ -1010,7 +1010,7 @@ class FuturesTradingEngine:
                 float(current_price), float(close_quantity), float(close_quantity),
                 float(close_value), float(close_value),
                 float(fee), float(fee_rate),
-                float(current_price), datetime.utcnow(),
+                float(current_price), datetime.now(),
                 float(realized_pnl), float(pnl_pct),
                 'strategy', reason
             ))
@@ -1039,7 +1039,7 @@ class FuturesTradingEngine:
                 symbol, side, float(current_price), float(close_quantity), float(close_value),
                 leverage, float(position_margin), float(fee), float(fee_rate),
                 float(realized_pnl), float(pnl_pct), float(roi),
-                float(entry_price), float(current_price), datetime.utcnow()
+                float(entry_price), float(current_price), datetime.now()
             ))
 
             # 7. 更新持仓状态
@@ -1073,7 +1073,7 @@ class FuturesTradingEngine:
                     realized_pnl = %s, notes = %s,
                     mark_price = %s, unrealized_pnl_pct = %s
                 WHERE id = %s""",
-                (datetime.utcnow(), float(realized_pnl), notes_reason,
+                (datetime.now(), float(realized_pnl), notes_reason,
                  float(current_price), profit_pct_at_close, position_id)
             )
 
@@ -1161,7 +1161,7 @@ class FuturesTradingEngine:
                         open_time = position['open_time']
                         if isinstance(open_time, str):
                             open_time = datetime.strptime(open_time, '%Y-%m-%d %H:%M:%S')
-                        hold_duration = datetime.utcnow() - open_time
+                        hold_duration = datetime.now() - open_time
                         hours, remainder = divmod(hold_duration.total_seconds(), 3600)
                         minutes = remainder // 60
                         if hours >= 24:

@@ -27,7 +27,7 @@ def mkconn():
                            cursorclass=pymysql.cursors.DictCursor, autocommit=True)
 
 def main():
-    since_ms = int((datetime.utcnow() - timedelta(days=8)).timestamp() * 1000)
+    since_ms = int((datetime.now() - timedelta(days=8)).timestamp() * 1000)
 
     c = mkconn(); cur = c.cursor()
     cur.execute(
