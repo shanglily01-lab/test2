@@ -1768,7 +1768,7 @@ class SmartExitOptimizer:
     # ════════════════════════════════════════════════════════════════
     # Gemini 实盘持仓顾问 入口 (2026-05-17)
     # 外部 (smart_trader_service 主循环) 每 15 min 调一次
-    # 内部 GeminiPositionAdvisor.tick() 自带 per-position 1h 节流
+    # 内部 GeminiPositionAdvisor.tick(): AI 单 4h+ 每 15min, 非 AI 3h+ 每 1h
     # ════════════════════════════════════════════════════════════════
 
     def gemini_advisor_tick(self) -> dict:

@@ -3704,8 +3704,7 @@ class SmartTraderService:
                         logger.warning(f"[对账] 异常: {_re}")
                     last_reconcile = now
 
-                # 0.61. Gemini 实盘持仓顾问 (每 15 min,内部 per-position 1h 节流)
-                # 默认 OFF (system_settings.gemini_position_advisor_enabled),用户开启后才动作
+                # 0.61. Gemini 持仓顾问 (每 15 min; AI 模拟单 4h+ 每 15min, 其他需开关)
                 if (now - last_gemini_advisor).total_seconds() >= 900:
                     try:
                         if self.smart_exit_optimizer:

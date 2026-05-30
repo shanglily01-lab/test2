@@ -2,15 +2,15 @@
 Gemini 持仓顾问 (2026-05-26 改为模拟仓)
 
 功能:
-  - 扫描 futures_positions 中 U本位
-    status=open 且持仓 >= 3 小时 的模拟单
-  - 喂给 Gemini: 持仓数据 + 近 4h 15m K线 + Big4 当前评分
+  - AI 模拟单 (gemini_/deepseek_ 探索/预测/战术): 持仓 >= 4h 后每 15min 问 Gemini
+  - 其他模拟单: 持仓 >= 3h 且开关开启时, 每 1h 问一次
   - Gemini 三选一: hold / observe / sell
-  - "sell" 关闭模拟仓，同步机制自动同步到实盘平仓
-  - 每 1 小时检查一次 (内部去重,同 position 1h 内不重复问)
+  - "sell" 关闭模拟仓; 若有对应实盘则同步平仓 (需 live_close_enabled)
+  - smart_trader 主循环每 15min 调 tick()
 
 开关:
-  system_settings.gemini_position_advisor_enabled = 1 启用 (默认 0)
+  - AI 模块顾问: 持仓满 4h 后始终运行 (不依赖开关)
+  - 非 AI 模拟单: system_settings.gemini_position_advisor_enabled = 1
 """
 from __future__ import annotations
 
@@ -19,16 +19,22 @@ import json
 import os
 import time
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pymysql
 import pymysql.cursors
 from loguru import logger
 
+from app.services.ai_explore_prompt import (
+    AI_ADVISOR_CHECK_INTERVAL_S,
+    AI_ADVISOR_MIN_HOLD_HOURS,
+)
+from app.services.position_sl_tp_monitor import _is_ai_hard_sltp_source
+
 
 GEMINI_TIMEOUT_MS = 180_000
-PER_POSITION_INTERVAL_S = 3600  # 同 position 1 小时内不重复问
-MIN_HOLD_HOURS = 3              # 持仓不满 3h 不查
+PER_POSITION_INTERVAL_S = 3600  # 非 AI: 同 position 1 小时内不重复问
+MIN_HOLD_HOURS = 3              # 非 AI: 持仓不满 3h 不查
 GEMINI_PER_CALL_DELAY_S = 1.0   # 防 Gemini rate limit
 
 
@@ -38,8 +44,17 @@ class GeminiPositionAdvisor:
     def __init__(self, db_config: dict):
         self.db_config = db_config
         self._client = None
-        # {(account_id, symbol, side): last_check_unix_ts}
-        self._last_check_ts: Dict[tuple, float] = {}
+        # {position_id: last_check_unix_ts}
+        self._last_check_ts: Dict[int, float] = {}
+
+    def _advisor_rules(self, source: str) -> Optional[Tuple[float, int]]:
+        """返回 (min_hold_hours, check_interval_s); None 表示本单不纳入顾问."""
+        src = source or ''
+        if _is_ai_hard_sltp_source(src):
+            return (AI_ADVISOR_MIN_HOLD_HOURS, AI_ADVISOR_CHECK_INTERVAL_S)
+        if not self._is_enabled():
+            return None
+        return (MIN_HOLD_HOURS, PER_POSITION_INTERVAL_S)
 
     # ────────────────────────────────────────────────────────
     # 开关读取
@@ -102,9 +117,10 @@ class GeminiPositionAdvisor:
 
     def get_eligible_positions(self) -> List[Dict]:
         """
-        查模拟仓 (futures_positions) U本位 OPEN >= 3h 的所有单。
-        只查 account_id=2 (U本位模拟盘)。
+        查模拟仓 (futures_positions) U本位 OPEN 单。
+        只查 account_id=2; tick() 内再按 AI/非 AI 规则过滤持仓时长。
         """
+        min_hours = min(MIN_HOLD_HOURS, AI_ADVISOR_MIN_HOLD_HOURS)
         try:
             conn = self._get_conn()
             cur = conn.cursor()
@@ -119,7 +135,7 @@ class GeminiPositionAdvisor:
                   AND TIMESTAMPDIFF(HOUR, open_time, NOW()) >= %s
                 ORDER BY open_time ASC
                 """,
-                (MIN_HOLD_HOURS,)
+                (min_hours,)
             )
             rows = cur.fetchall()
             cur.close(); conn.close()
@@ -446,29 +462,36 @@ Output ONLY a single valid JSON object, no markdown fence:
 
     def tick(self) -> dict:
         """
-        外部每 15 min 调一次,内部按 PER_POSITION_INTERVAL_S 节流。
+        外部每 15 min 调一次; AI 单按 15min/position, 非 AI 按 1h/position 节流。
         Returns 统计 dict {'evaluated', 'hold', 'observe', 'sell', 'skipped', 'errors'}
         """
         stats = {'evaluated': 0, 'hold': 0, 'observe': 0, 'sell': 0,
                  'skipped': 0, 'errors': 0, 'closed': 0}
 
-        if not self._is_enabled():
-            return stats  # OFF,静默
-
         positions = self.get_eligible_positions()
         if not positions:
             return stats
 
-        logger.info(f"[Gemini顾问] tick 开始,候选 {len(positions)} 模拟单 >= {MIN_HOLD_HOURS}h")
+        logger.info(f"[Gemini顾问] tick 开始,候选 {len(positions)} 模拟单")
 
         now = time.time()
         for pos in positions:
-            key = (pos['account_id'], pos['symbol'], pos['position_side'])
-            last = self._last_check_ts.get(key)
-            if last and (now - last) < PER_POSITION_INTERVAL_S:
+            rules = self._advisor_rules(pos.get('source') or '')
+            if not rules:
                 stats['skipped'] += 1
                 continue
-            self._last_check_ts[key] = now
+            min_hold_h, interval_s = rules
+            hold_h = float(pos.get('hold_hours') or 0)
+            if hold_h < min_hold_h:
+                stats['skipped'] += 1
+                continue
+
+            pid = int(pos['id'])
+            last = self._last_check_ts.get(pid)
+            if last and (now - last) < interval_s:
+                stats['skipped'] += 1
+                continue
+            self._last_check_ts[pid] = now
 
             try:
                 current_price = self._get_current_price(pos['symbol'])

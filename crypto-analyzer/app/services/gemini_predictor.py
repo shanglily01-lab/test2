@@ -36,6 +36,11 @@ from app.services.ai_big4_prompt import (
     enrich_global_context,
     market_regime_from_btc_change,
 )
+from app.services.ai_explore_prompt import (
+    AI_POSITION_HOLD_HOURS,
+    AI_POSITION_SL_PCT,
+    AI_POSITION_TP_PCT,
+)
 from app.services.ai_predict_schedule import (
     GEMINI_PREDICT_NEXT_DUE_KEY,
     PREDICT_ROUND_INTERVAL_HOURS,
@@ -91,9 +96,9 @@ def _try_snapshot() -> Optional[Dict]:
 # ============================================================
 PREDICT_MARGIN_USD = 500.0
 PREDICT_LEVERAGE = 5
-PREDICT_HOLD_HOURS = 6                         # 6 小时
-PREDICT_SL_PCT = 4.0                        # 硬 SL 4%
-PREDICT_TP_PCT = 6.0                        # 硬 TP 6%
+PREDICT_HOLD_HOURS = AI_POSITION_HOLD_HOURS
+PREDICT_SL_PCT = AI_POSITION_SL_PCT
+PREDICT_TP_PCT = AI_POSITION_TP_PCT
 PREDICT_CONFIDENCE_THRESHOLD = 0.60
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'gemini_predict'
@@ -452,7 +457,7 @@ def _has_open_position(conn, symbol: str) -> bool:
 # ============================================================
 PREDICT_PROMPT_TEMPLATE = """你是超级交易大师. 预测每个币种在未来 6 小时内的方向走势概率.
 
-持仓期 6 小时 (6h), SL=4%, TP=6%, 杠杆 5x, 不做中途干预.
+持仓期 6 小时 (6h), SL=4%, TP=6%, 杠杆 5x; 前 4h 仅硬 SL/TP, 满 4h 后 Gemini 顾问每 15min 可建议平仓.
 
 选中的币种需要能在 6 小时内到达 6% 的涨幅/跌幅空间, 或至少抗住 6 小时不跌/不涨过 4%.
 不要选"只波动 2-3%"的标的.

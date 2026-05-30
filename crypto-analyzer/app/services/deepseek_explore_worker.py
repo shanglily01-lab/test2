@@ -8,9 +8,9 @@ DeepSeek 探索 worker (v1 — 2026-05-28)
   - account_id = 2 (U本位模拟盘)
   - margin    = 500U
   - leverage  = 5x
-  - hold     = 4 小时
-  - SL       = 3%
-  - TP       = 5%
+  - hold     = 6 小时
+  - SL       = 4%
+  - TP       = 6%
 
 闸门:
   - system_settings.deepseek_explore_enabled (默认 0, 关时早返回)
@@ -34,6 +34,9 @@ from app.services.ai_big4_prompt import (
     enrich_global_context,
 )
 from app.services.ai_explore_prompt import (
+    AI_POSITION_HOLD_HOURS,
+    AI_POSITION_SL_PCT,
+    AI_POSITION_TP_PCT,
     EXPLORE_LLM_MAX_OUTPUT_TOKENS,
     EXPLORE_MIN_INTERVAL_HOURS,
     build_explore_prompt,
@@ -120,9 +123,9 @@ def _try_position_stats(source: str, account_id: int = 2) -> Optional[Dict]:
 # ============================================================
 EXPLORE_MARGIN_USD = 500.0
 EXPLORE_LEVERAGE = 5
-EXPLORE_HOLD_HOURS = 4
-EXPLORE_SL_PCT = 3.0
-EXPLORE_TP_PCT = 5.0
+EXPLORE_HOLD_HOURS = AI_POSITION_HOLD_HOURS
+EXPLORE_SL_PCT = AI_POSITION_SL_PCT
+EXPLORE_TP_PCT = AI_POSITION_TP_PCT
 EXPLORE_CONFIDENCE_THRESHOLD = 0.5
 EXPLORE_ACCOUNT_ID = 2
 EXPLORE_SOURCE = DEEPSEEK_SOURCE

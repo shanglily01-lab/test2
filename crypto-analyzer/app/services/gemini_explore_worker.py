@@ -2,15 +2,15 @@
 Gemini 探索 worker (v3 — 2026-05-21 长持仓版)
 
 每 4h 调用 Google Gemini 检测加密货币短时方向异动, 根据 verdict 直接开模拟单。
-现在改为4小时持仓模式: 持仓 4 小时, SL=3%, TP=5%, 跳过一切智能平仓, 只走硬 SL/TP。
+持仓 6 小时, SL=4%, TP=6%; 前 4h 仅硬 SL/TP, 满 4h 后 Gemini 顾问每 15min 问询是否持有。
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
   - margin    = 500U
   - leverage  = 5x
-  - hold     = 4 小时
-  - SL       = 3%
-  - TP       = 5%
+  - hold     = 6 小时
+  - SL       = 4%
+  - TP       = 6%
 
 闸门:
   - system_settings.gemini_explore_enabled (默认 0, 关时早返回)
@@ -34,6 +34,9 @@ from app.services.ai_big4_prompt import (
     enrich_global_context,
 )
 from app.services.ai_explore_prompt import (
+    AI_POSITION_HOLD_HOURS,
+    AI_POSITION_SL_PCT,
+    AI_POSITION_TP_PCT,
     EXPLORE_MIN_INTERVAL_HOURS,
     build_explore_prompt,
     explore_catalyst_technical_ok,
@@ -109,9 +112,9 @@ def _try_position_stats(source: str, account_id: int = 2) -> Optional[Dict]:
 # ============================================================
 EXPLORE_MARGIN_USD = 500.0
 EXPLORE_LEVERAGE = 5
-EXPLORE_HOLD_HOURS = 4                         # 4 小时
-EXPLORE_SL_PCT = 3.0
-EXPLORE_TP_PCT = 5.0
+EXPLORE_HOLD_HOURS = AI_POSITION_HOLD_HOURS
+EXPLORE_SL_PCT = AI_POSITION_SL_PCT
+EXPLORE_TP_PCT = AI_POSITION_TP_PCT
 EXPLORE_CONFIDENCE_THRESHOLD = 0.5      # 校准表 0.50+ 可开
 EXPLORE_ACCOUNT_ID = 2
 EXPLORE_SOURCE = 'gemini_explore'
@@ -917,7 +920,7 @@ def _describe_market_regime(conn) -> str:
 def _call_gemini_explore(
     universe: dict, global_ctx: dict, historical_stats: dict,
 ) -> Tuple[Optional[dict], Optional[str]]:
-    """调用 Gemini — 按 4 小时持仓趋势判断, 多周期 K 线叙事 + Big4 + 技术指标 + 历史表现."""
+    """调用 Gemini — 按 6 小时持仓趋势判断, 多周期 K 线叙事 + Big4 + 技术指标 + 历史表现."""
     if not GEMINI_API_KEY:
         logger.error("[Gemini探索] GEMINI_API_KEY 未设置")
         return None, "GEMINI_API_KEY 未设置"
@@ -1535,12 +1538,12 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
     """跑一轮 Gemini 探索 (v2 优化版). 成功返回 run_id, 失败/跳过返回 None.
 
     新增/修改:
-      1. SL 3%, TP 5%, 杠杆 5x
+      1. SL 4%, TP 6%, 杠杆 5x
       2. 候选池加入中等波动币 (NORMAL_MOVER)
       3. K 线用自然语言描述替代纯数组
       4. 新 prompt: 去天鹅化 + Few-shot + 置信度校准 + 鼓励空 verdicts
       5+6. 传递历史表现数据给 Gemini
-      7. SL 缓冲: 硬 SL 3% + 入场保护 30min
+      7. SL 缓冲: 硬 SL 4% + 入场保护 30min
       8. 置信度判定沿用 EXPLORE_CONFIDENCE_THRESHOLD=0.6
       9+10. 新增 _get_historical_stats 并注入 prompt
     """
@@ -1825,7 +1828,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            # 5i. 开仓 (SL 3%, 杠杆 5x)
+            # 5i. 开仓 (SL 4%, 杠杆 5x)
             position_id = _open_simulated_position(conn, symbol, side, price, catalyst)
             if position_id is None:
                 verdict_rows.append((
