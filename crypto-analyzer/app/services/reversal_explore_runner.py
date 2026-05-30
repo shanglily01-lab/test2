@@ -31,6 +31,11 @@ from app.services.gemini_explore_worker import (
 )
 from app.services.explore_prepared_bundle import get_explore_prepared_bundle
 from app.services.ai_big4_prompt import big4_conflict_risk_note
+from app.services.ai_tactical_explore_schedule import (
+    tactical_claim_next_slot,
+    tactical_next_due_key,
+    tactical_round_is_due,
+)
 
 # 各 teacher 独立锁
 _locks: Dict[str, threading.Lock] = {}
@@ -317,27 +322,34 @@ def run_tactical_explore_round(
 
     t0 = time.time()
     asof_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    manual = triggered_by == "manual"
 
-    if triggered_by != "manual":
+    if not manual:
         try:
             with _connect() as conn_chk:
-                with conn_chk.cursor() as cur:
-                    cur.execute(
-                        f"SELECT MAX(asof_utc) AS last_run FROM {cfg.runs_table} "
-                        f"WHERE status='ok'"
-                    )
-                    row = cur.fetchone()
-                    if row and row.get("last_run"):
-                        elapsed_h = (asof_utc - row["last_run"]).total_seconds() / 3600
-                        if elapsed_h < cfg.min_interval_hours:
-                            logger.info(
-                                f"[{cfg.log_tag}] 距上次成功 {elapsed_h:.1f}h "
-                                f"< {cfg.min_interval_hours}h, 跳过"
-                            )
-                            lock.release()
-                            return None
+                due, due_reason = tactical_round_is_due(
+                    conn_chk,
+                    runs_table=cfg.runs_table,
+                    next_due_key=tactical_next_due_key(cfg.source),
+                    now=asof_utc,
+                    manual=False,
+                    log_tag=cfg.log_tag,
+                )
+                if not due:
+                    logger.info(f"[{cfg.log_tag}] {due_reason}, 跳过")
+                    lock.release()
+                    return None
+                tactical_claim_next_slot(
+                    conn_chk,
+                    next_due_key=tactical_next_due_key(cfg.source),
+                    now=asof_utc,
+                    log_tag=cfg.log_tag,
+                )
+                conn_chk.commit()
         except Exception as e:
-            logger.warning(f"[{cfg.log_tag}] 防重检查失败, 继续: {e}")
+            logger.warning(f"[{cfg.log_tag}] 调度检查失败, 保守跳过: {e}")
+            lock.release()
+            return None
 
     logger.info(f"[{cfg.log_tag}] === 一轮开始 ({triggered_by}) ===")
     run_id = None
@@ -413,6 +425,8 @@ def run_tactical_explore_round(
         verdict_rows: List[Tuple] = []
 
         for v in verdicts:
+            if not isinstance(v, dict):
+                continue
             symbol = (v.get("symbol") or "").upper()
             category = (v.get("category") or "skip").lower()
             try:

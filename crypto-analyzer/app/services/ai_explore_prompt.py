@@ -153,8 +153,25 @@ def parse_explore_llm_json(text: str, tag: str = "Explore") -> Tuple[Optional[di
             return None, err
         logger.warning(f"[{tag}] JSON 被截断, 已抢救 {len(parsed.get('verdicts') or [])} 条 verdict: {e}")
 
-    if not isinstance(parsed.get("verdicts"), list):
+    # LLM 偶发返回顶层数组 [{symbol,...}, ...] 而非 {summary_zh, verdicts}
+    if isinstance(parsed, list):
+        logger.warning(f"[{tag}] JSON 顶层为 array, 已包装为 verdicts ({len(parsed)} 项)")
+        parsed = {"summary_zh": "", "verdicts": parsed}
+    elif not isinstance(parsed, dict):
+        logger.error(f"[{tag}] JSON 顶层类型异常: {type(parsed).__name__}")
+        return None, f"unexpected JSON type: {type(parsed).__name__}"
+
+    raw_verdicts = parsed.get("verdicts")
+    if isinstance(raw_verdicts, list):
+        verdicts = [v for v in raw_verdicts if isinstance(v, dict)]
+        dropped = len(raw_verdicts) - len(verdicts)
+        if dropped:
+            logger.warning(f"[{tag}] 丢弃 {dropped} 条非 object verdict")
+        parsed["verdicts"] = verdicts
+    else:
         parsed["verdicts"] = []
+    if "summary_zh" not in parsed:
+        parsed["summary_zh"] = ""
     return parsed, err
 
 

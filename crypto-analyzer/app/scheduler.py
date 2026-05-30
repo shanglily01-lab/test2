@@ -1348,7 +1348,7 @@ class UnifiedDataScheduler:
         except Exception:
             pass
         logger.info(
-            "  ✓ tactical_explore (10 jobs) - 4h 周期 + 15 分钟槽位轮询 (后台线程, 无 system_settings 开关)"
+            "  ✓ tactical_explore (10 jobs) - 每策略 4h 必跑 + 15min 轮询 (next_due DB, 重启不丢)"
         )
 
         # DeepSeek 预测 - 每 4h 调一次 DeepSeek 预测 TOP50 方向
@@ -1551,6 +1551,19 @@ class UnifiedDataScheduler:
         _launch_ai_init_task("DeepSeek探索","app.services.deepseek_explore_worker",  "run_explore_round", 90)
         _launch_predict_catchup("Gemini预测", "app.services.gemini_predictor", "run_predict_round", 45)
         _launch_predict_catchup("DeepSeek预测", "app.services.deepseek_predictor", "run_predict_round", 50)
+
+        def _launch_tactical_catchup():
+            import time
+            time.sleep(55)
+            try:
+                from app.services.tactical_explore_scheduler import run_tactical_explore_poll
+                run_tactical_explore_poll(triggered_by="scheduler")
+            except Exception as e:
+                logger.error(f"[战术探索] 启动补跑检查失败: {e}", exc_info=True)
+
+        threading.Thread(
+            target=_launch_tactical_catchup, daemon=True, name="TacticalCatchup",
+        ).start()
 
         # 定期打印状态 (每小时)
         schedule.every(1).hours.do(self.print_status)
