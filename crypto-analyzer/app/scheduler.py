@@ -1330,8 +1330,8 @@ class UnifiedDataScheduler:
             threading.Thread(target=wrapper, daemon=True, name="DeepSeekPredict").start()
 
         schedule.every(4).hours.do(_run_deepseek_predict)
-        schedule.every(10).minutes.do(_run_deepseek_predict)
-        logger.info("  ✓ deepseek_predict - 每 4 小时 + 10 分钟到期轮询 (后台线程)")
+        schedule.every(5).minutes.do(_run_deepseek_predict)
+        logger.info("  ✓ deepseek_predict - 每 4h 周期 + 5 分钟到期轮询 (DB next_due 防重)")
 
         # Gemini 预测 - 每 4h 调一次 Gemini 预测 TOP50 方向
         def _run_gemini_predict():
@@ -1344,8 +1344,8 @@ class UnifiedDataScheduler:
             threading.Thread(target=wrapper, daemon=True, name="GeminiPredict").start()
 
         schedule.every(4).hours.do(_run_gemini_predict)
-        schedule.every(10).minutes.do(_run_gemini_predict)
-        logger.info("  ✓ gemini_predict - 每 4 小时 + 10 分钟到期轮询 (后台线程)")
+        schedule.every(5).minutes.do(_run_gemini_predict)
+        logger.info("  ✓ gemini_predict - 每 4h 周期 + 5 分钟到期轮询 (DB next_due 防重)")
 
         # Gemini 市场情绪 + 川普分析 - 每 8h 调一次
         def _run_gemini_sentiment():
@@ -1501,10 +1501,23 @@ class UnifiedDataScheduler:
             threading.Thread(target=_run, daemon=True, name=f"AIInit_{name}").start()
 
         _launch_ai_init_task("Gemini探索",   "app.services.gemini_explore_worker",   "run_explore_round", 15)
-        _launch_ai_init_task("Gemini预测",   "app.services.gemini_predictor",        "run_predict_round", 20)
+        # 预测不走 scheduler_init；由 5min 轮询 + next_due 保证每 4h 至少一轮 (triggered_by=scheduler)
+        def _launch_predict_catchup(name: str, module_path: str, func_name: str, delay_s: int):
+            def _run():
+                import time
+                time.sleep(delay_s)
+                try:
+                    import importlib
+                    mod = importlib.import_module(module_path)
+                    getattr(mod, func_name)(triggered_by='scheduler')
+                except Exception as e:
+                    logger.error(f"[{name}] 启动补跑检查失败: {e}", exc_info=True)
+            threading.Thread(target=_run, daemon=True, name=f"PredictCatchup_{name}").start()
+
         _launch_ai_init_task("Gemini情绪",   "app.services.gemini_sentiment_analyzer","run_sentiment_round", 25)
         _launch_ai_init_task("DeepSeek探索","app.services.deepseek_explore_worker",  "run_explore_round", 90)
-        _launch_ai_init_task("DeepSeek预测","app.services.deepseek_predictor",       "run_predict_round", 95)
+        _launch_predict_catchup("Gemini预测", "app.services.gemini_predictor", "run_predict_round", 45)
+        _launch_predict_catchup("DeepSeek预测", "app.services.deepseek_predictor", "run_predict_round", 50)
 
         # 定期打印状态 (每小时)
         schedule.every(1).hours.do(self.print_status)

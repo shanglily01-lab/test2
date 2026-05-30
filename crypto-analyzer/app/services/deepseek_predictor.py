@@ -41,6 +41,12 @@ from app.services.gemini_swan_worker import (
     _is_excluded,
     _read_setting,
 )
+from app.services.ai_predict_schedule import (
+    DEEPSEEK_PREDICT_NEXT_DUE_KEY,
+    PREDICT_ROUND_INTERVAL_HOURS,
+    predict_claim_next_slot,
+    predict_round_is_due,
+)
 from app.services.deepseek_explore_worker import (
     DEEPSEEK_API_KEY,
     DEEPSEEK_MODEL,
@@ -881,41 +887,55 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
     if not _predict_running_lock.acquire(blocking=False):
         logger.warning(f"[DeepSeek预测] 上一轮还未结束, 跳过 (triggered_by={triggered_by})")
         return None
+    try:
+        return _run_predict_round_body(triggered_by)
+    finally:
+        try:
+            _predict_running_lock.release()
+        except Exception:
+            pass
 
+
+def _run_predict_round_body(triggered_by: str) -> Optional[int]:
     t0 = time.time()
     asof_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    manual = triggered_by == 'manual'
 
-    # 1. 读 kill switch
     try:
         with _connect() as conn_chk:
             with conn_chk.cursor() as cur:
                 enabled_raw = _read_setting(cur, 'deepseek_predict_enabled', '0').strip().lower()
+            if enabled_raw not in ('1', 'true', 'yes', 'on'):
+                logger.info(f"[DeepSeek预测] kill switch=0, 跳过 (triggered_by={triggered_by})")
+                return None
+
+            due, due_reason = predict_round_is_due(
+                conn_chk,
+                runs_table='deepseek_predict_runs',
+                next_due_key=DEEPSEEK_PREDICT_NEXT_DUE_KEY,
+                now=asof_utc,
+                manual=manual,
+                log_tag='DeepSeek预测',
+            )
+            if not due:
+                logger.info(f"[DeepSeek预测] {due_reason}, 跳过 (triggered_by={triggered_by})")
+                return None
+
+            if not manual:
+                predict_claim_next_slot(
+                    conn_chk,
+                    next_due_key=DEEPSEEK_PREDICT_NEXT_DUE_KEY,
+                    now=asof_utc,
+                    log_tag='DeepSeek预测',
+                )
     except Exception as e:
-        logger.error(f"[DeepSeek预测] 读 kill switch 失败, 保守跳过: {e}")
+        logger.error(f"[DeepSeek预测] 调度检查失败, 保守跳过: {e}")
         return None
 
-    if enabled_raw not in ('1', 'true', 'yes', 'on'):
-        logger.info(f"[DeepSeek预测] kill switch=0, 跳过 (triggered_by={triggered_by})")
-        return None
-
-    # 防重: 上次成功距今 >= 4h 才执行 (仅 manual 不拦截)
-    if triggered_by != 'manual':
-        try:
-            with _connect() as conn_chk:
-                with conn_chk.cursor() as cur:
-                    cur.execute(
-                        "SELECT MAX(asof_utc) AS last_run FROM deepseek_predict_runs WHERE status='ok'"
-                    )
-                    row = cur.fetchone()
-                    if row and row.get('last_run'):
-                        elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
-                        if elapsed_h < 4:
-                            logger.info(f"[DeepSeek预测] 上次成功距今 {elapsed_h:.1f}h < 4h, 跳过")
-                            return None
-        except Exception as e:
-            logger.warning(f"[DeepSeek预测] 防重检查失败, 继续: {e}")
-
-    logger.info(f"[DeepSeek预测] === 一轮开始 (triggered_by={triggered_by}) ===")
+    logger.info(
+        f"[DeepSeek预测] === 一轮开始 (triggered_by={triggered_by}, "
+        f"周期={PREDICT_ROUND_INTERVAL_HOURS}h) ==="
+    )
 
     try:
         conn = _connect()
@@ -1109,10 +1129,6 @@ def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
     finally:
         try:
             conn.close()
-        except Exception:
-            pass
-        try:
-            _predict_running_lock.release()
         except Exception:
             pass
 
