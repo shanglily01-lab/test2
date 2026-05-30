@@ -8,7 +8,6 @@ DeepSeek 预测 worker (v1 — 2026-05-29)
   - account_id = 2 (U本位模拟盘)
   - margin    = 500U
   - leverage  = 5x
-  - 最多 20 仓
   - hold     = 6 小时
   - SL       = 4%
   - TP       = 6%
@@ -95,7 +94,6 @@ def _try_snapshot() -> Optional[Dict]:
 # ============================================================
 PREDICT_MARGIN_USD = 500.0
 PREDICT_LEVERAGE = 5
-PREDICT_MAX_POSITIONS = 20
 PREDICT_HOLD_HOURS = 6
 PREDICT_SL_PCT = 4.0
 PREDICT_TP_PCT = 6.0
@@ -445,17 +443,6 @@ def _has_open_position(conn, symbol: str) -> bool:
             (PREDICT_SOURCE, symbol),
         )
         return cur.fetchone() is not None
-
-
-def _count_open_positions(conn) -> int:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT COUNT(*) AS cnt FROM futures_positions "
-            "WHERE source=%s AND status='open' AND account_id=%s",
-            (PREDICT_SOURCE, PREDICT_ACCOUNT_ID),
-        )
-        row = cur.fetchone()
-        return int((row or {}).get('cnt', 0) or 0)
 
 
 # ============================================================
@@ -1052,16 +1039,6 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                     catalyst, data_signal, risk_note,
                     price_at_pred, 'skipped_dedup', None,
                     f"{symbol} 已有 OPEN 仓位, 跳过反方向",
-                ))
-                predictions_made += 1
-                continue
-
-            if _count_open_positions(conn) >= PREDICT_MAX_POSITIONS:
-                verdict_rows.append((
-                    run_id, symbol, category, confidence,
-                    catalyst, data_signal, risk_note,
-                    price_at_pred, 'skipped_max_positions', None,
-                    f"已达上限 {PREDICT_MAX_POSITIONS}",
                 ))
                 predictions_made += 1
                 continue

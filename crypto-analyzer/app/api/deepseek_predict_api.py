@@ -193,7 +193,7 @@ async def status():
                 "last_run": last_run,
                 "open_positions": open_count,
                 "closed_positions_30d": closed_30d,
-                "max_positions": 20,
+                "max_positions": None,
                 "params": {
                     "margin_usd": 500,
                     "leverage": 5,

@@ -8,7 +8,6 @@ DeepSeek 探索 worker (v1 — 2026-05-28)
   - account_id = 2 (U本位模拟盘)
   - margin    = 500U
   - leverage  = 5x
-  - 最多 20 仓
   - hold     = 4 小时
   - SL       = 3%
   - TP       = 5%
@@ -119,7 +118,6 @@ def _try_position_stats(source: str, account_id: int = 2) -> Optional[Dict]:
 # ============================================================
 EXPLORE_MARGIN_USD = 500.0
 EXPLORE_LEVERAGE = 5
-EXPLORE_MAX_POSITIONS = 20
 EXPLORE_HOLD_HOURS = 4
 EXPLORE_SL_PCT = 3.0
 EXPLORE_TP_PCT = 5.0
@@ -925,17 +923,6 @@ def _has_open_position(conn, symbol: str) -> bool:
         return cur.fetchone() is not None
 
 
-def _count_open_positions(conn) -> int:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT COUNT(*) AS cnt FROM futures_positions "
-            "WHERE source=%s AND status='open' AND account_id=%s",
-            (EXPLORE_SOURCE, EXPLORE_ACCOUNT_ID),
-        )
-        row = cur.fetchone()
-        return int((row or {}).get('cnt', 0) or 0)
-
-
 # ============================================================
 # 价格获取
 # ============================================================
@@ -1504,16 +1491,6 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                     catalyst, data_signal, risk_note,
                     'skipped_dedup', None,
                     f"{symbol} 已有 OPEN 仓位, 跳过反方向",
-                ))
-                continue
-
-            current_open = _count_open_positions(conn)
-            if current_open >= EXPLORE_MAX_POSITIONS:
-                verdict_rows.append((
-                    run_id, symbol, db_category, confidence,
-                    catalyst, data_signal, risk_note,
-                    'skipped_max_positions', None,
-                    f"当前 OPEN={current_open} >= {EXPLORE_MAX_POSITIONS}",
                 ))
                 continue
 

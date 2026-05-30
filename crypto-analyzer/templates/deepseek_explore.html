@@ -657,7 +657,7 @@ function loadStatus() {
         label.textContent = '已禁用';
       }
       document.getElementById('stat-open').textContent = s.open_positions ?? '--';
-      document.getElementById('stat-max').textContent = s.max_positions ?? 20;
+      document.getElementById('stat-max').textContent = s.max_positions == null ? '无限制' : s.max_positions;
       document.getElementById('stat-closed').textContent = s.closed_positions_30d ?? '--';
       var lr = s.last_run || {};
       document.getElementById('stat-universe').textContent = lr.universe_size ?? '--';
@@ -896,7 +896,7 @@ function loadPredictStatus() {
         label.textContent = '已禁用';
       }
       document.getElementById('p-stat-open').textContent = s.open_positions ?? '--';
-      document.getElementById('p-stat-max').textContent = s.max_positions ?? 20;
+      document.getElementById('p-stat-max').textContent = s.max_positions == null ? '无限制' : s.max_positions;
       document.getElementById('p-stat-closed').textContent = s.closed_positions_30d ?? '--';
       var lr = s.last_run || {};
       document.getElementById('p-stat-symbols').textContent = lr.symbol_count ?? '--';
