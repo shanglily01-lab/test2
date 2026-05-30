@@ -49,6 +49,13 @@ BREAKEVEN_SL_PCT         = -0.005 # 保本线 -0.5%
 # 2026-04-24：数据显示 38% early-sl 在 5m 内扎中（入场瞬间均值回归误杀）
 ENTRY_GRACE_MIN          = 45
 
+# AI 探索/预测：只走 DB 硬 SL/TP，不走 early-sl / breakeven / 移动止盈
+_AI_HARD_SLTP_ONLY_SOURCES = frozenset({
+    'gemini_explore', 'gemini_predict',
+    'deepseek_explore', 'deepseek_predict',
+    'gemini_reversal', 'deepseek_reversal',
+})
+
 
 def _dynamic_trail_pullback(peak_pct: float) -> float:
     for threshold, pullback in TRAIL_TP_TIERS:
@@ -162,15 +169,15 @@ class PositionSLTPMonitor:
             trigger_price = price
 
             # ────────────────────────────────────────────────────────────────
-            # Gemini 探索/预测：跳过动态风控（Early-SL/移动止盈/保本守护），只走硬 SL/TP
+            # AI 探索/预测/反转：跳过动态风控，只走硬 SL/TP
             # ────────────────────────────────────────────────────────────────
-            if pos.get('source') in ('gemini_explore', 'gemini_predict'):
-                src_name = 'Gemini探索' if pos.get('source') == 'gemini_explore' else 'Gemini预测'
+            src = pos.get('source') or ''
+            if src in _AI_HARD_SLTP_ONLY_SOURCES:
                 trig = self._check_trigger(side, price, sl, tp)
                 if trig:
                     reason, trigger_price = trig
                     logger.info(
-                        f"[{src_name}硬SL/TP] pid={pid} {symbol} {side} "
+                        f"[AI硬SL/TP] pid={pid} {symbol} {side} source={src} "
                         f"reason={reason} price={price:.6f} SL={sl} TP={tp}"
                     )
                     self._cooldown[pid] = now + self._cooldown_seconds
