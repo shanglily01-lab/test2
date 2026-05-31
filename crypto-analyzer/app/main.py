@@ -1093,6 +1093,13 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+try:
+    from app.api.gemini_advisor_api import router as gemini_advisor_router
+    app.include_router(gemini_advisor_router)
+    logger.info("[Gemini顾问] API路由已注册")
+except Exception as e:
+    logger.warning(f"[Gemini顾问] API路由注册失败: {e}")
+
 # 注册企业金库监控API路由
 ENABLE_CORPORATE_TREASURY = True  # 启用企业金库API
 
@@ -1812,6 +1819,15 @@ async def ai_shadow_compare_page():
     if page_path.exists():
         return FileResponse(str(page_path))
     raise HTTPException(status_code=404, detail="AI Shadow compare page not found")
+
+
+@app.get("/gemini_advisor_reviews")
+async def gemini_advisor_reviews_page():
+    """Gemini 顾问审核记录 — 开仓 / 持仓."""
+    page_path = project_root / "templates" / "gemini_advisor_reviews.html"
+    if page_path.exists():
+        return FileResponse(str(page_path))
+    raise HTTPException(status_code=404, detail="Gemini advisor reviews page not found")
 
 
 @app.get("/deepseek_predict")

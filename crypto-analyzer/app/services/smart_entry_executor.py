@@ -347,6 +347,15 @@ class SmartEntryExecutor:
                 logger.warning(f"⚠️ {symbol} {direction} 已有{existing_count}个持仓，放弃本次开仓（防重复）")
                 return {'success': False, 'reason': '已有持仓，防止重复开仓'}
 
+            from app.services.paper_open_gate import gate_simulated_open
+            allowed, gate_reason = gate_simulated_open(
+                symbol, direction, entry_price, 'smart_trader', entry_reason,
+                leverage=leverage,
+            )
+            if not allowed:
+                conn.close()
+                return {'success': False, 'reason': f'开仓顾问拒绝: {gate_reason}'}
+
             # 插入持仓记录
             cursor.execute("""
                 INSERT INTO futures_positions

@@ -455,7 +455,7 @@ def _has_open_position(conn, symbol: str) -> bool:
 # ============================================================
 PREDICT_PROMPT_TEMPLATE = """你是超级交易大师. 预测每个币种在未来 6 小时内的方向走势概率.
 
-持仓期 6 小时 (6h), SL=4%, TP=6%, 杠杆 5x; 前 4h 仅硬 SL/TP, 满 4h 后 Gemini 顾问每 15min 可建议平仓.
+持仓期 6 小时 (6h), SL=4%, TP=6%, 杠杆 5x; 满 2h 后 Gemini 持仓顾问每 15min 可建议平仓.
 
 选中的币种需要能在 6 小时内到达 6% 的涨幅/跌幅空间, 或至少抗住 6 小时不跌/不涨过 4%.
 不要选"只波动 2-3%"的标的.
@@ -729,6 +729,16 @@ def _open_simulated_position(
     from app.services.trading_gates import is_symbol_blocked_level3
     if is_symbol_blocked_level3(symbol):
         logger.warning(f"[DeepSeek预测] {symbol} 黑名单3级, 禁止开仓模拟单")
+        return None
+
+    from app.services.paper_open_gate import gate_simulated_open
+    allowed, _gate_reason = gate_simulated_open(
+        symbol, side, price, PREDICT_SOURCE, catalyst,
+        leverage=PREDICT_LEVERAGE,
+        sl_pct=PREDICT_SL_PCT, tp_pct=PREDICT_TP_PCT,
+        hold_hours=PREDICT_HOLD_HOURS, conn=conn,
+    )
+    if not allowed:
         return None
 
     try:

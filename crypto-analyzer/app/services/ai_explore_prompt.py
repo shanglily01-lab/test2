@@ -22,8 +22,8 @@ EXPLORE_MIN_INTERVAL_HOURS = 4.0
 AI_POSITION_HOLD_HOURS = 6
 AI_POSITION_SL_PCT = 4.0
 AI_POSITION_TP_PCT = 6.0
-# 持仓超过该时长后 Gemini 顾问介入 (每 AI_ADVISOR_CHECK_INTERVAL_S 轮询)
-AI_ADVISOR_MIN_HOLD_HOURS = 4
+# 模拟仓持仓顾问: 满 2h 后每 15min 轮询 (见 gemini_position_advisor.HOLD_MIN_HOURS)
+AI_ADVISOR_MIN_HOLD_HOURS = 2
 AI_ADVISOR_CHECK_INTERVAL_S = 900
 
 _KLINE_MARKERS = (
@@ -357,7 +357,7 @@ CATALYST_EVIDENCE_BLOCK = """
 - 若删掉 change_24h 和 funding_rate 后, 理由还成立吗? 不成立 → skip
 """
 
-EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 6 小时 (6h), SL=4%, TP=6%, 杠杆 5x; 前 4h 仅硬 SL/TP, 满 4h 后 Gemini 顾问每 15min 可建议平仓.
+EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 6 小时 (6h), SL=4%, TP=6%, 杠杆 5x; 满 2h 后 Gemini 持仓顾问每 15min 可建议平仓.
 
 你的任务是: 基于**个股技术面**判断未来 6 小时内是否值得持有; 不是复述行情、不是宏观押注.
 

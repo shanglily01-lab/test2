@@ -358,6 +358,18 @@ class MultiStrategyService:
             if not price or price <= 0:
                 return False
 
+            from app.services.paper_open_gate import gate_simulated_open
+            sl_pct100 = (sl_pct * 100) if sl_pct else None
+            tp_pct100 = (tp_pct * 100) if tp_pct else None
+            allowed, _gate_reason = gate_simulated_open(
+                symbol, side, price, source, reason,
+                leverage=leverage,
+                sl_pct=sl_pct100, tp_pct=tp_pct100,
+                hold_hours=hold_hours,
+            )
+            if not allowed:
+                return False
+
             notional = margin * leverage
             qty = round(notional / price, 6)
             planned_close = datetime.now() + timedelta(hours=hold_hours)

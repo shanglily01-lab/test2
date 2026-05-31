@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Gemini 顾问审核记录 | Neural Obsidian</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  body { font-family: 'Manrope', sans-serif; }
+  h1 { font-family: 'Space Grotesk', sans-serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .tab-active { color: #49f4c8; border-bottom: 2px solid #49f4c8; }
+  .chip { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .chip-approve { background: rgba(73,244,200,0.12); color: #49f4c8; }
+  .chip-reject { background: rgba(255,113,108,0.12); color: #ff716c; }
+  .chip-sell { background: rgba(255,113,108,0.15); color: #ff716c; }
+  .chip-hold { background: rgba(73,244,200,0.1); color: #49f4c8; }
+  .chip-observe { background: rgba(168,171,178,0.12); color: #a8abb2; }
+</style>
+<script>
+  tailwind.config = { darkMode: "class", theme: { extend: { colors: {
+    primary: "#49f4c8", surface: "#0a0f14", "on-surface": "#ebeef5",
+    "on-surface-variant": "#a8abb2", "surface-container": "#151a20",
+    "outline-variant": "#44484e"
+  }}}};
+</script>
+</head>
+<body class="bg-[#0a0f14] text-[#ebeef5]">
+
+<aside class="fixed left-0 top-0 h-screen w-[240px] bg-[#0a0f14] border-r border-slate-800 flex flex-col py-6 z-50">
+<div class="px-5 mb-6">
+<a href="/" class="block"><h1 class="text-xl font-black tracking-tighter text-[#49f4c8]">NEURAL OBSIDIAN</h1>
+<p class="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">Quant Terminal</p></a>
+</div>
+<nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto text-sm">
+<a href="/dashboard" data-path="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20]"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
+<a href="/gemini_explore" data-path="/gemini_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20]"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>Gemini 探索</span></a>
+<a href="/gemini_advisor_reviews" data-path="/gemini_advisor_reviews" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20]"><span class="material-symbols-outlined text-[18px]">fact_check</span><span>Gemini 顾问审核</span></a>
+<a href="/ai_shadow_compare" data-path="/ai_shadow_compare" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20]"><span class="material-symbols-outlined text-[18px]">compare_arrows</span><span>AI Shadow 对比</span></a>
+<a href="/system-settings" data-path="/system-settings" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20]"><span class="material-symbols-outlined text-[18px]">settings</span><span>Settings</span></a>
+</nav>
+<script>
+(function(){
+  var path = window.location.pathname.replace(/\/$/, '') || '/';
+  document.querySelectorAll('#sidebar-nav .nav-item').forEach(function(a){
+    if (a.getAttribute('data-path') === path) {
+      a.classList.add('text-[#49f4c8]','bg-[#151a20]','border-r-2','border-[#49f4c8]','font-semibold');
+      a.classList.remove('text-slate-400');
+    }
+  });
+})();
+</script>
+</aside>
+
+<main class="ml-[240px] min-h-screen px-8 py-6">
+<header class="flex items-center justify-between mb-6 pb-4 border-b border-[#44484e]/40">
+  <div>
+    <h1 class="text-2xl font-bold">Gemini 顾问审核记录</h1>
+    <p class="text-xs text-[#a8abb2] mt-1">开仓审核 (approve/reject) · 持仓审核 (hold/observe/sell) · 近 7 日汇总</p>
+  </div>
+  <button onclick="loadAll()" class="flex items-center gap-1 px-3 py-2 rounded-lg bg-[#151a20] hover:bg-[#1a2027] text-xs">
+    <span class="material-symbols-outlined text-[16px]">refresh</span>刷新
+  </button>
+</header>
+
+<div id="notReady" class="hidden mb-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm"></div>
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <div class="bg-[#151a20] rounded-xl p-4 border border-[#44484e]/30">
+    <div class="text-[10px] uppercase text-[#a8abb2]">开仓通过</div>
+    <div id="statOpenApprove" class="text-2xl font-bold mt-1 mono text-[#49f4c8]">—</div>
+  </div>
+  <div class="bg-[#151a20] rounded-xl p-4 border border-[#44484e]/30">
+    <div class="text-[10px] uppercase text-[#a8abb2]">开仓拒绝</div>
+    <div id="statOpenReject" class="text-2xl font-bold mt-1 mono text-[#ff716c]">—</div>
+  </div>
+  <div class="bg-[#151a20] rounded-xl p-4 border border-[#44484e]/30">
+    <div class="text-[10px] uppercase text-[#a8abb2]">持仓 sell (7d)</div>
+    <div id="statHoldSell" class="text-2xl font-bold mt-1 mono">—</div>
+  </div>
+  <div class="bg-[#151a20] rounded-xl p-4 border border-[#44484e]/30">
+    <div class="text-[10px] uppercase text-[#a8abb2]">持仓问询 (7d)</div>
+    <div id="statHoldTotal" class="text-2xl font-bold mt-1 mono">—</div>
+  </div>
+</div>
+
+<div class="flex gap-4 border-b border-[#44484e]/40 mb-4">
+  <button id="tabOpen" onclick="setTab('open')" class="px-4 py-2 text-sm tab-active">开仓审核</button>
+  <button id="tabHold" onclick="setTab('hold')" class="px-4 py-2 text-sm text-[#a8abb2]">持仓审核</button>
+</div>
+
+<div class="bg-[#151a20] rounded-xl border border-[#44484e]/30 overflow-hidden">
+<table class="w-full text-xs">
+<thead class="bg-[#0a0f14] text-[#a8abb2] uppercase tracking-wider">
+<tr>
+  <th class="px-3 py-2 text-left">时间</th>
+  <th class="px-3 py-2 text-left">决策</th>
+  <th class="px-3 py-2 text-left">Symbol</th>
+  <th class="px-3 py-2 text-left">方向</th>
+  <th class="px-3 py-2 text-left">来源</th>
+  <th class="px-3 py-2 text-left">持仓h / ROI</th>
+  <th class="px-3 py-2 text-left">理由</th>
+</tr>
+</thead>
+<tbody id="reviewBody" class="divide-y divide-[#44484e]/20"></tbody>
+</table>
+<p id="emptyMsg" class="hidden p-6 text-center text-[#a8abb2] text-sm">暂无记录</p>
+</div>
+</main>
+
+<script>
+var currentTab = 'open';
+
+function chipClass(decision, type) {
+  if (type === 'open') {
+    return decision === 'approve' ? 'chip chip-approve' : 'chip chip-reject';
+  }
+  if (decision === 'sell') return 'chip chip-sell';
+  if (decision === 'hold') return 'chip chip-hold';
+  return 'chip chip-observe';
+}
+
+function setTab(t) {
+  currentTab = t;
+  document.getElementById('tabOpen').className = t === 'open' ? 'px-4 py-2 text-sm tab-active' : 'px-4 py-2 text-sm text-[#a8abb2]';
+  document.getElementById('tabHold').className = t === 'hold' ? 'px-4 py-2 text-sm tab-active' : 'px-4 py-2 text-sm text-[#a8abb2]';
+  loadReviews();
+}
+
+async function loadSummary() {
+  var r = await fetch('/api/gemini-advisor/summary');
+  var d = await r.json();
+  if (!d.ready) {
+    document.getElementById('notReady').textContent = d.message || '表未就绪';
+    document.getElementById('notReady').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('notReady').classList.add('hidden');
+  document.getElementById('statOpenApprove').textContent = d.open_approve || 0;
+  document.getElementById('statOpenReject').textContent = d.open_reject || 0;
+  document.getElementById('statHoldSell').textContent = d.hold_sell || 0;
+  document.getElementById('statHoldTotal').textContent = d.hold_total || 0;
+}
+
+async function loadReviews() {
+  var url = '/api/gemini-advisor/reviews?review_type=' + currentTab + '&limit=80';
+  var r = await fetch(url);
+  var d = await r.json();
+  var body = document.getElementById('reviewBody');
+  body.innerHTML = '';
+  if (!d.reviews || d.reviews.length === 0) {
+    document.getElementById('emptyMsg').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('emptyMsg').classList.add('hidden');
+  d.reviews.forEach(function(row) {
+    var tr = document.createElement('tr');
+    tr.className = 'hover:bg-[#1a2027]/50';
+    var holdCol = '—';
+    if (row.hold_hours != null) {
+      holdCol = row.hold_hours.toFixed(1) + 'h';
+      if (row.roi_pct != null) holdCol += ' / ' + (row.roi_pct >= 0 ? '+' : '') + row.roi_pct.toFixed(1) + '%';
+    }
+    tr.innerHTML =
+      '<td class="px-3 py-2 mono text-[#a8abb2]">' + (row.created_at || '') + '</td>' +
+      '<td class="px-3 py-2"><span class="' + chipClass(row.decision, currentTab) + '">' + row.decision + '</span></td>' +
+      '<td class="px-3 py-2 font-medium">' + row.symbol + '</td>' +
+      '<td class="px-3 py-2">' + (row.position_side || '—') + '</td>' +
+      '<td class="px-3 py-2 mono text-[#a8abb2]">' + (row.source || '—') + '</td>' +
+      '<td class="px-3 py-2 mono">' + holdCol + '</td>' +
+      '<td class="px-3 py-2 text-[#a8abb2] max-w-md truncate" title="' + (row.reason || '').replace(/"/g, '&quot;') + '">' + (row.reason || '—') + '</td>';
+    body.appendChild(tr);
+  });
+}
+
+function loadAll() {
+  loadSummary();
+  loadReviews();
+}
+loadAll();
+</script>
+</body>
+</html>

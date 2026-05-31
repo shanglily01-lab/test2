@@ -1069,6 +1069,16 @@ def _open_simulated_position(
         logger.warning(f"[DeepSeek探索] {symbol} 黑名单3级, 禁止开仓")
         return None
 
+    from app.services.paper_open_gate import gate_simulated_open
+    allowed, _gate_reason = gate_simulated_open(
+        symbol, side, price, EXPLORE_SOURCE, catalyst,
+        leverage=EXPLORE_LEVERAGE,
+        sl_pct=EXPLORE_SL_PCT, tp_pct=EXPLORE_TP_PCT,
+        hold_hours=EXPLORE_HOLD_HOURS, conn=conn,
+    )
+    if not allowed:
+        return None
+
     try:
         notional = EXPLORE_MARGIN_USD * EXPLORE_LEVERAGE
         qty = round(notional / price, 6)

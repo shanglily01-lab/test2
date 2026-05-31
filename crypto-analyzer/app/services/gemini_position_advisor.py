@@ -1,16 +1,15 @@
 """
-Gemini 持仓顾问 (2026-05-26 改为模拟仓)
+Gemini 顾问 — 模拟仓开仓审核 + 持仓监管
 
-功能:
-  - AI 模拟单 (gemini_/deepseek_ 探索/预测/战术): 持仓 >= 4h 后每 15min 问 Gemini
-  - 其他模拟单: 持仓 >= 3h 且开关开启时, 每 1h 问一次
-  - Gemini 三选一: hold / observe / sell
-  - "sell" 关闭模拟仓; 若有对应实盘则同步平仓 (需 live_close_enabled)
+开仓顾问:
+  - 所有 account_id=2 模拟开仓前审核 (gate_simulated_open / paper_open_gate)
+  - decision=reject 则不开仓; 开关 gemini_open_advisor_enabled
+
+持仓顾问:
+  - 所有模拟持仓 >= 2h 每 15min 问 Gemini (hold/observe/sell)
+  - sell 关模拟仓; 有实盘则同步平仓 (需 live_close_enabled)
+  - 开关 gemini_position_advisor_enabled (默认开)
   - smart_trader 主循环每 15min 调 tick()
-
-开关:
-  - AI 模块顾问: 持仓满 4h 后始终运行 (不依赖开关)
-  - 非 AI 模拟单: system_settings.gemini_position_advisor_enabled = 1
 """
 from __future__ import annotations
 
@@ -25,17 +24,23 @@ import pymysql
 import pymysql.cursors
 from loguru import logger
 
-from app.services.ai_explore_prompt import (
-    AI_ADVISOR_CHECK_INTERVAL_S,
-    AI_ADVISOR_MIN_HOLD_HOURS,
-)
-from app.services.position_sl_tp_monitor import _is_ai_hard_sltp_source
+from app.services.gemini_advisor_reviews import log_advisor_review
 
 
 GEMINI_TIMEOUT_MS = 180_000
-PER_POSITION_INTERVAL_S = 3600  # 非 AI: 同 position 1 小时内不重复问
-MIN_HOLD_HOURS = 3              # 非 AI: 持仓不满 3h 不查
+HOLD_MIN_HOURS = 2.0            # 持仓满 2h 纳入监管
+HOLD_CHECK_INTERVAL_S = 900     # 同仓 15min 内不重复问
 GEMINI_PER_CALL_DELAY_S = 1.0   # 防 Gemini rate limit
+
+_open_advisor_singleton: Optional["GeminiPositionAdvisor"] = None
+
+
+def get_open_advisor() -> "GeminiPositionAdvisor":
+    global _open_advisor_singleton
+    if _open_advisor_singleton is None:
+        from app.utils.config_loader import get_db_config
+        _open_advisor_singleton = GeminiPositionAdvisor(get_db_config())
+    return _open_advisor_singleton
 
 
 class GeminiPositionAdvisor:
@@ -48,35 +53,40 @@ class GeminiPositionAdvisor:
         self._last_check_ts: Dict[int, float] = {}
 
     def _advisor_rules(self, source: str) -> Optional[Tuple[float, int]]:
-        """返回 (min_hold_hours, check_interval_s); None 表示本单不纳入顾问."""
-        src = source or ''
-        if _is_ai_hard_sltp_source(src):
-            return (AI_ADVISOR_MIN_HOLD_HOURS, AI_ADVISOR_CHECK_INTERVAL_S)
-        if not self._is_enabled():
+        """返回 (min_hold_hours, check_interval_s); None 表示持仓顾问关闭."""
+        if not self._is_hold_advisor_enabled():
             return None
-        return (MIN_HOLD_HOURS, PER_POSITION_INTERVAL_S)
+        return (HOLD_MIN_HOURS, HOLD_CHECK_INTERVAL_S)
 
     # ────────────────────────────────────────────────────────
     # 开关读取
     # ────────────────────────────────────────────────────────
 
-    def _is_enabled(self) -> bool:
-        """读 system_settings.gemini_position_advisor_enabled"""
+    def _read_setting_bool(self, key: str, default: str = '1') -> bool:
         try:
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute(
                 "SELECT setting_value FROM system_settings "
-                "WHERE setting_key='gemini_position_advisor_enabled' LIMIT 1"
+                "WHERE setting_key=%s LIMIT 1",
+                (key,),
             )
             row = cur.fetchone()
-            cur.close(); conn.close()
+            cur.close()
+            conn.close()
             if not row:
-                return False
-            val = str(row.get('setting_value', '0')).strip().lower()
+                val = default
+            else:
+                val = str(row.get('setting_value', default)).strip().lower()
             return val in ('1', 'true', 'yes', 'on')
         except Exception:
-            return False
+            return default in ('1', 'true', 'yes', 'on')
+
+    def _is_hold_advisor_enabled(self) -> bool:
+        return self._read_setting_bool('gemini_position_advisor_enabled', '1')
+
+    def _is_open_advisor_enabled(self) -> bool:
+        return self._read_setting_bool('gemini_open_advisor_enabled', '1')
 
     # ────────────────────────────────────────────────────────
     # DB
@@ -118,9 +128,9 @@ class GeminiPositionAdvisor:
     def get_eligible_positions(self) -> List[Dict]:
         """
         查模拟仓 (futures_positions) U本位 OPEN 单。
-        只查 account_id=2; tick() 内再按 AI/非 AI 规则过滤持仓时长。
+        只查 account_id=2; tick() 内再按持仓时长与节流过滤。
         """
-        min_hours = min(MIN_HOLD_HOURS, AI_ADVISOR_MIN_HOLD_HOURS)
+        min_hours = int(HOLD_MIN_HOURS)
         try:
             conn = self._get_conn()
             cur = conn.cursor()
@@ -246,7 +256,7 @@ class GeminiPositionAdvisor:
         eth_6h = ctx.get('eth_6h_change', 0)
 
         return f"""你是一个超级交易大师。
-一个实盘仓位已持仓超过 {hold_h:.1f}h。请决定是 hold / observe / sell。
+一个模拟仓位已持仓超过 {hold_h:.1f}h。请决定是 hold / observe / sell。
 
 仓位信息
   Symbol:          {symbol}
@@ -285,7 +295,111 @@ Output ONLY a single valid JSON object, no markdown fence:
 }}
 """
 
-    def _call_gemini(self, prompt: str) -> Optional[dict]:
+    @staticmethod
+    def _build_open_prompt(
+        symbol: str,
+        side: str,
+        price: float,
+        source: str,
+        catalyst: str,
+        leverage: int,
+        sl_pct: Optional[float],
+        tp_pct: Optional[float],
+        hold_hours: Optional[float],
+        ctx: dict,
+    ) -> str:
+        klines_str = "  time           open         high          low        close       volume\n"
+        for k in ctx.get('klines_15m', []):
+            klines_str += (
+                f"  {k['t']}  {k['o']:>11}  {k['h']:>11}  {k['l']:>11}  "
+                f"{k['c']:>11}  {k['v']:>11}\n"
+            )
+        big4 = ctx.get('big4_signal', 'NEUTRAL')
+        sl_s = f"{sl_pct}%" if sl_pct is not None else "默认"
+        tp_s = f"{tp_pct}%" if tp_pct is not None else "默认"
+        hold_s = f"{hold_hours}h" if hold_hours is not None else "策略默认"
+        return f"""你是超级交易大师。系统在**开模拟仓之前**请你审核是否允许开仓。
+
+拟开仓
+  Symbol:     {symbol}
+  Direction:  {side}
+  Entry:      {price}
+  Leverage:   {leverage}x
+  SL/TP:      {sl_s} / {tp_s}
+  Plan hold:  {hold_s}
+  Source:     {source}
+  Catalyst:   {(catalyst or '')[:400]}
+
+MARKET
+  Big4: {big4}
+RECENT 4H 15M KLINES:
+{klines_str}
+
+规则: 结构不清晰、与 Big4 严重冲突、追涨杀跌极端位置 → reject。
+仅当风险收益合理、 catalyst 与 K 线一致时 approve。
+
+Output ONLY JSON:
+{{
+  "decision": "approve" | "reject",
+  "reason": "<50字中文>"
+}}
+"""
+
+    def review_open(
+        self,
+        symbol: str,
+        side: str,
+        price: float,
+        source: str,
+        catalyst: str = "",
+        leverage: int = 5,
+        sl_pct: Optional[float] = None,
+        tp_pct: Optional[float] = None,
+        hold_hours: Optional[float] = None,
+        conn=None,
+    ) -> Tuple[bool, str]:
+        """返回 (允许开仓, 原因). reject 时禁止开仓."""
+        if not self._is_open_advisor_enabled():
+            return True, "open_advisor_disabled"
+
+        ctx = self._fetch_market_context(symbol)
+        prompt = self._build_open_prompt(
+            symbol, side, price, source, catalyst, leverage,
+            sl_pct, tp_pct, hold_hours, ctx,
+        )
+        result = self._call_gemini(prompt, open_mode=True)
+        if not result:
+            log_advisor_review(
+                "open", "approve", symbol,
+                position_side=side, source=source, entry_price=price,
+                leverage=leverage, reason="gemini_api_error_allow",
+                catalyst=catalyst, conn=conn,
+            )
+            return True, "gemini_api_error_allow"
+
+        decision = str(result.get("decision", "approve")).lower()
+        reason = str(result.get("reason", ""))[:500]
+        approved = decision == "approve"
+        log_advisor_review(
+            "open",
+            "approve" if approved else "reject",
+            symbol,
+            position_side=side,
+            source=source,
+            entry_price=price,
+            leverage=leverage,
+            reason=reason,
+            catalyst=catalyst,
+            conn=conn,
+        )
+        if not approved:
+            logger.info(
+                f"[开仓顾问] REJECT {symbol} {side} @ {price} "
+                f"src={source} | {reason[:80]}"
+            )
+        return approved, reason
+
+    def _call_gemini(self, prompt: str, open_mode: bool = False) -> Optional[dict]:
         client = self._init_client()
         if not client:
             return None
@@ -304,6 +418,17 @@ Output ONLY a single valid JSON object, no markdown fence:
             if text.startswith('```'):
                 text = text.strip('`').lstrip('json').strip()
             sig = json.loads(text)
+            if open_mode:
+                decision = str(sig.get('decision', '')).strip().lower()
+                if decision not in ('approve', 'reject'):
+                    logger.warning(
+                        f"[开仓顾问] 非法 decision={decision}, 降级 approve"
+                    )
+                    decision = 'approve'
+                return {
+                    'decision': decision,
+                    'reason': str(sig.get('reason', ''))[:100],
+                }
             action = str(sig.get('action', '')).strip().lower()
             if action not in ('hold', 'observe', 'sell'):
                 logger.warning(f"[Gemini顾问] 非法 action={action} text={text[:200]},降级 observe")
@@ -462,7 +587,7 @@ Output ONLY a single valid JSON object, no markdown fence:
 
     def tick(self) -> dict:
         """
-        外部每 15 min 调一次; AI 单按 15min/position, 非 AI 按 1h/position 节流。
+        外部每 15 min 调一次; 模拟仓持仓 >=2h 按 15min/position 节流。
         Returns 统计 dict {'evaluated', 'hold', 'observe', 'sell', 'skipped', 'errors'}
         """
         stats = {'evaluated': 0, 'hold': 0, 'observe': 0, 'sell': 0,
@@ -524,6 +649,20 @@ Output ONLY a single valid JSON object, no markdown fence:
                     f"[Gemini顾问] {action.upper():8s} id={pos['id']} {pos['symbol']:15s} "
                     f"{pos['position_side']:5s} hold={pos['hold_hours']:.1f}h ROI={roi:+.1f}% "
                     f"| {reason[:60]}"
+                )
+
+                log_advisor_review(
+                    "hold",
+                    action,
+                    pos["symbol"],
+                    position_side=pos.get("position_side"),
+                    source=pos.get("source"),
+                    position_id=int(pos["id"]),
+                    entry_price=float(pos["entry_price"]),
+                    leverage=int(pos.get("leverage") or 5),
+                    hold_hours=hold_h,
+                    roi_pct=round(roi, 2),
+                    reason=reason,
                 )
 
                 if action == 'sell':

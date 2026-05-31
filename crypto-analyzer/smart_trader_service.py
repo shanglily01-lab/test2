@@ -2264,6 +2264,23 @@ class SmartTraderService:
             # 策略模式：signal_confirm / trend_follow，fallback smart_trader（兼容旧路径）
             position_source = opp.get('strategy_mode', 'smart_trader')
 
+            from app.services.paper_open_gate import gate_simulated_open
+            _hold_h = base_timeout_minutes / 60.0
+            _sl_pct100 = round(stop_loss_pct * 100, 2)
+            _tp_pct100 = round(take_profit_pct * 100, 2)
+            _allowed, _gate_reason = gate_simulated_open(
+                symbol, side, current_price, position_source, entry_reason,
+                leverage=int(used_leverage),
+                sl_pct=_sl_pct100, tp_pct=_tp_pct100, hold_hours=_hold_h,
+            )
+            if not _allowed:
+                cursor.close()
+                conn.close()
+                logger.warning(
+                    f"[开仓顾问] 拒绝 {symbol} {side} src={position_source}: {_gate_reason}"
+                )
+                return False
+
             # 插入持仓记录 (包含动态超时字段和计划平仓时间)
             cursor.execute("""
                 INSERT INTO futures_positions
@@ -3704,7 +3721,7 @@ class SmartTraderService:
                         logger.warning(f"[对账] 异常: {_re}")
                     last_reconcile = now
 
-                # 0.61. Gemini 持仓顾问 (每 15 min; AI 模拟单 4h+ 每 15min, 其他需开关)
+                # 0.61. Gemini 持仓顾问 (每 15 min; 模拟仓 ≥2h 每 15min)
                 if (now - last_gemini_advisor).total_seconds() >= 900:
                     try:
                         if self.smart_exit_optimizer:

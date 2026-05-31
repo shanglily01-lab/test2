@@ -2,7 +2,7 @@
 Gemini 探索 worker (v3 — 2026-05-21 长持仓版)
 
 每 4h 调用 Google Gemini 检测加密货币短时方向异动, 根据 verdict 直接开模拟单。
-持仓 6 小时, SL=4%, TP=6%; 前 4h 仅硬 SL/TP, 满 4h 后 Gemini 顾问每 15min 问询是否持有。
+持仓 6 小时, SL=4%, TP=6%; 满 2h 后 Gemini 持仓顾问每 15min 问询是否持有。
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
@@ -1336,6 +1336,16 @@ def _open_simulated_position(
     from app.services.trading_gates import is_symbol_blocked_level3
     if is_symbol_blocked_level3(symbol):
         logger.warning(f"[Gemini探索] {symbol} 黑名单3级, 禁止开仓模拟单")
+        return None
+
+    from app.services.paper_open_gate import gate_simulated_open
+    allowed, _gate_reason = gate_simulated_open(
+        symbol, side, price, EXPLORE_SOURCE, catalyst,
+        leverage=EXPLORE_LEVERAGE,
+        sl_pct=EXPLORE_SL_PCT, tp_pct=EXPLORE_TP_PCT,
+        hold_hours=EXPLORE_HOLD_HOURS, conn=conn,
+    )
+    if not allowed:
         return None
 
     try:
