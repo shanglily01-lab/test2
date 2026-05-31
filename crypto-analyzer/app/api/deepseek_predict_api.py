@@ -382,6 +382,9 @@ async def list_positions(
                         r[k] = float(v)
                     except Exception:
                         pass
+        if status == 'closed':
+            from app.utils.position_display import enrich_closed_position_rows
+            enrich_closed_position_rows(rows)
         return {"success": True, "data": rows, "count": len(rows)}
     except Exception as e:
         logger.error(f"[DeepSeek预测 API] /positions 失败: {e}")

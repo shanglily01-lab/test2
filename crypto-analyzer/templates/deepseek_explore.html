@@ -273,7 +273,7 @@
             <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">已实现盈亏</th>
             <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">开仓 CST</th>
             <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">平仓 CST</th>
-            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">备注</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">平仓原因</th>
           </tr>
         </thead>
         <tbody id="closed-tbody">
@@ -434,7 +434,7 @@
             <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">已实现盈亏</th>
             <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">开仓 CST</th>
             <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">平仓 CST</th>
-            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">备注</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">平仓原因</th>
           </tr>
         </thead>
         <tbody id="p-closed-tbody">
@@ -470,6 +470,19 @@ function pCls(v) {
   var n = parseFloat(v);
   if (isNaN(n)) return '';
   return n >= 0 ? 'pp' : 'pn';
+}
+function applyWinRateCard(prefix, s) {
+  var wins = s.wins || 0;
+  var losses = s.losses || 0;
+  var el = document.getElementById(prefix + '-stat-winrate');
+  var wl = document.getElementById(prefix + '-stat-wl');
+  if (el) {
+    el.innerHTML = '<span class="' + ((s.win_rate || 0) >= 50 ? 'pp' : 'pn') + '">' + fmt(s.win_rate, 1) + '%</span>';
+  }
+  if (wl) wl.textContent = wins + '胜 ' + losses + '负';
+}
+function closeReasonLabel(p) {
+  return (p && (p.close_reason_cn || p.notes)) || '--';
 }
 var _exploreRealizedPnl = 0;
 var _lastExploreFloating = 0;
@@ -621,7 +634,7 @@ function loadClosedPositions() {
           '<td class="px-4 py-3 text-right mono ' + pCls(pnl) + '">' + fmtSigned(pnl) + '</td>' +
           '<td class="px-4 py-3 mono text-on-surface-variant text-[11px]">' + shortUTC(p.open_time) + '</td>' +
           '<td class="px-4 py-3 mono text-on-surface-variant text-[11px]">' + shortUTC(p.close_time) + '</td>' +
-          '<td class="px-4 py-3 text-on-surface-variant text-[11px] max-w-xs truncate" title="' + escapeHtml((p.notes || p.entry_reason) || '') + '">' + escapeHtml((p.notes || p.entry_reason) || '') + '</td>' +
+          '<td class="px-4 py-3 text-on-surface-variant text-[11px] max-w-xs truncate" title="' + escapeHtml(closeReasonLabel(p)) + '">' + escapeHtml(closeReasonLabel(p)) + '</td>' +
           '</tr>';
       }).join('');
     })
@@ -643,8 +656,7 @@ function loadExploreStats() {
       _exploreRealizedPnl = s.total_realized_pnl || 0;
       document.getElementById('e-stat-realized').innerHTML = '<span class="' + pClsLocal(s.total_realized_pnl) + '">' + fmtSigned(s.total_realized_pnl) + ' U</span>';
       applyFloatingCards('e', _exploreRealizedPnl, _lastExploreFloating);
-      document.getElementById('e-stat-winrate').innerHTML = '<span class="' + ((s.win_rate || 0) >= 50 ? 'pp' : 'pn') + '">' + fmt(s.win_rate, 1) + '%</span>';
-      document.getElementById('e-stat-wl').textContent = s.wins + '胜 ' + s.losses + '负';
+      applyWinRateCard('e', s);
       document.getElementById('e-stat-closed2').textContent = s.total_trades;
     })
     .catch(function(e){ console.error('explore stats error', e); });
@@ -869,7 +881,7 @@ function loadPredictClosedPositions() {
           '<td class="px-4 py-3 text-right mono ' + pCls(pnl) + '">' + fmtSigned(pnl) + '</td>' +
           '<td class="px-4 py-3 mono text-on-surface-variant text-[11px]">' + shortUTC(p.open_time) + '</td>' +
           '<td class="px-4 py-3 mono text-on-surface-variant text-[11px]">' + shortUTC(p.close_time) + '</td>' +
-          '<td class="px-4 py-3 text-on-surface-variant text-[11px] max-w-xs truncate" title="' + escapeHtml((p.notes || p.entry_reason) || '') + '">' + escapeHtml((p.notes || p.entry_reason) || '') + '</td>' +
+          '<td class="px-4 py-3 text-on-surface-variant text-[11px] max-w-xs truncate" title="' + escapeHtml(closeReasonLabel(p)) + '">' + escapeHtml(closeReasonLabel(p)) + '</td>' +
           '</tr>';
       }).join('');
     })
@@ -891,8 +903,7 @@ function loadPredictStats() {
       _predictRealizedPnl = s.total_realized_pnl || 0;
       document.getElementById('p-stat-realized').innerHTML = '<span class="' + pClsLocal(s.total_realized_pnl) + '">' + fmtSigned(s.total_realized_pnl) + ' U</span>';
       applyFloatingCards('p', _predictRealizedPnl, _lastPredictFloating);
-      document.getElementById('p-stat-winrate').innerHTML = '<span class="' + ((s.win_rate || 0) >= 50 ? 'pp' : 'pn') + '">' + fmt(s.win_rate, 1) + '%</span>';
-      document.getElementById('p-stat-wl').textContent = s.wins + '胜 ' + s.losses + '负';
+      applyWinRateCard('p', s);
       document.getElementById('p-stat-closed2').textContent = s.total_trades;
     })
     .catch(function(e){ console.error('predict stats error', e); });

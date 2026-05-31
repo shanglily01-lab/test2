@@ -756,19 +756,25 @@ Output ONLY JSON:
     def _close_paper_only(self, position: dict, reason: str, close_price: float) -> bool:
         """仅关模拟仓（实盘不存在或关实盘失败时的兜底）"""
         try:
+            close_note = f'gemini_advisor({reason[:120]})'
             conn = self._get_conn()
             cur = conn.cursor()
+            side = position.get('position_side')
+            if side == 'SHORT':
+                pnl_expr = 'ROUND((entry_price - %s) * quantity, 2)'
+            else:
+                pnl_expr = 'ROUND((%s - entry_price) * quantity, 2)'
             cur.execute(
-                """UPDATE futures_positions
+                f"""UPDATE futures_positions
                    SET status='closed',
                        close_time=NOW(),
                        mark_price=%s,
-                       realized_pnl=ROUND((%s * quantity) - (entry_price * quantity), 2),
+                       realized_pnl={pnl_expr},
                        unrealized_pnl=0,
                        unrealized_pnl_pct=0,
-                       notes=CONCAT(IFNULL(notes,''),'|gemini_advisor:',%s)
+                       notes=%s
                    WHERE id=%s AND status='open'""",
-                (close_price, close_price, reason, position['id'])
+                (close_price, close_price, close_note, position['id'])
             )
             if cur.rowcount > 0:
                 logger.info(

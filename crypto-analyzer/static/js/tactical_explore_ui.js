@@ -28,15 +28,20 @@
       '<p class="mono text-xs font-medium pt-1" id="' + p + '-stat-lastrun">--</p><p class="text-[10px] mt-1" id="' + p + '-stat-laststatus">--</p></div></section>' +
       '<section class="px-8 pb-6 grid grid-cols-5 gap-4">' +
       statCard(p, 'realized', '已实现盈亏') + statCard(p, 'floating', '当前浮盈') +
-      statCard(p, 'total', '总盈亏') + statCard(p, 'winrate', '胜率') +
+      statCard(p, 'total', '总盈亏') + statCard(p, 'winrate', '胜率 (30d)') +
       statCard(p, 'closed2', '30d 平仓数') + '</section>' +
       tableSection(p, 'open', '当前持仓 (OPEN)', 7) +
       tableSection(p, 'runs', '最近运行 (点击展开)', 6) +
-      tableSection(p, 'closed', '历史平仓 (30d)', 4, true)
+      tableSection(p, 'closed', '历史平仓 (30d)', 5, true)
     );
   }
 
   function statCard(p, key, label) {
+    if (key === 'winrate') {
+      return '<div class="bg-surface-container-low rounded-xl p-4"><p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">' +
+        label + '</p><p class="mono text-2xl font-medium" id="' + p + '-stat-' + key + '">--</p>' +
+        '<p class="text-[10px] text-on-surface-variant mt-1" id="' + p + '-stat-wl">--</p></div>';
+    }
     return '<div class="bg-surface-container-low rounded-xl p-4"><p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">' +
       label + '</p><p class="mono text-2xl font-medium" id="' + p + '-stat-' + key + '">--</p></div>';
   }
@@ -44,7 +49,7 @@
   function tableSection(p, key, title, cols, isClosed) {
     var tid = p + '-' + key + '-tbody';
     var heads = isClosed
-      ? '<th class="px-4 py-2">Symbol</th><th class="px-4 py-2">方向</th><th class="px-4 py-2 text-right">盈亏</th><th class="px-4 py-2">平仓时间</th>'
+      ? '<th class="px-4 py-2">Symbol</th><th class="px-4 py-2">方向</th><th class="px-4 py-2 text-right">盈亏</th><th class="px-4 py-2">平仓原因</th><th class="px-4 py-2">平仓时间</th>'
       : (key === 'runs'
         ? '<th class="px-4 py-2">#</th><th class="px-4 py-2">时间</th><th class="px-4 py-2 text-right">universe</th><th class="px-4 py-2 text-right">开仓</th><th class="px-4 py-2">状态</th><th class="px-4 py-2">摘要</th>'
         : '<th class="px-4 py-2 text-left">Symbol</th><th class="px-4 py-2">方向</th><th class="px-4 py-2 text-right">开仓价</th><th class="px-4 py-2 text-right">现价</th><th class="px-4 py-2 text-right">浮盈</th><th class="px-4 py-2">开仓时间</th><th class="px-4 py-2">催化剂</th>');
@@ -122,6 +127,7 @@
       applyFloatingCards(p, s.realized, s.floating);
       var wr = document.getElementById(p + '-stat-winrate');
       if (wr) wr.innerHTML = '<span class="' + ((data.win_rate || 0) >= 50 ? 'pp' : 'pn') + '">' + fmt(data.win_rate, 1) + '%</span>';
+      setText(p + '-stat-wl', (data.wins || 0) + '胜 ' + (data.losses || 0) + '负');
       setText(p + '-stat-closed2', data.total_trades);
     });
   }
@@ -175,13 +181,15 @@
       var tbody = document.getElementById(p + '-closed-tbody');
       if (!tbody) return;
       if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-6 text-center text-on-surface-variant text-xs">近 30 天无平仓</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-center text-on-surface-variant text-xs">近 30 天无平仓</td></tr>';
         return;
       }
       tbody.innerHTML = rows.map(function (row) {
+        var reason = row.close_reason_cn || row.notes || '--';
         return '<tr class="border-b border-outline-variant/10"><td class="px-4 py-2 mono">' + escapeHtml(row.symbol) +
           '</td><td class="px-4 py-2">' + dirBadge(row.position_side) + '</td>' +
           '<td class="px-4 py-2 text-right mono ' + pCls(row.realized_pnl) + '">' + fmtSigned(row.realized_pnl) + '</td>' +
+          '<td class="px-4 py-2 text-[11px] truncate max-w-xs" title="' + escapeHtml(reason) + '">' + escapeHtml(reason) + '</td>' +
           '<td class="px-4 py-2 text-[11px]">' + shortUTC(row.close_time) + '</td></tr>';
       }).join('');
     });

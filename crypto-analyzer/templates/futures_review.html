@@ -731,9 +731,13 @@ function fmtCloseReason(r) {
   var map = {
     'STOP_LOSS': '止损', 'TAKE_PROFIT': '止盈', 'MANUAL': '手动',
     'TIMEOUT': '超时', 'TRAILING_STOP': '移动止盈', 'FORCED': '强平',
-    'SIGNAL_REVERSE': '反向信号', 'PREDICTOR': '预测平仓'
+    'SIGNAL_REVERSE': '反向信号', 'PREDICTOR': '预测平仓',
+    'gemini_advisor': 'Gemini顾问平仓'
   };
-  return map[r] || r || '--';
+  if (!r) return '--';
+  if (map[r]) return map[r];
+  if (String(r).toLowerCase().indexOf('gemini_advisor') >= 0) return 'Gemini顾问平仓';
+  return r || '--';
 }
 
 function updateTimestamp() {

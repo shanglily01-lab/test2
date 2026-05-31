@@ -54,6 +54,7 @@ CLOSE_REASON_MAP = {
     'reversal_warning': '反转预警平仓',
     # 超级大脑新增
     'reverse_signal': '反向信号平仓',
+    'gemini_advisor': 'Gemini顾问平仓',
 }
 
 # 开仓原因中英文映射（基于 entry_signal_type 字段）
@@ -115,6 +116,17 @@ def parse_close_reason(notes: str) -> tuple:
         return 'unknown', '未知'
 
     notes_lower = notes.lower()
+
+    # Gemini 持仓顾问平仓 (notes 可能是 "gemini_advisor(...)" 或 "...|gemini_advisor:reason")
+    if 'gemini_advisor' in notes_lower:
+        import re
+        m = re.search(r'gemini_advisor[:]([^|]+)', notes, re.I)
+        if not m:
+            m = re.search(r'gemini_advisor\(([^)]+)\)', notes, re.I)
+        detail = (m.group(1).strip() if m else '')[:80]
+        if detail:
+            return 'gemini_advisor', f'Gemini顾问平仓({detail})'
+        return 'gemini_advisor', 'Gemini顾问平仓'
 
     # 超级大脑智能顶底识别 (优先处理)
     if notes.startswith('TOP_DETECTED('):

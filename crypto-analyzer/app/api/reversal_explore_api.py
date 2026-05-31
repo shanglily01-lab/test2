@@ -291,6 +291,9 @@ def create_tactical_explore_router(
                             r[k] = float(v)
                         except Exception:
                             pass
+            if status == "closed":
+                from app.utils.position_display import enrich_closed_position_rows
+                enrich_closed_position_rows(rows)
             return {"success": True, "data": rows, "count": len(rows)}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
