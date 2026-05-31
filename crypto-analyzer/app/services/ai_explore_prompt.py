@@ -25,6 +25,16 @@ AI_POSITION_TP_PCT = 6.0
 # 模拟仓持仓顾问: 满 2h 后每 15min 轮询 (见 gemini_position_advisor.HOLD_MIN_HOURS)
 AI_ADVISOR_MIN_HOLD_HOURS = 2
 AI_ADVISOR_CHECK_INTERVAL_S = 900
+# 主探索/预测开仓置信度 (与 prompt 校准表 0.60+ 对齐)
+EXPLORE_CONFIDENCE_THRESHOLD = 0.60
+PREDICT_CONFIDENCE_THRESHOLD = 0.60
+
+KLINE_1H_READING_BLOCK = """
+## 1h K 线读法 (必读 — 禁止只看 1 根)
+- **整体趋势**: `kline_narrative.1h` 中「整体 N 根趋势 / 整体形态」≈ 近 **24 根 1h**。
+- **近期结构**: 「最近 4~6 根明细 / 近期形态」描述回调、反弹、连阳连阴。
+- catalyst 须同时引用 **24 根整体 + 近 4~6 根**，不得只写「最近 1 根 1h」或仅 24h 涨跌幅。
+"""
 
 _KLINE_MARKERS = (
     "1h", "15m", "1d", "连阳", "连阴", "形态", "放量", "缩量",
@@ -148,10 +158,15 @@ def explore_catalyst_technical_ok(
     if not _multi_tf_kline_ok(text):
         return False, "catalyst 须写明至少两个周期(1h/15m/1d)的 K 线形态"
 
+    if re.search(r"最近\s*1\s*根\s*1h", low) or re.search(r"单根\s*1h", low):
+        return False, "须基于 1h 近 4~6 根结构 + 24 根整体趋势，禁止只看 1 根 1h"
+
     if not _quantified_technical_ok(text):
         sym = _as_sym_dict(sym_data)
         rsi = sym.get("tech") or {}
         rsi_v = rsi.get("rsi_14_1h")
+        if rsi_v is None:
+            rsi_v = sym.get("rsi_14_1h")
         if rsi_v is not None:
             return False, f"catalyst 须含 RSI 1h={rsi_v} 或 EMA/7d/阳阴根数等量化描述"
         return False, "catalyst 须含 EMA/7d 距离/阳阴根数或 RSI 等量化技术位"
@@ -169,14 +184,55 @@ def explore_catalyst_technical_ok(
     return True, ""
 
 
+def sym_data_for_catalyst_gate(item: Optional[dict]) -> dict:
+    """explore universe / predict symbols_data → explore_catalyst_technical_ok 统一结构."""
+    sym = _as_sym_dict(item)
+    tech = dict(sym.get("tech") or {})
+    if sym.get("rsi_14_1h") is not None and tech.get("rsi_14_1h") is None:
+        tech["rsi_14_1h"] = sym.get("rsi_14_1h")
+    if sym.get("above_7d_low_pct") is not None and tech.get("above_7d_low_pct") is None:
+        tech["above_7d_low_pct"] = sym.get("above_7d_low_pct")
+    if sym.get("below_7d_high_pct") is not None and tech.get("below_7d_high_pct") is None:
+        tech["below_7d_high_pct"] = sym.get("below_7d_high_pct")
+    return {"tech": tech, "kline_narrative": sym.get("kline_narrative") or {}}
+
+
+def _explore_universe_score(item: dict) -> float:
+    """选币: 中等波动 + 技术极端 + 流动性，避免纯 |24h| 极端池."""
+    chg = abs(float(item.get("change_24h") or 0))
+    if 3 <= chg <= 14:
+        chg_score = chg
+    elif chg < 3:
+        chg_score = chg * 0.6
+    else:
+        chg_score = max(0.0, 14.0 - (chg - 14.0) * 0.85)
+    tech = item.get("tech") or {}
+    rsi_raw = tech.get("rsi_14_1h") or item.get("rsi_14_1h")
+    try:
+        rsi_f = float(rsi_raw) if rsi_raw is not None else 50.0
+    except (TypeError, ValueError):
+        rsi_f = 50.0
+    rsi_score = min(abs(rsi_f - 50.0), 25.0) * 0.35
+    vol = float(item.get("quote_volume_24h") or 0)
+    vol_score = min(vol / 5_000_000.0, 4.0)
+    b7h = tech.get("below_7d_high_pct") or item.get("below_7d_high_pct")
+    ext_score = 0.0
+    try:
+        if b7h is not None and abs(float(b7h)) < 18:
+            ext_score = 2.0
+    except (TypeError, ValueError):
+        pass
+    return chg_score * 0.45 + rsi_score + vol_score * 0.25 + ext_score
+
+
 def prepare_universe_for_llm(
     universe: dict,
     max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
 ) -> Tuple[List[dict], Dict[str, Any]]:
-    """按 |24h 涨跌| 取 TOP N 送 LLM, 避免 15 万字符 prompt + JSON 被 max_tokens 截断."""
+    """按技术面相关性取 TOP N (非单纯 |24h| 极端波动)."""
     items = sorted(
         universe.values(),
-        key=lambda x: abs(float(x.get("change_24h") or 0)),
+        key=_explore_universe_score,
         reverse=True,
     )
     for item in items:
@@ -193,7 +249,7 @@ def prepare_universe_for_llm(
     if meta["llm_symbols_truncated"]:
         logger.info(
             f"[Explore] LLM 候选截断: 全池 {meta['universe_total']} → "
-            f"送模 {meta['llm_symbol_count']} (|24h涨跌| TOP{max_symbols})"
+            f"送模 {meta['llm_symbol_count']} (技术面评分 TOP{max_symbols})"
         )
     return selected, meta
 
@@ -211,7 +267,8 @@ def build_explore_prompt(
         universe_json=json.dumps(universe_list, **compact),
         historical_stats_json=json.dumps(historical_stats, **compact),
         llm_universe_note=(
-            f"本列表为全池 {meta['universe_total']} 个中按 |24h涨跌| 取 TOP {meta['llm_symbol_count']}，"
+            f"本列表为全池 {meta['universe_total']} 个中按 **技术面评分** "
+            f"(中等波动+RSI/7d+流动性，非单纯|24h|极端) 取 TOP {meta['llm_symbol_count']}，"
             f"仅对这些 symbol 输出 verdict (其余忽略)."
         ),
     )
@@ -319,13 +376,14 @@ def _salvage_truncated_explore_json(text: str) -> Optional[dict]:
 
 # catalyst 必须引用的字段类型 (写进 prompt 供 LLM 自检)
 CATALYST_EVIDENCE_BLOCK = """
+""" + KLINE_1H_READING_BLOCK + """
 # catalyst 写法 (强制 — 违反则 confidence 不得超过 0.45, 应标 skip)
 
 ## 你必须做的 (每条 bullish/bearish 至少满足 3 项, 并在 catalyst 原文写出)
 
-1. **kline_narrative** — 引用具体周期与形态 (必填至少 1 个周期):
-   - 例: 「1h 形态: 连续3阳放量上攻」「15m 震荡、1h 跌破前低」
-   - 必须来自数据里的 `kline_narrative.1h` / `15m` / `1d`, 不得空泛说「走势偏强」
+1. **kline_narrative** — 引用 **24 根整体形态 + 近 4~6 根** 结构 (必填 1h, 辅以 15m/1d):
+   - 例: 「1h 整体24根偏多; 近5根阴线回踩 EMA20 缩量」「15m 沿强势整理」
+   - 必须来自 `kline_narrative.1h` / `15m` / `1d`, 不得空泛说「走势偏强」
 
 2. **量化指标 (至少一项, 优先 RSI)** — 若 `tech.rsi_14_1h` 有值, **必须**写出 RSI 数字:
    - 例: 「RSI 1h=58 未超买」「RSI=72 价跌 → 顶背离」
@@ -397,9 +455,9 @@ EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 6 小时 (6h), 
 | confidence | 条件 (全部满足才可给该档) |
 |---|---|
 | 0.80-1.00 | 1h+15m 形态同向 + 成交量确认 + RSI 支持方向 + 距 7d 极值仍有 ≥3% 空间 |
-| 0.65-0.79 | 1h 趋势明确 + 15m 不反向 + catalyst 含多周期 K 线 + RSI/EMA/7d 量化 |
-| 0.50-0.64 | 仅单周期(1h)有方向, 15m 中性 — **最多开 1-2 个** |
-| 0.00-0.49 | 无清晰 K 线结构 / 仅涨跌幅或费率 / 震荡 — **必须 skip** |
+| 0.65-0.79 | 1h **24根整体** + **近4~6根** 同向 + catalyst 含多周期 K 线 + RSI/EMA/7d 量化 |
+| 0.60-0.64 | 结构尚可但单周期偏弱 — **最多开 1-2 个** |
+| 0.00-0.59 | 无清晰 K 线结构 / 仅涨跌幅或费率 / 震荡 — **必须 skip** |
 
 # 判定原则 — 6 小时持仓
 
@@ -434,7 +492,7 @@ GOOD — 技术面 (可 bullish 0.72):
   "symbol": "NEAR/USDT",
   "category": "bullish",
   "confidence": 0.72,
-  "catalyst": "1h 形态: 连续4阳放量上攻; 15m 沿强势整理未破. RSI 1h=58 未超买. 距7d高点 4% 空间够 TP. 资金费 +0.003% 正常(辅助)",
+  "catalyst": "1h 整体24根偏多; 近4根连阳放量; RSI 1h=58 未超买. 15m 同向",
   "data_signal": "1h:4连阳+量放大, RSI=58, 距7d高4%",
   "risk_note": "BTC 若急跌可能拖累"
 }}

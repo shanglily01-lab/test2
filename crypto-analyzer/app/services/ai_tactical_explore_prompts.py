@@ -266,6 +266,10 @@ def tactical_catalyst_ok(
     sym_data: Optional[dict] = None,
     confidence: float = 0.0,
 ) -> Tuple[bool, str]:
+    if definition.extra_catalyst_check and confidence < 0.70:
+        ok, reason = definition.extra_catalyst_check(catalyst, data_signal, sym_data)
+        if not ok:
+            return ok, reason
     ok, reason = explore_catalyst_technical_ok(catalyst, data_signal, sym_data)
     if not ok:
         return ok, reason

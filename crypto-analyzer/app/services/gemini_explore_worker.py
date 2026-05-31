@@ -38,6 +38,7 @@ from app.services.ai_explore_prompt import (
     AI_POSITION_SL_PCT,
     AI_POSITION_TP_PCT,
     EXPLORE_MIN_INTERVAL_HOURS,
+    EXPLORE_CONFIDENCE_THRESHOLD,
     build_explore_prompt,
     explore_catalyst_technical_ok,
     parse_explore_llm_json,
@@ -115,7 +116,6 @@ EXPLORE_LEVERAGE = 5
 EXPLORE_HOLD_HOURS = AI_POSITION_HOLD_HOURS
 EXPLORE_SL_PCT = AI_POSITION_SL_PCT
 EXPLORE_TP_PCT = AI_POSITION_TP_PCT
-EXPLORE_CONFIDENCE_THRESHOLD = 0.5      # 校准表 0.50+ 可开
 EXPLORE_ACCOUNT_ID = 2
 EXPLORE_SOURCE = 'gemini_explore'
 
