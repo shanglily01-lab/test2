@@ -1093,6 +1093,22 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         _insert_verdicts(conn, run_id, verdict_rows)
         _update_run_stats(conn, run_id, predictions_made, orders_opened)
 
+        try:
+            from app.services.ai_shadow_explore import (
+                build_shadow_universe,
+                run_shadow_after_teacher_explore,
+            )
+            run_shadow_after_teacher_explore(
+                teacher_source=PREDICT_SOURCE,
+                teacher_run_id=run_id,
+                universe=build_shadow_universe(symbols_data),
+                global_ctx=global_ctx,
+                teacher_verdicts=verdicts,
+                conn=conn,
+            )
+        except Exception as _shadow_err:
+            logger.warning(f"[DeepSeek预测] Shadow 对比跳过: {_shadow_err}")
+
         logger.info(
             f"[DeepSeek预测] === 一轮结束 run_id={run_id} 开仓={orders_opened} "
             f"预测={predictions_made} 跳过={len(verdict_rows)-orders_opened} "

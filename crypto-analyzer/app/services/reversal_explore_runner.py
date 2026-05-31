@@ -506,6 +506,20 @@ def run_tactical_explore_round(
 
         _insert_verdicts(conn, cfg, verdict_rows)
         _update_trades_opened(conn, cfg, run_id, trades_opened)
+
+        try:
+            from app.services.ai_shadow_explore import run_shadow_after_teacher_explore
+            run_shadow_after_teacher_explore(
+                teacher_source=cfg.source,
+                teacher_run_id=run_id,
+                universe=universe,
+                global_ctx=global_ctx,
+                teacher_verdicts=verdicts,
+                conn=conn,
+            )
+        except Exception as _shadow_err:
+            logger.warning(f"[{cfg.log_tag}] Shadow 对比跳过: {_shadow_err}")
+
         logger.info(
             f"[{cfg.log_tag}] === 结束 run_id={run_id} 开仓={trades_opened} "
             f"耗时={time.time()-t0:.1f}s ==="

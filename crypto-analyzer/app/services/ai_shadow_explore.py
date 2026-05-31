@@ -1,5 +1,6 @@
 """
-探索 Shadow 对比 — Teacher (Gemini/DeepSeek) 跑完后, 用相同 universe 跑规则引擎.
+AI Shadow 对比 — Teacher (Gemini/DeepSeek 探索/预测/战术/顶空底多) 跑完后,
+用相同 universe 跑规则引擎.
 
 不开仓, 只落库对比 category/confidence, 积累样本用于后续蒸馏超级策略.
 """
@@ -36,6 +37,71 @@ def _normalize_category(cat: str) -> str:
     if c in ("bearish", "short", "sell"):
         return "bearish"
     return "skip"
+
+
+def _normalize_teacher_category(cat: str, teacher_source: str) -> str:
+    """探索/预测用 bullish/bearish; 战术 entry / 顶空底多映射为同向 category."""
+    c = (cat or "skip").lower().strip()
+    if c in ("bullish", "long", "buy"):
+        return "bullish"
+    if c in ("bearish", "short", "sell"):
+        return "bearish"
+    if c == "top_reversal":
+        return "bearish"
+    if c == "bottom_reversal":
+        return "bullish"
+    if c in ("entry", "signal", "trade"):
+        src = (teacher_source or "").lower()
+        if src.endswith(("_pullback", "_chase")):
+            return "bullish"
+        if src.endswith(("_rebound", "_dump")):
+            return "bearish"
+    return "skip"
+
+
+def normalize_symbol_data_for_shadow(sym_data: dict) -> dict:
+    """探索 universe 与预测 symbols_data 统一为 evaluate_explore_symbol 可读结构."""
+    if not sym_data:
+        return sym_data
+    out = dict(sym_data)
+    sym = (out.get("symbol") or "").upper()
+    if sym:
+        out["symbol"] = sym
+    tech = dict(out.get("tech") or {})
+    if tech.get("rsi_14_1h") is None and out.get("rsi_14_1h") is not None:
+        tech["rsi_14_1h"] = out["rsi_14_1h"]
+    if tech.get("above_7d_low_pct") is None and out.get("above_7d_low_pct") is not None:
+        tech["above_7d_low_pct"] = out["above_7d_low_pct"]
+    if tech.get("below_7d_high_pct") is None and out.get("below_7d_high_pct") is not None:
+        tech["below_7d_high_pct"] = out["below_7d_high_pct"]
+    out["tech"] = tech
+    if out.get("current_rate") is None and out.get("funding_rate") is not None:
+        out["current_rate"] = out["funding_rate"]
+    return out
+
+
+def build_shadow_universe(universe_or_list) -> Dict[str, dict]:
+    """dict[symbol] 或 list[{symbol,...}] → 规范化 universe."""
+    if isinstance(universe_or_list, dict):
+        out: Dict[str, dict] = {}
+        for key, val in universe_or_list.items():
+            sym = (key or "").upper()
+            if not sym:
+                continue
+            row = val if isinstance(val, dict) else {"symbol": sym}
+            if not row.get("symbol"):
+                row = dict(row)
+                row["symbol"] = sym
+            out[sym] = normalize_symbol_data_for_shadow(row)
+        return out
+    out = {}
+    for row in universe_or_list or []:
+        if not isinstance(row, dict):
+            continue
+        sym = (row.get("symbol") or "").upper()
+        if sym:
+            out[sym] = normalize_symbol_data_for_shadow(row)
+    return out
 
 
 def _narrative_bias(text: str) -> float:
@@ -199,12 +265,14 @@ def run_shadow_after_teacher_explore(
     conn=None,
 ) -> Optional[int]:
     """
-    Teacher explore 成功后立即调用. 使用内存中同一 universe/global_ctx, 不开仓.
-    返回 shadow_run_id 或 None.
+    Teacher 策略轮次成功后立即调用 (探索/预测/战术/顶空底多).
+    使用内存中同一 universe/global_ctx, 不开仓. 返回 shadow_run_id 或 None.
     """
     own_conn = conn is None
     if own_conn:
         conn = _connect()
+
+    universe = build_shadow_universe(universe)
 
     try:
         with conn.cursor() as cur:
@@ -256,7 +324,9 @@ def run_shadow_after_teacher_explore(
 
             tv = tmap.get(sym)
             if tv:
-                t_cat = _normalize_category(tv.get("category"))
+                t_cat = _normalize_teacher_category(
+                    tv.get("category"), teacher_source,
+                )
                 try:
                     t_conf = float(tv.get("confidence") or 0)
                 except (TypeError, ValueError):
