@@ -38,6 +38,11 @@ GEMINI_TIMEOUT_MS = 180_000
 HOLD_MIN_HOURS = 2.0            # 持仓满 2h 纳入监管
 HOLD_CHECK_INTERVAL_S = 900     # 同仓 15min 内不重复问
 GEMINI_PER_CALL_DELAY_S = 1.0   # 防 Gemini rate limit
+HOLD_15M_BARS = 6               # 持仓顾问：近 4~6 根 15m
+HOLD_1H_BARS = 4                # 持仓顾问：近 4 根 1h
+HOLD_LOSS_MILD_ROI = -5.0       # 保证金 ROI %，轻微亏损
+HOLD_LOSS_MODERATE_ROI = -12.0  # 中度亏损
+HOLD_LOSS_SEVERE_ROI = -15.0    # 严重亏损（近策略 SL）
 
 _open_advisor_singleton: Optional["GeminiPositionAdvisor"] = None
 
@@ -290,6 +295,151 @@ class GeminiPositionAdvisor:
     # ────────────────────────────────────────────────────────
 
     @staticmethod
+    def _score_klines_for_side(klines: list, side: str) -> dict:
+        """客观统计 K 线对持仓方向的支持/反向根数（供 prompt + 代码复核）."""
+        empty = {
+            "for": 0, "against": 0, "last3": "", "trail_against": 0,
+            "summary": "数据不足",
+        }
+        if not klines:
+            return empty
+        dirs: List[str] = []
+        for_count = 0
+        against_count = 0
+        for k in klines:
+            o, c = float(k['o']), float(k['c'])
+            if c > o:
+                d = "阳"
+            elif c < o:
+                d = "阴"
+            else:
+                d = "十"
+            dirs.append(d)
+            if side == 'LONG':
+                if d == "阳":
+                    for_count += 1
+                elif d == "阴":
+                    against_count += 1
+            else:
+                if d == "阴":
+                    for_count += 1
+                elif d == "阳":
+                    against_count += 1
+        want = "阳" if side == 'LONG' else "阴"
+        trail_against = 0
+        for d in reversed(dirs):
+            if d == "十":
+                continue
+            if d != want:
+                trail_against += 1
+            else:
+                break
+        last3 = "".join(dirs[-3:])
+        summary = (
+            f"顺向={for_count} 反向={against_count} "
+            f"末3根={last3} 末尾连反={trail_against}"
+        )
+        return {
+            "for": for_count,
+            "against": against_count,
+            "last3": last3,
+            "trail_against": trail_against,
+            "summary": summary,
+        }
+
+    @staticmethod
+    def _loss_tier_label(roi_pct: float) -> str:
+        if roi_pct >= 0:
+            return "盈利/保本"
+        if roi_pct > HOLD_LOSS_MILD_ROI:
+            return "轻微亏损"
+        if roi_pct > HOLD_LOSS_MODERATE_ROI:
+            return "中度亏损"
+        return "严重亏损"
+
+    @staticmethod
+    def _loss_tier_rules(roi_pct: float, side: str) -> str:
+        tier = GeminiPositionAdvisor._loss_tier_label(roi_pct)
+        if tier == "盈利/保本":
+            return (
+                "## 盈亏档位：盈利/保本\n"
+                "- hold 需 15m+1h 仍顺向；出现明确反转可 sell 锁利。\n"
+                "- ROI ≥ +20% 且 15m 反转 K 线 → 优先 sell 锁利。"
+            )
+        if tier == "轻微亏损":
+            return (
+                "## 盈亏档位：轻微亏损（ROI > -5%）\n"
+                "- **禁止**因「小亏」就 sell；须 15m 多数反向 + 1h 至少 2 根确认反向。\n"
+                "- 若 K 线仍顺向 → hold；混杂 → observe（不要勉强 hold）。"
+            )
+        if tier == "中度亏损":
+            return (
+                "## 盈亏档位：中度亏损（-12% < ROI ≤ -5%）\n"
+                "- **hold 门槛提高**：须 15m 顺向根数 ≥ 反向，且 1h 末 2 根仍支持 "
+                f"{side}（写进 reason）。\n"
+                "- 15m 末尾连反 ≥3 或 1h 反向 ≥2 → 倾向 **sell**；结构不清 → **observe**（勿 hold）。\n"
+                "- 不得用 Big4 代替 K 线证明「还能扛」。"
+            )
+        return (
+            "## 盈亏档位：严重亏损（ROI ≤ -12%）\n"
+            "- **默认倾向 stop-loss**：除非 15m 出现**明确企稳/反转**（如长下影+阳包阴 for LONG），"
+            "否则 **sell** 或至少 **observe**，几乎不得 hold。\n"
+            "- **hold 仅当同时**：(1) 15m 顺向 ≥ 反向 且末尾连反 ≤1；(2) 1h 末 2 根不再扩大亏损方向；"
+            "(3) reason 逐根引用表格。\n"
+            "- ROI ≤ -15% 且 15m 无企稳 → **必须 sell**（勿赌反弹）。"
+        )
+
+    @staticmethod
+    def _temper_losing_hold(
+        roi_pct: float,
+        action: str,
+        reason: str,
+        side: str,
+        s15: dict,
+        s1h: dict,
+    ) -> Tuple[str, str]:
+        """亏损单：Gemini 若建议 hold，用客观 K 线统计复核，防止「死扛」."""
+        if action != 'hold' or roi_pct >= 0:
+            return action, reason
+
+        override = ""
+        if roi_pct <= HOLD_LOSS_SEVERE_ROI:
+            if s15.get("trail_against", 0) >= 2 or s15.get("against", 0) >= 4:
+                action = 'sell'
+                override = "深亏+15m持续反向"
+            elif s15.get("for", 0) < s15.get("against", 0):
+                action = 'observe'
+                override = "深亏+15m无企稳"
+        elif roi_pct <= HOLD_LOSS_MODERATE_ROI:
+            if (
+                s15.get("against", 0) > s15.get("for", 0)
+                and s15.get("trail_against", 0) >= 2
+            ):
+                action = 'sell'
+                override = "中度亏+15m连反"
+            elif s15.get("for", 0) < 2 and s1h.get("against", 0) >= 2:
+                action = 'observe'
+                override = "中度亏+1h/15m不支持"
+        elif roi_pct <= HOLD_LOSS_MILD_ROI:
+            if (
+                s15.get("against", 0) >= s15.get("for", 0) + 2
+                and s1h.get("against", 0) >= 2
+            ):
+                action = 'observe'
+                override = "轻亏+K线偏反向"
+
+        if override:
+            reason = f"{reason[:40]}|复核:{override}"[:100]
+            logger.info(f"[Gemini顾问] 亏损 hold 复核 → {action} ({override})")
+        return action, reason
+
+    @staticmethod
+    def _recent_klines(klines: list, n: int) -> list:
+        if not klines or n <= 0:
+            return klines or []
+        return klines[-n:]
+
+    @staticmethod
     def _build_prompt(position: dict, current_price: float, ctx: dict) -> str:
         entry = float(position['entry_price'])
         leverage = int(position['leverage'])
@@ -304,56 +454,87 @@ class GeminiPositionAdvisor:
             price_change_pct = (entry - current_price) / entry * 100
         roi_pct = price_change_pct * leverage
 
-        # K线表格
-        klines_str = "  time           open         high          low        close       volume\n"
-        for k in ctx.get('klines_15m', []):
-            klines_str += (
-                f"  {k['t']}  {k['o']:>11}  {k['h']:>11}  {k['l']:>11}  "
-                f"{k['c']:>11}  {k['v']:>11}\n"
-            )
+        k15 = GeminiPositionAdvisor._recent_klines(
+            ctx.get('klines_15m', []), HOLD_15M_BARS,
+        )
+        k1h = GeminiPositionAdvisor._recent_klines(
+            ctx.get('klines_1h', []), HOLD_1H_BARS,
+        )
+        klines_15m_str = GeminiPositionAdvisor._format_kline_table(k15)
+        klines_1h_str = GeminiPositionAdvisor._format_kline_table(k1h)
+        s15 = GeminiPositionAdvisor._score_klines_for_side(k15, side)
+        s1h = GeminiPositionAdvisor._score_klines_for_side(k1h, side)
+        loss_rules = GeminiPositionAdvisor._loss_tier_rules(roi_pct, side)
+        loss_tier = GeminiPositionAdvisor._loss_tier_label(roi_pct)
 
+        rsi_s = ctx.get('rsi_14_1h')
+        rsi_line = f"RSI(1h): {rsi_s:.1f}" if rsi_s is not None else "RSI(1h): N/A"
         big4 = ctx.get('big4_signal', 'NEUTRAL')
         big4_strength = ctx.get('big4_strength', 0)
         btc_6h = ctx.get('btc_6h_change', 0)
         eth_6h = ctx.get('eth_6h_change', 0)
 
-        return f"""你是一个超级交易大师。
-一个模拟仓位已持仓超过 {hold_h:.1f}h。请决定是 hold / observe / sell。
+        side_cn = "做多 LONG" if side == 'LONG' else "做空 SHORT"
+        return f"""你是模拟仓**持仓监管**顾问。根据**本币最近 K 线客观结构**决定 hold / observe / sell。
 
-仓位信息
+## 禁止（违反则 reason 无效）
+- **不得**主要因 Big4/BTC/ETH 宏观偏多偏空就 sell 或 hold
+- **不得**空泛主观（「感觉要跌」「大盘不好」）；reason 必须引用下方 15m/1h 表格中的具体形态
+- Big4 仅作辅证；K 线与持仓方向不一致时优先看 K 线，Big4 不能单独触发 sell
+
+## 仓位
   Symbol:          {symbol}
-  Direction:       {side}
-  Entry price:     {entry}
-  Current price:   {current_price}
+  Direction:       {side_cn}
+  Entry:           {entry}
+  Current:         {current_price}
   Leverage:        {leverage}x
-  Hold hours:      {hold_h:.1f}h
+  Hold:            {hold_h:.1f}h
   Price change:    {price_change_pct:+.2f}%
-  ROI on margin:   {roi_pct:+.2f}%
-  Source strategy: {source}
+  ROI on margin:   {roi_pct:+.2f}%  （档位: {loss_tier}）
+  Source:          {source}
+  {rsi_line}
 
-MARKET CONTEXT
-  Big4 signal:     {big4} (strength {big4_strength:.0f})
-  BTC 6h change:   {btc_6h:+.2f}%
-  ETH 6h change:   {eth_6h:+.2f}%
+## 客观统计（须与 reason 一致，勿矛盾）
+  15m({HOLD_15M_BARS}根): {s15['summary']}
+  1h({HOLD_1H_BARS}根):  {s1h['summary']}
 
-RECENT 4H 15M KLINES (oldest -> newest)
-{klines_str}
+{loss_rules}
 
-DECISION RULES
-  - "hold":    Trend favors the position, signals stable. Continue.
-  - "observe": Mixed signals, neither clear continuation nor clear reversal.
-  - "sell":    Close NOW. Triggers:
-      * ROI <= -15% with no reversal signal in 15m bars
-      * ROI >= +20% with clear reversal candle (engulfing/pin bar)
-      * Strong opposite Big4 signal while position is losing
-      * Multiple 15m bars against position with expanding volume
+## K 线读法（主判据）
+1. **近 {HOLD_1H_BARS} 根 1h**（下表）：结构是否仍支持 {side}？
+   - LONG：高点/低点抬高，或最近 2 根 1h 仍偏多（阳线/下影支撑）
+   - SHORT：高点/低点降低，或最近 2 根 1h 仍偏空（阴线/上影承压）
+2. **近 {HOLD_15M_BARS} 根 15m**（下表）：短线是否**已反转**持仓方向？
+   - 数连阳/连阴、吞没、长上影/下影、是否放量反向
+3. reason 须写清形态，例如「近5根15m四连阴破前低 + 近4根1h末两根阴线」
 
-Be decisive. False holds (should have sold) cost more than false sells.
+## 近 {HOLD_1H_BARS} 根 1h K 线 (oldest → newest)
+{klines_1h_str}
 
-Output ONLY a single valid JSON object, no markdown fence:
+## 近 {HOLD_15M_BARS} 根 15m K 线 (oldest → newest)
+{klines_15m_str}
+
+## 宏观（辅证，权重低于 K 线）
+  Big4: {big4} (strength {big4_strength:.0f}) | BTC 6h {btc_6h:+.2f}% | ETH 6h {eth_6h:+.2f}%
+  仅当 K 线已明确反向时，方可引用 Big4 加强 sell 理由；不得单独因 Big4 sell。
+
+## 决策
+- **hold**: 近 {HOLD_1H_BARS} 根 1h + 近 {HOLD_15M_BARS} 根 15m **整体仍支持** {side}，无明确反转
+  （**亏损单 hold 门槛更高**，见上「盈亏档位」；中度/严重亏损无明确企稳 → 不得 hold）
+- **observe**: 15m 与 1h 信号混杂、震荡、或数据不足以判断（**轻微/中度亏损且结构不清 → 优先 observe**）
+- **sell**: 须同时满足：
+  (A) 近 {HOLD_15M_BARS} 根 15m **多数反向**持仓（连阴/连阳+放量等，写进 reason）
+  (B) 近 {HOLD_1H_BARS} 根 1h **至少最近 2 根确认**同向反转
+  或：**严重亏损**且 15m 无企稳；ROI ≤ -15% 且 15m 无反转；ROI ≥ +20% 且 15m 明确反转
+
+亏损越深，越需 **K 线逐根证据** 才能 hold；不得「亏损已深仍笼统 hold」。
+
+K 线方向不明时默认 **observe**；**严重亏损**默认 **sell**（除非 15m 明确反转）。
+
+Output ONLY JSON:
 {{
   "action": "hold" | "observe" | "sell",
-  "reason": "<50 chars max, in Chinese>"
+  "reason": "<50字中文，必须含15m/1h形态，勿只写Big4>"
 }}
 """
 
@@ -536,9 +717,12 @@ Output ONLY JSON:
                 model=model_name, contents=prompt, config=cfg,
             )
             text = (resp.text or '').strip()
-            if text.startswith('```'):
-                text = text.strip('`').lstrip('json').strip()
-            sig = json.loads(text)
+            from app.services.ai_explore_prompt import _extract_llm_json_text, _try_parse_json
+            parsed, _ = _try_parse_json(_extract_llm_json_text(text))
+            if parsed is None:
+                logger.warning(f"[Gemini顾问] 返回非 JSON: {text[:200]}")
+                return None
+            sig = parsed
             if open_mode:
                 decision = str(sig.get('decision', '')).strip().lower()
                 if decision not in ('approve', 'reject'):
@@ -753,18 +937,25 @@ Output ONLY JSON:
                     stats['errors'] += 1
                     continue
 
-                action = decision['action']
-                reason = decision['reason']
-                stats[action] += 1
-                stats['evaluated'] += 1
-
-                # 价格差描述
                 entry = float(pos['entry_price'])
                 if pos['position_side'] == 'LONG':
                     pct = (current_price - entry) / entry * 100
                 else:
                     pct = (entry - current_price) / entry * 100
                 roi = pct * int(pos['leverage'])
+
+                k15 = self._recent_klines(ctx.get('klines_15m', []), HOLD_15M_BARS)
+                k1h = self._recent_klines(ctx.get('klines_1h', []), HOLD_1H_BARS)
+                s15 = self._score_klines_for_side(k15, pos['position_side'])
+                s1h = self._score_klines_for_side(k1h, pos['position_side'])
+
+                action = decision['action']
+                reason = decision['reason']
+                action, reason = self._temper_losing_hold(
+                    roi, action, reason, pos['position_side'], s15, s1h,
+                )
+                stats[action] += 1
+                stats['evaluated'] += 1
 
                 logger.info(
                     f"[Gemini顾问] {action.upper():8s} id={pos['id']} {pos['symbol']:15s} "

@@ -122,6 +122,8 @@
 
 ### GeminiPositionAdvisor (持仓顾问 + 开仓审查)
 - **持仓顾问**: `system_settings.gemini_position_advisor_enabled`；持仓 ≥2h，hold/observe/sell
+- **持仓判断主依据**: 近 **4 根 1h** + 近 **6 根 15m** K 线结构；**Big4 仅辅证**，不得单独触发 sell
+- **亏损分档**: 轻微(-5%)/中度(-12%)/严重(≤-12%) ROI 提高 hold 门槛；深亏 hold 经 K 线统计复核，防止死扛
 - **开仓审查** (`paper_open_gate.py`): 模拟开仓前按 `source` 走 `open_advisor_strategy_rubrics` + Gemini 审查（FIFO 队列）
 - 表 `gemini_advisor_reviews` (migration 011)；Web `/gemini-advisor-reviews`
 - sell/拒单逻辑见 `gemini_position_advisor.py`；实盘平仓需 `live_close_enabled=1`

@@ -83,11 +83,67 @@ def test_open_prompt_contains_rubric():
     print("[PASS] open_prompt")
 
 
+def test_hold_prompt_kline_focus():
+    ctx = {
+        "klines_15m": [
+            {"t": f"01-01 {i:02d}:00", "o": 1, "h": 1, "l": 1, "c": 1, "v": 1}
+            for i in range(6)
+        ],
+        "klines_1h": [
+            {"t": f"01-01 {i:02d}:00", "o": 1, "h": 1, "l": 1, "c": 1, "v": 1}
+            for i in range(4)
+        ],
+        "big4_signal": "BEARISH",
+        "big4_strength": 80,
+        "btc_6h_change": -3.0,
+        "eth_6h_change": -2.0,
+        "rsi_14_1h": 48.0,
+    }
+    pos = {
+        "entry_price": 100.0,
+        "leverage": 5,
+        "position_side": "LONG",
+        "symbol": "BTC/USDT",
+        "hold_hours": 3.0,
+        "source": "gemini_explore",
+    }
+    prompt = GeminiPositionAdvisor._build_prompt(pos, 101.0, ctx)
+    assert "近 4 根 1h" in prompt
+    assert "近 6 根 15m" in prompt
+    assert "不得" in prompt and "Big4" in prompt
+    assert "DECISION RULES" not in prompt
+    assert "Strong opposite Big4" not in prompt
+    assert "01-01 05:00" in prompt  # last of 6 15m bars
+    assert "盈亏档位" in prompt
+    assert "客观统计" in prompt
+    print("[PASS] hold_prompt_kline_focus")
+
+
+def test_losing_hold_temper():
+    s15_bad = {"for": 1, "against": 5, "trail_against": 4, "last3": "阴阳阴", "summary": ""}
+    s1h_bad = {"for": 0, "against": 3, "trail_against": 2, "last3": "阴阴阴", "summary": ""}
+    act, reason = GeminiPositionAdvisor._temper_losing_hold(
+        -16.0, "hold", "还能扛", "LONG", s15_bad, s1h_bad,
+    )
+    assert act == "sell", act
+    assert "复核" in reason
+
+    s15_ok = {"for": 4, "against": 2, "trail_against": 0, "last3": "阳阳阴", "summary": ""}
+    s1h_ok = {"for": 3, "against": 1, "trail_against": 0, "last3": "阳阳阴", "summary": ""}
+    act2, _ = GeminiPositionAdvisor._temper_losing_hold(
+        -8.0, "hold", "15m仍顺向", "LONG", s15_ok, s1h_ok,
+    )
+    assert act2 == "hold"
+    print("[PASS] losing_hold_temper")
+
+
 def main():
     test_source_mapping()
     test_direction_gates()
     test_expected_side()
     test_open_prompt_contains_rubric()
+    test_hold_prompt_kline_focus()
+    test_losing_hold_temper()
     print("-" * 40)
     print("全部通过")
 
