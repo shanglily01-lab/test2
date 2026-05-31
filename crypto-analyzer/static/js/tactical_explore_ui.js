@@ -14,7 +14,7 @@
       '<div><h1 class="text-2xl font-bold tracking-tight">' + escapeHtml(cfg.pageTitle) + '</h1>' +
       '<p class="text-[11px] text-on-surface-variant mt-1 uppercase tracking-widest">' +
       escapeHtml(cfg.subtitle) + (side ? ' · ' + side : '') +
-      ' · 仅模拟仓 · SL 4% / TP 6% / 5x / 6h</p></div>' +
+      ' · 仅模拟仓 · SL 4% / TP 6% / 5x / 4h</p></div>' +
       '<div class="flex items-center gap-4">' +
       '<span class="chip chip-on"><span class="material-symbols-outlined text-[14px]">science</span><span>始终启用</span></span>' +
       '<button type="button" class="tac-run-now flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-xs text-primary" data-tab="' + cfg.tab + '">' +

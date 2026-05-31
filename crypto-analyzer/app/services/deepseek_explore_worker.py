@@ -8,7 +8,7 @@ DeepSeek 探索 worker (v1 — 2026-05-28)
   - account_id = 2 (U本位模拟盘)
   - margin    = 500U
   - leverage  = 5x
-  - hold     = 6 小时
+  - hold     = 4 小时
   - SL       = 4%
   - TP       = 6%
 

@@ -197,7 +197,7 @@ async def status():
                 "params": {
                     "margin_usd": 500,
                     "leverage": 3,
-                    "hold_hours": 6,
+                    "hold_hours": 4,
                     "sl_pct": 5,
                     "tp_pct": 8,
                     "confidence_threshold": 0.6,

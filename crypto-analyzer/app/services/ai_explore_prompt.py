@@ -19,7 +19,7 @@ EXPLORE_LLM_MAX_OUTPUT_TOKENS = 8192
 # 主探索 (gemini/deepseek_explore) scheduler + worker 防重间隔
 EXPLORE_MIN_INTERVAL_HOURS = 4.0
 # AI 模拟仓 (探索/预测/战术) 计划持仓时长
-AI_POSITION_HOLD_HOURS = 6
+AI_POSITION_HOLD_HOURS = 4
 AI_POSITION_SL_PCT = 4.0
 AI_POSITION_TP_PCT = 6.0
 # 模拟仓持仓顾问: 满 2h 后每 15min 轮询 (见 gemini_position_advisor.HOLD_MIN_HOURS)
@@ -441,13 +441,13 @@ CATALYST_EVIDENCE_BLOCK = """
 - 若删掉 change_24h 和 funding_rate 后, 理由还成立吗? 不成立 → skip
 """
 
-EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 6 小时 (6h), SL=4%, TP=6%, 杠杆 5x; 满 2h 后 Gemini 持仓顾问每 15min 可建议平仓.
+EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 4 小时 (4h), SL=4%, TP=6%, 杠杆 5x; 满 2h 后 Gemini 持仓顾问每 15min 可建议平仓.
 
-你的任务是: 基于**个股技术面**判断未来 6 小时内是否值得持有; 不是复述行情、不是宏观押注.
+你的任务是: 基于**个股技术面**判断未来 4 小时内是否值得持有; 不是复述行情、不是宏观押注.
 
 # 仓位设置 (供你理解容错空间)
 - 杠杆 5x, 名义本金 ~2500U, SL=4% 价格跌幅, TP=6% 涨幅
-- 6 小时到期强制平仓 — 方向须能在 6h 内走出约 6% 或至少不触发 4% SL
+- 4 小时到期强制平仓 — 方向须能在 4h 内尽量走向 6% TP 或至少不触发 4% SL
 - 不要选「只会小幅波动 1-2%」的标的
 
 # 全局市场环境 (宏观仅背景, 见 big4_trading_hint)
@@ -485,7 +485,7 @@ EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 6 小时 (6h), 
 | 0.60-0.64 | 结构尚可但单周期偏弱 — **最多开 1-2 个** |
 | 0.00-0.59 | 无清晰 K 线结构 / 仅涨跌幅或费率 / 震荡 — **必须 skip** |
 
-# 判定原则 — 6 小时持仓
+# 判定原则 — 4 小时持仓
 
 ## ✅ 可给 bullish/bearish (须技术面)
 

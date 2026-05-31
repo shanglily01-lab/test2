@@ -20,12 +20,14 @@ def test_thresholds():
     from app.services.ai_explore_prompt import (
         EXPLORE_CONFIDENCE_THRESHOLD,
         PREDICT_CONFIDENCE_THRESHOLD,
+        AI_POSITION_HOLD_HOURS,
     )
     from app.services.gemini_explore_worker import EXPLORE_CONFIDENCE_THRESHOLD as G
     from app.services.deepseek_explore_worker import EXPLORE_CONFIDENCE_THRESHOLD as D
 
     assert EXPLORE_CONFIDENCE_THRESHOLD == 0.60
     assert PREDICT_CONFIDENCE_THRESHOLD == 0.60
+    assert AI_POSITION_HOLD_HOURS == 4
     assert G == D == 0.60
     print("[PASS] thresholds unified at 0.60")
 

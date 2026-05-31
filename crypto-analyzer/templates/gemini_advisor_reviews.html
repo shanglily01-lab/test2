@@ -111,6 +111,22 @@
   <button id="tabHold" onclick="setTab('hold')" class="px-4 py-2 text-sm text-[#a8abb2]">持仓审核</button>
 </div>
 
+<div class="flex flex-wrap items-end gap-3 mb-4">
+  <div class="relative flex-1 min-w-[200px] max-w-sm group">
+    <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#a8abb2] text-lg group-focus-within:text-[#49f4c8]">search</span>
+    <input id="searchInput" type="text" placeholder="交易对 / 来源 / 理由 / 决策..."
+           class="w-full bg-[#151a20] border border-[#44484e]/40 rounded-lg pl-10 pr-4 py-2 text-xs text-[#ebeef5] placeholder-[#a8abb2] focus:outline-none focus:border-[#49f4c8]/50"/>
+  </div>
+  <select id="decisionFilter" class="bg-[#151a20] border border-[#44484e]/40 rounded-lg px-3 py-2 text-xs text-[#ebeef5] focus:outline-none focus:border-[#49f4c8]/50">
+    <option value="">全部决策</option>
+  </select>
+  <button onclick="doSearch()" class="flex items-center gap-1 px-4 py-2 rounded-lg bg-[#49f4c8] text-[#0a0f14] text-xs font-semibold hover:opacity-90">
+    <span class="material-symbols-outlined text-[16px]">search</span>搜索
+  </button>
+  <button onclick="resetSearch()" class="px-3 py-2 rounded-lg bg-[#151a20] hover:bg-[#1a2027] border border-[#44484e]/40 text-xs text-[#a8abb2]">重置</button>
+  <span id="resultCount" class="text-xs text-[#a8abb2] mono ml-auto"></span>
+</div>
+
 <div class="bg-[#151a20] rounded-xl border border-[#44484e]/30 overflow-hidden">
 <table class="w-full text-xs">
 <thead class="bg-[#0a0f14] text-[#a8abb2] uppercase tracking-wider">
@@ -127,11 +143,30 @@
 <tbody id="reviewBody" class="divide-y divide-[#44484e]/20"></tbody>
 </table>
 <p id="emptyMsg" class="hidden p-6 text-center text-[#a8abb2] text-sm">暂无记录</p>
+<div class="flex items-center justify-between px-4 py-3 border-t border-[#44484e]/30 text-xs text-[#a8abb2]">
+  <span id="pageInfo" class="mono"></span>
+  <div id="pageBtns" class="flex items-center gap-1"></div>
+</div>
 </div>
 </main>
 
 <script>
 var currentTab = 'open';
+var currentPage = 1;
+var pageSize = 50;
+var totalItems = 0;
+
+var OPEN_DECISIONS = [
+  { v: '', l: '全部决策' },
+  { v: 'approve', l: 'approve 通过' },
+  { v: 'reject', l: 'reject 拒绝' }
+];
+var HOLD_DECISIONS = [
+  { v: '', l: '全部决策' },
+  { v: 'hold', l: 'hold 持有' },
+  { v: 'observe', l: 'observe 观察' },
+  { v: 'sell', l: 'sell 平仓' }
+];
 
 function chipClass(decision, type) {
   if (type === 'open') {
@@ -142,11 +177,59 @@ function chipClass(decision, type) {
   return 'chip chip-observe';
 }
 
+function updateDecisionOptions() {
+  var sel = document.getElementById('decisionFilter');
+  var opts = currentTab === 'open' ? OPEN_DECISIONS : HOLD_DECISIONS;
+  sel.innerHTML = opts.map(function(o) {
+    return '<option value="' + o.v + '">' + o.l + '</option>';
+  }).join('');
+}
+
 function setTab(t) {
   currentTab = t;
+  currentPage = 1;
   document.getElementById('tabOpen').className = t === 'open' ? 'px-4 py-2 text-sm tab-active' : 'px-4 py-2 text-sm text-[#a8abb2]';
   document.getElementById('tabHold').className = t === 'hold' ? 'px-4 py-2 text-sm tab-active' : 'px-4 py-2 text-sm text-[#a8abb2]';
+  updateDecisionOptions();
   loadReviews();
+}
+
+function doSearch() {
+  currentPage = 1;
+  loadReviews();
+}
+
+function resetSearch() {
+  document.getElementById('searchInput').value = '';
+  document.getElementById('decisionFilter').value = '';
+  currentPage = 1;
+  loadReviews();
+}
+
+function goPage(p) {
+  var totalPages = Math.ceil(totalItems / pageSize) || 1;
+  if (p < 1 || p > totalPages) return;
+  currentPage = p;
+  loadReviews();
+}
+
+function renderPagination() {
+  var totalPages = Math.ceil(totalItems / pageSize) || 1;
+  document.getElementById('pageInfo').textContent =
+    totalItems > 0 ? ('共 ' + totalItems + ' 条 · 第 ' + currentPage + ' / ' + totalPages + ' 页') : '';
+  var html = '';
+  var btnCls = 'px-2 py-1 rounded border border-[#44484e]/40 text-[#a8abb2] hover:border-[#49f4c8] hover:text-[#49f4c8] disabled:opacity-30 disabled:cursor-not-allowed transition-all';
+  html += '<button onclick="goPage(' + (currentPage - 1) + ')" ' + (currentPage <= 1 ? 'disabled' : '') + ' class="' + btnCls + '">«</button>';
+  var start = Math.max(1, currentPage - 2);
+  var end = Math.min(totalPages, currentPage + 2);
+  for (var p = start; p <= end; p++) {
+    var active = p === currentPage;
+    html += '<button onclick="goPage(' + p + ')" class="px-2 py-1 rounded border ' +
+      (active ? 'border-[#49f4c8] text-[#49f4c8] bg-[#49f4c8]/10' : 'border-[#44484e]/40 text-[#a8abb2] hover:border-[#49f4c8] hover:text-[#49f4c8]') +
+      ' transition-all">' + p + '</button>';
+  }
+  html += '<button onclick="goPage(' + (currentPage + 1) + ')" ' + (currentPage >= totalPages ? 'disabled' : '') + ' class="' + btnCls + '">»</button>';
+  document.getElementById('pageBtns').innerHTML = totalItems > 0 ? html : '';
 }
 
 async function loadSummary() {
@@ -165,13 +248,31 @@ async function loadSummary() {
 }
 
 async function loadReviews() {
-  var url = '/api/gemini-advisor/reviews?review_type=' + currentTab + '&limit=80';
-  var r = await fetch(url);
-  var d = await r.json();
+  var q = (document.getElementById('searchInput').value || '').trim();
+  var decision = document.getElementById('decisionFilter').value || '';
+  var offset = (currentPage - 1) * pageSize;
+  var params = new URLSearchParams({
+    review_type: currentTab,
+    limit: String(pageSize),
+    offset: String(offset)
+  });
+  if (q) params.set('q', q);
+  if (decision) params.set('decision', decision);
+
   var body = document.getElementById('reviewBody');
+  body.innerHTML = '<tr><td colspan="7" class="px-3 py-8 text-center text-[#a8abb2]">加载中...</td></tr>';
+  document.getElementById('emptyMsg').classList.add('hidden');
+
+  var r = await fetch('/api/gemini-advisor/reviews?' + params.toString());
+  var d = await r.json();
+  totalItems = d.total || 0;
+  document.getElementById('resultCount').textContent =
+    totalItems > 0 ? ('匹配 ' + totalItems + ' 条') : (q || decision ? '无匹配结果' : '');
+
   body.innerHTML = '';
   if (!d.reviews || d.reviews.length === 0) {
     document.getElementById('emptyMsg').classList.remove('hidden');
+    renderPagination();
     return;
   }
   document.getElementById('emptyMsg').classList.add('hidden');
@@ -193,12 +294,18 @@ async function loadReviews() {
       '<td class="px-3 py-2 text-[#a8abb2] max-w-md truncate" title="' + (row.reason || '').replace(/"/g, '&quot;') + '">' + (row.reason || '—') + '</td>';
     body.appendChild(tr);
   });
+  renderPagination();
 }
 
 function loadAll() {
   loadSummary();
   loadReviews();
 }
+
+updateDecisionOptions();
+document.getElementById('searchInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doSearch();
+});
 loadAll();
 </script>
 </body>

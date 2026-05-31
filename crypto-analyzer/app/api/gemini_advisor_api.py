@@ -61,11 +61,42 @@ def get_summary():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _review_filters(
+    review_type: Optional[str],
+    decision: Optional[str],
+    symbol: Optional[str],
+    q: Optional[str],
+) -> tuple[str, list[Any]]:
+    """共用 WHERE 片段（不含 ORDER/LIMIT）。"""
+    sql = ""
+    params: list[Any] = []
+    if review_type:
+        sql += " AND review_type = %s"
+        params.append(review_type)
+    if decision:
+        sql += " AND decision = %s"
+        params.append(decision)
+    if symbol:
+        sql += " AND symbol = %s"
+        params.append(symbol.upper())
+    if q:
+        q = q.strip()
+        if q:
+            like = f"%{q}%"
+            sql += (
+                " AND (symbol LIKE %s OR source LIKE %s OR reason LIKE %s"
+                " OR decision LIKE %s OR position_side LIKE %s)"
+            )
+            params.extend([like, like, like, like, like])
+    return sql, params
+
+
 @router.get("/reviews")
 def list_reviews(
     review_type: Optional[str] = Query(None, description="open | hold"),
     decision: Optional[str] = Query(None),
     symbol: Optional[str] = Query(None),
+    q: Optional[str] = Query(None, description="模糊搜索 symbol/source/reason/decision"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
@@ -75,17 +106,8 @@ def list_reviews(
             if not _table_exists(cur, "gemini_advisor_reviews"):
                 return {"reviews": [], "ready": False, "total": 0}
 
-            sql = "SELECT COUNT(*) AS cnt FROM gemini_advisor_reviews WHERE 1=1"
-            params: list[Any] = []
-            if review_type:
-                sql += " AND review_type = %s"
-                params.append(review_type)
-            if decision:
-                sql += " AND decision = %s"
-                params.append(decision)
-            if symbol:
-                sql += " AND symbol = %s"
-                params.append(symbol.upper())
+            filt, params = _review_filters(review_type, decision, symbol, q)
+            sql = "SELECT COUNT(*) AS cnt FROM gemini_advisor_reviews WHERE 1=1" + filt
             cur.execute(sql, params)
             total = int((cur.fetchone() or {}).get("cnt") or 0)
 
@@ -95,17 +117,8 @@ def list_reviews(
                        reason, catalyst, created_at
                 FROM gemini_advisor_reviews
                 WHERE 1=1
-            """
-            qparams: list[Any] = []
-            if review_type:
-                sql += " AND review_type = %s"
-                qparams.append(review_type)
-            if decision:
-                sql += " AND decision = %s"
-                qparams.append(decision)
-            if symbol:
-                sql += " AND symbol = %s"
-                qparams.append(symbol.upper())
+            """ + filt
+            qparams = list(params)
             sql += " ORDER BY id DESC LIMIT %s OFFSET %s"
             qparams.extend([limit, offset])
             cur.execute(sql, qparams)

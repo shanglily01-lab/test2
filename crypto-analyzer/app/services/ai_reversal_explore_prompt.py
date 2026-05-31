@@ -13,6 +13,7 @@ from loguru import logger
 
 from app.services.ai_big4_prompt import BIG4_PROMPT_BLOCK_EXPLORE
 from app.services.ai_explore_prompt import (
+    AI_POSITION_HOLD_HOURS,
     EXPLORE_LLM_MAX_OUTPUT_TOKENS,
     EXPLORE_LLM_MAX_SYMBOLS,
     explore_catalyst_technical_ok,
@@ -22,7 +23,7 @@ from app.services.ai_explore_prompt import (
 REVERSAL_CONFIDENCE_THRESHOLD = 0.65
 REVERSAL_SL_PCT = 3.0
 REVERSAL_TP_PCT = 5.0
-REVERSAL_HOLD_HOURS = 4.0
+REVERSAL_HOLD_HOURS = float(AI_POSITION_HOLD_HOURS)
 
 # catalyst 中单根涨跌幅 >50% 多为叙事 bug 或幻觉
 _CATALYST_PCT_RE = re.compile(r"[-+]?\d+(?:\.\d+)?\s*%")
