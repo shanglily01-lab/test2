@@ -1077,6 +1077,9 @@ except Exception as e:
 try:
     from app.api.gemini_sentiment_api import router as gemini_sentiment_router
     app.include_router(gemini_sentiment_router)
+    from app.api.big4_analysis_api import gemini_big4_router, deepseek_big4_router
+    app.include_router(gemini_big4_router)
+    app.include_router(deepseek_big4_router)
     logger.info("[Gemini情绪分析] API路由已注册")
 except Exception as e:
     logger.warning(f"[Gemini情绪分析] API路由注册失败: {e}")

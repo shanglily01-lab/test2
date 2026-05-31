@@ -129,6 +129,9 @@
     <button onclick="switchTab('predict')" id="tab-predict-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
       <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">auto_graph</span>DeepSeek 预测
     </button>
+    <button onclick="switchTab('big4')" id="tab-big4-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
+      <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">candlestick_chart</span>Big4 综合行情
+    </button>
   </div>
 </div>
 
@@ -447,6 +450,86 @@
 
 </div><!-- /tab-predict -->
 
+<!-- ============================================================ -->
+<!-- TAB: Big4 综合行情 -->
+<!-- ============================================================ -->
+<div id="tab-big4" class="hidden">
+
+<header class="border-b border-outline-variant/10 px-8 py-5 flex items-center justify-between">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">Big4 综合行情</h1>
+    <p class="text-[11px] text-on-surface-variant mt-1 uppercase tracking-widest">每 2h 调用 DeepSeek 分析 BTC/ETH/BNB/SOL · 7×1d + 24×1h + 48×15m K 线 · 不做下单依据</p>
+  </div>
+  <div class="flex items-center gap-4">
+    <span id="b4-status-chip" class="chip chip-off"><span class="material-symbols-outlined text-[14px]">power_off</span><span id="b4-status-label">已禁用</span></span>
+    <label class="toggle" title="启用 / 禁用 Big4 分析">
+      <input type="checkbox" id="b4-enable-toggle"/>
+      <span class="slider"></span>
+    </label>
+    <button id="b4-run-now-btn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-xs text-primary transition-colors">
+      <span class="material-symbols-outlined text-[14px]">play_arrow</span>立即分析
+    </button>
+    <button id="b4-refresh-btn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-highest text-xs text-on-surface-variant transition-colors">
+      <span class="material-symbols-outlined text-[14px]">refresh</span>刷新
+    </button>
+  </div>
+</header>
+
+<section class="px-8 py-6 grid grid-cols-4 gap-4">
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">综合标签</p>
+    <p class="headline text-2xl font-medium" id="b4-stat-label"><span class="text-on-surface-variant">--</span></p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">综合评分</p>
+    <p class="mono text-2xl font-medium" id="b4-stat-score">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">量化 Big4 信号</p>
+    <p class="headline text-2xl font-medium" id="b4-stat-quant">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-1">24h 运行次数</p>
+    <p class="mono text-2xl font-medium" id="b4-stat-runs">--</p>
+    <p class="text-[10px] mt-1" id="b4-stat-lastrun">--</p>
+  </div>
+</section>
+
+<section class="px-8 pb-6">
+  <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant mb-3">最新分析结果</h2>
+  <div id="b4-latest-result" class="bg-surface-container-low rounded-xl p-6">
+    <div class="text-center text-on-surface-variant text-xs py-8">加载中...</div>
+  </div>
+</section>
+
+<section class="px-8 pb-10">
+  <h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant mb-3">历史分析记录</h2>
+  <div class="bg-surface-container-low rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+      <table class="w-full text-xs">
+        <thead class="bg-surface-container-low sticky top-0 z-10">
+          <tr class="border-b border-outline-variant/20">
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">#</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">CST 时间</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">综合</th>
+            <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">评分</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">量化信号</th>
+            <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">耗时</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">状态</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">方向判断</th>
+            <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">触发</th>
+          </tr>
+        </thead>
+        <tbody id="b4-runs-tbody">
+          <tr><td colspan="9" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+</div><!-- /tab-big4 -->
+
 </main>
 
 <script src="/static/js/modal.js"></script>
@@ -738,8 +821,8 @@ var DEEPSEEK_TACTICAL_CFGS = [
   { tab: 'chase', prefix: 'ch', api: '/api/deepseek-chase-explore', pageTitle: 'DeepSeek 追涨做多', subtitle: '突破后趋势延续', sideHint: '仅 LONG' },
   { tab: 'dump', prefix: 'dm', api: '/api/deepseek-dump-explore', pageTitle: 'DeepSeek 杀跌做空', subtitle: '跌破后趋势延续', sideHint: '仅 SHORT' }
 ];
-var _tacTabIds = ['explore', 'reversal', 'pullback', 'rebound', 'chase', 'dump', 'predict'];
-var _tacBtnIds = ['tab-explore-btn', 'tab-reversal-btn', 'tab-pullback-btn', 'tab-rebound-btn', 'tab-chase-btn', 'tab-dump-btn', 'tab-predict-btn'];
+var _tacTabIds = ['explore', 'reversal', 'pullback', 'rebound', 'chase', 'dump', 'predict', 'big4'];
+var _tacBtnIds = ['tab-explore-btn', 'tab-reversal-btn', 'tab-pullback-btn', 'tab-rebound-btn', 'tab-chase-btn', 'tab-dump-btn', 'tab-predict-btn', 'tab-big4-btn'];
 
 function switchTab(tab) {
   _tacTabIds.forEach(function(id) {
@@ -757,6 +840,10 @@ function switchTab(tab) {
   if (tab === 'predict' && !window._predictLoaded) {
     window._predictLoaded = true;
     loadPredictAll();
+  }
+  if (tab === 'big4' && !window._big4Loaded) {
+    window._big4Loaded = true;
+    Big4AnalysisTab.loadAll({ api: '/api/deepseek-big4-analysis' });
   }
   var tac = DEEPSEEK_TACTICAL_CFGS.find(function(c) { return c.tab === tab; });
   if (tac && window.TacticalExploreUI) TacticalExploreUI.onTabShow(tac);
@@ -1006,12 +1093,22 @@ setInterval(function(){
   }
 }, 30000);
 
-// URL ?tab= 直达
+// URL ?tab= 直达 — 在 big4_analysis_tab.js 加载后执行 (见下方 script)
+</script>
+<script src="/static/js/big4_analysis_tab.js"></script>
+<script>
+Big4AnalysisTab.init({ api: '/api/deepseek-big4-analysis' });
 (function(){
   var tab = new URLSearchParams(window.location.search).get('tab');
   if (tab === 'predict') switchTab('predict');
+  else if (tab === 'big4') switchTab('big4');
   else if (tab) switchTab(tab);
 })();
+setInterval(function(){
+  if (!document.getElementById('tab-big4').classList.contains('hidden')) {
+    Big4AnalysisTab.loadAll({ api: '/api/deepseek-big4-analysis' });
+  }
+}, 30000);
 </script>
 
 </body>
