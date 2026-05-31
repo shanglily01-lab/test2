@@ -50,37 +50,45 @@
 | data_cache.candidate_pool_snapshot | 每 **6 分钟** (行情+K线叙事) |
 | data_cache.explore_prepared_snapshot | 每 **15 分钟** (共用 universe，策略只读) |
 | data_cache.settings_cache | 每 1 分钟 |
-| Gemini 探索 | 每 **2h** + **10min 轮询** (worker 内 2h 防重) |
+| Gemini 探索 | 每 **4h** + **10min 轮询** (worker 内 4h 防重) |
 | Gemini 预测 | 每 **4h 必跑** + **5min 轮询** (`system_settings.*_predict_next_due_utc`) |
-| DeepSeek 探索 | 每 **2h** + **10min 轮询** |
+| DeepSeek 探索 | 每 **4h** + **10min 轮询** |
 | DeepSeek 预测 | 每 **4h 必跑** + **5min 轮询** (`deepseek_predict_next_due_utc`) |
 | 市场情绪分析 | 每 6 小时 |
 | ETF 同步 | 每天 06:45 |
 | 金库同步 | 每天 07:30 |
 
-### scheduler AI 运维备忘 (2026-05-30)
+### scheduler AI 运维备忘 (2026-05-31)
 
 **生产 DB**: MariaDB 10.5（非 MySQL 8）；`INSERT ... ON DUPLICATE KEY UPDATE` 可用。
 
 **探索/预测别混淆「延时」**:
-- 正常: 探索 `上次成功距今 Xh < 2h` / 预测 `未到点 剩余 Xh (next_due=...)` — 防重，不是 scheduler 坏了。
+- 正常: 探索 `上次成功距今 Xh < 4h` / 预测 `未到点 剩余 Xh (next_due=...)` — 防重，不是 scheduler 坏了。
 - 异常: `上一轮还未结束` 持续 >15min — 探索线程卡死或占锁（常因回退 `kline_data` 多层 JOIN）。
 - `schedule.every(N).hours` 在 **restart 后从 0 计时**；靠 **10min 轮询 + worker DB 防重** 补位。勿频繁 `systemctl restart crypto-scheduler`。
 
 **candidate_pool_snapshot** (`data_cache_service.refresh_candidate_pool`):
 - **禁止** refresh 开头 `DELETE` 全表（会导致探索读空表 → 慢路径）。已改为 **UPSERT + 本轮结束后删下架币**。
 - 探索读缓存: `load_candidate_pool_for_explore()`；`get_candidate_pool` 默认**不再**限制 `change_24h` 0–100%。
+- K 线叙事: **1h = 整体 24 根趋势 + 近 6 根明细** (`_make_kline_narrative`)
 
-**gemini_explore_runs.status**: ENUM `ok` / `partial` / `error` / `skipped` — **无 `running`**。进行中登记用 **`partial`**，结束 `_finish_run` 改为 `ok`/`skipped`/`error`（commit `15bdfc0`）。`status='running'` 会 1265 Data truncated。
+**主探索/预测 prompt 与门槛** (`ai_explore_prompt.py`, commit `162d8d5b`):
+- LLM 候选池: `prepare_universe_for_llm` **技术面评分 TOP50**，非 |24h| 极端排序
+- 开仓置信度: `EXPLORE_CONFIDENCE_THRESHOLD` / `PREDICT_CONFIDENCE_THRESHOLD` = **0.60**（与 prompt 校准表一致）
+- catalyst 硬门槛: `explore_catalyst_technical_ok`（多周期 K 线 + 量化技术位；禁单根 1h / 纯涨跌幅）
+- 预测同样走 catalyst gate → `skipped_weak_catalyst`
+- 回归: `scripts/validate_explore_predict_prompts.py`
 
-**预测 4h 保证**: 每 5min 轮询 + `gemini_predict_next_due_utc` / `deepseek_predict_next_due_utc` 认领窗口；启动后 +45s/+50s 补跑检查。勿用 `scheduler_init` 跑预测。进程锁在跳过时会释放 (fix 2026-05-30)。
+**gemini_explore_runs.status**: ENUM `ok` / `partial` / `error` / `skipped` — **无 `running`**。进行中登记用 **`partial`**，结束 `_finish_run` 改为 `ok`/`skipped`/`error`。`status='running'` 会 1265 Data truncated。
+
+**预测 4h 保证**: 每 5min 轮询 + `gemini_predict_next_due_utc` / `deepseek_predict_next_due_utc` 认领窗口；启动后 +45s/+50s 补跑检查。勿用 `scheduler_init` 跑预测。进程锁在跳过时会释放。
 
 **启动 init 错峰** (`scheduler_init`): Gemini探索 +15s, 情绪 +25s, DeepSeek探索 +90s。
 
 **日志** (非 journalctl): `logs/scheduler_YYYY-MM-DD.log`；排查:
-`grep -E "一轮开始|一轮结束|candidate_pool_snapshot 读取|回退 kline|上一轮还未结束" logs/scheduler_$(date -u +%Y-%m-%d).log`
+`grep -E "一轮开始|一轮结束|candidate_pool_snapshot 读取|回退 kline|上一轮还未结束|skipped_weak_catalyst" logs/scheduler_$(date -u +%Y-%m-%d).log`
 
-**相关 commits**: `211990b` (UPSERT+探索读缓存+锁修复), `15bdfc0` (partial 替代 running)。
+**相关 commits**: `211990b` (UPSERT+探索读缓存+锁), `15bdfc0` (partial), `e0feb1e9` (探索 4h), `162d8d5b` (主探索/预测 prompt+门槛).
 
 详见 `.cursor/rules/scheduler-ai-ops.mdc`。
 
@@ -97,28 +105,47 @@
 - **调度** (`tactical_explore_scheduler`): 10 任务、4h 周期、错峰槽位、15min 轮询认领
 - 固定方向四策略：`pullback`/`chase` → LONG，`rebound`/`dump` → SHORT；顶空底多 `top_reversal`/`bottom_reversal`
 - 仅模拟仓 `source=gemini_*` / `deepseek_*`；SL 3% / TP 5% / 5x / 500U / 持仓 4h；不同步实盘
-- 表 migration 008 (reversal) + 009 (四策略)；校验 `scripts/validate_tactical_explore_db.py`
+- 表 migration 008 (reversal) + 009 (四策略)；校验 `scripts/validate_tactical_explore_prompts.py`
+- Prompt: 1h **24 根整体 + 近 4~6 根**；`tactical_catalyst_ok` 先跑策略 extra 检查
 
-### gemini_explore_worker (探索)
-- 每 2h, kill switch: `gemini_explore_enabled`
-- 检测红/黑天鹅,开模拟单 (SL=3%/TP=8%/3x/6h/500U)
+### gemini_explore_worker / deepseek_explore_worker (主探索)
+- 每 **4h**, kill switch: `gemini_explore_enabled` / DeepSeek 同名
+- 开模拟单: SL=**4%**/TP=**6%**/5x/6h/500U；`explore_catalyst_technical_ok` + conf≥**0.60**
+- LLM 候选: 技术面评分 TOP50（`prepare_universe_for_llm`）
 - v3.5 接入实盘: `live_trading_enabled=1` 时同步到所有 active API Key
 
-### gemini_predictor (预测)
-- 每 4h, kill switch: `gemini_predict_enabled`
-- 预测 TOP50 方向,持仓 6h,SL=4%/TP=6%
+### gemini_predictor / deepseek_predictor (主预测)
+- 每 4h, kill switch: `gemini_predict_enabled` / DeepSeek 同名
+- 从 candidate_pool 技术面 TOP50 预测方向, 持仓 6h, SL=4%/TP=6%
+- conf≥**0.60** + **`explore_catalyst_technical_ok`**；弱 catalyst → `skipped_weak_catalyst`
 - 不实盘接入
+
+### GeminiPositionAdvisor (持仓顾问 + 开仓审查)
+- **持仓顾问**: `system_settings.gemini_position_advisor_enabled`；持仓 ≥2h，hold/observe/sell
+- **开仓审查** (`paper_open_gate.py`): 模拟开仓前按 `source` 走 `open_advisor_strategy_rubrics` + Gemini 审查（FIFO 队列）
+- 表 `gemini_advisor_reviews` (migration 011)；Web `/gemini-advisor-reviews`
+- sell/拒单逻辑见 `gemini_position_advisor.py`；实盘平仓需 `live_close_enabled=1`
 
 ### gemini_sentiment_analyzer (情绪)
 - 每 6h, kill switch: `gemini_sentiment_enabled` (默认 1)
 - 市场情绪标签 + 川普分析
 
-### GeminiPositionAdvisor (持仓顾问)
-- 开关: `system_settings.gemini_position_advisor_enabled`
-- 扫描 `futures_positions` (模拟仓, account_id=2), 持仓 >= 2h
-- 问 Gemini 三选一: hold/observe/sell
-- sell 时通过 `BinanceFuturesEngine.close_position_direct()` 平实盘，再同步关模拟仓
-- 需 `live_close_enabled=1`（实盘平仓开关）才能操作实盘
+## 校验脚本 (无 API)
+
+| 脚本 | 覆盖 |
+|------|------|
+| `validate_explore_predict_prompts.py` | 主探索/预测门槛与 prompt |
+| `validate_tactical_explore_prompts.py` | 四战术 + 顶空底多 catalyst |
+| `validate_open_advisor_rubrics.py` | 开仓审查 rubric |
+| `validate_tactical_explore_db.py` | 战术表结构 |
+| `ai_win_rate_report.py` | **AI 按日胜率巡检** (见下) |
+
+## AI 胜率 KPI (2026-05-31)
+
+- **长期目标**: 各 AI `source` 胜率 **≥ 50%**（模拟仓 `account_id=2`, closed 单）
+- **日检红线**: **每天**看 **当天**胜率; 当日 **< 40%** 且 closed **≥ 3 笔** → **必须优化**（提 conf / 收紧 catalyst / 调开仓顾问 rubric）
+- **改完观察期**: 连续看 **7 天** 日胜率即可判断一轮改动是否有效
+- **命令**: `python scripts/ai_win_rate_report.py`（近 7 天 UTC）; `--date YYYY-MM-DD` 查单日; 退出码 1 = 报表内有「必须优化」项
 
 ## 多策略服务 (multi_strategy_service)
 

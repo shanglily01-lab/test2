@@ -167,8 +167,22 @@ def test_db_bundle_optional():
         conn.close()
 
 
+def test_json_extra_data():
+    from app.services.ai_explore_prompt import parse_explore_llm_json
+
+    body = (
+        '{"summary_zh":"ok","verdicts":[{"symbol":"BTCUSDT","category":"bearish",'
+        '"confidence":0.7,"catalyst":"1h 近24根下降 近5根连阴","data_signal":"RSI=42",'
+        '"risk_note":""}]}\n\n以上为满足条件的标的。'
+    )
+    parsed, err = parse_explore_llm_json(body, "test")
+    assert parsed is not None, err
+    assert len(parsed["verdicts"]) == 1
+
+
 def main():
     tests = [
+        ("json extra data", test_json_extra_data),
         ("single bar rejected", test_single_bar_rejected),
         ("kline narrative 24 split", test_kline_narrative_24_split),
         ("pullback gates", test_pullback_gates),

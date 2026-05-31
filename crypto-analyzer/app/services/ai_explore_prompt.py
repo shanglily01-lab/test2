@@ -307,8 +307,36 @@ def _sanitize_json_string_literals(raw: str) -> str:
     return "".join(out)
 
 
+def _extract_llm_json_text(text: str) -> str:
+    """从 LLM 原文取出 JSON 主体 ( fenced block / 首个 { 或 [ )."""
+    raw = (text or "").strip()
+    if not raw:
+        return raw
+    m = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", raw, re.DOTALL | re.IGNORECASE)
+    if m:
+        return m.group(1).strip()
+    for i, ch in enumerate(raw):
+        if ch in "{[":
+            return raw[i:].strip()
+    return raw
+
+
 def _try_parse_json(raw: str) -> Tuple[Optional[Any], Optional[str]]:
+    last_err = "empty"
     for candidate in (raw, _sanitize_json_string_literals(raw)):
+        stripped = candidate.lstrip()
+        if not stripped:
+            continue
+        try:
+            obj, end = json.JSONDecoder().raw_decode(stripped)
+            trailing = stripped[end:].strip()
+            if trailing:
+                logger.warning(
+                    f"JSON 尾部多余内容已忽略 ({len(trailing)} chars): {trailing[:120]!r}"
+                )
+            return obj, None
+        except json.JSONDecodeError as e:
+            last_err = str(e)
         try:
             return json.loads(candidate), None
         except json.JSONDecodeError as e:
@@ -318,9 +346,7 @@ def _try_parse_json(raw: str) -> Tuple[Optional[Any], Optional[str]]:
 
 def parse_explore_llm_json(text: str, tag: str = "Explore") -> Tuple[Optional[dict], Optional[str]]:
     """解析 LLM JSON; 截断时尝试抢救已完整的 verdict 对象."""
-    raw = (text or "").strip()
-    if raw.startswith("```"):
-        raw = raw.strip("`").lstrip("json").strip()
+    raw = _extract_llm_json_text(text)
 
     err: Optional[str] = None
     parsed, parse_err = _try_parse_json(raw)
