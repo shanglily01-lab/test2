@@ -9,6 +9,9 @@ from loguru import logger
 
 from app.services.ai_explore_prompt import EXPLORE_LLM_MAX_OUTPUT_TOKENS
 from app.services.ai_reversal_explore_prompt import (
+    REVERSAL_HOLD_HOURS,
+    REVERSAL_SL_PCT,
+    REVERSAL_TP_PCT,
     build_reversal_explore_prompt,
     parse_reversal_llm_json,
 )
@@ -29,6 +32,9 @@ DEEPSEEK_REVERSAL_CFG = ReversalExploreConfig(
     verdicts_table="deepseek_reversal_explore_verdicts",
     model_name=DEEPSEEK_MODEL,
     min_interval_hours=4.0,
+    sl_pct=REVERSAL_SL_PCT,
+    tp_pct=REVERSAL_TP_PCT,
+    hold_hours=REVERSAL_HOLD_HOURS,
 )
 
 

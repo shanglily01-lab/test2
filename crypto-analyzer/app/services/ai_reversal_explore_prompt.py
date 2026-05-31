@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, Optional, Tuple
+import re
+from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
@@ -16,10 +17,15 @@ from app.services.ai_explore_prompt import (
     EXPLORE_LLM_MAX_SYMBOLS,
     explore_catalyst_technical_ok,
     parse_explore_llm_json,
-    prepare_universe_for_llm,
 )
 
-REVERSAL_CONFIDENCE_THRESHOLD = 0.5
+REVERSAL_CONFIDENCE_THRESHOLD = 0.65
+REVERSAL_SL_PCT = 3.0
+REVERSAL_TP_PCT = 5.0
+REVERSAL_HOLD_HOURS = 4.0
+
+# catalyst 中单根涨跌幅 >50% 多为叙事 bug 或幻觉
+_CATALYST_PCT_RE = re.compile(r"[-+]?\d+(?:\.\d+)?\s*%")
 
 REVERSAL_PROMPT_TEMPLATE = """你是加密货币 U 本位合约的**反转交易**分析师。任务：在候选池中找出「顶部做空、底部做多」机会。
 
@@ -32,8 +38,9 @@ REVERSAL_PROMPT_TEMPLATE = """你是加密货币 U 本位合约的**反转交易
 1. 每个 verdict 的 catalyst 必须写明 **至少两个周期** (1h/15m/1d) 的 K 线形态 + **量化技术位** (RSI 数值、EMA 偏离、7d 高低距离、阳阴根数等)。
 2. 禁止仅用「涨多了做空 / 跌多了做多」；须有多周期结构证据。
 3. 全池仅对下方 universe 列表中的 symbol 输出 verdict；其余忽略。
-4. confidence 0~1；仅当结构清晰时给 ≥0.5。
+4. confidence 0~1；仅当结构清晰时给 ≥0.65。
 5. 宁缺毋滥：无把握一律 skip。
+6. 引用 K 线涨跌幅须合理（单根通常 <20%）；须与 universe 中 tech / kline_narrative 一致。
 
 {llm_universe_note}
 
@@ -66,12 +73,78 @@ REVERSAL_PROMPT_TEMPLATE = """你是加密货币 U 本位合约的**反转交易
 """
 
 
+def _reversal_extremity_score(item: dict) -> float:
+    """距 7d 高低 / RSI 极端程度，用于选币（非 |24h| 动量）."""
+    tech = item.get("tech") or {}
+    score = 0.0
+
+    b7h = tech.get("below_7d_high_pct")
+    if b7h is not None:
+        try:
+            # 越接近 7d 高点（-5%）得分越高
+            score = max(score, -float(b7h))
+        except (TypeError, ValueError):
+            pass
+
+    a7l = tech.get("above_7d_low_pct")
+    if a7l is not None:
+        try:
+            a7l_f = float(a7l)
+            if a7l_f <= 25:
+                score = max(score, 25.0 - a7l_f)
+        except (TypeError, ValueError):
+            pass
+
+    rsi = tech.get("rsi_14_1h")
+    if rsi is not None:
+        try:
+            rsi_f = float(rsi)
+            if rsi_f >= 60:
+                score = max(score, (rsi_f - 55) * 1.2)
+            if rsi_f <= 40:
+                score = max(score, (45 - rsi_f) * 1.2)
+        except (TypeError, ValueError):
+            pass
+
+    return score
+
+
+def prepare_reversal_universe_for_llm(
+    universe: dict,
+    max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
+) -> Tuple[List[dict], Dict[str, Any]]:
+    """按 RSI / 距 7d 高低极端程度选 TOP N，供顶空底多 LLM."""
+    items = sorted(
+        universe.values(),
+        key=_reversal_extremity_score,
+        reverse=True,
+    )
+    for item in items:
+        item.pop("k_1d_ohlc", None)
+        item.pop("k_1h_ohlc", None)
+        item.pop("k_15m_ohlc", None)
+
+    selected = items[:max_symbols]
+    meta = {
+        "universe_total": len(items),
+        "llm_symbol_count": len(selected),
+        "llm_symbols_truncated": max(0, len(items) - len(selected)),
+        "selection": "reversal_extremity",
+    }
+    if meta["llm_symbols_truncated"]:
+        logger.info(
+            f"[Reversal] LLM 候选截断: 全池 {meta['universe_total']} → "
+            f"送模 {meta['llm_symbol_count']} (RSI/7d极端 TOP{max_symbols})"
+        )
+    return selected, meta
+
+
 def build_reversal_explore_prompt(
     universe: dict,
     global_ctx: dict,
     historical_stats: dict,
 ) -> Tuple[str, Dict[str, Any]]:
-    universe_list, meta = prepare_universe_for_llm(universe)
+    universe_list, meta = prepare_reversal_universe_for_llm(universe)
     compact = {"ensure_ascii": False, "separators": (",", ":"), "default": str}
     prompt = REVERSAL_PROMPT_TEMPLATE.format(
         big4_block=BIG4_PROMPT_BLOCK_EXPLORE,
@@ -79,8 +152,9 @@ def build_reversal_explore_prompt(
         universe_json=json.dumps(universe_list, **compact),
         historical_stats_json=json.dumps(historical_stats, **compact),
         llm_universe_note=(
-            f"本列表为全池 {meta['universe_total']} 个中按 |24h涨跌| 取 TOP {meta['llm_symbol_count']}，"
-            f"仅对这些 symbol 输出 verdict."
+            f"本列表为全池 {meta['universe_total']} 个中按 "
+            f"RSI 极端 + 距 7d 高低 proximity 取 TOP {meta['llm_symbol_count']}，"
+            f"仅对这些 symbol 输出 verdict（非 |24h涨跌| 排序）。"
         ),
     )
     return prompt, meta
@@ -102,26 +176,66 @@ def reversal_category_to_side(category: str, confidence: float) -> Optional[str]
     return None
 
 
+def _catalyst_pct_sane(catalyst: str, data_signal: str = "") -> Tuple[bool, str]:
+    text = f"{catalyst or ''} {data_signal or ''}"
+    for m in _CATALYST_PCT_RE.finditer(text):
+        raw = m.group(0).replace("%", "").strip()
+        try:
+            val = abs(float(raw))
+        except ValueError:
+            continue
+        if val > 50:
+            return False, f"catalyst 涨跌幅 {m.group(0)} 异常(>50%), 请核对 K 线叙事"
+    return True, ""
+
+
 def reversal_catalyst_technical_ok(
     category: str,
     catalyst: str,
     data_signal: str = "",
     sym_data: Optional[dict] = None,
 ) -> Tuple[bool, str]:
-    """多周期 K 线门槛 + 反转方向与 RSI 粗校验."""
+    """多周期 K 线门槛 + 反转方向与 RSI / 7d 位置硬校验."""
     ok, reason = explore_catalyst_technical_ok(catalyst, data_signal, sym_data)
     if not ok:
         return ok, reason
+
+    sane, sane_reason = _catalyst_pct_sane(catalyst, data_signal)
+    if not sane:
+        return False, sane_reason
 
     cat = (category or "").lower().strip()
     text = f"{catalyst or ''} {data_signal or ''}".lower()
     tech = (sym_data or {}).get("tech") or {}
     rsi = tech.get("rsi_14_1h")
+    rsi_f: Optional[float] = None
+    if rsi is not None:
+        try:
+            rsi_f = float(rsi)
+        except (TypeError, ValueError):
+            rsi_f = None
+
+    b7h = tech.get("below_7d_high_pct")
+    a7l = tech.get("above_7d_low_pct")
+    try:
+        near_high = b7h is not None and float(b7h) > -15
+    except (TypeError, ValueError):
+        near_high = False
+    try:
+        near_low = a7l is not None and float(a7l) <= 18
+    except (TypeError, ValueError):
+        near_low = False
 
     if cat == "top_reversal":
-        if rsi is not None and float(rsi) < 55:
-            if "超买" not in text and "overbought" not in text and "rsi" not in text:
-                return False, f"顶部做空需 RSI 超买区或 catalyst 写明超买 (当前 1h RSI={rsi})"
+        rsi_top = rsi_f is not None and rsi_f >= 58
+        if not rsi_top and not near_high:
+            if "超买" not in text and "overbought" not in text:
+                return False, (
+                    f"顶部做空需 1h RSI≥58 或距 7d 高点<15% "
+                    f"(RSI={rsi_f}, below_7d_high={b7h}%)"
+                )
+        if rsi_f is not None and rsi_f < 52 and not near_high:
+            return False, f"顶部做空 1h RSI={rsi_f} 偏低且无近高结构"
         weak_top = ("涨多了", "涨幅过大", "已经涨", "24h涨") and not any(
             x in text for x in ("上影", "滞涨", "假突破", "连阴", "回落", "阻力")
         )
@@ -129,9 +243,15 @@ def reversal_catalyst_technical_ok(
             return False, "顶部做空不能仅因涨幅大，须写明滞涨/上影/假突破等结构"
 
     if cat == "bottom_reversal":
-        if rsi is not None and float(rsi) > 45:
-            if "超卖" not in text and "oversold" not in text and "rsi" not in text:
-                return False, f"底部做多需 RSI 超卖区或 catalyst 写明超卖 (当前 1h RSI={rsi})"
+        rsi_bot = rsi_f is not None and rsi_f <= 42
+        if not rsi_bot and not near_low:
+            if "超卖" not in text and "oversold" not in text:
+                return False, (
+                    f"底部做多需 1h RSI≤42 或距 7d 低点<18% "
+                    f"(RSI={rsi_f}, above_7d_low={a7l}%)"
+                )
+        if rsi_f is not None and rsi_f > 48 and not near_low:
+            return False, f"底部做多 1h RSI={rsi_f} 偏高且无近低结构"
         weak_bot = ("跌多了", "跌幅过大", "已经跌", "24h跌") and not any(
             x in text for x in ("下影", "止跌", "假跌破", "连阳", "反弹", "支撑")
         )

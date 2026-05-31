@@ -11,6 +11,9 @@ import pymysql
 from loguru import logger
 
 from app.services.ai_reversal_explore_prompt import (
+    REVERSAL_HOLD_HOURS,
+    REVERSAL_SL_PCT,
+    REVERSAL_TP_PCT,
     reversal_catalyst_technical_ok,
     reversal_category_to_side,
 )
@@ -59,6 +62,9 @@ class ReversalExploreConfig:
     model_name: str
     min_interval_hours: float = 2.0
     strategy_label: str = "顶空底多"
+    sl_pct: float = EXPLORE_SL_PCT
+    tp_pct: float = EXPLORE_TP_PCT
+    hold_hours: float = EXPLORE_HOLD_HOURS
 
 
 # 类型别名，战术策略共用同一 runner
@@ -132,8 +138,8 @@ def _open_simulated_position(
     allowed, _gate_reason = gate_simulated_open(
         symbol, side, price, cfg.source, catalyst,
         leverage=EXPLORE_LEVERAGE,
-        sl_pct=EXPLORE_SL_PCT, tp_pct=EXPLORE_TP_PCT,
-        hold_hours=EXPLORE_HOLD_HOURS, conn=conn,
+        sl_pct=cfg.sl_pct, tp_pct=cfg.tp_pct,
+        hold_hours=cfg.hold_hours, conn=conn,
     )
     if not allowed:
         return None
@@ -145,18 +151,18 @@ def _open_simulated_position(
             return None
 
         if side == "LONG":
-            sl_price = round(price * (1 - EXPLORE_SL_PCT / 100), 8)
-            tp_price = round(price * (1 + EXPLORE_TP_PCT / 100), 8)
+            sl_price = round(price * (1 - cfg.sl_pct / 100), 8)
+            tp_price = round(price * (1 + cfg.tp_pct / 100), 8)
         else:
-            sl_price = round(price * (1 + EXPLORE_SL_PCT / 100), 8)
-            tp_price = round(price * (1 - EXPLORE_TP_PCT / 100), 8)
+            sl_price = round(price * (1 + cfg.sl_pct / 100), 8)
+            tp_price = round(price * (1 - cfg.tp_pct / 100), 8)
 
-        planned_close = datetime.now() + timedelta(hours=EXPLORE_HOLD_HOURS)
-        max_hold_minutes = EXPLORE_HOLD_HOURS * 60
+        planned_close = datetime.now() + timedelta(hours=cfg.hold_hours)
+        max_hold_minutes = int(cfg.hold_hours * 60)
         entry_reason = (catalyst or cfg.source)[:180]
         entry_reason += (
-            f" | {cfg.strategy_label} SL={EXPLORE_SL_PCT}% TP={EXPLORE_TP_PCT}% "
-            f"lev={EXPLORE_LEVERAGE}x hold={EXPLORE_HOLD_HOURS}h"
+            f" | {cfg.strategy_label} SL={cfg.sl_pct}% TP={cfg.tp_pct}% "
+            f"lev={EXPLORE_LEVERAGE}x hold={cfg.hold_hours}h"
         )
 
         with conn.cursor() as cur:
@@ -186,8 +192,8 @@ def _open_simulated_position(
                     price,
                     sl_price,
                     tp_price,
-                    EXPLORE_SL_PCT,
-                    EXPLORE_TP_PCT,
+                    cfg.sl_pct,
+                    cfg.tp_pct,
                     max_hold_minutes,
                     planned_close,
                     cfg.source,
@@ -494,9 +500,9 @@ def run_tactical_explore_round(
                 continue
 
             if side == "LONG":
-                tp_check = round(price * (1 + EXPLORE_TP_PCT / 100), 8)
+                tp_check = round(price * (1 + cfg.tp_pct / 100), 8)
             else:
-                tp_check = round(price * (1 - EXPLORE_TP_PCT / 100), 8)
+                tp_check = round(price * (1 - cfg.tp_pct / 100), 8)
             instant, ref_px = _would_instant_tp(conn, symbol, side, tp_check)
             if instant:
                 continue

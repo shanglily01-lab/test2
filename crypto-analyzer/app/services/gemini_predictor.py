@@ -255,7 +255,7 @@ def _format_kline_narrative(k_rows: List[Dict], timeframe_label: str, max_lines:
                 conv = '↑' if pct >= 0.1 else ('↓' if pct <= -0.1 else '→')
                 lines.append(
                     f"  {t_str}: O={o:.6g} H={h:.6g} L={l:.6g} C={c:.6g} "
-                    f"({pct:+.2%}){conv} Vol={v:.4g}"
+                    f"({pct:+.2f}%){conv} Vol={v:.4g}"
                 )
         except Exception:
             continue
