@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pymysql
 import pymysql.cursors
@@ -307,12 +307,26 @@ def _calc_ema(values: List[float], period: int) -> Optional[float]:
 # ============================================================
 # K 线叙事生成
 # ============================================================
-def _make_kline_narrative(k_rows: List[Dict], timeframe_label: str) -> str:
-    """生成 K 线自然语言描述."""
-    if not k_rows:
-        return f"[{timeframe_label}] 无数据"
-    lines = []
-    prices = []
+def _trend_desc_from_bars(prices: List[float], up_count: int, down_count: int) -> str:
+    n = len(prices)
+    if n < 3:
+        return "数据不足"
+    change_overall = (prices[-1] - prices[0]) / prices[0] * 100 if prices[0] > 0 else 0
+    trend = "上升" if prices[-1] > prices[0] else "下降"
+    if up_count > down_count * 1.5 and change_overall > 1:
+        return f"偏多 ({up_count}阳/{down_count}阴, 整体{change_overall:+.1f}%)"
+    if down_count > up_count * 1.5 and change_overall < -1:
+        return f"偏空 ({up_count}阳/{down_count}阴, 整体{change_overall:+.1f}%)"
+    if change_overall > 3:
+        return f"强势{trend} ({change_overall:+.1f}%)"
+    if change_overall < -3:
+        return f"强势{trend} ({change_overall:+.1f}%)"
+    return f"震荡 ({trend}趋势, {change_overall:+.1f}%)"
+
+
+def _bar_lines(k_rows: List[Dict], timeframe_label: str, max_lines: int = 4) -> Tuple[List[str], List[float], float, int, int]:
+    lines: List[str] = []
+    prices: List[float] = []
     total_vol = 0.0
     up_count = down_count = 0
     for r in k_rows:
@@ -330,7 +344,7 @@ def _make_kline_narrative(k_rows: List[Dict], timeframe_label: str) -> str:
                 up_count += 1
             elif pct <= -0.1:
                 down_count += 1
-            if len(lines) < 4:
+            if len(lines) < max_lines:
                 t_str = t.strftime("%H:%M") if timeframe_label in ("15m", "1h") else t.strftime("%m-%d")
                 conv = "↑" if pct >= 0.1 else ("↓" if pct <= -0.1 else "→")
                 lines.append(
@@ -339,25 +353,38 @@ def _make_kline_narrative(k_rows: List[Dict], timeframe_label: str) -> str:
                 )
         except Exception:
             continue
-    n = len(prices)
-    desc = "数据不足"
-    if n >= 3:
-        change_overall = (prices[-1] - prices[0]) / prices[0] * 100 if prices[0] > 0 else 0
-        trend = "上升" if prices[-1] > prices[0] else "下降"
-        if up_count > down_count * 1.5 and change_overall > 1:
-            desc = f"偏多 ({up_count}阳/{down_count}阴, 整体{change_overall:+.1f}%)"
-        elif down_count > up_count * 1.5 and change_overall < -1:
-            desc = f"偏空 ({up_count}阳/{down_count}阴, 整体{change_overall:+.1f}%)"
-        elif change_overall > 3:
-            desc = f"强势{trend} ({change_overall:+.1f}%)"
-        elif change_overall < -3:
-            desc = f"强势{trend} ({change_overall:+.1f}%)"
-        else:
-            desc = f"震荡 ({trend}趋势, {change_overall:+.1f}%)"
+    return lines, prices, total_vol, up_count, down_count
+
+
+def _make_kline_narrative(k_rows: List[Dict], timeframe_label: str) -> str:
+    """生成 K 线自然语言描述. 1h: 整体 24 根趋势 + 最近 4~6 根明细."""
+    if not k_rows:
+        return f"[{timeframe_label}] 无数据"
+
+    if timeframe_label == "1h" and len(k_rows) >= 6:
+        trend_rows = k_rows
+        recent_rows = k_rows[-6:]
+        _, trend_prices, trend_vol, tu, td = _bar_lines(trend_rows, timeframe_label, max_lines=0)
+        recent_lines, recent_prices, recent_vol, ru, rd = _bar_lines(
+            recent_rows, timeframe_label, max_lines=6,
+        )
+        trend_desc = _trend_desc_from_bars(trend_prices, tu, td)
+        recent_desc = _trend_desc_from_bars(recent_prices, ru, rd) if len(recent_prices) >= 3 else "近期数据不足"
+        recent_body = "\n".join(recent_lines)
+        return (
+            f"[1h · 整体 {len(trend_rows)} 根趋势] (Vol≈{trend_vol:.4g})\n"
+            f"整体形态: {trend_desc}\n"
+            f"[1h · 最近 {len(recent_rows)} 根明细] (Vol≈{recent_vol:.4g})\n"
+            f"{recent_body}\n"
+            f"近期形态: {recent_desc}"
+        )
+
+    lines, prices, total_vol, up_count, down_count = _bar_lines(k_rows, timeframe_label, max_lines=4)
+    desc = _trend_desc_from_bars(prices, up_count, down_count)
     header = f"[{timeframe_label} · 最近 {len(k_rows)} 根] (总成交量 {total_vol:.4g})"
-    body = "\n".join(lines[:4])
-    if len(lines) > 4:
-        body += f"\n  ... 还有 {len(lines) - 4} 根 (略)"
+    body = "\n".join(lines)
+    if len(k_rows) > len(lines):
+        body += f"\n  ... 还有 {len(k_rows) - len(lines)} 根 (略)"
     return f"{header}\n{body}\n形态: {desc}"
 
 
@@ -445,7 +472,7 @@ def refresh_candidate_pool() -> dict:
                     continue
 
                 # 获取 K 线数据
-                kline_1h = _fetch_klines(cur, main_db, sym, "1h", 12)
+                kline_1h = _fetch_klines(cur, main_db, sym, "1h", 24)
                 kline_15m = _fetch_klines(cur, main_db, sym, "15m", 8)
                 kline_1d = _fetch_klines(cur, main_db, sym, "1d", 7)
 

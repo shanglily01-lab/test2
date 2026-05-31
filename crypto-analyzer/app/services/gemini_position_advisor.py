@@ -25,6 +25,13 @@ import pymysql.cursors
 from loguru import logger
 
 from app.services.gemini_advisor_reviews import log_advisor_review
+from app.services.open_advisor_strategy_rubrics import (
+    build_big4_subjective_block,
+    check_direction_gates,
+    check_expected_side,
+    resolve_strategy_profile,
+    _KLINE_1H_READING,
+)
 
 
 GEMINI_TIMEOUT_MS = 180_000
@@ -87,6 +94,12 @@ class GeminiPositionAdvisor:
 
     def _is_open_advisor_enabled(self) -> bool:
         return self._read_setting_bool('gemini_open_advisor_enabled', '1')
+
+    def _read_direction_gates(self) -> Tuple[bool, bool]:
+        return (
+            self._read_setting_bool('allow_long', '1'),
+            self._read_setting_bool('allow_short', '1'),
+        )
 
     # ────────────────────────────────────────────────────────
     # DB
@@ -179,12 +192,23 @@ class GeminiPositionAdvisor:
             return None
 
     def _fetch_market_context(self, symbol: str) -> dict:
-        """取近 4h 15m K 线 (16根) + Big4 当前评分"""
-        ctx = {'klines_15m': [], 'big4_signal': 'NEUTRAL', 'big4_strength': 0}
+        """近 4h 15m K 线 + 近 24 根 1h + candidate_pool 叙事 + Big4 + 方向闸门."""
+        ctx = {
+            'klines_15m': [],
+            'klines_1h': [],
+            'big4_signal': 'NEUTRAL',
+            'big4_strength': 0,
+            'btc_6h_change': 0.0,
+            'eth_6h_change': 0.0,
+            'narrative_1h': '',
+            'narrative_15m': '',
+            'rsi_14_1h': None,
+            'allow_long': True,
+            'allow_short': True,
+        }
         try:
             conn = self._get_conn()
             cur = conn.cursor()
-            # 16 根 15m K 线 = 4 小时
             cur.execute(
                 "SELECT open_time, open_price, high_price, low_price, close_price, volume "
                 "FROM kline_data "
@@ -194,7 +218,7 @@ class GeminiPositionAdvisor:
             )
             rows = cur.fetchall()
             klines = []
-            for r in reversed(rows):  # oldest -> newest
+            for r in reversed(rows):
                 t = datetime.datetime.utcfromtimestamp(r['open_time'] / 1000)
                 klines.append({
                     't': t.strftime('%m-%d %H:%M'),
@@ -206,7 +230,40 @@ class GeminiPositionAdvisor:
                 })
             ctx['klines_15m'] = klines
 
-            # Big4 最新
+            cur.execute(
+                "SELECT open_time, open_price, high_price, low_price, close_price, volume "
+                "FROM kline_data "
+                "WHERE symbol=%s AND timeframe='1h' AND exchange='binance_futures' "
+                "ORDER BY open_time DESC LIMIT 24",
+                (symbol,)
+            )
+            rows_1h = cur.fetchall()
+            klines_1h = []
+            for r in reversed(rows_1h):
+                t = datetime.datetime.utcfromtimestamp(r['open_time'] / 1000)
+                klines_1h.append({
+                    't': t.strftime('%m-%d %H:%M'),
+                    'o': round(float(r['open_price']), 8),
+                    'h': round(float(r['high_price']), 8),
+                    'l': round(float(r['low_price']), 8),
+                    'c': round(float(r['close_price']), 8),
+                    'v': round(float(r['volume'] or 0), 2),
+                })
+            ctx['klines_1h'] = klines_1h
+
+            cur.execute(
+                "SELECT narrative_1h, narrative_15m, rsi_14 "
+                "FROM data_cache.candidate_pool_snapshot "
+                "WHERE symbol=%s AND exchange='binance_futures' LIMIT 1",
+                (symbol,)
+            )
+            pool = cur.fetchone()
+            if pool:
+                ctx['narrative_1h'] = (pool.get('narrative_1h') or '')[:2000]
+                ctx['narrative_15m'] = (pool.get('narrative_15m') or '')[:1200]
+                if pool.get('rsi_14') is not None:
+                    ctx['rsi_14_1h'] = float(pool['rsi_14'])
+
             cur.execute(
                 "SELECT overall_signal, signal_strength, btc_price_change_6h, eth_price_change_6h "
                 "FROM big4_trend_history ORDER BY created_at DESC LIMIT 1"
@@ -218,9 +275,14 @@ class GeminiPositionAdvisor:
                 ctx['btc_6h_change'] = float(big4.get('btc_price_change_6h') or 0)
                 ctx['eth_6h_change'] = float(big4.get('eth_price_change_6h') or 0)
 
-            cur.close(); conn.close()
+            cur.close()
+            conn.close()
         except Exception as e:
             logger.warning(f"[Gemini顾问] 取市场上下文 {symbol} 失败: {e}")
+
+        allow_long, allow_short = self._read_direction_gates()
+        ctx['allow_long'] = allow_long
+        ctx['allow_short'] = allow_short
         return ctx
 
     # ────────────────────────────────────────────────────────
@@ -296,6 +358,16 @@ Output ONLY a single valid JSON object, no markdown fence:
 """
 
     @staticmethod
+    def _format_kline_table(klines: list) -> str:
+        out = "  time           open         high          low        close       volume\n"
+        for k in klines:
+            out += (
+                f"  {k['t']}  {k['o']:>11}  {k['h']:>11}  {k['l']:>11}  "
+                f"{k['c']:>11}  {k['v']:>11}\n"
+            )
+        return out or "  (无数据)\n"
+
+    @staticmethod
     def _build_open_prompt(
         symbol: str,
         side: str,
@@ -308,40 +380,69 @@ Output ONLY a single valid JSON object, no markdown fence:
         hold_hours: Optional[float],
         ctx: dict,
     ) -> str:
-        klines_str = "  time           open         high          low        close       volume\n"
-        for k in ctx.get('klines_15m', []):
-            klines_str += (
-                f"  {k['t']}  {k['o']:>11}  {k['h']:>11}  {k['l']:>11}  "
-                f"{k['c']:>11}  {k['v']:>11}\n"
-            )
-        big4 = ctx.get('big4_signal', 'NEUTRAL')
+        profile = resolve_strategy_profile(source)
+        big4_block = build_big4_subjective_block(
+            ctx.get('big4_signal', 'NEUTRAL'),
+            float(ctx.get('big4_strength') or 0),
+            bool(ctx.get('allow_long', True)),
+            bool(ctx.get('allow_short', True)),
+            side,
+            float(ctx.get('btc_6h_change') or 0),
+            float(ctx.get('eth_6h_change') or 0),
+        )
+        klines_15m = GeminiPositionAdvisor._format_kline_table(ctx.get('klines_15m', []))
+        klines_1h = GeminiPositionAdvisor._format_kline_table(ctx.get('klines_1h', []))
+        narr_1h = (ctx.get('narrative_1h') or '').strip() or '(缓存暂无，以上表为准)'
+        narr_15m = (ctx.get('narrative_15m') or '').strip() or '(无)'
+        rsi_s = ctx.get('rsi_14_1h')
+        rsi_line = f"RSI(1h): {rsi_s:.1f}" if rsi_s is not None else "RSI(1h): N/A"
         sl_s = f"{sl_pct}%" if sl_pct is not None else "默认"
         tp_s = f"{tp_pct}%" if tp_pct is not None else "默认"
         hold_s = f"{hold_hours}h" if hold_hours is not None else "策略默认"
-        return f"""你是超级交易大师。系统在**开模拟仓之前**请你审核是否允许开仓。
+        return f"""你是超级交易大师。系统在**开模拟仓之前**请你按**策略专属标准**审核是否允许开仓。
 
-拟开仓
+## 本笔策略
+  策略名:     {profile.title_zh} (source={source})
+  固定方向:   {profile.expected_side or '按信号 LONG/SHORT'}
+
+{profile.rubric}
+
+{_KLINE_1H_READING}
+
+{big4_block}
+
+## 拟开仓
   Symbol:     {symbol}
   Direction:  {side}
   Entry:      {price}
   Leverage:   {leverage}x
   SL/TP:      {sl_s} / {tp_s}
   Plan hold:  {hold_s}
-  Source:     {source}
-  Catalyst:   {(catalyst or '')[:400]}
+  Catalyst:   {(catalyst or '')[:500]}
 
-MARKET
-  Big4: {big4}
-RECENT 4H 15M KLINES:
-{klines_str}
+## 市场数据
+  {rsi_line}
+  candidate_pool 1h 叙事:
+{narr_1h}
+  candidate_pool 15m 叙事:
+{narr_15m}
 
-规则: 结构不清晰、与 Big4 严重冲突、追涨杀跌极端位置 → reject。
-仅当风险收益合理、 catalyst 与 K 线一致时 approve。
+## 近 24 根 1h K 线 (oldest → newest)
+{klines_1h}
+
+## 近 4h 15m K 线
+{klines_15m}
+
+## 审核步骤（必须执行）
+1. 方向闸门 + Big4 主观规则（上节）— 冲突则 reject。
+2. **策略专属标准** — 例如顶空底多须真见顶/见底；回调做多须24h上涨+近4~6根回踩；反弹做空须下降+缩量反弹等。
+3. catalyst 与 K 线、方向一致；仅24h涨跌幅 / 只看1根1h → reject。
+4. 仅当**完全符合该策略定义**时 approve。
 
 Output ONLY JSON:
 {{
   "decision": "approve" | "reject",
-  "reason": "<50字中文>"
+  "reason": "<50字中文，写明策略名+驳回/通过要点>"
 }}
 """
 
@@ -361,6 +462,26 @@ Output ONLY JSON:
         """返回 (允许开仓, 原因). reject 时禁止开仓."""
         if not self._is_open_advisor_enabled():
             return True, "open_advisor_disabled"
+
+        profile = resolve_strategy_profile(source)
+        allow_long, allow_short = self._read_direction_gates()
+        ok, gate_reason = check_direction_gates(side, allow_long, allow_short)
+        if not ok:
+            log_advisor_review(
+                "open", "reject", symbol,
+                position_side=side, source=source, entry_price=price,
+                leverage=leverage, reason=gate_reason, catalyst=catalyst, conn=conn,
+            )
+            return False, gate_reason
+
+        ok_side, side_reason = check_expected_side(profile, side)
+        if not ok_side:
+            log_advisor_review(
+                "open", "reject", symbol,
+                position_side=side, source=source, entry_price=price,
+                leverage=leverage, reason=side_reason, catalyst=catalyst, conn=conn,
+            )
+            return False, side_reason
 
         ctx = self._fetch_market_context(symbol)
         prompt = self._build_open_prompt(
