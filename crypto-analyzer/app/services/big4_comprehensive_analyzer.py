@@ -134,6 +134,33 @@ def _format_15m_bars(k_rows: List[Dict]) -> str:
     return f"[15m · {len(k_rows)} 根明细]\n" + "\n".join(lines)
 
 
+def _kline_inventory(coin_data: dict) -> str:
+    """Prompt 顶部摘要：明确各币 K 线根数，避免 LLM 误判「无数据」."""
+    lines = ["## K 线数据完整性 (采集成功，必须用于分析)"]
+    ok = True
+    for symbol in BIG4_SYMBOLS:
+        cd = coin_data.get(symbol, {})
+        n1d = len(cd.get("1d") or [])
+        n1h = len(cd.get("1h") or [])
+        n15 = len(cd.get("15m") or [])
+        if n1h < 12:
+            ok = False
+        lines.append(f"- {symbol}: 1d={n1d}/7, 1h={n1h}/24, 15m={n15}/48")
+    if ok:
+        lines.append("✓ 四币 K 线均已就绪；**禁止**在分析中写「K线缺失/无K线数据/主要基于量化信号」等回避 K 线的表述。")
+    else:
+        lines.append("⚠ 部分 K 线不足，可说明哪一周期偏少，但仍须基于已有 K 线分析。")
+    return "\n".join(lines)
+
+
+def _kline_data_sufficient(coin_data: dict) -> bool:
+    for symbol in BIG4_SYMBOLS:
+        cd = coin_data.get(symbol, {})
+        if len(cd.get("1h") or []) < 12 or len(cd.get("15m") or []) < 24:
+            return False
+    return True
+
+
 def _build_prompt(big4_quant: dict, coin_data: dict) -> str:
     quant = big4_quant.get("overall_signal", "NEUTRAL")
     detail = big4_quant.get("detail") or {}
@@ -160,7 +187,9 @@ def _build_prompt(big4_quant: dict, coin_data: dict) -> str:
 请基于下方多周期 K 线结构 + 量化 Big4 信号，给出 **Big4 综合走势分析**。
 ⚠ 本分析仅供宏观参考，**不是**开仓/平仓指令。
 
-## 量化 Big4 背景 (规则引擎, 仅供参考)
+{_kline_inventory(coin_data)}
+
+## 量化 Big4 背景 (规则引擎, 辅证)
 {chr(10).join(quant_lines)}
 
 ## 各币 K 线 (UTC 收盘, 由旧到新)
@@ -170,9 +199,10 @@ def _build_prompt(big4_quant: dict, coin_data: dict) -> str:
 ---
 
 ## 分析要求
-1. 先看 1d×7 定大方向, 再用 1h×24 看中期结构, 15m×48 看近端动能/拐点。
-2. 四币权重: BTC>ETH>BNB≈SOL; 需说明是否共振或分化。
-3. 输出 JSON ONLY:
+1. **主依据**是下方各币 1d/1h/15m K 线结构；量化信号仅作辅证。
+2. 先看 1d×7 定大方向, 再用 1h×24 看中期结构, 15m×48 看近端动能/拐点。
+3. 四币权重: BTC>ETH>BNB≈SOL; 需说明是否共振或分化。
+4. 输出 JSON ONLY:
 
 ```json
 {{
@@ -246,12 +276,19 @@ def _call_deepseek(prompt: str) -> Optional[str]:
     except ImportError:
         logger.error("[Big4分析/DeepSeek] 缺 openai 库")
         return None
+    system_msg = (
+        "你是加密货币 Big4 (BTC/ETH/BNB/SOL) 综合行情分析师。"
+        "用户消息开头「K 线数据完整性」已确认四币 1d/1h/15m K 线齐全；"
+        "必须基于这些 K 线 OHLC 结构写 analysis_summary_zh 与 direction_verdict，"
+        "不得声称 K 线缺失或仅依赖量化信号。"
+        "仅输出合法 JSON，字段与 user 消息要求一致。"
+    )
     try:
         client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
         resp = client.chat.completions.create(
             model=DEEPSEEK_MODEL,
             messages=[
-                {"role": "system", "content": "You are a crypto Big4 market analyst. Output ONLY valid JSON."},
+                {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt},
             ],
             temperature=0.2,
@@ -393,6 +430,13 @@ def run_big4_analysis_round(provider: str, triggered_by: str = "scheduler") -> N
 
         prompt = _build_prompt(big4_quant, coin_data)
         logger.info(f"[Big4分析/{provider}] 调用 LLM, prompt≈{len(prompt)} chars")
+
+        if not _kline_data_sufficient(coin_data):
+            _insert_run(
+                conn, provider, "error", "K线采集不足(检查 kline_data)", t0,
+                triggered_by, cfg["model"], big4_quant, None, prompt, None,
+            )
+            return
 
         if provider == "gemini":
             raw = _call_gemini(prompt)

@@ -8,13 +8,16 @@
   }
 
   function big4Badge(label) {
-    var l = (label || '').toLowerCase();
-    if (l === 'bullish') return '<span class="chip chip-long">看多</span>';
-    if (l === 'bearish') return '<span class="chip chip-short">看空</span>';
-    if (l === 'sideways') return '<span class="chip chip-action-big4">震荡</span>';
-    if (l === 'mixed') return '<span class="chip chip-action-big4">分化</span>';
-    if (l === 'neutral') return '<span class="chip chip-skip">中性</span>';
-    return '<span class="chip chip-off">' + (label || '--') + '</span>';
+    var s = (label || '').toLowerCase().replace(/[\s-]+/g, '_');
+    if (s === 'strong_bullish') return '<span class="chip chip-strong-long">强烈看多</span>';
+    if (s === 'bullish') return '<span class="chip chip-long">看多</span>';
+    if (s === 'strong_bearish') return '<span class="chip chip-strong-short">强烈看空</span>';
+    if (s === 'bearish') return '<span class="chip chip-short">看空</span>';
+    if (s === 'sideways') return '<span class="chip chip-action-big4">震荡</span>';
+    if (s === 'mixed') return '<span class="chip chip-action-big4">分化</span>';
+    if (s === 'neutral') return '<span class="chip chip-skip">中性</span>';
+    if (!label) return '<span class="text-on-surface-variant">--</span>';
+    return '<span class="chip chip-off">' + escapeHtml(String(label)) + '</span>';
   }
 
   function loadStatus(cfg) {
@@ -50,7 +53,11 @@
           scoreEl.textContent = lr.overall_score != null ? (lr.overall_score >= 0 ? '+' : '') + Number(lr.overall_score).toFixed(2) : '--';
         }
         var quantEl = document.getElementById('b4-stat-quant');
-        if (quantEl) quantEl.textContent = lr.big4_quant_signal || '--';
+        if (quantEl) {
+          quantEl.innerHTML = lr.big4_quant_signal
+            ? big4Badge(lr.big4_quant_signal)
+            : '<span class="text-on-surface-variant">--</span>';
+        }
         var lastEl = document.getElementById('b4-stat-lastrun');
         if (lastEl) {
           lastEl.innerHTML = lr.asof_utc
@@ -91,7 +98,7 @@
             '<td class="px-4 py-3 mono text-[11px]">' + shortUTC(r.asof_utc) + '</td>' +
             '<td class="px-4 py-3">' + big4Badge(r.overall_label) + '</td>' +
             '<td class="px-4 py-3 text-right mono">' + (r.overall_score != null ? Number(r.overall_score).toFixed(2) : '--') + '</td>' +
-            '<td class="px-4 py-3 text-on-surface-variant text-[11px]">' + escapeHtml(r.big4_quant_signal || '--') + '</td>' +
+            '<td class="px-4 py-3">' + big4Badge(r.big4_quant_signal) + '</td>' +
             '<td class="px-4 py-3 text-right mono text-on-surface-variant text-[11px]">' + (typeof fmt === 'function' ? fmt(r.elapsed_s, 1) : r.elapsed_s) + 's</td>' +
             '<td class="px-4 py-3">' + (typeof statusBadge === 'function' ? statusBadge(r.status) : r.status) + '</td>' +
             '<td class="px-4 py-3 text-on-surface-variant text-[11px] max-w-md truncate" title="' + escapeHtml(r.direction_verdict || r.analysis_summary_short || '') + '">' +
