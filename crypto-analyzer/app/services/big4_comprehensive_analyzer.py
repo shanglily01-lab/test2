@@ -25,6 +25,7 @@ from app.services.data_cache_service import (
     MAIN_DB,
     _fetch_klines,
     _make_kline_narrative,
+    _trend_desc_from_bars,
 )
 from app.services.gemini_swan_worker import (
     GEMINI_API_KEY,
@@ -134,6 +135,98 @@ def _format_15m_bars(k_rows: List[Dict]) -> str:
     return f"[15m · {len(k_rows)} 根明细]\n" + "\n".join(lines)
 
 
+_MISSING_KLINE_PHRASES = (
+    "缺乏k线", "缺少k线", "k线缺失", "无k线", "没有k线", "无k线数据",
+    "k线数据缺失", "缺乏 k 线", "缺少 k 线", "k 线缺失",
+    "主要基于量化", "仅基于量化", "只能基于量化", "主要依赖量化",
+)
+
+
+def _closes(k_rows: List[Dict]) -> List[float]:
+    out: List[float] = []
+    for r in k_rows or []:
+        try:
+            out.append(float(r["close_price"]))
+        except Exception:
+            continue
+    return out
+
+
+def _up_down_count(k_rows: List[Dict]) -> tuple:
+    up = down = 0
+    for r in k_rows or []:
+        try:
+            o, c = float(r["open_price"]), float(r["close_price"])
+            if c > o:
+                up += 1
+            elif c < o:
+                down += 1
+        except Exception:
+            continue
+    return up, down
+
+
+def _pct_change(closes: List[float]) -> float:
+    if len(closes) < 2 or not closes[0]:
+        return 0.0
+    return (closes[-1] - closes[0]) / closes[0] * 100
+
+
+def _coin_structure_line(symbol: str, cd: dict) -> str:
+    k1d, k1h, k15 = cd.get("1d") or [], cd.get("1h") or [], cd.get("15m") or []
+    c1d, c1h, c15 = _closes(k1d), _closes(k1h), _closes(k15)
+    u1d, d1d = _up_down_count(k1d)
+    u1h, d1h = _up_down_count(k1h)
+    u15, d15 = _up_down_count(k15)
+    last = c1h[-1] if c1h else (c15[-1] if c15 else 0)
+    t1d = _trend_desc_from_bars(c1d, u1d, d1d) if len(c1d) >= 3 else "1d不足"
+    t1h = _trend_desc_from_bars(c1h, u1h, d1h) if len(c1h) >= 3 else "1h不足"
+    t15 = _trend_desc_from_bars(c15, u15, d15) if len(c15) >= 3 else "15m不足"
+    return (
+        f"- {symbol} 现价≈{last:.6g} | "
+        f"1d×{len(k1d)} {_pct_change(c1d):+.2f}% {t1d} | "
+        f"1h×{len(k1h)} {_pct_change(c1h):+.2f}% {t1h} | "
+        f"15m×{len(k15)} {_pct_change(c15):+.2f}% {t15}"
+    )
+
+
+def _kline_structure_digest(coin_data: dict) -> str:
+    lines = [
+        "## K 线结构摘要 (程序计算, 必须引用具体涨跌幅/形态, 不得声称无 K 线)",
+    ]
+    for symbol in BIG4_SYMBOLS:
+        lines.append(_coin_structure_line(symbol, coin_data.get(symbol, {})))
+    return "\n".join(lines)
+
+
+def _format_15m_compact(k_rows: List[Dict]) -> str:
+    """DeepSeek 用: 48 根统计 + 近 12 根 OHLC, 避免超长 prompt 被截断."""
+    if not k_rows:
+        return "[15m] 无数据"
+    up, down = _up_down_count(k_rows)
+    closes = _closes(k_rows)
+    chg = _pct_change(closes)
+    try:
+        hi = max(float(r["high_price"]) for r in k_rows)
+        lo = min(float(r["low_price"]) for r in k_rows)
+    except Exception:
+        hi = lo = 0.0
+    tail = _format_15m_bars(k_rows[-12:])
+    tail_body = tail.split("\n", 1)[1] if "\n" in tail else tail
+    return (
+        f"[15m · 共 {len(k_rows)} 根] H={hi:.6g} L={lo:.6g} 净变{chg:+.2f}% ({up}阳/{down}阴)\n"
+        f"近 12 根明细:\n{tail_body}"
+    )
+
+
+def _response_claims_missing_klines(parsed: dict) -> bool:
+    text = (
+        (parsed.get("analysis_summary_zh") or "")
+        + (parsed.get("direction_verdict") or "")
+    ).lower().replace(" ", "")
+    return any(p.replace(" ", "") in text for p in _MISSING_KLINE_PHRASES)
+
+
 def _kline_inventory(coin_data: dict) -> str:
     """Prompt 顶部摘要：明确各币 K 线根数，避免 LLM 误判「无数据」."""
     lines = ["## K 线数据完整性 (采集成功，必须用于分析)"]
@@ -161,7 +254,7 @@ def _kline_data_sufficient(coin_data: dict) -> bool:
     return True
 
 
-def _build_prompt(big4_quant: dict, coin_data: dict) -> str:
+def _build_prompt(big4_quant: dict, coin_data: dict, provider: str = "gemini") -> str:
     quant = big4_quant.get("overall_signal", "NEUTRAL")
     detail = big4_quant.get("detail") or {}
     quant_lines = [
@@ -173,14 +266,19 @@ def _build_prompt(big4_quant: dict, coin_data: dict) -> str:
         f"- BTC 近 6h 涨跌: {detail.get('btc_price_change_6h', 'N/A')}%",
     ]
 
+    use_compact_15m = provider == "deepseek"
     coin_sections = []
     for symbol in BIG4_SYMBOLS:
         cd = coin_data.get(symbol, {})
+        n15 = cd.get("15m") or []
+        narrative_15m = (
+            _format_15m_compact(n15) if use_compact_15m else cd.get("narrative_15m", "[无数据]")
+        )
         coin_sections.append(
             f"### {symbol}\n"
             f"#### 1d × 7\n{cd.get('narrative_1d', '[无数据]')}\n\n"
             f"#### 1h × 24\n{cd.get('narrative_1h', '[无数据]')}\n\n"
-            f"#### 15m × 48\n{cd.get('narrative_15m', '[无数据]')}"
+            f"#### 15m × {len(n15) if n15 else 48}\n{narrative_15m}"
         )
 
     return f"""你是加密货币 Big4 (BTC/ETH/BNB/SOL) 综合行情分析师。
@@ -189,19 +287,21 @@ def _build_prompt(big4_quant: dict, coin_data: dict) -> str:
 
 {_kline_inventory(coin_data)}
 
-## 量化 Big4 背景 (规则引擎, 辅证)
-{chr(10).join(quant_lines)}
+{_kline_structure_digest(coin_data)}
 
-## 各币 K 线 (UTC 收盘, 由旧到新)
+## 各币 K 线明细 (UTC 收盘, 由旧到新) — **分析主依据**
 
 {chr(10).join(coin_sections)}
+
+## 量化 Big4 背景 (规则引擎, 仅辅证, 靠后参考)
+{chr(10).join(quant_lines)}
 
 ---
 
 ## 分析要求
-1. **主依据**是下方各币 1d/1h/15m K 线结构；量化信号仅作辅证。
-2. 先看 1d×7 定大方向, 再用 1h×24 看中期结构, 15m×48 看近端动能/拐点。
-3. 四币权重: BTC>ETH>BNB≈SOL; 需说明是否共振或分化。
+1. **必须**引用上方「K 线结构摘要」与各周期 K 线写 analysis_summary_zh；**禁止**写「K线缺失/无K线/主要基于量化信号」。
+2. 先看 1d×7 定大方向, 再用 1h×24 看中期结构, 15m 看近端动能/拐点。
+3. 四币权重: BTC>ETH>BNB≈SOL; 需说明是否共振或分化；量化信号仅作辅证。
 4. 输出 JSON ONLY:
 
 ```json
@@ -267,7 +367,7 @@ def _call_gemini(prompt: str) -> Optional[str]:
         return None
 
 
-def _call_deepseek(prompt: str) -> Optional[str]:
+def _call_deepseek(prompt: str, *, strict: bool = False) -> Optional[str]:
     if not DEEPSEEK_API_KEY:
         logger.error("[Big4分析/DeepSeek] DEEPSEEK_API_KEY 未设置")
         return None
@@ -278,11 +378,13 @@ def _call_deepseek(prompt: str) -> Optional[str]:
         return None
     system_msg = (
         "你是加密货币 Big4 (BTC/ETH/BNB/SOL) 综合行情分析师。"
-        "用户消息开头「K 线数据完整性」已确认四币 1d/1h/15m K 线齐全；"
-        "必须基于这些 K 线 OHLC 结构写 analysis_summary_zh 与 direction_verdict，"
-        "不得声称 K 线缺失或仅依赖量化信号。"
-        "仅输出合法 JSON，字段与 user 消息要求一致。"
+        "用户消息含程序生成的「K 线结构摘要」与各周期 K 线 OHLC；"
+        "analysis_summary_zh 与 direction_verdict 必须引用具体 K 线涨跌幅、形态、共振/分化，"
+        "严禁写「K线缺失」「无K线数据」「主要基于量化信号」等表述。"
+        "量化 Big4 段落仅作辅证。仅输出合法 JSON。"
     )
+    if strict:
+        system_msg += " 上次输出错误地声称 K 线缺失；本次必须基于摘要中的数字重写。"
     try:
         client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
         resp = client.chat.completions.create(
@@ -291,7 +393,7 @@ def _call_deepseek(prompt: str) -> Optional[str]:
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
+            temperature=0.15 if strict else 0.2,
             max_tokens=8192,
             timeout=ANALYSIS_TIMEOUT_S,
             response_format={"type": "json_object"},
@@ -300,6 +402,25 @@ def _call_deepseek(prompt: str) -> Optional[str]:
     except Exception as e:
         logger.error(f"[Big4分析/DeepSeek] API 失败: {e}")
         return None
+
+
+def _call_deepseek_with_retry(prompt: str, coin_data: dict) -> tuple:
+    """DeepSeek 调用 + 缺失 K 线表述时自动重试一次."""
+    raw = _call_deepseek(prompt)
+    if not raw:
+        return raw, prompt
+    parsed = _parse_json(raw)
+    if parsed.get("_error") or not _response_claims_missing_klines(parsed):
+        return raw, prompt
+    logger.warning("[Big4分析/DeepSeek] 输出仍声称 K 线缺失, 带结构摘要重试")
+    retry_prompt = (
+        prompt
+        + "\n\n---\n**重试要求**: 上次 JSON 错误地写了 K 线缺失。"
+        "下方摘要与各周期 K 线均已提供；请引用摘要中的涨跌幅数字重写 analysis_summary_zh。\n"
+        + _kline_structure_digest(coin_data)
+    )
+    raw2 = _call_deepseek(retry_prompt, strict=True)
+    return (raw2 or raw), retry_prompt
 
 
 def _should_skip_interval(conn, provider: str, triggered_by: str) -> bool:
@@ -428,7 +549,7 @@ def run_big4_analysis_round(provider: str, triggered_by: str = "scheduler") -> N
                     f"15m={len(cd.get('15m') or [])}"
                 )
 
-        prompt = _build_prompt(big4_quant, coin_data)
+        prompt = _build_prompt(big4_quant, coin_data, provider=provider)
         logger.info(f"[Big4分析/{provider}] 调用 LLM, prompt≈{len(prompt)} chars")
 
         if not _kline_data_sufficient(coin_data):
@@ -441,7 +562,7 @@ def run_big4_analysis_round(provider: str, triggered_by: str = "scheduler") -> N
         if provider == "gemini":
             raw = _call_gemini(prompt)
         else:
-            raw = _call_deepseek(prompt)
+            raw, prompt = _call_deepseek_with_retry(prompt, coin_data)
 
         if not raw:
             _insert_run(conn, provider, "error", "LLM 返回空", t0, triggered_by, cfg["model"],
@@ -452,6 +573,15 @@ def run_big4_analysis_round(provider: str, triggered_by: str = "scheduler") -> N
         if parsed.get("_error"):
             _insert_run(conn, provider, "error", parsed["_error"], t0, triggered_by, cfg["model"],
                         big4_quant, None, prompt, raw)
+            return
+
+        if provider == "deepseek" and _response_claims_missing_klines(parsed):
+            _insert_run(
+                conn, provider, "error",
+                "DeepSeek 输出仍声称K线缺失(已重试)", t0, triggered_by, cfg["model"],
+                big4_quant, None, prompt, raw,
+            )
+            logger.error("[Big4分析/DeepSeek] 重试后仍声称 K 线缺失, 记 error")
             return
 
         run_id = _insert_run(conn, provider, "ok", None, t0, triggered_by, cfg["model"],
