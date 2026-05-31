@@ -216,6 +216,22 @@
   当前持仓
   <span id="pos-count-badge" class="text-[10px] font-mono text-on-surface-variant ml-1">-- 笔</span>
 </h4>
+<div class="flex flex-wrap items-center gap-2 flex-1 justify-end min-w-[280px]">
+  <input id="pos-search-input" type="text" placeholder="交易对 / 来源 / 信号..."
+    class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 w-44 min-w-[140px]"/>
+  <select id="pos-side-filter" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:outline-none focus:border-primary/50">
+    <option value="">全部方向</option>
+    <option value="LONG">LONG</option>
+    <option value="SHORT">SHORT</option>
+  </select>
+  <button type="button" onclick="searchPositions()"
+    class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-background text-xs font-bold hover:opacity-90 transition-opacity">
+    <span class="material-symbols-outlined text-[16px]">search</span>搜索
+  </button>
+  <button type="button" onclick="resetPositionSearch()"
+    class="px-3 py-1.5 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-xs text-on-surface-variant hover:text-on-surface transition-colors">重置</button>
+  <span id="pos-filter-count" class="text-[10px] font-mono text-on-surface-variant hidden"></span>
+</div>
 <div class="flex items-center gap-4">
   <div class="text-right">
     <p class="text-[10px] text-on-surface-variant uppercase tracking-widest">总浮盈</p>
@@ -366,23 +382,78 @@ function showToast(msg, type) {
 
 // ---- 加载持仓 ----
 
-async function loadPositions() {
+var _lastPositions = [];
+var _allPositions = [];
+
+function filterPositions(positions) {
+    var search = ((document.getElementById('pos-search-input') || {}).value || '').trim().toLowerCase();
+    var side = (document.getElementById('pos-side-filter') || {}).value || '';
+    return positions.filter(function(p) {
+        var sym = (p.symbol || '').toLowerCase();
+        var src = (p.source || '').toLowerCase();
+        var sig = (p.entry_signal_type || '').toLowerCase();
+        var ps = (p.position_side || '').toUpperCase();
+        if (side && ps !== side) return false;
+        if (!search) return true;
+        return sym.indexOf(search) >= 0
+            || src.indexOf(search) >= 0
+            || sig.indexOf(search) >= 0
+            || ps.toLowerCase().indexOf(search) >= 0;
+    });
+}
+
+function searchPositions() {
+    if (_allPositions.length) {
+        renderPositions(_allPositions);
+        return;
+    }
+    loadPositions();
+}
+
+function resetPositionSearch() {
+    var inp = document.getElementById('pos-search-input');
+    var sel = document.getElementById('pos-side-filter');
+    if (inp) inp.value = '';
+    if (sel) sel.value = '';
+    if (_allPositions.length) {
+        renderPositions(_allPositions);
+    } else {
+        loadPositions();
+    }
+}
+
+async function renderPositions(allPositions) {
     var tbody = document.getElementById('positions-tbody');
     if (!tbody) return null;
 
-    var positions = [];
-    try {
-        var res = await fetch('/api/futures/positions?account_id=' + ACCOUNT_ID + '&status=open');
-        var data = await res.json();
-        positions = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
-    } catch(e) {
-        tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败: ' + e.message + '</td></tr>';
-        return null;
+    _allPositions = allPositions;
+    _lastPositions = allPositions;
+    var positions = filterPositions(allPositions);
+    var filterEl = document.getElementById('pos-filter-count');
+    var hasFilter = ((document.getElementById('pos-search-input') || {}).value || '').trim()
+        || (document.getElementById('pos-side-filter') || {}).value;
+    if (filterEl) {
+        if (hasFilter && allPositions.length > 0) {
+            filterEl.textContent = '匹配 ' + positions.length + ' / ' + allPositions.length;
+            filterEl.classList.remove('hidden');
+        } else {
+            filterEl.textContent = '';
+            filterEl.classList.add('hidden');
+        }
+    }
+
+    if (allPositions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无持仓</td></tr>';
+        var badge0 = document.getElementById('pos-count-badge');
+        if (badge0) badge0.textContent = '0 笔';
+        return {count: 0, totalMargin: 0, totalPnl: 0};
     }
 
     if (positions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无持仓</td></tr>';
-        return {count: 0, totalMargin: 0, totalPnl: 0};
+        tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-on-surface-variant text-xs">无匹配持仓</td></tr>';
+        var badgeEmpty = document.getElementById('pos-count-badge');
+        if (badgeEmpty) badgeEmpty.textContent = allPositions.length + ' 笔';
+        return {count: allPositions.length, totalMargin: 0, totalPnl: 0};
     }
 
     // 批量获取实时价格
@@ -401,8 +472,6 @@ async function loadPositions() {
     } catch(e) { /* 使用 entry_price 作为回退 */ }
 
     var totalMargin = 0, totalPnl = 0;
-
-    _lastPositions = positions;
 
     var rows = positions.map(function(pos) {
         var isLong = pos.position_side === 'LONG';
@@ -505,21 +574,40 @@ async function loadPositions() {
 
     tbody.innerHTML = rows.join('');
 
-    // Update header stats
+    // Update header stats (全量持仓数; 浮盈仅统计当前筛选结果)
     var badge = document.getElementById('pos-count-badge');
     var pnlEl = document.getElementById('pos-header-pnl');
-    if (badge) badge.textContent = positions.length + ' 笔';
+    if (badge) {
+        badge.textContent = hasFilter
+            ? (positions.length + ' / ' + allPositions.length + ' 笔')
+            : (allPositions.length + ' 笔');
+    }
     if (pnlEl) {
         pnlEl.textContent = (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(2) + ' U';
         pnlEl.className = 'font-mono text-sm font-bold ' + (totalPnl >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
     }
 
-    return {count: positions.length, totalMargin: totalMargin, totalPnl: totalPnl};
+    return {count: allPositions.length, totalMargin: totalMargin, totalPnl: totalPnl};
+}
+
+async function loadPositions() {
+    var tbody = document.getElementById('positions-tbody');
+    if (!tbody) return null;
+
+    var positions = [];
+    try {
+        var res = await fetch('/api/futures/positions?account_id=' + ACCOUNT_ID + '&status=open');
+        var data = await res.json();
+        positions = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+    } catch(e) {
+        tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败: ' + e.message + '</td></tr>';
+        return null;
+    }
+
+    return renderPositions(positions);
 }
 
 // ---- 一键平仓 ----
-
-var _lastPositions = [];
 
 async function closeAllPositions() {
     var cnt = _lastPositions.length;
@@ -698,6 +786,12 @@ document.addEventListener('DOMContentLoaded', function() {
     loadAll();
     _posRefreshTimer = setInterval(loadPositions, 5000);
     _refreshTimer = setInterval(loadAccountInfo, 300000);
+    var posSearch = document.getElementById('pos-search-input');
+    if (posSearch) {
+        posSearch.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') searchPositions();
+        });
+    }
 });
 </script>
 </body></html>
