@@ -131,7 +131,7 @@
 <table class="w-full text-xs">
 <thead class="bg-[#0a0f14] text-[#a8abb2] uppercase tracking-wider">
 <tr>
-  <th class="px-3 py-2 text-left">时间</th>
+  <th class="px-3 py-2 text-left">时间 (UTC+8)</th>
   <th class="px-3 py-2 text-left">决策</th>
   <th class="px-3 py-2 text-left">Symbol</th>
   <th class="px-3 py-2 text-left">方向</th>
@@ -175,6 +175,24 @@ function chipClass(decision, type) {
   if (decision === 'sell') return 'chip chip-sell';
   if (decision === 'hold') return 'chip chip-hold';
   return 'chip chip-observe';
+}
+
+function parseUtcTime(t) {
+  if (!t) return null;
+  try {
+    var ts = (typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t)) ? t + 'Z' : t;
+    var d = new Date(ts);
+    return isNaN(d.getTime()) ? null : d;
+  } catch (e) { return null; }
+}
+
+function fmtTimeUtc8(t) {
+  var d = parseUtcTime(t);
+  if (!d) return '—';
+  var u = new Date(d.getTime() + 8 * 3600000);
+  var pad = function(x) { return String(x).padStart(2, '0'); };
+  return u.getUTCFullYear() + '-' + pad(u.getUTCMonth() + 1) + '-' + pad(u.getUTCDate())
+    + ' ' + pad(u.getUTCHours()) + ':' + pad(u.getUTCMinutes()) + ':' + pad(u.getUTCSeconds());
 }
 
 function updateDecisionOptions() {
@@ -285,7 +303,7 @@ async function loadReviews() {
       if (row.roi_pct != null) holdCol += ' / ' + (row.roi_pct >= 0 ? '+' : '') + row.roi_pct.toFixed(1) + '%';
     }
     tr.innerHTML =
-      '<td class="px-3 py-2 mono text-[#a8abb2]">' + (row.created_at || '') + '</td>' +
+      '<td class="px-3 py-2 mono text-[#a8abb2]">' + fmtTimeUtc8(row.created_at) + '</td>' +
       '<td class="px-3 py-2"><span class="' + chipClass(row.decision, currentTab) + '">' + row.decision + '</span></td>' +
       '<td class="px-3 py-2 font-medium">' + row.symbol + '</td>' +
       '<td class="px-3 py-2">' + (row.position_side || '—') + '</td>' +
