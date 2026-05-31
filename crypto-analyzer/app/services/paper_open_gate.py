@@ -1,9 +1,17 @@
 """模拟开仓前 Gemini 顾问闸门 — 所有 account_id=2 开仓路径应调用."""
 from __future__ import annotations
 
+import threading
+import time
 from typing import Optional, Tuple
 
 from loguru import logger
+
+from app.services.gemini_position_advisor import GEMINI_PER_CALL_DELAY_S
+
+# 全局串行：多策略/预测器/BTC动量等同刻触发时，按获得锁的顺序 FIFO 审查，避免并发打爆 Gemini
+_open_gate_lock = threading.Lock()
+_open_gate_waiting = 0
 
 
 def gate_simulated_open(
@@ -21,23 +29,39 @@ def gate_simulated_open(
     """
     开仓前审核。返回 (允许开仓, 原因).
     顾问关闭 / API 异常时放行 (降级), 仅明确 reject 时拦截。
+    所有调用经全局锁串行执行，并在每次审查后间隔 GEMINI_PER_CALL_DELAY_S。
     """
-    try:
-        from app.services.gemini_position_advisor import get_open_advisor
+    global _open_gate_waiting
+    with _open_gate_lock:
+        _open_gate_waiting += 1
+        queue_ahead = _open_gate_waiting - 1
+        if queue_ahead > 0:
+            logger.info(
+                f"[开仓顾问] {symbol} source={source} 排队中(前方约{queue_ahead}笔), 等待审查"
+            )
+        try:
+            from app.services.gemini_position_advisor import get_open_advisor
 
-        advisor = get_open_advisor()
-        return advisor.review_open(
-            symbol=symbol,
-            side=side,
-            price=price,
-            source=source,
-            catalyst=catalyst,
-            leverage=leverage,
-            sl_pct=sl_pct,
-            tp_pct=tp_pct,
-            hold_hours=hold_hours,
-            conn=conn,
-        )
-    except Exception as e:
-        logger.warning(f"[开仓顾问] {symbol} 审核异常, 放行: {e}")
-        return True, "advisor_error_allow"
+            advisor = get_open_advisor()
+            allowed, reason = advisor.review_open(
+                symbol=symbol,
+                side=side,
+                price=price,
+                source=source,
+                catalyst=catalyst,
+                leverage=leverage,
+                sl_pct=sl_pct,
+                tp_pct=tp_pct,
+                hold_hours=hold_hours,
+                conn=conn,
+            )
+            if not allowed:
+                logger.info(f"[开仓顾问] 拒绝开仓 {symbol} {side} source={source}: {reason}")
+            return allowed, reason
+        except Exception as e:
+            logger.warning(f"[开仓顾问] {symbol} 审核异常, 放行: {e}")
+            return True, "advisor_error_allow"
+        finally:
+            _open_gate_waiting = max(0, _open_gate_waiting - 1)
+            if GEMINI_PER_CALL_DELAY_S > 0:
+                time.sleep(GEMINI_PER_CALL_DELAY_S)

@@ -438,6 +438,23 @@ class KlinePullbackEntryExecutor:
                     logger.warning(f"⚠️ {symbol} {direction} 已有{existing_count}个持仓，放弃本次开仓（防重复）")
                     return {'success': False, 'reason': '已有持仓，防止重复开仓'}
 
+                if int(self.account_id) == 2:
+                    from app.services.paper_open_gate import gate_simulated_open
+                    _sl100 = _tp100 = None
+                    if stop_loss_price and current_price > 0:
+                        _sl100 = abs(current_price - float(stop_loss_price)) / current_price * 100
+                    if take_profit_price and current_price > 0:
+                        _tp100 = abs(float(take_profit_price) - current_price) / current_price * 100
+                    allowed, _gate_reason = gate_simulated_open(
+                        symbol, direction, float(current_price), 'smart_trader',
+                        entry_reason, leverage=int(leverage),
+                        sl_pct=_sl100, tp_pct=_tp100,
+                        hold_hours=float(max_hold_minutes) / 60.0,
+                        conn=conn,
+                    )
+                    if not allowed:
+                        return {'success': False, 'reason': f'开仓顾问拒绝: {_gate_reason}'}
+
                 # 插入持仓记录
                 cursor.execute("""
                     INSERT INTO futures_positions

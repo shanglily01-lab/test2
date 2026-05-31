@@ -263,6 +263,16 @@ class BTCMomentumTrader:
                 sl = round(entry_price * (1 + sl_pct), 8)
                 tp = round(entry_price * (1 - tp_pct), 8)
 
+            from app.services.paper_open_gate import gate_simulated_open
+            allowed, _gate_reason = gate_simulated_open(
+                symbol, direction, entry_price, 'BTC_MOMENTUM', trigger_info,
+                leverage=self.LEVERAGE,
+                sl_pct=sl_pct * 100, tp_pct=tp_pct * 100,
+                hold_hours=float(self._get_max_hold_hours()),
+            )
+            if not allowed:
+                return False
+
             conn = self._get_conn()
             cur = conn.cursor()
             planned_close_time = datetime.now() + timedelta(hours=self._get_max_hold_hours())

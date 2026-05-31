@@ -554,8 +554,19 @@ class MarketPredictor:
 
             qty = round(notional / entry_price, 6)
 
+            from app.services.paper_open_gate import gate_simulated_open
+            max_hold_hours = self._get_max_hold_hours()
+            allowed, _gate_reason = gate_simulated_open(
+                symbol, direction, entry_price, 'PREDICTOR',
+                f"预测器 confidence={r['confidence']} {r['direction']}",
+                leverage=LEVERAGE,
+                sl_pct=SL_PCT * 100, tp_pct=TP_PCT * 100,
+                hold_hours=float(max_hold_hours),
+            )
+            if not allowed:
+                continue
+
             try:
-                max_hold_hours = self._get_max_hold_hours()
                 planned_close = now + timedelta(hours=max_hold_hours)
                 max_hold_minutes = max_hold_hours * 60
                 cursor.execute("""
