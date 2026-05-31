@@ -1401,12 +1401,12 @@ class SmartTraderService:
 
     def _check_profit_and_auto_disable(self, profit_threshold=1000.0, window_hours=6, check_interval_hours=4) -> bool:
         """
-        盈利熔断：仅告警+跳过本轮开仓，不修改系统设置
+        盈利熔断：跳过本轮开仓，不修改系统设置
 
         逻辑：
         - 每 check_interval_hours 小时检测一次（默认4小时）
         - 检查最近 window_hours 小时已平仓PNL总和（默认6小时）
-        - 若超过 profit_threshold（默认1000U），发通知但不动系统设置
+        - 若超过 profit_threshold（默认1000U），跳过本轮开仓，不修改系统设置
 
         Returns:
             True = 已触发（调用方跳过本轮开仓）
@@ -1437,25 +1437,10 @@ class SmartTraderService:
             if pnl_6h >= profit_threshold:
                 logger.warning(
                     f"[PROFIT-GUARD] 盈利熔断触发! 过去{window_hours}h盈利={pnl_6h:+.1f}U "
-                    f"超过阈值{profit_threshold}U (仅告警，未关闭交易)"
+                    f"超过阈值{profit_threshold}U (仅跳过本轮，未关闭交易)"
                 )
-                _last_notified = getattr(self, '_profit_guard_notified_at', None)
-                _cooldown_ok = (_last_notified is None or
-                                (datetime.now() - _last_notified).total_seconds() >= 300)
-                if _cooldown_ok and hasattr(self, 'telegram_notifier') and self.telegram_notifier:
-                    try:
-                        self.telegram_notifier.send_message(
-                            f"🟡 【U本位盈利熔断】已触发（仅告警）\n\n"
-                            f"过去{window_hours}h盈利: {pnl_6h:+.1f}U\n"
-                            f"阈值: {profit_threshold}U\n"
-                            f"已跳过本轮扫描，系统设置未修改"
-                        )
-                        self._profit_guard_notified_at = datetime.now()
-                    except Exception:
-                        pass
                 return True
 
-            self._profit_guard_notified_at = None  # 条件解除，重置冷却
             return False
 
         except Exception as e:
@@ -1464,12 +1449,12 @@ class SmartTraderService:
 
     def _check_loss_and_auto_disable(self, loss_threshold=300.0, window_hours=3, check_interval_hours=3) -> bool:
         """
-        亏损熔断：仅告警+跳过本轮开仓，不修改系统设置
+        亏损熔断：跳过本轮开仓，不修改系统设置
 
         逻辑：
         - 每 check_interval_hours 小时检测一次（默认3小时）
         - 检查最近 window_hours 小时已平仓PNL总和（默认3小时）
-        - 若亏损超过 loss_threshold（默认300U），发通知但不动系统设置
+        - 若亏损超过 loss_threshold（默认300U），跳过本轮开仓，不修改系统设置
 
         Returns:
             True = 已触发（调用方跳过本轮开仓）
@@ -1499,26 +1484,10 @@ class SmartTraderService:
             if pnl <= -loss_threshold:
                 logger.warning(
                     f"[LOSS-GUARD] 亏损熔断触发! 过去{window_hours}h亏损={pnl:+.1f}U "
-                    f"超过阈值-{loss_threshold}U (仅告警，未关闭交易)"
+                    f"超过阈值-{loss_threshold}U (仅跳过本轮，未关闭交易)"
                 )
-                _last_notified = getattr(self, '_loss_guard_notified_at', None)
-                _cooldown_ok = (_last_notified is None or
-                                (datetime.now() - _last_notified).total_seconds() >= 300)
-                if _cooldown_ok and hasattr(self, 'telegram_notifier') and self.telegram_notifier:
-                    try:
-                        self.telegram_notifier.send_message(
-                            f"🟡 【U本位亏损熔断】已触发（仅告警）\n\n"
-                            f"过去{window_hours}h亏损: {pnl:+.1f}U\n"
-                            f"阈值: -{loss_threshold}U\n"
-                            f"已跳过本轮扫描，系统设置未修改"
-                        )
-                        self._loss_guard_notified_at = datetime.now()
-                    except Exception:
-                        pass
                 return True
 
-            cursor.close()
-            self._loss_guard_notified_at = None  # 条件解除，重置冷却
             return False
 
         except Exception as e:
@@ -3614,18 +3583,6 @@ class SmartTraderService:
             logger.info(
                 f"========== 监控重启完成: 成功{success_count}, 失败{fail_count} =========="
             )
-
-            # 3. 发送完成通知
-            if hasattr(self, 'telegram_notifier') and self.telegram_notifier:
-                try:
-                    self.telegram_notifier.send_message(
-                        f"✅ SmartExitOptimizer重启完成\n\n"
-                        f"成功: {success_count}个持仓\n"
-                        f"失败: {fail_count}个持仓\n"
-                        f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                    )
-                except Exception as e:
-                    logger.warning(f"发送Telegram通知失败: {e}")
 
         except Exception as e:
             logger.error(f"❌ 重启SmartExitOptimizer失败: {e}")

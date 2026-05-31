@@ -27,6 +27,10 @@ router = APIRouter(prefix='/api/futures/review', tags=['futures-review'])
 # 加载配置
 from app.utils.config_loader import load_config
 from app.services.signal_analysis_service import SignalAnalysisService
+from app.services.strategy_display_names import (
+    get_strategy_display_name,
+    get_strategy_short_name,
+)
 
 config = load_config()
 db_config = config['database']['mysql']
@@ -337,19 +341,9 @@ def parse_entry_reason(entry_reason: str, entry_signal_type: str, source: str = 
 
     # 使用 source 字段兜底
     if source:
-        source_label_map = {
-            'smart_trader': '智能交易(S1)',
-            's5_large_oversold': 'S5大币超卖',
-            's6_vol_spike': 'S6放量异动',
-            's9_gemini_ai': 'S9 Gemini AI',
-            'gemini_explore': 'Gemini探索',
-            'gemini_predict': 'Gemini预测',
-            'PREDICTOR': '预测神器',
-            'deepseek_explore': 'DeepSeek探索',
-            'deepseek_predict': 'DeepSeek预测',
-        }
-        if source in source_label_map:
-            return source, source_label_map[source]
+        label = get_strategy_display_name(source)
+        if label != source:
+            return source, label
 
     return 'unknown', '未知'
 
@@ -2139,18 +2133,6 @@ async def get_holding_analysis(
         """, (account_id, time_threshold))
         strategy_rows = cursor.fetchall()
 
-        STRATEGY_NAMES = {
-            'smart_trader': 'smart_trader',
-            'PREDICTOR': '预测神器',
-            'gemini_predict': 'Gemini预测',
-            'gemini_explore': 'Gemini探索',
-            's6_vol_spike': 'S6放量异动',
-            'deepseek_predict': 'DeepSeek预测',
-            'deepseek_explore': 'DeepSeek探索',
-            's9_gemini_ai': 'S9 Gemini AI',
-            's5_large_oversold': 'S5大币超卖',
-        }
-
         strategies = []
         for r in strategy_rows:
             src = r['source']
@@ -2160,7 +2142,7 @@ async def get_holding_analysis(
             win_rate = (wins / total * 100) if total > 0 else 0
             strategies.append({
                 "source": src,
-                "display_name": STRATEGY_NAMES.get(src, src),
+                "display_name": get_strategy_display_name(src),
                 "total_trades": total,
                 "wins": wins,
                 "win_rate": round(win_rate, 1),
@@ -2350,24 +2332,6 @@ async def get_strategy_performance(
         cursor.close()
         conn.close()
 
-        STRATEGY_NAMES = {
-            's1_early_long': 'S1 早期做多',
-            's5_large_oversold': 'S5 大币超卖做多',
-            's6_vol_spike': 'S6 放量异动做多',
-            's9_gemini_ai': 'S9 Gemini AI',
-            'gemini_explore': 'Gemini 探索',
-            'BTC_MOMENTUM': 'BTC 动量',
-        }
-
-        STRATEGY_SHORT = {
-            's1_early_long': 'S1',
-            's5_large_oversold': 'S5',
-            's6_vol_spike': 'S6',
-            's9_gemini_ai': 'S9',
-            'gemini_explore': '探索',
-            'BTC_MOMENTUM': 'BTC',
-        }
-
         strategies = []
         total_all = {'trades': 0, 'wins': 0, 'pnl': 0}
         for row in rows:
@@ -2391,8 +2355,8 @@ async def get_strategy_performance(
 
             strategies.append({
                 'source': source,
-                'name': STRATEGY_NAMES.get(source, source),
-                'short': STRATEGY_SHORT.get(source, source),
+                'name': get_strategy_display_name(source),
+                'short': get_strategy_short_name(source),
                 'total_trades': total,
                 'wins': wins,
                 'losses': losses,

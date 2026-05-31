@@ -113,11 +113,11 @@
 <nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto">
 <a href="/dashboard" data-path="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
 <a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>合约交易</span></a>
-<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history</span><span>合约交易记录</span></a>
 <a href="/gemini_explore" data-path="/gemini_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>Gemini 探索</span></a>
 <a href="/deepseek_explore" data-path="/deepseek_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">psychology</span><span>DeepSeek 探索</span></a>
 <a href="/live_trading" data-path="/live_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">precision_manufacturing</span><span>Live Trading</span></a>
 <a href="/futures_review" data-path="/futures_review" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>复盘分析</span></a>
+<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history</span><span>交易记录</span></a>
 <a href="/technical-signals" data-path="/technical-signals" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">sensors</span><span>信号分析</span></a>
 <a href="/market_regime" data-path="/market_regime" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">pulse_alert</span><span>行情识别</span></a>
 <a class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm" data-path="/top50" href="/top50"><span class="material-symbols-outlined text-lg">workspace_premium</span><span>TOP 50</span></a>
@@ -224,21 +224,10 @@
         <p class="mono text-3xl font-medium text-secondary" id="stat-winrate">--</p>
       </div>
     </div>
-    <div class="grid grid-cols-2 gap-6">
-      <div class="bg-surface-container-low rounded-xl p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">信号健康度</h3>
-          <span id="signal-health-badge" class="text-xs px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">--</span>
-        </div>
-        <div id="signal-analysis-list" class="space-y-3">
-          <p class="text-xs text-on-surface-variant">加载中...</p>
-        </div>
-      </div>
-      <div class="bg-surface-container-low rounded-xl p-6">
-        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">交易对表现</h3>
-        <div id="best-symbols-list" class="space-y-2">
-          <p class="text-xs text-on-surface-variant">加载中...</p>
-        </div>
+    <div class="bg-surface-container-low rounded-xl p-6">
+      <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">交易对表现</h3>
+      <div id="best-symbols-list" class="space-y-2">
+        <p class="text-xs text-on-surface-variant">加载中...</p>
       </div>
     </div>
   </div>
@@ -778,7 +767,7 @@ function switchTab(name) {
 }
 
 function loadTabData(name) {
-  if (name === 'overview') { loadSummary(); loadSignalAnalysis(); }
+  if (name === 'overview') { loadSummary(); }
   else if (name === 'trades') { loadTrades(); }
   else if (name === 'analysis') { loadAnalysis(); }
   else if (name === 'suggestions') { loadSuggestions(); }
@@ -833,66 +822,6 @@ function loadSummary() {
       renderSymbols(best, worst);
     })
     .catch(function(e){ console.error('loadSummary error:', e); });
-}
-
-function loadSignalAnalysis() {
-  fetch('/api/futures/review/signal-analysis?account_id=' + accountId() + '&hours=' + currentHours)
-    .then(function(r){ return r.json(); })
-    .then(function(d) {
-      var items = signalStatsToArray(d);
-      renderSignalBars(items, 'signal-analysis-list', 'signal-health-badge');
-    })
-    .catch(function(e){ console.error('loadSignalAnalysis error:', e); });
-}
-
-function signalStatsToArray(d) {
-  var data = d.data || d || {};
-  if (Array.isArray(data)) return data;
-  if (data.components && Array.isArray(data.components)) return data.components;
-  var stats = data.signal_stats || {};
-  if (typeof stats === 'object' && !Array.isArray(stats)) {
-    var arr = [];
-    for (var k in stats) {
-      if (stats.hasOwnProperty(k)) {
-        arr.push(Object.assign({ signal_type: k }, stats[k]));
-      }
-    }
-    return arr;
-  }
-  return [];
-}
-
-function renderSignalBars(items, listId, badgeId) {
-  var list = document.getElementById(listId);
-  var badge = document.getElementById(badgeId);
-  if (!list) return;
-  if (!items || items.length === 0) {
-    list.innerHTML = '<p class="text-xs text-on-surface-variant">暂无数据</p>';
-    return;
-  }
-  var total = items.reduce(function(a, b){ return a + parseFloat(b.score || b.win_rate || 0); }, 0);
-  var avg = items.length > 0 ? total / items.length : 0;
-  if (badge) {
-    var health = avg >= 60 ? 'HEALTHY' : avg >= 40 ? 'FAIR' : 'WEAK';
-    var hcls = avg >= 60 ? 'bg-primary/20 text-primary' : avg >= 40 ? 'bg-yellow-500/20 text-yellow-400' : 'bg-error/20 text-error';
-    badge.textContent = health;
-    badge.className = 'text-xs px-2 py-0.5 rounded-full ' + hcls;
-  }
-  var html = '';
-  items.slice(0, 12).forEach(function(item) {
-    var name = item.signal_type || item.component || item.name || '--';
-    var score = parseFloat(item.score || item.win_rate || 0);
-    var pct = Math.min(100, Math.max(0, score > 1 ? score : score * 100));
-    var color = pct >= 60 ? '#49f4c8' : pct >= 40 ? '#FFD700' : '#ff716c';
-    html += '<div class="space-y-1">' +
-      '<div class="flex justify-between text-xs">' +
-        '<span class="text-on-surface-variant truncate max-w-[160px]">' + name + '</span>' +
-        '<span class="mono text-[11px]" style="color:' + color + '">' + pct.toFixed(1) + '%</span>' +
-      '</div>' +
-      '<div class="bar-bg"><div class="bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
-      '</div>';
-  });
-  list.innerHTML = html;
 }
 
 function renderSymbols(best, worst) {

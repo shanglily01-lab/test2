@@ -1721,7 +1721,7 @@ async def futures_trading_page():
 @app.get("/coin_futures_trading")
 async def coin_futures_trading_page():
     """
-    合约交易记录页面（U本位历史成交）
+    交易记录页面（U本位历史成交）
     """
     coin_futures_path = project_root / "templates" / "coin_futures_trading.html"
     if coin_futures_path.exists():
