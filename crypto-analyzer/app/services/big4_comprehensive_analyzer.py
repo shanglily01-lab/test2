@@ -15,7 +15,7 @@ import re
 import threading
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import pymysql
 import pymysql.cursors
@@ -32,11 +32,11 @@ from app.services.gemini_swan_worker import (
     _read_setting,
 )
 
-BIG4_COINS: List[Tuple[str, str]] = [
-    ("BTC/USDT", "BTCUSDT"),
-    ("ETH/USDT", "ETHUSDT"),
-    ("BNB/USDT", "BNBUSDT"),
-    ("SOL/USDT", "SOLUSDT"),
+BIG4_SYMBOLS: List[str] = [
+    "BTC/USDT",
+    "ETH/USDT",
+    "BNB/USDT",
+    "SOL/USDT",
 ]
 
 INTERVAL_HOURS = 2
@@ -147,10 +147,10 @@ def _build_prompt(big4_quant: dict, coin_data: dict) -> str:
     ]
 
     coin_sections = []
-    for display, sym in BIG4_COINS:
-        cd = coin_data.get(sym, {})
+    for symbol in BIG4_SYMBOLS:
+        cd = coin_data.get(symbol, {})
         coin_sections.append(
-            f"### {display}\n"
+            f"### {symbol}\n"
             f"#### 1d × 7\n{cd.get('narrative_1d', '[无数据]')}\n\n"
             f"#### 1h × 24\n{cd.get('narrative_1h', '[无数据]')}\n\n"
             f"#### 15m × 48\n{cd.get('narrative_15m', '[无数据]')}"
@@ -381,8 +381,15 @@ def run_big4_analysis_round(provider: str, triggered_by: str = "scheduler") -> N
         big4_quant = _fetch_big4_quant(conn)
         coin_data = {}
         with conn.cursor() as cur:
-            for _display, sym in BIG4_COINS:
-                coin_data[sym] = _fetch_coin_klines(cur, sym)
+            for symbol in BIG4_SYMBOLS:
+                cd = _fetch_coin_klines(cur, symbol)
+                coin_data[symbol] = cd
+                logger.info(
+                    f"[Big4分析/{provider}] {symbol} K线: "
+                    f"1d={len(cd.get('1d') or [])} "
+                    f"1h={len(cd.get('1h') or [])} "
+                    f"15m={len(cd.get('15m') or [])}"
+                )
 
         prompt = _build_prompt(big4_quant, coin_data)
         logger.info(f"[Big4分析/{provider}] 调用 LLM, prompt≈{len(prompt)} chars")
