@@ -1098,10 +1098,12 @@ except Exception as e:
 
 try:
     from app.api.gemini_advisor_api import router as gemini_advisor_router
+    from app.api.gemini_advisor_api import legacy_router as gemini_advisor_legacy_router
     app.include_router(gemini_advisor_router)
-    logger.info("[Gemini顾问] API路由已注册")
+    app.include_router(gemini_advisor_legacy_router)
+    logger.info("[顾问审核] API路由已注册 (/api/advisor + 兼容 /api/gemini-advisor)")
 except Exception as e:
-    logger.warning(f"[Gemini顾问] API路由注册失败: {e}")
+    logger.warning(f"[顾问审核] API路由注册失败: {e}")
 
 # 注册企业金库监控API路由
 ENABLE_CORPORATE_TREASURY = True  # 启用企业金库API
@@ -1826,7 +1828,7 @@ async def ai_shadow_compare_page():
 
 @app.get("/gemini_advisor_reviews")
 async def gemini_advisor_reviews_page():
-    """Gemini 顾问审核记录 — 开仓 / 持仓."""
+    """顾问审核记录 — 开仓 / 持仓 (Gemini + DeepSeek)."""
     page_path = project_root / "templates" / "gemini_advisor_reviews.html"
     if page_path.exists():
         return FileResponse(str(page_path))

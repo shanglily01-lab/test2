@@ -3678,13 +3678,14 @@ class SmartTraderService:
                         logger.warning(f"[对账] 异常: {_re}")
                     last_reconcile = now
 
-                # 0.61. Gemini 持仓顾问 (每 15 min; 模拟仓 ≥2h 每 15min)
+                # 0.61. 持仓顾问 (每 15 min; 模拟仓 ≥2h)
                 if (now - last_gemini_advisor).total_seconds() >= 900:
                     try:
                         if self.smart_exit_optimizer:
                             self.smart_exit_optimizer.gemini_advisor_tick()
+                            self.smart_exit_optimizer.deepseek_advisor_tick()
                     except Exception as _ge:
-                        logger.warning(f"[Gemini顾问] tick 异常: {_ge}")
+                        logger.warning(f"[持仓顾问] tick 异常: {_ge}")
                     last_gemini_advisor = now
 
                 # 0.65. BTC动量跟随策略检测（每轮都跑，内部自带冷却控制）

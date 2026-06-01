@@ -81,11 +81,14 @@ class SmartExitOptimizer:
         # 默认 OFF (system_settings.gemini_position_advisor_enabled)
         try:
             from app.services.gemini_position_advisor import GeminiPositionAdvisor
+            from app.services.deepseek_position_advisor import DeepSeekPositionAdvisor
             self.gemini_advisor = GeminiPositionAdvisor(db_config)
-            logger.info("[SmartExit] Gemini 持仓顾问已初始化 (默认 OFF,需 system_settings 开启)")
+            self.deepseek_advisor = DeepSeekPositionAdvisor(db_config)
+            logger.info("[SmartExit] Gemini/DeepSeek 持仓顾问已初始化")
         except Exception as e:
             self.gemini_advisor = None
-            logger.warning(f"[SmartExit] Gemini 持仓顾问初始化失败: {e}")
+            self.deepseek_advisor = None
+            logger.warning(f"[SmartExit] 持仓顾问初始化失败: {e}")
 
     def _is_smart_exit_enabled(self) -> bool:
         """智能平仓总开关 (到期/SL/TP 不受此开关影响)."""
@@ -1779,5 +1782,15 @@ class SmartExitOptimizer:
             return self.gemini_advisor.tick()
         except Exception as e:
             logger.error(f"[SmartExit] gemini_advisor_tick 异常: {e}")
+            return {'evaluated': 0, 'errors': 1, 'note': str(e)}
+
+    def deepseek_advisor_tick(self) -> dict:
+        """触发 DeepSeek 持仓顾问扫描 deepseek_* 模拟仓."""
+        if not self.deepseek_advisor:
+            return {'evaluated': 0, 'skipped': 0, 'note': 'advisor not initialized'}
+        try:
+            return self.deepseek_advisor.tick()
+        except Exception as e:
+            logger.error(f"[SmartExit] deepseek_advisor_tick 异常: {e}")
             return {'evaluated': 0, 'errors': 1, 'note': str(e)}
 

@@ -2,7 +2,7 @@
 <html class="dark" lang="zh-CN"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Gemini 顾问审核记录 | Neural Obsidian</title>
+<title>顾问审核记录 | Neural Obsidian</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
@@ -58,7 +58,7 @@
 <a href="/system-settings" data-path="/system-settings" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">settings</span><span>Settings</span></a>
 <a href="/binance-news" data-path="/binance-news" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">campaign</span><span>公告监控</span></a>
 <a href="/trading-manual" data-path="/trading-manual" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">menu_book</span><span>操作手册</span></a>
-<a href="/gemini_advisor_reviews" data-path="/gemini_advisor_reviews" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">fact_check</span><span>Gemini 顾问审核</span></a>
+<a href="/gemini_advisor_reviews" data-path="/gemini_advisor_reviews" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">fact_check</span><span>顾问审核</span></a>
 <a href="/ai_shadow_compare" data-path="/ai_shadow_compare" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">compare_arrows</span><span>AI Shadow 对比</span></a>
 </nav>
 <script>
@@ -77,8 +77,8 @@
 <main class="ml-[240px] min-h-screen px-8 py-6">
 <header class="flex items-center justify-between mb-6 pb-4 border-b border-[#44484e]/40">
   <div>
-    <h1 class="text-2xl font-bold">Gemini 顾问审核记录</h1>
-    <p class="text-xs text-[#a8abb2] mt-1">开仓审核 (approve/reject) · 持仓审核 (hold/observe/sell) · 近 7 日汇总</p>
+    <h1 class="text-2xl font-bold">顾问审核记录</h1>
+    <p class="text-xs text-[#a8abb2] mt-1">Gemini / DeepSeek 开仓审核 · Gemini 持仓审核 · 近 7 日汇总</p>
   </div>
   <button onclick="loadAll()" class="flex items-center gap-1 px-3 py-2 rounded-lg bg-[#151a20] hover:bg-[#1a2027] text-xs">
     <span class="material-symbols-outlined text-[16px]">refresh</span>刷新
@@ -117,6 +117,11 @@
     <input id="searchInput" type="text" placeholder="交易对 / 来源 / 理由 / 决策..."
            class="w-full bg-[#151a20] border border-[#44484e]/40 rounded-lg pl-10 pr-4 py-2 text-xs text-[#ebeef5] placeholder-[#a8abb2] focus:outline-none focus:border-[#49f4c8]/50"/>
   </div>
+  <select id="providerFilter" class="bg-[#151a20] border border-[#44484e]/40 rounded-lg px-3 py-2 text-xs text-[#ebeef5] focus:outline-none focus:border-[#49f4c8]/50">
+    <option value="all">全部顾问</option>
+    <option value="gemini">Gemini</option>
+    <option value="deepseek">DeepSeek</option>
+  </select>
   <select id="decisionFilter" class="bg-[#151a20] border border-[#44484e]/40 rounded-lg px-3 py-2 text-xs text-[#ebeef5] focus:outline-none focus:border-[#49f4c8]/50">
     <option value="">全部决策</option>
   </select>
@@ -131,6 +136,7 @@
 <table class="w-full text-xs">
 <thead class="bg-[#0a0f14] text-[#a8abb2] uppercase tracking-wider">
 <tr>
+  <th class="px-3 py-2 text-left">顾问</th>
   <th class="px-3 py-2 text-left">时间 (UTC+8)</th>
   <th class="px-3 py-2 text-left">决策</th>
   <th class="px-3 py-2 text-left">Symbol</th>
@@ -220,6 +226,7 @@ function doSearch() {
 function resetSearch() {
   document.getElementById('searchInput').value = '';
   document.getElementById('decisionFilter').value = '';
+  document.getElementById('providerFilter').value = 'all';
   currentPage = 1;
   loadReviews();
 }
@@ -251,7 +258,7 @@ function renderPagination() {
 }
 
 async function loadSummary() {
-  var r = await fetch('/api/gemini-advisor/summary');
+  var r = await fetch('/api/advisor/summary');
   var d = await r.json();
   if (!d.ready) {
     document.getElementById('notReady').textContent = d.message || '表未就绪';
@@ -268,6 +275,7 @@ async function loadSummary() {
 async function loadReviews() {
   var q = (document.getElementById('searchInput').value || '').trim();
   var decision = document.getElementById('decisionFilter').value || '';
+  var provider = document.getElementById('providerFilter').value || 'all';
   var offset = (currentPage - 1) * pageSize;
   var params = new URLSearchParams({
     review_type: currentTab,
@@ -276,12 +284,13 @@ async function loadReviews() {
   });
   if (q) params.set('q', q);
   if (decision) params.set('decision', decision);
+  if (provider && provider !== 'all') params.set('provider', provider);
 
   var body = document.getElementById('reviewBody');
-  body.innerHTML = '<tr><td colspan="7" class="px-3 py-8 text-center text-[#a8abb2]">加载中...</td></tr>';
+  body.innerHTML = '<tr><td colspan="8" class="px-3 py-8 text-center text-[#a8abb2]">加载中...</td></tr>';
   document.getElementById('emptyMsg').classList.add('hidden');
 
-  var r = await fetch('/api/gemini-advisor/reviews?' + params.toString());
+  var r = await fetch('/api/advisor/reviews?' + params.toString());
   var d = await r.json();
   totalItems = d.total || 0;
   document.getElementById('resultCount').textContent =
@@ -302,7 +311,9 @@ async function loadReviews() {
       holdCol = row.hold_hours.toFixed(1) + 'h';
       if (row.roi_pct != null) holdCol += ' / ' + (row.roi_pct >= 0 ? '+' : '') + row.roi_pct.toFixed(1) + '%';
     }
+    var providerLabel = row.provider === 'deepseek' ? 'DeepSeek' : 'Gemini';
     tr.innerHTML =
+      '<td class="px-3 py-2 mono text-[#a8abb2]">' + providerLabel + '</td>' +
       '<td class="px-3 py-2 mono text-[#a8abb2]">' + fmtTimeUtc8(row.created_at) + '</td>' +
       '<td class="px-3 py-2"><span class="' + chipClass(row.decision, currentTab) + '">' + row.decision + '</span></td>' +
       '<td class="px-3 py-2 font-medium">' + row.symbol + '</td>' +

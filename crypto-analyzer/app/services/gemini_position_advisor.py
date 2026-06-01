@@ -25,6 +25,7 @@ import pymysql.cursors
 from loguru import logger
 
 from app.services.gemini_advisor_reviews import log_advisor_review
+from app.services.open_advisor_routing import should_use_gemini_hold_advisor
 from app.services.open_advisor_strategy_rubrics import (
     build_big4_subjective_block,
     check_direction_gates,
@@ -43,6 +44,19 @@ HOLD_1H_BARS = 4                # 持仓顾问：近 4 根 1h
 HOLD_LOSS_MILD_ROI = -5.0       # 保证金 ROI %，轻微亏损
 HOLD_LOSS_MODERATE_ROI = -12.0  # 中度亏损
 HOLD_LOSS_SEVERE_ROI = -15.0    # 严重亏损（近策略 SL）
+
+
+def _normalize_symbol_for_db(symbol: str) -> str:
+    """kline_data / candidate_pool 存 BTC/USDT；部分模拟仓为 BTCUSDT."""
+    s = (symbol or "").strip()
+    if not s or "/" in s:
+        return s
+    if s.endswith("USDT"):
+        return f"{s[:-4]}/USDT"
+    if s.endswith("USD"):
+        return f"{s[:-3]}/USD"
+    return s
+
 
 _open_advisor_singleton: Optional["GeminiPositionAdvisor"] = None
 
@@ -161,6 +175,7 @@ class GeminiPositionAdvisor:
                 WHERE status='open'
                   AND account_id = 2
                   AND TIMESTAMPDIFF(HOUR, open_time, NOW()) >= %s
+                  AND (source IS NULL OR LOWER(source) NOT LIKE 'deepseek_%%')
                 ORDER BY open_time ASC
                 """,
                 (min_hours,)
@@ -174,6 +189,7 @@ class GeminiPositionAdvisor:
 
     def _get_current_price(self, symbol: str) -> Optional[float]:
         """取当前价: 优先 5m K 线 (最近 15 分钟内有数据)"""
+        symbol = _normalize_symbol_for_db(symbol)
         try:
             conn = self._get_conn()
             cur = conn.cursor()
@@ -198,6 +214,7 @@ class GeminiPositionAdvisor:
 
     def _fetch_market_context(self, symbol: str) -> dict:
         """近 4h 15m K 线 + 近 24 根 1h + candidate_pool 叙事 + Big4 + 方向闸门."""
+        symbol = _normalize_symbol_for_db(symbol)
         ctx = {
             'klines_15m': [],
             'klines_1h': [],
@@ -753,10 +770,13 @@ Output ONLY JSON:
     # 实盘平仓
     # ────────────────────────────────────────────────────────
 
-    def _close_paper_only(self, position: dict, reason: str, close_price: float) -> bool:
+    def _close_paper_only(
+        self, position: dict, reason: str, close_price: float,
+        advisor_tag: str = "gemini_advisor",
+    ) -> bool:
         """仅关模拟仓（实盘不存在或关实盘失败时的兜底）"""
         try:
-            close_note = f'gemini_advisor({reason[:120]})'
+            close_note = f'{advisor_tag}({reason[:120]})'
             conn = self._get_conn()
             cur = conn.cursor()
             side = position.get('position_side')
@@ -787,7 +807,9 @@ Output ONLY JSON:
             logger.error(f"[Gemini顾问] 关模拟仓异常 id={position['id']}: {e}")
             return False
 
-    def _close_live_position(self, position: dict, reason: str) -> bool:
+    def _close_live_position(
+        self, position: dict, reason: str, advisor_tag: str = "gemini_advisor",
+    ) -> bool:
         """
         关闭模拟仓 + 主动平实盘。
         无论如何模拟仓都会关（实盘平成功与否都不影响模拟仓关仓）。
@@ -847,10 +869,13 @@ Output ONLY JSON:
                                    close_time=NOW(),
                                    close_price=%s,
                                    realized_pnl=%s,
-                                   close_reason='gemini_advisor',
-                                   notes=CONCAT(IFNULL(notes,''),'|gemini_advisor:',%s)
+                                   close_reason=%s,
+                                   notes=CONCAT(IFNULL(notes,''),%s,%s)
                                WHERE id=%s AND status='OPEN'""",
-                            (close_price_f, live_pnl, reason, live_row['id'])
+                            (
+                                close_price_f, live_pnl, advisor_tag,
+                                f'|{advisor_tag}:', reason, live_row['id'],
+                            )
                         )
                         if cur2.rowcount > 0:
                             logger.info(
@@ -865,14 +890,17 @@ Output ONLY JSON:
                             notif = get_trade_notifier()
                             if notif:
                                 notif.send_message(
-                                    f"[Gemini顾问 SELL] {position['symbol']} {position['position_side']} "
+                                    f"[{advisor_tag} SELL] {position['symbol']} {position['position_side']} "
                                     f"已平仓 pnl={live_pnl}U\nreason={reason[:60]}"
                                 )
                         except Exception:
                             pass
 
                         # 实盘平成功，用实盘成交价关模拟仓
-                        self._close_paper_only(position, reason, close_price_f or float(position['entry_price']))
+                        self._close_paper_only(
+                            position, reason, close_price_f or float(position['entry_price']),
+                            advisor_tag=advisor_tag,
+                        )
                         return True
                     else:
                         logger.error(
@@ -889,7 +917,7 @@ Output ONLY JSON:
         if not close_price:
             current_price = self._get_current_price(position['symbol'])
             close_price = current_price or float(position['entry_price'])
-        self._close_paper_only(position, reason, close_price)
+        self._close_paper_only(position, reason, close_price, advisor_tag=advisor_tag)
         return True
 
     # ────────────────────────────────────────────────────────
@@ -912,6 +940,9 @@ Output ONLY JSON:
 
         now = time.time()
         for pos in positions:
+            if not should_use_gemini_hold_advisor(pos.get('source') or ''):
+                stats['skipped'] += 1
+                continue
             rules = self._advisor_rules(pos.get('source') or '')
             if not rules:
                 stats['skipped'] += 1
