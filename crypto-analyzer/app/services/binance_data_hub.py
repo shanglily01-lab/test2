@@ -614,11 +614,13 @@ class BinanceDataHub:
                 return None
             return entry["price"]
 
-    def _db_kline_fallback(self, symbol: str) -> Optional[Decimal]:
-        """从 kline_data 表读最近一根 5m K 线收盘价."""
+    def _db_kline_fallback(self, symbol: str, max_age_minutes: int = 15) -> Optional[Decimal]:
+        """从 kline_data 读最近一根 K 线收盘价（兼容 BASEUSDT / BASE/USDT）。"""
         if not self.db_config:
             return None
         try:
+            from app.utils.futures_symbol import futures_symbol_kline_keys
+
             import pymysql
             conn = pymysql.connect(
                 **self.db_config,
@@ -629,19 +631,24 @@ class BinanceDataHub:
             )
             try:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT close_price, open_time FROM kline_data "
-                        "WHERE symbol=%s AND timeframe='5m' "
-                        "ORDER BY open_time DESC LIMIT 1",
-                        (symbol,),
-                    )
-                    row = cur.fetchone()
+                    for sym_key in futures_symbol_kline_keys(symbol):
+                        for tf in ("1m", "5m"):
+                            cur.execute(
+                                "SELECT close_price, open_time FROM kline_data "
+                                "WHERE symbol=%s AND timeframe=%s "
+                                "ORDER BY open_time DESC LIMIT 1",
+                                (sym_key, tf),
+                            )
+                            row = cur.fetchone()
+                            if not row or not row.get("close_price"):
+                                continue
+                            age_min = (
+                                datetime.now().timestamp() - row["open_time"] / 1000
+                            ) / 60
+                            if age_min <= max_age_minutes:
+                                return Decimal(str(row["close_price"]))
             finally:
                 conn.close()
-            if row and row.get("close_price"):
-                age_min = (datetime.now().timestamp() - row["open_time"] / 1000) / 60
-                if age_min <= 15:  # 15 分钟内可信
-                    return Decimal(str(row["close_price"]))
         except Exception as e:
             logger.debug(f"[DataHub] {symbol} DB kline 兜底失败: {e}")
         return None

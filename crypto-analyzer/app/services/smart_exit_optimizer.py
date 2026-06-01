@@ -177,17 +177,8 @@ class SmartExitOptimizer:
                 # 不依赖实时价格，无论能否取价都要平仓
                 # ────────────────────────────────────────────────────────────
                 if position.get('planned_close_time') and datetime.now() >= position['planned_close_time']:
-                    # 尝试获取价格，如果拿不到就用 DB 中的 mark_price 或 entry_price 兜底
-                    close_price = await self._get_realtime_price(position['symbol'])
-                    if close_price is None:
-                        mp = position.get('mark_price')
-                        close_price = Decimal(str(mp)) if mp else Decimal(str(position.get('entry_price', 0)))
-                        if close_price == 0:
-                            logger.error(f"持仓{position_id} {position['symbol']} 既无实时价也无入库价，无法计算盈亏，但仍执行平仓")
-                            close_price = Decimal('0')
-                        else:
-                            logger.warning(f"持仓{position_id} {position['symbol']} 无实时价，使用入库价{close_price}平仓")
-                    logger.warning(f"[到期平仓] 持仓{position_id} {position['symbol']} 持有到期，强制平仓")
+                    close_price = await self._resolve_expiry_close_price(position)
+                    logger.warning(f"[到期平仓] 持仓{position_id} {position['symbol']} 持有到期，强制平仓 @ {close_price}")
                     await self._execute_close(position_id, close_price, f"计划平仓时间到期强制平仓")
                     break
 
@@ -352,6 +343,98 @@ class SmartExitOptimizer:
             logger.error(f"{symbol} DataHub 未初始化, 无法取价")
             return None
         return await hub.get_price(symbol)
+
+    @staticmethod
+    def _close_price_differs_from_entry(price: Decimal, entry: Decimal) -> bool:
+        if price <= 0 or entry <= 0:
+            return price > 0
+        return abs(price - entry) / entry > Decimal("1e-8")
+
+    def _kline_close_price(self, symbol: str, max_age_minutes: int = 35) -> Optional[Decimal]:
+        """到期平仓专用：多 symbol 写法 + 1m/5m K 线，避免 XAGUSDT vs XAG/USDT 取不到价。"""
+        if not self.db_config:
+            return None
+        try:
+            import pymysql
+            from app.utils.futures_symbol import futures_symbol_kline_keys
+
+            conn = pymysql.connect(
+                **self.db_config,
+                charset="utf8mb4",
+                cursorclass=pymysql.cursors.DictCursor,
+                autocommit=True,
+                connect_timeout=5,
+            )
+            try:
+                with conn.cursor() as cur:
+                    for sym_key in futures_symbol_kline_keys(symbol):
+                        for tf in ("1m", "5m"):
+                            cur.execute(
+                                "SELECT close_price, open_time FROM kline_data "
+                                "WHERE symbol=%s AND timeframe=%s "
+                                "ORDER BY open_time DESC LIMIT 1",
+                                (sym_key, tf),
+                            )
+                            row = cur.fetchone()
+                            if not row or not row.get("close_price"):
+                                continue
+                            age_min = (
+                                datetime.now().timestamp() - row["open_time"] / 1000
+                            ) / 60
+                            if age_min <= max_age_minutes:
+                                return Decimal(str(row["close_price"]))
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.debug(f"[SmartExit] {symbol} K线取价失败: {e}")
+        return None
+
+    async def _resolve_expiry_close_price(self, position: Dict) -> Decimal:
+        """
+        计划到期强制平仓取价：Hub(含REST) -> K线多写法 -> mark_price；
+        禁止静默使用等于开仓价的 mark/entry（会导致 0 盈亏）。
+        """
+        symbol = position["symbol"]
+        entry = Decimal(str(position.get("entry_price") or 0))
+        hub = get_global_data_hub()
+
+        if hub is not None:
+            for age in (90, 180):
+                p = await hub.get_price(
+                    symbol, max_age_seconds=age, allow_rest_fallback=True,
+                )
+                if p and p > 0 and self._close_price_differs_from_entry(p, entry):
+                    return p
+            p_sync = hub.get_price_sync(
+                symbol, max_age_seconds=180, allow_rest_fallback=True,
+            )
+            if p_sync and p_sync > 0 and self._close_price_differs_from_entry(p_sync, entry):
+                return p_sync
+
+        k_price = self._kline_close_price(symbol)
+        if k_price and k_price > 0:
+            if self._close_price_differs_from_entry(k_price, entry):
+                return k_price
+            logger.warning(
+                f"[到期平仓] {symbol} K线价与开仓价相同({k_price})，继续尝试其他来源"
+            )
+
+        mp = position.get("mark_price")
+        if mp is not None:
+            mp_dec = Decimal(str(mp))
+            if mp_dec > 0 and self._close_price_differs_from_entry(mp_dec, entry):
+                logger.warning(
+                    f"[到期平仓] {symbol} Hub/K线无价差，使用 mark_price={mp_dec}"
+                )
+                return mp_dec
+
+        if entry > 0:
+            logger.error(
+                f"[到期平仓] {symbol} 无法取得有效平仓价，退回 entry={entry} "
+                f"（交易记录盈亏将为0，symbol 可能无行情或 K 线未入库）"
+            )
+            return entry
+        return Decimal("0")
 
     def _calculate_profit(self, position: Dict, current_price: Decimal) -> Dict:
         """
@@ -608,14 +691,7 @@ class SmartExitOptimizer:
                 f"当前: {now.strftime('%H:%M:%S')}"
             )
             # 获取当前价格，拿不到就用 mark_price 或 entry_price 兜底
-            cp = await self._get_realtime_price(position['symbol'])
-            if cp is None:
-                mp = position.get('mark_price')
-                cp = Decimal(str(mp)) if mp else Decimal(str(position.get('entry_price', 0)))
-                if cp == 0:
-                    logger.error(f"{position['symbol']} 无实时价也无入库价，用0平仓（仅更新状态）")
-                else:
-                    logger.warning(f"{position['symbol']} 无实时价，使用入库价{cp}平仓")
+            cp = await self._resolve_expiry_close_price(position)
             await self._execute_close(position_id, cp, "超时强制平仓")
             return True
 
