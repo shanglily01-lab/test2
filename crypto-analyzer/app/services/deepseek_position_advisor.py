@@ -16,6 +16,7 @@ from app.services.gemini_position_advisor import (
     HOLD_1H_BARS,
     HOLD_CHECK_INTERVAL_S,
     HOLD_MIN_HOURS,
+    HOLD_MIN_MINUTES,
 )
 from app.services.open_advisor_routing import should_use_deepseek_hold_advisor
 from app.services.open_advisor_strategy_rubrics import (
@@ -153,8 +154,7 @@ class DeepSeekPositionAdvisor:
             return None
 
     def get_eligible_positions(self):
-        """deepseek_* 模拟仓，持仓 ≥2h."""
-        min_hours = int(HOLD_MIN_HOURS)
+        """deepseek_* 模拟仓，持仓 ≥30min."""
         try:
             conn = self._get_conn()
             cur = conn.cursor()
@@ -166,11 +166,11 @@ class DeepSeekPositionAdvisor:
                 FROM futures_positions
                 WHERE status='open'
                   AND account_id = 2
-                  AND TIMESTAMPDIFF(HOUR, open_time, NOW()) >= %s
+                  AND TIMESTAMPDIFF(MINUTE, open_time, NOW()) >= %s
                   AND LOWER(source) LIKE 'deepseek_%%'
                 ORDER BY open_time ASC
                 """,
-                (min_hours,),
+                (HOLD_MIN_MINUTES,),
             )
             rows = cur.fetchall()
             cur.close()

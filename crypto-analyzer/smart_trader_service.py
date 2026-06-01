@@ -3678,7 +3678,7 @@ class SmartTraderService:
                         logger.warning(f"[对账] 异常: {_re}")
                     last_reconcile = now
 
-                # 0.61. 持仓顾问 (每 15 min; 模拟仓 ≥2h)
+                # 0.61. 持仓顾问 (每 15 min; 模拟仓 ≥30min)
                 if (now - last_gemini_advisor).total_seconds() >= 900:
                     try:
                         if self.smart_exit_optimizer:

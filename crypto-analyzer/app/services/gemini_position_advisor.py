@@ -6,7 +6,7 @@ Gemini 顾问 — 模拟仓开仓审核 + 持仓监管
   - decision=reject 则不开仓; 开关 gemini_open_advisor_enabled
 
 持仓顾问:
-  - 所有模拟持仓 >= 2h 每 15min 问 Gemini (hold/observe/sell)
+  - 所有模拟持仓 >= 30min 每 15min 问 Gemini (hold/observe/sell)
   - sell 关模拟仓; 有实盘则同步平仓 (需 live_close_enabled)
   - 开关 gemini_position_advisor_enabled (默认开)
   - smart_trader 主循环每 15min 调 tick()
@@ -36,7 +36,8 @@ from app.services.open_advisor_strategy_rubrics import (
 
 
 GEMINI_TIMEOUT_MS = 180_000
-HOLD_MIN_HOURS = 2.0            # 持仓满 2h 纳入监管
+HOLD_MIN_MINUTES = 30           # 持仓满 30min 纳入监管
+HOLD_MIN_HOURS = HOLD_MIN_MINUTES / 60.0
 HOLD_CHECK_INTERVAL_S = 900     # 同仓 15min 内不重复问
 GEMINI_PER_CALL_DELAY_S = 1.0   # 防 Gemini rate limit
 HOLD_15M_BARS = 6               # 持仓顾问：近 4~6 根 15m
@@ -162,7 +163,6 @@ class GeminiPositionAdvisor:
         查模拟仓 (futures_positions) U本位 OPEN 单。
         只查 account_id=2; tick() 内再按持仓时长与节流过滤。
         """
-        min_hours = int(HOLD_MIN_HOURS)
         try:
             conn = self._get_conn()
             cur = conn.cursor()
@@ -174,11 +174,11 @@ class GeminiPositionAdvisor:
                 FROM futures_positions
                 WHERE status='open'
                   AND account_id = 2
-                  AND TIMESTAMPDIFF(HOUR, open_time, NOW()) >= %s
+                  AND TIMESTAMPDIFF(MINUTE, open_time, NOW()) >= %s
                   AND (source IS NULL OR LOWER(source) NOT LIKE 'deepseek_%%')
                 ORDER BY open_time ASC
                 """,
-                (min_hours,)
+                (HOLD_MIN_MINUTES,)
             )
             rows = cur.fetchall()
             cur.close(); conn.close()
@@ -926,7 +926,7 @@ Output ONLY JSON:
 
     def tick(self) -> dict:
         """
-        外部每 15 min 调一次; 模拟仓持仓 >=2h 按 15min/position 节流。
+        外部每 15 min 调一次; 模拟仓持仓 >=30min 按 15min/position 节流。
         Returns 统计 dict {'evaluated', 'hold', 'observe', 'sell', 'skipped', 'errors'}
         """
         stats = {'evaluated': 0, 'hold': 0, 'observe': 0, 'sell': 0,

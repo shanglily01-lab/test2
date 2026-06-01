@@ -39,10 +39,10 @@ def _set_open_advisor_pair(cursor, enabled: bool) -> None:
 
 def _set_position_advisor_pair(cursor, enabled: bool) -> None:
     desc_gemini = (
-        'Gemini 模拟持仓顾问 (1=启用). 非 deepseek 仓 ≥2h 每15min hold/observe/sell'
+        'Gemini 模拟持仓顾问 (1=启用). 非 deepseek 仓 ≥30min 每15min hold/observe/sell'
     )
     desc_deepseek = (
-        'DeepSeek 模拟持仓顾问: deepseek_* 仓 ≥2h 每15min hold/observe/sell'
+        'DeepSeek 模拟持仓顾问: deepseek_* 仓 ≥30min 每15min hold/observe/sell'
     )
     _upsert_bool_setting(cursor, 'gemini_position_advisor_enabled', enabled, desc_gemini)
     _upsert_bool_setting(cursor, 'deepseek_position_advisor_enabled', enabled, desc_deepseek)
