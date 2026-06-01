@@ -1313,11 +1313,10 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
     if not symbols:
         return {'success': True, 'prices': {}}
 
-    # 标准化交易对格式
-    symbol_map = {}  # 原始symbol -> 标准化symbol
-    for s in symbols:
-        clean = s.replace('/', '').replace('%2F', '').upper()
-        symbol_map[clean] = s
+    from app.utils.futures_symbol import futures_symbol_groups, futures_symbol_kline_keys
+
+    # 同一币种可能同时有 BCHUSDT 与 BCH/USDT，须按 clean 分组后回填所有写法
+    symbol_groups = futures_symbol_groups(symbols)
 
     prices = {}
     quick_timeout = ClientTimeout(total=3)  # 3秒超时
@@ -1329,12 +1328,15 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
         hub = get_global_data_hub()
         if hub is not None:
             price_map = hub.get_full_ticker_map(market="futures")
-            for clean_symbol, original_symbol in symbol_map.items():
-                if clean_symbol in price_map:
-                    prices[original_symbol] = {
-                        'price': float(price_map[clean_symbol]),
-                        'source': 'binance_futures'
-                    }
+            for clean_symbol, originals in symbol_groups.items():
+                if clean_symbol not in price_map:
+                    continue
+                entry = {
+                    'price': float(price_map[clean_symbol]),
+                    'source': 'binance_futures',
+                }
+                for original_symbol in originals:
+                    prices[original_symbol] = entry
     except Exception as e:
         logger.debug(f"DataHub 批量取价失败: {e}")
 
@@ -1349,7 +1351,11 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
 
             for symbol in missing_symbols:
                 try:
-                    latest_kline = db_service.get_latest_kline(symbol, '5m')
+                    latest_kline = None
+                    for key in futures_symbol_kline_keys(symbol):
+                        latest_kline = db_service.get_latest_kline(key, '5m')
+                        if latest_kline:
+                            break
                     if latest_kline:
                         prices[symbol] = {
                             'price': float(latest_kline.close_price),

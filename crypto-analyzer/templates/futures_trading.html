@@ -480,9 +480,19 @@ async function renderPositions(allPositions) {
         var margin = parseFloat(pos.margin) || 0;
         totalMargin += margin;
 
-        // 获取当前价
+        // 获取当前价（兼容 BCHUSDT 与 BCH/USDT 两种写法）
         var curPrice = parseFloat(pos.current_price) || entry;
         var pm = priceMap[pos.symbol];
+        if (!pm && pos.symbol) {
+            var clean = String(pos.symbol).replace(/\//g, '').toUpperCase();
+            for (var k in priceMap) {
+                if (Object.prototype.hasOwnProperty.call(priceMap, k)
+                    && String(k).replace(/\//g, '').toUpperCase() === clean) {
+                    pm = priceMap[k];
+                    break;
+                }
+            }
+        }
         if (pm) {
             var pp = (typeof pm === 'object' && pm !== null) ? (pm.price || pm) : pm;
             var pv = parseFloat(pp);

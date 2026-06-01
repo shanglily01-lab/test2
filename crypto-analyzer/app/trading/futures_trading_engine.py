@@ -249,32 +249,38 @@ class FuturesTradingEngine:
         )
         
         try:
+            from app.utils.futures_symbol import futures_symbol_kline_keys
+
             cursor = connection.cursor()
+            kline_keys = futures_symbol_kline_keys(symbol)
             # 多周期 K 线回退（与币本位引擎一致；1m 可能已停采）
-            for tf in ('5m', '15m', '1h', '1m'):
-                cursor.execute(
-                    """SELECT close_price FROM kline_data
-                    WHERE symbol = %s AND timeframe = %s
-                    ORDER BY open_time DESC LIMIT 1""",
-                    (symbol, tf),
-                )
-                result = cursor.fetchone()
-                if result and result['close_price']:
-                    price = Decimal(str(result['close_price']))
-                    cursor.close()
-                    return price
+            for db_sym in kline_keys:
+                for tf in ('5m', '15m', '1h', '1m'):
+                    cursor.execute(
+                        """SELECT close_price FROM kline_data
+                        WHERE symbol = %s AND timeframe = %s
+                        ORDER BY open_time DESC LIMIT 1""",
+                        (db_sym, tf),
+                    )
+                    result = cursor.fetchone()
+                    if result and result['close_price']:
+                        price = Decimal(str(result['close_price']))
+                        cursor.close()
+                        return price
 
             # 回退到价格表
-            cursor.execute(
-                """SELECT price FROM price_data
-                WHERE symbol = %s
-                ORDER BY timestamp DESC LIMIT 1""",
-                (symbol,)
-            )
-            result = cursor.fetchone()
+            for db_sym in kline_keys:
+                cursor.execute(
+                    """SELECT price FROM price_data
+                    WHERE symbol = %s
+                    ORDER BY timestamp DESC LIMIT 1""",
+                    (db_sym,)
+                )
+                result = cursor.fetchone()
+                if result and result['price']:
+                    cursor.close()
+                    return Decimal(str(result['price']))
             cursor.close()
-            if result and result['price']:
-                return Decimal(str(result['price']))
 
             raise ValueError(f"无法获取{symbol}的价格")
         except Exception as e:
