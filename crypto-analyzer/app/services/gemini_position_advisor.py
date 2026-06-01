@@ -774,35 +774,29 @@ Output ONLY JSON:
         self, position: dict, reason: str, close_price: float,
         advisor_tag: str = "gemini_advisor",
     ) -> bool:
-        """仅关模拟仓（实盘不存在或关实盘失败时的兜底）"""
+        """仅关模拟仓（走 FuturesTradingEngine，写入 futures_trades / 更新账户）"""
         try:
+            from app.trading.futures_trading_engine import FuturesTradingEngine
+
             close_note = f'{advisor_tag}({reason[:120]})'
-            conn = self._get_conn()
-            cur = conn.cursor()
-            side = position.get('position_side')
-            if side == 'SHORT':
-                pnl_expr = 'ROUND((entry_price - %s) * quantity, 2)'
-            else:
-                pnl_expr = 'ROUND((%s - entry_price) * quantity, 2)'
-            cur.execute(
-                f"""UPDATE futures_positions
-                   SET status='closed',
-                       close_time=NOW(),
-                       mark_price=%s,
-                       realized_pnl={pnl_expr},
-                       unrealized_pnl=0,
-                       unrealized_pnl_pct=0,
-                       notes=%s
-                   WHERE id=%s AND status='open'""",
-                (close_price, close_price, close_note, position['id'])
+            engine = FuturesTradingEngine(self.db_config)
+            result = engine.close_position(
+                position['id'],
+                reason=close_note,
+                close_price=Decimal(str(close_price)),
             )
-            if cur.rowcount > 0:
-                logger.info(
-                    f"[Gemini顾问] 模拟仓已关闭 id={position['id']} "
-                    f"{position['symbol']} {position['position_side']} @ {close_price}"
-                )
-            cur.close(); conn.close()
-            return True
+            if result.get('success'):
+                if not result.get('already_closed'):
+                    logger.info(
+                        f"[Gemini顾问] 模拟仓已关闭 id={position['id']} "
+                        f"{position['symbol']} {position['position_side']} @ {close_price}"
+                    )
+                return True
+            logger.warning(
+                f"[Gemini顾问] 模拟仓平仓未成功 id={position['id']}: "
+                f"{result.get('message', result)}"
+            )
+            return False
         except Exception as e:
             logger.error(f"[Gemini顾问] 关模拟仓异常 id={position['id']}: {e}")
             return False

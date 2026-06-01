@@ -358,24 +358,27 @@ class MarketPredictor:
         )
         rows = cursor.fetchall()
         closed = 0
+        from decimal import Decimal
+        from app.trading.futures_trading_engine import FuturesTradingEngine
+
+        paper_engine = FuturesTradingEngine(self.db_config)
         for row in rows:
             exit_price = self._get_current_price(cursor, row['symbol'])
             if not exit_price:
                 continue
-            entry = float(row['entry_price'])
-            margin = float(row['margin'])
-            lev = int(row['leverage'])
-            if row['position_side'] == 'LONG':
-                pnl = (exit_price - entry) / entry * margin * lev
-            else:
-                pnl = (entry - exit_price) / entry * margin * lev
-            cursor.execute(
-                "UPDATE futures_positions SET status='closed', close_time=NOW(), "
-                "mark_price=%s, realized_pnl=%s, notes='预测器6H到期平仓' WHERE id=%s",
-                (exit_price, round(pnl, 4), row['id'])
+            result = paper_engine.close_position(
+                row['id'],
+                reason='预测器6H到期平仓',
+                close_price=Decimal(str(exit_price)),
             )
-            # 同步更新关联实盘记录 + 调用交易引擎平仓
+            if not result.get('success'):
+                logger.warning(
+                    f"[预测下单] 到期平仓失败 id={row['id']} {row['symbol']}: "
+                    f"{result.get('message', result)}"
+                )
+                continue
             self._sync_close_live(row['id'], row['symbol'], row['position_side'], exit_price)
+            pnl = float(result.get('realized_pnl') or 0)
             logger.info(f"[预测下单] 平仓 {row['symbol']} {row['position_side']} pnl={pnl:+.2f}U")
             closed += 1
         return closed

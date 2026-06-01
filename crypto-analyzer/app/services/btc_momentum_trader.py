@@ -225,26 +225,25 @@ class BTCMomentumTrader:
     # ──────────────────────────────────────────
 
     def _close_position(self, pos: dict, reason: str = 'BTC动量反向平仓'):
-        """平掉模拟盘指定持仓"""
+        """平掉模拟盘指定持仓（写入 futures_trades）"""
         try:
             price = self._get_symbol_price(pos['symbol'])
             if not price:
                 return
-            entry = float(pos['entry_price'])
-            margin = float(pos['margin'])
-            if pos['position_side'] == 'LONG':
-                pnl = (price - entry) / entry * margin * self.LEVERAGE
-            else:
-                pnl = (entry - price) / entry * margin * self.LEVERAGE
-            conn = self._get_conn()
-            cur = conn.cursor()
-            cur.execute(
-                "UPDATE futures_positions SET status='closed', close_time=NOW(), "
-                "mark_price=%s, realized_pnl=%s, notes=%s WHERE id=%s",
-                (price, round(pnl, 4), reason, pos['id'])
+            from app.trading.futures_trading_engine import FuturesTradingEngine
+
+            result = FuturesTradingEngine(self.db_config).close_position(
+                pos['id'],
+                reason=reason,
+                close_price=Decimal(str(price)),
             )
-            cur.close(); conn.close()
-            logger.info(f"[BTC动量] 平仓 {pos['symbol']} {pos['position_side']} pnl={pnl:+.2f}U")
+            if result.get('success'):
+                pnl = float(result.get('realized_pnl') or 0)
+                logger.info(f"[BTC动量] 平仓 {pos['symbol']} {pos['position_side']} pnl={pnl:+.2f}U")
+            else:
+                logger.warning(
+                    f"[BTC动量] 平仓失败 {pos['symbol']}: {result.get('message', result)}"
+                )
         except Exception as e:
             logger.error(f"[BTC动量] 平仓失败 {pos['symbol']}: {e}")
 
