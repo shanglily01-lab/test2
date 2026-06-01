@@ -2333,12 +2333,12 @@ async def get_strategy_performance(
 
         time_threshold = datetime.now() - timedelta(hours=hours)
 
-        cursor.execute("""
+        from app.utils.pnl_stats import PNL_COUNT_SELECT, parse_pnl_counts
+
+        cursor.execute(f"""
             SELECT
                 source,
-                COUNT(*) AS total_trades,
-                SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
-                SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS losses,
+                {PNL_COUNT_SELECT},
                 COALESCE(SUM(realized_pnl), 0) AS total_pnl,
                 COALESCE(AVG(realized_pnl), 0) AS avg_pnl,
                 COALESCE(SUM(CASE WHEN realized_pnl > 0 THEN realized_pnl ELSE 0 END), 0) AS total_profit,
@@ -2360,16 +2360,18 @@ async def get_strategy_performance(
         total_all = {'trades': 0, 'wins': 0, 'pnl': 0}
         for row in rows:
             source = row['source']
-            total = int(row['total_trades'] or 0)
-            wins = int(row['wins'] or 0)
-            losses = int(row['losses'] or 0)
+            counts = parse_pnl_counts(row)
+            total = counts['total_trades']
+            wins = counts['wins']
+            losses = counts['losses']
+            breakeven = counts['breakeven']
             total_pnl = float(row['total_pnl'] or 0)
             avg_pnl = float(row['avg_pnl'] or 0)
             total_profit = float(row['total_profit'] or 0)
             total_loss = float(row['total_loss'] or 0)
             total_margin = float(row['total_margin'] or 0)
 
-            win_rate = (wins / total * 100) if total > 0 else 0
+            win_rate = counts['win_rate']
             loss_rate = (losses / total * 100) if total > 0 else 0
             roi = (total_pnl / total_margin * 100) if total_margin > 0 else 0
 
@@ -2384,6 +2386,7 @@ async def get_strategy_performance(
                 'total_trades': total,
                 'wins': wins,
                 'losses': losses,
+                'breakeven': breakeven,
                 'win_rate': round(win_rate, 1),
                 'loss_rate': round(loss_rate, 1),
                 'total_pnl': round(total_pnl, 2),

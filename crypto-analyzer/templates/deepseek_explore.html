@@ -556,15 +556,24 @@ function pCls(v) {
   if (isNaN(n)) return '';
   return n >= 0 ? 'pp' : 'pn';
 }
-function applyWinRateCard(prefix, s) {
+function formatWlCounts(s) {
   var wins = s.wins || 0;
   var losses = s.losses || 0;
+  var be = s.breakeven || 0;
+  if (!be && s.total_trades) {
+    be = Math.max(0, (s.total_trades || 0) - wins - losses);
+  }
+  var txt = wins + '胜 ' + losses + '负';
+  if (be) txt += ' ' + be + '平';
+  return txt;
+}
+function applyWinRateCard(prefix, s) {
   var el = document.getElementById(prefix + '-stat-winrate');
   var wl = document.getElementById(prefix + '-stat-wl');
   if (el) {
     el.innerHTML = '<span class="' + ((s.win_rate || 0) >= 50 ? 'pp' : 'pn') + '">' + fmt(s.win_rate, 1) + '%</span>';
   }
-  if (wl) wl.textContent = wins + '胜 ' + losses + '负';
+  if (wl) wl.textContent = formatWlCounts(s);
 }
 function closeReasonLabel(p) {
   return (p && (p.close_reason_cn || p.notes)) || '--';

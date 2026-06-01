@@ -398,6 +398,7 @@
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">交易数</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">盈利</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">亏损</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">持平</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">胜率</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">总盈亏(U)</th>
               <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">平均盈亏</th>
@@ -405,7 +406,7 @@
             </tr>
           </thead>
           <tbody id="sp-table-body">
-            <tr><td colspan="8" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
+            <tr><td colspan="9" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
           </tbody>
         </table>
       </div>
@@ -1312,6 +1313,7 @@ function loadStrategyPerformance() {
           '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + s.total_trades + '</td>' +
           '<td class="px-4 py-3 text-right mono text-primary">' + s.wins + '</td>' +
           '<td class="px-4 py-3 text-right mono text-error">' + s.losses + '</td>' +
+          '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + (s.breakeven || 0) + '</td>' +
           '<td class="px-4 py-3 text-right mono ' + (s.win_rate >= 50 ? 'text-primary' : 'text-error') + '">' + s.win_rate + '%</td>' +
           '<td class="px-4 py-3 text-right mono font-medium ' + pCls(s.total_pnl) + '">' + fmtPnl(s.total_pnl) + '</td>' +
           '<td class="px-4 py-3 text-right mono ' + pCls(s.avg_pnl) + '">' + fmtPnl(s.avg_pnl) + '</td>' +

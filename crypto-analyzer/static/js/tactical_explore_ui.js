@@ -127,7 +127,13 @@
       applyFloatingCards(p, s.realized, s.floating);
       var wr = document.getElementById(p + '-stat-winrate');
       if (wr) wr.innerHTML = '<span class="' + ((data.win_rate || 0) >= 50 ? 'pp' : 'pn') + '">' + fmt(data.win_rate, 1) + '%</span>';
-      setText(p + '-stat-wl', (data.wins || 0) + '胜 ' + (data.losses || 0) + '负');
+      var wl = (data.wins || 0) + '胜 ' + (data.losses || 0) + '负';
+      var be = data.breakeven || 0;
+      if (!be && data.total_trades) {
+        be = Math.max(0, (data.total_trades || 0) - (data.wins || 0) - (data.losses || 0));
+      }
+      if (be) wl += ' ' + be + '平';
+      setText(p + '-stat-wl', wl);
       setText(p + '-stat-closed2', data.total_trades);
     });
   }

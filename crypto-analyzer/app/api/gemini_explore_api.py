@@ -430,12 +430,12 @@ async def stats(days: int = Query(30, ge=1, le=365)):
         conn = _connect()
         try:
             with conn.cursor() as cur:
+                from app.utils.pnl_stats import PNL_COUNT_SELECT, parse_pnl_counts
+
                 cur.execute(
-                    """
+                    f"""
                     SELECT
-                        COUNT(*) AS total_trades,
-                        SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
-                        SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS losses,
+                        {PNL_COUNT_SELECT},
                         COALESCE(SUM(realized_pnl), 0) AS total_pnl,
                         COALESCE(AVG(realized_pnl), 0) AS avg_pnl
                     FROM futures_positions
@@ -445,9 +445,11 @@ async def stats(days: int = Query(30, ge=1, le=365)):
                     (days,),
                 )
                 row = cur.fetchone()
-                total = int(row['total_trades'] or 0)
-                wins = int(row['wins'] or 0)
-                losses = int(row['losses'] or 0)
+                counts = parse_pnl_counts(row)
+                total = counts["total_trades"]
+                wins = counts["wins"]
+                losses = counts["losses"]
+                breakeven = counts["breakeven"]
 
                 cur.execute(_OPEN_POSITIONS_SQL)
                 open_positions = cur.fetchall()
@@ -457,7 +459,6 @@ async def stats(days: int = Query(30, ge=1, le=365)):
         _, live_summary = _build_live_positions(open_positions)
         floating_pnl = float(live_summary['total_unrealized_pnl'])
 
-        win_rate = round(wins / total * 100, 2) if total > 0 else 0
         total_pnl = float(row['total_pnl'] or 0)
         avg_pnl = float(row['avg_pnl'] or 0)
 
@@ -467,7 +468,8 @@ async def stats(days: int = Query(30, ge=1, le=365)):
                 "total_trades": total,
                 "wins": wins,
                 "losses": losses,
-                "win_rate": win_rate,
+                "breakeven": breakeven,
+                "win_rate": counts["win_rate"],
                 "total_realized_pnl": round(total_pnl, 2),
                 "avg_realized_pnl": round(avg_pnl, 2),
                 "floating_pnl": round(floating_pnl, 2),

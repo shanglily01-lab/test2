@@ -319,11 +319,11 @@ def create_tactical_explore_router(
             conn = _connect()
             try:
                 with conn.cursor() as cur:
+                    from app.utils.pnl_stats import PNL_COUNT_SELECT, parse_pnl_counts
+
                     cur.execute(
                         f"""
-                        SELECT COUNT(*) AS total_trades,
-                               SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
-                               SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS losses,
+                        SELECT {PNL_COUNT_SELECT},
                                COALESCE(SUM(realized_pnl), 0) AS total_pnl,
                                COALESCE(AVG(realized_pnl), 0) AS avg_pnl
                         FROM futures_positions
@@ -337,8 +337,9 @@ def create_tactical_explore_router(
                     open_positions = cur.fetchall()
             finally:
                 conn.close()
-            total = int(row["total_trades"] or 0)
-            wins = int(row["wins"] or 0)
+            counts = parse_pnl_counts(row)
+            total = counts["total_trades"]
+            wins = counts["wins"]
             _, live_summary = _build_live_positions(open_positions)
             floating_pnl = float(live_summary["total_unrealized_pnl"])
             total_pnl = float(row["total_pnl"] or 0)
@@ -347,8 +348,9 @@ def create_tactical_explore_router(
                 "data": {
                     "total_trades": total,
                     "wins": wins,
-                    "losses": int(row["losses"] or 0),
-                    "win_rate": round(wins / total * 100, 2) if total > 0 else 0,
+                    "losses": counts["losses"],
+                    "breakeven": counts["breakeven"],
+                    "win_rate": counts["win_rate"],
                     "total_realized_pnl": round(total_pnl, 2),
                     "avg_realized_pnl": round(float(row["avg_pnl"] or 0), 2),
                     "floating_pnl": round(floating_pnl, 2),
