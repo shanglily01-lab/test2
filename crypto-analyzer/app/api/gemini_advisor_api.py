@@ -38,7 +38,8 @@ def _table_exists(cur, table: str) -> bool:
 def _tables_ready(cur) -> tuple[bool, bool]:
     gemini = _table_exists(cur, "gemini_advisor_reviews")
     deepseek = _table_exists(cur, "deepseek_advisor_reviews")
-    return gemini, deepseek
+    gpt = _table_exists(cur, "gpt_advisor_reviews")
+    return gemini, deepseek, gpt
 
 
 def _review_filters(
@@ -59,7 +60,7 @@ def _review_filters(
     if symbol:
         sql += " AND symbol = %s"
         params.append(symbol.upper())
-    if provider in ("gemini", "deepseek"):
+    if provider in ("gemini", "deepseek", "gpt"):
         sql += " AND provider = %s"
         params.append(provider)
     if q:
@@ -100,8 +101,8 @@ def _aggregate_summary(cur, table: str, provider: str) -> dict:
 def _build_summary():
     conn = _connect()
     with conn.cursor() as cur:
-        gemini_ok, deepseek_ok = _tables_ready(cur)
-        if not gemini_ok and not deepseek_ok:
+        gemini_ok, deepseek_ok, gpt_ok = _tables_ready(cur)
+        if not gemini_ok and not deepseek_ok and not gpt_ok:
             return {
                 "ready": False,
                 "message": "请执行 migration 011 / 013",
@@ -110,18 +111,20 @@ def _build_summary():
             }
         g = _aggregate_summary(cur, "gemini_advisor_reviews", "gemini") if gemini_ok else {}
         d = _aggregate_summary(cur, "deepseek_advisor_reviews", "deepseek") if deepseek_ok else {}
+        p = _aggregate_summary(cur, "gpt_advisor_reviews", "gpt") if gpt_ok else {}
     conn.close()
     return {
         "ready": True,
         "gemini_ready": gemini_ok,
         "deepseek_ready": deepseek_ok,
-        "open_approve": int(g.get("open_approve", 0)) + int(d.get("open_approve", 0)),
-        "open_reject": int(g.get("open_reject", 0)) + int(d.get("open_reject", 0)),
-        "open_total": int(g.get("open_total", 0)) + int(d.get("open_total", 0)),
-        "hold_sell": int(g.get("hold_sell", 0)),
-        "hold_hold": int(g.get("hold_hold", 0)),
-        "hold_observe": int(g.get("hold_observe", 0)),
-        "hold_total": int(g.get("hold_total", 0)),
+        "gpt_ready": gpt_ok,
+        "open_approve": int(g.get("open_approve", 0)) + int(d.get("open_approve", 0)) + int(p.get("open_approve", 0)),
+        "open_reject": int(g.get("open_reject", 0)) + int(d.get("open_reject", 0)) + int(p.get("open_reject", 0)),
+        "open_total": int(g.get("open_total", 0)) + int(d.get("open_total", 0)) + int(p.get("open_total", 0)),
+        "hold_sell": int(g.get("hold_sell", 0)) + int(d.get("hold_sell", 0)) + int(p.get("hold_sell", 0)),
+        "hold_hold": int(g.get("hold_hold", 0)) + int(d.get("hold_hold", 0)) + int(p.get("hold_hold", 0)),
+        "hold_observe": int(g.get("hold_observe", 0)) + int(d.get("hold_observe", 0)) + int(p.get("hold_observe", 0)),
+        "hold_total": int(g.get("hold_total", 0)) + int(d.get("hold_total", 0)) + int(p.get("hold_total", 0)),
     }
 
 
@@ -136,8 +139,8 @@ def _list_reviews(
 ):
     conn = _connect()
     with conn.cursor() as cur:
-        gemini_ok, deepseek_ok = _tables_ready(cur)
-        if not gemini_ok and not deepseek_ok:
+        gemini_ok, deepseek_ok, gpt_ok = _tables_ready(cur)
+        if not gemini_ok and not deepseek_ok and not gpt_ok:
             conn.close()
             return {"reviews": [], "ready": False, "total": 0}
 
@@ -151,6 +154,11 @@ def _list_reviews(
             parts.append(
                 f"SELECT 'deepseek' AS provider, {_REVIEW_COLS.strip()} "
                 f"FROM deepseek_advisor_reviews WHERE 1=1"
+            )
+        if gpt_ok and provider in (None, "", "all", "gpt"):
+            parts.append(
+                f"SELECT 'gpt' AS provider, {_REVIEW_COLS.strip()} "
+                f"FROM gpt_advisor_reviews WHERE 1=1"
             )
         if not parts:
             conn.close()
@@ -197,13 +205,13 @@ def list_reviews(
     decision: Optional[str] = Query(None),
     symbol: Optional[str] = Query(None),
     q: Optional[str] = Query(None, description="模糊搜索"),
-    provider: Optional[str] = Query(None, description="gemini | deepseek | all"),
+    provider: Optional[str] = Query(None, description="gemini | deepseek | gpt | all"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ):
     try:
         prov = (provider or "all").lower()
-        if prov not in ("all", "gemini", "deepseek"):
+        if prov not in ("all", "gemini", "deepseek", "gpt"):
             prov = "all"
         return _list_reviews(review_type, decision, symbol, q, prov, limit, offset)
     except Exception as e:

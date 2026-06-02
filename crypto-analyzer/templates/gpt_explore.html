@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>GPT 探索 | Neural Obsidian</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    body { font-family: 'Manrope', sans-serif; background: #0a0f14; color: #ebeef5; }
+    h1,h2,h3 { font-family: 'Space Grotesk', sans-serif; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .pp { color: #49f4c8; } .pn { color: #ff716c; }
+    .card { background:#0f1419; border:1px solid #20262e; border-radius: 12px; }
+    .chip { display:inline-flex; align-items:center; gap:6px; font-size:11px; padding:2px 8px; border-radius:999px; }
+    .chip-on { background: rgba(73,244,200,.15); color:#49f4c8; border:1px solid rgba(73,244,200,.35); }
+    .chip-off { background: rgba(168,171,178,.08); color:#a8abb2; border:1px solid rgba(168,171,178,.2); }
+  </style>
+</head>
+<body>
+<main class="max-w-[1400px] mx-auto px-6 py-6">
+  <header class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold">GPT 探索</h1>
+      <p class="text-xs text-slate-400 mt-1">每 4h 调用 GPT 检测方向异动 · 模拟单 · SL 4% / TP 6% / 5x / 持仓 4h</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="status-chip" class="chip chip-off"><span id="status-label">已禁用</span></span>
+      <button onclick="loadAll()" class="px-3 py-1.5 rounded-lg bg-slate-800 text-xs hover:bg-slate-700">刷新</button>
+    </div>
+  </header>
+
+  <section class="grid grid-cols-5 gap-4 mb-5">
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">当前持仓</p><p id="stat-open" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">30天平仓</p><p id="stat-closed" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">上轮 Universe</p><p id="stat-universe" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">上轮开仓</p><p id="stat-trades" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">上轮时间</p><p id="stat-lastrun" class="mono text-xs mt-2">--</p><p id="stat-laststatus" class="text-[10px] mt-1 text-slate-400">--</p></div>
+  </section>
+
+  <section class="grid grid-cols-5 gap-4 mb-6">
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">已实现盈亏</p><p id="e-stat-realized" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">当前浮盈</p><p id="e-stat-floating" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">总盈亏</p><p id="e-stat-total" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">胜率(30d)</p><p id="e-stat-winrate" class="mono text-2xl mt-1">--</p><p id="e-stat-wl" class="text-[10px] text-slate-400 mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">平仓数</p><p id="e-stat-closed2" class="mono text-2xl mt-1">--</p></div>
+  </section>
+
+  <section class="mb-6">
+    <h2 class="text-sm uppercase tracking-wider text-slate-400 mb-2">当前持仓 (OPEN)</h2>
+    <div class="card overflow-auto max-h-[360px]">
+      <table class="w-full text-xs">
+        <thead class="sticky top-0 bg-[#0f1419]"><tr class="text-slate-400">
+          <th class="text-left p-3">Symbol</th><th class="text-left p-3">方向</th><th class="text-right p-3">开仓价</th><th class="text-right p-3">当前价</th><th class="text-right p-3">浮盈</th><th class="text-left p-3">开仓时间</th><th class="text-left p-3">催化剂</th>
+        </tr></thead>
+        <tbody id="open-tbody"><tr><td class="p-4 text-slate-500" colspan="7">加载中...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="mb-6">
+    <h2 class="text-sm uppercase tracking-wider text-slate-400 mb-2">最近 GPT 探索运行</h2>
+    <div class="card overflow-auto max-h-[360px]">
+      <table class="w-full text-xs">
+        <thead class="sticky top-0 bg-[#0f1419]"><tr class="text-slate-400">
+          <th class="text-left p-3">#</th><th class="text-left p-3">时间</th><th class="text-right p-3">Universe</th><th class="text-right p-3">开仓</th><th class="text-left p-3">状态</th><th class="text-left p-3">来源</th><th class="text-left p-3">摘要</th>
+        </tr></thead>
+        <tbody id="runs-tbody"><tr><td class="p-4 text-slate-500" colspan="7">加载中...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="text-sm uppercase tracking-wider text-slate-400 mb-2">历史平仓 (近30天)</h2>
+    <div class="card overflow-auto max-h-[360px]">
+      <table class="w-full text-xs">
+        <thead class="sticky top-0 bg-[#0f1419]"><tr class="text-slate-400">
+          <th class="text-left p-3">Symbol</th><th class="text-left p-3">方向</th><th class="text-right p-3">开仓价</th><th class="text-right p-3">平仓价</th><th class="text-right p-3">已实现盈亏</th><th class="text-left p-3">平仓时间</th><th class="text-left p-3">原因</th>
+        </tr></thead>
+        <tbody id="closed-tbody"><tr><td class="p-4 text-slate-500" colspan="7">加载中...</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script>
+function fmt(v,d){ if(v===null||v===undefined||v==='') return '--'; var n=parseFloat(v); if(isNaN(n)) return '--'; return n.toFixed(d===undefined?2:d); }
+function signed(v,d){ var n=parseFloat(v||0); return (n>=0?'+':'')+n.toFixed(d===undefined?2:d); }
+function shortUTC(s){ if(!s) return '--'; var d=new Date(s+(s.indexOf('Z')===-1&&s.indexOf('+')===-1?'Z':'')); if(isNaN(d.getTime())) return s; var p=n=>n<10?'0'+n:n; return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());}
+function pCls(v){ return parseFloat(v||0)>=0?'pp':'pn';}
+function statusBadge(st){ if(!st) return '--'; return st.toUpperCase(); }
+function formatWl(s){ var be=s.breakeven||Math.max(0,(s.total_trades||0)-(s.wins||0)-(s.losses||0)); return (s.wins||0)+'胜 '+(s.losses||0)+'负'+(be?(' '+be+'平'):'');}
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+let realized=0,floating=0;
+function applyTotals(){ document.getElementById('e-stat-floating').innerHTML='<span class="'+pCls(floating)+'">'+signed(floating)+' U</span>'; var t=realized+floating; document.getElementById('e-stat-total').innerHTML='<span class="'+pCls(t)+'">'+signed(t)+' U</span>'; }
+
+function loadStatus(){
+  fetch('/api/gpt-explore/status').then(r=>r.json()).then(d=>{
+    var s=d.data||{},lr=s.last_run||{};
+    var enabled=!!s.enabled, chip=document.getElementById('status-chip');
+    chip.className='chip '+(enabled?'chip-on':'chip-off'); document.getElementById('status-label').textContent=enabled?'已启用':'已禁用';
+    document.getElementById('stat-open').textContent=s.open_positions??'--';
+    document.getElementById('stat-closed').textContent=s.closed_positions_30d??'--';
+    document.getElementById('stat-universe').textContent=lr.universe_size??'--';
+    document.getElementById('stat-trades').textContent=lr.trades_opened??'--';
+    document.getElementById('stat-lastrun').textContent=lr.asof_utc?shortUTC(lr.asof_utc):'--';
+    document.getElementById('stat-laststatus').textContent=statusBadge(lr.status);
+  }).catch(()=>{});
+}
+function loadOpen(){
+  fetch('/api/gpt-explore/positions/live').then(r=>r.json()).then(d=>{
+    var rows=d.data||[], sum=d.summary||{}; floating=sum.total_unrealized_pnl||0; applyTotals();
+    var tb=document.getElementById('open-tbody');
+    if(!rows.length){ tb.innerHTML='<tr><td class="p-4 text-slate-500" colspan="7">暂无 OPEN 持仓</td></tr>'; return; }
+    tb.innerHTML=rows.map(p=>'<tr class="border-t border-slate-800"><td class="p-3 mono">'+esc(p.symbol)+'</td><td class="p-3">'+esc(p.position_side)+'</td><td class="p-3 text-right mono">'+fmt(p.entry_price,6)+'</td><td class="p-3 text-right mono">'+fmt(p.mark_price,6)+'</td><td class="p-3 text-right mono '+pCls(p.unrealized_pnl)+'">'+signed(p.unrealized_pnl)+' ('+signed(p.unrealized_pnl_pct,2)+'%)</td><td class="p-3 mono">'+shortUTC(p.open_time)+'</td><td class="p-3 truncate max-w-[420px]" title="'+esc(p.entry_reason)+'">'+esc(p.entry_reason)+'</td></tr>').join('');
+  }).catch(()=>{});
+}
+function loadRuns(){
+  fetch('/api/gpt-explore/runs?limit=20').then(r=>r.json()).then(d=>{
+    var rows=d.data||[], tb=document.getElementById('runs-tbody');
+    if(!rows.length){ tb.innerHTML='<tr><td class="p-4 text-slate-500" colspan="7">暂无运行记录</td></tr>'; return; }
+    tb.innerHTML=rows.map(r=>'<tr class="border-t border-slate-800"><td class="p-3 mono">'+r.id+'</td><td class="p-3 mono">'+shortUTC(r.asof_utc)+'</td><td class="p-3 text-right mono">'+(r.universe_size||0)+'</td><td class="p-3 text-right mono">'+(r.trades_opened||0)+'</td><td class="p-3">'+statusBadge(r.status)+'</td><td class="p-3">'+esc(r.triggered_by||'')+'</td><td class="p-3 truncate max-w-[520px]" title="'+esc(r.summary_short||'')+'">'+esc(r.summary_short||'')+'</td></tr>').join('');
+  }).catch(()=>{});
+}
+function loadClosed(){
+  fetch('/api/gpt-explore/positions?status=closed&limit=200').then(r=>r.json()).then(d=>{
+    var rows=d.data||[], tb=document.getElementById('closed-tbody');
+    if(!rows.length){ tb.innerHTML='<tr><td class="p-4 text-slate-500" colspan="7">近30天无平仓</td></tr>'; return; }
+    tb.innerHTML=rows.map(p=>'<tr class="border-t border-slate-800"><td class="p-3 mono">'+esc(p.symbol)+'</td><td class="p-3">'+esc(p.position_side)+'</td><td class="p-3 text-right mono">'+fmt(p.entry_price,6)+'</td><td class="p-3 text-right mono">'+fmt(p.mark_price,6)+'</td><td class="p-3 text-right mono '+pCls(p.realized_pnl)+'">'+signed(p.realized_pnl)+'</td><td class="p-3 mono">'+shortUTC(p.close_time)+'</td><td class="p-3 truncate max-w-[520px]" title="'+esc(p.notes||'')+'">'+esc(p.notes||'')+'</td></tr>').join('');
+  }).catch(()=>{});
+}
+function loadStats(){
+  fetch('/api/gpt-explore/stats?days=30').then(r=>r.json()).then(d=>{
+    if(!d.success) return; var s=d.data||{}; realized=s.total_realized_pnl||0;
+    document.getElementById('e-stat-realized').innerHTML='<span class="'+pCls(realized)+'">'+signed(realized)+' U</span>';
+    document.getElementById('e-stat-winrate').innerHTML='<span class="'+((s.win_rate||0)>=50?'pp':'pn')+'">'+fmt(s.win_rate,1)+'%</span>';
+    document.getElementById('e-stat-wl').textContent=formatWl(s);
+    document.getElementById('e-stat-closed2').textContent=s.total_trades||0;
+    applyTotals();
+  }).catch(()=>{});
+}
+function loadAll(){ loadStatus(); loadOpen(); loadRuns(); loadClosed(); loadStats(); }
+loadAll(); setInterval(loadOpen,3000); setInterval(loadStatus,30000); setInterval(loadStats,30000);
+</script>
+</body>
+</html>

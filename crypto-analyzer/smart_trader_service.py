@@ -3684,6 +3684,7 @@ class SmartTraderService:
                         if self.smart_exit_optimizer:
                             self.smart_exit_optimizer.gemini_advisor_tick()
                             self.smart_exit_optimizer.deepseek_advisor_tick()
+                            self.smart_exit_optimizer.gpt_advisor_tick()
                     except Exception as _ge:
                         logger.warning(f"[持仓顾问] tick 异常: {_ge}")
                     last_gemini_advisor = now

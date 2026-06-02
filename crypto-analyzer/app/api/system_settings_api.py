@@ -83,12 +83,15 @@ class TradingServicesUpdate(BaseModel):
     gemini_predict_enabled: Optional[bool] = None   # 2026-05-27 Gemini 预测
     deepseek_explore_enabled: Optional[bool] = None   # DeepSeek 探索
     deepseek_predict_enabled: Optional[bool] = None   # DeepSeek 预测
+    gpt_explore_enabled: Optional[bool] = None        # GPT 探索
     s1_early_long_enabled: Optional[bool] = None     # 2026-05-27 S1 早期做多
     s5_large_oversold_enabled: Optional[bool] = None   # 2026-05-27 S5 大币超卖
     s6_vol_spike_enabled: Optional[bool] = None         # 2026-05-27 S6 小币量能异动
     s9_gemini_ai_enabled: Optional[bool] = None      # 2026-05-16 S9 Gemini AI 抄底反转
     gemini_position_advisor_enabled: Optional[bool] = None  # 兼容；同步 DeepSeek
     gemini_open_advisor_enabled: Optional[bool] = None      # 兼容；同步 DeepSeek
+    gpt_position_advisor_enabled: Optional[bool] = None
+    gpt_open_advisor_enabled: Optional[bool] = None
     open_advisor_enabled: Optional[bool] = None             # Gemini+DeepSeek 开仓顾问
     position_advisor_enabled: Optional[bool] = None         # Gemini+DeepSeek 持仓顾问
     smart_exit_enabled: Optional[bool] = None              # 智能平仓 (趋势反转/移动止盈/最优价等)
@@ -417,6 +420,7 @@ async def get_trading_services():
                                   'signal_confirmation_enabled', 'trend_following_enabled',
                                   'gemini_explore_enabled', 'gemini_predict_enabled',
                                   'deepseek_explore_enabled', 'deepseek_predict_enabled',
+                                  'gpt_explore_enabled',
                                   's1_early_long_enabled',
                                   's5_large_oversold_enabled', 's6_vol_spike_enabled',
                                   's9_gemini_ai_enabled',
@@ -424,6 +428,8 @@ async def get_trading_services():
                                   'gemini_open_advisor_enabled',
                                   'deepseek_position_advisor_enabled',
                                   'deepseek_open_advisor_enabled',
+                                  'gpt_position_advisor_enabled',
+                                  'gpt_open_advisor_enabled',
                                   'smart_exit_enabled',
                                   'blacklist_level3_enabled',
                                   'live_top50_required',
@@ -450,11 +456,14 @@ async def get_trading_services():
             'gemini_predict_enabled': 'gemini_predict_enabled',
             'deepseek_explore_enabled': 'deepseek_explore_enabled',
             'deepseek_predict_enabled': 'deepseek_predict_enabled',
+            'gpt_explore_enabled': 'gpt_explore_enabled',
             's9_gemini_ai_enabled': 's9_gemini_ai_enabled',
             'gemini_position_advisor_enabled': 'gemini_position_advisor_enabled',
             'gemini_open_advisor_enabled': 'gemini_open_advisor_enabled',
             'deepseek_position_advisor_enabled': 'deepseek_position_advisor_enabled',
             'deepseek_open_advisor_enabled': 'deepseek_open_advisor_enabled',
+            'gpt_position_advisor_enabled': 'gpt_position_advisor_enabled',
+            'gpt_open_advisor_enabled': 'gpt_open_advisor_enabled',
             'smart_exit_enabled': 'smart_exit_enabled',
             'blacklist_level3_enabled': 'blacklist_level3_enabled',
             'live_top50_required': 'live_top50_required',
@@ -479,11 +488,14 @@ async def get_trading_services():
             'gemini_predict_enabled': True,
             'deepseek_explore_enabled': False,
             'deepseek_predict_enabled': False,
+            'gpt_explore_enabled': False,
             's9_gemini_ai_enabled': False,
             'gemini_position_advisor_enabled': True,
             'gemini_open_advisor_enabled': True,
             'deepseek_position_advisor_enabled': True,
             'deepseek_open_advisor_enabled': True,
+            'gpt_position_advisor_enabled': True,
+            'gpt_open_advisor_enabled': True,
             'smart_exit_enabled': False,
             'blacklist_level3_enabled': True,
             'live_top50_required': True,
@@ -761,6 +773,42 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (value,))
             updates.append(f"DeepSeek预测: {'启用' if data.deepseek_predict_enabled else '禁用'}")
+
+        if data.gpt_explore_enabled is not None:
+            value = '1' if data.gpt_explore_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('gpt_explore_enabled', %s, 'GPT 探索开关 (1=启用, 0=禁用)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"GPT探索: {'启用' if data.gpt_explore_enabled else '禁用'}")
+
+        if data.gpt_position_advisor_enabled is not None:
+            value = '1' if data.gpt_position_advisor_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('gpt_position_advisor_enabled', %s, 'GPT 模拟持仓顾问: gpt_* 仓 ≥30min 每15min hold/observe/sell', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"GPT持仓顾问: {'启用' if data.gpt_position_advisor_enabled else '禁用'}")
+
+        if data.gpt_open_advisor_enabled is not None:
+            value = '1' if data.gpt_open_advisor_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('gpt_open_advisor_enabled', %s, 'GPT 模拟开仓顾问: 1=开仓前审核, 不通过则不开仓', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"GPT开仓顾问: {'启用' if data.gpt_open_advisor_enabled else '禁用'}")
 
         if data.s9_gemini_ai_enabled is not None:
             value = '1' if data.s9_gemini_ai_enabled else '0'

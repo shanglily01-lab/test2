@@ -46,6 +46,8 @@ data/*.xlsx
 *.sqlite
 *.sqlite3
 *.sql
+!migrations/015_create_gpt_explore_tables.sql
+!migrations/016_create_gpt_advisor_reviews.sql
 
 # 系统文件
 .DS_Store

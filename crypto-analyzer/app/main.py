@@ -1036,6 +1036,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 注册 GPT 探索 API 路由
+try:
+    from app.api.gpt_explore_api import router as gpt_explore_router
+    app.include_router(gpt_explore_router)
+    logger.info("[GPT探索] API路由已注册")
+except Exception as e:
+    logger.warning(f"[GPT探索] API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册 Gemini / DeepSeek 顶空底多探索 API
 try:
     from app.api.reversal_explore_api import (
@@ -1815,6 +1825,15 @@ async def deepseek_explore_page():
         return FileResponse(str(page_path))
     else:
         raise HTTPException(status_code=404, detail="DeepSeek explore page not found")
+
+
+@app.get("/gpt_explore")
+async def gpt_explore_page():
+    """GPT 探索页面 (短时方向异动 + 模拟单)."""
+    page_path = project_root / "templates" / "gpt_explore.html"
+    if page_path.exists():
+        return FileResponse(str(page_path))
+    raise HTTPException(status_code=404, detail="GPT explore page not found")
 
 
 @app.get("/ai_shadow_compare")

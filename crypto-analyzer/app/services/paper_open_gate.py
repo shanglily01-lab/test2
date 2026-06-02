@@ -9,6 +9,7 @@ from loguru import logger
 
 from app.services.gemini_position_advisor import GEMINI_PER_CALL_DELAY_S
 from app.services.deepseek_position_advisor import DEEPSEEK_PER_CALL_DELAY_S
+from app.services.gpt_position_advisor import GPT_PER_CALL_DELAY_S
 from app.services.open_advisor_routing import resolve_open_advisors
 
 _open_gate_lock = threading.Lock()
@@ -17,6 +18,7 @@ _open_gate_waiting = 0
 _PROVIDER_DELAY = {
     "gemini": GEMINI_PER_CALL_DELAY_S,
     "deepseek": DEEPSEEK_PER_CALL_DELAY_S,
+    "gpt": GPT_PER_CALL_DELAY_S,
 }
 
 
@@ -66,6 +68,20 @@ def gate_simulated_open(
                 elif provider == "deepseek":
                     from app.services.deepseek_position_advisor import get_deepseek_advisor
                     allowed, reason = get_deepseek_advisor().review_open(
+                        symbol=symbol,
+                        side=side,
+                        price=price,
+                        source=source,
+                        catalyst=catalyst,
+                        leverage=leverage,
+                        sl_pct=sl_pct,
+                        tp_pct=tp_pct,
+                        hold_hours=hold_hours,
+                        conn=conn,
+                    )
+                elif provider == "gpt":
+                    from app.services.gpt_position_advisor import get_gpt_advisor
+                    allowed, reason = get_gpt_advisor().review_open(
                         symbol=symbol,
                         side=side,
                         price=price,

@@ -1328,6 +1328,21 @@ class UnifiedDataScheduler:
         schedule.every(10).minutes.do(_run_deepseek_explore)
         logger.info("  ✓ deepseek_explore - 每 4 小时 + 10 分钟到期轮询 (后台线程)")
 
+        # GPT 探索 - 每 4h 调一轮 GPT 检测短时方向异动, 模拟开仓
+        # kill switch = system_settings.gpt_explore_enabled
+        def _run_gpt_explore():
+            def wrapper():
+                try:
+                    from app.services.gpt_explore_worker import run_explore_round
+                    run_explore_round(triggered_by='scheduler')
+                except Exception as e:
+                    logger.error(f"[GPT探索] 调度异常: {e}", exc_info=True)
+            threading.Thread(target=wrapper, daemon=True, name="GPTExplore").start()
+
+        schedule.every(4).hours.do(_run_gpt_explore)
+        schedule.every(10).minutes.do(_run_gpt_explore)
+        logger.info("  ✓ gpt_explore - 每 4 小时 + 10 分钟到期轮询 (后台线程)")
+
         # 战术探索 (顶空底多 + 四策略) × Gemini/DeepSeek — 4h 错峰槽位, 15min 轮询认领
         def _run_tactical_explore_poll():
             def wrapper():
@@ -1576,6 +1591,7 @@ class UnifiedDataScheduler:
         _launch_ai_init_task("DeepSeekBig4", "app.services.big4_comprehensive_analyzer", "run_big4_analysis_round_deepseek", 95)
         _launch_ai_init_task("Gemini情绪",   "app.services.gemini_sentiment_analyzer","run_sentiment_round", 25)
         _launch_ai_init_task("DeepSeek探索","app.services.deepseek_explore_worker",  "run_explore_round", 90)
+        _launch_ai_init_task("GPT探索",      "app.services.gpt_explore_worker",       "run_explore_round", 120)
         _launch_predict_catchup("Gemini预测", "app.services.gemini_predictor", "run_predict_round", 45)
         _launch_predict_catchup("DeepSeek预测", "app.services.deepseek_predictor", "run_predict_round", 50)
 
