@@ -25,6 +25,7 @@ import pymysql.cursors
 from loguru import logger
 
 from app.services.gemini_advisor_reviews import log_advisor_review
+from app.services.open_advisor_routing import is_gemini_order_source
 from app.services.open_advisor_routing import should_use_gemini_hold_advisor
 from app.services.open_advisor_strategy_rubrics import (
     build_big4_subjective_block,
@@ -658,6 +659,8 @@ Output ONLY JSON:
         conn=None,
     ) -> Tuple[bool, str]:
         """返回 (允许开仓, 原因). reject 时禁止开仓."""
+        if not is_gemini_order_source(source):
+            return True, "non_gemini_source_skip"
         if not self._is_open_advisor_enabled():
             return True, "open_advisor_disabled"
 

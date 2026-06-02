@@ -384,7 +384,7 @@ def run_tactical_explore_round(
             conn, cfg, asof_utc, 0, "", 0.0, "partial", None, triggered_by,
         )
 
-        allow_rebuild = triggered_by in ("manual", "scheduler_init", "test")
+        allow_rebuild = triggered_by in ("manual", "scheduler", "scheduler_init", "test")
         universe, global_ctx, _cache_hit = get_explore_prepared_bundle(
             conn, cfg.log_tag, allow_rebuild=allow_rebuild,
         )

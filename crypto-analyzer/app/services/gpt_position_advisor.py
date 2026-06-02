@@ -18,7 +18,7 @@ from app.services.gemini_position_advisor import (
     HOLD_MIN_MINUTES,
 )
 from app.services.gpt_advisor_reviews import log_gpt_advisor_review
-from app.services.open_advisor_routing import should_use_gpt_hold_advisor
+from app.services.open_advisor_routing import is_gpt_order_source, should_use_gpt_hold_advisor
 from app.services.open_advisor_strategy_rubrics import (
     check_direction_gates,
     check_expected_side,
@@ -190,6 +190,8 @@ class GPTPositionAdvisor:
         hold_hours: Optional[float] = None,
         conn=None,
     ) -> Tuple[bool, str]:
+        if not is_gpt_order_source(source):
+            return True, "non_gpt_source_skip"
         if not self._is_open_advisor_enabled():
             return True, "gpt_open_advisor_disabled"
 

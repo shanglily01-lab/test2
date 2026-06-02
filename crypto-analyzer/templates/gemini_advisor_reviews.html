@@ -122,6 +122,7 @@
     <option value="all">全部顾问</option>
     <option value="gemini">Gemini</option>
     <option value="deepseek">DeepSeek</option>
+    <option value="gpt">GPT</option>
   </select>
   <select id="decisionFilter" class="bg-[#151a20] border border-[#44484e]/40 rounded-lg px-3 py-2 text-xs text-[#ebeef5] focus:outline-none focus:border-[#49f4c8]/50">
     <option value="">全部决策</option>
@@ -312,7 +313,8 @@ async function loadReviews() {
       holdCol = row.hold_hours.toFixed(1) + 'h';
       if (row.roi_pct != null) holdCol += ' / ' + (row.roi_pct >= 0 ? '+' : '') + row.roi_pct.toFixed(1) + '%';
     }
-    var providerLabel = row.provider === 'deepseek' ? 'DeepSeek' : 'Gemini';
+    var providerLabel = row.provider === 'deepseek' ? 'DeepSeek'
+      : (row.provider === 'gpt' ? 'GPT' : 'Gemini');
     tr.innerHTML =
       '<td class="px-3 py-2 mono text-[#a8abb2]">' + providerLabel + '</td>' +
       '<td class="px-3 py-2 mono text-[#a8abb2]">' + fmtTimeUtc8(row.created_at) + '</td>' +

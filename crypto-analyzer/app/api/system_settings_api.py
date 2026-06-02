@@ -787,10 +787,13 @@ async def update_trading_services(data: TradingServicesUpdate):
 
         if data.gpt_predict_enabled is not None:
             value = '1' if data.gpt_predict_enabled else '0'
-            cur.execute("""
+            cursor.execute("""
                 INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
                 VALUES ('gpt_predict_enabled', %s, 'GPT 预测开关 (1=启用, 0=禁用)', 'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value), updated_by='web_ui', updated_at=NOW()
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
             """, (value,))
             updates.append(f"GPT预测: {'启用' if data.gpt_predict_enabled else '禁用'}")
 

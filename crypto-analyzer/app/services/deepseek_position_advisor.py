@@ -18,7 +18,7 @@ from app.services.gemini_position_advisor import (
     HOLD_MIN_HOURS,
     HOLD_MIN_MINUTES,
 )
-from app.services.open_advisor_routing import should_use_deepseek_hold_advisor
+from app.services.open_advisor_routing import is_deepseek_order_source, should_use_deepseek_hold_advisor
 from app.services.open_advisor_strategy_rubrics import (
     check_direction_gates,
     check_expected_side,
@@ -194,6 +194,8 @@ class DeepSeekPositionAdvisor:
         conn=None,
     ) -> Tuple[bool, str]:
         """返回 (允许开仓, 原因). reject 时禁止开仓."""
+        if not is_deepseek_order_source(source):
+            return True, "non_deepseek_source_skip"
         if not self._is_open_advisor_enabled():
             return True, "deepseek_open_advisor_disabled"
 

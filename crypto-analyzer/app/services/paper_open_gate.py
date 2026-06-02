@@ -36,7 +36,7 @@ def gate_simulated_open(
 ) -> Tuple[bool, str]:
     """
     开仓前审核。返回 (允许开仓, 原因).
-    Gemini 订单仅 Gemini 审；DeepSeek 订单仅 DeepSeek 审；其余双审均须通过。
+    Gemini 订单仅 Gemini 审；DeepSeek 仅 DeepSeek；GPT 仅 GPT；其余双审 Gemini+DeepSeek。
     顾问关闭 / API 异常时放行 (降级), 仅明确 reject 时拦截。
     """
     global _open_gate_waiting
