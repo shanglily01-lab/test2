@@ -2,7 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
+
+from app.services.ai_tactical_explore_prompts import (
+    CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT,
+    CHASE_RSI_MAX,
+    PULLBACK_RSI_MAX,
+)
 
 
 @dataclass(frozen=True)
@@ -69,10 +75,12 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         title_zh="回调做多",
         expected_side="LONG",
         rubric=(
-            "须全部符合才 approve：\n"
+            "须全部符合才 approve（与代码门槛一致）：\n"
             "1. **近24根1h** 整体上涨趋势（通道/高点抬高）。\n"
             "2. **近4~6根1h** 回落/回踩/阴线，且有支撑企稳（非单边下跌抄底）。\n"
-            "3. 方向必须 LONG；与「追涨」「杀跌」叙事混淆则 reject。"
+            "3. **RSI 1h ≤68**；若 RSI>68 仅浅调 → reject（应归追涨或 skip）。\n"
+            "4. 距 7d 高点过近（below_7d_high_pct > -2）且无深回踩 → reject。\n"
+            "5. 方向必须 LONG；叙事主调是「连阳追高/无明显回调」→ reject（应属追涨）。"
         ),
     ),
     "rebound": OpenAdvisorStrategyProfile(
@@ -91,10 +99,13 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         title_zh="追涨做多",
         expected_side="LONG",
         rubric=(
-            "须全部符合才 approve：\n"
+            "须全部符合才 approve（与代码门槛一致）：\n"
             "1. **近24根1h** 持续上涨，**近4~6根** 仍延续、无明显深度回踩。\n"
-            "2. **不要求放量**；量能平平但结构未破可 approve。\n"
-            "3. 方向 LONG；若 catalyst 主叙事是「大幅回踩支撑」则 reject（应属回调做多）。"
+            "2. **RSI 1h ≤68**；>68 一律 reject（超买延伸段，48h 实盘胜率极差）。\n"
+            "3. **below_7d_high_pct ≤ -3**（距 7d 高至少约 3% 空间）；不足则 reject。\n"
+            "4. 量能平平可 approve，但不得仅有 24h 涨幅叙事。\n"
+            "5. 方向 LONG；主叙事是「回踩/支撑反弹」→ reject（应属回调做多）。\n"
+            "6. 不得因 catalyst 措辞像追涨就 approve：必须核对 RSI 与 7d 距离数值。"
         ),
     ),
     "dump": OpenAdvisorStrategyProfile(
@@ -110,11 +121,13 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
     ),
     "explore": OpenAdvisorStrategyProfile(
         key="explore",
-        title_zh="Gemini/DeepSeek 探索（红/黑天鹅）",
+        title_zh="AI 主探索（事件/结构）",
         expected_side=None,
         rubric=(
-            "探索仓：须有多周期 K 线 + 事件/结构 catalyst（非纯24h涨跌）。\n"
+            "【探索专属，勿用战术四策略标准】\n"
+            "须有多周期 K 线 + 事件/结构 catalyst（非纯24h涨跌）。\n"
             "- LONG：下跌后反转/利好结构；SHORT：上涨后衰竭/利空结构。\n"
+            "- 禁止用「回调做多/追涨/反弹空/杀跌」战术 checklist 替代本 rubric。\n"
             "- 结构不清晰、与 catalyst 矛盾、极端追涨杀跌 → reject。"
         ),
     ),
@@ -123,7 +136,8 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         title_zh="AI 预测（4h 方向）",
         expected_side=None,
         rubric=(
-            "预测单：catalyst 须含 1h/15m 方向依据 + 置信逻辑；\n"
+            "【预测专属，勿用战术/探索混审】\n"
+            "catalyst 须含 1h/15m 方向依据 + 置信逻辑；\n"
             "与 Big4 严重冲突且个股 catalyst 不足 → reject；"
             "非极端行情下允许与 Big4 反向但须在 catalyst 中自洽。"
         ),
@@ -196,11 +210,14 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         title_zh="其他策略",
         expected_side=None,
         rubric=(
-            "通用：catalyst/entry_reason 与方向、K 线一致；"
+            "【通用兜底】仅审 catalyst/entry_reason 与方向、K 线是否一致；"
+            "禁止套用追涨/回调/探索等其它策略的专属 checklist。"
             "结构不清晰或与 Big4/方向闸门冲突 → reject。"
         ),
     ),
 }
+
+_TACTICAL_PROFILE_KEYS = frozenset({"pullback", "rebound", "chase", "dump"})
 
 
 def resolve_strategy_profile(source: str) -> OpenAdvisorStrategyProfile:
@@ -282,4 +299,197 @@ _KLINE_1H_READING = """
 - **禁止**仅凭最近 **1 根** 1h K 线下结论。
 - **整体趋势**：近 **24 根 1h**（约24小时）。
 - **近期结构**：近 **4~6 根 1h**（回调/反弹/连阳连阴）。
+"""
+
+
+def build_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
+    """按策略类型生成审核步骤（非全策略共用同一套条文）."""
+    key = profile.key
+    title = profile.title_zh
+    lines = [
+        "## 审核步骤（仅适用于本策略）",
+        f"- 本笔仅按 **「{title}」**（profile=`{key}`）审核；"
+        "**禁止**用其它策略（回调/追涨/探索/预测/S1 等）的标准替代下文 rubric。",
+        "1. 方向闸门 + Big4（上节）— 冲突则 reject。",
+        f"2. **仅执行上文「{title}」专属 rubric** — 与 K 线表、下方量化指标交叉验证。",
+    ]
+    if key in _TACTICAL_PROFILE_KEYS:
+        lines.append(
+            "3. **战术互斥**（仅四战术）：形态更符合其它战术名 → reject，即使 catalyst 措辞漂亮。"
+        )
+        lines.append(
+            "4. catalyst 须与 RSI、below_7d_high_pct 一致；仅24h涨跌 / 单根1h → reject。"
+        )
+        lines.append("5. 完全符合**本战术**才 approve；存疑 reject。")
+    elif key == "reversal":
+        lines.append(
+            "3. SHORT=真顶部反转、LONG=真底部反转；禁止「涨多了/跌多了」无结构。"
+        )
+        lines.append("4. 勿按回调/追涨/杀跌战术 checklist 审核反转单。")
+        lines.append("5. 完全符合反转定义才 approve。")
+    elif key == "explore":
+        lines.append("3. 审事件/结构 catalyst，**勿**用四战术互斥 checklist。")
+        lines.append("4. 红/黑天鹅逻辑与方向自洽才 approve。")
+    elif key == "predict":
+        lines.append("3. 审 4h 预测逻辑与多周期依据，**勿**用战术或探索 checklist。")
+        lines.append("4. catalyst 与 proposed side 自洽才 approve。")
+    elif key in ("s1", "s5", "s6", "s9"):
+        lines.append(f"3. 仅审 **{title}** 定义（RSI/量能/超卖等），勿混用 AI 战术标准。")
+        lines.append("4. 不符合该多策略定义 → reject。")
+    else:
+        lines.append("3. entry_reason/catalyst 与方向、K 线一致；含糊或与闸门冲突 → reject。")
+        lines.append("4. 勿套用未列出的其它策略专属标准。")
+    return "\n".join(lines)
+
+
+def build_tech_metrics_block(profile: OpenAdvisorStrategyProfile, ctx: dict) -> str:
+    """战术/探索类顾问可见的量化字段（便于按策略核对，非通用模糊描述）."""
+    if profile.key not in _TACTICAL_PROFILE_KEYS | {"reversal", "explore", "predict"}:
+        return ""
+    rsi = ctx.get("rsi_14_1h")
+    b7h = ctx.get("below_7d_high_pct")
+    a7l = ctx.get("above_7d_low_pct")
+    rsi_s = f"{rsi:.1f}" if rsi is not None else "N/A"
+    b7h_s = f"{b7h:.2f}%" if b7h is not None else "N/A"
+    a7l_s = f"{a7l:.2f}%" if a7l is not None else "N/A"
+    extra = ""
+    if profile.key == "chase":
+        extra = (
+            f"\n- 追涨硬线: RSI≤{CHASE_RSI_MAX}, below_7d_high≤-{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}%"
+        )
+    elif profile.key == "pullback":
+        extra = f"\n- 回调硬线: RSI≤{PULLBACK_RSI_MAX}, 深回踩时 below_7d_high 不宜 >-2%"
+    return (
+        "## 量化指标（须与 rubric 交叉验证）\n"
+        f"- RSI(1h): {rsi_s}\n"
+        f"- below_7d_high_pct: {b7h_s}\n"
+        f"- above_7d_low_pct: {a7l_s}"
+        f"{extra}"
+    )
+
+
+def precheck_open_advisor(
+    profile: OpenAdvisorStrategyProfile,
+    side: str,
+    ctx: dict,
+) -> Tuple[bool, str]:
+    """代码层策略专属预检（LLM 之前），避免所有单用同一套模糊标准."""
+    s = (side or "").upper()
+    rsi = ctx.get("rsi_14_1h")
+    b7h = ctx.get("below_7d_high_pct")
+
+    if profile.key == "chase" and s == "LONG":
+        if rsi is not None and float(rsi) > CHASE_RSI_MAX:
+            return False, (
+                f"策略「追涨做多」: RSI={rsi:.0f}>{CHASE_RSI_MAX}，代码预检 reject"
+            )
+        if b7h is not None and float(b7h) > -CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:
+            return False, (
+                f"策略「追涨做多」: below_7d_high={b7h:.1f}% 空间不足，代码预检 reject"
+            )
+
+    if profile.key == "pullback" and s == "LONG":
+        if rsi is not None and float(rsi) > PULLBACK_RSI_MAX:
+            return False, (
+                f"策略「回调做多」: RSI={rsi:.0f}>{PULLBACK_RSI_MAX}，代码预检 reject"
+            )
+        if b7h is not None and float(b7h) > -2.0:
+            return False, (
+                f"策略「回调做多」: below_7d_high={b7h:.1f}% 过近无像样回踩，代码预检 reject"
+            )
+
+    if profile.key == "dump" and s == "SHORT":
+        if rsi is not None and float(rsi) > 55:
+            return False, f"策略「杀跌做空」: RSI={rsi:.0f}>55，更像反弹空而非杀跌，代码预检 reject"
+
+    if profile.key == "rebound" and s == "SHORT":
+        if rsi is not None and float(rsi) < 40:
+            return False, f"策略「反弹做空」: RSI={rsi:.0f}<40 偏低，代码预检 reject"
+
+    return True, ""
+
+
+def build_open_advisor_prompt(
+    *,
+    profile: OpenAdvisorStrategyProfile,
+    symbol: str,
+    side: str,
+    price: float,
+    source: str,
+    catalyst: str,
+    leverage: int,
+    sl_pct: Optional[float],
+    tp_pct: Optional[float],
+    hold_hours: Optional[float],
+    ctx: dict,
+    format_kline_table: Callable[[list], str],
+) -> str:
+    """组装开仓顾问 prompt — 每策略注入不同 rubric + 审核步骤 + 量化块."""
+    big4_block = build_big4_subjective_block(
+        ctx.get("big4_signal", "NEUTRAL"),
+        float(ctx.get("big4_strength") or 0),
+        bool(ctx.get("allow_long", True)),
+        bool(ctx.get("allow_short", True)),
+        side,
+        float(ctx.get("btc_6h_change") or 0),
+        float(ctx.get("eth_6h_change") or 0),
+    )
+    klines_15m = format_kline_table(ctx.get("klines_15m", []))
+    klines_1h = format_kline_table(ctx.get("klines_1h", []))
+    narr_1h = (ctx.get("narrative_1h") or "").strip() or "(缓存暂无，以上表为准)"
+    narr_15m = (ctx.get("narrative_15m") or "").strip() or "(无)"
+    tech_block = build_tech_metrics_block(profile, ctx)
+    review_steps = build_strategy_review_steps(profile)
+    sl_s = f"{sl_pct}%" if sl_pct is not None else "默认"
+    tp_s = f"{tp_pct}%" if tp_pct is not None else "默认"
+    hold_s = f"{hold_hours}h" if hold_hours is not None else "策略默认"
+    return f"""你是超级交易大师。系统在**开模拟仓之前**请你审核是否允许开仓。
+
+## 重要
+- 本笔 **唯一** 审核标准：下方「{profile.title_zh}」专属 rubric（profile={profile.key}）。
+- **禁止**用其它策略的标准审本单（例如用「追涨」标准审「回调」单）。
+
+## 本笔策略
+  策略名:     {profile.title_zh}
+  profile:    {profile.key}
+  source:     {source}
+  固定方向:   {profile.expected_side or '按信号 LONG/SHORT'}
+
+### 「{profile.title_zh}」专属审核标准（仅此一节有效）
+{profile.rubric}
+
+{_KLINE_1H_READING}
+
+{tech_block}
+
+{big4_block}
+
+## 拟开仓
+  Symbol:     {symbol}
+  Direction:  {side}
+  Entry:      {price}
+  Leverage:   {leverage}x
+  SL/TP:      {sl_s} / {tp_s}
+  Plan hold:  {hold_s}
+  Catalyst:   {(catalyst or '')[:500]}
+
+## 市场数据
+  candidate_pool 1h 叙事:
+{narr_1h}
+  candidate_pool 15m 叙事:
+{narr_15m}
+
+## 近 24 根 1h K 线 (oldest → newest)
+{klines_1h}
+
+## 近 4h 15m K 线
+{klines_15m}
+
+{review_steps}
+
+Output ONLY JSON:
+{{
+  "decision": "approve" | "reject",
+  "reason": "<50字中文，必须写明策略名「{profile.title_zh}」+通过/驳回要点>"
+}}
 """

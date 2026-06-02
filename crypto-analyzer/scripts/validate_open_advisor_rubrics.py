@@ -10,8 +10,10 @@ sys.path.insert(0, str(ROOT))
 
 from app.services.open_advisor_strategy_rubrics import (
     build_big4_subjective_block,
+    build_strategy_review_steps,
     check_direction_gates,
     check_expected_side,
+    precheck_open_advisor,
     resolve_strategy_profile,
 )
 from app.services.gemini_position_advisor import GeminiPositionAdvisor
@@ -58,6 +60,63 @@ def test_expected_side():
     print("[PASS] expected_side")
 
 
+def test_per_strategy_prompts_differ():
+    ctx = {
+        "klines_15m": [{"t": "01-01 00:00", "o": 1, "h": 1, "l": 1, "c": 1, "v": 1}],
+        "klines_1h": [],
+        "big4_signal": "NEUTRAL",
+        "big4_strength": 0,
+        "allow_long": True,
+        "allow_short": True,
+        "btc_6h_change": 0,
+        "eth_6h_change": 0,
+        "narrative_1h": "",
+        "narrative_15m": "",
+        "rsi_14_1h": 60.0,
+        "below_7d_high_pct": -8.0,
+        "above_7d_low_pct": 10.0,
+    }
+    chase_p = GeminiPositionAdvisor._build_open_prompt(
+        "BTC/USDT", "LONG", 1.0, "gemini_chase", "test", 5, 3.0, 5.0, 4.0, ctx,
+    )
+    pull_p = GeminiPositionAdvisor._build_open_prompt(
+        "BTC/USDT", "LONG", 1.0, "gemini_pullback", "test", 5, 3.0, 5.0, 4.0, ctx,
+    )
+    explore_p = GeminiPositionAdvisor._build_open_prompt(
+        "BTC/USDT", "LONG", 1.0, "gemini_explore", "test", 5, 3.0, 5.0, 4.0, ctx,
+    )
+    assert "追涨做多" in chase_p and "profile:    chase" in chase_p
+    assert "回调做多" in pull_p and "profile:    pullback" in pull_p
+    assert "禁止" in chase_p and "其它策略" in chase_p
+    assert "（仅四战术）" in chase_p and "（仅四战术）" in pull_p
+    assert "（仅四战术）" not in explore_p
+    assert "探索专属" in explore_p or "勿用战术" in explore_p
+    assert chase_p != pull_p
+    print("[PASS] per_strategy_prompts_differ")
+
+
+def test_precheck_chase_rsi():
+    p = resolve_strategy_profile("gemini_chase")
+    ok, reason = precheck_open_advisor(
+        p, "LONG", {"rsi_14_1h": 72.0, "below_7d_high_pct": -10.0},
+    )
+    assert not ok and "追涨" in reason
+    ok2, _ = precheck_open_advisor(
+        p, "LONG", {"rsi_14_1h": 62.0, "below_7d_high_pct": -10.0},
+    )
+    assert ok2
+    print("[PASS] precheck_chase_rsi")
+
+
+def test_review_steps_by_profile():
+    chase_steps = build_strategy_review_steps(resolve_strategy_profile("gemini_chase"))
+    explore_steps = build_strategy_review_steps(resolve_strategy_profile("gemini_explore"))
+    assert "（仅四战术）" in chase_steps
+    assert "勿" in explore_steps and "四战术" in explore_steps
+    assert "（仅四战术）" not in explore_steps
+    print("[PASS] review_steps_by_profile")
+
+
 def test_open_prompt_contains_rubric():
     ctx = {
         "klines_15m": [{"t": "01-01 00:00", "o": 1, "h": 1, "l": 1, "c": 1, "v": 1}],
@@ -77,6 +136,7 @@ def test_open_prompt_contains_rubric():
         "近24根上涨 近5根回踩支撑", 5, 3.0, 5.0, 4.0, ctx,
     )
     assert "回调做多" in prompt
+    assert "profile:    pullback" in prompt
     assert "24 根 1h" in prompt
     assert "allow_short" in prompt
     assert "1 根" in prompt and "24 根" in prompt
@@ -141,6 +201,9 @@ def main():
     test_source_mapping()
     test_direction_gates()
     test_expected_side()
+    test_per_strategy_prompts_differ()
+    test_precheck_chase_rsi()
+    test_review_steps_by_profile()
     test_open_prompt_contains_rubric()
     test_hold_prompt_kline_focus()
     test_losing_hold_temper()

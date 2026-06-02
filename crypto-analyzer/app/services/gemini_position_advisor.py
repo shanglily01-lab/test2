@@ -28,11 +28,11 @@ from app.services.gemini_advisor_reviews import log_advisor_review
 from app.services.open_advisor_routing import is_gemini_order_source
 from app.services.open_advisor_routing import should_use_gemini_hold_advisor
 from app.services.open_advisor_strategy_rubrics import (
-    build_big4_subjective_block,
+    build_open_advisor_prompt,
     check_direction_gates,
     check_expected_side,
+    precheck_open_advisor,
     resolve_strategy_profile,
-    _KLINE_1H_READING,
 )
 
 
@@ -226,6 +226,8 @@ class GeminiPositionAdvisor:
             'narrative_1h': '',
             'narrative_15m': '',
             'rsi_14_1h': None,
+            'below_7d_high_pct': None,
+            'above_7d_low_pct': None,
             'allow_long': True,
             'allow_short': True,
         }
@@ -275,7 +277,8 @@ class GeminiPositionAdvisor:
             ctx['klines_1h'] = klines_1h
 
             cur.execute(
-                "SELECT narrative_1h, narrative_15m, rsi_14 "
+                "SELECT narrative_1h, narrative_15m, rsi_14, "
+                "below_7d_high_pct, above_7d_low_pct "
                 "FROM data_cache.candidate_pool_snapshot "
                 "WHERE symbol=%s AND exchange='binance_futures' LIMIT 1",
                 (symbol,)
@@ -286,6 +289,10 @@ class GeminiPositionAdvisor:
                 ctx['narrative_15m'] = (pool.get('narrative_15m') or '')[:1200]
                 if pool.get('rsi_14') is not None:
                     ctx['rsi_14_1h'] = float(pool['rsi_14'])
+                if pool.get('below_7d_high_pct') is not None:
+                    ctx['below_7d_high_pct'] = float(pool['below_7d_high_pct'])
+                if pool.get('above_7d_low_pct') is not None:
+                    ctx['above_7d_low_pct'] = float(pool['above_7d_low_pct'])
 
             cur.execute(
                 "SELECT overall_signal, signal_strength, btc_price_change_6h, eth_price_change_6h "
@@ -580,70 +587,20 @@ Output ONLY JSON:
         ctx: dict,
     ) -> str:
         profile = resolve_strategy_profile(source)
-        big4_block = build_big4_subjective_block(
-            ctx.get('big4_signal', 'NEUTRAL'),
-            float(ctx.get('big4_strength') or 0),
-            bool(ctx.get('allow_long', True)),
-            bool(ctx.get('allow_short', True)),
-            side,
-            float(ctx.get('btc_6h_change') or 0),
-            float(ctx.get('eth_6h_change') or 0),
+        return build_open_advisor_prompt(
+            profile=profile,
+            symbol=symbol,
+            side=side,
+            price=price,
+            source=source,
+            catalyst=catalyst,
+            leverage=leverage,
+            sl_pct=sl_pct,
+            tp_pct=tp_pct,
+            hold_hours=hold_hours,
+            ctx=ctx,
+            format_kline_table=GeminiPositionAdvisor._format_kline_table,
         )
-        klines_15m = GeminiPositionAdvisor._format_kline_table(ctx.get('klines_15m', []))
-        klines_1h = GeminiPositionAdvisor._format_kline_table(ctx.get('klines_1h', []))
-        narr_1h = (ctx.get('narrative_1h') or '').strip() or '(缓存暂无，以上表为准)'
-        narr_15m = (ctx.get('narrative_15m') or '').strip() or '(无)'
-        rsi_s = ctx.get('rsi_14_1h')
-        rsi_line = f"RSI(1h): {rsi_s:.1f}" if rsi_s is not None else "RSI(1h): N/A"
-        sl_s = f"{sl_pct}%" if sl_pct is not None else "默认"
-        tp_s = f"{tp_pct}%" if tp_pct is not None else "默认"
-        hold_s = f"{hold_hours}h" if hold_hours is not None else "策略默认"
-        return f"""你是超级交易大师。系统在**开模拟仓之前**请你按**策略专属标准**审核是否允许开仓。
-
-## 本笔策略
-  策略名:     {profile.title_zh} (source={source})
-  固定方向:   {profile.expected_side or '按信号 LONG/SHORT'}
-
-{profile.rubric}
-
-{_KLINE_1H_READING}
-
-{big4_block}
-
-## 拟开仓
-  Symbol:     {symbol}
-  Direction:  {side}
-  Entry:      {price}
-  Leverage:   {leverage}x
-  SL/TP:      {sl_s} / {tp_s}
-  Plan hold:  {hold_s}
-  Catalyst:   {(catalyst or '')[:500]}
-
-## 市场数据
-  {rsi_line}
-  candidate_pool 1h 叙事:
-{narr_1h}
-  candidate_pool 15m 叙事:
-{narr_15m}
-
-## 近 24 根 1h K 线 (oldest → newest)
-{klines_1h}
-
-## 近 4h 15m K 线
-{klines_15m}
-
-## 审核步骤（必须执行）
-1. 方向闸门 + Big4 主观规则（上节）— 冲突则 reject。
-2. **策略专属标准** — 例如顶空底多须真见顶/见底；回调做多须24h上涨+近4~6根回踩；反弹做空须下降+缩量反弹等。
-3. catalyst 与 K 线、方向一致；仅24h涨跌幅 / 只看1根1h → reject。
-4. 仅当**完全符合该策略定义**时 approve。
-
-Output ONLY JSON:
-{{
-  "decision": "approve" | "reject",
-  "reason": "<50字中文，写明策略名+驳回/通过要点>"
-}}
-"""
 
     def review_open(
         self,
@@ -685,6 +642,15 @@ Output ONLY JSON:
             return False, side_reason
 
         ctx = self._fetch_market_context(symbol)
+        ok_pre, pre_reason = precheck_open_advisor(profile, side, ctx)
+        if not ok_pre:
+            log_advisor_review(
+                "open", "reject", symbol,
+                position_side=side, source=source, entry_price=price,
+                leverage=leverage, reason=pre_reason, catalyst=catalyst, conn=conn,
+            )
+            return False, pre_reason
+
         prompt = self._build_open_prompt(
             symbol, side, price, source, catalyst, leverage,
             sl_pct, tp_pct, hold_hours, ctx,

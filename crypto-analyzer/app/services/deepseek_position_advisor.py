@@ -22,6 +22,7 @@ from app.services.open_advisor_routing import is_deepseek_order_source, should_u
 from app.services.open_advisor_strategy_rubrics import (
     check_direction_gates,
     check_expected_side,
+    precheck_open_advisor,
     resolve_strategy_profile,
 )
 
@@ -220,6 +221,15 @@ class DeepSeekPositionAdvisor:
             return False, side_reason
 
         ctx = self._prompt_helper._fetch_market_context(symbol)
+        ok_pre, pre_reason = precheck_open_advisor(profile, side, ctx)
+        if not ok_pre:
+            log_deepseek_advisor_review(
+                "open", "reject", symbol,
+                position_side=side, source=source, entry_price=price,
+                leverage=leverage, reason=pre_reason, catalyst=catalyst, conn=conn,
+            )
+            return False, pre_reason
+
         prompt = self._prompt_helper._build_open_prompt(
             symbol, side, price, source, catalyst, leverage,
             sl_pct, tp_pct, hold_hours, ctx,

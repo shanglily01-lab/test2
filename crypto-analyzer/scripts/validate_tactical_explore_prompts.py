@@ -45,6 +45,15 @@ def test_pullback_gates():
     ok, reason = tactical_catalyst_ok(PULLBACK_LONG, bad, "", _sym(rsi=35, narr_1h="偏空 连阴"), 0.6)
     assert not ok, reason
 
+    high_rsi = (
+        "1h 近24根上升通道 近5根阴线回踩 EMA20 支撑企稳 RSI 1h 74"
+    )
+    ok, reason = tactical_catalyst_ok(
+        PULLBACK_LONG, high_rsi, "", _sym(rsi=74, b7h=-5), 0.72,
+    )
+    assert not ok, reason
+    assert "68" in reason or "追涨" in reason
+
 
 def test_rebound_gates():
     from app.services.ai_tactical_explore_prompts import REBOUND_SHORT, tactical_catalyst_ok
@@ -70,13 +79,30 @@ def test_chase_gates():
         "1h 近24根持续上涨 近6根连阳 无明显回调 量能未放大 趋势延续 RSI 1h 62"
     )
     ok, _ = tactical_catalyst_ok(
-        CHASE_LONG, good, "", _sym(rsi=62, narr_1h="偏多 上升"), 0.6,
+        CHASE_LONG, good, "", _sym(rsi=62, b7h=-8.0, narr_1h="偏多 上升"), 0.6,
     )
     assert ok
 
     bad = "大幅回踩支撑反弹 回调到位 做多"
     ok, _ = tactical_catalyst_ok(CHASE_LONG, bad, "", _sym(rsi=50), 0.6)
     assert not ok
+
+    overbought = (
+        "1h 近24根持续上涨 近6根连阳 趋势延续 RSI 1h 72"
+    )
+    ok, reason = tactical_catalyst_ok(
+        CHASE_LONG, overbought, "", _sym(rsi=72, b7h=-10), 0.75,
+    )
+    assert not ok, reason
+    assert "68" in reason
+
+    no_room = (
+        "1h 近24根持续上涨 近6根连阳 无明显回调 RSI 1h 60"
+    )
+    ok, reason = tactical_catalyst_ok(
+        CHASE_LONG, no_room, "", _sym(rsi=60, b7h=-1.5), 0.8,
+    )
+    assert not ok, reason
 
 
 def test_dump_gates():
@@ -122,6 +148,24 @@ def test_kline_narrative_24_split():
     narr = _make_kline_narrative(rows, "1h")
     assert "整体 24 根" in narr
     assert "最近 6 根" in narr
+
+
+def test_prompt_has_strategy_differentiation():
+    from app.services.ai_tactical_explore_prompts import (
+        CHASE_LONG,
+        PULLBACK_LONG,
+        build_strategy_prompt,
+    )
+
+    chase_p, _ = build_strategy_prompt("chase", {}, {}, {})
+    pull_p, _ = build_strategy_prompt("pullback", {}, {}, {})
+    assert "本策略边界" in chase_p
+    assert "追涨做多" in chase_p and "回调做多" in chase_p
+    assert CHASE_LONG.key in chase_p or "RSI" in chase_p
+    assert "≤68" in chase_p or "68" in chase_p
+    assert "本策略量化硬门槛" in pull_p
+    assert "勿与其它战术混淆" in pull_p or "勿混淆" in pull_p
+    print("[PASS] per-strategy differentiation in tactical prompts")
 
 
 def test_prompt_build():
@@ -189,6 +233,7 @@ def main():
         ("rebound gates", test_rebound_gates),
         ("chase gates", test_chase_gates),
         ("dump gates", test_dump_gates),
+        ("strategy differentiation", test_prompt_has_strategy_differentiation),
         ("prompt build", test_prompt_build),
         ("DB bundle", test_db_bundle_optional),
     ]

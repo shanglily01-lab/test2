@@ -19,6 +19,10 @@ from app.services.ai_explore_prompt import (
 from app.services.ai_reversal_explore_prompt import _catalyst_pct_sane
 
 TACTICAL_CONFIDENCE_THRESHOLD = 0.55
+# 与代码门槛 / 开仓顾问 rubric 对齐（改一处须同步另两处）
+CHASE_RSI_MAX = 68
+PULLBACK_RSI_MAX = 68
+CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT = 3.0  # below_7d_high_pct 须 ≤ -3（距 7d 高至少 3% 空间）
 
 _KLINE_1H_RULES = """
 ## 1h K 线读法（必读，禁止只看 1 根）
@@ -52,6 +56,7 @@ class TacticalStrategyDef:
     title_zh: str
     fixed_side: str  # LONG | SHORT
     prompt_body: str
+    contrast_block: str = ""  # 与其它战术的边界，减轻「共用模板」同质化
     extra_catalyst_check: Optional[Callable[[str, str, Optional[dict]], Tuple[bool, str]]] = None
 
 
@@ -68,6 +73,20 @@ def _tech(sym_data: Optional[dict]) -> dict:
 
 def _rsi_1h(sym_data: Optional[dict]) -> Optional[float]:
     raw = _tech(sym_data).get("rsi_14_1h")
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _below_7d_high_pct(sym_data: Optional[dict]) -> Optional[float]:
+    """现价相对 7d 高点的百分比 (负=低于高点)."""
+    t = _tech(sym_data)
+    raw = t.get("below_7d_high_pct")
+    if raw is None and isinstance(sym_data, dict):
+        raw = sym_data.get("below_7d_high_pct")
     if raw is None:
         return None
     try:
@@ -138,12 +157,17 @@ def _build_prompt(definition: TacticalStrategyDef, universe: dict, global_ctx: d
     universe_list, meta = prepare_tactical_universe_for_llm(definition, universe)
     compact = {"ensure_ascii": False, "separators": (",", ":"), "default": str}
     side_note = "做多" if definition.fixed_side == "LONG" else "做空"
+    contrast = (definition.contrast_block or "").strip()
+    contrast_section = f"{contrast}\n\n" if contrast else ""
     prompt = (
-        f"你是加密货币 U 本位合约的**{definition.title_zh}**分析师。"
-        f"仅寻找符合本策略的 **{side_note}** 机会。\n\n"
+        f"你是加密货币 U 本位合约的**{definition.title_zh}**专属分析师（非泛化多空评论）。"
+        f"只输出**符合下述定义**的 {side_note} entry；其它战术形态一律不要塞进本 JSON。\n\n"
         f"{definition.prompt_body}\n\n"
+        f"{contrast_section}"
         f"{_KLINE_1H_RULES}\n"
-        "## 硬性规则\n"
+        f"## 本策略量化硬门槛（与代码校验一致，违反则勿 entry）\n"
+        f"{_strategy_quant_rules(definition.key)}\n"
+        "## 通用输出规则\n"
         "1. catalyst 须写明 1h **24 根整体趋势** + **近 4~6 根结构**，并辅以 15m/1d + 量化技术位 (RSI/EMA/7d/阳阴根数)。\n"
         "2. 禁止仅用 24h 涨跌幅或资金费率做主因。\n"
         "3. **只输出 category=entry 的标的**（最多 5 个）；不符合的不写入 verdicts。\n"
@@ -266,7 +290,8 @@ def tactical_catalyst_ok(
     sym_data: Optional[dict] = None,
     confidence: float = 0.0,
 ) -> Tuple[bool, str]:
-    if definition.extra_catalyst_check and confidence < 0.70:
+    # 战术 extra 门槛始终执行（高 confidence 不得绕过，避免超买追涨等漏网）
+    if definition.extra_catalyst_check:
         ok, reason = definition.extra_catalyst_check(catalyst, data_signal, sym_data)
         if not ok:
             return ok, reason
@@ -276,11 +301,33 @@ def tactical_catalyst_ok(
     sane, sane_reason = _catalyst_pct_sane(catalyst, data_signal)
     if not sane:
         return False, sane_reason
-    if confidence >= 0.70:
-        return True, ""
-    if definition.extra_catalyst_check:
-        return definition.extra_catalyst_check(catalyst, data_signal, sym_data)
     return True, ""
+
+
+def _strategy_quant_rules(strategy_key: str) -> str:
+    """各战术专属量化红线（写入 prompt，与 extra_catalyst_check 一致）."""
+    rules = {
+        "pullback": (
+            f"- RSI 1h 须 ≤ {PULLBACK_RSI_MAX}；高于此多为强势末端浅调，应 skip 或归追涨。\n"
+            f"- 须先确认 24h 上涨趋势，再在近 4~6 根出现**回落/阴线/回踩**；须写支撑企稳。\n"
+            "- 禁止「跌多了抄底」、禁止单边下跌中继。"
+        ),
+        "chase": (
+            f"- RSI 1h 须 ≤ {CHASE_RSI_MAX}；>68 禁止追涨（超买延伸段）。\n"
+            f"- tech.below_7d_high_pct 须 ≤ -{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}"
+            f"（距 7d 高点至少 3% 上行空间，否则 TP=6% 不现实）。\n"
+            "- 近 6 根须**延续上行**、无深度回踩；叙事主调不得是「回调到位」。"
+        ),
+        "rebound": (
+            "- 须下降趋势 + 近 4~6 根缩量/无力反弹 + 相对阻力区；禁止突破新高追空。\n"
+            "- RSI 不宜极低钝化区盲目空（须写明反弹衰竭）。"
+        ),
+        "dump": (
+            "- 须下跌趋势延续 + 反弹无量/失败；RSI 1h 不宜 >55。\n"
+            "- 禁止底部博反弹叙事。"
+        ),
+    }
+    return rules.get(strategy_key, "- 遵守策略定义与多周期 K 线结构。")
 
 
 def _has_any(text: str, words: tuple) -> bool:
@@ -351,8 +398,17 @@ def _pullback_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -
     ):
         return False, "kline_narrative 1h/1d 仍偏空，不符合回调做多前提"
 
-    if rsi is not None and rsi > 75:
-        return False, f"1h RSI={rsi} 过高，更像追涨而非健康回调"
+    if rsi is not None and rsi > PULLBACK_RSI_MAX:
+        return False, (
+            f"1h RSI={rsi:.0f}>{PULLBACK_RSI_MAX}，强势末端浅调，应 skip 或归追涨策略"
+        )
+
+    b7h = _below_7d_high_pct(sym_data)
+    if b7h is not None and b7h > -2.0:
+        return False, (
+            f"距7d高点仅{-b7h:.1f}%（below_7d_high_pct={b7h:.1f}），"
+            "回调做多需更深回踩或更大上行空间"
+        )
 
     return True, ""
 
@@ -443,6 +499,16 @@ def _chase_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -> T
     if rsi is not None and rsi < 48:
         return False, f"1h RSI={rsi} 偏弱，不宜追涨"
 
+    if rsi is not None and rsi > CHASE_RSI_MAX:
+        return False, f"1h RSI={rsi:.0f}>{CHASE_RSI_MAX}，超买追涨禁止（延伸段易触发 SL）"
+
+    b7h = _below_7d_high_pct(sym_data)
+    if b7h is not None and b7h > -CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:
+        return False, (
+            f"距7d高点空间不足（below_7d_high_pct={b7h:.1f}，须≤"
+            f"-{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}），TP6% 不现实"
+        )
+
     if _has_any(narr, ("偏空", "下降", "连阴", "下杀")) and not _has_any(narr, ("偏多", "上升", "上攻")):
         return False, "kline 叙事偏空，不符合追涨"
 
@@ -494,9 +560,15 @@ PULLBACK_LONG = TacticalStrategyDef(
         "1. **大前提**：**近 24 根 1h** 整体处于**上涨趋势**（高点抬高/通道上行；见 kline_narrative 整体形态）。\n"
         "2. **近 4~6 根 1h**：出现**回落/回调**（多根阴线、回踩、短线下跌），而非仅凭 1 根阴线。\n"
         "3. **支撑有效**：回踩至支撑（EMA/前低/箱体下沿/下影线企稳）并有止跌迹象。\n"
-        "4. **方向**：仅 **做多**；禁止在单边下跌或无趋势时「跌多了抄底」。\n"
+        "4. **RSI**：1h RSI 须 **≤68**；宜写「从 XX 回落至 YY」，禁止在 RSI>68 时把浅调当健康回调。\n"
+        "5. **方向**：仅 **做多**；禁止在单边下跌或无趋势时「跌多了抄底」。\n"
         "典型 catalyst 示例：「1h 近24根上升通道；近5根连续阴线回踩 EMA20；"
         "15m 下影企稳；RSI 1h 从 58 回落至 48」。"
+    ),
+    contrast_block=(
+        "## 本策略边界（勿混淆）\n"
+        "✅ 只找：**上涨趋势里**的回踩做多。\n"
+        "❌ 不是：连阳末端追高（→**追涨做多**）、跌深反弹（→反转/探索）、顶部做空（→反弹做空）。"
     ),
     extra_catalyst_check=_pullback_extra,
 )
@@ -505,6 +577,11 @@ REBOUND_SHORT = TacticalStrategyDef(
     key="rebound",
     title_zh="反弹做空",
     fixed_side="SHORT",
+    contrast_block=(
+        "## 本策略边界（勿混淆）\n"
+        "✅ 只找：**下降通道里**的缩量反弹至阻力做空。\n"
+        "❌ 不是：顺势杀跌（→杀跌做空）、强势突破新高（应 skip）、底部抄底（→反转/探索）。"
+    ),
     prompt_body=(
         "## 策略定义（必须全部满足才 entry）\n"
         "1. **曾见顶**：此前出现相对**最高价/阶段顶**，之后进入**下降趋势**（1h/1d 结构转弱）。\n"
@@ -525,10 +602,17 @@ CHASE_LONG = TacticalStrategyDef(
     prompt_body=(
         "## 策略定义（必须全部满足才 entry）\n"
         "1. **持续上涨**：**近 24 根 1h** 趋势向上，**近 4~6 根** 仍延续上行、**无明显深度回调**。\n"
-        "2. **量能**：**不要求放量**；即使量能未放大、量能平平，只要趋势延续仍可 entry。\n"
-        "3. **禁止**：把「大幅回踩支撑」当追涨；那是回调做多。\n"
-        "4. **方向**：仅 **做多**；须有趋势延续证据（连阳、通道、高点抬升等）。\n"
-        "典型：「1h 近24根偏多；近6根连阳无像样回调；量能未放大；RSI 1h 62」。"
+        "2. **量能**：**不要求放量**；量能平平但结构未破仍可 entry。\n"
+        "3. **RSI**：1h RSI 须 **≤68**；>68 禁止 entry（超买延伸，4h 内易回撤打 SL）。\n"
+        "4. **空间**：`tech.below_7d_high_pct` 须 **≤-3**（距 7d 高点至少约 3% 上行空间）。\n"
+        "5. **禁止**：把「大幅回踩支撑」当追涨——那是**回调做多**。\n"
+        "6. **方向**：仅 **做多**；须有连阳/通道/高点抬升等延续证据。\n"
+        "典型：「1h 近24根偏多；近6根连阳无像样回调；below_7d_high=-8%；RSI 1h 62」。"
+    ),
+    contrast_block=(
+        "## 本策略边界（勿混淆）\n"
+        "✅ 只找：趋势延续中的**顺势追多**（尚未超买、距 7d 高有空间）。\n"
+        "❌ 不是：深回踩后做多（→回调做多）、涨多了摸顶空、仅因 24h 大涨而多。"
     ),
     extra_catalyst_check=_chase_extra,
 )
@@ -537,6 +621,11 @@ DUMP_SHORT = TacticalStrategyDef(
     key="dump",
     title_zh="杀跌做空",
     fixed_side="SHORT",
+    contrast_block=(
+        "## 本策略边界（勿混淆）\n"
+        "✅ 只找：**下跌趋势延续**中的顺势做空（反弹无力）。\n"
+        "❌ 不是：下降通道里的缩量反弹空（→反弹做空）、见底反转多。"
+    ),
     prompt_body=(
         "## 策略定义（必须全部满足才 entry）\n"
         "1. **下跌趋势**：**近 24 根 1h** 处于**下降通道**，趋势**未扭转**。\n"
