@@ -1,14 +1,15 @@
 <!DOCTYPE html>
-<html class="dark" lang="zh-CN">
-<head>
+<html class="dark" lang="zh-CN"><head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
   <title>GPT 探索 | Neural Obsidian</title>
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
   <style>
+    .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
     body { font-family: 'Manrope', sans-serif; background: #0a0f14; color: #ebeef5; }
-    h1,h2,h3 { font-family: 'Space Grotesk', sans-serif; }
+    h1,h2,h3,.headline { font-family: 'Space Grotesk', sans-serif; }
     .mono { font-family: 'JetBrains Mono', monospace; }
     .pp { color: #49f4c8; } .pn { color: #ff716c; }
     .card { background:#0f1419; border:1px solid #20262e; border-radius: 12px; }
@@ -18,7 +19,46 @@
   </style>
 </head>
 <body>
-<main class="max-w-[1400px] mx-auto px-6 py-6">
+<aside class="fixed left-0 top-0 h-screen w-[240px] bg-[#0a0f14] border-r border-slate-800 flex flex-col py-6 z-50">
+  <div class="px-5 mb-6">
+    <a href="/" class="block group">
+      <h1 class="text-xl font-black tracking-tighter text-[#49f4c8] group-hover:opacity-80 transition-opacity">NEURAL OBSIDIAN</h1>
+      <p class="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">Quant Terminal</p>
+    </a>
+  </div>
+  <nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto">
+    <a href="/dashboard" data-path="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
+    <a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>合约交易</span></a>
+    <a href="/gemini_explore" data-path="/gemini_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>Gemini 探索</span></a>
+    <a href="/deepseek_explore" data-path="/deepseek_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">psychology</span><span>DeepSeek 探索</span></a>
+    <a href="/gpt_explore" data-path="/gpt_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">smart_toy</span><span>GPT 探索</span></a>
+  </nav>
+  <script>
+  (function(){
+    var path = window.location.pathname.replace(/\/$/, '') || '/';
+    document.querySelectorAll('#sidebar-nav .nav-item').forEach(function(a){
+      if (a.getAttribute('data-path') === path) {
+        a.classList.remove('text-slate-400');
+        a.classList.add('text-[#49f4c8]','bg-[#151a20]','border-r-2','border-[#49f4c8]','font-semibold');
+      }
+    });
+  })();
+  </script>
+</aside>
+
+<main class="ml-[240px] min-h-screen">
+  <div class="border-b border-[#44484e]/30 px-8">
+    <div class="flex gap-0">
+      <button onclick="switchTab('explore')" id="tab-explore-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors"><span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">smart_toy</span>GPT 探索</button>
+      <button onclick="switchTab('reversal')" id="tab-reversal-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-[#ebeef5] transition-colors"><span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">swap_vert</span>顶空底多</button>
+      <button onclick="switchTab('pullback')" id="tab-pullback-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-[#ebeef5] transition-colors">回调做多</button>
+      <button onclick="switchTab('rebound')" id="tab-rebound-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-[#ebeef5] transition-colors">反弹做空</button>
+      <button onclick="switchTab('chase')" id="tab-chase-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-[#ebeef5] transition-colors">追涨做多</button>
+      <button onclick="switchTab('dump')" id="tab-dump-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-[#ebeef5] transition-colors">杀跌做空</button>
+    </div>
+  </div>
+
+  <div id="tab-explore" class="block px-6 py-6">
   <header class="flex items-center justify-between mb-6">
     <div>
       <h1 class="text-2xl font-bold">GPT 探索</h1>
@@ -81,6 +121,38 @@
       </table>
     </div>
   </section>
+</div>
+
+<div id="tab-reversal" class="hidden px-8 py-8">
+  <div class="card p-8">
+    <h2 class="headline text-2xl font-semibold mb-2">GPT 顶空底多</h2>
+    <p class="text-slate-400 text-sm">策略页已添加。后端数据接口将按 GPT 战术探索链路接入后展示实时数据。</p>
+  </div>
+</div>
+<div id="tab-pullback" class="hidden px-8 py-8">
+  <div class="card p-8">
+    <h2 class="headline text-2xl font-semibold mb-2">GPT 回调做多</h2>
+    <p class="text-slate-400 text-sm">策略页已添加。后端数据接口将按 GPT 战术探索链路接入后展示实时数据。</p>
+  </div>
+</div>
+<div id="tab-rebound" class="hidden px-8 py-8">
+  <div class="card p-8">
+    <h2 class="headline text-2xl font-semibold mb-2">GPT 反弹做空</h2>
+    <p class="text-slate-400 text-sm">策略页已添加。后端数据接口将按 GPT 战术探索链路接入后展示实时数据。</p>
+  </div>
+</div>
+<div id="tab-chase" class="hidden px-8 py-8">
+  <div class="card p-8">
+    <h2 class="headline text-2xl font-semibold mb-2">GPT 追涨做多</h2>
+    <p class="text-slate-400 text-sm">策略页已添加。后端数据接口将按 GPT 战术探索链路接入后展示实时数据。</p>
+  </div>
+</div>
+<div id="tab-dump" class="hidden px-8 py-8">
+  <div class="card p-8">
+    <h2 class="headline text-2xl font-semibold mb-2">GPT 杀跌做空</h2>
+    <p class="text-slate-400 text-sm">策略页已添加。后端数据接口将按 GPT 战术探索链路接入后展示实时数据。</p>
+  </div>
+</div>
 </main>
 
 <script>
@@ -140,6 +212,18 @@ function loadStats(){
   }).catch(()=>{});
 }
 function loadAll(){ loadStatus(); loadOpen(); loadRuns(); loadClosed(); loadStats(); }
+function switchTab(tab){
+  ['explore','reversal','pullback','rebound','chase','dump'].forEach(function(id){
+    var el=document.getElementById('tab-'+id);
+    if(el) el.classList.toggle('hidden', id!==tab);
+  });
+  var active='px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors';
+  var idle='px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-[#ebeef5] transition-colors';
+  ['explore','reversal','pullback','rebound','chase','dump'].forEach(function(id){
+    var btn=document.getElementById('tab-'+id+'-btn');
+    if(btn) btn.className = id===tab ? active : idle;
+  });
+}
 loadAll(); setInterval(loadOpen,3000); setInterval(loadStatus,30000); setInterval(loadStats,30000);
 </script>
 </body>
