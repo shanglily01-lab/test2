@@ -1363,7 +1363,7 @@ class UnifiedDataScheduler:
         except Exception:
             pass
         logger.info(
-            "  ✓ tactical_explore (10 jobs) - 每策略 4h 必跑 + 15min 轮询 (next_due DB, 重启不丢)"
+            "  ✓ tactical_explore (15 jobs) - 每策略 4h 必跑 + 15min 轮询 (next_due DB, 重启不丢)"
         )
 
         # DeepSeek 预测 - 每 4h 调一次 DeepSeek 预测 TOP50 方向
@@ -1393,6 +1393,20 @@ class UnifiedDataScheduler:
         schedule.every(4).hours.do(_run_gemini_predict)
         schedule.every(5).minutes.do(_run_gemini_predict)
         logger.info("  ✓ gemini_predict - 每 4h 周期 + 5 分钟到期轮询 (DB next_due 防重)")
+
+        # GPT 预测 - 每 4h 调一次 GPT 预测 TOP50 方向
+        def _run_gpt_predict():
+            def wrapper():
+                try:
+                    from app.services.gpt_predictor import run_predict_round
+                    run_predict_round(triggered_by='scheduler')
+                except Exception as e:
+                    logger.error(f"[GPT预测] 调度异常: {e}", exc_info=True)
+            threading.Thread(target=wrapper, daemon=True, name="GPTPredict").start()
+
+        schedule.every(4).hours.do(_run_gpt_predict)
+        schedule.every(5).minutes.do(_run_gpt_predict)
+        logger.info("  ✓ gpt_predict - 每 4h 周期 + 5 分钟到期轮询 (DB next_due 防重)")
 
         # Big4 综合行情 LLM 分析 — 每 2h (Gemini + DeepSeek)
         def _run_gemini_big4_analysis():
@@ -1594,6 +1608,7 @@ class UnifiedDataScheduler:
         _launch_ai_init_task("GPT探索",      "app.services.gpt_explore_worker",       "run_explore_round", 120)
         _launch_predict_catchup("Gemini预测", "app.services.gemini_predictor", "run_predict_round", 45)
         _launch_predict_catchup("DeepSeek预测", "app.services.deepseek_predictor", "run_predict_round", 50)
+        _launch_predict_catchup("GPT预测", "app.services.gpt_predictor", "run_predict_round", 55)
 
         def _launch_tactical_catchup():
             import time

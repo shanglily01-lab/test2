@@ -235,7 +235,8 @@ def run_explore_round(triggered_by: str = "scheduler") -> Optional[int]:
 
         from app.services.explore_prepared_bundle import get_explore_prepared_bundle
         universe, global_ctx, _ = get_explore_prepared_bundle(
-            conn, "GPT探索", allow_rebuild=triggered_by in ("manual", "scheduler_init", "test"),
+            # 快照偶发过期时，scheduler 也允许兜底现场构建，避免整轮被判空。
+            conn, "GPT探索", allow_rebuild=triggered_by in ("manual", "scheduler_init", "test", "scheduler"),
         )
         if not universe:
             return _insert_run(conn, asof_utc, 0, "", time.time() - t0, "skipped", "候选池为空", triggered_by)

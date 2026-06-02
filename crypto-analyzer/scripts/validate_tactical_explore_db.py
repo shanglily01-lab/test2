@@ -40,6 +40,11 @@ TACTICAL_SOURCES = [
     "deepseek_rebound",
     "deepseek_chase",
     "deepseek_dump",
+    "gpt_reversal",
+    "gpt_pullback",
+    "gpt_rebound",
+    "gpt_chase",
+    "gpt_dump",
 ]
 
 RUNS_TABLES = [
@@ -53,6 +58,11 @@ RUNS_TABLES = [
     "deepseek_rebound_explore_runs",
     "deepseek_chase_explore_runs",
     "deepseek_dump_explore_runs",
+    "gpt_reversal_explore_runs",
+    "gpt_pullback_explore_runs",
+    "gpt_rebound_explore_runs",
+    "gpt_chase_explore_runs",
+    "gpt_dump_explore_runs",
 ]
 
 VERDICTS_TABLES = [t.replace("_runs", "_verdicts") for t in RUNS_TABLES]

@@ -1051,13 +1051,18 @@ try:
     from app.api.reversal_explore_api import (
         deepseek_reversal_router,
         gemini_reversal_router,
+        gpt_reversal_router,
+        gpt_tactical_four_routers,
         tactical_four_routers,
     )
     app.include_router(gemini_reversal_router)
     app.include_router(deepseek_reversal_router)
+    app.include_router(gpt_reversal_router)
     for r in tactical_four_routers:
         app.include_router(r)
-    logger.info("[战术探索] API路由已注册 (顶空底多 + 四策略×2)")
+    for r in gpt_tactical_four_routers:
+        app.include_router(r)
+    logger.info("[战术探索] API路由已注册 (顶空底多 + 四策略×3)")
 except Exception as e:
     logger.warning(f"[顶空底多探索] API路由注册失败: {e}")
     import traceback
@@ -1080,6 +1085,16 @@ try:
     logger.info("[Gemini预测] API路由已注册")
 except Exception as e:
     logger.warning(f"[Gemini预测] API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
+# 注册 GPT 预测 API 路由
+try:
+    from app.api.gpt_predict_api import router as gpt_predict_router
+    app.include_router(gpt_predict_router)
+    logger.info("[GPT预测] API路由已注册")
+except Exception as e:
+    logger.warning(f"[GPT预测] API路由注册失败: {e}")
     import traceback
     traceback.print_exc()
 

@@ -389,6 +389,7 @@ create_reversal_explore_router = create_tactical_explore_router
 
 from app.services.gemini_reversal_explore_worker import run_gemini_reversal_explore_round
 from app.services.deepseek_reversal_explore_worker import run_deepseek_reversal_explore_round
+from app.services.gpt_reversal_explore_worker import run_gpt_reversal_explore_round
 from app.services.tactical_explore_workers import (
     run_deepseek_chase_explore_round,
     run_deepseek_dump_explore_round,
@@ -398,6 +399,10 @@ from app.services.tactical_explore_workers import (
     run_gemini_dump_explore_round,
     run_gemini_pullback_explore_round,
     run_gemini_rebound_explore_round,
+    run_gpt_chase_explore_round,
+    run_gpt_dump_explore_round,
+    run_gpt_pullback_explore_round,
+    run_gpt_rebound_explore_round,
 )
 
 gemini_reversal_router = create_tactical_explore_router(
@@ -428,6 +433,35 @@ _TACTICAL_API_SPECS = [
     ("deepseek", "chase", "追涨做多", run_deepseek_chase_explore_round),
     ("deepseek", "dump", "杀跌做空", run_deepseek_dump_explore_round),
 ]
+
+gpt_reversal_router = create_tactical_explore_router(
+    prefix="/api/gpt-reversal-explore",
+    tag="GPT顶空底多",
+    source="gpt_reversal",
+    runs_table="gpt_reversal_explore_runs",
+    verdicts_table="gpt_reversal_explore_verdicts",
+    run_round_fn=run_gpt_reversal_explore_round,
+)
+
+_GPT_TACTICAL_API_SPECS = [
+    ("gpt", "pullback", "回调做多", run_gpt_pullback_explore_round),
+    ("gpt", "rebound", "反弹做空", run_gpt_rebound_explore_round),
+    ("gpt", "chase", "追涨做多", run_gpt_chase_explore_round),
+    ("gpt", "dump", "杀跌做空", run_gpt_dump_explore_round),
+]
+
+gpt_tactical_four_routers = []
+for teacher, key, title, fn in _GPT_TACTICAL_API_SPECS:
+    gpt_tactical_four_routers.append(
+        create_tactical_explore_router(
+            prefix=f"/api/{teacher}-{key}-explore",
+            tag=f"GPT{title}",
+            source=f"{teacher}_{key}",
+            runs_table=f"{teacher}_{key}_explore_runs",
+            verdicts_table=f"{teacher}_{key}_explore_verdicts",
+            run_round_fn=fn,
+        )
+    )
 
 tactical_four_routers = []
 for teacher, key, title, fn in _TACTICAL_API_SPECS:

@@ -1,4 +1,4 @@
-"""战术探索 workers — 回调做多 / 反弹做空 / 追涨做多 / 杀跌做空 × Gemini/DeepSeek."""
+"""战术探索 workers — 回调做多 / 反弹做空 / 追涨做多 / 杀跌做空 × Gemini/DeepSeek/GPT."""
 from __future__ import annotations
 
 import os
@@ -17,6 +17,12 @@ from app.services.ai_tactical_explore_prompts import (
     tactical_category_to_side,
 )
 from app.services.gemini_swan_worker import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT_S
+from app.services.gpt_explore_worker import (
+    GPT_API_KEY,
+    GPT_BASE_URL,
+    GPT_MODEL,
+    GPT_TIMEOUT_S,
+)
 from app.services.reversal_explore_runner import (
     TacticalExploreConfig,
     run_tactical_explore_round,
@@ -29,10 +35,18 @@ DEEPSEEK_TIMEOUT_S = int(os.getenv("DEEPSEEK_TIMEOUT_S", "180"))
 
 
 def _make_cfg(teacher: str, strategy_key: str, defn: TacticalStrategyDef) -> TacticalExploreConfig:
-    prefix = "gemini" if teacher == "gemini" else "deepseek"
-    model = GEMINI_MODEL if teacher == "gemini" else DEEPSEEK_MODEL
+    prefix = teacher
+    if teacher == "gemini":
+        model = GEMINI_MODEL
+        label = "Gemini"
+    elif teacher == "gpt":
+        model = GPT_MODEL
+        label = "GPT"
+    else:
+        model = DEEPSEEK_MODEL
+        label = "DeepSeek"
     return TacticalExploreConfig(
-        log_tag=f"{'Gemini' if teacher == 'gemini' else 'DeepSeek'}{defn.title_zh}",
+        log_tag=f"{label}{defn.title_zh}",
         source=f"{prefix}_{strategy_key}",
         runs_table=f"{prefix}_{strategy_key}_explore_runs",
         verdicts_table=f"{prefix}_{strategy_key}_explore_verdicts",
@@ -116,10 +130,51 @@ def _call_deepseek(defn: TacticalStrategyDef, strategy_key: str):
     return _inner
 
 
+def _call_gpt(defn: TacticalStrategyDef, strategy_key: str):
+    def _inner(universe, global_ctx, historical_stats):
+        if not GPT_API_KEY:
+            return None, "OPENAI_API_KEY 未设置"
+        try:
+            from openai import OpenAI
+        except ImportError:
+            return None, "缺 openai"
+        prompt, meta = build_strategy_prompt(strategy_key, universe, global_ctx, historical_stats)
+        logger.info(
+            f"[GPT{defn.title_zh}] prompt {len(prompt)} chars, "
+            f"sym {meta['llm_symbol_count']}/{meta['universe_total']}"
+        )
+        client = OpenAI(api_key=GPT_API_KEY, base_url=GPT_BASE_URL)
+        t0 = time.time()
+        try:
+            resp = client.chat.completions.create(
+                model=GPT_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
+                timeout=GPT_TIMEOUT_S,
+            )
+        except Exception as e:
+            return None, f"API: {e}"
+        text = (resp.choices[0].message.content or "").strip()
+        logger.info(f"[GPT{defn.title_zh}] {time.time()-t0:.1f}s out={len(text)}")
+        parsed, err = parse_tactical_llm_json(text, f"GPT{defn.title_zh}", defn.fixed_side)
+        if parsed is None:
+            return None, f"JSON: {err}"
+        parsed["_prompt"] = prompt
+        parsed["_raw_response"] = text
+        return parsed, None
+    return _inner
+
+
 def _make_runner(teacher: str, strategy_key: str) -> Callable[[str], Optional[int]]:
     defn = TACTICAL_STRATEGIES[strategy_key]
     cfg = _make_cfg(teacher, strategy_key, defn)
-    call_llm = _call_gemini(defn, strategy_key) if teacher == "gemini" else _call_deepseek(defn, strategy_key)
+    if teacher == "gemini":
+        call_llm = _call_gemini(defn, strategy_key)
+    elif teacher == "gpt":
+        call_llm = _call_gpt(defn, strategy_key)
+    else:
+        call_llm = _call_deepseek(defn, strategy_key)
 
     def run(triggered_by: str = "scheduler") -> Optional[int]:
         return run_tactical_explore_round(
@@ -145,3 +200,9 @@ run_deepseek_pullback_explore_round = _make_runner("deepseek", "pullback")
 run_deepseek_rebound_explore_round = _make_runner("deepseek", "rebound")
 run_deepseek_chase_explore_round = _make_runner("deepseek", "chase")
 run_deepseek_dump_explore_round = _make_runner("deepseek", "dump")
+
+# GPT
+run_gpt_pullback_explore_round = _make_runner("gpt", "pullback")
+run_gpt_rebound_explore_round = _make_runner("gpt", "rebound")
+run_gpt_chase_explore_round = _make_runner("gpt", "chase")
+run_gpt_dump_explore_round = _make_runner("gpt", "dump")

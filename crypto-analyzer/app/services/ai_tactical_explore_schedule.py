@@ -1,4 +1,4 @@
-"""战术探索 (10 策略) — 统一 4h 调度防重 (保证每 4h 至少一轮, 重启不丢).
+"""战术探索 (Gemini/DeepSeek/GPT 各 5 策略) — 统一 4h 调度防重 (保证每 4h 至少一轮, 重启不丢).
 
 与 Gemini/DeepSeek 预测相同模式:
   - system_settings.{tactical_{source}_next_due_utc} 持久化下一窗口

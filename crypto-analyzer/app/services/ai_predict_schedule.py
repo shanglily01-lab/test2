@@ -16,6 +16,7 @@ PREDICT_SCHEDULE_POLL_MINUTES = 5
 
 GEMINI_PREDICT_NEXT_DUE_KEY = "gemini_predict_next_due_utc"
 DEEPSEEK_PREDICT_NEXT_DUE_KEY = "deepseek_predict_next_due_utc"
+GPT_PREDICT_NEXT_DUE_KEY = "gpt_predict_next_due_utc"
 
 
 def _parse_utc_naive(value: str) -> Optional[datetime]:

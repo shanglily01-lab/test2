@@ -431,6 +431,15 @@
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#49f4c8] text-xl shrink-0">smart_toy</span>
+<div><div class="text-sm font-medium text-slate-200">GPT 预测</div><p class="text-[11px] text-slate-500">每 4h 预测 TOP50 方向</p></div>
+</div>
+<div id="gptPredictToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
+</div>
+</div>
+<div class="cfg-row">
+<div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-[#49f4c8] text-xl shrink-0">smart_toy</span>
 <div><div class="text-sm font-medium text-slate-200">GPT 探索</div><p class="text-[11px] text-slate-500">每 4h 检测短时方向异动，模拟单持仓 4h</p></div>
 </div>
 <div id="gptExploreToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
@@ -833,6 +842,7 @@
                 setToggle('geminiPredictToggle', !!svc.gemini_predict_enabled);
                 setToggle('deepseekExploreToggle', !!svc.deepseek_explore_enabled);
                 setToggle('deepseekPredictToggle', !!svc.deepseek_predict_enabled);
+                setToggle('gptPredictToggle', !!svc.gpt_predict_enabled);
                 setToggle('gptExploreToggle', !!svc.gpt_explore_enabled);
                 setToggle('s9GeminiToggle',    !!svc.s9_gemini_ai_enabled);
                 setToggle('s1Toggle',   !!svc.s1_early_long_enabled);
@@ -1014,6 +1024,16 @@
             try {
                 await apiPut('/trading-services', { deepseek_predict_enabled: enabled });
                 showToast('DeepSeek 预测已' + (enabled ? '开启' : '关闭'), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
+        bindToggle('gptPredictToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { gpt_predict_enabled: enabled });
+                showToast('GPT 预测已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;

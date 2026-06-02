@@ -1,7 +1,7 @@
 """
 战术探索统一调度 — 每策略 4h 必跑 + 15min 轮询 + DB next_due (重启不丢).
 
-10 任务首次初始化 next_due 按 24min 错峰; 之后每轮认领 now+4h.
+15 任务首次初始化 next_due 按 24min 错峰; 之后每轮认领 now+4h.
 同一 poll 若多个任务 overdue, 先跑 next_due 最早的一个, 避免 LLM 并发风暴.
 """
 from __future__ import annotations
@@ -26,6 +26,7 @@ from app.services.ai_tactical_explore_schedule import (
 from app.services.deepseek_reversal_explore_worker import run_deepseek_reversal_explore_round
 from app.services.gemini_explore_worker import _connect
 from app.services.gemini_reversal_explore_worker import run_gemini_reversal_explore_round
+from app.services.gpt_reversal_explore_worker import run_gpt_reversal_explore_round
 from app.services.tactical_explore_workers import (
     run_deepseek_chase_explore_round,
     run_deepseek_dump_explore_round,
@@ -35,6 +36,10 @@ from app.services.tactical_explore_workers import (
     run_gemini_dump_explore_round,
     run_gemini_pullback_explore_round,
     run_gemini_rebound_explore_round,
+    run_gpt_chase_explore_round,
+    run_gpt_dump_explore_round,
+    run_gpt_pullback_explore_round,
+    run_gpt_rebound_explore_round,
 )
 
 
@@ -80,6 +85,16 @@ TACTICAL_SCHEDULE_JOBS: List[TacticalScheduleJob] = [
                         "deepseek_chase", "deepseek_chase_explore_runs"),
     TacticalScheduleJob("DeepSeek杀跌做空", run_deepseek_dump_explore_round, 9,
                         "deepseek_dump", "deepseek_dump_explore_runs"),
+    TacticalScheduleJob("GPT顶空底多", run_gpt_reversal_explore_round, 10,
+                        "gpt_reversal", "gpt_reversal_explore_runs"),
+    TacticalScheduleJob("GPT回调做多", run_gpt_pullback_explore_round, 11,
+                        "gpt_pullback", "gpt_pullback_explore_runs"),
+    TacticalScheduleJob("GPT反弹做空", run_gpt_rebound_explore_round, 12,
+                        "gpt_rebound", "gpt_rebound_explore_runs"),
+    TacticalScheduleJob("GPT追涨做多", run_gpt_chase_explore_round, 13,
+                        "gpt_chase", "gpt_chase_explore_runs"),
+    TacticalScheduleJob("GPT杀跌做空", run_gpt_dump_explore_round, 14,
+                        "gpt_dump", "gpt_dump_explore_runs"),
 ]
 
 

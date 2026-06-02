@@ -74,6 +74,7 @@
       <button onclick="switchTab('rebound')" id="tab-rebound-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-[#ebeef5] transition-colors">反弹做空</button>
       <button onclick="switchTab('chase')" id="tab-chase-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-[#ebeef5] transition-colors">追涨做多</button>
       <button onclick="switchTab('dump')" id="tab-dump-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-[#ebeef5] transition-colors">杀跌做空</button>
+      <button onclick="switchTab('predict')" id="tab-predict-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-[#ebeef5] transition-colors"><span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">trending_up</span>预测</button>
     </div>
   </div>
 
@@ -142,38 +143,67 @@
   </section>
 </div>
 
-<div id="tab-reversal" class="hidden px-8 py-8">
-  <div class="card p-8">
-    <h2 class="headline text-2xl font-semibold mb-2">GPT 顶空底多</h2>
-    <p class="text-slate-400 text-sm">策略页已添加。后端数据接口将按 GPT 战术探索链路接入后展示实时数据。</p>
-  </div>
-</div>
-<div id="tab-pullback" class="hidden px-8 py-8">
-  <div class="card p-8">
-    <h2 class="headline text-2xl font-semibold mb-2">GPT 回调做多</h2>
-    <p class="text-slate-400 text-sm">策略页已添加。后端数据接口将按 GPT 战术探索链路接入后展示实时数据。</p>
-  </div>
-</div>
-<div id="tab-rebound" class="hidden px-8 py-8">
-  <div class="card p-8">
-    <h2 class="headline text-2xl font-semibold mb-2">GPT 反弹做空</h2>
-    <p class="text-slate-400 text-sm">策略页已添加。后端数据接口将按 GPT 战术探索链路接入后展示实时数据。</p>
-  </div>
-</div>
-<div id="tab-chase" class="hidden px-8 py-8">
-  <div class="card p-8">
-    <h2 class="headline text-2xl font-semibold mb-2">GPT 追涨做多</h2>
-    <p class="text-slate-400 text-sm">策略页已添加。后端数据接口将按 GPT 战术探索链路接入后展示实时数据。</p>
-  </div>
-</div>
-<div id="tab-dump" class="hidden px-8 py-8">
-  <div class="card p-8">
-    <h2 class="headline text-2xl font-semibold mb-2">GPT 杀跌做空</h2>
-    <p class="text-slate-400 text-sm">策略页已添加。后端数据接口将按 GPT 战术探索链路接入后展示实时数据。</p>
-  </div>
+<div id="tab-reversal" class="hidden"></div>
+<div id="tab-pullback" class="hidden"></div>
+<div id="tab-rebound" class="hidden"></div>
+<div id="tab-chase" class="hidden"></div>
+<div id="tab-dump" class="hidden"></div>
+
+<div id="tab-predict" class="hidden px-6 py-6">
+  <header class="flex items-center justify-between mb-6">
+    <div>
+      <h1 class="text-2xl font-bold">GPT 预测</h1>
+      <p class="text-xs text-slate-400 mt-1">每 4h 对 TOP50 预测方向 · 模拟单 · SL 4% / TP 6% / 5x / 持仓 4h</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="p-status-chip" class="chip chip-off"><span id="p-status-label">已禁用</span></span>
+      <a href="/system-settings" class="text-[11px] text-slate-400 hover:text-[#49f4c8]">系统设置开关</a>
+      <button onclick="loadPredictAll()" class="px-3 py-1.5 rounded-lg bg-slate-800 text-xs hover:bg-slate-700">刷新</button>
+    </div>
+  </header>
+  <section class="grid grid-cols-5 gap-4 mb-5">
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">当前持仓</p><p id="p-stat-open" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">30天平仓</p><p id="p-stat-closed" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">上轮 symbols</p><p id="p-stat-symbols" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">上轮开仓</p><p id="p-stat-trades" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">上轮时间</p><p id="p-stat-lastrun" class="mono text-xs mt-2">--</p><p id="p-stat-laststatus" class="text-[10px] mt-1 text-slate-400">--</p></div>
+  </section>
+  <section class="grid grid-cols-5 gap-4 mb-6">
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">已实现盈亏</p><p id="p-stat-realized" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">当前浮盈</p><p id="p-stat-floating" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">总盈亏</p><p id="p-stat-total" class="mono text-2xl mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">胜率(30d)</p><p id="p-stat-winrate" class="mono text-2xl mt-1">--</p><p id="p-stat-wl" class="text-[10px] text-slate-400 mt-1">--</p></div>
+    <div class="card p-4"><p class="text-[10px] text-slate-400 uppercase">平仓数</p><p id="p-stat-closed2" class="mono text-2xl mt-1">--</p></div>
+  </section>
+  <section class="mb-6">
+    <h2 class="text-sm uppercase tracking-wider text-slate-400 mb-2">当前持仓 (OPEN)</h2>
+    <div class="card overflow-auto max-h-[360px]">
+      <table class="w-full text-xs"><thead class="sticky top-0 bg-[#0f1419]"><tr class="text-slate-400">
+        <th class="text-left p-3">Symbol</th><th class="text-left p-3">方向</th><th class="text-right p-3">开仓价</th><th class="text-right p-3">现价</th><th class="text-right p-3">浮盈</th><th class="text-left p-3">开仓时间</th><th class="text-left p-3">预测原因</th>
+      </tr></thead><tbody id="p-open-tbody"><tr><td class="p-4 text-slate-500" colspan="7">加载中...</td></tr></tbody></table>
+    </div>
+  </section>
+  <section class="mb-6">
+    <h2 class="text-sm uppercase tracking-wider text-slate-400 mb-2">最近 GPT 预测运行</h2>
+    <div class="card overflow-auto max-h-[400px]">
+      <table class="w-full text-xs"><thead class="sticky top-0 bg-[#0f1419]"><tr class="text-slate-400">
+        <th class="text-left p-3">#</th><th class="text-left p-3">时间</th><th class="text-right p-3">symbols</th><th class="text-right p-3">预测数</th><th class="text-right p-3">开仓</th><th class="text-right p-3">耗时</th><th class="text-left p-3">状态</th><th class="text-left p-3">来源</th><th class="text-left p-3">摘要</th>
+      </tr></thead><tbody id="p-runs-tbody"><tr><td class="p-4 text-slate-500" colspan="9">加载中...</td></tr></tbody></table>
+    </div>
+  </section>
+  <section>
+    <h2 class="text-sm uppercase tracking-wider text-slate-400 mb-2">历史平仓 (近30天)</h2>
+    <div class="card overflow-auto max-h-[360px]">
+      <table class="w-full text-xs"><thead class="sticky top-0 bg-[#0f1419]"><tr class="text-slate-400">
+        <th class="text-left p-3">Symbol</th><th class="text-left p-3">方向</th><th class="text-right p-3">开仓价</th><th class="text-right p-3">平仓价</th><th class="text-right p-3">已实现盈亏</th><th class="text-left p-3">开仓时间</th><th class="text-left p-3">平仓时间</th><th class="text-left p-3">原因</th>
+      </tr></thead><tbody id="p-closed-tbody"><tr><td class="p-4 text-slate-500" colspan="8">加载中...</td></tr></tbody></table>
+    </div>
+  </section>
 </div>
 </main>
 
+<script src="/static/js/explore_page_common.js"></script>
+<script src="/static/js/tactical_explore_ui.js"></script>
 <script>
 function fmt(v,d){ if(v===null||v===undefined||v==='') return '--'; var n=parseFloat(v); if(isNaN(n)) return '--'; return n.toFixed(d===undefined?2:d); }
 function signed(v,d){ var n=parseFloat(v||0); return (n>=0?'+':'')+n.toFixed(d===undefined?2:d); }
@@ -231,19 +261,140 @@ function loadStats(){
   }).catch(()=>{});
 }
 function loadAll(){ loadStatus(); loadOpen(); loadRuns(); loadClosed(); loadStats(); }
+
+var GPT_TACTICAL_CFGS = [
+  { tab: 'reversal', prefix: 'rev', api: '/api/gpt-reversal-explore', pageTitle: 'GPT 顶空底多', subtitle: '顶部做空 · 底部做多', sideHint: '双向反转' },
+  { tab: 'pullback', prefix: 'pb', api: '/api/gpt-pullback-explore', pageTitle: 'GPT 回调做多', subtitle: '上升趋势回踩支撑', sideHint: '仅 LONG' },
+  { tab: 'rebound', prefix: 'rb', api: '/api/gpt-rebound-explore', pageTitle: 'GPT 反弹做空', subtitle: '下降趋势反弹受阻', sideHint: '仅 SHORT' },
+  { tab: 'chase', prefix: 'ch', api: '/api/gpt-chase-explore', pageTitle: 'GPT 追涨做多', subtitle: '突破后趋势延续', sideHint: '仅 LONG' },
+  { tab: 'dump', prefix: 'dm', api: '/api/gpt-dump-explore', pageTitle: 'GPT 杀跌做空', subtitle: '跌破后趋势延续', sideHint: '仅 SHORT' }
+];
+var _tacTabIds = ['explore', 'reversal', 'pullback', 'rebound', 'chase', 'dump', 'predict'];
+var _tacBtnIds = ['tab-explore-btn', 'tab-reversal-btn', 'tab-pullback-btn', 'tab-rebound-btn', 'tab-chase-btn', 'tab-dump-btn', 'tab-predict-btn'];
+var _predictRealizedPnl = 0, _lastPredictFloating = 0;
+
 function switchTab(tab){
-  ['explore','reversal','pullback','rebound','chase','dump'].forEach(function(id){
-    var el=document.getElementById('tab-'+id);
-    if(el) el.classList.toggle('hidden', id!==tab);
+  _tacTabIds.forEach(function(id){
+    var el = document.getElementById('tab-' + id);
+    if (el) el.classList.toggle('hidden', id !== tab);
   });
-  var active='px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors';
-  var idle='px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-[#ebeef5] transition-colors';
-  ['explore','reversal','pullback','rebound','chase','dump'].forEach(function(id){
-    var btn=document.getElementById('tab-'+id+'-btn');
-    if(btn) btn.className = id===tab ? active : idle;
+  var active = 'px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors';
+  var idle = 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-[#ebeef5] transition-colors';
+  _tacBtnIds.forEach(function(btnId){
+    var btn = document.getElementById(btnId);
+    if (!btn) return;
+    var t = btnId.replace('tab-', '').replace('-btn', '');
+    btn.className = (t === tab) ? active : idle;
   });
+  if (tab === 'predict' && !window._predictLoaded) {
+    window._predictLoaded = true;
+    loadPredictAll();
+  }
+  var tac = GPT_TACTICAL_CFGS.find(function(c){ return c.tab === tab; });
+  if (tac && window.TacticalExploreUI) TacticalExploreUI.onTabShow(tac);
 }
-loadAll(); setInterval(loadOpen,3000); setInterval(loadStatus,30000); setInterval(loadStats,30000);
+
+function escapeHtml(s){ return esc(s); }
+function dirBadge(side){ if(side==='LONG') return '<span class="chip chip-on">LONG</span>'; if(side==='SHORT') return '<span class="chip" style="background:rgba(255,113,108,0.12);color:#ff716c">SHORT</span>'; return side; }
+function fmtSigned(v,d){ return signed(v,d); }
+function liveFloatingFromResponse(summary, rows){ if(summary&&summary.total_unrealized_pnl!==undefined) return summary.total_unrealized_pnl; var sum=0; (rows||[]).forEach(function(p){ sum+=(p.unrealized_pnl||0); }); return sum; }
+function applyFloatingCards(prefix, realized, floating){
+  var floatEl = document.getElementById(prefix + '-stat-floating');
+  var totalEl = document.getElementById(prefix + '-stat-total');
+  if (floatEl) floatEl.innerHTML = '<span class="' + pCls(floating) + '">' + fmtSigned(floating) + ' U</span>';
+  if (totalEl) { var tp = (realized||0)+floating; totalEl.innerHTML = '<span class="' + pCls(tp) + '">' + fmtSigned(tp) + ' U</span>'; }
+}
+function applyWinRateCard(prefix, s){
+  var el = document.getElementById(prefix + '-stat-winrate');
+  var wl = document.getElementById(prefix + '-stat-wl');
+  if (el) el.innerHTML = '<span class="' + ((s.win_rate||0)>=50?'pp':'pn') + '">' + fmt(s.win_rate,1) + '%</span>';
+  if (wl) wl.textContent = formatWl(s);
+}
+function closeReasonLabel(p){ return (p&&(p.close_reason_cn||p.notes))||'--'; }
+function aiLogBadge(r){ return (r&&r.has_prompt)?' 📄':''; }
+
+function loadPredictStatus(){
+  fetch('/api/gpt-predict/status').then(function(r){ return r.json(); }).then(function(d){
+    var s = d.data || {}, enabled = !!s.enabled;
+    var chip = document.getElementById('p-status-chip');
+    chip.className = 'chip ' + (enabled ? 'chip-on' : 'chip-off');
+    document.getElementById('p-status-label').textContent = enabled ? '已启用' : '已禁用';
+    document.getElementById('p-stat-open').textContent = s.open_positions ?? '--';
+    document.getElementById('p-stat-closed').textContent = s.closed_positions_30d ?? '--';
+    var lr = s.last_run || {};
+    document.getElementById('p-stat-symbols').textContent = lr.symbol_count ?? '--';
+    document.getElementById('p-stat-trades').textContent = lr.orders_opened ?? '--';
+    document.getElementById('p-stat-lastrun').textContent = lr.asof_utc ? shortUTC(lr.asof_utc) : '--';
+    document.getElementById('p-stat-laststatus').textContent = statusBadge(lr.status);
+  }).catch(function(){});
+}
+function loadPredictOpenPositions(){
+  fetch('/api/gpt-predict/positions/live').then(function(r){ return r.json(); }).then(function(d){
+    var rows = d.data || [], summary = d.summary || {}, tb = document.getElementById('p-open-tbody');
+    _lastPredictFloating = liveFloatingFromResponse(summary, rows);
+    applyFloatingCards('p', _predictRealizedPnl, _lastPredictFloating);
+    if (!rows.length) { tb.innerHTML = '<tr><td class="p-4 text-slate-500" colspan="7">暂无 OPEN 持仓</td></tr>'; return; }
+    tb.innerHTML = rows.map(function(p){
+      return '<tr class="border-t border-slate-800"><td class="p-3 mono">'+esc(p.symbol)+'</td><td class="p-3">'+dirBadge(p.position_side)+'</td><td class="p-3 text-right mono">'+fmt(p.entry_price,6)+'</td><td class="p-3 text-right mono">'+fmt(p.mark_price,6)+'</td><td class="p-3 text-right mono '+pCls(p.unrealized_pnl)+'">'+signed(p.unrealized_pnl)+'</td><td class="p-3 mono">'+shortUTC(p.open_time)+'</td><td class="p-3 truncate max-w-[420px]">'+esc(p.entry_reason)+'</td></tr>';
+    }).join('');
+  }).catch(function(){});
+}
+function loadPredictClosedPositions(){
+  fetch('/api/gpt-predict/positions?status=closed&limit=200').then(function(r){ return r.json(); }).then(function(d){
+    var rows = d.data || [], tb = document.getElementById('p-closed-tbody');
+    if (!rows.length) { tb.innerHTML = '<tr><td class="p-4 text-slate-500" colspan="8">近30天无平仓</td></tr>'; return; }
+    tb.innerHTML = rows.map(function(p){
+      return '<tr class="border-t border-slate-800"><td class="p-3 mono">'+esc(p.symbol)+'</td><td class="p-3">'+dirBadge(p.position_side)+'</td><td class="p-3 text-right mono">'+fmt(p.entry_price,6)+'</td><td class="p-3 text-right mono">'+fmt(p.mark_price,6)+'</td><td class="p-3 text-right mono '+pCls(p.realized_pnl)+'">'+signed(p.realized_pnl)+'</td><td class="p-3 mono">'+shortUTC(p.open_time)+'</td><td class="p-3 mono">'+shortUTC(p.close_time)+'</td><td class="p-3">'+esc(closeReasonLabel(p))+'</td></tr>';
+    }).join('');
+  }).catch(function(){});
+}
+function loadPredictStats(){
+  fetch('/api/gpt-predict/stats?days=30').then(function(r){ return r.json(); }).then(function(d){
+    if (!d.success) return;
+    var s = d.data || {};
+    _predictRealizedPnl = s.total_realized_pnl || 0;
+    document.getElementById('p-stat-realized').innerHTML = '<span class="'+pCls(s.total_realized_pnl)+'">'+signed(s.total_realized_pnl)+' U</span>';
+    applyFloatingCards('p', _predictRealizedPnl, _lastPredictFloating);
+    applyWinRateCard('p', s);
+    document.getElementById('p-stat-closed2').textContent = s.total_trades || 0;
+  }).catch(function(){});
+}
+var _pVerdictsCache = {};
+function loadPredictRuns(){
+  fetch('/api/gpt-predict/runs?limit=20').then(function(r){ return r.json(); }).then(function(d){
+    var rows = d.data || [], tb = document.getElementById('p-runs-tbody');
+    if (!rows.length) { tb.innerHTML = '<tr><td class="p-4 text-slate-500" colspan="9">暂无运行记录</td></tr>'; return; }
+    tb.innerHTML = rows.map(function(r){
+      return '<tr class="border-t border-slate-800 cursor-pointer" onclick="togglePredictVerdicts('+r.id+')"><td class="p-3 mono">'+r.id+aiLogBadge(r)+'</td><td class="p-3 mono">'+shortUTC(r.asof_utc)+'</td><td class="p-3 text-right mono">'+(r.symbol_count||0)+'</td><td class="p-3 text-right mono">'+(r.predictions_made||0)+'</td><td class="p-3 text-right mono">'+(r.orders_opened||0)+'</td><td class="p-3 text-right mono">'+fmt(r.elapsed_s,1)+'s</td><td class="p-3">'+statusBadge(r.status)+'</td><td class="p-3">'+esc(r.triggered_by)+'</td><td class="p-3 truncate max-w-[480px]">'+esc(r.summary_short||(r.error_msg||''))+'</td></tr>'+
+        '<tr id="p-verdict-row-'+r.id+'" class="hidden"><td colspan="9" class="p-4" id="p-verdict-cell-'+r.id+'"></td></tr>';
+    }).join('');
+  }).catch(function(){});
+}
+function togglePredictVerdicts(runId){
+  var row = document.getElementById('p-verdict-row-' + runId);
+  if (!row) return;
+  if (!row.classList.contains('hidden')) { row.classList.add('hidden'); return; }
+  var cell = document.getElementById('p-verdict-cell-' + runId);
+  if (_pVerdictsCache[runId]) { cell.innerHTML = _pVerdictsCache[runId]; row.classList.remove('hidden'); return; }
+  cell.innerHTML = '<p class="text-slate-500 text-xs">加载中...</p>'; row.classList.remove('hidden');
+  fetch('/api/gpt-predict/verdicts?run_id=' + runId).then(function(r){ return r.json(); }).then(function(d){
+    var vs = d.data || [];
+    if (typeof buildVerdictsTable === 'function' && typeof buildRunDetailShell === 'function') {
+      var html = buildRunDetailShell(runId, 'p-', '/api/gpt-predict', buildVerdictsTable(vs, true));
+      _pVerdictsCache[runId] = html; cell.innerHTML = html;
+    } else { cell.innerHTML = '<p class="text-slate-500 text-xs">'+vs.length+' 条 verdict</p>'; }
+  }).catch(function(e){ cell.innerHTML = '<p class="text-slate-500">'+e+'</p>'; });
+}
+function loadPredictAll(){ loadPredictStatus(); loadPredictOpenPositions(); loadPredictRuns(); loadPredictClosedPositions(); loadPredictStats(); }
+
+loadAll();
+if (window.TacticalExploreUI) TacticalExploreUI.init(GPT_TACTICAL_CFGS);
+setInterval(loadOpen, 3000);
+setInterval(loadStatus, 30000);
+setInterval(loadStats, 30000);
+setInterval(function(){ if (!document.getElementById('tab-predict').classList.contains('hidden')) loadPredictOpenPositions(); }, 3000);
+setInterval(function(){ if (!document.getElementById('tab-predict').classList.contains('hidden')) { loadPredictStatus(); loadPredictStats(); loadPredictRuns(); } }, 30000);
+(function(){ var tab = new URLSearchParams(window.location.search).get('tab'); if (tab) switchTab(tab); })();
 </script>
 </body>
 </html>
