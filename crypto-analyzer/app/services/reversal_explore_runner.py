@@ -46,6 +46,12 @@ from app.services.ai_explore_prompt import normalize_explore_llm_payload
 # 各 teacher 独立锁
 _locks: Dict[str, threading.Lock] = {}
 
+_SKIP_CATEGORIES = frozenset({"skip", "none", "hold", "wait", "neutral", "跳过"})
+
+
+def _is_llm_skip_category(category: str) -> bool:
+    return (category or "skip").lower().strip() in _SKIP_CATEGORIES
+
 
 def _get_lock(key: str) -> threading.Lock:
     if key not in _locks:
@@ -127,28 +133,28 @@ def _open_simulated_position(
     side: str,
     price: float,
     catalyst: str,
-) -> Optional[int]:
+) -> Tuple[Optional[int], str]:
     from app.services.trading_gates import is_symbol_blocked_level3
 
     if is_symbol_blocked_level3(symbol):
         logger.warning(f"[{cfg.log_tag}] {symbol} 黑名单3级, 禁止开仓")
-        return None
+        return None, "黑名单3级"
 
     from app.services.paper_open_gate import gate_simulated_open
-    allowed, _gate_reason = gate_simulated_open(
+    allowed, gate_reason = gate_simulated_open(
         symbol, side, price, cfg.source, catalyst,
         leverage=EXPLORE_LEVERAGE,
         sl_pct=cfg.sl_pct, tp_pct=cfg.tp_pct,
         hold_hours=cfg.hold_hours, conn=conn,
     )
     if not allowed:
-        return None
+        return None, (gate_reason or "开仓顾问拒绝")[:255]
 
     try:
         notional = EXPLORE_MARGIN_USD * EXPLORE_LEVERAGE
         qty = round(notional / price, 6)
         if qty <= 0:
-            return None
+            return None, "数量计算为0"
 
         if side == "LONG":
             sl_price = round(price * (1 - cfg.sl_pct / 100), 8)
@@ -207,10 +213,10 @@ def _open_simulated_position(
             f"[{cfg.log_tag}] 开仓 {symbol} {side} id={pid} "
             f"(模拟, 不同步实盘)"
         )
-        return pid
+        return pid, ""
     except Exception as e:
         logger.error(f"[{cfg.log_tag}] 开仓失败 {symbol}: {e}")
-        return None
+        return None, str(e)[:255]
 
 
 def _insert_run(
@@ -469,18 +475,40 @@ def run_tactical_explore_round(
 
             side = category_to_side(category, confidence)
             if not side:
+                if not _is_llm_skip_category(category):
+                    verdict_rows.append((
+                        run_id, symbol, category[:20], confidence,
+                        catalyst, data_signal, risk_note,
+                        "skipped_confidence", None,
+                        f"category={category},conf={confidence:.2f}",
+                    ))
                 continue
 
             tech_ok, tech_reason = catalyst_ok(
                 category, catalyst, data_signal, universe.get(symbol), confidence,
             )
             if not tech_ok:
-                logger.debug(f"[{cfg.log_tag}] {symbol} 跳过 catalyst: {tech_reason}")
+                logger.info(f"[{cfg.log_tag}] {symbol} 跳过 catalyst: {tech_reason}")
+                verdict_rows.append((
+                    run_id, symbol, category[:20], confidence,
+                    catalyst, data_signal, risk_note,
+                    "skipped_weak_catalyst", None, (tech_reason or "")[:255],
+                ))
                 continue
 
             if side == "LONG" and not allow_long:
+                verdict_rows.append((
+                    run_id, symbol, category[:20], confidence,
+                    catalyst, data_signal, risk_note,
+                    "skipped_direction_lock", None, "系统禁止做多",
+                ))
                 continue
             if side == "SHORT" and not allow_short:
+                verdict_rows.append((
+                    run_id, symbol, category[:20], confidence,
+                    catalyst, data_signal, risk_note,
+                    "skipped_direction_lock", None, "系统禁止做空",
+                ))
                 continue
 
             if _big4_blocks(big4, side):
@@ -488,15 +516,30 @@ def run_tactical_explore_round(
                 risk_note = (risk_note + " | " + warn) if risk_note else warn
 
             if _has_open_position(conn, cfg.source, symbol):
+                verdict_rows.append((
+                    run_id, symbol, category[:20], confidence,
+                    catalyst, data_signal, risk_note,
+                    "skipped_dedup", None, "已有OPEN仓位",
+                ))
                 continue
 
             from app.services.trading_gates import is_symbol_blocked_level3
 
             if is_symbol_blocked_level3(symbol):
+                verdict_rows.append((
+                    run_id, symbol, category[:20], confidence,
+                    catalyst, data_signal, risk_note,
+                    "skipped_other", None, "黑名单3级",
+                ))
                 continue
 
             price = _get_open_price(conn, symbol, universe.get(symbol))
             if price is None or price <= 0:
+                verdict_rows.append((
+                    run_id, symbol, category[:20], confidence,
+                    catalyst, data_signal, risk_note,
+                    "skipped_other", None, "无有效开仓价",
+                ))
                 continue
 
             if side == "LONG":
@@ -505,12 +548,22 @@ def run_tactical_explore_round(
                 tp_check = round(price * (1 - cfg.tp_pct / 100), 8)
             instant, ref_px = _would_instant_tp(conn, symbol, side, tp_check)
             if instant:
+                verdict_rows.append((
+                    run_id, symbol, category[:20], confidence,
+                    catalyst, data_signal, risk_note,
+                    "skipped_other", None, f"市价{ref_px:.6g}已越过TP",
+                ))
                 continue
 
-            position_id = _open_simulated_position(
+            position_id, open_fail = _open_simulated_position(
                 conn, cfg, symbol, side, price, catalyst,
             )
             if position_id is None:
+                verdict_rows.append((
+                    run_id, symbol, category[:20], confidence,
+                    catalyst, data_signal, risk_note,
+                    "skipped_other", None, open_fail or "开仓失败",
+                ))
                 continue
 
             trades_opened += 1

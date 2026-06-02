@@ -1,7 +1,6 @@
 """GPT 探索 worker (与 Gemini/DeepSeek 主探索一致的执行链路)."""
 from __future__ import annotations
 
-import os
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -11,6 +10,12 @@ import pymysql
 import pymysql.cursors
 from loguru import logger
 
+from app.services.gpt_config import (
+    GPT_API_KEY,
+    GPT_BASE_URL,
+    GPT_MODEL,
+    GPT_TIMEOUT_S,
+)
 from app.services.ai_big4_prompt import big4_conflict_risk_note
 from app.services.ai_explore_prompt import (
     AI_POSITION_HOLD_HOURS,
@@ -24,21 +29,6 @@ from app.services.ai_explore_prompt import (
 )
 from app.services.gemini_explore_worker import _get_current_price, _would_instant_tp
 from app.services.gemini_swan_worker import _read_setting
-
-GPT_API_KEY = os.getenv("OPENAI_API_KEY", "")
-GPT_MODEL = os.getenv("GPT_MODEL") or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-GPT_TIMEOUT_S = int(os.getenv("GPT_TIMEOUT_S") or os.getenv("OPENAI_TIMEOUT_S", "180"))
-
-
-def _normalize_openai_base_url(raw: str) -> str:
-    base = (raw or "").strip().rstrip("/")
-    if not base:
-        return "https://api.openai.com/v1"
-    # OpenAI Python SDK expects /v1 style API base.
-    return base if base.endswith("/v1") else f"{base}/v1"
-
-
-GPT_BASE_URL = _normalize_openai_base_url(os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"))
 
 GPT_SOURCE = "gpt_explore"
 EXPLORE_MARGIN_USD = 500.0
@@ -170,20 +160,22 @@ def _insert_verdicts(conn, verdict_rows: List[Tuple]) -> None:
         )
 
 
-def _open_simulated_position(conn, symbol: str, side: str, price: float, catalyst: str) -> Optional[int]:
+def _open_simulated_position(
+    conn, symbol: str, side: str, price: float, catalyst: str,
+) -> Tuple[Optional[int], str]:
     from app.services.paper_open_gate import gate_simulated_open
-    allowed, _ = gate_simulated_open(
+    allowed, gate_reason = gate_simulated_open(
         symbol, side, price, GPT_SOURCE, catalyst,
         leverage=EXPLORE_LEVERAGE, sl_pct=EXPLORE_SL_PCT, tp_pct=EXPLORE_TP_PCT,
         hold_hours=EXPLORE_HOLD_HOURS, conn=conn,
     )
     if not allowed:
-        return None
+        return None, (gate_reason or "开仓顾问拒绝")[:255]
 
     notional = EXPLORE_MARGIN_USD * EXPLORE_LEVERAGE
     qty = round(notional / price, 6)
     if qty <= 0:
-        return None
+        return None, "数量计算为0"
     if side == "LONG":
         sl_price = round(price * (1 - EXPLORE_SL_PCT / 100), 8)
         tp_price = round(price * (1 + EXPLORE_TP_PCT / 100), 8)
@@ -208,7 +200,7 @@ def _open_simulated_position(conn, symbol: str, side: str, price: float, catalys
                 GPT_SOURCE, "gpt_explore", (catalyst or "gpt_explore")[:180], datetime.now(),
             ),
         )
-        return cur.lastrowid
+        return cur.lastrowid, ""
 
 
 def run_explore_round(triggered_by: str = "scheduler") -> Optional[int]:
@@ -294,9 +286,12 @@ def run_explore_round(triggered_by: str = "scheduler") -> Optional[int]:
             if instant:
                 verdict_rows.append((run_id, symbol, category, confidence, catalyst, data_signal, risk_note, "skipped_other", None, f"市价{ref_px:.6g}已越过TP"))
                 continue
-            position_id = _open_simulated_position(conn, symbol, side, price, catalyst)
+            position_id, open_fail = _open_simulated_position(conn, symbol, side, price, catalyst)
             if not position_id:
-                verdict_rows.append((run_id, symbol, category, confidence, catalyst, data_signal, risk_note, "skipped_other", None, "开仓失败"))
+                verdict_rows.append((
+                    run_id, symbol, category, confidence, catalyst, data_signal, risk_note,
+                    "skipped_other", None, open_fail or "开仓失败",
+                ))
                 continue
             trades_opened += 1
             verdict_rows.append((run_id, symbol, category, confidence, catalyst, data_signal, risk_note, "opened", position_id, None))

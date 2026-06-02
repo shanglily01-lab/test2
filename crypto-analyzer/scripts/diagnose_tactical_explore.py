@@ -24,6 +24,11 @@ TACTICAL = [
     ("deepseek_dump", "deepseek_dump_explore_runs", "deepseek_dump_explore_verdicts"),
     ("gemini_reversal", "gemini_reversal_explore_runs", "gemini_reversal_explore_verdicts"),
     ("deepseek_reversal", "deepseek_reversal_explore_runs", "deepseek_reversal_explore_verdicts"),
+    ("gpt_pullback", "gpt_pullback_explore_runs", "gpt_pullback_explore_verdicts"),
+    ("gpt_rebound", "gpt_rebound_explore_runs", "gpt_rebound_explore_verdicts"),
+    ("gpt_chase", "gpt_chase_explore_runs", "gpt_chase_explore_verdicts"),
+    ("gpt_dump", "gpt_dump_explore_runs", "gpt_dump_explore_verdicts"),
+    ("gpt_reversal", "gpt_reversal_explore_runs", "gpt_reversal_explore_verdicts"),
 ]
 
 
