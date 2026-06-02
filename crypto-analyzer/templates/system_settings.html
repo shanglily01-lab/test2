@@ -457,24 +457,6 @@
 </div>
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#ff9500] text-xl shrink-0">smart_toy</span>
-<div><div class="text-sm font-medium text-slate-200">GPT 持仓顾问</div><p class="text-[11px] text-slate-500">仅 gpt_* 模拟仓 ≥30min 每 15min hold/observe/sell</p></div>
-</div>
-<div id="gptAdvisorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#7c4dff] text-xl shrink-0">fact_check</span>
-<div><div class="text-sm font-medium text-slate-200">GPT 开仓顾问</div><p class="text-[11px] text-slate-500">仅 gpt_* 模拟开仓前审核，reject 则不开仓</p></div>
-</div>
-<div id="gptOpenAdvisorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#49f4c8] text-xl shrink-0">filter_alt</span>
 <div><div class="text-sm font-medium text-slate-200">Big4 趋势过滤</div><p class="text-[11px] text-slate-500">主策略等</p></div>
 </div>
@@ -858,8 +840,6 @@
                 setToggle('s6Toggle',   !!svc.s6_vol_spike_enabled);
                 setToggle('geminiAdvisorToggle', svc.position_advisor_enabled !== false);
                 setToggle('geminiOpenAdvisorToggle', svc.open_advisor_enabled !== false);
-                setToggle('gptAdvisorToggle', svc.gpt_position_advisor_enabled !== false);
-                setToggle('gptOpenAdvisorToggle', svc.gpt_open_advisor_enabled !== false);
                 setToggle('smartExitToggle', !!svc.smart_exit_enabled);
                 setToggle('blacklistL3Toggle', svc.blacklist_level3_enabled !== false);
                 setToggle('liveTop50Toggle', svc.live_top50_required !== false);
@@ -1112,26 +1092,6 @@
             }
         });
 
-        bindToggle('gptAdvisorToggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { gpt_position_advisor_enabled: enabled });
-                showToast('GPT 持仓顾问已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
-        bindToggle('gptOpenAdvisorToggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { gpt_open_advisor_enabled: enabled });
-                showToast('GPT 开仓顾问已' + (enabled ? '启用' : '禁用'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
         // 智能平仓
         bindToggle('smartExitToggle', async function (enabled) {
             try {
@@ -1267,8 +1227,6 @@
                             btc_momentum_enabled: getToggle('btcMomentumToggle'),
                             predictor_enabled: getToggle('predictorToggle'),
                             gpt_explore_enabled: getToggle('gptExploreToggle'),
-                            gpt_position_advisor_enabled: getToggle('gptAdvisorToggle'),
-                            gpt_open_advisor_enabled: getToggle('gptOpenAdvisorToggle'),
                             signal_confirmation_enabled: document.getElementById('signalConfirmCheckbox')?.checked ?? false,
                             smart_exit_enabled: getToggle('smartExitToggle'),
                             blacklist_level3_enabled: getToggle('blacklistL3Toggle'),

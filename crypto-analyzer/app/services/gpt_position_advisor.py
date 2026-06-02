@@ -26,13 +26,23 @@ from app.services.open_advisor_strategy_rubrics import (
 )
 
 GPT_API_KEY = os.getenv("OPENAI_API_KEY", "")
-GPT_MODEL = os.getenv("GPT_MODEL", "gpt-4o-mini")
-GPT_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-GPT_TIMEOUT_S = int(os.getenv("GPT_TIMEOUT_S", "180"))
+GPT_MODEL = os.getenv("GPT_MODEL") or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+GPT_TIMEOUT_S = int(os.getenv("GPT_TIMEOUT_S") or os.getenv("OPENAI_TIMEOUT_S", "180"))
 GPT_PER_CALL_DELAY_S = 1.0
 GPT_HOLD_ADVISOR_TAG = "gpt_advisor"
 
 _gpt_advisor_singleton: Optional["GPTPositionAdvisor"] = None
+
+
+def _normalize_openai_base_url(raw: str) -> str:
+    base = (raw or "").strip().rstrip("/")
+    if not base:
+        return "https://api.openai.com/v1"
+    # OpenAI Python SDK expects /v1 style API base.
+    return base if base.endswith("/v1") else f"{base}/v1"
+
+
+GPT_BASE_URL = _normalize_openai_base_url(os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"))
 
 
 def get_gpt_open_advisor() -> "GPTPositionAdvisor":

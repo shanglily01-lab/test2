@@ -26,9 +26,19 @@ from app.services.gemini_explore_worker import _get_current_price, _would_instan
 from app.services.gemini_swan_worker import _read_setting
 
 GPT_API_KEY = os.getenv("OPENAI_API_KEY", "")
-GPT_MODEL = os.getenv("GPT_MODEL", "gpt-4o-mini")
-GPT_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
-GPT_TIMEOUT_S = int(os.getenv("GPT_TIMEOUT_S", "180"))
+GPT_MODEL = os.getenv("GPT_MODEL") or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+GPT_TIMEOUT_S = int(os.getenv("GPT_TIMEOUT_S") or os.getenv("OPENAI_TIMEOUT_S", "180"))
+
+
+def _normalize_openai_base_url(raw: str) -> str:
+    base = (raw or "").strip().rstrip("/")
+    if not base:
+        return "https://api.openai.com/v1"
+    # OpenAI Python SDK expects /v1 style API base.
+    return base if base.endswith("/v1") else f"{base}/v1"
+
+
+GPT_BASE_URL = _normalize_openai_base_url(os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"))
 
 GPT_SOURCE = "gpt_explore"
 EXPLORE_MARGIN_USD = 500.0

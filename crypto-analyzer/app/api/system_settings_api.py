@@ -33,8 +33,10 @@ def _upsert_bool_setting(cursor, key: str, enabled: bool, description: str) -> N
 def _set_open_advisor_pair(cursor, enabled: bool) -> None:
     desc_gemini = 'Gemini 模拟开仓顾问 (1=开仓前审核, reject 不开仓)'
     desc_deepseek = 'DeepSeek 模拟开仓顾问: 1=开仓前审核, 不通过则不开仓'
+    desc_gpt = 'GPT 模拟开仓顾问: 1=开仓前审核, 不通过则不开仓'
     _upsert_bool_setting(cursor, 'gemini_open_advisor_enabled', enabled, desc_gemini)
     _upsert_bool_setting(cursor, 'deepseek_open_advisor_enabled', enabled, desc_deepseek)
+    _upsert_bool_setting(cursor, 'gpt_open_advisor_enabled', enabled, desc_gpt)
 
 
 def _set_position_advisor_pair(cursor, enabled: bool) -> None:
@@ -44,8 +46,12 @@ def _set_position_advisor_pair(cursor, enabled: bool) -> None:
     desc_deepseek = (
         'DeepSeek 模拟持仓顾问: deepseek_* 仓 ≥30min 每15min hold/observe/sell'
     )
+    desc_gpt = (
+        'GPT 模拟持仓顾问: gpt_* 仓 ≥30min 每15min hold/observe/sell'
+    )
     _upsert_bool_setting(cursor, 'gemini_position_advisor_enabled', enabled, desc_gemini)
     _upsert_bool_setting(cursor, 'deepseek_position_advisor_enabled', enabled, desc_deepseek)
+    _upsert_bool_setting(cursor, 'gpt_position_advisor_enabled', enabled, desc_gpt)
 
 
 class SystemSetting(BaseModel):
@@ -92,8 +98,8 @@ class TradingServicesUpdate(BaseModel):
     gemini_open_advisor_enabled: Optional[bool] = None      # 兼容；同步 DeepSeek
     gpt_position_advisor_enabled: Optional[bool] = None
     gpt_open_advisor_enabled: Optional[bool] = None
-    open_advisor_enabled: Optional[bool] = None             # Gemini+DeepSeek 开仓顾问
-    position_advisor_enabled: Optional[bool] = None         # Gemini+DeepSeek 持仓顾问
+    open_advisor_enabled: Optional[bool] = None             # 统一开仓顾问开关 (Gemini+DeepSeek+GPT)
+    position_advisor_enabled: Optional[bool] = None         # 统一持仓顾问开关 (Gemini+DeepSeek+GPT)
     smart_exit_enabled: Optional[bool] = None              # 智能平仓 (趋势反转/移动止盈/最优价等)
     blacklist_level3_enabled: Optional[bool] = None      # 黑名单3级禁止开仓
     live_top50_required: Optional[bool] = None           # TOP50 内可开实仓
@@ -522,10 +528,12 @@ async def get_trading_services():
         result['open_advisor_enabled'] = (
             result['gemini_open_advisor_enabled']
             and result['deepseek_open_advisor_enabled']
+            and result['gpt_open_advisor_enabled']
         )
         result['position_advisor_enabled'] = (
             result['gemini_position_advisor_enabled']
             and result['deepseek_position_advisor_enabled']
+            and result['gpt_position_advisor_enabled']
         )
 
         return {
