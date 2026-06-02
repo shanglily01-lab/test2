@@ -344,6 +344,70 @@ def _try_parse_json(raw: str) -> Tuple[Optional[Any], Optional[str]]:
     return None, last_err
 
 
+def _repair_truncated_json(raw: str) -> str:
+    """截断/未闭合字符串时补引号并平衡 [] {}."""
+    s = raw.rstrip()
+    if not s:
+        return s
+    in_string = False
+    escape = False
+    stack: List[str] = []
+    for ch in s:
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_string:
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if not in_string:
+            if ch == "{":
+                stack.append("}")
+            elif ch == "[":
+                stack.append("]")
+            elif ch in "}]" and stack and stack[-1] == ch:
+                stack.pop()
+    if in_string:
+        s += '"'
+    while stack:
+        s += stack.pop()
+    return s
+
+
+def _salvage_loose_verdicts(text: str) -> Optional[dict]:
+    """JSON 严重损坏时仍尝试提取 symbol/category/confidence（catalyst 可能缺失）."""
+    summary_m = re.search(r'"summary_zh"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+    summary_zh = summary_m.group(1) if summary_m else ""
+    verdicts: List[dict] = []
+    loose = re.compile(
+        r'"symbol"\s*:\s*"([^"]+)"\s*,\s*"category"\s*:\s*"([^"]+)"\s*,\s*"confidence"\s*:\s*([\d.]+)',
+        re.IGNORECASE,
+    )
+    seen: set = set()
+    for m in loose.finditer(text):
+        sym = m.group(1).upper().replace("/", "")
+        if sym in seen:
+            continue
+        seen.add(sym)
+        try:
+            conf = float(m.group(3))
+        except (TypeError, ValueError):
+            conf = 0.0
+        verdicts.append({
+            "symbol": sym,
+            "category": m.group(2),
+            "confidence": conf,
+            "catalyst": "",
+            "data_signal": "",
+            "risk_note": "",
+        })
+    if not verdicts:
+        return None
+    return {"summary_zh": summary_zh, "verdicts": verdicts}
+
+
 def parse_explore_llm_json(text: str, tag: str = "Explore") -> Tuple[Optional[dict], Optional[str]]:
     """解析 LLM JSON; 截断时尝试抢救已完整的 verdict 对象."""
     raw = _extract_llm_json_text(text)
@@ -352,13 +416,35 @@ def parse_explore_llm_json(text: str, tag: str = "Explore") -> Tuple[Optional[di
     parsed, parse_err = _try_parse_json(raw)
     if parsed is None:
         err = parse_err
-        parsed = _salvage_truncated_explore_json(raw)
-        if parsed is None:
-            parsed = _salvage_truncated_explore_json(_sanitize_json_string_literals(raw))
-        if parsed is None:
-            logger.error(f"[{tag}] JSON 解析失败: {err}; raw[:500]={raw[:500]}")
-            return None, err
-        logger.warning(f"[{tag}] JSON 需抢救/清洗, 已恢复 {len(parsed.get('verdicts') or [])} 条 verdict: {err}")
+        for candidate in (
+            _repair_truncated_json(raw),
+            _repair_truncated_json(_sanitize_json_string_literals(raw)),
+        ):
+            parsed, _ = _try_parse_json(candidate)
+            if parsed is not None:
+                break
+    if parsed is None:
+        err = parse_err
+        for text_src in (raw, _sanitize_json_string_literals(raw)):
+            parsed = _salvage_truncated_explore_json(text_src)
+            if parsed is not None:
+                break
+    if parsed is None:
+        parsed = _salvage_loose_verdicts(raw) or _salvage_loose_verdicts(
+            _sanitize_json_string_literals(raw)
+        )
+        if parsed is not None:
+            logger.warning(
+                f"[{tag}] JSON 宽松抢救 {len(parsed.get('verdicts') or [])} 条 "
+                f"(catalyst 可能缺失): {err}"
+            )
+    if parsed is None:
+        logger.error(f"[{tag}] JSON 解析失败: {err}; raw[:500]={raw[:500]}")
+        return None, err
+    if err:
+        logger.warning(
+            f"[{tag}] JSON 需抢救/清洗, 已恢复 {len(parsed.get('verdicts') or [])} 条 verdict: {err}"
+        )
 
     normalized = normalize_explore_llm_payload(parsed)
     if normalized is None:

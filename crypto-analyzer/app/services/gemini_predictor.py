@@ -40,9 +40,11 @@ from app.services.ai_explore_prompt import (
     AI_POSITION_HOLD_HOURS,
     AI_POSITION_SL_PCT,
     AI_POSITION_TP_PCT,
+    EXPLORE_LLM_MAX_OUTPUT_TOKENS,
     KLINE_1H_READING_BLOCK,
     PREDICT_CONFIDENCE_THRESHOLD,
     explore_catalyst_technical_ok,
+    parse_explore_llm_json,
     sym_data_for_catalyst_gate,
 )
 from app.services.ai_predict_schedule import (
@@ -545,17 +547,19 @@ PREDICT_PROMPT_TEMPLATE = """你是超级交易大师. 预测每个币种在未�
 # ============================================================
 # Gemini 调用
 # ============================================================
-def _call_gemini_predict(symbols_data: List[Dict], global_ctx: dict) -> Optional[dict]:
-    """调用 Gemini — 批量预测所有 TOP100 方向."""
+def _call_gemini_predict(
+    symbols_data: List[Dict], global_ctx: dict,
+) -> Tuple[Optional[dict], Optional[str]]:
+    """调用 Gemini — 批量预测 TOP50 方向. 返回 (parsed, error_msg)."""
     if not GEMINI_API_KEY:
         logger.error("[Gemini预测] GEMINI_API_KEY 未设置")
-        return None
+        return None, "GEMINI_API_KEY 未设置"
     try:
         from google import genai
         from google.genai import types
     except ImportError:
         logger.error("[Gemini预测] 缺依赖, 请 pip install google-genai")
-        return None
+        return None, "缺 google-genai 依赖"
 
     prompt = PREDICT_PROMPT_TEMPLATE.format(
         global_context_json=json.dumps(global_ctx, ensure_ascii=False, indent=2),
@@ -567,6 +571,8 @@ def _call_gemini_predict(symbols_data: List[Dict], global_ctx: dict) -> Optional
     client = genai.Client(api_key=GEMINI_API_KEY)
     cfg = types.GenerateContentConfig(
         response_mime_type="application/json",
+        temperature=0.1,
+        max_output_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
         http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_S * 1000),
     )
 
@@ -577,24 +583,22 @@ def _call_gemini_predict(symbols_data: List[Dict], global_ctx: dict) -> Optional
         )
     except Exception as e:
         logger.error(f"[Gemini预测] Gemini 调用失败: {e}")
-        return None
+        return None, f"API: {e}"
 
     text = (resp.text or "").strip()
-    if text.startswith("```"):
-        text = text.strip("`").lstrip("json").strip()
     logger.info(f"[Gemini预测] gemini 用时 {time.time()-t0:.1f}s, output_len={len(text)}")
 
-    try:
-        parsed = json.loads(text)
-        if not isinstance(parsed.get('verdicts'), list):
-            logger.warning("[Gemini预测] Gemini 返回格式异常, verdicts 非 list")
-            parsed['verdicts'] = []
-        parsed['_prompt'] = prompt
-        parsed['_raw_response'] = text
-        return parsed
-    except json.JSONDecodeError as e:
-        logger.error(f"[Gemini预测] JSON 解析失败: {e}; raw[:500]={text[:500]}")
-        return None
+    parsed, parse_err = parse_explore_llm_json(text, "Gemini预测")
+    if parsed is None:
+        return None, f"JSON解析失败: {parse_err}"
+    if not isinstance(parsed.get("verdicts"), list):
+        logger.warning("[Gemini预测] Gemini 返回格式异常, verdicts 非 list")
+        parsed["verdicts"] = []
+    parsed["_prompt"] = prompt
+    parsed["_raw_response"] = text
+    if parse_err:
+        parsed["_json_salvaged"] = True
+    return parsed, None
 
 
 # ============================================================
@@ -985,11 +989,12 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         logger.info(f"[Gemini预测] 全局: Big4={global_ctx.get('big4_signal')}")
 
         # 5. 调 Gemini
-        gemini_response = _call_gemini_predict(symbols_data, global_ctx)
+        gemini_response, call_err = _call_gemini_predict(symbols_data, global_ctx)
         if gemini_response is None:
             elapsed = time.time() - t0
-            _insert_run(conn, asof_utc, len(symbols_data), '', elapsed, 'error', 'Gemini 调用失败', triggered_by)
-            logger.error("[Gemini预测] Gemini 调用失败, 本轮结束")
+            err_msg = (call_err or "Gemini 调用失败")[:500]
+            _insert_run(conn, asof_utc, len(symbols_data), '', elapsed, 'error', err_msg, triggered_by)
+            logger.error(f"[Gemini预测] Gemini 调用失败: {err_msg}")
             return None
 
         summary_zh = (gemini_response.get('summary_zh') or '')[:1000]

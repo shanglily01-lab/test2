@@ -70,6 +70,7 @@ def _call_gemini(defn: TacticalStrategyDef, strategy_key: str):
         client = genai.Client(api_key=GEMINI_API_KEY)
         gcfg = types.GenerateContentConfig(
             response_mime_type="application/json",
+            temperature=0.1,
             http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_S * 1000),
             max_output_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
         )

@@ -48,7 +48,11 @@ def _read_setting_dt(cur, key: str) -> Optional[datetime]:
 
 
 def _last_run_at(cur, runs_table: str) -> Optional[datetime]:
-    cur.execute(f"SELECT MAX(asof_utc) AS last_at FROM `{runs_table}`")
+    # partial = 进行中；进程中断后可能长期残留，不能参与 4h 防重
+    cur.execute(
+        f"SELECT MAX(asof_utc) AS last_at FROM `{runs_table}` "
+        f"WHERE status IS NULL OR status != 'partial'"
+    )
     row = cur.fetchone()
     last_at = (row or {}).get("last_at")
     if last_at is None:

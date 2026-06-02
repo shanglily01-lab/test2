@@ -211,6 +211,20 @@ def test_db_bundle_optional():
         conn.close()
 
 
+def test_json_unterminated_string_salvage():
+    from app.services.ai_explore_prompt import parse_explore_llm_json
+
+    broken = (
+        '{"summary_zh":"测试","verdicts":[{"symbol":"BTCUSDT","category":"entry",'
+        '"confidence":0.72,"catalyst":"1h 近24根下降 近5根缩量反弹 上影'
+    )
+    parsed, err = parse_explore_llm_json(broken, "test")
+    assert parsed is not None, err
+    assert len(parsed.get("verdicts") or []) >= 1
+    assert parsed["verdicts"][0]["symbol"] == "BTCUSDT"
+    print("[PASS] json unterminated string salvage")
+
+
 def test_json_extra_data():
     from app.services.ai_explore_prompt import parse_explore_llm_json
 
@@ -227,6 +241,7 @@ def test_json_extra_data():
 def main():
     tests = [
         ("json extra data", test_json_extra_data),
+        ("json unterminated salvage", test_json_unterminated_string_salvage),
         ("single bar rejected", test_single_bar_rejected),
         ("kline narrative 24 split", test_kline_narrative_24_split),
         ("pullback gates", test_pullback_gates),

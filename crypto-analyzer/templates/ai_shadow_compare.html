@@ -18,6 +18,27 @@
   .row-click { cursor: pointer; }
   .row-click:hover { background: rgba(73,244,200,0.04); }
   .row-active { background: rgba(73,244,200,0.08); border-left: 2px solid #49f4c8; }
+  .source-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+  @media (max-width: 1024px) { .source-grid { grid-template-columns: 1fr; } }
+  .provider-col { background: linear-gradient(180deg, rgba(21,26,32,0.95) 0%, rgba(15,20,26,0.6) 100%); border: 1px solid rgba(68,72,78,0.35); border-radius: 14px; overflow: hidden; }
+  .provider-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid rgba(68,72,78,0.25); }
+  .provider-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .provider-gemini .provider-dot { background: #49f4c8; box-shadow: 0 0 10px rgba(73,244,200,0.5); }
+  .provider-deepseek .provider-dot { background: #7c8aff; box-shadow: 0 0 10px rgba(124,138,255,0.45); }
+  .provider-gpt .provider-dot { background: #74aa9c; box-shadow: 0 0 10px rgba(116,170,156,0.45); }
+  .source-item { padding: 10px 14px; border-bottom: 1px solid rgba(68,72,78,0.15); transition: background 0.15s; }
+  .source-item:last-child { border-bottom: none; }
+  .source-item:hover { background: rgba(255,255,255,0.02); }
+  .rate-bar { height: 4px; border-radius: 999px; background: rgba(68,72,78,0.4); overflow: hidden; margin-top: 6px; }
+  .rate-fill { height: 100%; border-radius: 999px; transition: width 0.4s ease; }
+  .rate-good { color: #49f4c8; }
+  .rate-warn { color: #fbbf24; }
+  .rate-bad { color: #ff716c; }
+  .fill-good { background: linear-gradient(90deg, #2dd4a8, #49f4c8); }
+  .fill-warn { background: linear-gradient(90deg, #d97706, #fbbf24); }
+  .fill-bad { background: linear-gradient(90deg, #dc2626, #ff716c); }
+  .source-pill { font-size: 10px; padding: 2px 7px; border-radius: 6px; background: rgba(68,72,78,0.35); color: #a8abb2; }
+  .provider-avg { font-size: 11px; color: #a8abb2; margin-left: auto; }
 </style>
 <script>
   tailwind.config = { darkMode: "class", theme: { extend: { colors: {
@@ -80,10 +101,34 @@
     <p class="text-xs text-[#a8abb2] mt-1">Teacher (Gemini/DeepSeek) vs 本地规则引擎 · 不开仓 · 规则 <span class="mono text-primary">v1</span></p>
   </div>
   <div class="flex items-center gap-3">
-    <select id="filterSource" onchange="loadRuns()" class="text-xs bg-[#151a20] border border-[#44484e] rounded-lg px-3 py-2 text-[#ebeef5]">
+    <select id="filterSource" onchange="loadRuns()" class="text-xs bg-[#151a20] border border-[#44484e] rounded-lg px-3 py-2 text-[#ebeef5] max-w-[200px]">
       <option value="">全部来源</option>
-      <option value="gemini_explore">gemini_explore</option>
-      <option value="deepseek_explore">deepseek_explore</option>
+      <optgroup label="Gemini">
+        <option value="gemini_explore">gemini_explore</option>
+        <option value="gemini_predict">gemini_predict</option>
+        <option value="gemini_chase">gemini_chase</option>
+        <option value="gemini_pullback">gemini_pullback</option>
+        <option value="gemini_rebound">gemini_rebound</option>
+        <option value="gemini_dump">gemini_dump</option>
+        <option value="gemini_reversal">gemini_reversal</option>
+      </optgroup>
+      <optgroup label="DeepSeek">
+        <option value="deepseek_explore">deepseek_explore</option>
+        <option value="deepseek_predict">deepseek_predict</option>
+        <option value="deepseek_chase">deepseek_chase</option>
+        <option value="deepseek_pullback">deepseek_pullback</option>
+        <option value="deepseek_rebound">deepseek_rebound</option>
+        <option value="deepseek_dump">deepseek_dump</option>
+        <option value="deepseek_reversal">deepseek_reversal</option>
+      </optgroup>
+      <optgroup label="GPT">
+        <option value="gpt_chase">gpt_chase</option>
+        <option value="gpt_pullback">gpt_pullback</option>
+        <option value="gpt_rebound">gpt_rebound</option>
+        <option value="gpt_dump">gpt_dump</option>
+        <option value="gpt_predict">gpt_predict</option>
+        <option value="gpt_reversal">gpt_reversal</option>
+      </optgroup>
     </select>
     <button onclick="loadAll()" class="flex items-center gap-1 px-3 py-2 rounded-lg bg-[#151a20] hover:bg-[#1a2027] text-xs">
       <span class="material-symbols-outlined text-[16px]">refresh</span>刷新
@@ -94,7 +139,7 @@
 <div id="notReady" class="hidden mb-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm"></div>
 
 <!-- 汇总卡片 -->
-<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
   <div class="bg-[#151a20] rounded-xl p-4 border border-[#44484e]/30">
     <div class="text-[10px] uppercase tracking-wider text-[#a8abb2]">对比轮数</div>
     <div id="statRuns" class="text-2xl font-bold mt-1 mono">—</div>
@@ -107,13 +152,23 @@
     <div class="text-[10px] uppercase tracking-wider text-[#a8abb2]">对比 symbol 总数</div>
     <div id="statCompared" class="text-2xl font-bold mt-1 mono">—</div>
   </div>
-  <div class="bg-[#151a20] rounded-xl p-4 border border-[#44484e]/30">
-    <div class="text-[10px] uppercase tracking-wider text-[#a8abb2]">按来源</div>
-    <div id="statBySource" class="text-xs mt-2 space-y-1 text-[#a8abb2]">—</div>
-  </div>
 </div>
 
-<div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+<!-- 按来源一致率 -->
+<section class="mb-6 bg-[#151a20] rounded-xl border border-[#44484e]/30 overflow-hidden">
+  <div class="px-4 py-3 border-b border-[#44484e]/30 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-[18px] text-primary">hub</span>
+      <span class="text-sm font-semibold">按来源 · Teacher vs Shadow 一致率</span>
+    </div>
+    <span class="text-[10px] text-[#a8abb2]">≥50% 良好 · 40–50% 观察 · &lt;40% 需优化</span>
+  </div>
+  <div id="statBySource" class="p-4">
+    <div class="text-xs text-[#a8abb2] text-center py-6">加载中…</div>
+  </div>
+</section>
+
+<div id="runsSection" class="grid grid-cols-1 xl:grid-cols-2 gap-6">
   <!-- 运行列表 -->
   <section class="bg-[#151a20] rounded-xl border border-[#44484e]/30 overflow-hidden">
     <div class="px-4 py-3 border-b border-[#44484e]/30 text-sm font-semibold">最近对比轮次</div>
@@ -173,6 +228,102 @@ function fmtConf(v) {
   return Number(v).toFixed(2);
 }
 
+var STRATEGY_ZH = {
+  explore: '探索', predict: '预测', chase: '追涨', pullback: '回调',
+  rebound: '反弹', dump: '杀跌', reversal: '顶空底多'
+};
+var STRATEGY_ORDER = ['explore', 'predict', 'pullback', 'chase', 'rebound', 'dump', 'reversal'];
+var PROVIDER_META = {
+  gemini: { label: 'Gemini', cls: 'provider-gemini' },
+  deepseek: { label: 'DeepSeek', cls: 'provider-deepseek' },
+  gpt: { label: 'GPT', cls: 'provider-gpt' }
+};
+
+function parseSourceKey(src) {
+  var parts = (src || '').split('_');
+  var provider = parts[0] || 'other';
+  var strategy = parts.slice(1).join('_') || 'other';
+  return { provider: provider, strategy: strategy, raw: src };
+}
+
+function rateTier(pct) {
+  var p = Number(pct) || 0;
+  if (p >= 50) return { cls: 'rate-good', fill: 'fill-good' };
+  if (p >= 40) return { cls: 'rate-warn', fill: 'fill-warn' };
+  return { cls: 'rate-bad', fill: 'fill-bad' };
+}
+
+function renderBySource(items) {
+  var box = document.getElementById('statBySource');
+  if (!items || !items.length) {
+    box.innerHTML = '<div class="text-xs text-[#a8abb2] text-center py-8">暂无按来源数据</div>';
+    return;
+  }
+  var grouped = { gemini: [], deepseek: [], gpt: [], other: [] };
+  items.forEach(function(s) {
+    var p = parseSourceKey(s.teacher_source);
+    var bucket = grouped[p.provider] ? p.provider : 'other';
+    grouped[bucket].push(Object.assign({}, s, { _strategy: p.strategy }));
+  });
+  ['gemini', 'deepseek', 'gpt'].forEach(function(k) {
+    grouped[k].sort(function(a, b) {
+      var ia = STRATEGY_ORDER.indexOf(a._strategy);
+      var ib = STRATEGY_ORDER.indexOf(b._strategy);
+      if (ia < 0) ia = 99;
+      if (ib < 0) ib = 99;
+      return ia - ib || String(a.teacher_source).localeCompare(b.teacher_source);
+    });
+  });
+  var html = '<div class="source-grid">';
+  ['gemini', 'deepseek', 'gpt'].forEach(function(prov) {
+    var list = grouped[prov];
+    if (!list.length) return;
+    var meta = PROVIDER_META[prov];
+    var sumRuns = 0, sumPct = 0;
+    list.forEach(function(s) {
+      sumRuns += Number(s.runs) || 0;
+      sumPct += (Number(s.avg_agree_pct) || 0) * (Number(s.runs) || 0);
+    });
+    var avgPct = sumRuns ? (sumPct / sumRuns).toFixed(1) : '—';
+    var avgTier = rateTier(avgPct);
+    html += '<div class="provider-col ' + meta.cls + '">';
+    html += '<div class="provider-head">';
+    html += '<span class="provider-dot"></span>';
+    html += '<span class="text-sm font-semibold">' + meta.label + '</span>';
+    html += '<span class="provider-avg">均 <span class="mono ' + avgTier.cls + '">' + avgPct + '%</span> · ' + sumRuns + ' 轮</span>';
+    html += '</div>';
+    list.forEach(function(s) {
+      var pct = Number(s.avg_agree_pct) || 0;
+      var tier = rateTier(pct);
+      var stratZh = STRATEGY_ZH[s._strategy] || s._strategy;
+      var barW = Math.min(100, Math.max(0, pct));
+      html += '<div class="source-item cursor-pointer" data-source="' + s.teacher_source + '" title="点击筛选 ' + s.teacher_source + '">';
+      html += '<div class="flex items-center justify-between gap-2">';
+      html += '<div class="flex items-center gap-2 min-w-0">';
+      html += '<span class="text-sm font-medium truncate">' + stratZh + '</span>';
+      html += '<span class="source-pill mono shrink-0">' + (s.runs || 0) + ' 轮</span>';
+      html += '</div>';
+      html += '<span class="mono text-sm font-bold shrink-0 ' + tier.cls + '">' + pct.toFixed(1) + '%</span>';
+      html += '</div>';
+      html += '<div class="rate-bar"><div class="rate-fill ' + tier.fill + '" style="width:' + barW + '%"></div></div>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+  html += '</div>';
+  box.innerHTML = html;
+  box.querySelectorAll('.source-item[data-source]').forEach(function(el) {
+    el.addEventListener('click', function() {
+      var src = el.getAttribute('data-source');
+      var sel = document.getElementById('filterSource');
+      sel.value = src;
+      loadRuns();
+      var sec = document.getElementById('runsSection');
+      if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+}
+
 async function loadSummary() {
   var res = await fetch('/api/ai-shadow/summary');
   var data = await res.json();
@@ -186,11 +337,7 @@ async function loadSummary() {
   document.getElementById('statRuns').textContent = data.total_runs;
   document.getElementById('statAgree').textContent = data.avg_agree_pct + '%';
   document.getElementById('statCompared').textContent = data.total_compared;
-  var srcHtml = '';
-  (data.by_source || []).forEach(function(s) {
-    srcHtml += '<div>' + s.teacher_source + ': ' + s.runs + '轮 · ' + s.avg_agree_pct + '%</div>';
-  });
-  document.getElementById('statBySource').innerHTML = srcHtml || '—';
+  renderBySource(data.by_source || []);
 }
 
 async function loadRuns() {

@@ -303,6 +303,66 @@ def _update_trades_opened(conn, cfg: ReversalExploreConfig, run_id: int, n: int)
         )
 
 
+_STALE_PARTIAL_SECONDS = 900  # 15min，与「上一轮还未结束」运维阈值一致
+
+
+def _reset_tactical_next_due_now(conn, source: str) -> None:
+    key = tactical_next_due_key(source)
+    value = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE system_settings
+            SET setting_value = %s, updated_by = 'tactical_stale_recovery', updated_at = NOW()
+            WHERE setting_key = %s
+            """,
+            (value, key),
+        )
+
+
+def _recover_stale_partial_runs(conn, cfg: ReversalExploreConfig) -> int:
+    """清理进程中断后遗留的 partial，并允许调度尽快重试."""
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT id FROM `{cfg.runs_table}`
+            WHERE status = 'partial'
+              AND TIMESTAMPDIFF(SECOND, asof_utc, UTC_TIMESTAMP()) >= %s
+            ORDER BY id ASC
+            """,
+            (_STALE_PARTIAL_SECONDS,),
+        )
+        rows = cur.fetchall() or []
+        if not rows:
+            return 0
+        ids = [int(r["id"]) for r in rows]
+        placeholders = ",".join(["%s"] * len(ids))
+        cur.execute(
+            f"""
+            UPDATE `{cfg.runs_table}` SET
+              status = 'error',
+              elapsed_s = GREATEST(
+                  COALESCE(elapsed_s, 0),
+                  TIMESTAMPDIFF(SECOND, asof_utc, UTC_TIMESTAMP())
+              ),
+              error_msg = COALESCE(
+                  NULLIF(TRIM(error_msg), ''),
+                  '上一轮未完成(进程中断或超时，已自动清理)'
+              )
+            WHERE id IN ({placeholders}) AND status = 'partial'
+            """,
+            ids,
+        )
+        n = cur.rowcount or 0
+    if n:
+        _reset_tactical_next_due_now(conn, cfg.source)
+        logger.warning(
+            f"[{cfg.log_tag}] 清理 stale partial x{n} ids={ids[:8]}"
+            f"{'...' if len(ids) > 8 else ''}"
+        )
+    return n
+
+
 def _insert_verdicts(
     conn,
     cfg: ReversalExploreConfig,
@@ -378,6 +438,7 @@ def run_tactical_explore_round(
 
     logger.info(f"[{cfg.log_tag}] === 一轮开始 ({triggered_by}) ===")
     run_id = None
+    run_closed = False
     try:
         conn = _connect()
     except Exception as e:
@@ -385,7 +446,26 @@ def run_tactical_explore_round(
         lock.release()
         return None
 
+    def _close_run(
+        universe_size: int,
+        summary_zh: str,
+        elapsed_s: float,
+        status: str,
+        error_msg: Optional[str],
+        prompt_text: Optional[str] = None,
+        raw_response: Optional[str] = None,
+    ) -> None:
+        nonlocal run_closed
+        if run_id and not run_closed:
+            _finish_run(
+                conn, cfg, run_id, asof_utc, universe_size, summary_zh, elapsed_s,
+                status, error_msg, triggered_by, prompt_text, raw_response,
+            )
+            run_closed = True
+
     try:
+        _recover_stale_partial_runs(conn, cfg)
+
         run_id = _insert_run(
             conn, cfg, asof_utc, 0, "", 0.0, "partial", None, triggered_by,
         )
@@ -403,49 +483,34 @@ def run_tactical_explore_round(
             )
         universe_size = len(universe)
         if universe_size == 0:
-            elapsed = time.time() - t0
-            _finish_run(
-                conn, cfg, run_id, asof_utc, 0, "", elapsed,
-                "skipped", "候选池为空", triggered_by,
-            )
+            _close_run(0, "", time.time() - t0, "skipped", "候选池为空")
             return run_id
 
         historical_stats = _get_historical_stats(conn, cfg.source)
 
         llm_response, call_err = call_llm(universe, global_ctx, historical_stats)
         if llm_response is None:
-            elapsed = time.time() - t0
-            _finish_run(
-                conn, cfg, run_id, asof_utc, universe_size, "", elapsed,
-                "error", (call_err or "LLM 失败")[:500], triggered_by,
+            _close_run(
+                universe_size, "", time.time() - t0, "error",
+                (call_err or "LLM 失败")[:500],
             )
             return run_id
 
         llm_response = normalize_explore_llm_payload(llm_response)
         if not isinstance(llm_response, dict):
-            elapsed = time.time() - t0
-            _finish_run(
-                conn, cfg, run_id, asof_utc, universe_size, "", elapsed,
-                "error", "LLM JSON 结构无效", triggered_by,
-            )
+            _close_run(universe_size, "", time.time() - t0, "error", "LLM JSON 结构无效")
             return run_id
 
         summary_zh = (llm_response.get("summary_zh") or "")[:1000]
         verdicts = llm_response.get("verdicts") or []
         if not isinstance(verdicts, list):
             verdicts = []
-        elapsed = time.time() - t0
-        _finish_run(
-            conn,
-            cfg,
-            run_id,
-            asof_utc,
+        _close_run(
             universe_size,
             summary_zh,
-            elapsed,
+            time.time() - t0,
             "ok",
             None,
-            triggered_by,
             llm_response.get("_prompt"),
             llm_response.get("_raw_response"),
         )
@@ -598,15 +663,19 @@ def run_tactical_explore_round(
     except Exception as e:
         logger.error(f"[{cfg.log_tag}] 异常: {e}", exc_info=True)
         try:
-            if run_id:
-                _finish_run(
-                    conn, cfg, run_id, asof_utc, 0, "", time.time() - t0,
-                    "error", str(e)[:480], triggered_by,
-                )
+            _close_run(0, "", time.time() - t0, "error", str(e)[:480])
         except Exception:
             pass
         return run_id
     finally:
+        if run_id and not run_closed:
+            try:
+                _close_run(
+                    0, "", time.time() - t0, "error",
+                    "轮次异常退出未完成",
+                )
+            except Exception as fin_err:
+                logger.error(f"[{cfg.log_tag}] finally 收尾失败 run_id={run_id}: {fin_err}")
         try:
             conn.close()
         except Exception:
