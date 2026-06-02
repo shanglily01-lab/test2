@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS `gpt_advisor_reviews` (
   KEY `idx_decision_created` (`decision`,`created_at`),
   KEY `idx_source_created` (`source`,`created_at`),
   KEY `idx_position_id` (`position_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='GPT 顾问审核记录';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='GPT 顾问审核记录';
 
 INSERT INTO system_settings (setting_key, setting_value, description, updated_at)
 VALUES

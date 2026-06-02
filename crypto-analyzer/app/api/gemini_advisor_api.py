@@ -19,6 +19,26 @@ _REVIEW_COLS = """
   reason, catalyst, created_at
 """
 
+_UNION_SELECT_TEMPLATE = """
+SELECT
+  '{provider}' COLLATE utf8mb4_general_ci AS provider,
+  id,
+  review_type COLLATE utf8mb4_general_ci AS review_type,
+  decision COLLATE utf8mb4_general_ci AS decision,
+  symbol COLLATE utf8mb4_general_ci AS symbol,
+  position_side COLLATE utf8mb4_general_ci AS position_side,
+  source COLLATE utf8mb4_general_ci AS source,
+  position_id,
+  entry_price,
+  leverage,
+  hold_hours,
+  roi_pct,
+  CAST(reason AS CHAR) COLLATE utf8mb4_general_ci AS reason,
+  CAST(catalyst AS CHAR) COLLATE utf8mb4_general_ci AS catalyst,
+  created_at
+FROM {table} WHERE 1=1
+"""
+
 
 def _connect():
     from app.utils.config_loader import get_db_config
@@ -146,20 +166,11 @@ def _list_reviews(
 
         parts = []
         if gemini_ok and provider in (None, "", "all", "gemini"):
-            parts.append(
-                f"SELECT 'gemini' AS provider, {_REVIEW_COLS.strip()} "
-                f"FROM gemini_advisor_reviews WHERE 1=1"
-            )
+            parts.append(_UNION_SELECT_TEMPLATE.format(provider="gemini", table="gemini_advisor_reviews"))
         if deepseek_ok and provider in (None, "", "all", "deepseek"):
-            parts.append(
-                f"SELECT 'deepseek' AS provider, {_REVIEW_COLS.strip()} "
-                f"FROM deepseek_advisor_reviews WHERE 1=1"
-            )
+            parts.append(_UNION_SELECT_TEMPLATE.format(provider="deepseek", table="deepseek_advisor_reviews"))
         if gpt_ok and provider in (None, "", "all", "gpt"):
-            parts.append(
-                f"SELECT 'gpt' AS provider, {_REVIEW_COLS.strip()} "
-                f"FROM gpt_advisor_reviews WHERE 1=1"
-            )
+            parts.append(_UNION_SELECT_TEMPLATE.format(provider="gpt", table="gpt_advisor_reviews"))
         if not parts:
             conn.close()
             return {"reviews": [], "ready": True, "total": 0}
