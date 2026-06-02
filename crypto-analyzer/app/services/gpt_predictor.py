@@ -55,12 +55,8 @@ from app.services.ai_predict_schedule import (
     predict_claim_next_slot,
     predict_round_is_due,
 )
-from app.services.gpt_explore_worker import (
-    GPT_API_KEY,
-    GPT_BASE_URL,
-    GPT_MODEL,
-    GPT_TIMEOUT_S,
-)
+from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_TIMEOUT_S
+from app.services.gpt_llm_client import gpt_chat_json
 
 # ── data_cache 层: 尝试从缓存读取, 失败回退 ──
 _DATA_CACHE_AVAILABLE_PREDICT = False
@@ -566,22 +562,15 @@ def _call_gpt_predict(symbols_data: List[Dict], global_ctx: dict) -> Optional[di
 
     t0 = time.time()
     try:
-        resp = client.chat.completions.create(
-            model=GPT_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a professional crypto trading analyst. Output ONLY valid JSON."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.1,
+        text = gpt_chat_json(
+            client,
+            user_prompt=prompt,
             max_tokens=4096,
             timeout=GPT_TIMEOUT_S,
-            response_format={"type": "json_object"},
         )
     except Exception as e:
         logger.error(f"[GPT预测] GPT 调用失败: {e}")
         return None
-
-    text = (resp.choices[0].message.content or "").strip()
     if text.startswith("```"):
         text = text.strip("`").lstrip("json").strip()
     logger.info(f"[GPT预测] GPT 用时 {time.time()-t0:.1f}s, output_len={len(text)}")

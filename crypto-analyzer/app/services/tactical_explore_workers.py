@@ -17,12 +17,9 @@ from app.services.ai_tactical_explore_prompts import (
     tactical_category_to_side,
 )
 from app.services.gemini_swan_worker import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT_S
-from app.services.gpt_explore_worker import (
-    GPT_API_KEY,
-    GPT_BASE_URL,
-    GPT_MODEL,
-    GPT_TIMEOUT_S,
-)
+from app.services.ai_explore_prompt import EXPLORE_LLM_MAX_OUTPUT_TOKENS
+from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_MODEL, GPT_TIMEOUT_S
+from app.services.gpt_llm_client import gpt_chat_json
 from app.services.reversal_explore_runner import (
     TacticalExploreConfig,
     run_tactical_explore_round,
@@ -146,16 +143,14 @@ def _call_gpt(defn: TacticalStrategyDef, strategy_key: str):
         client = OpenAI(api_key=GPT_API_KEY, base_url=GPT_BASE_URL)
         t0 = time.time()
         try:
-            resp = client.chat.completions.create(
-                model=GPT_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"},
+            text = gpt_chat_json(
+                client,
+                user_prompt=prompt,
                 max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
                 timeout=GPT_TIMEOUT_S,
             )
         except Exception as e:
             return None, f"API: {e}"
-        text = (resp.choices[0].message.content or "").strip()
         logger.info(f"[GPT{defn.title_zh}] {time.time()-t0:.1f}s out={len(text)}")
         parsed, err = parse_tactical_llm_json(text, f"GPT{defn.title_zh}", defn.fixed_side)
         if parsed is None:

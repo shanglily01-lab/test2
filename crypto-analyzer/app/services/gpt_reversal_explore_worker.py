@@ -14,12 +14,8 @@ from app.services.ai_reversal_explore_prompt import (
     build_reversal_explore_prompt,
     parse_reversal_llm_json,
 )
-from app.services.gpt_explore_worker import (
-    GPT_API_KEY,
-    GPT_BASE_URL,
-    GPT_MODEL,
-    GPT_TIMEOUT_S,
-)
+from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_MODEL, GPT_TIMEOUT_S
+from app.services.gpt_llm_client import gpt_chat_json
 from app.services.reversal_explore_runner import (
     ReversalExploreConfig,
     run_reversal_explore_round,
@@ -57,17 +53,14 @@ def _call_gpt_reversal(
     client = OpenAI(api_key=GPT_API_KEY, base_url=GPT_BASE_URL)
     t0 = time.time()
     try:
-        resp = client.chat.completions.create(
-            model=GPT_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
+        text = gpt_chat_json(
+            client,
+            user_prompt=prompt,
             max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
             timeout=GPT_TIMEOUT_S,
         )
     except Exception as e:
         return None, f"API: {e}"
-
-    text = (resp.choices[0].message.content or "").strip()
     logger.info(f"[GPT顶空底多] 用时 {time.time()-t0:.1f}s, out={len(text)}")
 
     parsed, parse_err = parse_reversal_llm_json(text, "GPT顶空底多")

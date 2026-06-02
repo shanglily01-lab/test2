@@ -10,12 +10,9 @@ import pymysql
 import pymysql.cursors
 from loguru import logger
 
-from app.services.gpt_config import (
-    GPT_API_KEY,
-    GPT_BASE_URL,
-    GPT_MODEL,
-    GPT_TIMEOUT_S,
-)
+from app.services.ai_explore_prompt import EXPLORE_LLM_MAX_OUTPUT_TOKENS
+from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_TIMEOUT_S
+from app.services.gpt_llm_client import gpt_chat_json
 from app.services.ai_big4_prompt import big4_conflict_risk_note
 from app.services.ai_explore_prompt import (
     AI_POSITION_HOLD_HOURS,
@@ -90,18 +87,12 @@ def _call_gpt_explore(universe: dict, global_ctx: dict, historical_stats: dict):
     try:
         from openai import OpenAI
         client = OpenAI(api_key=GPT_API_KEY, base_url=GPT_BASE_URL)
-        resp = client.chat.completions.create(
-            model=GPT_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a professional crypto trading analyst. Output ONLY valid JSON."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.1,
-            max_tokens=2200,
+        text = gpt_chat_json(
+            client,
+            user_prompt=prompt,
+            max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
             timeout=GPT_TIMEOUT_S,
-            response_format={"type": "json_object"},
         )
-        text = (resp.choices[0].message.content or "").strip()
     except Exception as e:
         return None, f"GPT API 调用失败: {e}"
 

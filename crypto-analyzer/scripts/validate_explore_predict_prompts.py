@@ -103,6 +103,23 @@ def test_sym_data_for_gate():
     print("[PASS] sym_data_for_catalyst_gate")
 
 
+def test_gpt_llm_aligns_gemini():
+    from app.services.ai_explore_prompt import EXPLORE_LLM_MAX_OUTPUT_TOKENS
+    from app.services.gpt_llm_client import GPT_JSON_SYSTEM_ZH, GPT_LLM_TEMPERATURE
+    import inspect
+    import app.services.gpt_explore_worker as gew
+
+    assert GPT_LLM_TEMPERATURE == 0.1
+    assert "kline_narrative" in GPT_JSON_SYSTEM_ZH
+    assert "24h 涨跌幅" in GPT_JSON_SYSTEM_ZH
+    src = inspect.getsource(gew._call_gpt_explore)
+    assert "gpt_chat_json" in src
+    assert "EXPLORE_LLM_MAX_OUTPUT_TOKENS" in src
+    assert "2200" not in src
+    assert "professional crypto trading analyst" not in src
+    print("[PASS] GPT LLM invoke aligned with Gemini (zh system, low temp, 8k tokens)")
+
+
 def main():
     tests = [
         test_thresholds,
@@ -111,6 +128,7 @@ def main():
         test_predict_prompt,
         test_catalyst_gate_predict,
         test_sym_data_for_gate,
+        test_gpt_llm_aligns_gemini,
     ]
     failed = 0
     for fn in tests:
