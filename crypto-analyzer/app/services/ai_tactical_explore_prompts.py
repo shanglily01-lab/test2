@@ -19,6 +19,10 @@ from app.services.ai_explore_prompt import (
 from app.services.ai_reversal_explore_prompt import _catalyst_pct_sane
 
 TACTICAL_CONFIDENCE_THRESHOLD = 0.55
+# GPT 战术：每轮至少尝试的 entry 数（由代码补位，不依赖 LLM 宏观 skip）
+GPT_TACTICAL_MIN_ENTRIES = 2
+GPT_TACTICAL_MAX_ENTRIES = 3
+GPT_FALLBACK_SCAN_TOP = 40
 # 与代码门槛 / 开仓顾问 rubric 对齐（改一处须同步另两处）
 CHASE_RSI_MAX = 68
 PULLBACK_RSI_MAX = 68
@@ -279,21 +283,20 @@ def _synth_tactical_catalyst(defn: TacticalStrategyDef, item: dict) -> str:
     return "；".join(parts)
 
 
-def supplement_empty_tactical_verdicts(
+def build_tactical_fallback_entries(
     definition: TacticalStrategyDef,
     universe: dict,
-    verdicts: List[dict],
     *,
-    max_entries: int = 3,
-) -> Tuple[List[dict], bool]:
-    """LLM 返回空列表时，从预筛 TOP 中挑能通过代码门槛的标的（主要缓解 GPT 过度保守）."""
-    if verdicts:
-        return verdicts, False
+    max_entries: int = GPT_TACTICAL_MAX_ENTRIES,
+    exclude_symbols: Optional[set] = None,
+) -> List[dict]:
+    """从预筛 TOP 生成已通过 tactical_catalyst_ok 的 entry（GPT 补位用）."""
+    exclude = {str(s).upper().replace("/", "") for s in (exclude_symbols or set())}
     selected, _meta = prepare_tactical_universe_for_llm(definition, universe)
     out: List[dict] = []
-    for item in selected[:20]:
+    for item in selected[:GPT_FALLBACK_SCAN_TOP]:
         sym = str(item.get("symbol") or "").upper().replace("/", "")
-        if not sym:
+        if not sym or sym in exclude:
             continue
         catalyst = _synth_tactical_catalyst(definition, item)
         rsi = _rsi_1h(item)
@@ -311,6 +314,22 @@ def supplement_empty_tactical_verdicts(
         })
         if len(out) >= max_entries:
             break
+    return out
+
+
+def supplement_empty_tactical_verdicts(
+    definition: TacticalStrategyDef,
+    universe: dict,
+    verdicts: List[dict],
+    *,
+    max_entries: int = GPT_TACTICAL_MAX_ENTRIES,
+) -> Tuple[List[dict], bool]:
+    """LLM 返回空列表时，从预筛 TOP 中挑能通过代码门槛的标的（主要缓解 GPT 过度保守）."""
+    if verdicts:
+        return verdicts, False
+    out = build_tactical_fallback_entries(
+        definition, universe, max_entries=max_entries,
+    )
     return out, len(out) > 0
 
 

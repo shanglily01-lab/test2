@@ -41,6 +41,9 @@ from app.services.ai_tactical_explore_schedule import (
     tactical_round_is_due,
 )
 from app.services.ai_tactical_explore_prompts import (
+    GPT_TACTICAL_MAX_ENTRIES,
+    GPT_TACTICAL_MIN_ENTRIES,
+    build_tactical_fallback_entries,
     parse_tactical_confidence,
     supplement_empty_tactical_verdicts,
     TACTICAL_STRATEGIES,
@@ -83,7 +86,7 @@ def _gpt_apply_verdict_fallback(
     catalyst_ok: Callable[..., Tuple[bool, str]],
     category_to_side: Callable[[str, float], Optional[str]],
 ) -> Tuple[List[dict], bool, str]:
-    """GPT 空列表或 entry 全未过 catalyst 时，用预筛 TOP 补位."""
+    """GPT：过滤 LLM entry，不足时用预筛 TOP 补到至少 MIN 条（最多 MAX）."""
     if not cfg.source.startswith("gpt_"):
         return verdicts, False, ""
 
@@ -108,39 +111,66 @@ def _gpt_apply_verdict_fallback(
         )
         return ok
 
+    raw_n = len(verdicts) if isinstance(verdicts, list) else 0
+    good = [v for v in verdicts if isinstance(v, dict) and _entry_passes(v)]
+    if raw_n > len(good):
+        logger.warning(
+            f"[{cfg.log_tag}] GPT {raw_n - len(good)} 条 LLM verdict catalyst 未过"
+        )
+
+    seen = {
+        str(v.get("symbol") or "").upper().replace("/", "")
+        for v in good
+    }
     note = ""
-    if verdicts:
-        good = [v for v in verdicts if _entry_passes(v)]
-        if good:
-            dropped = len(verdicts) - len(good)
-            if dropped:
-                logger.warning(
-                    f"[{cfg.log_tag}] GPT {dropped} 条 verdict catalyst 未过，"
-                    f"保留 {len(good)} 条"
-                )
-            return good, False, note
-        verdicts = []
+    if not good and raw_n > 0:
         note = "GPT entry 均未过 catalyst，"
 
-    filled = False
+    fb: List[dict] = []
     if sk == "reversal":
         from app.services.ai_reversal_explore_prompt import (
-            supplement_empty_reversal_verdicts,
+            build_reversal_fallback_entries,
         )
-        verdicts, filled = supplement_empty_reversal_verdicts(
-            universe, verdicts, max_entries=2,
+        fb = build_reversal_fallback_entries(
+            universe,
+            max_entries=GPT_TACTICAL_MAX_ENTRIES,
+            exclude_symbols=seen,
         )
     else:
         defn = TACTICAL_STRATEGIES.get(sk)
         if defn is not None:
-            verdicts, filled = supplement_empty_tactical_verdicts(
-                defn, universe, verdicts, max_entries=3,
+            fb = build_tactical_fallback_entries(
+                defn,
+                universe,
+                max_entries=GPT_TACTICAL_MAX_ENTRIES,
+                exclude_symbols=seen,
             )
+
+    merged = list(good)
+    for v in fb:
+        sym = str(v.get("symbol") or "").upper().replace("/", "")
+        if sym and sym not in seen:
+            merged.append(v)
+            seen.add(sym)
+        if len(merged) >= GPT_TACTICAL_MAX_ENTRIES:
+            break
+
+    if len(merged) < GPT_TACTICAL_MIN_ENTRIES:
+        for v in fb:
+            sym = str(v.get("symbol") or "").upper().replace("/", "")
+            if sym and sym not in seen:
+                merged.append(v)
+                seen.add(sym)
+            if len(merged) >= GPT_TACTICAL_MIN_ENTRIES:
+                break
+
+    filled = len(merged) > len(good)
     if filled:
         logger.warning(
-            f"[{cfg.log_tag}] {note}eligible_fallback 补 {len(verdicts)} 个"
+            f"[{cfg.log_tag}] {note}eligible_fallback 补 {len(merged) - len(good)} 个"
+            f"（合计 {len(merged)} 条 entry）"
         )
-    return verdicts, filled, note
+    return merged, filled, note
 
 
 def _get_lock(key: str) -> threading.Lock:
@@ -650,13 +680,16 @@ def run_tactical_explore_round(
                     ))
                 continue
 
-            tech_ok, tech_reason = catalyst_ok(
-                category,
-                catalyst,
-                data_signal,
-                _universe_lookup(universe, symbol),
-                confidence,
-            )
+            if risk_note == "eligible_fallback":
+                tech_ok, tech_reason = True, ""
+            else:
+                tech_ok, tech_reason = catalyst_ok(
+                    category,
+                    catalyst,
+                    data_signal,
+                    _universe_lookup(universe, symbol),
+                    confidence,
+                )
             if not tech_ok:
                 logger.info(f"[{cfg.log_tag}] {symbol} 跳过 catalyst: {tech_reason}")
                 verdict_rows.append((

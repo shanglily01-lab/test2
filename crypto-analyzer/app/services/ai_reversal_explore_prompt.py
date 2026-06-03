@@ -186,19 +186,18 @@ def _synth_reversal_catalyst(category: str, item: dict) -> str:
     return "；".join(parts)
 
 
-def supplement_empty_reversal_verdicts(
+def build_reversal_fallback_entries(
     universe: dict,
-    verdicts: List[dict],
     *,
     max_entries: int = 2,
-) -> Tuple[List[dict], bool]:
-    if verdicts:
-        return verdicts, False
+    exclude_symbols: Optional[set] = None,
+) -> List[dict]:
+    exclude = {str(s).upper().replace("/", "") for s in (exclude_symbols or set())}
     items, _meta = prepare_reversal_universe_for_llm(universe)
     out: List[dict] = []
-    for item in items[:25]:
+    for item in items[:40]:
         sym = str(item.get("symbol") or "").upper().replace("/", "")
-        if not sym:
+        if not sym or sym in exclude:
             continue
         tech = item.get("tech") or {}
         try:
@@ -225,6 +224,18 @@ def supplement_empty_reversal_verdicts(
         })
         if len(out) >= max_entries:
             break
+    return out
+
+
+def supplement_empty_reversal_verdicts(
+    universe: dict,
+    verdicts: List[dict],
+    *,
+    max_entries: int = 2,
+) -> Tuple[List[dict], bool]:
+    if verdicts:
+        return verdicts, False
+    out = build_reversal_fallback_entries(universe, max_entries=max_entries)
     return out, len(out) > 0
 
 
