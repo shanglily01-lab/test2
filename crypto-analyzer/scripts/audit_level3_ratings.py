@@ -11,11 +11,9 @@ sys.path.insert(0, str(ROOT))
 import pymysql
 from app.utils.config_loader import get_db_config
 from app.utils.futures_symbol import futures_symbol_clean
+from update_top_performers import MIN_TRADES, _should_ban_level3
 
 ACCOUNT_ID = 2
-MIN_TRADES = 5
-BLACKLIST_MAX_PNL = -200.0
-BLACKLIST_MAX_WIN_RATE = 40.0
 
 STATS_SQL = """
     SELECT
@@ -55,12 +53,12 @@ def main() -> int:
 
         auto_daily = 0
         other_reason = 0
-        by_pnl_only = 0
-        by_wr_only = 0
-        by_both = 0
-        by_neither = 0
+        hit_current_rule = 0
+        hit_pnl_only = 0
+        hit_wr_only = 0
+        hit_neither = 0
         no_stats = 0
-        wr_only_but_pnl_positive = []
+        profitable_low_wr = []
 
         for row in l3_rows:
             reason = (row.get("level_change_reason") or "")
@@ -77,63 +75,51 @@ def main() -> int:
 
             pnl = float(st["total_realized_pnl"] or 0)
             wr = float(st["win_rate"] or 0)
-            hit_pnl = pnl < BLACKLIST_MAX_PNL
-            hit_wr_loss = wr < BLACKLIST_MAX_WIN_RATE and pnl < 0
-            hit_wr_only_old = wr < BLACKLIST_MAX_WIN_RATE and not hit_pnl
-
-            if hit_pnl and hit_wr_loss:
-                by_both += 1
-            elif hit_pnl:
-                by_pnl_only += 1
-            elif hit_wr_loss:
-                by_wr_only += 1
-            elif hit_wr_only_old:
+            if _should_ban_level3(pnl, wr)[0]:
+                hit_current_rule += 1
+            elif pnl < -200:
+                hit_pnl_only += 1
+            elif wr < 40:
+                hit_wr_only += 1
                 if pnl >= 0:
-                    wr_only_but_pnl_positive.append(
-                        (row["symbol"], pnl, wr, reason[:60])
-                    )
+                    profitable_low_wr.append((row["symbol"], pnl, wr, reason[:60]))
             else:
-                by_neither += 1
+                hit_neither += 1
 
         print("=== L3 原因来源 ===")
         print(f"  日终自动黑名单3级: {auto_daily}")
         print(f"  其他原因(手动/旧逻辑): {other_reason}")
         print()
         print("=== L3 对照 account_id=2 累计统计 (有>=5笔平仓) ===")
-        print(f"  同时 pnl<-200 且 胜率<40%: {by_both}")
-        print(f"  仅 pnl<-200: {by_pnl_only}")
-        print(f"  仅 胜率<40%且盈利<0(新规则): {by_wr_only}")
-        print(f"  旧规则误伤(胜率<40%但盈利>=0): {len(wr_only_but_pnl_positive)}")
-        print(f"  两项都不满足(历史L3或口径不一致): {by_neither}")
-        print(f"  无平仓统计(未交易够5笔): {no_stats}")
+        print(f"  满足当前规则(亏损>200U 且 胜率<40%): {hit_current_rule}")
+        print(f"  仅亏损>200U(胜率>=40%, 当前规则不封): {hit_pnl_only}")
+        print(f"  仅胜率<40%(亏损<=200U, 当前规则不封): {hit_wr_only}")
+        print(f"    其中盈利>=0仅因胜率<40%: {len(profitable_low_wr)}")
+        print(f"  两项都不满足(历史L3/手动): {hit_neither}")
+        print(f"  无平仓统计(未交易够{MIN_TRADES}笔): {no_stats}")
         print()
 
-        # 若全市场跑日终规则会命中多少
-        would_old = would_new = 0
-        would_old_wr_profitable = 0
+        would_and = would_old_or = 0
         for st in stats_by_key.values():
             pnl = float(st["total_realized_pnl"] or 0)
             wr = float(st["win_rate"] or 0)
-            if pnl < BLACKLIST_MAX_PNL or wr < BLACKLIST_MAX_WIN_RATE:
-                would_old += 1
-                if wr < BLACKLIST_MAX_WIN_RATE and pnl >= 0:
-                    would_old_wr_profitable += 1
-            if pnl < BLACKLIST_MAX_PNL or (wr < BLACKLIST_MAX_WIN_RATE and pnl < 0):
-                would_new += 1
+            if _should_ban_level3(pnl, wr)[0]:
+                would_and += 1
+            if pnl < -200 or wr < 40:
+                would_old_or += 1
 
-        print("=== 旧规则 pnl<-200 OR 胜率<40% ===")
-        print(f"  会设为 L3: {would_old} / {len(stats_by_key)}")
-        print(f"    其中盈利>=0仅因胜率<40%: {would_old_wr_profitable}")
-        print("=== 新规则 pnl<-200 OR (胜率<40% AND 盈利<0) ===")
-        print(f"  会设为 L3: {would_new} / {len(stats_by_key)}")
+        print("=== 当前日终规则: 亏损>200U 且 胜率<40% ===")
+        print(f"  会设为 L3: {would_and} / {len(stats_by_key)}")
+        print("=== 旧规则(已废弃): 亏损>200U 或 胜率<40% ===")
+        print(f"  会设为 L3: {would_old_or} / {len(stats_by_key)}")
         print()
 
-        if wr_only_but_pnl_positive:
-            print(f"=== 典型：L3 但累计盈利>=0、只因胜率<40% (前15个) ===")
-            for sym, pnl, wr, rsn in wr_only_but_pnl_positive[:15]:
+        if profitable_low_wr:
+            print(f"=== L3 但仅胜率<40%、累计仍盈利 (前15个) ===")
+            for sym, pnl, wr, rsn in profitable_low_wr[:15]:
                 print(f"  {sym:16} pnl={pnl:+8.2f} wr={wr:5.1f}% | {rsn}")
-            if len(wr_only_but_pnl_positive) > 15:
-                print(f"  ... 共 {len(wr_only_but_pnl_positive)} 个")
+            if len(profitable_low_wr) > 15:
+                print(f"  ... 共 {len(profitable_low_wr)} 个")
 
     finally:
         conn.close()

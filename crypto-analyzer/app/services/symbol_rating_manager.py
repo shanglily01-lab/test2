@@ -11,6 +11,15 @@ from loguru import logger
 import pymysql
 from .optimization_config import OptimizationConfig
 
+# 与 update_top_performers 日终白名单同一口径（全仓累计，非近7天毛利）
+try:
+    from update_top_performers import MIN_TRADES as WL_MIN_TRADES, qualifies_whitelist
+except ImportError:
+    WL_MIN_TRADES = 5
+
+    def qualifies_whitelist(pnl: float, win_rate: float) -> bool:
+        return pnl > 200.0 or win_rate > 55.0
+
 
 class SymbolRatingManager:
     """交易对评级管理器 - 自动升级/降级黑名单等级"""
@@ -111,6 +120,38 @@ class SymbolRatingManager:
             'net_pnl': safe_float(result['total_pnl'])
         }
 
+    def analyze_symbol_performance_all_time(self, symbol: str, account_id: int = 2) -> Dict:
+        """全仓累计表现（与 TOP50 / 日终白名单口径一致）."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                COUNT(*) AS total_trades,
+                COALESCE(SUM(realized_pnl), 0) AS net_pnl,
+                CASE
+                    WHEN COUNT(*) > 0
+                    THEN SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) * 100.0 / COUNT(*)
+                    ELSE 0
+                END AS win_rate_pct
+            FROM futures_positions
+            WHERE symbol = %s
+              AND account_id = %s
+              AND status = 'closed'
+              AND realized_pnl IS NOT NULL
+            """,
+            (symbol, account_id),
+        )
+        result = cursor.fetchone()
+        cursor.close()
+        if not result or int(result["total_trades"] or 0) < WL_MIN_TRADES:
+            return {"total_trades": 0, "net_pnl": 0.0, "win_rate_pct": 0.0}
+        return {
+            "total_trades": int(result["total_trades"]),
+            "net_pnl": float(result["net_pnl"] or 0),
+            "win_rate_pct": float(result["win_rate_pct"] or 0),
+        }
+
     def calculate_new_rating_level(self, stats: Dict, current_level: int) -> tuple:
         """
         根据统计数据计算新的评级等级
@@ -132,17 +173,31 @@ class SymbolRatingManager:
         if total_trades < 3:
             return current_level, "交易数量不足,保持现状"
 
-        # 获取升级配置
+        symbol = stats.get("symbol") or ""
+
+        # 升至白名单 L0：仅允许全仓累计达日终白名单门槛（禁止用近7天毛利误判）
+        if current_level == 1 and symbol:
+            at = self.analyze_symbol_performance_all_time(symbol)
+            if at["total_trades"] >= WL_MIN_TRADES and qualifies_whitelist(
+                at["net_pnl"], at["win_rate_pct"]
+            ):
+                parts = []
+                if at["net_pnl"] > 200.0:
+                    parts.append(f"累计盈利{at['net_pnl']:.0f}U")
+                if at["win_rate_pct"] > 55.0:
+                    parts.append(f"胜率{at['win_rate_pct']:.1f}%")
+                return 0, "全仓达白名单: " + ", ".join(parts)
+
+        # L2 → L1：仍用观察窗内表现（非白名单）
         upgrade_config = self.opt_config.get_blacklist_upgrade_config()
         required_profit = upgrade_config['profit_amount']
         required_win_rate = upgrade_config['win_rate']
 
-        # 降级逻辑 (升级到更好的等级)
-        if current_level > 0 and current_level < 3:  # Level 1或2可以降级到更好的等级
-            # 条件: 盈利足够 且 胜率足够
+        if current_level == 2:
             if total_profit >= required_profit and win_rate >= required_win_rate:
-                new_level = current_level - 1
-                return new_level, f"表现良好(盈利${total_profit:.2f}, 胜率{win_rate*100:.1f}%), 降级到Level {new_level}"
+                return 1, (
+                    f"表现良好(盈利${total_profit:.2f}, 胜率{win_rate*100:.1f}%), 降级到Level 1"
+                )
 
         # 升级逻辑 (降级到更差的等级)
         for target_level in [1, 2, 3]:

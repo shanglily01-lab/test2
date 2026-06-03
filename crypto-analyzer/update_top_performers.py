@@ -2,8 +2,8 @@
 每日更新 U 本位模拟仓盈亏榜单与评级联动
 
 1. top_performing_symbols: 累计盈利前 50（至少 5 笔平仓）
-2. 白名单: 盈利 > 200U 或 胜率 > 54% → rating_level=0
-3. 黑名单3级: 盈利 < -200U，或（胜率 < 40% 且累计盈利 < 0）→ rating_level=3
+2. 白名单: 盈利 > 200U 或 胜率 > 55% → rating_level=0
+3. 黑名单3级: 亏损 > 200U 且 胜率 < 40% → rating_level=3
 """
 
 from app.utils.config_loader import get_db_config
@@ -24,24 +24,24 @@ MYSQL_CONFIG = {**get_db_config()}
 MIN_TRADES = 5
 TOP_N_DEFAULT = 50
 WHITELIST_MIN_PNL = 200.0
-WHITELIST_MIN_WIN_RATE = 54.0
+WHITELIST_MIN_WIN_RATE = 55.0
 BLACKLIST_MAX_PNL = -200.0
 BLACKLIST_MAX_WIN_RATE = 40.0
 
 
+def qualifies_whitelist(pnl: float, win_rate: float) -> bool:
+    """白名单: 盈利 > 200U 或 胜率 > 55%（严格大于）."""
+    return pnl > WHITELIST_MIN_PNL or win_rate > WHITELIST_MIN_WIN_RATE
+
+
 def _should_ban_level3(pnl: float, win_rate: float) -> tuple[bool, list[str]]:
-    """
-    黑名单3级（永不交易）:
-    - 累计盈利 < -200U，或
-    - 胜率 < 40% 且累计盈利 < 0（避免「盈利但胜率偏低」被误封，如 BTC +1000U/38% WR）
-    """
-    parts: list[str] = []
-    if pnl < BLACKLIST_MAX_PNL:
-        parts.append(f"累计盈利{pnl:.0f}U")
-    elif win_rate < BLACKLIST_MAX_WIN_RATE and pnl < 0:
-        parts.append(f"胜率{win_rate:.1f}%")
-        parts.append(f"累计盈利{pnl:.0f}U")
-    return (len(parts) > 0, parts)
+    """黑名单3级: 累计亏损 > 200U 且 胜率 < 40%（两项同时满足）."""
+    if pnl < BLACKLIST_MAX_PNL and win_rate < BLACKLIST_MAX_WIN_RATE:
+        return True, [
+            f"累计盈利{pnl:.0f}U",
+            f"胜率{win_rate:.1f}%",
+        ]
+    return False, []
 
 _SYMBOL_STATS_SQL = """
     SELECT
@@ -118,7 +118,7 @@ def _apply_whitelist_and_blacklist(symbol_stats: list, opt: OptimizationConfig) 
             logger.info(f"[评级] L3 {symbol} | {reason}")
             continue
 
-        if pnl > WHITELIST_MIN_PNL or wr > WHITELIST_MIN_WIN_RATE:
+        if qualifies_whitelist(pnl, wr):
             if cur_level == 0:
                 skipped_wl += 1
                 continue
@@ -254,7 +254,7 @@ def update_top_performing_symbols(account_id: int = 2, top_n: int = TOP_N_DEFAUL
 
         logger.info(
             f"评级规则: 白名单 盈利>{WHITELIST_MIN_PNL}U 或 胜率>{WHITELIST_MIN_WIN_RATE}% | "
-            f"黑名单3级 盈利<{BLACKLIST_MAX_PNL}U 或 (胜率<{BLACKLIST_MAX_WIN_RATE}% 且盈利<0)"
+            f"黑名单3级 盈利<{BLACKLIST_MAX_PNL}U 且 胜率<{BLACKLIST_MAX_WIN_RATE}%"
         )
         opt = OptimizationConfig(MYSQL_CONFIG)
         rating_result = _apply_whitelist_and_blacklist(all_stats, opt)

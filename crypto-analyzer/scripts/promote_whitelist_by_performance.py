@@ -23,10 +23,11 @@ import pymysql
 from app.services.optimization_config import OptimizationConfig
 from app.utils.config_loader import get_db_config
 from app.utils.futures_symbol import futures_symbol_clean, futures_symbol_rating_canonical
+from update_top_performers import qualifies_whitelist
 
 PAPER_ACCOUNT_ID = 2
 DEFAULT_MIN_PNL = 200.0
-DEFAULT_MIN_WIN_RATE = 54.0
+DEFAULT_MIN_WIN_RATE = 55.0
 DEFAULT_MIN_TRADES = 5
 
 
@@ -34,12 +35,13 @@ def _normalize_symbol_key(symbol: str) -> str:
     return futures_symbol_clean(symbol)
 
 
-def _reason_for(row: dict, min_pnl: float, min_win_rate: float) -> str:
+def _reason_for(row: dict) -> str:
     parts = []
-    if row["net_pnl"] > min_pnl:
-        parts.append(f"累计盈利{row['net_pnl']:.0f}U")
-    if row["win_rate"] > min_win_rate:
-        parts.append(f"胜率{row['win_rate']:.1f}%")
+    pnl, wr = row["net_pnl"], row["win_rate"]
+    if pnl > DEFAULT_MIN_PNL:
+        parts.append(f"累计盈利{pnl:.0f}U")
+    if wr > DEFAULT_MIN_WIN_RATE:
+        parts.append(f"胜率{wr:.1f}%")
     return "脚本自动加入白名单: " + ", ".join(parts)
 
 
@@ -122,7 +124,7 @@ def pick_candidates(
 ) -> list[dict]:
     candidates = []
     for row in perf_rows:
-        if row["net_pnl"] <= min_pnl and row["win_rate"] <= min_win_rate:
+        if not qualifies_whitelist(row["net_pnl"], row["win_rate"]):
             continue
         key = _normalize_symbol_key(row["symbol"])
         if is_whitelisted(key, rating_map):
@@ -132,7 +134,7 @@ def pick_candidates(
             continue
         row = dict(row)
         row["current_level"] = rating["rating_level"] if rating else None
-        row["reason"] = _reason_for(row, min_pnl, min_win_rate)
+        row["reason"] = _reason_for(row)
         candidates.append(row)
     return candidates
 
@@ -179,7 +181,7 @@ def main() -> int:
         "--min-win-rate",
         type=float,
         default=DEFAULT_MIN_WIN_RATE,
-        help="胜率阈值 %% (默认 54，满足盈利或胜率其一即可)",
+        help="胜率阈值 %% (默认 55，满足盈利或胜率其一即可)",
     )
     parser.add_argument("--min-trades", type=int, default=DEFAULT_MIN_TRADES, help="至少 N 笔平仓 (默认 5)")
     parser.add_argument("--account-id", type=int, default=PAPER_ACCOUNT_ID)

@@ -597,10 +597,11 @@ async def lifespan(app: FastAPI):
                 logger.error(f"[FAIL] 市场预测分析失败: {e}")
         schedule.every(4).hours.do(run_market_prediction)
 
-        # 盈亏日终：Top50 盈利榜 + 白名单/黑名单3级 (每天 02:00 本地, U 本位 account_id=2)
+        # 盈亏日终：Top50 + 评级 (每天 02:00) — update_top_performers.py
+        # 白名单 L0: 盈利>200U 或 胜率>55% | L3: 亏损>200U 且 胜率<40%
         # live_top50_required=1 时实盘同步须在 top_performing_symbols 内 (见 trading_gates.py)
         def run_top50_update():
-            """每天更新 top_performing_symbols，并按盈亏规则调整白名单/L3."""
+            """每天 update_top_performing_symbols：Top50 榜 + 白名单/L3 日终规则."""
             try:
                 logger.info("[盈亏日终] 开始更新 Top50 盈利榜 + 评级联动...")
                 from update_top_performers import update_top_performing_symbols
