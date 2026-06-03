@@ -17,6 +17,7 @@ PREDICT_SCHEDULE_POLL_MINUTES = 5
 GEMINI_PREDICT_NEXT_DUE_KEY = "gemini_predict_next_due_utc"
 DEEPSEEK_PREDICT_NEXT_DUE_KEY = "deepseek_predict_next_due_utc"
 GPT_PREDICT_NEXT_DUE_KEY = "gpt_predict_next_due_utc"
+GPT_EXPLORE_NEXT_DUE_KEY = "gpt_explore_next_due_utc"
 
 
 def _parse_utc_naive(value: str) -> Optional[datetime]:
@@ -47,11 +48,10 @@ def _read_setting_dt(cur, key: str) -> Optional[datetime]:
     return _parse_utc_naive(row.get("setting_value") or "")
 
 
-def _last_run_at(cur, runs_table: str) -> Optional[datetime]:
-    # partial = 进行中；进程中断后可能长期残留，不能参与 4h 防重
+def _last_ok_run_at(cur, runs_table: str) -> Optional[datetime]:
+    """仅 status=ok 参与 4h 周期（error/skipped 不推迟下一轮）."""
     cur.execute(
-        f"SELECT MAX(asof_utc) AS last_at FROM `{runs_table}` "
-        f"WHERE status IS NULL OR status != 'partial'"
+        f"SELECT MAX(asof_utc) AS last_at FROM `{runs_table}` WHERE status='ok'"
     )
     row = cur.fetchone()
     last_at = (row or {}).get("last_at")
@@ -75,20 +75,28 @@ def predict_round_is_due(
     if manual:
         return True, "manual"
 
-    now = now or datetime.now()
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     with conn.cursor() as cur:
+        last_ok = _last_ok_run_at(cur, runs_table)
+        if last_ok:
+            elapsed_s = (now - last_ok).total_seconds()
+            if elapsed_s >= PREDICT_ROUND_INTERVAL_SECONDS:
+                return True, (
+                    f"逾期补跑 距上次成功 {elapsed_s / 3600:.2f}h >= {PREDICT_ROUND_INTERVAL_HOURS}h "
+                    f"(last_ok={last_ok.isoformat()})"
+                )
+
         next_due = _read_setting_dt(cur, next_due_key)
         if next_due and now < next_due:
             remain_s = (next_due - now).total_seconds()
             return False, f"未到点 剩余 {remain_s / 3600:.2f}h (next_due={next_due.isoformat()})"
 
-        last_at = _last_run_at(cur, runs_table)
-        if last_at:
-            elapsed_s = (now - last_at).total_seconds()
+        if last_ok:
+            elapsed_s = (now - last_ok).total_seconds()
             if elapsed_s < PREDICT_ROUND_INTERVAL_SECONDS:
                 return False, (
-                    f"距上次执行 {elapsed_s / 3600:.2f}h < {PREDICT_ROUND_INTERVAL_HOURS}h "
-                    f"(last_at={last_at.isoformat()})"
+                    f"距上次成功 {elapsed_s / 3600:.2f}h < {PREDICT_ROUND_INTERVAL_HOURS}h "
+                    f"(last_ok={last_ok.isoformat()})"
                 )
 
     return True, "due"

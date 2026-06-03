@@ -238,8 +238,27 @@ def test_json_extra_data():
     assert len(parsed["verdicts"]) == 1
 
 
+def test_normalize_preserves_prompt_meta():
+    from app.services.ai_explore_prompt import normalize_explore_llm_payload
+
+    raw = {
+        "summary_zh": "测试",
+        "verdicts": [{"symbol": "BTCUSDT", "category": "entry", "confidence": 0.7}],
+        "_prompt": "PROMPT_BODY",
+        "_raw_response": '{"verdicts":[]}',
+    }
+    out = normalize_explore_llm_payload(raw)
+    assert out is not None
+    assert out.get("_prompt") == "PROMPT_BODY"
+    assert out.get("_raw_response") == '{"verdicts":[]}'
+    wrapped = [{"summary_zh": "x", "verdicts": [], "_prompt": "nested"}]
+    out2 = normalize_explore_llm_payload(wrapped)
+    assert out2 and out2.get("_prompt") == "nested"
+
+
 def main():
     tests = [
+        ("normalize prompt meta", test_normalize_preserves_prompt_meta),
         ("json extra data", test_json_extra_data),
         ("json unterminated salvage", test_json_unterminated_string_salvage),
         ("single bar rejected", test_single_bar_rejected),

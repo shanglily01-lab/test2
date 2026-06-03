@@ -111,10 +111,34 @@ def _flatten_verdict_items(raw: Any) -> List[dict]:
     return out
 
 
+def explore_llm_stub_with_trace(prompt: str, raw: str) -> dict:
+    """JSON 解析失败时仍把 prompt/原始响应交给 runs 表落库."""
+    return {
+        "summary_zh": "",
+        "verdicts": [],
+        "_prompt": prompt,
+        "_raw_response": raw or "",
+    }
+
+
+def _llm_meta_from_payload(parsed: Any) -> dict:
+    """保留 call_llm 附带的 _prompt / _raw_response 等元字段（normalize 不得丢弃）."""
+    if isinstance(parsed, dict):
+        return {
+            k: v
+            for k, v in parsed.items()
+            if isinstance(k, str) and k.startswith("_")
+        }
+    if isinstance(parsed, list) and len(parsed) == 1 and isinstance(parsed[0], dict):
+        return _llm_meta_from_payload(parsed[0])
+    return {}
+
+
 def normalize_explore_llm_payload(parsed: Any) -> Optional[dict]:
     """LLM 偶发 list 顶层 / verdicts 为 dict / 单元素 wrapper → 标准 {summary_zh, verdicts}."""
     if parsed is None:
         return None
+    meta = _llm_meta_from_payload(parsed)
     if isinstance(parsed, list):
         if len(parsed) == 1 and isinstance(parsed[0], dict):
             inner = parsed[0]
@@ -143,7 +167,9 @@ def normalize_explore_llm_payload(parsed: Any) -> Optional[dict]:
     if not isinstance(summary, str):
         summary = str(summary)
     verdicts = _flatten_verdict_items(parsed.get("verdicts"))
-    return {"summary_zh": summary, "verdicts": verdicts}
+    out: dict = {"summary_zh": summary, "verdicts": verdicts}
+    out.update(meta)
+    return out
 
 
 def explore_catalyst_technical_ok(

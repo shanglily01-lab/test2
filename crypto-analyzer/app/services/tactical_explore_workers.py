@@ -7,7 +7,10 @@ from typing import Callable, Optional, Tuple
 
 from loguru import logger
 
-from app.services.ai_explore_prompt import EXPLORE_LLM_MAX_OUTPUT_TOKENS
+from app.services.ai_explore_prompt import (
+    EXPLORE_LLM_MAX_OUTPUT_TOKENS,
+    explore_llm_stub_with_trace,
+)
 from app.services.ai_tactical_explore_prompts import (
     TACTICAL_STRATEGIES,
     TacticalStrategyDef,
@@ -17,7 +20,6 @@ from app.services.ai_tactical_explore_prompts import (
     tactical_category_to_side,
 )
 from app.services.gemini_swan_worker import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT_S
-from app.services.ai_explore_prompt import EXPLORE_LLM_MAX_OUTPUT_TOKENS
 from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_MODEL, GPT_TIMEOUT_S
 from app.services.gpt_llm_client import gpt_chat_json
 from app.services.reversal_explore_runner import (
@@ -85,7 +87,7 @@ def _call_gemini(defn: TacticalStrategyDef, strategy_key: str):
         logger.info(f"[Gemini{defn.title_zh}] {time.time()-t0:.1f}s out={len(text)}")
         parsed, err = parse_tactical_llm_json(text, f"Gemini{defn.title_zh}", defn.fixed_side)
         if parsed is None:
-            return None, f"JSON: {err}"
+            return explore_llm_stub_with_trace(prompt, text), f"JSON: {err}"
         parsed["_prompt"] = prompt
         parsed["_raw_response"] = text
         return parsed, None
@@ -121,7 +123,7 @@ def _call_deepseek(defn: TacticalStrategyDef, strategy_key: str):
         logger.info(f"[DeepSeek{defn.title_zh}] {time.time()-t0:.1f}s out={len(text)}")
         parsed, err = parse_tactical_llm_json(text, f"DeepSeek{defn.title_zh}", defn.fixed_side)
         if parsed is None:
-            return None, f"JSON: {err}"
+            return explore_llm_stub_with_trace(prompt, text), f"JSON: {err}"
         parsed["_prompt"] = prompt
         parsed["_raw_response"] = text
         return parsed, None
@@ -155,7 +157,7 @@ def _call_gpt(defn: TacticalStrategyDef, strategy_key: str):
         logger.info(f"[GPT{defn.title_zh}] {time.time()-t0:.1f}s out={len(text)}")
         parsed, err = parse_tactical_llm_json(text, f"GPT{defn.title_zh}", defn.fixed_side)
         if parsed is None:
-            return None, f"JSON: {err}"
+            return explore_llm_stub_with_trace(prompt, text), f"JSON: {err}"
         parsed["_prompt"] = prompt
         parsed["_raw_response"] = text
         return parsed, None

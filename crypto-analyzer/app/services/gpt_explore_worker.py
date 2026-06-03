@@ -19,10 +19,15 @@ from app.services.ai_explore_prompt import (
     AI_POSITION_SL_PCT,
     AI_POSITION_TP_PCT,
     EXPLORE_CONFIDENCE_THRESHOLD,
-    EXPLORE_MIN_INTERVAL_HOURS,
     build_explore_prompt,
     explore_catalyst_technical_ok,
     parse_explore_llm_json,
+)
+from app.services.ai_predict_schedule import (
+    GPT_EXPLORE_NEXT_DUE_KEY,
+    PREDICT_ROUND_INTERVAL_HOURS,
+    predict_claim_next_slot,
+    predict_round_is_due,
 )
 from app.services.gemini_explore_worker import _get_current_price, _would_instant_tp
 from app.services.gemini_swan_worker import _read_setting
@@ -198,31 +203,69 @@ def run_explore_round(triggered_by: str = "scheduler") -> Optional[int]:
     if not _explore_running_lock.acquire(blocking=False):
         logger.warning(f"[GPT探索] 上一轮还未结束, 跳过 (triggered_by={triggered_by})")
         return None
+    try:
+        return _run_explore_round_body(triggered_by)
+    finally:
+        try:
+            _explore_running_lock.release()
+        except Exception:
+            pass
+
+
+def _run_explore_round_body(triggered_by: str = "scheduler") -> Optional[int]:
     t0 = time.time()
     asof_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    manual = triggered_by == "manual"
     conn = None
+
+    try:
+        with _connect() as conn_chk:
+            with conn_chk.cursor() as cur:
+                enabled_raw = _read_setting(cur, "gpt_explore_enabled", "0").strip().lower()
+            if enabled_raw not in ("1", "true", "yes", "on"):
+                logger.info(f"[GPT探索] kill switch=0, 跳过 (triggered_by={triggered_by})")
+                return None
+
+            due, due_reason = predict_round_is_due(
+                conn_chk,
+                runs_table="gpt_explore_runs",
+                next_due_key=GPT_EXPLORE_NEXT_DUE_KEY,
+                now=asof_utc,
+                manual=manual,
+                log_tag="GPT探索",
+            )
+            if not due:
+                logger.info(f"[GPT探索] {due_reason}, 跳过 (triggered_by={triggered_by})")
+                return None
+
+            if not manual:
+                predict_claim_next_slot(
+                    conn_chk,
+                    next_due_key=GPT_EXPLORE_NEXT_DUE_KEY,
+                    now=asof_utc,
+                    log_tag="GPT探索",
+                )
+    except Exception as e:
+        logger.error(f"[GPT探索] 调度检查失败, 保守跳过: {e}")
+        return None
+
+    logger.info(
+        f"[GPT探索] === 一轮开始 (triggered_by={triggered_by}, "
+        f"周期={PREDICT_ROUND_INTERVAL_HOURS}h) ==="
+    )
+
     try:
         conn = _connect()
-        with conn.cursor() as cur:
-            enabled_raw = _read_setting(cur, "gpt_explore_enabled", "0").strip().lower()
-        if enabled_raw not in ("1", "true", "yes", "on"):
-            return None
-        if triggered_by != "manual":
-            with conn.cursor() as cur:
-                cur.execute("SELECT MAX(asof_utc) AS last_run FROM gpt_explore_runs WHERE status='ok'")
-                row = cur.fetchone()
-                if row and row.get("last_run"):
-                    elapsed_h = (asof_utc - row["last_run"]).total_seconds() / 3600
-                    if elapsed_h < EXPLORE_MIN_INTERVAL_HOURS:
-                        return None
-
         from app.services.explore_prepared_bundle import get_explore_prepared_bundle
         universe, global_ctx, _ = get_explore_prepared_bundle(
             # 快照偶发过期时，scheduler 也允许兜底现场构建，避免整轮被判空。
             conn, "GPT探索", allow_rebuild=triggered_by in ("manual", "scheduler_init", "test", "scheduler"),
         )
         if not universe:
-            return _insert_run(conn, asof_utc, 0, "", time.time() - t0, "skipped", "候选池为空", triggered_by)
+            logger.warning("[GPT探索] 候选池为空, 跳过")
+            return _insert_run(
+                conn, asof_utc, 0, "", time.time() - t0, "skipped", "候选池为空", triggered_by,
+            )
 
         historical_stats = {"total_trades": 0, "win_rate": None, "total_pnl": 0}
         resp, call_err = _call_gpt_explore(universe, global_ctx, historical_stats)
@@ -289,6 +332,10 @@ def run_explore_round(triggered_by: str = "scheduler") -> Optional[int]:
 
         _insert_verdicts(conn, verdict_rows)
         _update_run_trades_opened(conn, run_id, trades_opened)
+        logger.info(
+            f"[GPT探索] === 一轮结束 run_id={run_id} 开仓={trades_opened} "
+            f"候选池={len(universe)} 耗时={time.time()-t0:.1f}s ==="
+        )
         return run_id
     except Exception as e:
         logger.error(f"[GPT探索] 一轮异常: {e}", exc_info=True)
@@ -299,8 +346,8 @@ def run_explore_round(triggered_by: str = "scheduler") -> Optional[int]:
                 pass
         return None
     finally:
-        try:
-            if conn:
+        if conn:
+            try:
                 conn.close()
-        finally:
-            _explore_running_lock.release()
+            except Exception:
+                pass

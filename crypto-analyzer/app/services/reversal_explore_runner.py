@@ -609,17 +609,39 @@ def run_tactical_explore_round(
         historical_stats = _get_historical_stats(conn, cfg.source)
 
         llm_response, call_err = call_llm(universe, global_ctx, historical_stats)
+        saved_prompt = (
+            llm_response.get("_prompt") if isinstance(llm_response, dict) else None
+        )
+        saved_raw = (
+            llm_response.get("_raw_response") if isinstance(llm_response, dict) else None
+        )
         if llm_response is None:
             _close_run(
                 universe_size, "", time.time() - t0, "error",
                 (call_err or "LLM 失败")[:500],
+                saved_prompt,
+                saved_raw,
+            )
+            return run_id
+
+        if call_err:
+            _close_run(
+                universe_size, "", time.time() - t0, "error",
+                (call_err or "LLM 失败")[:500],
+                saved_prompt,
+                saved_raw,
             )
             return run_id
 
         llm_response = normalize_explore_llm_payload(llm_response)
         if not isinstance(llm_response, dict):
-            _close_run(universe_size, "", time.time() - t0, "error", "LLM JSON 结构无效")
+            _close_run(
+                universe_size, "", time.time() - t0, "error", "LLM JSON 结构无效",
+                saved_prompt, saved_raw,
+            )
             return run_id
+        saved_prompt = llm_response.get("_prompt") or saved_prompt
+        saved_raw = llm_response.get("_raw_response") or saved_raw
 
         summary_zh = (llm_response.get("summary_zh") or "")[:1000]
         verdicts = llm_response.get("verdicts") or []
@@ -642,8 +664,8 @@ def run_tactical_explore_round(
             time.time() - t0,
             "ok",
             None,
-            llm_response.get("_prompt"),
-            llm_response.get("_raw_response"),
+            saved_prompt,
+            saved_raw,
         )
 
         big4 = _get_big4_signal(conn)

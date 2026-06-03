@@ -6,7 +6,10 @@ from typing import Optional, Tuple
 
 from loguru import logger
 
-from app.services.ai_explore_prompt import EXPLORE_LLM_MAX_OUTPUT_TOKENS
+from app.services.ai_explore_prompt import (
+    EXPLORE_LLM_MAX_OUTPUT_TOKENS,
+    explore_llm_stub_with_trace,
+)
 from app.services.ai_reversal_explore_prompt import (
     REVERSAL_HOLD_HOURS,
     REVERSAL_SL_PCT,
@@ -75,7 +78,7 @@ def _call_gemini_reversal(
 
     parsed, parse_err = parse_reversal_llm_json(text, "Gemini顶空底多")
     if parsed is None:
-        return None, f"JSON解析失败: {parse_err}"
+        return explore_llm_stub_with_trace(prompt, text), f"JSON解析失败: {parse_err}"
     parsed["_prompt"] = prompt
     parsed["_raw_response"] = text
     return parsed, None
