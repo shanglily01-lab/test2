@@ -57,6 +57,92 @@ def _is_llm_skip_category(category: str) -> bool:
     return (category or "skip").lower().strip() in _SKIP_CATEGORIES
 
 
+def _universe_lookup(universe: dict, symbol: str) -> Optional[dict]:
+    """LLM 常输出 MANTAUSDT，universe 键为 MANTA/USDT."""
+    if not symbol or not universe:
+        return None
+    s = str(symbol).upper().strip()
+    if s in universe:
+        return universe[s]
+    if "/" not in s and len(s) > 4 and s.endswith("USDT"):
+        slash = f"{s[:-4]}/USDT"
+        if slash in universe:
+            return universe[slash]
+    compact = s.replace("/", "")
+    for key, item in universe.items():
+        if str(key).upper().replace("/", "") == compact:
+            return item
+    return None
+
+
+def _gpt_apply_verdict_fallback(
+    cfg: ReversalExploreConfig,
+    universe: dict,
+    verdicts: List[dict],
+    *,
+    catalyst_ok: Callable[..., Tuple[bool, str]],
+    category_to_side: Callable[[str, float], Optional[str]],
+) -> Tuple[List[dict], bool, str]:
+    """GPT 空列表或 entry 全未过 catalyst 时，用预筛 TOP 补位."""
+    if not cfg.source.startswith("gpt_"):
+        return verdicts, False, ""
+
+    sk = cfg.source.replace("gpt_", "", 1)
+
+    def _entry_passes(v: dict) -> bool:
+        if not isinstance(v, dict):
+            return False
+        sym = str(v.get("symbol") or "").upper().replace("/", "")
+        category = (v.get("category") or "skip").lower()
+        confidence = parse_tactical_confidence(v)
+        side = category_to_side(category, confidence)
+        if not side:
+            return False
+        item = _universe_lookup(universe, sym)
+        ok, _reason = catalyst_ok(
+            category,
+            (v.get("catalyst") or "")[:500],
+            (v.get("data_signal") or "")[:255],
+            item,
+            confidence,
+        )
+        return ok
+
+    note = ""
+    if verdicts:
+        good = [v for v in verdicts if _entry_passes(v)]
+        if good:
+            dropped = len(verdicts) - len(good)
+            if dropped:
+                logger.warning(
+                    f"[{cfg.log_tag}] GPT {dropped} 条 verdict catalyst 未过，"
+                    f"保留 {len(good)} 条"
+                )
+            return good, False, note
+        verdicts = []
+        note = "GPT entry 均未过 catalyst，"
+
+    filled = False
+    if sk == "reversal":
+        from app.services.ai_reversal_explore_prompt import (
+            supplement_empty_reversal_verdicts,
+        )
+        verdicts, filled = supplement_empty_reversal_verdicts(
+            universe, verdicts, max_entries=2,
+        )
+    else:
+        defn = TACTICAL_STRATEGIES.get(sk)
+        if defn is not None:
+            verdicts, filled = supplement_empty_tactical_verdicts(
+                defn, universe, verdicts, max_entries=3,
+            )
+    if filled:
+        logger.warning(
+            f"[{cfg.log_tag}] {note}eligible_fallback 补 {len(verdicts)} 个"
+        )
+    return verdicts, filled, note
+
+
 def _get_lock(key: str) -> threading.Lock:
     if key not in _locks:
         _locks[key] = threading.Lock()
@@ -509,31 +595,17 @@ def run_tactical_explore_round(
         verdicts = llm_response.get("verdicts") or []
         if not isinstance(verdicts, list):
             verdicts = []
-        if not verdicts and cfg.source.startswith("gpt_"):
-            sk = cfg.source.replace("gpt_", "", 1)
-            filled = False
-            if sk == "reversal":
-                from app.services.ai_reversal_explore_prompt import (
-                    supplement_empty_reversal_verdicts,
-                )
-                verdicts, filled = supplement_empty_reversal_verdicts(
-                    universe, verdicts, max_entries=2,
-                )
-            else:
-                defn = TACTICAL_STRATEGIES.get(sk)
-                if defn is not None:
-                    verdicts, filled = supplement_empty_tactical_verdicts(
-                        defn, universe, verdicts, max_entries=3,
-                    )
-            if filled:
-                logger.warning(
-                    f"[{cfg.log_tag}] GPT 返回空 verdicts，"
-                    f"eligible_fallback 补 {len(verdicts)} 个"
-                )
-                if not summary_zh.strip():
-                    summary_zh = (
-                        f"GPT 未输出 entry，代码从预筛 TOP 补 {len(verdicts)} 个"
-                    )[:1000]
+        verdicts, gpt_filled, gpt_note = _gpt_apply_verdict_fallback(
+            cfg,
+            universe,
+            verdicts,
+            catalyst_ok=catalyst_ok,
+            category_to_side=category_to_side,
+        )
+        if gpt_filled and not summary_zh.strip():
+            summary_zh = (
+                f"{gpt_note}代码从预筛 TOP 补 {len(verdicts)} 个"
+            )[:1000]
         _close_run(
             universe_size,
             summary_zh,
@@ -579,7 +651,11 @@ def run_tactical_explore_round(
                 continue
 
             tech_ok, tech_reason = catalyst_ok(
-                category, catalyst, data_signal, universe.get(symbol), confidence,
+                category,
+                catalyst,
+                data_signal,
+                _universe_lookup(universe, symbol),
+                confidence,
             )
             if not tech_ok:
                 logger.info(f"[{cfg.log_tag}] {symbol} 跳过 catalyst: {tech_reason}")
@@ -627,7 +703,9 @@ def run_tactical_explore_round(
                 ))
                 continue
 
-            price = _get_open_price(conn, symbol, universe.get(symbol))
+            price = _get_open_price(
+                conn, symbol, _universe_lookup(universe, symbol),
+            )
             if price is None or price <= 0:
                 verdict_rows.append((
                     run_id, symbol, category[:20], confidence,
