@@ -123,9 +123,17 @@
   <!-- Page Content -->
   <div class="pt-24 px-8 pb-12">
 
+    <!-- Tab Bar -->
+    <div class="border-b border-gray-800 mb-6 flex items-center gap-6 px-1 font-mono text-sm">
+      <button id="tab-top50" onclick="setPageTab('top50')" class="page-tab pb-3 text-[#49f4c8] border-b-2 border-[#49f4c8] font-bold">TOP 50 <span id="tab-cnt-top50">50</span></button>
+      <button id="tab-whitelist" onclick="setPageTab('whitelist')" class="page-tab pb-3 text-gray-400 hover:text-gray-200 transition-colors">白名单 <span id="tab-cnt-whitelist">--</span></button>
+    </div>
+
+    <!-- TOP50 Panel -->
+    <div id="panel-top50">
     <!-- TOP50 Stats Row -->
     <p class="text-[10px] uppercase tracking-widest text-gray-500 mb-2 font-mono">TOP 50 榜单汇总</p>
-    <div class="grid grid-cols-4 gap-5 mb-6">
+    <div class="grid grid-cols-4 gap-5 mb-8">
       <div class="bg-[#0f1520] p-5 rounded-xl border border-gray-800 relative overflow-hidden">
         <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-[#49f4c8]">workspace_premium</span></div>
         <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">入选交易对数</p>
@@ -145,38 +153,6 @@
         <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-gray-700">schedule</span></div>
         <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">最后更新</p>
         <h4 id="stat-updated" class="text-lg font-mono font-bold text-gray-300">--</h4>
-      </div>
-    </div>
-
-    <!-- Whitelist Stats Row -->
-    <div class="flex items-center justify-between mb-2">
-      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono">白名单盈利统计 <span class="text-gray-600 normal-case">rating_level=0 · 模拟仓已平仓</span></p>
-      <span id="wl-in-top50" class="text-[10px] text-gray-500 font-mono">--</span>
-    </div>
-    <div class="grid grid-cols-4 gap-5 mb-8">
-      <div class="bg-[#0f1520] p-5 rounded-xl border border-emerald-500/20 relative overflow-hidden">
-        <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-emerald-400">verified_user</span></div>
-        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">白名单币数</p>
-        <h4 id="wl-count" class="text-3xl font-mono font-bold text-emerald-400">--</h4>
-        <p id="wl-trades" class="text-[10px] text-gray-500 mt-1 font-mono">平仓 -- 笔</p>
-      </div>
-      <div class="bg-[#0f1520] p-5 rounded-xl border border-emerald-500/20 relative overflow-hidden">
-        <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-emerald-400">percent</span></div>
-        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">白名单胜率</p>
-        <h4 id="wl-winrate" class="text-3xl font-mono font-bold text-white">--</h4>
-        <p id="wl-wl" class="text-[10px] text-gray-500 mt-1 font-mono">--W / --L</p>
-      </div>
-      <div class="bg-[#0f1520] p-5 rounded-xl border border-emerald-500/20 relative overflow-hidden">
-        <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-emerald-400">account_balance_wallet</span></div>
-        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">白名单累计盈亏</p>
-        <h4 id="wl-pnl" class="text-3xl font-mono font-bold text-[#49f4c8]">--</h4>
-        <p id="wl-pf" class="text-[10px] text-gray-500 mt-1 font-mono">盈亏比 --</p>
-      </div>
-      <div class="bg-[#0f1520] p-5 rounded-xl border border-emerald-500/20 relative overflow-hidden">
-        <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-emerald-400">stacked_line_chart</span></div>
-        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">总盈利 / 总亏损</p>
-        <h4 id="wl-gross" class="text-lg font-mono font-bold text-gray-200 leading-tight">--</h4>
-        <p class="text-[10px] text-gray-500 mt-2 font-mono">毛盈利 · 毛亏损</p>
       </div>
     </div>
 
@@ -208,14 +184,81 @@
         </table>
       </div>
     </div>
+    </div><!-- /panel-top50 -->
+
+    <!-- Whitelist Panel -->
+    <div id="panel-whitelist" class="hidden">
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-[10px] uppercase tracking-widest text-gray-500 font-mono">白名单盈利统计 <span class="text-gray-600 normal-case">rating_level=0 · 模拟仓已平仓</span></p>
+      <span id="wl-in-top50" class="text-[10px] text-gray-500 font-mono">--</span>
+    </div>
+    <div class="grid grid-cols-4 gap-5 mb-8">
+      <div class="bg-[#0f1520] p-5 rounded-xl border border-emerald-500/20 relative overflow-hidden">
+        <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-emerald-400">verified_user</span></div>
+        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">白名单币数</p>
+        <h4 id="wl-count" class="text-3xl font-mono font-bold text-emerald-400">--</h4>
+        <p id="wl-trades" class="text-[10px] text-gray-500 mt-1 font-mono">平仓 -- 笔</p>
+      </div>
+      <div class="bg-[#0f1520] p-5 rounded-xl border border-emerald-500/20 relative overflow-hidden">
+        <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-emerald-400">percent</span></div>
+        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">白名单胜率</p>
+        <h4 id="wl-winrate" class="text-3xl font-mono font-bold text-white">--</h4>
+        <p id="wl-wl" class="text-[10px] text-gray-500 mt-1 font-mono">--W / --L</p>
+      </div>
+      <div class="bg-[#0f1520] p-5 rounded-xl border border-emerald-500/20 relative overflow-hidden">
+        <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-emerald-400">account_balance_wallet</span></div>
+        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">白名单累计盈亏</p>
+        <h4 id="wl-pnl" class="text-3xl font-mono font-bold text-[#49f4c8]">--</h4>
+        <p id="wl-pf" class="text-[10px] text-gray-500 mt-1 font-mono">盈亏比 --</p>
+      </div>
+      <div class="bg-[#0f1520] p-5 rounded-xl border border-emerald-500/20 relative overflow-hidden">
+        <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-emerald-400">stacked_line_chart</span></div>
+        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">总盈利 / 总亏损</p>
+        <h4 id="wl-gross" class="text-lg font-mono font-bold text-gray-200 leading-tight">--</h4>
+        <p class="text-[10px] text-gray-500 mt-2 font-mono">毛盈利 · 毛亏损</p>
+      </div>
+    </div>
+
+    <div class="bg-[#0f1520] rounded-xl border border-emerald-500/20 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+        <h3 class="font-headline font-semibold text-white">白名单交易对明细</h3>
+        <span id="wl-table-count" class="text-xs text-gray-500 font-mono">-- 条</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-[#0d1117] text-gray-500 text-xs uppercase tracking-widest">
+            <tr>
+              <th class="sortable-wl px-4 py-3 text-left" onclick="sortWlBy('symbol')">交易对</th>
+              <th class="sortable-wl px-4 py-3 text-center" onclick="sortWlBy('in_top50')">TOP50</th>
+              <th class="sortable-wl px-4 py-3 text-right" onclick="sortWlBy('total_trades')">总交易数</th>
+              <th class="sortable-wl px-4 py-3 text-center" onclick="sortWlBy('winning_trades')">盈利 / 亏损</th>
+              <th class="sortable-wl px-4 py-3 text-center" onclick="sortWlBy('win_rate')">胜率</th>
+              <th class="sortable-wl px-4 py-3 text-right" onclick="sortWlBy('total_realized_pnl')">累计盈亏</th>
+              <th class="sortable-wl px-4 py-3 text-right" onclick="sortWlBy('avg_pnl_per_trade')">均盈/均亏</th>
+              <th class="sortable-wl px-4 py-3 text-right" onclick="sortWlBy('profit_factor')">盈亏比</th>
+              <th class="sortable-wl px-4 py-3 text-left" onclick="sortWlBy('reason')">备注</th>
+              <th class="px-4 py-3 text-right">操作</th>
+            </tr>
+          </thead>
+          <tbody id="whitelist-tbody">
+            <tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    </div><!-- /panel-whitelist -->
 
   </div><!-- /page content -->
 </main>
 
 <script>
 var _data = [];
+var _wlData = [];
+var _currentTab = 'top50';
 var _sortKey = 'rank_score';
 var _sortAsc = true;
+var _wlSortKey = 'total_realized_pnl';
+var _wlSortAsc = false;
 var _searchVal = '';
 
 function authHeaders() {
@@ -223,18 +266,45 @@ function authHeaders() {
   return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
 }
 
+function setPageTab(tab) {
+  _currentTab = tab;
+  document.querySelectorAll('.page-tab').forEach(function(b) {
+    b.classList.remove('text-[#49f4c8]', 'border-b-2', 'border-[#49f4c8]', 'font-bold');
+    b.classList.add('text-gray-400');
+  });
+  var active = document.getElementById('tab-' + tab);
+  if (active) {
+    active.classList.add('text-[#49f4c8]', 'border-b-2', 'border-[#49f4c8]', 'font-bold');
+    active.classList.remove('text-gray-400');
+  }
+  document.getElementById('panel-top50').classList.toggle('hidden', tab !== 'top50');
+  document.getElementById('panel-whitelist').classList.toggle('hidden', tab !== 'whitelist');
+  var hdr = document.querySelector('header h2');
+  if (hdr) {
+    hdr.textContent = tab === 'whitelist' ? '白名单交易对' : 'TOP 50 高胜率交易对';
+  }
+  if (tab === 'whitelist') renderWhitelist();
+}
+
 async function loadData() {
   document.getElementById('top50-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">加载中...</td></tr>';
+  document.getElementById('whitelist-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">加载中...</td></tr>';
   try {
     var resp = await fetch('/api/top50', { headers: authHeaders() });
     var json = await resp.json();
     if (!json.success) throw new Error(json.detail || json.error || 'API error');
     _data = json.data || [];
+    _wlData = json.whitelist_data || [];
+    document.getElementById('tab-cnt-top50').textContent = _data.length;
+    document.getElementById('tab-cnt-whitelist').textContent = (json.whitelist_stats && json.whitelist_stats.symbol_count != null)
+      ? json.whitelist_stats.symbol_count : _wlData.length;
     updateStats(json.stats || {});
     updateWhitelistStats(json.whitelist_stats || {});
     render();
+    renderWhitelist();
   } catch(e) {
     document.getElementById('top50-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-red-400">' + e.message + '</td></tr>';
+    document.getElementById('whitelist-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-red-400">' + e.message + '</td></tr>';
   }
 }
 
@@ -297,7 +367,85 @@ function sortBy(key) {
 
 function filterTable() {
   _searchVal = (document.getElementById('search-input').value || '').trim().toUpperCase();
-  render();
+  if (_currentTab === 'whitelist') renderWhitelist();
+  else render();
+}
+
+function sortWlBy(key) {
+  if (_wlSortKey === key) { _wlSortAsc = !_wlSortAsc; } else { _wlSortKey = key; _wlSortAsc = false; }
+  document.querySelectorAll('th.sortable-wl').forEach(function(th) {
+    th.classList.remove('sort-asc', 'sort-desc');
+  });
+  var ths = document.querySelectorAll('th.sortable-wl');
+  var keys = ['symbol','in_top50','total_trades','winning_trades','win_rate','total_realized_pnl','avg_pnl_per_trade','profit_factor','reason'];
+  var idx = keys.indexOf(key);
+  if (idx >= 0 && ths[idx]) {
+    ths[idx].classList.add(_wlSortAsc ? 'sort-asc' : 'sort-desc');
+  }
+  renderWhitelist();
+}
+
+function renderWhitelist() {
+  var rows = _wlData.slice();
+  if (_searchVal) {
+    rows = rows.filter(function(r) { return r.symbol.toUpperCase().indexOf(_searchVal) >= 0; });
+  }
+  var key = _wlSortKey;
+  rows.sort(function(a, b) {
+    var av = a[key], bv = b[key];
+    if (typeof av === 'boolean') {
+      av = av ? 1 : 0;
+      bv = bv ? 1 : 0;
+    }
+    if (typeof av === 'string') return _wlSortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+    av = parseFloat(av) || 0;
+    bv = parseFloat(bv) || 0;
+    return _wlSortAsc ? av - bv : bv - av;
+  });
+
+  document.getElementById('wl-table-count').textContent = rows.length + ' / ' + _wlData.length + ' 条';
+
+  if (rows.length === 0) {
+    document.getElementById('whitelist-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">暂无白名单数据</td></tr>';
+    return;
+  }
+
+  var html = rows.map(function(r) {
+    var wr = parseFloat(r.win_rate) || 0;
+    var wrBar = '<div class="flex items-center gap-2"><div class="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden"><div class="h-full rounded-full bg-emerald-400" style="width:' + Math.min(wr, 100) + '%"></div></div><span class="font-mono text-xs ' + (wr >= 60 ? 'text-emerald-400' : wr >= 50 ? 'text-yellow-400' : 'text-red-400') + '">' + wr.toFixed(1) + '%</span></div>';
+    var pnl = parseFloat(r.total_realized_pnl) || 0;
+    var pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + ' U';
+    var pnlCls = pnl >= 0 ? 'text-[#49f4c8]' : 'text-red-400';
+    var avg = parseFloat(r.avg_pnl_per_trade) || 0;
+    var avgStr = (avg >= 0 ? '+' : '') + avg.toFixed(2) + ' U';
+    var avgCls = avg >= 0 ? 'text-[#49f4c8]' : 'text-red-400';
+    var pf = r.profit_factor != null ? parseFloat(r.profit_factor) : 0;
+    var pfStr = pf > 0 ? pf.toFixed(2) + 'x' : '--';
+    var pfCls = pf >= 1.5 ? 'text-[#49f4c8]' : pf >= 1 ? 'text-yellow-400' : 'text-red-400';
+    var symShort = r.symbol.replace('/USDT', '').replace('/USD', '');
+    var topBadge = r.in_top50
+      ? '<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-[#49f4c8]/10 text-[#49f4c8] border border-[#49f4c8]/20">TOP50</span>'
+      : '<span class="text-gray-600 text-[10px] font-mono">—</span>';
+    var reason = (r.reason || '').slice(0, 40);
+    if ((r.reason || '').length > 40) reason += '…';
+
+    return [
+      '<tr class="border-t border-gray-800/50 hover:bg-[#151a20] transition-colors">',
+      '  <td class="px-4 py-3"><div class="flex items-center gap-2"><span class="font-mono font-bold text-white">' + symShort + '</span><span class="text-[10px] text-gray-500">USDT</span></div></td>',
+      '  <td class="px-4 py-3 text-center">' + topBadge + '</td>',
+      '  <td class="px-4 py-3 text-right font-mono text-gray-300">' + (r.total_trades || 0) + '</td>',
+      '  <td class="px-4 py-3 text-center font-mono text-xs"><span class="text-[#49f4c8]">' + (r.winning_trades || 0) + 'W</span> / <span class="text-red-400">' + (r.losing_trades || 0) + 'L</span></td>',
+      '  <td class="px-4 py-3" style="min-width:120px">' + wrBar + '</td>',
+      '  <td class="px-4 py-3 text-right font-mono font-bold ' + pnlCls + '">' + pnlStr + '</td>',
+      '  <td class="px-4 py-3 text-right font-mono text-xs ' + avgCls + '">' + avgStr + '</td>',
+      '  <td class="px-4 py-3 text-right font-mono text-xs ' + pfCls + '">' + pfStr + '</td>',
+      '  <td class="px-4 py-3 text-left text-xs text-gray-500 max-w-[160px] truncate" title="' + (r.reason || '').replace(/"/g, '&quot;') + '">' + (reason || '—') + '</td>',
+      '  <td class="px-4 py-3 text-right"><button onclick="addToBlacklist(\'' + r.symbol.replace(/'/g, "\\'") + '\')" class="text-[10px] px-2 py-1 rounded border border-gray-700 text-gray-500 hover:border-red-500 hover:text-red-400 transition-all font-mono">加入黑名单</button></td>',
+      '</tr>'
+    ].join('\n');
+  }).join('\n');
+
+  document.getElementById('whitelist-tbody').innerHTML = html;
 }
 
 function render() {
@@ -402,7 +550,10 @@ async function addToBlacklist(symbol) {
   }
 }
 
-document.addEventListener('DOMContentLoaded', loadData);
+document.addEventListener('DOMContentLoaded', function() {
+  setPageTab('top50');
+  loadData();
+});
 </script>
 </body>
 </html>

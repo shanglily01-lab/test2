@@ -252,27 +252,8 @@ def _normalize_symbol_key(symbol: str) -> str:
     return (symbol or "").replace("/", "").upper()
 
 
-def _fetch_whitelist_pnl_stats(cur, account_id: int = 2) -> dict:
-    """白名单 (rating_level=0) 在模拟仓已平仓单上的累计盈亏."""
-    cur.execute(
-        "SELECT symbol FROM trading_symbol_rating WHERE rating_level = 0"
-    )
-    wl_rows = cur.fetchall()
-    symbol_count = len(wl_rows)
-    wl_keys = set()
-    for r in wl_rows:
-        sym = (r.get("symbol") or "").strip()
-        if not sym:
-            continue
-        wl_keys.add(_normalize_symbol_key(sym))
-
-    cur.execute("SELECT symbol FROM top_performing_symbols")
-    in_top50 = sum(
-        1 for r in cur.fetchall()
-        if _normalize_symbol_key(r.get("symbol") or "") in wl_keys
-    )
-
-    empty = {
+def _empty_whitelist_stats(symbol_count: int = 0, in_top50: int = 0, account_id: int = 2) -> dict:
+    return {
         "symbol_count": symbol_count,
         "in_top50_count": in_top50,
         "total_trades": 0,
@@ -286,54 +267,146 @@ def _fetch_whitelist_pnl_stats(cur, account_id: int = 2) -> dict:
         "profit_factor": None,
         "account_id": account_id,
     }
-    if not wl_keys:
-        return empty
 
-    cur.execute(
-        """
-        SELECT symbol, realized_pnl
-        FROM futures_positions
-        WHERE account_id = %s
-          AND status = 'closed'
-          AND realized_pnl IS NOT NULL
-        """,
-        (account_id,),
-    )
-    wins = losses = breakeven = 0
-    net_pnl = gross_profit = gross_loss = 0.0
-    for fp in cur.fetchall():
-        if _normalize_symbol_key(fp.get("symbol") or "") not in wl_keys:
-            continue
-        pnl = float(fp.get("realized_pnl") or 0)
-        net_pnl += pnl
-        if pnl > 0:
-            wins += 1
-            gross_profit += pnl
-        elif pnl < 0:
-            losses += 1
-            gross_loss += abs(pnl)
-        else:
-            breakeven += 1
-    total_trades = wins + losses + breakeven
+
+def _symbol_pnl_row(total_trades, wins, losses, breakeven, net_pnl, gross_profit, gross_loss):
     row = {
-        "net_pnl": net_pnl,
-        "gross_profit": gross_profit,
-        "gross_loss": gross_loss,
+        "total_trades": total_trades,
+        "winning_trades": wins,
+        "losing_trades": losses,
+        "breakeven": breakeven,
+        "total_realized_pnl": round(net_pnl, 2),
+        "gross_profit": round(gross_profit, 2),
+        "gross_loss": round(gross_loss, 2),
+    }
+    counts = parse_pnl_counts({
         "total_trades": total_trades,
         "wins": wins,
         "losses": losses,
         "breakeven": breakeven,
-    }
-    counts = parse_pnl_counts(row)
-    gross_profit = float(row.get("gross_profit") or 0)
-    gross_loss = float(row.get("gross_loss") or 0)
-    net_pnl = float(row.get("net_pnl") or 0)
-    profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else None
+        "net_pnl": net_pnl,
+        "gross_profit": gross_profit,
+        "gross_loss": gross_loss,
+    })
+    row["win_rate"] = counts["win_rate"]
+    row["avg_pnl_per_trade"] = round(net_pnl / total_trades, 2) if total_trades > 0 else 0
+    row["profit_factor"] = round(gross_profit / gross_loss, 2) if gross_loss > 0 else None
+    return row
 
-    return {
-        "symbol_count": symbol_count,
-        "in_top50_count": in_top50,
-        "total_trades": int(row.get("total_trades") or 0),
+
+def _fetch_whitelist_bundle(cur, account_id: int = 2) -> dict:
+    """白名单汇总统计 + 逐币列表 (rating_level=0 · 模拟仓已平仓)."""
+    cur.execute(
+        """
+        SELECT symbol, level_change_reason, updated_at
+        FROM trading_symbol_rating
+        WHERE rating_level = 0
+        ORDER BY symbol
+        """
+    )
+    wl_rows = cur.fetchall()
+    wl_meta = {}
+    for r in wl_rows:
+        sym = (r.get("symbol") or "").strip()
+        if not sym:
+            continue
+        key = _normalize_symbol_key(sym)
+        wl_meta[key] = {
+            "symbol": sym,
+            "reason": (r.get("level_change_reason") or "").strip(),
+            "updated_at": r.get("updated_at").isoformat() if r.get("updated_at") else None,
+        }
+
+    cur.execute("SELECT symbol FROM top_performing_symbols")
+    top50_keys = {
+        _normalize_symbol_key(r.get("symbol") or "")
+        for r in cur.fetchall()
+        if r.get("symbol")
+    }
+
+    per_symbol = {
+        key: {"wins": 0, "losses": 0, "breakeven": 0, "net_pnl": 0.0, "gross_profit": 0.0, "gross_loss": 0.0}
+        for key in wl_meta
+    }
+
+    if wl_meta:
+        cur.execute(
+            """
+            SELECT symbol, realized_pnl
+            FROM futures_positions
+            WHERE account_id = %s
+              AND status = 'closed'
+              AND realized_pnl IS NOT NULL
+            """,
+            (account_id,),
+        )
+        for fp in cur.fetchall():
+            key = _normalize_symbol_key(fp.get("symbol") or "")
+            if key not in per_symbol:
+                continue
+            agg = per_symbol[key]
+            pnl = float(fp.get("realized_pnl") or 0)
+            agg["net_pnl"] += pnl
+            if pnl > 0:
+                agg["wins"] += 1
+                agg["gross_profit"] += pnl
+            elif pnl < 0:
+                agg["losses"] += 1
+                agg["gross_loss"] += abs(pnl)
+            else:
+                agg["breakeven"] += 1
+
+    symbols = []
+    in_top50_count = 0
+    for key, meta in wl_meta.items():
+        in_top50 = key in top50_keys
+        if in_top50:
+            in_top50_count += 1
+        agg = per_symbol[key]
+        total_trades = agg["wins"] + agg["losses"] + agg["breakeven"]
+        pnl_row = _symbol_pnl_row(
+            total_trades,
+            agg["wins"],
+            agg["losses"],
+            agg["breakeven"],
+            agg["net_pnl"],
+            agg["gross_profit"],
+            agg["gross_loss"],
+        )
+        symbols.append({
+            "symbol": meta["symbol"],
+            "in_top50": in_top50,
+            "reason": meta["reason"],
+            "updated_at": meta["updated_at"],
+            **pnl_row,
+        })
+
+    symbols.sort(key=lambda x: (-x["total_realized_pnl"], -x["total_trades"], x["symbol"]))
+
+    if not wl_meta:
+        return {"stats": _empty_whitelist_stats(0, 0, account_id), "symbols": []}
+
+    total_wins = sum(s["winning_trades"] for s in symbols)
+    total_losses = sum(s["losing_trades"] for s in symbols)
+    total_breakeven = sum(s["breakeven"] for s in symbols)
+    total_trades = total_wins + total_losses + total_breakeven
+    net_pnl = sum(s["total_realized_pnl"] for s in symbols)
+    gross_profit = sum(s["gross_profit"] for s in symbols)
+    gross_loss = sum(s["gross_loss"] for s in symbols)
+    counts = parse_pnl_counts({
+        "total_trades": total_trades,
+        "wins": total_wins,
+        "losses": total_losses,
+        "breakeven": total_breakeven,
+        "net_pnl": net_pnl,
+        "gross_profit": gross_profit,
+        "gross_loss": gross_loss,
+    })
+
+    stats = {
+        "symbol_count": len(wl_meta),
+        "in_top50_count": in_top50_count,
+        "total_trades": total_trades,
         "wins": counts["wins"],
         "losses": counts["losses"],
         "breakeven": counts["breakeven"],
@@ -341,9 +414,14 @@ def _fetch_whitelist_pnl_stats(cur, account_id: int = 2) -> dict:
         "net_pnl": round(net_pnl, 2),
         "gross_profit": round(gross_profit, 2),
         "gross_loss": round(gross_loss, 2),
-        "profit_factor": profit_factor,
+        "profit_factor": round(gross_profit / gross_loss, 2) if gross_loss > 0 else None,
         "account_id": account_id,
     }
+    return {"stats": stats, "symbols": symbols}
+
+
+def _fetch_whitelist_pnl_stats(cur, account_id: int = 2) -> dict:
+    return _fetch_whitelist_bundle(cur, account_id)["stats"]
 
 
 @router.get("/api/top50")
@@ -362,7 +440,9 @@ async def get_top50():
             LIMIT 50
         """)
         rows = cur.fetchall()
-        whitelist_stats = _fetch_whitelist_pnl_stats(cur, account_id=2)
+        whitelist_bundle = _fetch_whitelist_bundle(cur, account_id=2)
+        whitelist_stats = whitelist_bundle["stats"]
+        whitelist_data = whitelist_bundle["symbols"]
         cur.close()
         conn.close()
 
@@ -397,6 +477,7 @@ async def get_top50():
                 'last_updated':  last_updated,
             },
             'whitelist_stats': whitelist_stats,
+            'whitelist_data': whitelist_data,
         }
     except Exception as e:
         logger.error(f"获取TOP50失败: {e}")
