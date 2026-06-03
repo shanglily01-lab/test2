@@ -429,6 +429,10 @@ class MultiStrategyService:
         source: str,
     ):
         """同步实盘下单"""
+        from app.services.trading_gates import should_sync_live_for_source
+        if not should_sync_live_for_source(source):
+            logger.info(f"[{source}] {symbol} 仅模拟盘，跳过实盘同步")
+            return
         # TOP50/白名单实盘过滤: 模拟单已开但实盘不下
         if not self._is_allowed_for_live(symbol):
             logger.info(f"[{source}] {symbol} 不在 TOP50, 跳过实盘 (模拟单已开)")

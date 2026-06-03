@@ -774,6 +774,16 @@ Output ONLY JSON:
         关闭模拟仓 + 主动平实盘。
         无论如何模拟仓都会关（实盘平成功与否都不影响模拟仓关仓）。
         """
+        from app.services.trading_gates import is_live_close_enabled, should_sync_live_for_source
+
+        source = position.get("source") or ""
+        if not is_live_close_enabled() or not should_sync_live_for_source(source):
+            current_price = self._get_current_price(position["symbol"])
+            close_price = current_price or float(position["entry_price"])
+            return self._close_paper_only(
+                position, reason, close_price, advisor_tag=advisor_tag,
+            )
+
         close_price = None
         live_pnl = None
         live_row = None

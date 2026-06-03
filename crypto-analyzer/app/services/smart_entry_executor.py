@@ -390,20 +390,11 @@ class SmartEntryExecutor:
             logger.info(f"✅ {symbol} 一次性开仓完成 | 持仓ID:{position_id} | 价格:${entry_price:.4f} | 保证金:{margin}U")
 
             # ========== 同步实盘开仓 ==========
-            try:
-                from app.services.system_settings_loader import get_setting as _get_cached_setting
-                live_trading_enabled = str(_get_cached_setting('live_trading_enabled', '0')).lower() in ('1', 'true', 'yes')
-            except Exception:
-                live_trading_enabled = False
-
-            if not live_trading_enabled:
-                logger.info(f"[同步实盘] {symbol} live_trading_enabled=0，跳过实盘同步")
+            from app.services.trading_gates import check_live_open_allowed
+            _allowed, _reason = check_live_open_allowed(symbol, "smart_trader_sync")
+            if not _allowed:
+                logger.info(f"[同步实盘] {symbol} {_reason}，跳过实盘同步")
             else:
-                from app.services.trading_gates import check_live_symbol_allowed
-                _allowed, _reason = check_live_symbol_allowed(symbol)
-                if not _allowed:
-                    logger.info(f"[同步实盘] {symbol} {_reason}，跳过实盘同步")
-                else:
                     try:
                         from app.services.api_key_service import APIKeyService
                         from app.trading.binance_futures_engine import BinanceFuturesEngine

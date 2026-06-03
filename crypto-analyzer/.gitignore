@@ -68,6 +68,9 @@ debug_*.py
 *问题*.md
 
 
+# benchmark / 临时输出目录
+scripts/out/
+
 # 文本文件（排除 requirements.txt 和 table_schemas.txt）
 *.txt
 ema_alerts.txt

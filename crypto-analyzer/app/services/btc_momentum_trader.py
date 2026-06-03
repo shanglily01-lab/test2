@@ -300,7 +300,8 @@ class BTCMomentumTrader:
     def _sync_live(self, symbol: str, direction: str, entry_price: float,
                    paper_pos_id: int, trigger_info: str):
         """同步到实盘账号（调用交易引擎真实下单）"""
-        if not self._is_live_enabled():
+        from app.services.trading_gates import should_sync_live_for_source
+        if not self._is_live_enabled() or not should_sync_live_for_source("btc_momentum"):
             return
         try:
             from app.services.api_key_service import APIKeyService

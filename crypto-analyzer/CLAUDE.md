@@ -54,7 +54,9 @@
 | Gemini 预测 | 每 **4h 必跑** + **5min 轮询** (`system_settings.*_predict_next_due_utc`) |
 | DeepSeek 探索 | 每 **4h** + **10min 轮询** |
 | DeepSeek 预测 | 每 **4h 必跑** + **5min 轮询** (`deepseek_predict_next_due_utc`) |
-| 市场情绪分析 | 每 6 小时 |
+| GPT 探索/预测 | 同 Gemini/DeepSeek 节奏 + `gpt_*_next_due_utc` |
+| 战术探索 15 槽位 | 每 **15min** 轮询 (`tactical_explore_scheduler`) |
+| 市场情绪分析 | 每 **8 小时** |
 | ETF 同步 | 每天 06:45 |
 | 金库同步 | 每天 07:30 |
 
@@ -83,54 +85,52 @@
 
 **预测 4h 保证**: 每 5min 轮询 + `gemini_predict_next_due_utc` / `deepseek_predict_next_due_utc` 认领窗口；启动后 +45s/+50s 补跑检查。勿用 `scheduler_init` 跑预测。进程锁在跳过时会释放。
 
-**启动 init 错峰** (`scheduler_init`): Gemini探索 +15s, 情绪 +25s, DeepSeek探索 +90s。
+**启动 init 错峰** (`scheduler_init`): Gemini探索 +15s, 情绪 +25s, DeepSeek探索 +90s, GPT探索 +120s；预测补跑 +45s/+50s/+55s。
+
+**生产 LLM prompt 语言 (2026-06)**: 主探索/预测/战术/反转/开仓顾问/持仓顾问 **英文**（`build_*_prompt()` → `*_en`）；顾问 `reason` 英文。完整说明见 `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md` / `AI_STRATEGIES_AND_ADVISORS_EN.md`。
 
 **日志** (非 journalctl): `logs/scheduler_YYYY-MM-DD.log`；排查:
 `grep -E "一轮开始|一轮结束|candidate_pool_snapshot 读取|回退 kline|上一轮还未结束|skipped_weak_catalyst" logs/scheduler_$(date -u +%Y-%m-%d).log`
 
 **相关 commits**: `211990b` (UPSERT+探索读缓存+锁), `15bdfc0` (partial), `e0feb1e9` (探索 4h), `162d8d5b` (主探索/预测 prompt+门槛).
 
-详见 `.cursor/rules/scheduler-ai-ops.mdc`。
+详见 `.cursor/rules/scheduler-ai-ops.mdc` 与 `.cursor/rules/ai-strategies-advisors.mdc`。
 
-## Gemini AI 模块
+## AI 策略与顾问（完整文档）
 
-### gemini_reversal_explore_worker / deepseek_reversal_explore_worker (顶空底多)
-- 无 kill switch，始终可跑；Web 页「顶空底多」Tab + `POST /api/*-reversal-explore/run-now`
-- `top_reversal` → SHORT，`bottom_reversal` → LONG；仅模拟仓 `source=gemini_reversal` / `deepseek_reversal`
-- 不同步实盘；表 `*_reversal_explore_runs` / `*_reversal_explore_verdicts`（migration 008）
+- 中文: `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md`
+- English: `docs/AI_STRATEGIES_AND_ADVISORS_EN.md`
 
-### gemini/deepseek 战术探索 (顶空底多 + 四策略)
-- 无 kill switch、无 `system_settings` 开关；探索页 Tab + `POST /api/*-explore/run-now`
-- **共用数据** (`explore_prepared_bundle` + `data_cache.explore_prepared_snapshot`): scheduler **每 15min** `refresh_explore_shared_data` 预计算 universe+global_ctx；主探索/战术策略**只读**，不再每轮 build/enrich
-- **调度** (`tactical_explore_scheduler`): 10 任务、4h 周期、错峰槽位、15min 轮询认领
-- 固定方向四策略：`pullback`/`chase` → LONG，`rebound`/`dump` → SHORT；顶空底多 `top_reversal`/`bottom_reversal`
-- 仅模拟仓 `source=gemini_*` / `deepseek_*`；SL 3% / TP 5% / 5x / 500U / 持仓 4h；不同步实盘
-- 表 migration 008 (reversal) + 009 (四策略)；校验 `scripts/validate_tactical_explore_prompts.py`
-- Prompt: 1h **24 根整体 + 近 4~6 根**；`tactical_catalyst_ok` 先跑策略 extra 检查
+以下为速查；细节以文档为准。
 
-### gemini_explore_worker / deepseek_explore_worker (主探索)
-- 每 **4h**, kill switch: `gemini_explore_enabled` / DeepSeek 同名
-- 开模拟单: SL=**4%**/TP=**6%**/5x/6h/500U；`explore_catalyst_technical_ok` + conf≥**0.60**
-- LLM 候选: 技术面评分 TOP50（`prepare_universe_for_llm`）
-- v3.5 接入实盘: `live_trading_enabled=1` 时同步到所有 active API Key
+## Gemini / DeepSeek / GPT AI 模块
 
-### gemini_predictor / deepseek_predictor (主预测)
-- 每 4h, kill switch: `gemini_predict_enabled` / DeepSeek 同名
-- 从 candidate_pool 技术面 TOP50 预测方向, 持仓 6h, SL=4%/TP=6%
-- conf≥**0.60** + **`explore_catalyst_technical_ok`**；弱 catalyst → `skipped_weak_catalyst`
-- 不实盘接入
+### 顶空底多 (`*_reversal`)
+- 无 kill switch；`top_reversal`→SHORT / `bottom_reversal`→LONG；SL **3%** / TP **5%** / 4h / 5x / 500U；conf≥**0.65**
+- 仅模拟仓；表 `*_reversal_explore_runs`（migration 008）
 
-### GeminiPositionAdvisor (持仓顾问 + 开仓审查)
-- **持仓顾问**: `system_settings.gemini_position_advisor_enabled`；持仓 ≥30min，hold/observe/sell
-- **持仓判断主依据**: 近 **4 根 1h** + 近 **6 根 15m** K 线结构；**Big4 仅辅证**，不得单独触发 sell
-- **亏损分档**: 轻微(-5%)/中度(-12%)/严重(≤-12%) ROI 提高 hold 门槛；深亏 hold 经 K 线统计复核，防止死扛
-- **开仓审查** (`paper_open_gate.py`): 模拟开仓前按 `source` 走 `open_advisor_strategy_rubrics` + Gemini 审查（FIFO 队列）
-- 表 `gemini_advisor_reviews` (migration 011)；Web `/gemini-advisor-reviews`
-- sell/拒单逻辑见 `gemini_position_advisor.py`；实盘平仓需 `live_close_enabled=1`
+### 战术四策略 + 三教师 (`*_pullback|rebound|chase|dump`)
+- **15 任务**（5 策略 × 3 教师），`tactical_explore_scheduler` 4h + **15min** 轮询；共用 `explore_prepared_snapshot`
+- 固定方向：pullback/chase→LONG，rebound/dump→SHORT；SL **4%** / TP **6%**；conf≥**0.55**
+- 仅模拟仓；migration 009 / 017
+
+### 主探索 (`*_explore`)
+- 每 **4h** + 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
+- SL **4%** / TP **6%** / **4h** / 5x / 500U；conf≥**0.60** + `explore_catalyst_technical_ok`
+- **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：仅 `gemini_explore`；DeepSeek/GPT 探索仅模拟
+
+### 主预测 (`*_predict`)
+- 每 **4h** + 5min 轮询 + `*_predict_next_due_utc`；kill switch（Gemini 预测默认 1）
+- 同主探索持仓/SL/TP/门槛；**实盘**：`gemini_predict`、`deepseek_predict`；GPT 预测仅模拟
+
+### 开仓 / 持仓顾问
+- **开仓**: `paper_open_gate` — `gemini_*`→Gemini；`deepseek_*`→DeepSeek；`gpt_*`→GPT；**其它→Gemini+DeepSeek 双审**
+- **持仓**: Gemini 管非 deepseek/gpt；DeepSeek 管 `deepseek_*`；GPT 管 `gpt_*`；`smart_trader` 每 15min tick
+- Prompt/rubric/**reason 生产环境为英文**；开关 `*_open_advisor_enabled` / `*_position_advisor_enabled`
+- 表 `gemini/deepseek/gpt_advisor_reviews`；Web `/gemini-advisor-reviews`
 
 ### gemini_sentiment_analyzer (情绪)
-- 每 6h, kill switch: `gemini_sentiment_enabled` (默认 1)
-- 市场情绪标签 + 川普分析
+- 每 **8h**；`gemini_sentiment_enabled`（默认 1）；不下单
 
 ## 校验脚本 (无 API)
 
@@ -138,7 +138,8 @@
 |------|------|
 | `validate_explore_predict_prompts.py` | 主探索/预测门槛与 prompt |
 | `validate_tactical_explore_prompts.py` | 四战术 + 顶空底多 catalyst |
-| `validate_open_advisor_rubrics.py` | 开仓审查 rubric |
+| `validate_open_advisor_rubrics.py` | 开仓/持仓顾问英文 rubric |
+| `benchmark_*_prompt_lang.py` | 主/战术/顾问 prompt 中英对照（无 API） |
 | `validate_tactical_explore_db.py` | 战术表结构 |
 | `ai_win_rate_report.py` | **AI 按日胜率巡检** (见下) |
 
@@ -163,14 +164,16 @@
 
 ## 实盘控制
 
-- **统一闸门**: `system_settings.live_trading_enabled` (1=开启)
+- **按 source 白名单**（`app/services/trading_gates.py`）：仅 `gemini_explore`、`gemini_predict`、`deepseek_predict` 可开/平实盘；其余策略（S1/S5/S6/S9、战术、反转、GPT、smart_trader 等）只写模拟仓
+- **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)
+- **平仓总开关**: `system_settings.live_close_enabled` (1=开启；模拟平仓时同步交易所；持仓顾问 sell 亦受此规则)
 - **TOP50 实仓闸门**: `system_settings.live_top50_required` (默认 1，TOP50 内可开实仓)
 - **白名单实仓闸门**: `system_settings.live_whitelist_enabled` (默认 1，rating_level=0 可开实仓)
 - 两者为 **或** 关系；**都关** 则即使 `live_trading_enabled=1` 也不同步实盘
 - **黑名单3级**: `system_settings.blacklist_level3_enabled` (默认 1，关闭后 L3 可开仓)
-- 各闸门由 `app/services/trading_gates.py` 统一读取，**不在 config.yaml**
+- 各闸门由 `trading_gates.check_live_open_allowed` / `should_sync_live_for_source` 统一读取，**不在 config.yaml**
 - 每账号 OPEN 上限 20 仓
-- 各策略通过 `_sync_live()` / `_sync_to_live()` 同步到 BinanceFuturesEngine
+- 允许实盘的策略通过 `_sync_live()` / `_sync_to_live()` 同步到 BinanceFuturesEngine
 
 ## 代码规范
 

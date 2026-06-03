@@ -1213,33 +1213,18 @@ def _sync_to_live(
     3. 对每个账号调用 BinanceFuturesEngine.open_position()
     4. 通过 paper_position_id 关联实盘单与模拟单
     """
-    # 1. 检查实盘开关 (受统一闸门 live_trading_enabled 控制)
     try:
         conn = _connect()
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'"
-            )
-            row = cur.fetchone()
-            enabled = (row and str(row.get('setting_value', '0')).strip().lower() in ('1', 'true', 'yes'))
-            if not enabled:
-                logger.info(f"[Gemini探索] live_trading_enabled=0, 跳过实盘同步 {symbol}")
-                conn.close()
-                return
-
-            # 1b. 实盘 TOP50 / 白名单闸门 (system_settings 可配置)
-            from app.services.trading_gates import check_live_symbol_allowed
-            allowed, reason = check_live_symbol_allowed(symbol, cursor=cur)
+            from app.services.trading_gates import check_live_open_allowed
+            allowed, reason = check_live_open_allowed(symbol, EXPLORE_SOURCE, cursor=cur)
             if not allowed:
-                logger.warning(
-                    f"[Gemini探索] {symbol} {reason}, 跳过实盘同步 "
-                    f"(模拟单已开, 但不同步到实盘)"
-                )
+                logger.info(f"[Gemini探索] {symbol} {reason}, 跳过实盘同步")
                 conn.close()
                 return
         conn.close()
     except Exception as e:
-        logger.warning(f"[Gemini探索] 检查实盘开关/TOP50失败, 跳过实盘同步: {e}")
+        logger.warning(f"[Gemini探索] 检查实盘闸门失败, 跳过实盘同步: {e}")
         return
 
     # 2. 获取实盘账号

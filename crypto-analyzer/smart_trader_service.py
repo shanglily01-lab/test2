@@ -2910,13 +2910,13 @@ class SmartTraderService:
             # 获取持仓信息用于日志和计算盈亏
             if position_id is not None:
                 cursor.execute("""
-                    SELECT id, entry_price, quantity, leverage, margin FROM futures_positions
+                    SELECT id, entry_price, quantity, leverage, margin, source FROM futures_positions
                     WHERE id = %s AND symbol = %s AND position_side = %s
                       AND status = 'open' AND account_id = %s
                 """, (position_id, symbol, side, self.account_id))
             else:
                 cursor.execute("""
-                    SELECT id, entry_price, quantity, leverage, margin FROM futures_positions
+                    SELECT id, entry_price, quantity, leverage, margin, source FROM futures_positions
                     WHERE symbol = %s AND position_side = %s AND status = 'open' AND account_id = %s
                 """, (symbol, side, self.account_id))
 
@@ -3030,7 +3030,13 @@ class SmartTraderService:
             except Exception:
                 live_enabled = False
 
-            if live_enabled and positions:
+            from app.services.trading_gates import should_sync_live_for_source
+            sync_live_close = (
+                live_enabled
+                and positions
+                and any(should_sync_live_for_source(p.get("source") or "") for p in positions)
+            )
+            if sync_live_close:
                 try:
                     from app.services.api_key_service import APIKeyService
                     from app.trading.binance_futures_engine import BinanceFuturesEngine

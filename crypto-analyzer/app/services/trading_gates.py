@@ -1,5 +1,9 @@
 """
 实盘开仓闸门 & 黑名单3级 — 统一读取 system_settings，避免各模块硬编码。
+
+按 source 控制实盘（其余策略仅模拟）:
+  - gemini_explore, gemini_predict, deepseek_predict → 可开/平实盘
+  - 总开关: live_trading_enabled（开仓）, live_close_enabled（平仓）
 """
 from __future__ import annotations
 
@@ -9,6 +13,13 @@ import pymysql
 from loguru import logger
 
 from app.utils.config_loader import get_db_config
+
+# 仅此三类策略同步 Binance 实盘；其它 source 只走模拟仓
+LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
+    "gemini_explore",
+    "gemini_predict",
+    "deepseek_predict",
+})
 from app.utils.futures_symbol import (
     futures_symbol_clean,
     sql_rating_l3_clean_subquery,
@@ -42,6 +53,40 @@ def is_live_top50_required() -> bool:
 def is_live_whitelist_enabled() -> bool:
     """实盘同步是否允许白名单 (rating_level=0) 开实仓 (默认开启)."""
     return _bool_setting('live_whitelist_enabled', True)
+
+
+def _normalize_source(source: str) -> str:
+    return (source or "").strip().lower()
+
+
+def is_live_trading_enabled() -> bool:
+    """system_settings.live_trading_enabled 总开关."""
+    return _bool_setting("live_trading_enabled", False)
+
+
+def is_live_close_enabled() -> bool:
+    """system_settings.live_close_enabled — 模拟平仓时是否同步平交易所仓位."""
+    return _bool_setting("live_close_enabled", False)
+
+
+def should_sync_live_for_source(source: str) -> bool:
+    """该订单 source 是否允许参与实盘开/平同步."""
+    return _normalize_source(source) in LIVE_SYNC_SOURCES
+
+
+def check_live_open_allowed(
+    symbol: str, source: str, cursor=None,
+) -> Tuple[bool, str]:
+    """
+    开仓同步实盘前的完整检查: 总开关 + source 白名单 + TOP50/评级白名单.
+
+    Returns: (allowed, reject_reason)
+    """
+    if not is_live_trading_enabled():
+        return False, "live_trading_enabled=0"
+    if not should_sync_live_for_source(source):
+        return False, f"策略 {source} 仅模拟盘"
+    return check_live_symbol_allowed(symbol, cursor)
 
 
 def is_symbol_blocked_level3(symbol: str, rating_level: Optional[int] = None) -> bool:

@@ -1225,43 +1225,15 @@ class FuturesTradingEngine:
                         f"(paper_position_id={position_id}, reason={reason})"
                     )
                 else:
-                    # 检查策略配置 syncLive (若有 strategy_id)
-                    should_sync = False
-                    strategy_id = position.get('strategy_id')
-                    if strategy_id:
-                        cursor = connection.cursor()
-                        cursor.execute(
-                            "SELECT config FROM trading_strategies WHERE id = %s",
-                            (strategy_id,)
-                        )
-                        strategy_row = cursor.fetchone()
-                        cursor.close()
-                        logger.info(f"[同步实盘] 策略配置查询结果: strategy_id={strategy_id}, found={strategy_row is not None}")
-                        if strategy_row and strategy_row.get('config'):
-                            import json
-                            config = strategy_row['config']
-                            parse_attempts = 0
-                            while isinstance(config, str) and parse_attempts < 3:
-                                try:
-                                    config = json.loads(config)
-                                    parse_attempts += 1
-                                except json.JSONDecodeError:
-                                    break
-                            if isinstance(config, dict):
-                                sync_value = config.get('syncLive', False)
-                                should_sync = sync_value in (True, 1, "1", "true", "True")
-                                logger.info(f"[同步实盘] 策略 {strategy_id} syncLive={sync_value} 解析={should_sync}")
-                            else:
-                                logger.warning(f"[同步实盘] 策略配置解析失败,config 类型: {type(config)}")
-                        else:
-                            logger.warning(f"[同步实盘] 策略 {strategy_id} 无配置信息")
-                    else:
-                        # 无 strategy_id (手动开仓) 默认同步
-                        should_sync = True
-                        logger.info(f"[同步实盘] {symbol} {position_side} 无策略ID,默认同步实盘平仓")
+                    from app.services.trading_gates import should_sync_live_for_source
 
+                    paper_source = position.get("source") or ""
+                    should_sync = should_sync_live_for_source(paper_source)
                     if not should_sync:
-                        logger.debug(f"[同步实盘] {symbol} {position_side} 策略未启用实盘同步,跳过")
+                        logger.info(
+                            f"[同步实盘] source={paper_source} 仅模拟盘,跳过 {symbol} "
+                            f"{position_side} 实盘平仓"
+                        )
                     else:
                         # 关键改动: 按 paper_position_id 查 live_futures_positions,
                         # 用每条记录对应账号 (user_api_keys) 的密钥平仓

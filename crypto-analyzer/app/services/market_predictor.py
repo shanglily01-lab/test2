@@ -387,17 +387,13 @@ class MarketPredictor:
 
     def _sync_close_live(self, paper_id: int, symbol: str, side: str, exit_price: float):
         """模拟单平仓时同步平掉对应实盘"""
+        from app.services.trading_gates import is_live_close_enabled, should_sync_live_for_source
+        if not is_live_close_enabled() or not should_sync_live_for_source("PREDICTOR"):
+            return
         try:
             conn = self._get_conn()
             cur = conn.cursor()
-            cur.execute(
-                "SELECT setting_value FROM system_settings WHERE setting_key='live_close_enabled'"
-            )
-            r = cur.fetchone()
-            live_enabled = r and str(r.get('setting_value', '0')).lower() in ('1', 'true', 'yes')
-            if not live_enabled:
-                cur.close(); conn.close()
-                return
+            cur.close(); conn.close()
             # 不再手动更新 live_futures_positions — 由定时任务每15M从币安全量同步
             # 调用交易引擎真实平仓
             from app.services.api_key_service import APIKeyService
@@ -610,25 +606,12 @@ class MarketPredictor:
                    sl: float, tp: float, leverage: int, margin: float,
                    paper_pos_id: int, confidence: int):
         """同步到实盘账号（调用交易引擎真实下单）"""
-        logger.info(f"[预测下单] _sync_live 开始 {symbol} {direction} confidence={confidence}")
-        try:
-            conn = self._get_conn()
-            cur = conn.cursor()
-            cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
-            row = cur.fetchone()
-            if not (row and str(row['setting_value']) in ('1', 'true')):
-                cur.close(); conn.close()
-                logger.debug(f"[预测下单] {symbol} live_trading_enabled 未开启，跳过实盘同步")
-                return
-            from app.services.trading_gates import check_live_symbol_allowed
-            allowed, reason = check_live_symbol_allowed(symbol, cursor=cur)
-            cur.close(); conn.close()
-            if not allowed:
-                logger.debug(f"[预测下单] {symbol} {reason}，跳过实盘同步")
-                return
-        except Exception as e:
-            logger.warning(f"[预测下单] 查询实盘开关/TOP50失败: {e}")
+        from app.services.trading_gates import check_live_open_allowed
+        allowed, gate_reason = check_live_open_allowed(symbol, "PREDICTOR")
+        if not allowed:
+            logger.debug(f"[预测下单] {symbol} {gate_reason}，跳过实盘同步")
             return
+        logger.info(f"[预测下单] _sync_live 开始 {symbol} {direction} confidence={confidence}")
 
         try:
             from app.services.api_key_service import APIKeyService

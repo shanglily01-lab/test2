@@ -490,23 +490,9 @@ class KlinePullbackEntryExecutor:
             logger.info(f"✅ {symbol} 一次性开仓完成 | 持仓ID:{position_id} | 价格:${current_price:.4f} | 保证金:{margin}U")
 
             # ========== 同步实盘开仓 ==========
-            try:
-                _c = pymysql.connect(**self.db_config, autocommit=True)
-                _cur = _c.cursor()
-                _cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'")
-                _r = _cur.fetchone()
-                live_trading_enabled = _r and str(_r[0]).lower() in ('1', 'true', 'yes')
-                from app.services.trading_gates import check_live_symbol_allowed
-                _allowed, _reason = check_live_symbol_allowed(symbol, cursor=_cur)
-                _cur.close(); _c.close()
-            except Exception:
-                live_trading_enabled = False
-                _allowed = False
-                _reason = '查询失败'
-
-            if not live_trading_enabled:
-                pass  # 同步开关关闭
-            elif not _allowed:
+            from app.services.trading_gates import check_live_open_allowed
+            _allowed, _reason = check_live_open_allowed(symbol, "smart_trader_sync")
+            if not _allowed:
                 logger.info(f"[同步实盘] {symbol} {_reason}，跳过实盘同步")
             else:
                 try:

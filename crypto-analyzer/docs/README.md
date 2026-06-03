@@ -1,7 +1,18 @@
 # 超级大脑交易系统 - 文档中心
 
-> **最后更新**: 2026-02-21
-> **文档版本**: V3.0
+> **最后更新**: 2026-06-04
+> **文档版本**: V3.1
+
+---
+
+## AI 策略与顾问（2026-06 收尾）
+
+| 文档 | 说明 |
+|------|------|
+| [AI_STRATEGIES_AND_ADVISORS_ZH.md](./AI_STRATEGIES_AND_ADVISORS_ZH.md) | 主探索/预测/战术/反转、开仓与持仓顾问、调度、表与开关 — **中文** |
+| [AI_STRATEGIES_AND_ADVISORS_EN.md](./AI_STRATEGIES_AND_ADVISORS_EN.md) | Same content in **English** |
+
+项目记忆同步：`CLAUDE.md` · `.cursor/rules/ai-strategies-advisors.mdc` · `.cursor/rules/scheduler-ai-ops.mdc`
 
 ---
 

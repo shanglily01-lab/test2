@@ -230,11 +230,7 @@ def _bench_explore(top: int, teachers: list[str]) -> None:
         universe, global_ctx, hist, max_symbols=top,
     )
     conn.close()
-    out = ROOT / "scripts" / "out"
-    out.mkdir(exist_ok=True)
-    (out / "explore_zh.txt").write_text(zh, encoding="utf-8")
-    (out / "explore_en.txt").write_text(en, encoding="utf-8")
-    print("Prompts saved: scripts/out/explore_zh.txt | explore_en.txt")
+    print(f"  explore prompts zh={len(zh)} en={len(en)} chars")
     meta_line = f"  universe TOP={meta.get('llm_symbol_count')}/{meta.get('universe_total')}"
     for t in teachers:
         _run_lang_pair(t, "explore", zh, en, meta_line)
@@ -246,11 +242,7 @@ def _bench_predict(top: int, teachers: list[str]) -> None:
     print(f"Main PREDICT ZH vs EN  symbols={len(symbols_data)}")
     zh = build_predict_prompt_zh(symbols_data, global_ctx)
     en = build_predict_prompt(symbols_data, global_ctx)
-    out = ROOT / "scripts" / "out"
-    out.mkdir(exist_ok=True)
-    (out / "predict_zh.txt").write_text(zh, encoding="utf-8")
-    (out / "predict_en.txt").write_text(en, encoding="utf-8")
-    print("Prompts saved: scripts/out/predict_zh.txt | predict_en.txt")
+    print(f"  predict prompts zh={len(zh)} en={len(en)} chars")
     meta_line = f"  predict symbols={len(symbols_data)} Big4={global_ctx.get('big4_signal')}"
     for t in teachers:
         _run_lang_pair(t, "predict", zh, en, meta_line)

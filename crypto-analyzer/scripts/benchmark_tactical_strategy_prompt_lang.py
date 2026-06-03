@@ -225,12 +225,7 @@ def main():
         max_symbols=args.top,
     )
     conn.close()
-
-    out = ROOT / "scripts" / "out"
-    out.mkdir(exist_ok=True)
-    (out / f"tactical_{args.strategy}_zh.txt").write_text(zh, encoding="utf-8")
-    (out / f"tactical_{args.strategy}_en.txt").write_text(en, encoding="utf-8")
-    print(f"Prompts saved: scripts/out/tactical_{args.strategy}_zh.txt | _en.txt")
+    print(f"  tactical {args.strategy} prompts zh={len(zh)} en={len(en)} chars")
 
     for t in teachers:
         _run_teacher(t, args.strategy, zh, en, defn, meta_zh)
