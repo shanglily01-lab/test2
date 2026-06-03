@@ -3,7 +3,7 @@
 
 1. top_performing_symbols: 累计盈利前 50（至少 5 笔平仓）
 2. 白名单: 盈利 > 200U 或 胜率 > 54% → rating_level=0
-3. 黑名单3级: 盈利 < -200U 或 胜率 < 40% → rating_level=3（永不交易，优先于白名单）
+3. 黑名单3级: 盈利 < -200U，或（胜率 < 40% 且累计盈利 < 0）→ rating_level=3
 """
 
 from app.utils.config_loader import get_db_config
@@ -27,6 +27,21 @@ WHITELIST_MIN_PNL = 200.0
 WHITELIST_MIN_WIN_RATE = 54.0
 BLACKLIST_MAX_PNL = -200.0
 BLACKLIST_MAX_WIN_RATE = 40.0
+
+
+def _should_ban_level3(pnl: float, win_rate: float) -> tuple[bool, list[str]]:
+    """
+    黑名单3级（永不交易）:
+    - 累计盈利 < -200U，或
+    - 胜率 < 40% 且累计盈利 < 0（避免「盈利但胜率偏低」被误封，如 BTC +1000U/38% WR）
+    """
+    parts: list[str] = []
+    if pnl < BLACKLIST_MAX_PNL:
+        parts.append(f"累计盈利{pnl:.0f}U")
+    elif win_rate < BLACKLIST_MAX_WIN_RATE and pnl < 0:
+        parts.append(f"胜率{win_rate:.1f}%")
+        parts.append(f"累计盈利{pnl:.0f}U")
+    return (len(parts) > 0, parts)
 
 _SYMBOL_STATS_SQL = """
     SELECT
@@ -84,15 +99,11 @@ def _apply_whitelist_and_blacklist(symbol_stats: list, opt: OptimizationConfig) 
         canon = futures_symbol_rating_canonical(symbol)
         cur_level = opt.get_symbol_rating_level(symbol)
 
-        if pnl < BLACKLIST_MAX_PNL or wr < BLACKLIST_MAX_WIN_RATE:
+        ban, parts = _should_ban_level3(pnl, wr)
+        if ban:
             if cur_level >= 3:
                 skipped_bl += 1
                 continue
-            parts = []
-            if pnl < BLACKLIST_MAX_PNL:
-                parts.append(f"累计盈利{pnl:.0f}U")
-            if wr < BLACKLIST_MAX_WIN_RATE:
-                parts.append(f"胜率{wr:.1f}%")
             reason = "日终自动黑名单3级: " + ", ".join(parts)
             opt.update_symbol_rating(
                 symbol=canon,
@@ -243,7 +254,7 @@ def update_top_performing_symbols(account_id: int = 2, top_n: int = TOP_N_DEFAUL
 
         logger.info(
             f"评级规则: 白名单 盈利>{WHITELIST_MIN_PNL}U 或 胜率>{WHITELIST_MIN_WIN_RATE}% | "
-            f"黑名单3级 盈利<{BLACKLIST_MAX_PNL}U 或 胜率<{BLACKLIST_MAX_WIN_RATE}%"
+            f"黑名单3级 盈利<{BLACKLIST_MAX_PNL}U 或 (胜率<{BLACKLIST_MAX_WIN_RATE}% 且盈利<0)"
         )
         opt = OptimizationConfig(MYSQL_CONFIG)
         rating_result = _apply_whitelist_and_blacklist(all_stats, opt)
