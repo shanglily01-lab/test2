@@ -95,8 +95,43 @@ def _below_7d_high_pct(sym_data: Optional[dict]) -> Optional[float]:
         return None
 
 
+def _symbol_hard_precheck_fail(defn: TacticalStrategyDef, item: dict) -> Optional[str]:
+    """用 universe 内 tech/叙事做预筛，排除必过不了 extra_catalyst 的币（避免 LLM 白跑）."""
+    rsi = _rsi_1h(item)
+    narr = _narrative_text(item).lower()
+    b7h = _below_7d_high_pct(item)
+    bear_narr = _has_any(narr, ("偏空", "强势下降", "连阴", "下行趋势"))
+    bull_narr = _has_any(narr, ("偏多", "上升", "上攻", "连阳"))
+
+    if defn.key == "pullback":
+        if rsi is not None and rsi > PULLBACK_RSI_MAX:
+            return f"RSI={rsi:.0f}>{PULLBACK_RSI_MAX}"
+        if bear_narr and not bull_narr:
+            return "1h叙事偏空"
+        if b7h is not None and b7h > -2.0:
+            return f"below_7d_high={b7h:.1f}%过近"
+    elif defn.key == "chase":
+        if rsi is not None and rsi > CHASE_RSI_MAX:
+            return f"RSI={rsi:.0f}>{CHASE_RSI_MAX}"
+        if b7h is not None and b7h > -CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:
+            return f"below_7d_high={b7h:.1f}%空间不足"
+        if bear_narr and not bull_narr:
+            return "1h叙事偏空"
+    elif defn.key == "rebound":
+        if rsi is not None and rsi < 40:
+            return f"RSI={rsi:.0f}<40"
+        if bull_narr and not bear_narr:
+            return "1h叙事仍偏多"
+    elif defn.key == "dump":
+        if rsi is not None and rsi > 55:
+            return f"RSI={rsi:.0f}>55"
+        if bull_narr and not bear_narr:
+            return "1h叙事仍偏强"
+    return None
+
+
 def _tactical_universe_score(defn: TacticalStrategyDef, item: dict) -> float:
-    """LONG 策略偏强势币，SHORT 策略偏弱势币（非 |24h| 动量盲选）."""
+    """按策略语义排序 TOP 列表（须与 extra_catalyst_check 硬线一致）."""
     tech = item.get("tech") or {}
     rsi = tech.get("rsi_14_1h")
     try:
@@ -106,15 +141,32 @@ def _tactical_universe_score(defn: TacticalStrategyDef, item: dict) -> float:
     chg = float(item.get("change_24h") or 0)
     b7h = tech.get("below_7d_high_pct")
     a7l = tech.get("above_7d_low_pct")
-    score = 0.0
     if defn.fixed_side == "LONG":
-        score = rsi_f + chg * 0.25
-        if defn.key == "pullback" and b7h is not None:
-            try:
-                score += max(0.0, -float(b7h) * 0.3)
-            except (TypeError, ValueError):
-                pass
-        return score
+        if defn.key == "pullback":
+            # 回调：宜 RSI 回落至 45~65，距 7d 高有一定深度（勿按最高 RSI 排序）
+            score = 100.0 - abs(rsi_f - 52.0) + chg * 0.15
+            if b7h is not None:
+                try:
+                    score += max(0.0, min(25.0, -float(b7h) * 0.35))
+                except (TypeError, ValueError):
+                    pass
+            return score
+        if defn.key == "chase":
+            # 追涨：在 RSI≤68 前提下偏强势；超买段降权
+            if rsi_f > CHASE_RSI_MAX:
+                return -500.0 - rsi_f
+            score = rsi_f + chg * 0.3
+            if b7h is not None:
+                try:
+                    bf = float(b7h)
+                    if bf > -CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:
+                        score -= 30.0
+                    else:
+                        score += min(15.0, max(0.0, (-bf - CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT) * 0.5))
+                except (TypeError, ValueError):
+                    pass
+            return score
+        return rsi_f + chg * 0.25
     score = (100.0 - rsi_f) - chg * 0.25
     if defn.key == "rebound" and b7h is not None:
         try:
@@ -134,8 +186,19 @@ def prepare_tactical_universe_for_llm(
     universe: dict,
     max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
 ) -> Tuple[List[dict], Dict[str, Any]]:
+    pool = list(universe.values())
+    eligible = []
+    precheck_dropped = 0
+    for item in pool:
+        if _symbol_hard_precheck_fail(definition, item):
+            precheck_dropped += 1
+            continue
+        eligible.append(item)
+    if not eligible:
+        eligible = pool
+        precheck_dropped = 0
     items = sorted(
-        universe.values(),
+        eligible,
         key=lambda x: _tactical_universe_score(definition, x),
         reverse=True,
     )
@@ -145,9 +208,10 @@ def prepare_tactical_universe_for_llm(
         item.pop("k_15m_ohlc", None)
     selected = items[:max_symbols]
     meta = {
-        "universe_total": len(items),
+        "universe_total": len(pool),
         "llm_symbol_count": len(selected),
         "llm_symbols_truncated": max(0, len(items) - len(selected)),
+        "precheck_dropped": precheck_dropped,
         "selection": f"tactical_{definition.key}",
     }
     return selected, meta
@@ -174,8 +238,10 @@ def _build_prompt(definition: TacticalStrategyDef, universe: dict, global_ctx: d
         "4. entry 时 confidence 必填 0.55–0.85；结构不清晰勿勉强 entry。\n"
         "5. 无机会时 verdicts=[]，在 summary_zh 说明。\n"
         "6. K 线涨跌幅须合理（单根通常 <20%），与 universe 中 kline_narrative / tech 一致。\n\n"
-        f"本列表为全池 {meta['universe_total']} 个中按本策略方向相关性取 TOP "
-        f"{meta['llm_symbol_count']}（非单纯 |24h涨跌| 排序）。\n\n"
+        f"本列表为全池 {meta['universe_total']} 个中按本策略硬门槛预筛"
+        f"（剔除 {meta.get('precheck_dropped', 0)} 个必过不了代码校验的币）后取 TOP "
+        f"{meta['llm_symbol_count']}（排序与 RSI/7d 空间等量化线一致，非单纯 |24h涨跌|）。\n"
+        f"**禁止**对列表外币种 entry；**禁止** catalyst 与各行 tech/kline_narrative 矛盾。\n\n"
         f"## Big4 / 宏观 (仅参考)\n{BIG4_PROMPT_BLOCK_EXPLORE}\n\n"
         f"## 全局市场\n{json.dumps(global_ctx, **compact)}\n\n"
         f"## 本策略历史 (30d closed)\n{json.dumps(historical_stats, **compact)}\n\n"
