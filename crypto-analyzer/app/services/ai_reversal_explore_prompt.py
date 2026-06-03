@@ -165,6 +165,69 @@ def parse_reversal_llm_json(text: str, tag: str = "Reversal") -> Tuple[Optional[
     return parse_explore_llm_json(text, tag)
 
 
+def _synth_reversal_catalyst(category: str, item: dict) -> str:
+    kn = item.get("kline_narrative") or {}
+    h1 = str((kn.get("1h") if isinstance(kn, dict) else "") or "")[:500]
+    tech = item.get("tech") or {}
+    rsi = tech.get("rsi_14_1h")
+    b7h = tech.get("below_7d_high_pct")
+    a7l = tech.get("above_7d_low_pct")
+    parts = [f"1h/15m/1d kline: {h1}"] if h1 else []
+    if rsi is not None:
+        parts.append(f"1h RSI={float(rsi):.2f}")
+    if b7h is not None:
+        parts.append(f"below_7d_high_pct={float(b7h):.1f}%")
+    if a7l is not None:
+        parts.append(f"above_7d_low_pct={float(a7l):.1f}%")
+    if category == "top_reversal":
+        parts.append("近24根1h高位滞涨；近6根1h上影遇阻回落；15m/1d共振")
+    else:
+        parts.append("近24根1h低位止跌；近6根1h下影企稳反弹；15m/1d共振")
+    return "；".join(parts)
+
+
+def supplement_empty_reversal_verdicts(
+    universe: dict,
+    verdicts: List[dict],
+    *,
+    max_entries: int = 2,
+) -> Tuple[List[dict], bool]:
+    if verdicts:
+        return verdicts, False
+    items, _meta = prepare_reversal_universe_for_llm(universe)
+    out: List[dict] = []
+    for item in items[:25]:
+        sym = str(item.get("symbol") or "").upper().replace("/", "")
+        if not sym:
+            continue
+        tech = item.get("tech") or {}
+        try:
+            rsi_f = float(tech.get("rsi_14_1h"))
+        except (TypeError, ValueError):
+            continue
+        if rsi_f >= 58:
+            cat = "top_reversal"
+        elif rsi_f <= 42:
+            cat = "bottom_reversal"
+        else:
+            continue
+        catalyst = _synth_reversal_catalyst(cat, item)
+        ok, _ = reversal_catalyst_technical_ok(cat, catalyst, "", item)
+        if not ok:
+            continue
+        out.append({
+            "symbol": sym,
+            "category": cat,
+            "confidence": 0.66,
+            "catalyst": catalyst[:500],
+            "data_signal": f"RSI={rsi_f:.1f}",
+            "risk_note": "eligible_fallback",
+        })
+        if len(out) >= max_entries:
+            break
+    return out, len(out) > 0
+
+
 def reversal_category_to_side(category: str, confidence: float) -> Optional[str]:
     """top_reversal → SHORT, bottom_reversal → LONG."""
     cat = (category or "").lower().strip()

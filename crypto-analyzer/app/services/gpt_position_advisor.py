@@ -20,6 +20,7 @@ from app.services.gemini_position_advisor import (
 from app.services.gpt_advisor_reviews import log_gpt_advisor_review
 from app.services.open_advisor_routing import is_gpt_order_source, should_use_gpt_hold_advisor
 from app.services.open_advisor_strategy_rubrics import (
+    _TACTICAL_PROFILE_KEYS,
     check_direction_gates,
     check_expected_side,
     precheck_open_advisor,
@@ -207,6 +208,15 @@ class GPTPositionAdvisor:
                 entry_price=price, leverage=leverage, reason=pre_reason, catalyst=catalyst, conn=conn,
             )
             return False, pre_reason
+
+        # 战术/顶空底多：探索+代码门槛已校验；二次 GPT 常因宏观悲观整批 reject
+        if profile.key in _TACTICAL_PROFILE_KEYS or profile.key == "reversal":
+            log_gpt_advisor_review(
+                "open", "approve", symbol, position_side=side, source=source,
+                entry_price=price, leverage=leverage, reason="gpt_tactical_precheck_pass",
+                catalyst=catalyst, conn=conn,
+            )
+            return True, "gpt_tactical_precheck_pass"
 
         prompt = self._prompt_helper._build_open_prompt(
             symbol, side, price, source, catalyst, leverage, sl_pct, tp_pct, hold_hours, ctx,

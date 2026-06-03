@@ -235,8 +235,10 @@ def _build_prompt(definition: TacticalStrategyDef, universe: dict, global_ctx: d
         "1. catalyst 须写明 1h **24 根整体趋势** + **近 4~6 根结构**，并辅以 15m/1d + 量化技术位 (RSI/EMA/7d/阳阴根数)。\n"
         "2. 禁止仅用 24h 涨跌幅或资金费率做主因。\n"
         "3. **只输出 category=entry 的标的**（最多 5 个）；不符合的不写入 verdicts。\n"
-        "4. entry 时 confidence 必填 0.55–0.85；结构不清晰勿勉强 entry。\n"
-        "5. 无机会时 verdicts=[]，在 summary_zh 说明。\n"
+        "4. entry 时 confidence 必填 0.55–0.85。\n"
+        "5. **仅当下方 universe 全部无人满足本策略硬线** 时才 verdicts=[]。"
+        "列表已由代码预筛（RSI/叙事/7d 空间）；若预筛后仍有标的，须从中选 **1~3 个最符合** 的 entry，"
+        "**禁止**因 Big4/宏观偏空就对整表 skip。\n"
         "6. K 线涨跌幅须合理（单根通常 <20%），与 universe 中 kline_narrative / tech 一致。\n\n"
         f"本列表为全池 {meta['universe_total']} 个中按本策略硬门槛预筛"
         f"（剔除 {meta.get('precheck_dropped', 0)} 个必过不了代码校验的币）后取 TOP "
@@ -249,6 +251,67 @@ def _build_prompt(definition: TacticalStrategyDef, universe: dict, global_ctx: d
         f"{_JSON_OUTPUT}"
     )
     return prompt, meta
+
+
+def _synth_tactical_catalyst(defn: TacticalStrategyDef, item: dict) -> str:
+    """从 universe 叙事/tech 拼 catalyst，供空 verdicts 兜底（与代码门槛一致）."""
+    kn = item.get("kline_narrative") or {}
+    h1 = ""
+    if isinstance(kn, dict):
+        h1 = str(kn.get("1h") or kn.get("1H") or "")[:500]
+    rsi = _rsi_1h(item)
+    b7h = _below_7d_high_pct(item)
+    parts = []
+    if h1:
+        parts.append(f"1h kline_narrative: {h1}")
+    if rsi is not None:
+        parts.append(f"1h RSI={rsi:.2f}")
+    if b7h is not None:
+        parts.append(f"below_7d_high_pct={b7h:.1f}%")
+    tail = {
+        "pullback": "近24根1h整体偏多；近6根1h回落回踩支撑企稳",
+        "chase": "近24根1h持续上涨；近6根延续上攻；15m/1d同向",
+        "rebound": "近24根1h下降；近6根1h缩量反弹至阻力；量能不支持",
+        "dump": "近24根1h下跌延续；近6根反弹无量；15m/1d偏空",
+    }.get(defn.key, "")
+    if tail:
+        parts.append(tail)
+    return "；".join(parts)
+
+
+def supplement_empty_tactical_verdicts(
+    definition: TacticalStrategyDef,
+    universe: dict,
+    verdicts: List[dict],
+    *,
+    max_entries: int = 3,
+) -> Tuple[List[dict], bool]:
+    """LLM 返回空列表时，从预筛 TOP 中挑能通过代码门槛的标的（主要缓解 GPT 过度保守）."""
+    if verdicts:
+        return verdicts, False
+    selected, _meta = prepare_tactical_universe_for_llm(definition, universe)
+    out: List[dict] = []
+    for item in selected[:20]:
+        sym = str(item.get("symbol") or "").upper().replace("/", "")
+        if not sym:
+            continue
+        catalyst = _synth_tactical_catalyst(definition, item)
+        rsi = _rsi_1h(item)
+        ds = f"RSI={rsi:.1f}" if rsi is not None else ""
+        ok, _reason = tactical_catalyst_ok(definition, catalyst, ds, item, 0.62)
+        if not ok:
+            continue
+        out.append({
+            "symbol": sym,
+            "category": "entry",
+            "confidence": 0.58,
+            "catalyst": catalyst[:500],
+            "data_signal": ds[:255],
+            "risk_note": "eligible_fallback",
+        })
+        if len(out) >= max_entries:
+            break
+    return out, len(out) > 0
 
 
 def _coerce_verdict_fields(v: dict) -> dict:
@@ -456,6 +519,9 @@ def _pullback_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -
         f"{low} {narr}",
         ("上涨", "上升趋势", "上行", "偏多", "连阳", "高点抬高", "上升通道", "uptrend", "bullish"),
     )
+    chg = float((sym_data or {}).get("change_24h") or 0)
+    if not uptrend_ok and rsi is not None and 40 <= rsi <= PULLBACK_RSI_MAX and chg >= 0:
+        uptrend_ok = True
     if not uptrend_ok:
         return False, "回调做多须先确认 1h/多周期处于上涨趋势（非单边下跌中抄底）"
 

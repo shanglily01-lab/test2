@@ -40,7 +40,11 @@ from app.services.ai_tactical_explore_schedule import (
     tactical_next_due_key,
     tactical_round_is_due,
 )
-from app.services.ai_tactical_explore_prompts import parse_tactical_confidence
+from app.services.ai_tactical_explore_prompts import (
+    parse_tactical_confidence,
+    supplement_empty_tactical_verdicts,
+    TACTICAL_STRATEGIES,
+)
 from app.services.ai_explore_prompt import normalize_explore_llm_payload
 
 # 各 teacher 独立锁
@@ -505,6 +509,31 @@ def run_tactical_explore_round(
         verdicts = llm_response.get("verdicts") or []
         if not isinstance(verdicts, list):
             verdicts = []
+        if not verdicts and cfg.source.startswith("gpt_"):
+            sk = cfg.source.replace("gpt_", "", 1)
+            filled = False
+            if sk == "reversal":
+                from app.services.ai_reversal_explore_prompt import (
+                    supplement_empty_reversal_verdicts,
+                )
+                verdicts, filled = supplement_empty_reversal_verdicts(
+                    universe, verdicts, max_entries=2,
+                )
+            else:
+                defn = TACTICAL_STRATEGIES.get(sk)
+                if defn is not None:
+                    verdicts, filled = supplement_empty_tactical_verdicts(
+                        defn, universe, verdicts, max_entries=3,
+                    )
+            if filled:
+                logger.warning(
+                    f"[{cfg.log_tag}] GPT 返回空 verdicts，"
+                    f"eligible_fallback 补 {len(verdicts)} 个"
+                )
+                if not summary_zh.strip():
+                    summary_zh = (
+                        f"GPT 未输出 entry，代码从预筛 TOP 补 {len(verdicts)} 个"
+                    )[:1000]
         _close_run(
             universe_size,
             summary_zh,
