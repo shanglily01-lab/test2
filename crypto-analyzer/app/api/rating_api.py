@@ -426,9 +426,102 @@ def _fetch_whitelist_pnl_stats(cur, account_id: int = 2) -> dict:
     return _fetch_whitelist_bundle(cur, account_id)["stats"]
 
 
+def _fetch_losers_bundle(cur, account_id: int = 2, limit: int = 50, min_trades: int = 5) -> dict:
+    """累计亏损交易对（模拟仓已平仓，至少 min_trades 笔）."""
+    cur.execute(
+        """
+        SELECT
+            symbol,
+            COUNT(*) AS total_trades,
+            SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
+            SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS losses,
+            SUM(CASE WHEN realized_pnl = 0 THEN 1 ELSE 0 END) AS breakeven,
+            COALESCE(SUM(realized_pnl), 0) AS net_pnl,
+            COALESCE(SUM(CASE WHEN realized_pnl > 0 THEN realized_pnl ELSE 0 END), 0) AS gross_profit,
+            COALESCE(SUM(CASE WHEN realized_pnl < 0 THEN ABS(realized_pnl) ELSE 0 END), 0) AS gross_loss
+        FROM futures_positions
+        WHERE account_id = %s
+          AND status = 'closed'
+          AND realized_pnl IS NOT NULL
+        GROUP BY symbol
+        HAVING total_trades >= %s AND net_pnl < 0
+        ORDER BY net_pnl ASC
+        LIMIT %s
+        """,
+        (account_id, min_trades, limit),
+    )
+    rows = cur.fetchall()
+    symbols = []
+    for r in rows:
+        total_trades = int(r["total_trades"] or 0)
+        wins = int(r["wins"] or 0)
+        losses = int(r["losses"] or 0)
+        breakeven = int(r["breakeven"] or 0)
+        net_pnl = float(r["net_pnl"] or 0)
+        gross_profit = float(r["gross_profit"] or 0)
+        gross_loss = float(r["gross_loss"] or 0)
+        pnl_row = _symbol_pnl_row(
+            total_trades, wins, losses, breakeven, net_pnl, gross_profit, gross_loss
+        )
+        symbols.append({
+            "symbol": r["symbol"],
+            "rank_score": len(symbols) + 1,
+            **pnl_row,
+        })
+
+    if not symbols:
+        return {
+            "stats": {
+                "symbol_count": 0,
+                "total_trades": 0,
+                "wins": 0,
+                "losses": 0,
+                "breakeven": 0,
+                "win_rate": 0,
+                "net_pnl": 0,
+                "gross_profit": 0,
+                "gross_loss": 0,
+                "profit_factor": None,
+                "account_id": account_id,
+            },
+            "symbols": [],
+        }
+
+    total_wins = sum(s["winning_trades"] for s in symbols)
+    total_losses = sum(s["losing_trades"] for s in symbols)
+    total_breakeven = sum(s["breakeven"] for s in symbols)
+    total_trades = total_wins + total_losses + total_breakeven
+    net_pnl = sum(s["total_realized_pnl"] for s in symbols)
+    gross_profit = sum(s["gross_profit"] for s in symbols)
+    gross_loss = sum(s["gross_loss"] for s in symbols)
+    counts = parse_pnl_counts({
+        "total_trades": total_trades,
+        "wins": total_wins,
+        "losses": total_losses,
+        "breakeven": total_breakeven,
+        "net_pnl": net_pnl,
+        "gross_profit": gross_profit,
+        "gross_loss": gross_loss,
+    })
+    stats = {
+        "symbol_count": len(symbols),
+        "total_trades": total_trades,
+        "wins": counts["wins"],
+        "losses": counts["losses"],
+        "breakeven": counts["breakeven"],
+        "win_rate": counts["win_rate"],
+        "net_pnl": round(net_pnl, 2),
+        "gross_profit": round(gross_profit, 2),
+        "gross_loss": round(gross_loss, 2),
+        "profit_factor": round(gross_profit / gross_loss, 2) if gross_loss > 0 else None,
+        "account_id": account_id,
+    }
+    return {"stats": stats, "symbols": symbols}
+
+
 @router.get("/api/top50")
 async def get_top50():
-    """获取 TOP50 高胜率交易对列表及统计"""
+    """盈亏分析：TOP50 盈利 / 白名单盈利 / 亏损榜单"""
     import pymysql
     try:
         conn = pymysql.connect(**DB_CONFIG, cursorclass=pymysql.cursors.DictCursor)
@@ -445,6 +538,9 @@ async def get_top50():
         whitelist_bundle = _fetch_whitelist_bundle(cur, account_id=2)
         whitelist_stats = whitelist_bundle["stats"]
         whitelist_data = whitelist_bundle["symbols"]
+        losers_bundle = _fetch_losers_bundle(cur, account_id=2)
+        losers_stats = losers_bundle["stats"]
+        losers_data = losers_bundle["symbols"]
         cur.close()
         conn.close()
 
@@ -480,9 +576,11 @@ async def get_top50():
             },
             'whitelist_stats': whitelist_stats,
             'whitelist_data': whitelist_data,
+            'losers_stats': losers_stats,
+            'losers_data': losers_data,
         }
     except Exception as e:
-        logger.error(f"获取TOP50失败: {e}")
+        logger.error(f"获取盈亏分析失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

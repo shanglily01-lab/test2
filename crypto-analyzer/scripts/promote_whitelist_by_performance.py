@@ -25,8 +25,8 @@ from app.utils.config_loader import get_db_config
 from app.utils.futures_symbol import futures_symbol_clean, futures_symbol_rating_canonical
 
 PAPER_ACCOUNT_ID = 2
-DEFAULT_MIN_PNL = 500.0
-DEFAULT_MIN_WIN_RATE = 52.0
+DEFAULT_MIN_PNL = 200.0
+DEFAULT_MIN_WIN_RATE = 54.0
 DEFAULT_MIN_TRADES = 5
 
 
@@ -174,12 +174,12 @@ def apply_whitelist(opt: OptimizationConfig, candidates: list[dict]) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="按盈利/胜率自动加入白名单")
     parser.add_argument("--apply", action="store_true", help="写入数据库 (默认预览)")
-    parser.add_argument("--min-pnl", type=float, default=DEFAULT_MIN_PNL, help="累计盈利阈值 U (默认 500)")
+    parser.add_argument("--min-pnl", type=float, default=DEFAULT_MIN_PNL, help="累计盈利阈值 U (默认 200)")
     parser.add_argument(
         "--min-win-rate",
         type=float,
         default=DEFAULT_MIN_WIN_RATE,
-        help="胜率阈值 %% (默认 52，满足盈利或胜率其一即可)",
+        help="胜率阈值 %% (默认 54，满足盈利或胜率其一即可)",
     )
     parser.add_argument("--min-trades", type=int, default=DEFAULT_MIN_TRADES, help="至少 N 笔平仓 (默认 5)")
     parser.add_argument("--account-id", type=int, default=PAPER_ACCOUNT_ID)

@@ -597,17 +597,17 @@ async def lifespan(app: FastAPI):
                 logger.error(f"[FAIL] 市场预测分析失败: {e}")
         schedule.every(4).hours.do(run_market_prediction)
 
-        # TOP 50 盈利交易对更新 (每天 02:00 本地, 仅 U 本位 account_id=2)
+        # 盈亏日终：Top50 盈利榜 + 白名单/黑名单3级 (每天 02:00 本地, U 本位 account_id=2)
         # live_top50_required=1 时实盘同步须在 top_performing_symbols 内 (见 trading_gates.py)
         def run_top50_update():
-            """每天更新 top_performing_symbols 表的 Top 50 盈利交易对."""
+            """每天更新 top_performing_symbols，并按盈亏规则调整白名单/L3."""
             try:
-                logger.info("[TOP50] 开始更新 U 本位 TOP 50 交易对...")
+                logger.info("[盈亏日终] 开始更新 Top50 盈利榜 + 评级联动...")
                 from update_top_performers import update_top_performing_symbols
                 update_top_performing_symbols(account_id=2, top_n=50)
-                logger.info("[TOP50] 完成更新")
+                logger.info("[盈亏日终] 完成")
             except Exception as e:
-                logger.error(f"[TOP50] 更新失败: {type(e).__name__}: {e}")
+                logger.error(f"[盈亏日终] 更新失败: {type(e).__name__}: {e}")
                 import traceback
                 traceback.print_exc()
         schedule.every().day.at("02:00").do(run_top50_update)
@@ -1682,7 +1682,7 @@ def paper_trading_page():
 
 @app.get("/top50")
 async def top50_page():
-    """TOP100高胜率交易对页面"""
+    """盈亏分析页面（TOP50盈利 / 白名单 / 亏损）"""
     p = project_root / "templates" / "top50.html"
     if p.exists():
         return FileResponse(str(p))
