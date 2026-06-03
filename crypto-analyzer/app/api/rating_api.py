@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.optimization_config import OptimizationConfig
 from app.utils.config_loader import load_config
+from app.utils.pnl_stats import PNL_COUNT_SELECT, parse_pnl_counts
 
 
 def safe_float(value, default=0.0):
@@ -247,6 +248,104 @@ async def delete_symbol_rating(symbol: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _normalize_symbol_key(symbol: str) -> str:
+    return (symbol or "").replace("/", "").upper()
+
+
+def _fetch_whitelist_pnl_stats(cur, account_id: int = 2) -> dict:
+    """白名单 (rating_level=0) 在模拟仓已平仓单上的累计盈亏."""
+    cur.execute(
+        "SELECT symbol FROM trading_symbol_rating WHERE rating_level = 0"
+    )
+    wl_rows = cur.fetchall()
+    symbol_count = len(wl_rows)
+    wl_keys = set()
+    for r in wl_rows:
+        sym = (r.get("symbol") or "").strip()
+        if not sym:
+            continue
+        wl_keys.add(_normalize_symbol_key(sym))
+
+    cur.execute("SELECT symbol FROM top_performing_symbols")
+    in_top50 = sum(
+        1 for r in cur.fetchall()
+        if _normalize_symbol_key(r.get("symbol") or "") in wl_keys
+    )
+
+    empty = {
+        "symbol_count": symbol_count,
+        "in_top50_count": in_top50,
+        "total_trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "breakeven": 0,
+        "win_rate": 0,
+        "net_pnl": 0,
+        "gross_profit": 0,
+        "gross_loss": 0,
+        "profit_factor": None,
+        "account_id": account_id,
+    }
+    if not wl_keys:
+        return empty
+
+    cur.execute(
+        """
+        SELECT symbol, realized_pnl
+        FROM futures_positions
+        WHERE account_id = %s
+          AND status = 'closed'
+          AND realized_pnl IS NOT NULL
+        """,
+        (account_id,),
+    )
+    wins = losses = breakeven = 0
+    net_pnl = gross_profit = gross_loss = 0.0
+    for fp in cur.fetchall():
+        if _normalize_symbol_key(fp.get("symbol") or "") not in wl_keys:
+            continue
+        pnl = float(fp.get("realized_pnl") or 0)
+        net_pnl += pnl
+        if pnl > 0:
+            wins += 1
+            gross_profit += pnl
+        elif pnl < 0:
+            losses += 1
+            gross_loss += abs(pnl)
+        else:
+            breakeven += 1
+    total_trades = wins + losses + breakeven
+    row = {
+        "net_pnl": net_pnl,
+        "gross_profit": gross_profit,
+        "gross_loss": gross_loss,
+        "total_trades": total_trades,
+        "wins": wins,
+        "losses": losses,
+        "breakeven": breakeven,
+    }
+    counts = parse_pnl_counts(row)
+    gross_profit = float(row.get("gross_profit") or 0)
+    gross_loss = float(row.get("gross_loss") or 0)
+    net_pnl = float(row.get("net_pnl") or 0)
+    profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else None
+
+    return {
+        "symbol_count": symbol_count,
+        "in_top50_count": in_top50,
+        "total_trades": int(row.get("total_trades") or 0),
+        "wins": counts["wins"],
+        "losses": counts["losses"],
+        "breakeven": counts["breakeven"],
+        "win_rate": counts["win_rate"],
+        "net_pnl": round(net_pnl, 2),
+        "gross_profit": round(gross_profit, 2),
+        "gross_loss": round(gross_loss, 2),
+        "profit_factor": profit_factor,
+        "account_id": account_id,
+    }
+
+
 @router.get("/api/top50")
 async def get_top50():
     """获取 TOP50 高胜率交易对列表及统计"""
@@ -263,6 +362,7 @@ async def get_top50():
             LIMIT 50
         """)
         rows = cur.fetchall()
+        whitelist_stats = _fetch_whitelist_pnl_stats(cur, account_id=2)
         cur.close()
         conn.close()
 
@@ -295,7 +395,8 @@ async def get_top50():
                 'total_pnl':     round(total_pnl, 2),
                 'avg_win_rate':  round(avg_wr, 2),
                 'last_updated':  last_updated,
-            }
+            },
+            'whitelist_stats': whitelist_stats,
         }
     except Exception as e:
         logger.error(f"获取TOP50失败: {e}")
