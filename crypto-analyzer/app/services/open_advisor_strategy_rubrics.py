@@ -493,3 +493,277 @@ Output ONLY JSON:
   "reason": "<50字中文，必须写明策略名「{profile.title_zh}」+通过/驳回要点>"
 }}
 """
+
+
+_GPT_PROFILE_TITLE_EN: dict[str, str] = {
+    "reversal": "Top-short / Bottom-long (reversal)",
+    "pullback": "Pullback long",
+    "rebound": "Rebound short",
+    "chase": "Momentum chase long",
+    "dump": "Breakdown short",
+    "explore": "AI main explore (event/structure)",
+    "predict": "AI predict (4h direction)",
+    "s1": "S1 early long",
+    "s5": "S5 large-cap oversold",
+    "s6": "S6 small-cap volume spike",
+    "s9": "S9 Gemini bottom reversal",
+    "btc_momentum": "BTC momentum",
+    "smart_trader": "Main strategy / smart_trader",
+    "mean_reversion": "Bollinger mean reversion",
+    "generic": "Other strategy",
+}
+
+_GPT_RUBRIC_EN: dict[str, str] = {
+    "reversal": (
+        "1h: use last 24 bars for trend, last 4-6 for local structure.\n"
+        "- SHORT: true top reversal — prior stage high / 7d stall, multi-TF weakness; "
+        "recent bars show failed breakout / upper wicks, not 'up a lot' without structure.\n"
+        "- LONG: true bottom reversal — oversold base, lower wicks / bullish follow-through; "
+        "not bear-flag continuation.\n"
+        "- Catalyst must match side; 24h % alone is insufficient."
+    ),
+    "pullback": (
+        "ALL required (aligned with code gates):\n"
+        "1. Last 24x1h: overall uptrend (higher highs/channel).\n"
+        "2. Last 4-6x1h: pullback/dip with support hold (not knife-catch in downtrend).\n"
+        "3. RSI 1h <= 68; if RSI>68 with shallow dip → reject (chase or skip).\n"
+        "4. below_7d_high_pct > -2 without deep pullback → reject.\n"
+        "5. Side must LONG; narrative is pure momentum chase without dip → reject."
+    ),
+    "rebound": (
+        "ALL required:\n"
+        "1. Prior top then downtrend on 24x1h.\n"
+        "2. Last 4-6x1h: bounce but weak volume (state divergence in reason).\n"
+        "3. Near resistance / relative high; SHORT only; no fresh breakout high short."
+    ),
+    "chase": (
+        "ALL required (aligned with code gates):\n"
+        "1. Last 24x1h uptrend; last 4-6 still extend without deep pullback.\n"
+        "2. RSI 1h <= 68; >68 → reject (overbought extension).\n"
+        "3. below_7d_high_pct <= -3; insufficient room → reject.\n"
+        "4. Do not approve on pretty catalyst text alone — verify RSI and 7d distance.\n"
+        "5. LONG only; narrative is dip/support bounce → reject (pullback)."
+    ),
+    "dump": (
+        "ALL required:\n"
+        "1. 24x1h downtrend intact.\n"
+        "2. Bounce lacks volume support or fails (describe last 4-6 bars).\n"
+        "3. SHORT only; not bottom-fishing bounce."
+    ),
+    "explore": (
+        "Explore-only rubric (not tactical four-way checklist).\n"
+        "Multi-TF K-lines + event/structure catalyst (not 24h % only).\n"
+        "Unclear structure or catalyst/side mismatch → reject."
+    ),
+    "predict": (
+        "Predict-only rubric.\n"
+        "Catalyst needs 1h/15m direction logic; severe Big4 conflict without coin-specific case → reject."
+    ),
+    "s1": "LONG only; early bull RSI+MA20 structure; no downtrend knife-catch.",
+    "s5": "LONG only; large-cap oversold bounce with evidence; not mid-bear continuation.",
+    "s6": "LONG only; volume leads price; hollow pump narrative → reject.",
+    "s9": "LONG only; bottom reversal structure; no counter-trend catch in strong bear.",
+    "btc_momentum": "Side must align with BTC short-term momentum unless catalyst is exceptional.",
+    "smart_trader": "entry_reason/catalyst matches side and K-line regime; vague signal → reject.",
+    "mean_reversion": "Range-edge mean reversion; strong trend breakout chase → reject.",
+    "generic": (
+        "Generic: catalyst/entry_reason consistent with side and K-lines; "
+        "do not apply another strategy's checklist."
+    ),
+}
+
+
+def _gpt_rubric_en(profile: OpenAdvisorStrategyProfile) -> str:
+    return _GPT_RUBRIC_EN.get(profile.key, _GPT_RUBRIC_EN["generic"])
+
+
+def build_gpt_big4_subjective_block(
+    big4_signal: str,
+    big4_strength: float,
+    allow_long: bool,
+    allow_short: bool,
+    side: str,
+    btc_6h: float = 0.0,
+    eth_6h: float = 0.0,
+) -> str:
+    s = (side or "").upper()
+    lines = [
+        "## Big4 & direction gates (mandatory)",
+        f"- User switches: allow_long={'yes' if allow_long else '**no**'} | "
+        f"allow_short={'yes' if allow_short else '**no**'}",
+        f"- Big4: {big4_signal} (strength {big4_strength:.0f}) | BTC 6h {btc_6h:+.2f}% | ETH 6h {eth_6h:+.2f}%",
+    ]
+    if s == "LONG" and not allow_long:
+        lines.append("- **Hard rule**: longs disabled → reject.")
+    if s == "SHORT" and not allow_short:
+        lines.append("- **Hard rule**: shorts disabled → reject.")
+    if allow_long and allow_short:
+        lines.append(
+            "- Both sides allowed: weigh Big4 vs proposed side; "
+            "STRONG_BEARISH long / STRONG_BULLISH short needs exceptional structure else reject."
+        )
+    elif allow_long and not allow_short:
+        lines.append(
+            "- **Long-only mode**: any SHORT → reject; "
+            "bearish Big4 long needs very strong reversal/pullback proof."
+        )
+    elif allow_short and not allow_long:
+        lines.append(
+            "- **Short-only mode**: any LONG → reject; "
+            "bullish Big4 short needs clear top / failed rally."
+        )
+    else:
+        lines.append("- Both long and short disabled → reject.")
+    lines.append(
+        "- Big4 cannot replace K-lines; conflict with gates and weak coin structure → reject."
+    )
+    lines.append(
+        "- Exploration already passed code + catalyst gates; do not batch-reject on macro FUD alone "
+        "if the tactical rubric below is satisfied."
+    )
+    return "\n".join(lines)
+
+
+def build_gpt_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
+    title = _GPT_PROFILE_TITLE_EN.get(profile.key, profile.title_zh)
+    key = profile.key
+    lines = [
+        "## Review steps (this strategy only)",
+        f"- Audit **only** profile `{key}` ({title}); do not substitute another strategy's checklist.",
+        "1. Direction gates + Big4 — conflict → reject.",
+        f"2. Apply the **{title}** rubric below against K-line tables and metrics.",
+    ]
+    if key in _TACTICAL_PROFILE_KEYS:
+        lines.append(
+            "3. **Tactical mutual exclusion**: pattern fits another tactical profile → reject."
+        )
+        lines.append(
+            "4. Catalyst must match RSI / below_7d_high_pct; single 1h bar or 24h % only → reject."
+        )
+        lines.append("5. Approve only on full rubric fit; doubt → reject.")
+    elif key == "reversal":
+        lines.append("3. SHORT = true top reversal; LONG = true bottom reversal.")
+        lines.append("4. Do not use tactical four-way checklist for reversal.")
+    elif key == "explore":
+        lines.append("3. Event/structure catalyst; no tactical four-way checklist.")
+    elif key == "predict":
+        lines.append("3. 4h predict logic; no tactical/explore checklist mix.")
+    else:
+        lines.append("3. entry_reason/catalyst vs side and K-lines; vague → reject.")
+    return "\n".join(lines)
+
+
+def build_gpt_tech_metrics_block(profile: OpenAdvisorStrategyProfile, ctx: dict) -> str:
+    if profile.key not in _TACTICAL_PROFILE_KEYS | {"reversal", "explore", "predict"}:
+        return ""
+    rsi = ctx.get("rsi_14_1h")
+    b7h = ctx.get("below_7d_high_pct")
+    a7l = ctx.get("above_7d_low_pct")
+    rsi_s = f"{rsi:.1f}" if rsi is not None else "N/A"
+    b7h_s = f"{b7h:.2f}%" if b7h is not None else "N/A"
+    a7l_s = f"{a7l:.2f}%" if a7l is not None else "N/A"
+    extra = ""
+    if profile.key == "chase":
+        extra = (
+            f"\n- Chase hard lines: RSI<={CHASE_RSI_MAX}, "
+            f"below_7d_high<=-{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}%"
+        )
+    elif profile.key == "pullback":
+        extra = f"\n- Pullback hard lines: RSI<={PULLBACK_RSI_MAX}, deep dip vs 7d high"
+    return (
+        "## Quant metrics (cross-check rubric)\n"
+        f"- RSI(1h): {rsi_s}\n"
+        f"- below_7d_high_pct: {b7h_s}\n"
+        f"- above_7d_low_pct: {a7l_s}"
+        f"{extra}"
+    )
+
+
+_KLINE_1H_READING_EN = """
+## 1h K-line reading
+- **Never** decide from the latest **single** 1h candle.
+- **Trend**: last **24** 1h bars (~24h).
+- **Local structure**: last **4-6** 1h bars (pullback/bounce/streak).
+"""
+
+
+def build_gpt_open_advisor_prompt(
+    *,
+    profile: OpenAdvisorStrategyProfile,
+    symbol: str,
+    side: str,
+    price: float,
+    source: str,
+    catalyst: str,
+    leverage: int,
+    sl_pct: Optional[float],
+    tp_pct: Optional[float],
+    hold_hours: Optional[float],
+    ctx: dict,
+    format_kline_table: Callable[[list], str],
+) -> str:
+    """GPT open advisor — English instructions; reason still Chinese for Web UI."""
+    title_en = _GPT_PROFILE_TITLE_EN.get(profile.key, profile.title_zh)
+    rubric_en = _gpt_rubric_en(profile)
+    big4_block = build_gpt_big4_subjective_block(
+        ctx.get("big4_signal", "NEUTRAL"),
+        float(ctx.get("big4_strength") or 0),
+        bool(ctx.get("allow_long", True)),
+        bool(ctx.get("allow_short", True)),
+        side,
+        float(ctx.get("btc_6h_change") or 0),
+        float(ctx.get("eth_6h_change") or 0),
+    )
+    klines_15m = format_kline_table(ctx.get("klines_15m", []))
+    klines_1h = format_kline_table(ctx.get("klines_1h", []))
+    narr_1h = (ctx.get("narrative_1h") or "").strip() or "(no cache; use tables)"
+    narr_15m = (ctx.get("narrative_15m") or "").strip() or "(none)"
+    tech_block = build_gpt_tech_metrics_block(profile, ctx)
+    review_steps = build_gpt_strategy_review_steps(profile)
+    sl_s = f"{sl_pct}%" if sl_pct is not None else "default"
+    tp_s = f"{tp_pct}%" if tp_pct is not None else "default"
+    hold_s = f"{hold_hours}h" if hold_hours is not None else "strategy default"
+    return f"""You are a senior crypto futures risk reviewer. The system asks you to approve or reject a **paper** open **before** execution.
+
+## Scope
+- **Only** the rubric for: **{title_en}** (profile=`{profile.key}`, source=`{source}`).
+- Do **not** apply another strategy's rules (e.g. do not judge a pullback trade as chase).
+
+## Strategy rubric ({title_en})
+{rubric_en}
+
+{_KLINE_1H_READING_EN}
+
+{tech_block}
+
+{big4_block}
+
+## Proposed open
+  Symbol:     {symbol}
+  Direction:  {side}
+  Entry:      {price}
+  Leverage:   {leverage}x
+  SL/TP:      {sl_s} / {tp_s}
+  Plan hold:  {hold_s}
+  Explore catalyst (from prior LLM round): {(catalyst or '')[:500]}
+
+## Market context
+  candidate_pool 1h narrative:
+{narr_1h}
+  candidate_pool 15m narrative:
+{narr_15m}
+
+## Last 24x1h K-lines (oldest → newest)
+{klines_1h}
+
+## Last ~4h 15m K-lines
+{klines_15m}
+
+{review_steps}
+
+Output ONLY JSON:
+{{
+  "decision": "approve" | "reject",
+  "reason": "<=80 Chinese chars for operator UI; must cite strategy「{profile.title_zh}」and key pass/fail point>"
+}}
+"""

@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT))
 
 from app.services.open_advisor_strategy_rubrics import (
     build_big4_subjective_block,
+    build_gpt_open_advisor_prompt,
     build_strategy_review_steps,
     check_direction_gates,
     check_expected_side,
@@ -17,6 +18,7 @@ from app.services.open_advisor_strategy_rubrics import (
     resolve_strategy_profile,
 )
 from app.services.gemini_position_advisor import GeminiPositionAdvisor
+from app.services.gpt_position_advisor import GPTPositionAdvisor
 
 
 def test_source_mapping():
@@ -179,6 +181,48 @@ def test_hold_prompt_kline_focus():
     print("[PASS] hold_prompt_kline_focus")
 
 
+def test_gpt_open_prompt_english_tactical():
+    ctx = {
+        "klines_15m": [{"t": "01-01 00:00", "o": 1, "h": 1, "l": 1, "c": 1, "v": 1}],
+        "klines_1h": [],
+        "big4_signal": "NEUTRAL",
+        "big4_strength": 0,
+        "allow_long": True,
+        "allow_short": True,
+        "btc_6h_change": 0,
+        "eth_6h_change": 0,
+        "narrative_1h": "",
+        "narrative_15m": "",
+        "rsi_14_1h": 55.0,
+        "below_7d_high_pct": -6.0,
+        "above_7d_low_pct": 10.0,
+    }
+    p = GPTPositionAdvisor._build_gpt_open_prompt(
+        "BTC/USDT", "LONG", 1.0, "gpt_chase", "momentum test", 5, 3.0, 5.0, 4.0, ctx,
+    )
+    assert "Momentum chase long" in p
+    assert "gpt_tactical_precheck_pass" not in p
+    assert "do not batch-reject on macro FUD alone" in p
+    assert "Chinese chars" in p
+    profile = resolve_strategy_profile("gpt_pullback")
+    p2 = build_gpt_open_advisor_prompt(
+        profile=profile,
+        symbol="ETH/USDT",
+        side="LONG",
+        price=1.0,
+        source="gpt_pullback",
+        catalyst="dip",
+        leverage=5,
+        sl_pct=3.0,
+        tp_pct=5.0,
+        hold_hours=4.0,
+        ctx=ctx,
+        format_kline_table=GeminiPositionAdvisor._format_kline_table,
+    )
+    assert "Pullback long" in p2
+    print("[PASS] gpt_open_prompt_english_tactical")
+
+
 def test_losing_hold_temper():
     s15_bad = {"for": 1, "against": 5, "trail_against": 4, "last3": "阴阳阴", "summary": ""}
     s1h_bad = {"for": 0, "against": 3, "trail_against": 2, "last3": "阴阴阴", "summary": ""}
@@ -205,6 +249,7 @@ def main():
     test_precheck_chase_rsi()
     test_review_steps_by_profile()
     test_open_prompt_contains_rubric()
+    test_gpt_open_prompt_english_tactical()
     test_hold_prompt_kline_focus()
     test_losing_hold_temper()
     print("-" * 40)

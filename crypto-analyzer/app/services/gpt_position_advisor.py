@@ -20,7 +20,7 @@ from app.services.gemini_position_advisor import (
 from app.services.gpt_advisor_reviews import log_gpt_advisor_review
 from app.services.open_advisor_routing import is_gpt_order_source, should_use_gpt_hold_advisor
 from app.services.open_advisor_strategy_rubrics import (
-    _TACTICAL_PROFILE_KEYS,
+    build_gpt_open_advisor_prompt,
     check_direction_gates,
     check_expected_side,
     precheck_open_advisor,
@@ -98,8 +98,9 @@ class GPTPositionAdvisor:
             logger.warning("[GPT顾问] 缺 openai 库")
             return None
         system_msg = (
-            "你是超级交易大师，负责模拟开仓前审核。"
-            "仅输出合法 JSON，含 decision(approve|reject) 与 reason。"
+            "You are a crypto futures paper-trading open reviewer. "
+            "Output ONLY valid JSON with decision (approve|reject) and reason "
+            "(Chinese, <=80 chars, for operator UI)."
         )
         if hold_mode:
             system_msg = (
@@ -165,6 +166,35 @@ class GPTPositionAdvisor:
             logger.error(f"[GPT顾问] 查模拟仓失败: {e}")
             return []
 
+    @staticmethod
+    def _build_gpt_open_prompt(
+        symbol: str,
+        side: str,
+        price: float,
+        source: str,
+        catalyst: str,
+        leverage: int,
+        sl_pct: Optional[float],
+        tp_pct: Optional[float],
+        hold_hours: Optional[float],
+        ctx: dict,
+    ) -> str:
+        profile = resolve_strategy_profile(source)
+        return build_gpt_open_advisor_prompt(
+            profile=profile,
+            symbol=symbol,
+            side=side,
+            price=price,
+            source=source,
+            catalyst=catalyst,
+            leverage=leverage,
+            sl_pct=sl_pct,
+            tp_pct=tp_pct,
+            hold_hours=hold_hours,
+            ctx=ctx,
+            format_kline_table=GeminiPositionAdvisor._format_kline_table,
+        )
+
     def review_open(
         self,
         symbol: str,
@@ -209,16 +239,7 @@ class GPTPositionAdvisor:
             )
             return False, pre_reason
 
-        # 战术/顶空底多：探索+代码门槛已校验；二次 GPT 常因宏观悲观整批 reject
-        if profile.key in _TACTICAL_PROFILE_KEYS or profile.key == "reversal":
-            log_gpt_advisor_review(
-                "open", "approve", symbol, position_side=side, source=source,
-                entry_price=price, leverage=leverage, reason="gpt_tactical_precheck_pass",
-                catalyst=catalyst, conn=conn,
-            )
-            return True, "gpt_tactical_precheck_pass"
-
-        prompt = self._prompt_helper._build_open_prompt(
+        prompt = self._build_gpt_open_prompt(
             symbol, side, price, source, catalyst, leverage, sl_pct, tp_pct, hold_hours, ctx,
         )
         result = self._call_gpt_json(prompt, hold_mode=False)
