@@ -117,7 +117,7 @@
 ### 主探索 (`*_explore`)
 - 每 **4h** + 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
 - SL **4%** / TP **6%** / **4h** / 5x / 500U；conf≥**0.60** + `explore_catalyst_technical_ok`
-- **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：仅 `gemini_explore`；DeepSeek/GPT 探索仅模拟
+- **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：`gemini_explore`、`deepseek_explore`；GPT 探索仅模拟
 
 ### 主预测 (`*_predict`)
 - 每 **4h** + 5min 轮询 + `*_predict_next_due_utc`；kill switch（Gemini 预测默认 1）
@@ -164,7 +164,7 @@
 
 ## 实盘控制
 
-- **按 source 白名单**（`app/services/trading_gates.py`）：仅 `gemini_explore`、`gemini_predict`、`deepseek_predict` 可开/平实盘；其余策略（S1/S5/S6/S9、战术、反转、GPT、smart_trader 等）只写模拟仓
+- **按 source 白名单**（`app/services/trading_gates.py`）：`gemini_explore`、`deepseek_explore`、`gemini_predict`、`deepseek_predict` 可开/平实盘；其余策略（S1/S5/S6/S9、战术、反转、GPT、smart_trader 等）只写模拟仓
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)
 - **平仓总开关**: `system_settings.live_close_enabled` (1=开启；模拟平仓时同步交易所；持仓顾问 sell 亦受此规则)
 - **TOP50 实仓闸门**: `system_settings.live_top50_required` (默认 1，TOP50 内可开实仓)

@@ -1,6 +1,6 @@
 # AI Strategies & Advisors — Reference (English)
 
-> Version: 2026-06-04 · Aligned with production code (main explore/predict/tactical/reversal **LLM prompts are English**; some JSON fields still require Chinese per prompt spec — see each `ai_*_prompt` module)
+> Version: 2026-06-05 · Aligned with production code (main explore/predict/tactical/reversal **LLM prompts are English**; live sync limited to `LIVE_SYNC_SOURCES` + TOP50/whitelist on open)
 
 ## 1. Overview
 
@@ -22,11 +22,11 @@ Any simulated open
 
 | Category | LLM? | Typical `source` prefix | Live sync |
 |----------|------|-------------------------|-----------|
-| Main explore | Yes | `gemini_explore` / `deepseek_explore` / `gpt_explore` | **Gemini explore only** |
-| Main predict | Yes | `*_predict` | Hooks exist; DeepSeek/GPT usually disabled |
+| Main explore | Yes | `gemini_explore` / `deepseek_explore` / `gpt_explore` | **`gemini_explore`, `deepseek_explore`** (+ TOP50/whitelist on open); GPT paper only |
+| Main predict | Yes | `*_predict` | **`gemini_predict`, `deepseek_predict` only** (GPT paper only) |
 | Reversal | Yes | `*_reversal` | No |
 | Tactical four | Yes | `*_pullback`, etc. | No |
-| Open / hold advisors | Yes | Routed by `source` | Hold `sell` may close live if enabled |
+| Open / hold advisors | Yes | Routed by `source` | `sell` closes exchange only for the four allowlisted sources + `live_close_enabled` |
 | Sentiment | Yes | No orders | — |
 | S9 bottom reversal | Yes | `s9_gemini_ai` | Multi-strategy path |
 
@@ -108,8 +108,8 @@ Init stagger: Gemini +15s, DeepSeek +90s, GPT +120s.
 
 ### 3.6 Live trading
 
-- **Gemini explore**: `_sync_to_live()` when `live_trading_enabled=1` and TOP50/whitelist gates pass.
-- DeepSeek / GPT explore: **paper only**.
+- **`gemini_explore`, `deepseek_explore`**: `_sync_to_live()` when `check_live_open_allowed()` passes (see §11).
+- **GPT explore**: paper only.
 
 ### 3.7 Tables
 
@@ -152,7 +152,8 @@ Same as main explore: **4h hold, SL 4%, TP 6%, 5x, conf≥0.60, catalyst gate**.
 
 ### 4.5 Live
 
-Gemini predict can sync live; DeepSeek/GPT predict sync usually **commented out**.
+- **`gemini_predict`, `deepseek_predict`**: `_sync_to_live()` + `check_live_open_allowed` (TOP50/whitelist).
+- **`gpt_predict`**: paper only (`_sync_to_live` commented out).
 
 ### 4.6 Tables
 
@@ -289,7 +290,8 @@ For OPEN paper positions held **≥30 minutes**, poll every **15 minutes/positio
 
 ### 8.4 On `sell`
 
-Close paper; optionally close live mapping if `live_close_enabled=1`.
+- Always close paper.
+- Close exchange only if `live_close_enabled=1` and `should_sync_live_for_source(position.source)` (four-source allowlist); map via `paper_position_id`.
 
 ### 8.5 Kill switches
 
@@ -318,15 +320,21 @@ Close paper; optionally close live mapping if `live_close_enabled=1`.
 
 ## 11. Live Trading Gates
 
-`app/services/trading_gates.py`:
+`app/services/trading_gates.py` (`LIVE_SYNC_SOURCES`):
 
 | Setting | Meaning |
 |---------|---------|
-| `live_trading_enabled` | Master switch |
-| `live_top50_required` | TOP50 OR whitelist path |
-| `live_whitelist_enabled` | Whitelist path |
-| `live_close_enabled` | Advisor sell closes exchange |
-| `blacklist_level3_enabled` | Block L3 blacklist symbols |
+| `live_trading_enabled` | Master switch for **opening** live positions |
+| `live_close_enabled` | Master switch for **closing** live (paper close, advisor sell, engine) |
+| `live_top50_required` | Open: symbol in `top_performing_symbols` (daily TOP50) |
+| `live_whitelist_enabled` | Open: `rating_level=0` whitelist |
+| `blacklist_level3_enabled` | Block L3 symbols (often checked before paper open) |
+
+**Source allowlist (open & close):** `gemini_explore`, `deepseek_explore`, `gemini_predict`, `deepseek_predict`. All other strategies stay paper-only even if `live_trading_enabled=1`.
+
+**Open chain** (`check_live_open_allowed`): `live_trading_enabled` → source ∈ allowlist → `check_live_symbol_allowed` (TOP50 **OR** whitelist; if both gates off, no live open). Reject reasons include “not in TOP 50 nor whitelist”, “strategy X paper only”.
+
+**Close:** `live_close_enabled` + source allowlist only; **no** TOP50/whitelist re-check.
 
 Max **20** OPEN positions per live account.
 

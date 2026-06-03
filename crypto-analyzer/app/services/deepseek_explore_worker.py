@@ -958,27 +958,15 @@ def _sync_to_live(
     try:
         conn = _connect()
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT setting_value FROM system_settings WHERE setting_key='live_trading_enabled'"
-            )
-            row = cur.fetchone()
-            enabled = (row and str(row.get('setting_value', '0')).strip().lower() in ('1', 'true', 'yes'))
-            if not enabled:
-                logger.info(f"[DeepSeek探索] live_trading_enabled=0, 跳过实盘同步 {symbol}")
-                conn.close()
-                return
-
-            from app.services.trading_gates import check_live_symbol_allowed
-            allowed, reason = check_live_symbol_allowed(symbol, cursor=cur)
+            from app.services.trading_gates import check_live_open_allowed
+            allowed, reason = check_live_open_allowed(symbol, DEEPSEEK_SOURCE, cursor=cur)
             if not allowed:
-                logger.warning(
-                    f"[DeepSeek探索] {symbol} {reason}, 跳过实盘同步"
-                )
+                logger.info(f"[DeepSeek探索] {symbol} {reason}, 跳过实盘同步")
                 conn.close()
                 return
         conn.close()
     except Exception as e:
-        logger.warning(f"[DeepSeek探索] 检查实盘开关/TOP50失败, 跳过实盘同步: {e}")
+        logger.warning(f"[DeepSeek探索] 检查实盘闸门失败, 跳过实盘同步: {e}")
         return
 
     try:
@@ -1138,9 +1126,7 @@ def _open_simulated_position(
             f"id={position_id}"
         )
 
-        # DeepSeek 暂时不同步实盘
-        # _sync_to_live(position_id, symbol, side, price, sl_price, tp_price, qty, catalyst)
-        logger.info(f"[DeepSeek探索] 模拟仓 #{position_id} {symbol} {side} 已开, 暂不同步实盘")
+        _sync_to_live(position_id, symbol, side, price, sl_price, tp_price, qty, catalyst)
 
         return position_id
     except Exception as e:

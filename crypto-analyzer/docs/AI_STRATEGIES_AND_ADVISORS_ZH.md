@@ -1,6 +1,6 @@
 # AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-06-04 · 与生产代码对齐（主探索/预测/战术/反转 **LLM prompt 为英文**；JSON 仍要求 `summary_zh` 等中文字段处见各 prompt 模块）
+> 文档版本：2026-06-05 · 与生产代码对齐（主探索/预测/战术/反转 **LLM prompt 为英文**；实盘按 `LIVE_SYNC_SOURCES` 三策略 + TOP50/白名单开仓闸）
 
 ## 1. 总览
 
@@ -22,11 +22,11 @@ smart_trader_service (每 900s)
 
 | 类别 | 是否 LLM | 典型 source 前缀 | 实盘同步 |
 |------|----------|------------------|----------|
-| 主探索 | 是 | `gemini_explore` / `deepseek_explore` / `gpt_explore` | 仅 **Gemini** 探索可同步 |
-| 主预测 | 是 | `*_predict` | 代码有钩子，DeepSeek/GPT 默认注释掉 |
+| 主探索 | 是 | `gemini_explore` / `deepseek_explore` / `gpt_explore` | **`gemini_explore`、`deepseek_explore`**（+ 开仓 TOP50/白名单）；GPT 仅模拟 |
+| 主预测 | 是 | `*_predict` | 仅 **`gemini_predict`、`deepseek_predict`**（GPT 仅模拟） |
 | 顶空底多 | 是 | `*_reversal` | 否 |
 | 战术四策略 | 是 | `*_pullback` 等 | 否 |
-| 开仓/持仓顾问 | 是 | 按 source 路由 | 持仓 sell 可平实盘（需 `live_close_enabled`） |
+| 开仓/持仓顾问 | 是 | 按 source 路由 | 持仓 sell：仅上述四 source + `live_close_enabled=1` 时平交易所 |
 | 情绪分析 | 是 | 不下单 | — |
 | S9 抄底 | 是 | `s9_gemini_ai` | 规则多策略路径 |
 
@@ -108,8 +108,8 @@ A/B 或回归仍可用 `*_zh()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 3.6 实盘
 
-- **Gemini 探索**：`live_trading_enabled=1` 且 TOP50/白名单闸门通过时 `_sync_to_live()`。
-- DeepSeek / GPT 探索：**不同步实盘**。
+- **`gemini_explore`、`deepseek_explore`**：`check_live_open_allowed()` 通过后 `_sync_to_live()`（见 §11）。
+- **GPT 探索**：仅模拟。
 
 ### 3.7 数据表
 
@@ -152,7 +152,8 @@ A/B 或回归仍可用 `*_zh()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 4.5 实盘
 
-Gemini 预测有 `_sync_to_live`；DeepSeek/GPT 预测同步调用通常 **注释掉**（仅模拟）。
+- **`gemini_predict`、`deepseek_predict`**：`_sync_to_live()` + `check_live_open_allowed`（TOP50/白名单）。
+- **`gpt_predict`**：仅模拟（`_sync_to_live` 注释）。
 
 ### 4.6 数据表
 
@@ -294,7 +295,8 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 
 ### 8.4 sell 后果
 
-- 关闭模拟仓；若存在实盘映射且 `live_close_enabled=1`，尝试交易所平仓
+- **始终**关闭模拟仓。
+- 仅当 `live_close_enabled=1` 且 `should_sync_live_for_source(position.source)`（四策略白名单）时，按 `paper_position_id` 平映射实盘；其它 source 只关模拟。
 
 ### 8.5 Kill Switch
 
@@ -324,15 +326,21 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 
 ## 11. 实盘闸门（共用）
 
-`app/services/trading_gates.py`：
+`app/services/trading_gates.py`（`LIVE_SYNC_SOURCES`）：
 
 | 设置 | 含义 |
 |------|------|
-| `live_trading_enabled` | 总开关 |
-| `live_top50_required` | TOP50 内可开实仓（与白名单 **或** 关系） |
-| `live_whitelist_enabled` | 白名单币可开实仓 |
-| `live_close_enabled` | 顾问 sell 是否平交易所仓位 |
-| `blacklist_level3_enabled` | L3 黑名单禁止开仓 |
+| `live_trading_enabled` | **开仓**同步总开关 |
+| `live_close_enabled` | **平仓**同步总开关（模拟平仓、持仓顾问 sell、引擎关仓） |
+| `live_top50_required` | 开仓：在 `top_performing_symbols`（日终 TOP50）可开实仓 |
+| `live_whitelist_enabled` | 开仓：`rating_level=0` 可开实仓 |
+| `blacklist_level3_enabled` | L3 禁止开仓（多在开模拟前检查） |
+
+**按 source 白名单（开/平）**：`gemini_explore`、`deepseek_explore`、`gemini_predict`、`deepseek_predict`。其它策略即使 `live_trading_enabled=1` 也只写模拟仓。
+
+**开仓检查链**（`check_live_open_allowed`）：`live_trading_enabled` → source ∈ `LIVE_SYNC_SOURCES` → `check_live_symbol_allowed`（TOP50 **或** 白名单；两闸门都关则拒绝）。不满足时日志如「不在 TOP 50 也非白名单」「策略 xxx 仅模拟盘」。
+
+**平仓**：只认 `live_close_enabled` + source 白名单；**不**再查 TOP50/白名单。
 
 每账号 OPEN 上限 **20** 仓。
 
