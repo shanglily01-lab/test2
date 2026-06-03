@@ -14,6 +14,7 @@ from loguru import logger
 import pymysql
 
 from app.utils.binance_rate_guard import rate_guard as _rate_guard
+from app.utils.futures_symbol import futures_symbol_rating_canonical
 
 
 # 拉取每页条数。注意：币安该接口在 pageSize=30 时会返回 HTTP 400（无正文），20/50 正常。
@@ -345,11 +346,12 @@ class BinanceNewsMonitor:
         """新币上线：加入 trading_symbols (enabled=0)，发 Telegram 通知"""
         added = []
         for symbol in symbols:
+            sym = futures_symbol_rating_canonical(symbol)
             try:
                 cursor.execute("""
                     INSERT IGNORE INTO trading_symbols (symbol, exchange, enabled)
                     VALUES (%s, 'binance_futures', 0)
-                """, (symbol,))
+                """, (sym,))
                 if cursor.rowcount > 0:
                     added.append(symbol)
             except Exception as e:

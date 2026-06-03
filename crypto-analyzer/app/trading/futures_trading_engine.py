@@ -11,6 +11,8 @@ from typing import Dict, List, Optional, Tuple
 from loguru import logger
 import pymysql
 
+from app.utils.futures_symbol import futures_symbol_rating_canonical
+
 def get_quantity_precision(symbol: str) -> int:
     """
     根据交易对获取数量精度（小数位数）
@@ -362,6 +364,7 @@ class FuturesTradingEngine:
         Returns:
             开仓结果
         """
+        symbol = futures_symbol_rating_canonical(symbol)
         try:
             cursor = self._get_cursor()
         except Exception as cursor_error:

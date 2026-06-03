@@ -23,6 +23,7 @@ import pymysql.cursors
 from loguru import logger
 
 from app.utils.config_loader import get_db_config
+from app.utils.futures_symbol import futures_symbol_rating_canonical
 
 DATA_CACHE_DB = "data_cache"
 # 主数据库名 — 懒加载, 避免 import 时抛出异常
@@ -226,7 +227,7 @@ def refresh_market_movers() -> dict:
                 f"ORDER BY t.funding_rate DESC LIMIT 10"
             )
             for rank, r in enumerate(cur.fetchall(), 1):
-                sym = r["symbol"].replace("/", "")
+                sym = futures_symbol_rating_canonical(r["symbol"])
                 if _is_excluded(sym):
                     continue
                 cur.execute(
@@ -248,7 +249,7 @@ def refresh_market_movers() -> dict:
                 f"ORDER BY t.funding_rate ASC LIMIT 10"
             )
             for rank, r in enumerate(cur.fetchall(), 1):
-                sym = r["symbol"].replace("/", "")
+                sym = futures_symbol_rating_canonical(r["symbol"])
                 if _is_excluded(sym):
                     continue
                 cur.execute(
