@@ -11,6 +11,7 @@ from loguru import logger
 import pymysql
 import yaml
 from .scoring_weight_optimizer import ScoringWeightOptimizer
+from .optimization_config import OptimizationConfig
 
 
 class AdaptiveOptimizer:
@@ -48,6 +49,7 @@ class AdaptiveOptimizer:
 
         # 初始化评分权重优化器
         self.weight_optimizer = ScoringWeightOptimizer(db_config)
+        self.opt_config = OptimizationConfig(db_config)
 
         logger.info("✅ 自适应优化器已初始化 (包含评分权重优化器)")
 
@@ -318,9 +320,6 @@ class AdaptiveOptimizer:
         # 1. 更新黑名单到数据库
         if report['blacklist_candidates']:
             try:
-                conn = self._get_connection()
-                cursor = conn.cursor()
-
                 for candidate in report['blacklist_candidates']:
                     symbol = candidate['symbol']
                     reason = candidate['reason']
@@ -328,62 +327,38 @@ class AdaptiveOptimizer:
                     win_rate = candidate['win_rate']
                     order_count = candidate['order_count']
 
-                    # 检查是否已存在
-                    cursor.execute("""
-                        SELECT id, rating_level FROM trading_symbol_rating
-                        WHERE symbol = %s
-                    """, (symbol,))
-
-                    existing = cursor.fetchone()
-
-                    if existing:
-                        # 更新现有记录，提升黑名单等级
-                        current_level = existing['rating_level']
-                        new_level = min(current_level + 1, 2)  # 最高2级（永久禁止是3级）
-
-                        cursor.execute("""
-                            UPDATE trading_symbol_rating
-                            SET rating_level = %s,
-                                reason = %s,
-                                total_loss_amount = total_loss_amount + %s,
-                                win_rate = %s,
-                                total_trades = total_trades + %s,
-                                previous_level = %s,
-                                level_changed_at = NOW(),
-                                level_change_reason = %s,
-                                stats_end_date = CURDATE()
-                            WHERE symbol = %s
-                        """, (new_level, reason, abs(total_pnl), win_rate, order_count,
-                              current_level, f"自适应优化器: {reason}", symbol))
-
-                        results['blacklist_added'].append({
-                            'symbol': symbol,
-                            'action': 'updated',
-                            'old_level': current_level,
-                            'new_level': new_level,
-                            'reason': reason
-                        })
-                        logger.info(f"⬆️ 提升黑名单等级: {symbol} (L{current_level}→L{new_level}) - {reason}")
+                    current_level = self.opt_config.get_symbol_rating_level(symbol)
+                    if current_level >= 1:
+                        new_level = min(current_level + 1, 2)
+                        action = 'updated'
                     else:
-                        # 插入新黑名单记录（等级1）
-                        cursor.execute("""
-                            INSERT INTO trading_symbol_rating
-                            (symbol, rating_level, reason, total_loss_amount, win_rate,
-                             total_trades, stats_start_date, stats_end_date, level_change_reason)
-                            VALUES (%s, 1, %s, %s, %s, %s, CURDATE(), CURDATE(), %s)
-                        """, (symbol, reason, abs(total_pnl), win_rate, order_count,
-                              f"自适应优化器: {reason}"))
+                        new_level = 1
+                        action = 'added'
 
-                        results['blacklist_added'].append({
-                            'symbol': symbol,
-                            'action': 'added',
-                            'level': 1,
-                            'reason': reason
-                        })
-                        logger.info(f"➕ 添加到黑名单: {symbol} (L1) - {reason}")
+                    self.opt_config.update_symbol_rating(
+                        symbol=symbol,
+                        new_level=new_level,
+                        reason=reason,
+                        total_loss_amount=abs(total_pnl),
+                        win_rate=win_rate,
+                        total_trades=order_count,
+                    )
 
-                conn.commit()
-                cursor.close()
+                    entry = {
+                        'symbol': symbol,
+                        'action': action,
+                        'new_level': new_level,
+                        'reason': reason,
+                    }
+                    if action == 'updated':
+                        entry['old_level'] = current_level
+                    else:
+                        entry['level'] = 1
+                    results['blacklist_added'].append(entry)
+                    logger.info(
+                        f"{'⬆️ 提升' if action == 'updated' else '➕ 添加'}黑名单: "
+                        f"{symbol} (L{current_level if action == 'updated' else 0}→L{new_level}) - {reason}"
+                    )
 
                 logger.info(f"✅ 数据库黑名单已更新，新增{len(results['blacklist_added'])}个交易对")
 

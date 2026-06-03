@@ -10,6 +10,9 @@ from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel
 
+from app.utils.futures_symbol import futures_symbol_rating_canonical
+from app.utils.position_display import canonicalize_symbol_fields
+
 router = APIRouter(prefix="/api/gpt-explore", tags=["GPT探索"])
 
 
@@ -55,14 +58,14 @@ def _build_live_positions(positions):
         entry = float(p["entry_price"])
         qty = float(p["quantity"])
         margin = float(p["margin"])
-        live_price = _live_price(p["symbol"], hub)
+        live_price = _live_price(futures_symbol_rating_canonical(p["symbol"]), hub)
         unrealized_pnl = None
         unrealized_pnl_pct = None
         if live_price is not None and live_price > 0:
             unrealized_pnl = (live_price - entry) * qty if p["position_side"] == "LONG" else (entry - live_price) * qty
             unrealized_pnl_pct = (unrealized_pnl / margin * 100) if margin > 0 else 0
         rows.append({
-            "id": p["id"], "symbol": p["symbol"], "position_side": p["position_side"], "leverage": p["leverage"],
+            "id": p["id"], "symbol": futures_symbol_rating_canonical(p["symbol"]), "position_side": p["position_side"], "leverage": p["leverage"],
             "quantity": qty, "entry_price": entry, "mark_price": live_price, "margin": margin,
             "stop_loss_price": float(p["stop_loss_price"]) if p["stop_loss_price"] else None,
             "take_profit_price": float(p["take_profit_price"]) if p["take_profit_price"] else None,
@@ -178,6 +181,7 @@ async def list_verdicts(run_id: int = Query(..., ge=1)):
     for r in rows:
         if r.get("confidence") is not None:
             r["confidence"] = float(r["confidence"])
+    canonicalize_symbol_fields(rows)
     return {"success": True, "data": rows, "count": len(rows)}
 
 
@@ -214,6 +218,7 @@ async def list_positions(status: str = Query("open", pattern="^(open|closed)$"),
     if status == "closed":
         from app.utils.position_display import enrich_closed_position_rows
         enrich_closed_position_rows(rows)
+    canonicalize_symbol_fields(rows)
     return {"success": True, "data": rows, "count": len(rows)}
 
 

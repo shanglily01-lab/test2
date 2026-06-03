@@ -62,6 +62,18 @@ def _last_ok_run_at(cur, runs_table: str) -> Optional[datetime]:
     return last_at
 
 
+def _last_run_at(cur, runs_table: str) -> Optional[datetime]:
+    """任意 status 的最后一轮 asof_utc (战术探索初始化 next_due 用)."""
+    cur.execute(f"SELECT MAX(asof_utc) AS last_at FROM `{runs_table}`")
+    row = cur.fetchone()
+    last_at = (row or {}).get("last_at")
+    if last_at is None:
+        return None
+    if getattr(last_at, "tzinfo", None) is not None:
+        return last_at.astimezone(timezone.utc).replace(tzinfo=None)
+    return last_at
+
+
 def predict_round_is_due(
     conn,
     *,

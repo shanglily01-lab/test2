@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.optimization_config import OptimizationConfig
+from app.utils.futures_symbol import futures_symbol_clean, futures_symbol_rating_canonical
 from app.utils.config_loader import load_config
 from app.utils.pnl_stats import PNL_COUNT_SELECT, parse_pnl_counts
 
@@ -217,11 +218,12 @@ async def set_symbol_rating(request: ManualRatingRequest):
             raise HTTPException(status_code=400, detail="rating_level must be 0, 1, 2, or 3")
         opt_config = OptimizationConfig(DB_CONFIG)
         opt_config.update_symbol_rating(
-            symbol=request.symbol.upper(),
+            symbol=futures_symbol_rating_canonical(request.symbol),
             new_level=request.rating_level,
             reason=request.reason or "手动设置"
         )
-        return {"success": True, "message": f"{request.symbol.upper()} 评级已设置为 {request.rating_level}"}
+        canon = futures_symbol_rating_canonical(request.symbol)
+        return {"success": True, "message": f"{canon} 评级已设置为 {request.rating_level}"}
     except HTTPException:
         raise
     except Exception as e:
@@ -249,7 +251,7 @@ async def delete_symbol_rating(symbol: str):
 
 
 def _normalize_symbol_key(symbol: str) -> str:
-    return (symbol or "").replace("/", "").upper()
+    return futures_symbol_clean(symbol)
 
 
 def _empty_whitelist_stats(symbol_count: int = 0, in_top50: int = 0, account_id: int = 2) -> dict:

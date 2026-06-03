@@ -6,6 +6,12 @@
 """
 import os
 import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+
 import pymysql
 import pymysql.cursors
 
@@ -14,7 +20,6 @@ try:
     from dotenv import load_dotenv
     load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 except ImportError:
-    # 没有 python-dotenv，手动解析
     env_path = os.path.join(os.path.dirname(__file__), '.env')
     if os.path.exists(env_path):
         with open(env_path) as _f:
@@ -23,6 +28,9 @@ except ImportError:
                 if _line and not _line.startswith('#') and '=' in _line:
                     _k, _v = _line.split('=', 1)
                     os.environ.setdefault(_k.strip(), _v.strip())
+
+from app.services.optimization_config import OptimizationConfig
+from app.utils.futures_symbol import futures_symbol_rating_canonical
 
 SYMBOLS_TO_BAN = [
     '1000LUNC/USDT',
@@ -69,32 +77,14 @@ def main():
         print(f"读取config.yaml失败: {e}")
         return
 
-    conn = pymysql.connect(
-        **db, charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor, autocommit=True
-    )
-    cur = conn.cursor()
-
+    opt = OptimizationConfig(db)
     for symbol in SYMBOLS_TO_BAN:
+        canon = futures_symbol_rating_canonical(symbol)
         try:
-            cur.execute("""
-                INSERT INTO trading_symbol_rating
-                    (symbol, rating_level, margin_multiplier, score_bonus,
-                     hard_stop_loss_count, level_change_reason, level_changed_at)
-                VALUES (%s, 3, 0.0, 999, 0, %s, NOW())
-                ON DUPLICATE KEY UPDATE
-                    rating_level       = 3,
-                    margin_multiplier  = 0.0,
-                    score_bonus        = 999,
-                    level_change_reason = %s,
-                    level_changed_at   = NOW()
-            """, (symbol, REASON, REASON))
-            print(f"OK: {symbol} -> Level 3 永久禁止")
+            opt.update_symbol_rating(symbol=canon, new_level=3, reason=REASON)
+            print(f"OK: {canon} -> Level 3 永久禁止")
         except Exception as e:
             print(f"ERROR: {symbol} 设置失败: {e}")
-
-    cur.close()
-    conn.close()
 
 
 if __name__ == "__main__":

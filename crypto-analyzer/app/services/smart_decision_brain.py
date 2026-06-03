@@ -12,6 +12,7 @@ from loguru import logger
 import pymysql
 from app.services.breakout_system import BreakoutSystem
 from app.services.optimization_config import OptimizationConfig
+from app.utils.futures_symbol import futures_symbol_clean, futures_symbol_rating_canonical
 
 
 class SmartDecisionBrain:
@@ -40,15 +41,18 @@ class SmartDecisionBrain:
 
         # 黑名单 - 表现较差不再交易的交易对 (2026-01-20更新)
         self.blacklist = [
+            futures_symbol_rating_canonical(s) for s in [
             'IP/USDT',        # 亏损 $79.34 (2笔订单, 0%胜率)
             'VIRTUAL/USDT',   # 亏损 $35.65 (4笔订单, 0%胜率) - 从白名单移除
             'LDO/USDT',       # 亏损 $35.88 (5笔订单, 0%胜率) - 从白名单移除
             'ATOM/USDT',      # 亏损 $27.56 (5笔订单, 20%胜率)
             'ADA/USDT',       # 亏损 $22.87 (6笔订单, 0%胜率) - 从白名单移除
-        ]
+        ]]
+        self._blacklist_clean = {futures_symbol_clean(s) for s in self.blacklist}
 
         # 白名单 - 只做LONG方向(基于回测数据,已移除黑名单币种)
         self.whitelist_long = [
+            futures_symbol_rating_canonical(s) for s in [
             'BCH/USDT',    # 4笔 +1.28%, 100%胜率
             # 'LDO/USDT',  # 已加入黑名单 (实盘表现差)
             'ENA/USDT',    # 3笔 +1.26%, 100%胜率
@@ -63,7 +67,8 @@ class SmartDecisionBrain:
             'UNI/USDT',    # 3笔 +0.88%
             # 'ADA/USDT',  # 已加入黑名单 (实盘表现差)
             'SOL/USDT',    # 2笔 +0.47%
-        ]
+        ]]
+        self._whitelist_long_clean = {futures_symbol_clean(s) for s in self.whitelist_long}
 
         # 决策阈值
         self.threshold = 60  # 最低60分才开仓（强信号）
@@ -351,7 +356,8 @@ class SmartDecisionBrain:
             决策结果字典
         """
         # 黑名单检查 (优先级最高)
-        if symbol in self.blacklist:
+        sym_clean = futures_symbol_clean(symbol)
+        if sym_clean in self._blacklist_clean:
             return {
                 'decision': False,
                 'direction': None,
@@ -361,7 +367,7 @@ class SmartDecisionBrain:
             }
 
         # 白名单检查
-        if symbol not in self.whitelist_long:
+        if sym_clean not in self._whitelist_long_clean:
             return {
                 'decision': False,
                 'direction': None,

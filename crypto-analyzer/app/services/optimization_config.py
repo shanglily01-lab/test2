@@ -11,6 +11,14 @@ from loguru import logger
 import pymysql
 from decimal import Decimal
 
+from app.utils.futures_symbol import (
+    futures_symbol_clean,
+    futures_symbol_rating_canonical,
+    sql_rating_symbol_clean,
+)
+
+_RATING_CLEAN = sql_rating_symbol_clean("symbol")
+
 
 class OptimizationConfig:
     """优化配置管理器 - 支持自我优化的参数配置"""
@@ -408,10 +416,13 @@ class OptimizationConfig:
         conn = self._get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
+        clean = futures_symbol_clean(symbol)
+        cursor.execute(f"""
             SELECT * FROM trading_symbol_rating
-            WHERE symbol = %s
-        """, (symbol,))
+            WHERE {_RATING_CLEAN} = %s
+            ORDER BY rating_level DESC, updated_at DESC
+            LIMIT 1
+        """, (clean,))
 
         result = cursor.fetchone()
         cursor.close()
@@ -431,7 +442,11 @@ class OptimizationConfig:
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
-            cursor.execute("DELETE FROM trading_symbol_rating WHERE symbol = %s", (symbol,))
+            clean = futures_symbol_clean(symbol)
+            cursor.execute(
+                f"DELETE FROM trading_symbol_rating WHERE {_RATING_CLEAN} = %s",
+                (clean,),
+            )
             deleted = cursor.rowcount > 0
             cursor.close()
             if deleted:
@@ -498,10 +513,17 @@ class OptimizationConfig:
         """
         conn = self._get_connection()
         cursor = conn.cursor()
+        canon = futures_symbol_rating_canonical(symbol)
+        clean = futures_symbol_clean(symbol)
 
         try:
-            # 获取旧评级
-            old_rating = self.get_symbol_rating(symbol)
+            cursor.execute(f"""
+                SELECT * FROM trading_symbol_rating
+                WHERE {_RATING_CLEAN} = %s
+                ORDER BY rating_level DESC, updated_at DESC
+                LIMIT 1
+            """, (clean,))
+            old_rating = cursor.fetchone()
             old_level = old_rating['rating_level'] if old_rating else 0
 
             # 获取统计日期范围
@@ -547,14 +569,19 @@ class OptimizationConfig:
                     level_change_reason = VALUES(level_change_reason),
                     stats_start_date = VALUES(stats_start_date),
                     stats_end_date = VALUES(stats_end_date)
-            """, (symbol, new_level, margin_multiplier, score_bonus,
+            """, (canon, new_level, margin_multiplier, score_bonus,
                   hard_stop_loss_count, total_loss_amount, total_profit_amount,
                   win_rate, total_trades, old_level, reason, start_date, end_date,
                   old_level))
 
+            cursor.execute(
+                f"DELETE FROM trading_symbol_rating WHERE {_RATING_CLEAN} = %s AND symbol <> %s",
+                (clean, canon),
+            )
+
             conn.commit()
 
-            logger.info(f"✅ 更新交易对评级: {symbol} {old_level}→{new_level} ({reason})")
+            logger.info(f"✅ 更新交易对评级: {canon} {old_level}→{new_level} ({reason})")
 
             # 记录优化日志
             self._log_optimization('blacklist',

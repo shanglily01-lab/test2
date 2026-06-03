@@ -22,6 +22,9 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from loguru import logger
 
+from app.utils.futures_symbol import futures_symbol_rating_canonical
+from app.utils.position_display import canonicalize_symbol_fields
+
 
 router = APIRouter(prefix="/api/gemini-explore", tags=["Gemini探索"])
 
@@ -89,7 +92,7 @@ def _build_live_positions(positions):
     hub = _get_price_hub()
     result = []
     for p in positions:
-        symbol = p['symbol']
+        symbol = futures_symbol_rating_canonical(p['symbol'])
         side = p['position_side']
         entry = float(p['entry_price'])
         qty = float(p['quantity'])
@@ -314,6 +317,7 @@ async def list_verdicts(run_id: int = Query(..., ge=1)):
         for v in verdicts:
             if v.get('confidence') is not None:
                 v['confidence'] = float(v['confidence'])
+        canonicalize_symbol_fields(verdicts)
         return {"success": True, "data": verdicts, "count": len(verdicts)}
     except Exception as e:
         logger.error(f"[Gemini探索 API] /verdicts 失败: {e}")
@@ -380,6 +384,7 @@ async def list_positions(
         if status == 'closed':
             from app.utils.position_display import enrich_closed_position_rows
             enrich_closed_position_rows(rows)
+        canonicalize_symbol_fields(rows)
         return {"success": True, "data": rows, "count": len(rows)}
     except Exception as e:
         logger.error(f"[Gemini探索 API] /positions 失败: {e}")

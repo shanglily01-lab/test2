@@ -138,6 +138,7 @@ class BTCMomentumTrader:
         """从 top_performing_symbols 获取TOP50列表（可配置排除 L3）"""
         try:
             from app.services.trading_gates import load_blacklist_level3_symbols
+            from app.utils.futures_symbol import futures_symbol_clean
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute("SELECT symbol FROM top_performing_symbols ORDER BY rank_score DESC LIMIT 50")
@@ -145,7 +146,10 @@ class BTCMomentumTrader:
             banned = load_blacklist_level3_symbols(conn)
             cur.close(); conn.close()
             if rows:
-                return [r['symbol'] for r in rows if r['symbol'] not in banned]
+                return [
+                    r['symbol'] for r in rows
+                    if futures_symbol_clean(r['symbol']) not in banned
+                ]
         except Exception as e:
             logger.warning(f"[BTC动量] 获取TOP50失败: {e}")
         return []

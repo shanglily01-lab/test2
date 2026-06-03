@@ -9,6 +9,11 @@ import pymysql
 from loguru import logger
 
 from app.utils.config_loader import get_db_config
+from app.utils.futures_symbol import (
+    futures_symbol_clean,
+    sql_rating_l3_clean_subquery,
+    sql_rating_symbol_clean,
+)
 
 
 def _bool_setting(key: str, default: bool = True) -> bool:
@@ -49,11 +54,12 @@ def is_symbol_blocked_level3(symbol: str, rating_level: Optional[int] = None) ->
         db_config = get_db_config()
         conn = pymysql.connect(**db_config, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
         cur = conn.cursor()
-        _clean = symbol.replace('/', '')
+        clean = futures_symbol_clean(symbol)
         cur.execute(
-            "SELECT rating_level FROM trading_symbol_rating "
-            "WHERE symbol=%s OR symbol=%s LIMIT 1",
-            (symbol, _clean),
+            f"SELECT rating_level FROM trading_symbol_rating "
+            f"WHERE {sql_rating_symbol_clean('symbol')} = %s "
+            f"ORDER BY rating_level DESC LIMIT 1",
+            (clean,),
         )
         row = cur.fetchone()
         cur.close()
@@ -80,7 +86,7 @@ def load_blacklist_level3_symbols(conn=None) -> Set[str]:
         if own_conn:
             cur.close()
             conn.close()
-        return {r['symbol'] if isinstance(r, dict) else r[0] for r in rows}
+        return {futures_symbol_clean(r['symbol'] if isinstance(r, dict) else r[0]) for r in rows}
     except Exception as e:
         logger.warning(f"[trading_gates] 读取黑名单3级失败: {e}")
         if own_conn and conn:
@@ -110,14 +116,17 @@ def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
 
     in_top50 = False
     is_whitelist = False
-    _clean = symbol.replace('/', '')
+    clean = futures_symbol_clean(symbol)
     try:
         if cursor is not None:
             cursor.execute(
-                "SELECT "
-                "  (SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1) AS in_top100,"
-                "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s OR symbol=%s LIMIT 1) AS rating_level",
-                (symbol, symbol, _clean),
+                f"SELECT "
+                f"  (SELECT 1 FROM top_performing_symbols "
+                f"   WHERE {sql_rating_symbol_clean('symbol')} = %s LIMIT 1) AS in_top100,"
+                f"  (SELECT rating_level FROM trading_symbol_rating "
+                f"   WHERE {sql_rating_symbol_clean('symbol')} = %s "
+                f"   ORDER BY rating_level DESC LIMIT 1) AS rating_level",
+                (clean, clean),
             )
             row = cursor.fetchone()
         else:
@@ -125,10 +134,13 @@ def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
             conn = pymysql.connect(**db_config, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
             cur = conn.cursor()
             cur.execute(
-                "SELECT "
-                "  (SELECT 1 FROM top_performing_symbols WHERE symbol=%s LIMIT 1) AS in_top100,"
-                "  (SELECT rating_level FROM trading_symbol_rating WHERE symbol=%s OR symbol=%s LIMIT 1) AS rating_level",
-                (symbol, symbol, _clean),
+                f"SELECT "
+                f"  (SELECT 1 FROM top_performing_symbols "
+                f"   WHERE {sql_rating_symbol_clean('symbol')} = %s LIMIT 1) AS in_top100,"
+                f"  (SELECT rating_level FROM trading_symbol_rating "
+                f"   WHERE {sql_rating_symbol_clean('symbol')} = %s "
+                f"   ORDER BY rating_level DESC LIMIT 1) AS rating_level",
+                (clean, clean),
             )
             row = cur.fetchone()
             cur.close()
@@ -153,11 +165,33 @@ def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
     return False, '不在白名单'
 
 
+def has_open_futures_position(conn, source: str, symbol: str, account_id: Optional[int] = None) -> bool:
+    """按 clean key 检查是否已有 OPEN 仓（跨 XXX/USDT 与 XXXUSDT）。"""
+    clean = futures_symbol_clean(symbol)
+    try:
+        cur = conn.cursor()
+        sql = (
+            f"SELECT 1 FROM futures_positions WHERE source=%s AND status='open' "
+            f"AND {sql_rating_symbol_clean('symbol')} = %s"
+        )
+        params: list = [source, clean]
+        if account_id is not None:
+            sql += " AND account_id=%s"
+            params.append(account_id)
+        sql += " LIMIT 1"
+        cur.execute(sql, params)
+        found = cur.fetchone() is not None
+        cur.close()
+        return found
+    except Exception as e:
+        logger.warning(f"[trading_gates] OPEN 仓检查失败 {source} {symbol}: {e}")
+        return False
+
+
 def sql_exclude_level3_filter(column: str = "symbol") -> str:
     """动态 SQL：排除 L3 的 AND 子句；开关关闭时返回空串."""
     if not is_blacklist_level3_enforced():
         return ""
     return (
-        f" AND {column} NOT IN ("
-        f"SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3)"
+        f" AND {sql_rating_symbol_clean(column)} NOT IN ({sql_rating_l3_clean_subquery()})"
     )

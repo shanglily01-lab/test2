@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from app.services.binance_ws_price import get_ws_price_service, BinanceWSPriceService
 from app.services.adaptive_optimizer import AdaptiveOptimizer
 from app.services.optimization_config import OptimizationConfig
+from app.utils.futures_symbol import futures_symbol_rating_canonical
 from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_exit_optimizer import SmartExitOptimizer
@@ -94,7 +95,10 @@ class SmartDecisionBrain:
             """)
             blacklist_rows = cursor.fetchall()
             old_blacklist = set(self.blacklist) if hasattr(self, 'blacklist') else set()
-            new_blacklist = set([row['symbol'] for row in blacklist_rows]) if blacklist_rows else set()
+            new_blacklist = {
+                futures_symbol_rating_canonical(row['symbol'])
+                for row in blacklist_rows
+            } if blacklist_rows else set()
 
             # 扫描池 = config.yaml 的所有交易对（不过滤）
             old_whitelist = set(self.whitelist) if hasattr(self, 'whitelist') else set()
@@ -149,7 +153,10 @@ class SmartDecisionBrain:
                 ORDER BY rating_level DESC, updated_at DESC
             """)
             blacklist_rows = cursor.fetchall()
-            self.blacklist = [row['symbol'] for row in blacklist_rows] if blacklist_rows else []
+            self.blacklist = [
+                futures_symbol_rating_canonical(row['symbol'])
+                for row in blacklist_rows
+            ] if blacklist_rows else []
 
             cursor.close()
 

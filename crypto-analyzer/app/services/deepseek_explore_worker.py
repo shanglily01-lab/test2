@@ -33,6 +33,11 @@ from app.services.ai_big4_prompt import (
     big4_conflict_risk_note,
     enrich_global_context,
 )
+from app.utils.futures_symbol import (
+    futures_symbol_clean,
+    futures_symbol_rating_canonical,
+    resolve_futures_universe_item,
+)
 from app.services.ai_explore_prompt import (
     AI_POSITION_HOLD_HOURS,
     AI_POSITION_SL_PCT,
@@ -393,7 +398,7 @@ def _build_universe(conn) -> dict:
     cached = _try_candidate_pool(min_volume=1000000, limit=200)
     if cached:
         before = len(cached)
-        cached = [r for r in cached if r['symbol'] not in _level3_set]
+        cached = [r for r in cached if futures_symbol_clean(r['symbol']) not in _level3_set]
         if len(cached) < before:
             logger.info(f"[DeepSeek探索] 黑名单3级过滤: {before - len(cached)} 个交易对")
 
@@ -918,14 +923,8 @@ def _big4_blocks(big4_signal: str, side: str) -> bool:
 
 
 def _has_open_position(conn, symbol: str) -> bool:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT 1 FROM futures_positions "
-            "WHERE source=%s AND status='open' AND symbol=%s "
-            "LIMIT 1",
-            (EXPLORE_SOURCE, symbol),
-        )
-        return cur.fetchone() is not None
+    from app.services.trading_gates import has_open_futures_position
+    return has_open_futures_position(conn, EXPLORE_SOURCE, symbol, EXPLORE_ACCOUNT_ID)
 
 
 # ============================================================
@@ -1064,6 +1063,7 @@ def _open_simulated_position(
     price: float,
     catalyst: str,
 ) -> Optional[int]:
+    symbol = futures_symbol_rating_canonical(symbol)
     from app.services.trading_gates import is_symbol_blocked_level3
     if is_symbol_blocked_level3(symbol):
         logger.warning(f"[DeepSeek探索] {symbol} 黑名单3级, 禁止开仓")
@@ -1399,7 +1399,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         verdict_rows: List[Tuple] = []
 
         for v in verdicts:
-            symbol = (v.get('symbol') or '').upper()
+            symbol = futures_symbol_rating_canonical(v.get('symbol') or '')
             category = (v.get('category') or 'skip').lower()
             db_category = _map_category(category)
             try:
@@ -1427,7 +1427,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 continue
 
             tech_ok, tech_reason = explore_catalyst_technical_ok(
-                catalyst, data_signal, universe.get(symbol),
+                catalyst, data_signal, resolve_futures_universe_item(universe, symbol),
             )
             if not tech_ok:
                 verdict_rows.append((
@@ -1478,7 +1478,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            price = _get_current_price(conn, symbol, universe.get(symbol))
+            price = _get_current_price(conn, symbol, resolve_futures_universe_item(universe, symbol))
             if price is None or price <= 0:
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,

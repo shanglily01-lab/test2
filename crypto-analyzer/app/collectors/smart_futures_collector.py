@@ -24,6 +24,7 @@ import pymysql
 from decimal import Decimal
 from app.database.connection_pool import get_global_pool
 from app.utils.binance_rate_guard import rate_guard, parse_ban_msg
+from app.utils.futures_symbol import futures_symbol_clean
 
 
 class SmartFuturesCollector:
@@ -311,7 +312,12 @@ class SmartFuturesCollector:
                         "SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 2"
                     )
                     rows = cursor.fetchall()
-                    return {row[0] if not isinstance(row, dict) else row['symbol'] for row in rows}
+                    return {
+                        futures_symbol_clean(
+                            row[0] if not isinstance(row, dict) else row['symbol']
+                        )
+                        for row in rows
+                    }
         except Exception as e:
             logger.warning(f"查询高风险 symbol 失败 (跳过过滤): {e}")
             return set()
@@ -400,7 +406,7 @@ class SmartFuturesCollector:
             # 剔除 rating_level >= 2 的 symbol
             high_risk = self._get_high_risk_symbols()
             before = len(symbols_list)
-            symbols_list = [s for s in symbols_list if s not in high_risk]
+            symbols_list = [s for s in symbols_list if futures_symbol_clean(s) not in high_risk]
             after = len(symbols_list)
             if before > after:
                 logger.info(f"按 rating_level >= 2 过滤: {before} -> {after} symbols (剔除 {before - after} 个高风险)")

@@ -287,7 +287,7 @@ class MultiStrategyService:
                     {_l3}
                   UNION
                   SELECT symbol, 999 AS score FROM trading_symbol_rating
-                  WHERE rating_level = 0 AND symbol LIKE '%%/USDT'
+                  WHERE rating_level = 0
                 ) combined ORDER BY score DESC
             """, (min_abs_change,))
             rows = cur.fetchall()
@@ -635,7 +635,7 @@ class MultiStrategyService:
                     {_l3}
                   UNION
                   SELECT symbol FROM trading_symbol_rating
-                  WHERE rating_level = 0 AND symbol LIKE '%/USDT'
+                  WHERE rating_level = 0
                 ) combined
             """)
             rows = cur.fetchall()
@@ -774,7 +774,7 @@ class MultiStrategyService:
                     {_l3}
                   UNION
                   SELECT symbol, 999999999 AS score FROM trading_symbol_rating
-                  WHERE rating_level = 0 AND symbol LIKE '%%/USDT'
+                  WHERE rating_level = 0
                 ) combined ORDER BY score DESC LIMIT 100
             """, (self.S9_MIN_QUOTE_VOLUME,))
             rows = cur.fetchall()

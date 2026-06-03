@@ -26,6 +26,7 @@ router = APIRouter(prefix='/api/futures/review', tags=['futures-review'])
 
 # 加载配置
 from app.utils.config_loader import load_config
+from app.utils.futures_symbol import futures_symbol_clean
 from app.services.signal_analysis_service import SignalAnalysisService
 from app.services.strategy_display_names import (
     get_strategy_display_name,
@@ -1792,7 +1793,7 @@ async def get_realtime_opportunity_analysis(
             ORDER BY rating_level DESC
         """)
         blacklist = {
-            row['symbol']: {
+            futures_symbol_clean(row['symbol']): {
                 'reason': row['level_change_reason'],
                 'level': row['rating_level'],
                 'margin_multiplier': row['margin_multiplier']
@@ -1890,8 +1891,8 @@ async def get_realtime_opportunity_analysis(
                     # 未开仓，分析原因
                     miss_reasons = []
 
-                    if symbol in blacklist:
-                        bl_info = blacklist[symbol]
+                    if futures_symbol_clean(symbol) in blacklist:
+                        bl_info = blacklist[futures_symbol_clean(symbol)]
                         miss_reasons.append(f'黑名单Level{bl_info["level"]}: {bl_info["reason"]}')
 
                     if signal_quality == "弱":

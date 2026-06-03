@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from loguru import logger
 
+from app.utils.futures_symbol import futures_symbol_clean
+
 
 class MarketPredictor:
     def __init__(self, db_config: dict, ws_price_service=None):
@@ -485,7 +487,10 @@ class MarketPredictor:
             cursor.execute(
                 "SELECT symbol, rating_level FROM trading_symbol_rating WHERE rating_level IN (1, 2)"
             )
-            restricted_symbols = {r['symbol']: r['rating_level'] for r in cursor.fetchall()}
+            restricted_symbols = {
+                futures_symbol_clean(r['symbol']): r['rating_level']
+                for r in cursor.fetchall()
+            }
         except Exception:
             restricted_symbols = {}
 
@@ -524,7 +529,7 @@ class MarketPredictor:
                 continue
 
             # 根据评级确定保证金：1级=100U，2级=50U，默认=400U
-            _level = restricted_symbols.get(symbol, 0)
+            _level = restricted_symbols.get(futures_symbol_clean(symbol), 0)
             if _level == 1:
                 MARGIN = RESTRICTED_MARGIN_L1
             elif _level == 2:
@@ -714,8 +719,8 @@ class MarketPredictor:
         # 加载 Level3 永久禁止交易对
         try:
             cursor.execute("SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3")
-            banned = {r['symbol'] for r in cursor.fetchall()}
-            symbols = [s for s in symbols if s not in banned]
+            banned = {futures_symbol_clean(r['symbol']) for r in cursor.fetchall()}
+            symbols = [s for s in symbols if futures_symbol_clean(s) not in banned]
             if banned:
                 logger.debug(f"[预测] Level3黑名单过滤，排除{len(banned)}个交易对")
         except Exception as e:

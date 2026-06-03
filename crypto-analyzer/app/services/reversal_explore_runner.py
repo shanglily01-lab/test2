@@ -49,6 +49,7 @@ from app.services.ai_tactical_explore_prompts import (
     TACTICAL_STRATEGIES,
 )
 from app.services.ai_explore_prompt import normalize_explore_llm_payload
+from app.utils.futures_symbol import futures_symbol_rating_canonical, resolve_futures_universe_item
 
 # 各 teacher 独立锁
 _locks: Dict[str, threading.Lock] = {}
@@ -61,21 +62,7 @@ def _is_llm_skip_category(category: str) -> bool:
 
 
 def _universe_lookup(universe: dict, symbol: str) -> Optional[dict]:
-    """LLM 常输出 MANTAUSDT，universe 键为 MANTA/USDT."""
-    if not symbol or not universe:
-        return None
-    s = str(symbol).upper().strip()
-    if s in universe:
-        return universe[s]
-    if "/" not in s and len(s) > 4 and s.endswith("USDT"):
-        slash = f"{s[:-4]}/USDT"
-        if slash in universe:
-            return universe[slash]
-    compact = s.replace("/", "")
-    for key, item in universe.items():
-        if str(key).upper().replace("/", "") == compact:
-            return item
-    return None
+    return resolve_futures_universe_item(universe, symbol)
 
 
 def _gpt_apply_verdict_fallback(
@@ -237,13 +224,8 @@ def _get_historical_stats(conn, source: str) -> dict:
 
 
 def _has_open_position(conn, source: str, symbol: str) -> bool:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT 1 FROM futures_positions "
-            "WHERE source=%s AND status='open' AND symbol=%s LIMIT 1",
-            (source, symbol),
-        )
-        return cur.fetchone() is not None
+    from app.services.trading_gates import has_open_futures_position
+    return has_open_futures_position(conn, source, symbol, EXPLORE_ACCOUNT_ID)
 
 
 def _open_simulated_position(
@@ -254,6 +236,7 @@ def _open_simulated_position(
     price: float,
     catalyst: str,
 ) -> Tuple[Optional[int], str]:
+    symbol = futures_symbol_rating_canonical(symbol)
     from app.services.trading_gates import is_symbol_blocked_level3
 
     if is_symbol_blocked_level3(symbol):
@@ -681,7 +664,7 @@ def run_tactical_explore_round(
         for v in verdicts:
             if not isinstance(v, dict):
                 continue
-            symbol = (v.get("symbol") or "").upper()
+            symbol = futures_symbol_rating_canonical(v.get("symbol") or "")
             category = (v.get("category") or "skip").lower()
             confidence = parse_tactical_confidence(v)
             catalyst = (v.get("catalyst") or "")[:500]

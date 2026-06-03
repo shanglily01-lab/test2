@@ -29,6 +29,8 @@ import pymysql
 import pymysql.cursors
 from loguru import logger
 
+from app.utils.futures_symbol import futures_symbol_rating_canonical
+
 from app.services.ai_big4_prompt import (
     BIG4_PROMPT_BLOCK_PREDICT,
     CONFIDENCE_ROW_BIG4_OK,
@@ -138,15 +140,14 @@ def _connect():
 # ============================================================
 def _get_top50_symbols(conn) -> List[str]:
     """从 top_performing_symbols 获取 TOP 50 交易对, 可配置排除黑名单3级."""
-    from app.services.trading_gates import is_blacklist_level3_enforced
+    from app.services.trading_gates import is_blacklist_level3_enforced, sql_exclude_level3_filter
+    _l3 = sql_exclude_level3_filter("symbol")
     with conn.cursor() as cur:
         if is_blacklist_level3_enforced():
             cur.execute(
-                "SELECT symbol FROM top_performing_symbols "
-                "WHERE symbol NOT IN ("
-                "  SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3"
-                ") "
-                "ORDER BY rank_score DESC LIMIT %s",
+                f"SELECT symbol FROM top_performing_symbols "
+                f"WHERE 1=1 {_l3} "
+                f"ORDER BY rank_score DESC LIMIT %s",
                 (PREDICT_TOP_N,),
             )
         else:
@@ -445,14 +446,8 @@ def _big4_blocks(big4_signal: str, side: str) -> bool:
 
 
 def _has_open_position(conn, symbol: str) -> bool:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT 1 FROM futures_positions "
-            "WHERE source=%s AND status='open' AND symbol=%s "
-            "LIMIT 1",
-            (PREDICT_SOURCE, symbol),
-        )
-        return cur.fetchone() is not None
+    from app.services.trading_gates import has_open_futures_position
+    return has_open_futures_position(conn, PREDICT_SOURCE, symbol, PREDICT_ACCOUNT_ID)
 
 
 # ============================================================
@@ -726,6 +721,7 @@ def _open_simulated_position(
     catalyst: str,
 ) -> Optional[int]:
     """INSERT 到 futures_positions, 模拟单, 返回 position_id."""
+    symbol = futures_symbol_rating_canonical(symbol)
     from app.services.trading_gates import is_symbol_blocked_level3
     if is_symbol_blocked_level3(symbol):
         logger.warning(f"[DeepSeek预测] {symbol} 黑名单3级, 禁止开仓模拟单")
@@ -1009,7 +1005,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         verdict_rows: List[Tuple] = []
 
         for v in verdicts:
-            symbol = (v.get('symbol') or '').upper()
+            symbol = futures_symbol_rating_canonical(v.get('symbol') or '')
             category = (v.get('category') or 'skip').lower()
             try:
                 confidence = float(v.get('confidence') or 0)

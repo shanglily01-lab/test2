@@ -369,21 +369,21 @@ class BinanceNewsMonitor:
 
     def _handle_delisting(self, cursor, title: str, symbols: List[str]):
         """下架公告：trading_symbol_rating 升为 Level 3（永久禁止）"""
+        from app.services.optimization_config import OptimizationConfig
+        from app.utils.futures_symbol import futures_symbol_rating_canonical
+
+        opt = OptimizationConfig(self.db_config)
         blocked = []
         for symbol in symbols:
-            # 去掉 USDT 后缀匹配 trading_symbol_rating 的 symbol 格式
-            # trading_symbol_rating.symbol 格式可能是 BTCUSDT 或 BTC/USDT，统一处理
+            canon = futures_symbol_rating_canonical(symbol)
             try:
-                cursor.execute("""
-                    INSERT INTO trading_symbol_rating (symbol, rating_level, margin_multiplier, updated_at)
-                    VALUES (%s, 3, 0.0, NOW())
-                    ON DUPLICATE KEY UPDATE
-                        rating_level = 3,
-                        margin_multiplier = 0.0,
-                        updated_at = NOW()
-                """, (symbol,))
-                blocked.append(symbol)
-                logger.warning("下架公告 - 设置 Level3 禁止: %s", symbol)
+                opt.update_symbol_rating(
+                    symbol=canon,
+                    new_level=3,
+                    reason=f"下架公告: {title[:120]}",
+                )
+                blocked.append(canon)
+                logger.warning("下架公告 - 设置 Level3 禁止: %s", canon)
             except Exception as e:
                 logger.error("下架处理失败 [%s]: %s", symbol, e)
 

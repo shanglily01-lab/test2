@@ -31,6 +31,7 @@ from app.services.ai_predict_schedule import (
 )
 from app.services.gemini_explore_worker import _get_current_price, _would_instant_tp
 from app.services.gemini_swan_worker import _read_setting
+from app.utils.futures_symbol import futures_symbol_rating_canonical, resolve_futures_universe_item
 
 GPT_SOURCE = "gpt_explore"
 EXPLORE_MARGIN_USD = 500.0
@@ -77,12 +78,8 @@ def _big4_blocks(big4_signal: str, side: str) -> bool:
 
 
 def _has_open_position(conn, symbol: str) -> bool:
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT 1 FROM futures_positions WHERE source=%s AND status='open' AND symbol=%s LIMIT 1",
-            (GPT_SOURCE, symbol),
-        )
-        return cur.fetchone() is not None
+    from app.services.trading_gates import has_open_futures_position
+    return has_open_futures_position(conn, GPT_SOURCE, symbol, EXPLORE_ACCOUNT_ID)
 
 
 def _call_gpt_explore(universe: dict, global_ctx: dict, historical_stats: dict):
@@ -159,6 +156,7 @@ def _insert_verdicts(conn, verdict_rows: List[Tuple]) -> None:
 def _open_simulated_position(
     conn, symbol: str, side: str, price: float, catalyst: str,
 ) -> Tuple[Optional[int], str]:
+    symbol = futures_symbol_rating_canonical(symbol)
     from app.services.paper_open_gate import gate_simulated_open
     allowed, gate_reason = gate_simulated_open(
         symbol, side, price, GPT_SOURCE, catalyst,
@@ -284,7 +282,7 @@ def _run_explore_round_body(triggered_by: str = "scheduler") -> Optional[int]:
         trades_opened = 0
         verdict_rows: List[Tuple] = []
         for v in (resp.get("verdicts") or []):
-            symbol = (v.get("symbol") or "").upper()
+            symbol = futures_symbol_rating_canonical(v.get("symbol") or "")
             category = (v.get("category") or "skip").lower()
             confidence = float(v.get("confidence") or 0)
             catalyst = (v.get("catalyst") or "")[:500]
@@ -299,7 +297,7 @@ def _run_explore_round_body(triggered_by: str = "scheduler") -> Optional[int]:
             else:
                 verdict_rows.append((run_id, symbol, category, confidence, catalyst, data_signal, risk_note, "skipped_confidence", None, f"category={category}"))
                 continue
-            tech_ok, tech_reason = explore_catalyst_technical_ok(catalyst, data_signal, universe.get(symbol))
+            tech_ok, tech_reason = explore_catalyst_technical_ok(catalyst, data_signal, resolve_futures_universe_item(universe, symbol))
             if not tech_ok:
                 verdict_rows.append((run_id, symbol, category, confidence, catalyst, data_signal, risk_note, "skipped_weak_catalyst", None, tech_reason))
                 continue
@@ -311,7 +309,7 @@ def _run_explore_round_body(triggered_by: str = "scheduler") -> Optional[int]:
             if _has_open_position(conn, symbol):
                 verdict_rows.append((run_id, symbol, category, confidence, catalyst, data_signal, risk_note, "skipped_dedup", None, "已有OPEN仓位"))
                 continue
-            price = _get_current_price(conn, symbol, universe.get(symbol))
+            price = _get_current_price(conn, symbol, resolve_futures_universe_item(universe, symbol))
             if not price or price <= 0:
                 verdict_rows.append((run_id, symbol, category, confidence, catalyst, data_signal, risk_note, "skipped_other", None, "无有效开仓价"))
                 continue

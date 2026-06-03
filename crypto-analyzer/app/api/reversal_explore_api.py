@@ -9,6 +9,9 @@ import pymysql.cursors
 from fastapi import APIRouter, HTTPException, Query
 from loguru import logger
 
+from app.utils.futures_symbol import futures_symbol_rating_canonical
+from app.utils.position_display import canonicalize_symbol_fields
+
 
 def _get_db_config():
     from app.utils.config_loader import get_db_config
@@ -71,7 +74,7 @@ def _build_live_positions(positions):
     hub = _get_price_hub()
     result = []
     for p in positions:
-        symbol = p["symbol"]
+        symbol = futures_symbol_rating_canonical(p["symbol"])
         side = p["position_side"]
         entry = float(p["entry_price"])
         qty = float(p["quantity"])
@@ -245,6 +248,7 @@ def create_tactical_explore_router(
             for v in verdicts:
                 if v.get("confidence") is not None:
                     v["confidence"] = float(v["confidence"])
+            canonicalize_symbol_fields(verdicts)
             return {"success": True, "data": verdicts, "count": len(verdicts)}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
@@ -294,6 +298,7 @@ def create_tactical_explore_router(
             if status == "closed":
                 from app.utils.position_display import enrich_closed_position_rows
                 enrich_closed_position_rows(rows)
+            canonicalize_symbol_fields(rows)
             return {"success": True, "data": rows, "count": len(rows)}
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
