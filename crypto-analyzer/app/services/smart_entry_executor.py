@@ -354,7 +354,7 @@ class SmartEntryExecutor:
             )
             if not allowed:
                 conn.close()
-                return {'success': False, 'reason': f'开仓顾问拒绝: {gate_reason}'}
+                return {'success': False, 'reason': f'open advisor rejected: {gate_reason}'}
 
             # 插入持仓记录
             cursor.execute("""

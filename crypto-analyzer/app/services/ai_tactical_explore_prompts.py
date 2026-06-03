@@ -221,8 +221,140 @@ def prepare_tactical_universe_for_llm(
     return selected, meta
 
 
-def _build_prompt(definition: TacticalStrategyDef, universe: dict, global_ctx: dict, historical_stats: dict):
-    universe_list, meta = prepare_tactical_universe_for_llm(definition, universe)
+_KLINE_1H_RULES_EN = """
+## 1h K-line reading (required)
+- **Trend**: last **24** 1h bars (~24h) for up/down/channel; align with kline_narrative.1h overall trend.
+- **Local structure**: last **4-6** 1h bars for pullback/bounce/streak (catalyst must cite "last 4-6" or "recent 6x1h", not single 1h bar).
+- 15m/1d are auxiliary; primary evidence is 24 + 4-6 on 1h.
+"""
+
+_JSON_OUTPUT_EN = """
+## Output JSON (this schema only, no markdown)
+{{
+  "summary_zh": "1-3 sentences in Chinese; if no setup, explain why",
+  "verdicts": [
+    {{
+      "symbol": "XXXUSDT",
+      "category": "entry",
+      "confidence": 0.68,
+      "catalyst": "multi-TF 1h/15m K-lines + RSI/EMA/7d/bar counts",
+      "data_signal": "optional one-liner",
+      "risk_note": "optional"
+    }}
+  ]
+}}
+If nothing qualifies, use verdicts=[] — do not list skips one-by-one.
+"""
+
+_TACTICAL_PROMPT_EN: Dict[str, Dict[str, str]] = {
+    "pullback": {
+        "title": "Pullback long",
+        "body": (
+            "## Strategy definition (ALL required for entry)\n"
+            "1. **24x1h** overall uptrend (higher highs/channel).\n"
+            "2. **Last 4-6x1h** pullback/dip with support hold (not knife-catch).\n"
+            "3. **RSI 1h <= 68**; shallow dip at RSI>68 → reject (chase/skip).\n"
+            "4. **LONG only**; pure momentum chase narrative → reject.\n"
+            "Example catalyst: 24h up channel; last 5 bars red dip to EMA20; 15m lower wick; RSI 48."
+        ),
+        "contrast": (
+            "## Boundaries\n"
+            "✅ Uptrend pullback long only.\n"
+            "❌ Not: late chase (→ momentum chase), deep dump bounce, top short."
+        ),
+    },
+    "rebound": {
+        "title": "Rebound short",
+        "body": (
+            "## Strategy definition (ALL required)\n"
+            "1. Prior top then **downtrend** on 24x1h.\n"
+            "2. **Last 4-6x1h** bounce with **weak volume** (state clearly).\n"
+            "3. Near resistance / relative high; **SHORT only**.\n"
+            "Example: 24h down channel; last 4 bars weak bounce at prior high; RSI ~52."
+        ),
+        "contrast": (
+            "## Boundaries\n"
+            "✅ Short weak bounce in downtrend.\n"
+            "❌ Not: breakdown chase (→ dump short), fresh breakout high."
+        ),
+    },
+    "chase": {
+        "title": "Momentum chase long",
+        "body": (
+            "## Strategy definition (ALL required)\n"
+            "1. **24x1h** up; **last 4-6** still extend without deep pullback.\n"
+            "2. Volume not required; flat volume OK if structure holds.\n"
+            "3. **RSI 1h <= 68**; >68 → reject.\n"
+            "4. **below_7d_high_pct <= -3** (room to 7d high).\n"
+            "5. **LONG only**; dip-buy narrative → reject (pullback).\n"
+            "Example: 24h bullish; last 6 bars up streak; below_7d_high=-8%; RSI 62."
+        ),
+        "contrast": (
+            "## Boundaries\n"
+            "✅ Trend continuation long with room below 7d high.\n"
+            "❌ Not: deep pullback long, top short, 24h % only."
+        ),
+    },
+    "dump": {
+        "title": "Breakdown short",
+        "body": (
+            "## Strategy definition (ALL required)\n"
+            "1. **24x1h** downtrend intact.\n"
+            "2. Bounce lacks volume or fails (last 4-6 bars).\n"
+            "3. **SHORT only**; not bottom fishing.\n"
+            "Example: 24h down; last 5 bars weak bounce; 15m fail; RSI 38."
+        ),
+        "contrast": (
+            "## Boundaries\n"
+            "✅ Short trend continuation after failed bounce.\n"
+            "❌ Not: rebound short at resistance, bottom reversal long."
+        ),
+    },
+}
+
+_BIG4_PROMPT_BLOCK_EXPLORE_EN = """
+# Big4 rules (read big4_trading_hint in global_context)
+- Big4 is background only, not a ban on long/short.
+- Non-extreme: evaluate each symbol independently; do not empty verdicts solely on macro/Big4.
+- summary_zh in Chinese; no "ban all longs/shorts" wording.
+"""
+
+
+def _strategy_quant_rules_en(strategy_key: str) -> str:
+    rules = {
+        "pullback": (
+            f"- RSI 1h <= {PULLBACK_RSI_MAX}; higher → skip or chase.\n"
+            "- Confirm 24h uptrend then 4-6 bar pullback with support.\n"
+            "- No knife-catch in downtrend."
+        ),
+        "chase": (
+            f"- RSI 1h <= {CHASE_RSI_MAX}; >68 reject.\n"
+            f"- below_7d_high_pct <= -{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}.\n"
+            "- Last 6 bars must extend up; not 'pullback ready' narrative."
+        ),
+        "rebound": (
+            "- Downtrend + 4-6 bar weak bounce + resistance; no fresh breakout high short.\n"
+            "- RSI not extremely low without exhaustion story."
+        ),
+        "dump": (
+            "- Downtrend + failed bounce; RSI 1h not >55.\n"
+            "- No bottom-fishing narrative."
+        ),
+    }
+    return rules.get(strategy_key, "- Follow strategy definition and multi-bar 1h structure.")
+
+
+def _build_prompt(
+    definition: TacticalStrategyDef,
+    universe: dict,
+    global_ctx: dict,
+    historical_stats: dict,
+    *,
+    max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
+):
+    universe_list, meta = prepare_tactical_universe_for_llm(
+        definition, universe, max_symbols=max_symbols,
+    )
     compact = {"ensure_ascii": False, "separators": (",", ":"), "default": str}
     side_note = "做多" if definition.fixed_side == "LONG" else "做空"
     contrast = (definition.contrast_block or "").strip()
@@ -253,6 +385,55 @@ def _build_prompt(definition: TacticalStrategyDef, universe: dict, global_ctx: d
         f"## 本策略历史 (30d closed)\n{json.dumps(historical_stats, **compact)}\n\n"
         f"## universe\n{json.dumps(universe_list, **compact)}\n"
         f"{_JSON_OUTPUT}"
+    )
+    return prompt, meta
+
+
+def _build_prompt_en(
+    definition: TacticalStrategyDef,
+    universe: dict,
+    global_ctx: dict,
+    historical_stats: dict,
+    *,
+    max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
+):
+    """English tactical prompt — same gates as _build_prompt; summary_zh still Chinese."""
+    universe_list, meta = prepare_tactical_universe_for_llm(
+        definition, universe, max_symbols=max_symbols,
+    )
+    compact = {"ensure_ascii": False, "separators": (",", ":"), "default": str}
+    pack = _TACTICAL_PROMPT_EN.get(definition.key, {})
+    title_en = pack.get("title", definition.title_zh)
+    body_en = pack.get("body", definition.prompt_body)
+    contrast = (pack.get("contrast") or definition.contrast_block or "").strip()
+    contrast_section = f"{contrast}\n\n" if contrast else ""
+    side_en = "LONG" if definition.fixed_side == "LONG" else "SHORT"
+    prompt = (
+        f"You are a dedicated **{title_en}** analyst for USDT-M futures. "
+        f"Output only **{side_en}** entries matching the definition below; do not mix other tactics.\n\n"
+        f"{body_en}\n\n"
+        f"{contrast_section}"
+        f"{_KLINE_1H_RULES_EN}\n"
+        f"## Quant hard lines (code-validated; violating → no entry)\n"
+        f"{_strategy_quant_rules_en(definition.key)}\n"
+        "## Output rules\n"
+        "1. catalyst: 1h **24-bar trend** + **last 4-6 bars** + 15m/1d + RSI/EMA/7d/bar counts.\n"
+        "2. Do not use 24h % or funding rate as primary reason.\n"
+        "3. **Only category=entry** in verdicts (max 5).\n"
+        "4. confidence 0.55-0.85 for entries.\n"
+        "5. verdicts=[] **only** if no symbol in universe meets hard lines. "
+        "If the prefiltered list is non-empty, pick **1-3 best** entries — "
+        "**do not** skip the whole table due to Big4/macro alone.\n"
+        "6. Bar moves must match kline_narrative / tech (no invented numbers).\n\n"
+        f"Universe: {meta['universe_total']} pool → prefilter dropped "
+        f"{meta.get('precheck_dropped', 0)} → TOP {meta['llm_symbol_count']} "
+        f"(tactical_{definition.key} score, not |24h| sort).\n"
+        "Do not entry symbols outside the list; catalyst must match row tech/narrative.\n\n"
+        f"## Big4 / macro (background)\n{_BIG4_PROMPT_BLOCK_EXPLORE_EN}\n\n"
+        f"## Global market\n{json.dumps(global_ctx, **compact)}\n\n"
+        f"## Strategy history (30d closed)\n{json.dumps(historical_stats, **compact)}\n\n"
+        f"## universe\n{json.dumps(universe_list, **compact)}\n"
+        f"{_JSON_OUTPUT_EN}"
     )
     return prompt, meta
 
@@ -796,11 +977,45 @@ TACTICAL_STRATEGIES: Dict[str, TacticalStrategyDef] = {
 }
 
 
+def build_strategy_prompt_zh(
+    strategy_key: str,
+    universe: dict,
+    global_ctx: dict,
+    historical_stats: dict,
+    *,
+    max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
+) -> Tuple[str, Dict[str, Any]]:
+    """Chinese tactical prompt (A/B benchmark only)."""
+    defn = TACTICAL_STRATEGIES[strategy_key]
+    return _build_prompt(
+        defn, universe, global_ctx, historical_stats, max_symbols=max_symbols,
+    )
+
+
 def build_strategy_prompt(
     strategy_key: str,
     universe: dict,
     global_ctx: dict,
     historical_stats: dict,
+    *,
+    max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
 ) -> Tuple[str, Dict[str, Any]]:
+    """Production default: English tactical prompt."""
+    return build_strategy_prompt_en(
+        strategy_key, universe, global_ctx, historical_stats, max_symbols=max_symbols,
+    )
+
+
+def build_strategy_prompt_en(
+    strategy_key: str,
+    universe: dict,
+    global_ctx: dict,
+    historical_stats: dict,
+    *,
+    max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
+) -> Tuple[str, Dict[str, Any]]:
+    """English tactical explore prompt (Gemini/DeepSeek/GPT A/B tests)."""
     defn = TACTICAL_STRATEGIES[strategy_key]
-    return _build_prompt(defn, universe, global_ctx, historical_stats)
+    return _build_prompt_en(
+        defn, universe, global_ctx, historical_stats, max_symbols=max_symbols,
+    )

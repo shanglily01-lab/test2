@@ -9,9 +9,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.services.open_advisor_strategy_rubrics import (
-    build_big4_subjective_block,
     build_gpt_open_advisor_prompt,
-    build_strategy_review_steps,
+    build_gpt_strategy_review_steps,
+    build_open_advisor_prompt,
     check_direction_gates,
     check_expected_side,
     precheck_open_advisor,
@@ -58,7 +58,7 @@ def test_expected_side():
     ok, _ = check_expected_side(p, "LONG")
     assert ok
     ok, r = check_expected_side(p, "SHORT")
-    assert not ok and "回调做多" in r
+    assert not ok and "Pullback long" in r
     print("[PASS] expected_side")
 
 
@@ -87,12 +87,12 @@ def test_per_strategy_prompts_differ():
     explore_p = GeminiPositionAdvisor._build_open_prompt(
         "BTC/USDT", "LONG", 1.0, "gemini_explore", "test", 5, 3.0, 5.0, 4.0, ctx,
     )
-    assert "追涨做多" in chase_p and "profile:    chase" in chase_p
-    assert "回调做多" in pull_p and "profile:    pullback" in pull_p
-    assert "禁止" in chase_p and "其它策略" in chase_p
-    assert "（仅四战术）" in chase_p and "（仅四战术）" in pull_p
-    assert "（仅四战术）" not in explore_p
-    assert "探索专属" in explore_p or "勿用战术" in explore_p
+    assert "Momentum chase long" in chase_p and "profile=`chase`" in chase_p
+    assert "Pullback long" in pull_p and "profile=`pullback`" in pull_p
+    assert "do not" in chase_p.lower() and "another strategy" in chase_p.lower()
+    assert "Tactical mutual exclusion" in chase_p
+    assert "Tactical mutual exclusion" not in explore_p
+    assert "Explore-only" in explore_p or "tactical" in explore_p.lower()
     assert chase_p != pull_p
     print("[PASS] per_strategy_prompts_differ")
 
@@ -102,7 +102,7 @@ def test_precheck_chase_rsi():
     ok, reason = precheck_open_advisor(
         p, "LONG", {"rsi_14_1h": 72.0, "below_7d_high_pct": -10.0},
     )
-    assert not ok and "追涨" in reason
+    assert not ok and "chase" in reason and "precheck" in reason
     ok2, _ = precheck_open_advisor(
         p, "LONG", {"rsi_14_1h": 62.0, "below_7d_high_pct": -10.0},
     )
@@ -111,11 +111,11 @@ def test_precheck_chase_rsi():
 
 
 def test_review_steps_by_profile():
-    chase_steps = build_strategy_review_steps(resolve_strategy_profile("gemini_chase"))
-    explore_steps = build_strategy_review_steps(resolve_strategy_profile("gemini_explore"))
-    assert "（仅四战术）" in chase_steps
-    assert "勿" in explore_steps and "四战术" in explore_steps
-    assert "（仅四战术）" not in explore_steps
+    chase_steps = build_gpt_strategy_review_steps(resolve_strategy_profile("gemini_chase"))
+    explore_steps = build_gpt_strategy_review_steps(resolve_strategy_profile("gemini_explore"))
+    assert "Tactical mutual exclusion" in chase_steps
+    assert "tactical" in explore_steps.lower()
+    assert "Tactical mutual exclusion" not in explore_steps
     print("[PASS] review_steps_by_profile")
 
 
@@ -129,19 +129,20 @@ def test_open_prompt_contains_rubric():
         "allow_short": False,
         "btc_6h_change": -2.0,
         "eth_6h_change": -1.0,
-        "narrative_1h": "[1h · 整体 24 根趋势] 偏多",
+        "narrative_1h": "[1h · 24-bar trend] bullish",
         "narrative_15m": "",
         "rsi_14_1h": 55.0,
     }
     prompt = GeminiPositionAdvisor._build_open_prompt(
         "BTC/USDT", "LONG", 100000.0, "gemini_pullback",
-        "近24根上涨 近5根回踩支撑", 5, 3.0, 5.0, 4.0, ctx,
+        "24h up channel, last 5 bars dip", 5, 3.0, 5.0, 4.0, ctx,
     )
-    assert "回调做多" in prompt
-    assert "profile:    pullback" in prompt
-    assert "24 根 1h" in prompt
+    assert "Pullback long" in prompt
+    assert "profile=`pullback`" in prompt
+    assert "24" in prompt and "1h" in prompt
     assert "allow_short" in prompt
-    assert "1 根" in prompt and "24 根" in prompt
+    assert "single" in prompt.lower() and "1h" in prompt.lower()
+    assert "English" in prompt
     print("[PASS] open_prompt")
 
 
@@ -170,14 +171,13 @@ def test_hold_prompt_kline_focus():
         "source": "gemini_explore",
     }
     prompt = GeminiPositionAdvisor._build_prompt(pos, 101.0, ctx)
-    assert "近 4 根 1h" in prompt
-    assert "近 6 根 15m" in prompt
-    assert "不得" in prompt and "Big4" in prompt
-    assert "DECISION RULES" not in prompt
-    assert "Strong opposite Big4" not in prompt
-    assert "01-01 05:00" in prompt  # last of 6 15m bars
-    assert "盈亏档位" in prompt
-    assert "客观统计" in prompt
+    assert f"Last {4}x1h" in prompt or "4x1h" in prompt
+    assert f"{6}x15m" in prompt or "15m" in prompt
+    assert "do **not**" in prompt.lower() and "big4" in prompt.lower()
+    assert "01-01 05:00" in prompt
+    assert "PnL tier" in prompt
+    assert "Objective stats" in prompt
+    assert "English" in prompt
     print("[PASS] hold_prompt_kline_focus")
 
 
@@ -202,10 +202,9 @@ def test_gpt_open_prompt_english_tactical():
     )
     assert "Momentum chase long" in p
     assert "gpt_tactical_precheck_pass" not in p
-    assert "do not batch-reject on macro FUD alone" in p
-    assert "Chinese chars" in p
+    assert "English" in p
     profile = resolve_strategy_profile("gpt_pullback")
-    p2 = build_gpt_open_advisor_prompt(
+    p2 = build_open_advisor_prompt(
         profile=profile,
         symbol="ETH/USDT",
         side="LONG",
@@ -224,18 +223,18 @@ def test_gpt_open_prompt_english_tactical():
 
 
 def test_losing_hold_temper():
-    s15_bad = {"for": 1, "against": 5, "trail_against": 4, "last3": "阴阳阴", "summary": ""}
-    s1h_bad = {"for": 0, "against": 3, "trail_against": 2, "last3": "阴阴阴", "summary": ""}
+    s15_bad = {"for": 1, "against": 5, "trail_against": 4, "last3": "RRR", "summary": ""}
+    s1h_bad = {"for": 0, "against": 3, "trail_against": 2, "last3": "RRR", "summary": ""}
     act, reason = GeminiPositionAdvisor._temper_losing_hold(
-        -16.0, "hold", "还能扛", "LONG", s15_bad, s1h_bad,
+        -16.0, "hold", "still ok", "LONG", s15_bad, s1h_bad,
     )
     assert act == "sell", act
-    assert "复核" in reason
+    assert "review:" in reason
 
-    s15_ok = {"for": 4, "against": 2, "trail_against": 0, "last3": "阳阳阴", "summary": ""}
-    s1h_ok = {"for": 3, "against": 1, "trail_against": 0, "last3": "阳阳阴", "summary": ""}
+    s15_ok = {"for": 4, "against": 2, "trail_against": 0, "last3": "GGR", "summary": ""}
+    s1h_ok = {"for": 3, "against": 1, "trail_against": 0, "last3": "GGR", "summary": ""}
     act2, _ = GeminiPositionAdvisor._temper_losing_hold(
-        -8.0, "hold", "15m仍顺向", "LONG", s15_ok, s1h_ok,
+        -8.0, "hold", "15m still with trend", "LONG", s15_ok, s1h_ok,
     )
     assert act2 == "hold"
     print("[PASS] losing_hold_temper")

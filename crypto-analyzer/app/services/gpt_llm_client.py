@@ -9,6 +9,16 @@ from app.services.gpt_config import GPT_MODEL, GPT_TIMEOUT_S
 # Gemini 无单独 system; GPT 用极短中文 system 强化客观性, 不覆盖 user 内策略全文
 GPT_LLM_TEMPERATURE = 0.1
 
+GPT_JSON_SYSTEM_EN = """You are a quantitative crypto futures analysis engine. The user message is the sole source of truth.
+
+Hard requirements (aligned with Gemini/DeepSeek explore):
+1. catalyst / data_signal must cite kline_narrative (1h: 24-bar trend + last 4-6 bars) and tech (RSI value if present; or EMA/7d/bar counts).
+2. Do not use 24h change, funding rate, or Big4 alone as primary reason; no multi-bar structure → skip / no entry.
+3. Do not invent prices or indicators; must match universe rows.
+4. summary_zh: 1-3 sentences in Chinese describing technical backdrop only.
+5. Output one valid JSON object only, no markdown fences.
+6. If prefiltered universe has symbols meeting hard lines, verdicts must not be empty — pick 1-3 best entries; no macro-only table skip."""
+
 GPT_JSON_SYSTEM_ZH = """你是量化交易分析引擎。用户消息中的策略定义与 universe 数据为唯一依据。
 
 硬性要求（与 Gemini 探索一致）:
@@ -26,12 +36,13 @@ def gpt_chat_json(
     user_prompt: str,
     max_tokens: int = EXPLORE_LLM_MAX_OUTPUT_TOKENS,
     timeout: Optional[int] = None,
+    system_prompt: Optional[str] = None,
 ) -> str:
     """OpenAI Chat Completions, JSON mode, 统一温度与 system."""
     resp = client.chat.completions.create(
         model=GPT_MODEL,
         messages=[
-            {"role": "system", "content": GPT_JSON_SYSTEM_ZH},
+            {"role": "system", "content": system_prompt or GPT_JSON_SYSTEM_ZH},
             {"role": "user", "content": user_prompt},
         ],
         temperature=GPT_LLM_TEMPERATURE,

@@ -324,7 +324,7 @@ class GeminiPositionAdvisor:
         """客观统计 K 线对持仓方向的支持/反向根数（供 prompt + 代码复核）."""
         empty = {
             "for": 0, "against": 0, "last3": "", "trail_against": 0,
-            "summary": "数据不足",
+            "summary": "insufficient data",
         }
         if not klines:
             return empty
@@ -334,26 +334,26 @@ class GeminiPositionAdvisor:
         for k in klines:
             o, c = float(k['o']), float(k['c'])
             if c > o:
-                d = "阳"
+                d = "G"
             elif c < o:
-                d = "阴"
+                d = "R"
             else:
-                d = "十"
+                d = "D"
             dirs.append(d)
             if side == 'LONG':
-                if d == "阳":
+                if d == "G":
                     for_count += 1
-                elif d == "阴":
+                elif d == "R":
                     against_count += 1
             else:
-                if d == "阴":
+                if d == "R":
                     for_count += 1
-                elif d == "阳":
+                elif d == "G":
                     against_count += 1
-        want = "阳" if side == 'LONG' else "阴"
+        want = "G" if side == 'LONG' else "R"
         trail_against = 0
         for d in reversed(dirs):
-            if d == "十":
+            if d == "D":
                 continue
             if d != want:
                 trail_against += 1
@@ -361,8 +361,8 @@ class GeminiPositionAdvisor:
                 break
         last3 = "".join(dirs[-3:])
         summary = (
-            f"顺向={for_count} 反向={against_count} "
-            f"末3根={last3} 末尾连反={trail_against}"
+            f"with_trend={for_count} against={against_count} "
+            f"last3={last3} trail_against={trail_against}"
         )
         return {
             "for": for_count,
@@ -375,43 +375,43 @@ class GeminiPositionAdvisor:
     @staticmethod
     def _loss_tier_label(roi_pct: float) -> str:
         if roi_pct >= 0:
-            return "盈利/保本"
+            return "profit/breakeven"
         if roi_pct > HOLD_LOSS_MILD_ROI:
-            return "轻微亏损"
+            return "mild_loss"
         if roi_pct > HOLD_LOSS_MODERATE_ROI:
-            return "中度亏损"
-        return "严重亏损"
+            return "moderate_loss"
+        return "severe_loss"
 
     @staticmethod
     def _loss_tier_rules(roi_pct: float, side: str) -> str:
         tier = GeminiPositionAdvisor._loss_tier_label(roi_pct)
-        if tier == "盈利/保本":
+        if tier == "profit/breakeven":
             return (
-                "## 盈亏档位：盈利/保本\n"
-                "- hold 需 15m+1h 仍顺向；出现明确反转可 sell 锁利。\n"
-                "- ROI ≥ +20% 且 15m 反转 K 线 → 优先 sell 锁利。"
+                "## PnL tier: profit / breakeven\n"
+                "- **hold** only if 15m+1h still support the position side; clear reversal → **sell** to lock profit.\n"
+                "- ROI ≥ +20% with 15m reversal pattern → prefer **sell**."
             )
-        if tier == "轻微亏损":
+        if tier == "mild_loss":
             return (
-                "## 盈亏档位：轻微亏损（ROI > -5%）\n"
-                "- **禁止**因「小亏」就 sell；须 15m 多数反向 + 1h 至少 2 根确认反向。\n"
-                "- 若 K 线仍顺向 → hold；混杂 → observe（不要勉强 hold）。"
+                "## PnL tier: mild loss (ROI > -5%)\n"
+                "- Do **not** sell on small loss alone; need 15m majority against + ≥2 confirming 1h bars.\n"
+                "- If K-lines still support side → **hold**; mixed → **observe** (avoid weak hold)."
             )
-        if tier == "中度亏损":
+        if tier == "moderate_loss":
             return (
-                "## 盈亏档位：中度亏损（-12% < ROI ≤ -5%）\n"
-                "- **hold 门槛提高**：须 15m 顺向根数 ≥ 反向，且 1h 末 2 根仍支持 "
-                f"{side}（写进 reason）。\n"
-                "- 15m 末尾连反 ≥3 或 1h 反向 ≥2 → 倾向 **sell**；结构不清 → **observe**（勿 hold）。\n"
-                "- 不得用 Big4 代替 K 线证明「还能扛」。"
+                "## PnL tier: moderate loss (-12% < ROI ≤ -5%)\n"
+                "- **Higher hold bar**: 15m with_trend ≥ against and last 2x1h still support "
+                f"{side} (cite bars in reason).\n"
+                "- 15m trail_against ≥3 or 1h against ≥2 → lean **sell**; unclear → **observe** (not hold).\n"
+                "- Big4 cannot replace K-line evidence."
             )
         return (
-            "## 盈亏档位：严重亏损（ROI ≤ -12%）\n"
-            "- **默认倾向 stop-loss**：除非 15m 出现**明确企稳/反转**（如长下影+阳包阴 for LONG），"
-            "否则 **sell** 或至少 **observe**，几乎不得 hold。\n"
-            "- **hold 仅当同时**：(1) 15m 顺向 ≥ 反向 且末尾连反 ≤1；(2) 1h 末 2 根不再扩大亏损方向；"
-            "(3) reason 逐根引用表格。\n"
-            "- ROI ≤ -15% 且 15m 无企稳 → **必须 sell**（勿赌反弹）。"
+            "## PnL tier: severe loss (ROI ≤ -12%)\n"
+            "- **Default stop-loss bias**: unless 15m shows clear stabilization/reversal "
+            f"(e.g. long lower wick + bullish engulf for LONG), prefer **sell** or **observe**, rarely **hold**.\n"
+            "- **hold** only if: (1) 15m with_trend ≥ against and trail_against ≤1; "
+            "(2) last 2x1h not extending loss direction; (3) reason cites table bars.\n"
+            "- ROI ≤ -15% with no 15m stabilization → **must sell**."
         )
 
     @staticmethod
@@ -431,31 +431,31 @@ class GeminiPositionAdvisor:
         if roi_pct <= HOLD_LOSS_SEVERE_ROI:
             if s15.get("trail_against", 0) >= 2 or s15.get("against", 0) >= 4:
                 action = 'sell'
-                override = "深亏+15m持续反向"
+                override = "severe_loss+15m_against"
             elif s15.get("for", 0) < s15.get("against", 0):
                 action = 'observe'
-                override = "深亏+15m无企稳"
+                override = "severe_loss+15m_no_base"
         elif roi_pct <= HOLD_LOSS_MODERATE_ROI:
             if (
                 s15.get("against", 0) > s15.get("for", 0)
                 and s15.get("trail_against", 0) >= 2
             ):
                 action = 'sell'
-                override = "中度亏+15m连反"
+                override = "moderate_loss+15m_trail_against"
             elif s15.get("for", 0) < 2 and s1h.get("against", 0) >= 2:
                 action = 'observe'
-                override = "中度亏+1h/15m不支持"
+                override = "moderate_loss+1h_15m_weak"
         elif roi_pct <= HOLD_LOSS_MILD_ROI:
             if (
                 s15.get("against", 0) >= s15.get("for", 0) + 2
                 and s1h.get("against", 0) >= 2
             ):
                 action = 'observe'
-                override = "轻亏+K线偏反向"
+                override = "mild_loss+kline_against"
 
         if override:
-            reason = f"{reason[:40]}|复核:{override}"[:100]
-            logger.info(f"[Gemini顾问] 亏损 hold 复核 → {action} ({override})")
+            reason = f"{reason[:80]}|review:{override}"[:200]
+            logger.info(f"[Gemini advisor] losing hold review → {action} ({override})")
         return action, reason
 
     @staticmethod
@@ -499,67 +499,64 @@ class GeminiPositionAdvisor:
         btc_6h = ctx.get('btc_6h_change', 0)
         eth_6h = ctx.get('eth_6h_change', 0)
 
-        side_cn = "做多 LONG" if side == 'LONG' else "做空 SHORT"
-        return f"""你是模拟仓**持仓监管**顾问。根据**本币最近 K 线客观结构**决定 hold / observe / sell。
+        side_label = f"{side} (LONG)" if side == 'LONG' else f"{side} (SHORT)"
+        return f"""You are a **paper position** supervisor. Decide **hold**, **observe**, or **sell** from **this coin's recent K-line structure**.
 
-## 禁止（违反则 reason 无效）
-- **不得**主要因 Big4/BTC/ETH 宏观偏多偏空就 sell 或 hold
-- **不得**空泛主观（「感觉要跌」「大盘不好」）；reason 必须引用下方 15m/1h 表格中的具体形态
-- Big4 仅作辅证；K 线与持仓方向不一致时优先看 K 线，Big4 不能单独触发 sell
+## Invalid reasons (reject vague answers)
+- Do **not** decide mainly from Big4/BTC/ETH macro alone
+- Do **not** use vague sentiment ("feels weak", "market bad"); **reason** must cite 15m/1h table patterns
+- If K-lines conflict with position side, prioritize K-lines; Big4 alone cannot trigger sell
 
-## 仓位
+## Position
   Symbol:          {symbol}
-  Direction:       {side_cn}
+  Direction:       {side_label}
   Entry:           {entry}
   Current:         {current_price}
   Leverage:        {leverage}x
   Hold:            {hold_h:.1f}h
   Price change:    {price_change_pct:+.2f}%
-  ROI on margin:   {roi_pct:+.2f}%  （档位: {loss_tier}）
+  ROI on margin:   {roi_pct:+.2f}%  (tier: {loss_tier})
   Source:          {source}
   {rsi_line}
 
-## 客观统计（须与 reason 一致，勿矛盾）
-  15m({HOLD_15M_BARS}根): {s15['summary']}
-  1h({HOLD_1H_BARS}根):  {s1h['summary']}
+## Objective stats (must match reason)
+  15m ({HOLD_15M_BARS} bars): {s15['summary']}
+  1h ({HOLD_1H_BARS} bars):  {s1h['summary']}
 
 {loss_rules}
 
-## K 线读法（主判据）
-1. **近 {HOLD_1H_BARS} 根 1h**（下表）：结构是否仍支持 {side}？
-   - LONG：高点/低点抬高，或最近 2 根 1h 仍偏多（阳线/下影支撑）
-   - SHORT：高点/低点降低，或最近 2 根 1h 仍偏空（阴线/上影承压）
-2. **近 {HOLD_15M_BARS} 根 15m**（下表）：短线是否**已反转**持仓方向？
-   - 数连阳/连阴、吞没、长上影/下影、是否放量反向
-3. reason 须写清形态，例如「近5根15m四连阴破前低 + 近4根1h末两根阴线」
+## K-line rules (primary)
+1. **Last {HOLD_1H_BARS}x1h** (table): still supports {side}?
+   - LONG: higher highs/lows or last 2x1h still bullish (green bodies / lower-wick support)
+   - SHORT: lower highs/lows or last 2x1h still bearish (red bodies / upper-wick rejection)
+2. **Last {HOLD_15M_BARS}x15m** (table): short-term **reversal** against the position?
+   - Count streaks, engulfing, long wicks, volume on reversal bars
+3. Example reason: "last 5x15m four red bars break prior low + last 2x1h red bodies"
 
-## 近 {HOLD_1H_BARS} 根 1h K 线 (oldest → newest)
+## Last {HOLD_1H_BARS}x1h K-lines (oldest → newest)
 {klines_1h_str}
 
-## 近 {HOLD_15M_BARS} 根 15m K 线 (oldest → newest)
+## Last {HOLD_15M_BARS}x15m K-lines (oldest → newest)
 {klines_15m_str}
 
-## 宏观（辅证，权重低于 K 线）
+## Macro (secondary)
   Big4: {big4} (strength {big4_strength:.0f}) | BTC 6h {btc_6h:+.2f}% | ETH 6h {eth_6h:+.2f}%
-  仅当 K 线已明确反向时，方可引用 Big4 加强 sell 理由；不得单独因 Big4 sell。
+  Cite Big4 only when K-lines already show reversal; never sell on Big4 alone.
 
-## 决策
-- **hold**: 近 {HOLD_1H_BARS} 根 1h + 近 {HOLD_15M_BARS} 根 15m **整体仍支持** {side}，无明确反转
-  （**亏损单 hold 门槛更高**，见上「盈亏档位」；中度/严重亏损无明确企稳 → 不得 hold）
-- **observe**: 15m 与 1h 信号混杂、震荡、或数据不足以判断（**轻微/中度亏损且结构不清 → 优先 observe**）
-- **sell**: 须同时满足：
-  (A) 近 {HOLD_15M_BARS} 根 15m **多数反向**持仓（连阴/连阳+放量等，写进 reason）
-  (B) 近 {HOLD_1H_BARS} 根 1h **至少最近 2 根确认**同向反转
-  或：**严重亏损**且 15m 无企稳；ROI ≤ -15% 且 15m 无反转；ROI ≥ +20% 且 15m 明确反转
+## Decision
+- **hold**: last {HOLD_1H_BARS}x1h + {HOLD_15M_BARS}x15m still support {side}, no clear reversal
+  (losing positions need higher bar; moderate/severe loss without stabilization → not hold)
+- **observe**: mixed 15m/1h, chop, or insufficient data (mild/moderate loss + unclear → prefer observe)
+- **sell**: when (A) {HOLD_15M_BARS}x15m majority against position (cite pattern), AND
+  (B) last 2x1h confirm reversal; OR severe loss without 15m base; OR ROI≤-15% no 15m reversal;
+  OR ROI≥+20% with clear 15m reversal (take profit)
 
-亏损越深，越需 **K 线逐根证据** 才能 hold；不得「亏损已深仍笼统 hold」。
-
-K 线方向不明时默认 **observe**；**严重亏损**默认 **sell**（除非 15m 明确反转）。
+Deeper loss needs bar-by-bar evidence to hold. Unclear → **observe**; severe loss → **sell** unless 15m reverses.
 
 Output ONLY JSON:
 {{
   "action": "hold" | "observe" | "sell",
-  "reason": "<50字中文，必须含15m/1h形态，勿只写Big4>"
+  "reason": "<=120 English words; must cite 15m/1h patterns, not Big4 alone>"
 }}
 """
 
@@ -571,7 +568,7 @@ Output ONLY JSON:
                 f"  {k['t']}  {k['o']:>11}  {k['h']:>11}  {k['l']:>11}  "
                 f"{k['c']:>11}  {k['v']:>11}\n"
             )
-        return out or "  (无数据)\n"
+        return out or "  (no data)\n"
 
     @staticmethod
     def _build_open_prompt(
@@ -718,7 +715,7 @@ Output ONLY JSON:
                     decision = 'approve'
                 return {
                     'decision': decision,
-                    'reason': str(sig.get('reason', ''))[:100],
+                    'reason': str(sig.get('reason', ''))[:500],
                 }
             action = str(sig.get('action', '')).strip().lower()
             if action not in ('hold', 'observe', 'sell'):
@@ -726,7 +723,7 @@ Output ONLY JSON:
                 action = 'observe'
             return {
                 'action': action,
-                'reason': str(sig.get('reason', ''))[:100],
+                'reason': str(sig.get('reason', ''))[:500],
             }
         except json.JSONDecodeError:
             logger.warning(f"[Gemini顾问] 返回非 JSON: {text[:200]}")

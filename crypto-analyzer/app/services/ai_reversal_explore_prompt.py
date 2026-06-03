@@ -11,7 +11,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
-from app.services.ai_big4_prompt import BIG4_PROMPT_BLOCK_EXPLORE
+from app.services.ai_big4_prompt import (
+    BIG4_PROMPT_BLOCK_EXPLORE,
+    BIG4_PROMPT_BLOCK_EXPLORE_EN,
+)
 from app.services.ai_explore_prompt import (
     AI_POSITION_HOLD_HOURS,
     EXPLORE_LLM_MAX_OUTPUT_TOKENS,
@@ -68,6 +71,51 @@ REVERSAL_PROMPT_TEMPLATE = """你是加密货币 U 本位合约的**反转交易
       "catalyst": "多周期 K 线 + RSI/EMA 量化描述",
       "data_signal": "可选补充",
       "risk_note": "可选"
+    }}
+  ]
+}}
+"""
+
+REVERSAL_PROMPT_TEMPLATE_EN = """You are a **reversal** analyst for USDT-M perpetual futures. Find top/bottom reversal setups in the candidate pool.
+
+## Strategy
+- **top_reversal** → expect **SHORT**: multi-TF stall, upper wicks, RSI overbought zone, failed breakout, bearish follow-through.
+- **bottom_reversal** → expect **LONG**: multi-TF base, lower wicks, RSI oversold zone, failed breakdown, bullish follow-through.
+- **skip**: no clear reversal structure, or 24h % / funding-only opinion.
+
+## Hard rules
+1. Each catalyst must cite **≥2 timeframes** (1h/15m/1d) + **quant levels** (RSI, EMA distance, 7d high/low proximity, bar counts).
+2. No "up too much short / down too much long" without structure.
+3. Verdicts only for symbols in the universe list below.
+4. confidence 0~1; use ≥0.65 only when structure is clear.
+5. Prefer skip when unsure.
+6. Bar % moves must be plausible (<20% per bar) and match universe tech / kline_narrative.
+
+{llm_universe_note}
+
+## Big4 / macro (background only)
+{big4_block}
+
+## Global market
+{global_context_json}
+
+## Strategy history (closed paper)
+{historical_stats_json}
+
+## Candidate universe (JSON array)
+{universe_json}
+
+## Output JSON only (no markdown)
+{{
+  "summary_zh": "1-3 sentence Chinese summary of reversal opportunities",
+  "verdicts": [
+    {{
+      "symbol": "BTCUSDT",
+      "category": "top_reversal|bottom_reversal|skip",
+      "confidence": 0.0,
+      "catalyst": "multi-TF K-line + RSI/EMA quant",
+      "data_signal": "optional",
+      "risk_note": "optional"
     }}
   ]
 }}
@@ -140,25 +188,33 @@ def prepare_reversal_universe_for_llm(
     return selected, meta
 
 
-def build_reversal_explore_prompt(
+def build_reversal_explore_prompt_en(
     universe: dict,
     global_ctx: dict,
     historical_stats: dict,
 ) -> Tuple[str, Dict[str, Any]]:
     universe_list, meta = prepare_reversal_universe_for_llm(universe)
     compact = {"ensure_ascii": False, "separators": (",", ":"), "default": str}
-    prompt = REVERSAL_PROMPT_TEMPLATE.format(
-        big4_block=BIG4_PROMPT_BLOCK_EXPLORE,
+    prompt = REVERSAL_PROMPT_TEMPLATE_EN.format(
+        big4_block=BIG4_PROMPT_BLOCK_EXPLORE_EN,
         global_context_json=json.dumps(global_ctx, **compact),
         universe_json=json.dumps(universe_list, **compact),
         historical_stats_json=json.dumps(historical_stats, **compact),
         llm_universe_note=(
-            f"本列表为全池 {meta['universe_total']} 个中按 "
-            f"RSI 极端 + 距 7d 高低 proximity 取 TOP {meta['llm_symbol_count']}，"
-            f"仅对这些 symbol 输出 verdict（非 |24h涨跌| 排序）。"
+            f"TOP {meta['llm_symbol_count']} of {meta['universe_total']} by RSI extreme + "
+            f"7d high/low proximity (not |24h| sort). Verdicts only for listed symbols."
         ),
     )
     return prompt, meta
+
+
+def build_reversal_explore_prompt(
+    universe: dict,
+    global_ctx: dict,
+    historical_stats: dict,
+) -> Tuple[str, Dict[str, Any]]:
+    """Production default: English reversal explore prompt."""
+    return build_reversal_explore_prompt_en(universe, global_ctx, historical_stats)
 
 
 def parse_reversal_llm_json(text: str, tag: str = "Reversal") -> Tuple[Optional[dict], Optional[str]]:

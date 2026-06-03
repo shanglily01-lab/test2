@@ -32,8 +32,6 @@ from loguru import logger
 from app.utils.futures_symbol import futures_symbol_rating_canonical
 
 from app.services.ai_big4_prompt import (
-    BIG4_PROMPT_BLOCK_PREDICT,
-    CONFIDENCE_ROW_BIG4_OK,
     big4_conflict_risk_note,
     enrich_global_context,
     market_regime_from_btc_change,
@@ -43,12 +41,12 @@ from app.services.ai_explore_prompt import (
     AI_POSITION_SL_PCT,
     AI_POSITION_TP_PCT,
     EXPLORE_LLM_MAX_OUTPUT_TOKENS,
-    KLINE_1H_READING_BLOCK,
     PREDICT_CONFIDENCE_THRESHOLD,
     explore_catalyst_technical_ok,
     parse_explore_llm_json,
     sym_data_for_catalyst_gate,
 )
+from app.services.ai_predict_prompt import build_predict_prompt
 from app.services.ai_predict_schedule import (
     GEMINI_PREDICT_NEXT_DUE_KEY,
     PREDICT_ROUND_INTERVAL_HOURS,
@@ -455,91 +453,6 @@ def _has_open_position(conn, symbol: str) -> bool:
 
 
 # ============================================================
-# Prompt 构建
-# ============================================================
-PREDICT_PROMPT_TEMPLATE = """你是超级交易大师. 预测每个币种在未来 4 小时内的方向走势概率.
-
-持仓期 4 小时 (4h), SL=4%, TP=6%, 杠杆 5x; 满 30min 后 Gemini 持仓顾问每 15min 可建议平仓.
-
-选中的币种需要能在 4 小时持仓期内尽量走向 6% 的涨幅/跌幅目标, 或至少抗住 4 小时不触发 4% SL.
-不要选"只波动 2-3%"的标的.
-
-# 全局市场环境 (含 big4_signal / market_regime / big4_trading_hint)
-{global_context_json}
-""" + BIG4_PROMPT_BLOCK_PREDICT + """
-# 候选数据说明
-每个 symbol 包含:
-- kline_narrative: 1h 含 **整体24根趋势 + 近4~6根明细**; 15m/1d 辅助
-""" + KLINE_1H_READING_BLOCK + """
-- current_price / change_24h / quote_volume_24h
-- funding_rate: 资金费率
-- rsi_14_1h: 1h 级别 RSI
-- above_7d_low_pct / below_7d_high_pct: 现价距 7 日极值距离
-
-{symbols_data_json}
-
-# 任务
-为**每个** symbol 标注:
-- category: 'bullish' / 'bearish' / 'skip'
-- confidence: 0.0-1.0
-- catalyst: 判断依据, 必须引用具体数据, 至少 2 句
-- data_signal: 最支持判断的关键数据点
-- risk_note: 反向风险一句
-
-# 置信度校准
-| confidence | 意义 |
-|---|---|
-| 0.80-1.00 | 1h 级别强趋势 + 成交量确认, 方向明确 |
-| 0.65-0.79 | 1h **24根整体** + **近4~6根** 同向 + 15m 不反向, """ + CONFIDENCE_ROW_BIG4_OK + """ |
-| 0.60-0.64 | 结构尚可 — 可开但须 catalyst 含多周期+RSI |
-| 0.00-0.59 | 方向模糊/震荡 — 跳过 |
-
-# 判定原则 — 4 小时持仓
-
-## 适合开仓 (应该输出 bullish/bearish)
-
-**A. 趋势延续** — 1h **24根整体**向上/向下 + **近4~6根**同向 + 15m 同向 + 放量 (写在 catalyst)
-- 现价在趋势中段, 距 7d 极值还有 3%+ 空间
-
-**B. 资金费率与价格严重背离 — 次可靠**
-- 资金费极端 + RSI 走到反向极值
-- 前提: 1h 级别已经确认了拐点 (至少 1h K 线形态转势)
-
-**C. 突破后回踩确认**
-- 刚突破关键阻力/支撑, 回踩确认后有望延续
-- 成交量在突破时放大, 回踩时缩量
-
-## 必须跳过
-
-- 暴涨暴跌后的报复性反弹 (Dead Cat Bounce)
-- 震荡区间 / 成交量萎缩
-- 禁止仅用 24h 涨跌幅或「涨多了/跌多了」; catalyst 须多周期 K 线 + RSI/EMA/7d 量化
-
-## 禁止 Big4 单边偏见
-
-- 不得因 Big4=BEARISH 就把多数标的标 bearish；低波动盘整时应多空均衡筛选。
-
-# 输出要求
-仅一个合法 JSON, 不要 markdown 围栏.
-优先 quality 而非 quantity.
-
-{{
-  "summary_zh": "整体市场氛围 1-2 句",
-  "verdicts": [
-    {{
-      "symbol": "FOO/USDT",
-      "category": "bullish",
-      "confidence": 0.72,
-      "catalyst": "具体依据...",
-      "data_signal": "...",
-      "risk_note": "..."
-    }}
-  ]
-}}
-"""
-
-
-# ============================================================
 # Gemini 调用
 # ============================================================
 def _call_gemini_predict(
@@ -556,10 +469,7 @@ def _call_gemini_predict(
         logger.error("[Gemini预测] 缺依赖, 请 pip install google-genai")
         return None, "缺 google-genai 依赖"
 
-    prompt = PREDICT_PROMPT_TEMPLATE.format(
-        global_context_json=json.dumps(global_ctx, ensure_ascii=False, indent=2),
-        symbols_data_json=json.dumps(symbols_data, ensure_ascii=False, indent=2, default=str),
-    )
+    prompt = build_predict_prompt(symbols_data, global_ctx)
 
     logger.info(f"[Gemini预测] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens)")
 

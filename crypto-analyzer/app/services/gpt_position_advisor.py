@@ -20,7 +20,7 @@ from app.services.gemini_position_advisor import (
 from app.services.gpt_advisor_reviews import log_gpt_advisor_review
 from app.services.open_advisor_routing import is_gpt_order_source, should_use_gpt_hold_advisor
 from app.services.open_advisor_strategy_rubrics import (
-    build_gpt_open_advisor_prompt,
+    build_open_advisor_prompt,
     check_direction_gates,
     check_expected_side,
     precheck_open_advisor,
@@ -99,13 +99,12 @@ class GPTPositionAdvisor:
             return None
         system_msg = (
             "You are a crypto futures paper-trading open reviewer. "
-            "Output ONLY valid JSON with decision (approve|reject) and reason "
-            "(Chinese, <=80 chars, for operator UI)."
+            "Output ONLY valid JSON with decision (approve|reject) and reason (English)."
         )
         if hold_mode:
             system_msg = (
-                "你是模拟仓持仓监管顾问。"
-                "仅输出合法 JSON，含 action(hold|observe|sell) 与 reason。"
+                "You are a paper position supervisor. "
+                "Output ONLY valid JSON with action (hold|observe|sell) and reason (English)."
             )
         try:
             client = OpenAI(api_key=GPT_API_KEY, base_url=GPT_BASE_URL)
@@ -180,7 +179,7 @@ class GPTPositionAdvisor:
         ctx: dict,
     ) -> str:
         profile = resolve_strategy_profile(source)
-        return build_gpt_open_advisor_prompt(
+        return build_open_advisor_prompt(
             profile=profile,
             symbol=symbol,
             side=side,

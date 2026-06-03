@@ -251,7 +251,7 @@ def _open_simulated_position(
         hold_hours=cfg.hold_hours, conn=conn,
     )
     if not allowed:
-        return None, (gate_reason or "开仓顾问拒绝")[:255]
+        return None, (gate_reason or "open advisor rejected")[:255]
 
     try:
         notional = EXPLORE_MARGIN_USD * EXPLORE_LEVERAGE

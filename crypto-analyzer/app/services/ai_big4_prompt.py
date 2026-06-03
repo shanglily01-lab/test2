@@ -57,6 +57,14 @@ def big4_conflict_risk_note(big4_signal: str, side: str) -> str:
     return f"Big4={big4_signal} 与{side}方向不一致(已评估个股信号)"
 
 
+BIG4_PROMPT_BLOCK_EXPLORE_EN = """
+# Big4 rules (read big4_trading_hint in global_context)
+- Big4 is BTC/ETH/BNB/SOL composite — background only, not an open ban.
+- Non-extreme: each symbol independent; counter-Big4 OK if catalyst is strong (note in risk_note).
+- Do not empty verdicts or one-side the pool on macro alone.
+- summary_zh in Chinese; no "ban all longs/shorts".
+"""
+
 BIG4_PROMPT_BLOCK_EXPLORE = """
 # Big4 使用规则 (必读 global_context 内 big4_trading_hint)
 - Big4 是 BTC/ETH/BNB/SOL 综合趋势，**仅作背景**，不是开仓禁令。
@@ -71,6 +79,14 @@ BIG4_PROMPT_BLOCK_PREDICT = """
 - **非极端行情**: 每个 symbol 独立给出 bullish/bearish/skip；允许与 Big4 反向 (confidence≥0.65 须在 risk_note 说明冲突)。
 - **禁止 Big4 单边偏见**: 不得因 Big4=BEARISH 就把多数标的标 bearish；低波动盘整时应多空均衡筛选。
 - summary_zh 客观描述环境，**禁止**「严格禁止多头/空头」「只做空/只做多」。
+"""
+
+BIG4_PROMPT_BLOCK_PREDICT_EN = """
+# Big4 rules (read big4_trading_hint in global_context)
+- Big4 is macro background only, not a ban on long/short.
+- Non-extreme: each symbol independent; counter-Big4 OK if confidence≥0.65 with conflict in risk_note.
+- No Big4 one-sided bias on the whole pool.
+- summary_zh in Chinese; no "ban all longs/shorts".
 """
 
 CONFIDENCE_ROW_BIG4_OK = (

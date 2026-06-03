@@ -453,7 +453,7 @@ class KlinePullbackEntryExecutor:
                         conn=conn,
                     )
                     if not allowed:
-                        return {'success': False, 'reason': f'开仓顾问拒绝: {_gate_reason}'}
+                        return {'success': False, 'reason': f'open advisor rejected: {_gate_reason}'}
 
                 # 插入持仓记录
                 cursor.execute("""

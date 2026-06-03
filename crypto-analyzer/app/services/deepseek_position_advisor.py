@@ -103,13 +103,13 @@ class DeepSeekPositionAdvisor:
             logger.warning("[DeepSeek顾问] 缺 openai 库")
             return None
         system_msg = (
-            "你是超级交易大师，负责模拟开仓前审核。"
-            "仅输出合法 JSON，含 decision(approve|reject) 与 reason。"
+            "You are a crypto futures paper-trading open reviewer. "
+            "Output ONLY valid JSON with decision (approve|reject) and reason (English)."
         )
         if hold_mode:
             system_msg = (
-                "你是模拟仓持仓监管顾问。"
-                "仅输出合法 JSON，含 action(hold|observe|sell) 与 reason。"
+                "You are a paper position supervisor. "
+                "Output ONLY valid JSON with action (hold|observe|sell) and reason (English)."
             )
         text = ""
         try:

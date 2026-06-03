@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
-from app.services.ai_big4_prompt import BIG4_PROMPT_BLOCK_EXPLORE
+from app.services.ai_big4_prompt import BIG4_PROMPT_BLOCK_EXPLORE, BIG4_PROMPT_BLOCK_EXPLORE_EN
 
 # 送入 LLM 的 symbol 上限 (全池 ~200 时 prompt/output 都会爆)
 EXPLORE_LLM_MAX_SYMBOLS = 50
@@ -280,13 +280,15 @@ def prepare_universe_for_llm(
     return selected, meta
 
 
-def build_explore_prompt(
+def build_explore_prompt_zh(
     universe: dict,
     global_ctx: dict,
     historical_stats: dict,
+    *,
+    max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
 ) -> Tuple[str, Dict[str, Any]]:
-    """紧凑 JSON 拼 prompt, 降低 token."""
-    universe_list, meta = prepare_universe_for_llm(universe)
+    """Chinese main explore prompt (A/B benchmark only)."""
+    universe_list, meta = prepare_universe_for_llm(universe, max_symbols=max_symbols)
     compact = {"ensure_ascii": False, "separators": (",", ":"), "default": str}
     prompt = EXPLORE_PROMPT_TEMPLATE.format(
         global_context_json=json.dumps(global_ctx, **compact),
@@ -299,6 +301,19 @@ def build_explore_prompt(
         ),
     )
     return prompt, meta
+
+
+def build_explore_prompt(
+    universe: dict,
+    global_ctx: dict,
+    historical_stats: dict,
+    *,
+    max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
+) -> Tuple[str, Dict[str, Any]]:
+    """Production default: English main explore prompt."""
+    return build_explore_prompt_en(
+        universe, global_ctx, historical_stats, max_symbols=max_symbols,
+    )
 
 
 def _sanitize_json_string_literals(raw: str) -> str:
@@ -663,3 +678,98 @@ GOOD — skip:
   ]
 }}
 """
+
+KLINE_1H_READING_BLOCK_EN = """
+## 1h K-line reading (required)
+- **Trend**: kline_narrative.1h overall ≈ last **24** 1h bars.
+- **Local**: last **4-6** bars for pullback/bounce/streak.
+- catalyst must cite **24-bar trend + last 4-6 bars**, not single 1h bar or 24h % alone.
+"""
+
+CATALYST_EVIDENCE_BLOCK_EN = """
+""" + KLINE_1H_READING_BLOCK_EN + """
+# catalyst rules (violations → confidence ≤0.45 or skip)
+- Cite kline_narrative 1h/15m/1d with **24-bar + 4-6 bar** structure.
+- If tech.rsi_14_1h exists, **state RSI number** in catalyst.
+- Volume from narrative; position vs 7d high/low via tech fields.
+- At least 2 timeframes aligned for confidence≥0.65.
+- Do NOT use 24h %, funding alone, or Big4 alone as primary catalyst.
+- data_signal: one quantitative line only.
+"""
+
+EXPLORE_PROMPT_TEMPLATE_EN = """You are a senior crypto futures analyst. Hold 4h, SL=4%, TP=6%, 5x leverage.
+
+Task: per-symbol **technical** 4h tradeability — not macro-only bets.
+
+# Position context
+- Need room toward 6% TP or survive 4% SL within 4h; skip 1-2% chop names.
+
+# Global context (macro background only)
+{global_context_json}
+""" + BIG4_PROMPT_BLOCK_EXPLORE_EN + """
+# Historical stats (calibration, not macro entries)
+{historical_stats_json}
+
+# Candidate note
+{llm_universe_note_en}
+Each row: triggers (not catalyst), price/24h/volume, funding, kline_narrative, tech RSI/7d fields.
+
+{universe_json}
+
+""" + CATALYST_EVIDENCE_BLOCK_EN + """
+# Task
+Per symbol in list:
+- category: bullish | bearish | skip
+- confidence: 0.0-1.0
+- catalyst: multi-TF K-lines + RSI/EMA/7d (Chinese text OK)
+- data_signal: one line
+- risk_note: one line (Big4/BTC allowed here only)
+
+# Confidence
+| 0.80-1.00 | 1h+15m aligned + volume + RSI supports side + ≥3% room to 7d extreme |
+| 0.65-0.79 | 24h trend + last 4-6 bars aligned + quant in catalyst |
+| 0.60-0.64 | OK but max 1-2 names |
+| <0.60 | skip |
+
+# Rules
+- Technical setups only; no pool-wide long/short from Big4 alone.
+- Quality over quantity; 5-15 strong verdicts enough.
+
+Output ONE JSON only (summary_zh in Chinese):
+{{
+  "summary_zh": "1-2 sentences Chinese",
+  "verdicts": [
+    {{
+      "symbol": "FOO/USDT",
+      "category": "bullish",
+      "confidence": 0.72,
+      "catalyst": "...",
+      "data_signal": "...",
+      "risk_note": "..."
+    }}
+  ]
+}}
+"""
+
+
+def build_explore_prompt_en(
+    universe: dict,
+    global_ctx: dict,
+    historical_stats: dict,
+    *,
+    max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
+) -> Tuple[str, Dict[str, Any]]:
+    """English main explore prompt (GPT production / A-B tests)."""
+    universe_list, meta = prepare_universe_for_llm(universe, max_symbols=max_symbols)
+    compact = {"ensure_ascii": False, "separators": (",", ":"), "default": str}
+    note_en = (
+        f"TOP {meta['llm_symbol_count']} of {meta['universe_total']} by technical score "
+        f"(not |24h| extreme). Verdicts only for symbols in this list."
+    )
+    prompt = EXPLORE_PROMPT_TEMPLATE_EN.format(
+        global_context_json=json.dumps(global_ctx, **compact),
+        universe_json=json.dumps(universe_list, **compact),
+        historical_stats_json=json.dumps(historical_stats, **compact),
+        llm_universe_note_en=note_en,
+    )
+    return prompt, meta

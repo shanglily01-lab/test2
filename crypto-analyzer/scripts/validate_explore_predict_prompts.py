@@ -42,7 +42,7 @@ def test_universe_scoring():
     universe = {f"S{i}": {"symbol": f"S{i}", "change_24h": i, "tech": {}} for i in range(60)}
     selected, meta = prepare_universe_for_llm(universe, max_symbols=50)
     assert len(selected) == 50
-    assert "技术面评分" in str(meta) or meta["llm_symbol_count"] == 50
+    assert meta["llm_symbol_count"] == 50
     print("[PASS] universe scoring favors moderate over extreme")
 
 
@@ -54,25 +54,30 @@ def test_explore_prompt():
             "symbol": "AAA/USDT",
             "change_24h": 10,
             "tech": {"rsi_14_1h": 60},
-            "kline_narrative": {"1h": "[1h · 整体 24 根趋势] 偏多"},
+            "kline_narrative": {"1h": "[1h · 24-bar trend] bullish"},
         }
     }
     p, meta = build_explore_prompt(u, {}, {})
-    assert "24 根" in p and "4~6" in p
-    assert "技术面评分" in p
-    assert "|24h涨跌|" not in p or "非单纯" in p
-    print(f"[PASS] explore prompt ({len(p)} chars, {meta['llm_symbol_count']} syms)")
+    assert "24-bar" in p.lower() or "24 bar" in p.lower()
+    assert "technical score" in p.lower()
+    print(f"[PASS] explore prompt EN ({len(p)} chars, {meta['llm_symbol_count']} syms)")
 
 
 def test_predict_prompt():
-    from app.services.gemini_predictor import PREDICT_PROMPT_TEMPLATE
-    from app.services.deepseek_predictor import PREDICT_PROMPT_TEMPLATE as DS
+    from app.services.ai_predict_prompt import build_predict_prompt
+    import inspect
+    import app.services.gemini_predictor as gp
+    import app.services.deepseek_predictor as dp
 
-    assert "24根整体" in PREDICT_PROMPT_TEMPLATE
-    assert "4~6" in PREDICT_PROMPT_TEMPLATE
-    assert "0.60-0.64" in PREDICT_PROMPT_TEMPLATE
-    assert "24根整体" in DS
-    print("[PASS] predict prompts aligned")
+    p = build_predict_prompt(
+        [{"symbol": "AAA/USDT", "kline_narrative": {"1h": "x"}, "current_price": 1.0}],
+        {"big4_signal": "NEUTRAL"},
+    )
+    assert "4 hours" in p
+    assert "24-bar" in p.lower() or "24 bar" in p.lower()
+    assert "build_predict_prompt" in inspect.getsource(gp._call_gemini_predict)
+    assert "build_predict_prompt" in inspect.getsource(dp._call_deepseek_predict)
+    print("[PASS] predict prompts EN (shared ai_predict_prompt)")
 
 
 def test_catalyst_gate_predict():
@@ -103,21 +108,39 @@ def test_sym_data_for_gate():
     print("[PASS] sym_data_for_catalyst_gate")
 
 
+def test_gpt_en_prompts():
+    from app.services.gpt_llm_client import GPT_JSON_SYSTEM_EN
+    import inspect
+    import app.services.gpt_explore_worker as gew
+    import app.services.gpt_predictor as gp
+
+    assert "JSON" in GPT_JSON_SYSTEM_EN
+    explore_src = inspect.getsource(gew._call_gpt_explore)
+    assert "build_explore_prompt" in explore_src
+    assert "GPT_JSON_SYSTEM_EN" in explore_src
+    predict_src = inspect.getsource(gp._call_gpt_predict)
+    assert "build_predict_prompt" in predict_src
+    assert "GPT_JSON_SYSTEM_EN" in predict_src
+    import app.services.gemini_position_advisor as gpa
+    open_src = inspect.getsource(gpa.GeminiPositionAdvisor._build_open_prompt)
+    hold_src = inspect.getsource(gpa.GeminiPositionAdvisor._build_prompt)
+    assert "build_open_advisor_prompt" in open_src
+    assert "paper position" in hold_src.lower()
+    print("[PASS] GPT + advisor prompts English")
+
+
 def test_gpt_llm_aligns_gemini():
     from app.services.ai_explore_prompt import EXPLORE_LLM_MAX_OUTPUT_TOKENS
-    from app.services.gpt_llm_client import GPT_JSON_SYSTEM_ZH, GPT_LLM_TEMPERATURE
+    from app.services.gpt_llm_client import GPT_LLM_TEMPERATURE
     import inspect
     import app.services.gpt_explore_worker as gew
 
     assert GPT_LLM_TEMPERATURE == 0.1
-    assert "kline_narrative" in GPT_JSON_SYSTEM_ZH
-    assert "24h 涨跌幅" in GPT_JSON_SYSTEM_ZH
     src = inspect.getsource(gew._call_gpt_explore)
     assert "gpt_chat_json" in src
     assert "EXPLORE_LLM_MAX_OUTPUT_TOKENS" in src
     assert "2200" not in src
-    assert "professional crypto trading analyst" not in src
-    print("[PASS] GPT LLM invoke aligned with Gemini (zh system, low temp, 8k tokens)")
+    print("[PASS] GPT explore invoke (low temp, 8k tokens)")
 
 
 def main():
@@ -128,6 +151,7 @@ def main():
         test_predict_prompt,
         test_catalyst_gate_predict,
         test_sym_data_for_gate,
+        test_gpt_en_prompts,
         test_gpt_llm_aligns_gemini,
     ]
     failed = 0

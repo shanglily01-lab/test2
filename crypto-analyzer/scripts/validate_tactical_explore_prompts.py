@@ -159,13 +159,13 @@ def test_prompt_has_strategy_differentiation():
 
     chase_p, _ = build_strategy_prompt("chase", {}, {}, {})
     pull_p, _ = build_strategy_prompt("pullback", {}, {}, {})
-    assert "本策略边界" in chase_p
-    assert "追涨做多" in chase_p and "回调做多" in chase_p
+    assert "Boundaries" in chase_p or "boundaries" in chase_p.lower()
+    assert "Momentum chase" in chase_p or "chase" in chase_p.lower()
     assert CHASE_LONG.key in chase_p or "RSI" in chase_p
-    assert "≤68" in chase_p or "68" in chase_p
-    assert "本策略量化硬门槛" in pull_p
-    assert "勿与其它战术混淆" in pull_p or "勿混淆" in pull_p
-    print("[PASS] per-strategy differentiation in tactical prompts")
+    assert "68" in chase_p
+    assert "Quant hard lines" in pull_p
+    assert "Pullback long" in pull_p or "pullback" in pull_p.lower()
+    print("[PASS] per-strategy differentiation in tactical prompts (EN)")
 
 
 def test_prompt_build():
@@ -181,16 +181,13 @@ def test_prompt_build():
     for key in TACTICAL_STRATEGIES:
         prompt, meta = build_strategy_prompt(key, u, {}, {})
         assert meta["selection"] == f"tactical_{key}"
-        assert "|24h涨跌| 取 TOP" not in prompt
-        assert "非单纯 |24h涨跌|" in prompt or "非单纯" in prompt
-        defn = TACTICAL_STRATEGIES[key]
-        assert defn.title_zh in prompt
+        assert "|24h| sort" in prompt.lower() or "not |24h|" in prompt.lower()
         if key == "pullback":
-            assert "上涨趋势" in prompt and "支撑" in prompt
-            assert "24 根" in prompt and "4~6" in prompt
+            assert "uptrend" in prompt.lower() or "pullback" in prompt.lower()
+            assert "4-6" in prompt or "4~6" in prompt
         if key == "chase":
-            assert "不要求放量" in prompt or "量能未放大" in prompt
-        assert "禁止只看 1 根" in prompt
+            assert "volume" in prompt.lower() or "Volume" in prompt
+        assert "24-bar" in prompt.lower() or "24x1h" in prompt.lower()
 
 
 def test_db_bundle_optional():

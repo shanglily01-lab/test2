@@ -12,7 +12,7 @@ from loguru import logger
 
 from app.services.ai_explore_prompt import EXPLORE_LLM_MAX_OUTPUT_TOKENS
 from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_TIMEOUT_S
-from app.services.gpt_llm_client import gpt_chat_json
+from app.services.gpt_llm_client import GPT_JSON_SYSTEM_EN, gpt_chat_json
 from app.services.ai_big4_prompt import big4_conflict_risk_note
 from app.services.ai_explore_prompt import (
     AI_POSITION_HOLD_HOURS,
@@ -94,6 +94,7 @@ def _call_gpt_explore(universe: dict, global_ctx: dict, historical_stats: dict):
             user_prompt=prompt,
             max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
             timeout=GPT_TIMEOUT_S,
+            system_prompt=GPT_JSON_SYSTEM_EN,
         )
     except Exception as e:
         return None, f"GPT API 调用失败: {e}"
@@ -164,7 +165,7 @@ def _open_simulated_position(
         hold_hours=EXPLORE_HOLD_HOURS, conn=conn,
     )
     if not allowed:
-        return None, (gate_reason or "开仓顾问拒绝")[:255]
+        return None, (gate_reason or "open advisor rejected")[:255]
 
     notional = EXPLORE_MARGIN_USD * EXPLORE_LEVERAGE
     qty = round(notional / price, 6)

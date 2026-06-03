@@ -232,9 +232,9 @@ def check_direction_gates(
 ) -> Tuple[bool, str]:
     s = (side or "").upper()
     if s == "LONG" and not allow_long:
-        return False, "系统设置禁止做多(allow_long=0)"
+        return False, "System disallows LONG (allow_long=0)"
     if s == "SHORT" and not allow_short:
-        return False, "系统设置禁止做空(allow_short=0)"
+        return False, "System disallows SHORT (allow_short=0)"
     return True, ""
 
 
@@ -243,9 +243,10 @@ def check_expected_side(profile: OpenAdvisorStrategyProfile, side: str) -> Tuple
         return True, ""
     s = (side or "").upper()
     if s != profile.expected_side:
+        title = _GPT_PROFILE_TITLE_EN.get(profile.key, profile.title_zh)
         return (
             False,
-            f"策略「{profile.title_zh}」仅允许{profile.expected_side}，实际为{s}",
+            f"Strategy [{title}] allows {profile.expected_side} only, got {s}",
         )
     return True, ""
 
@@ -381,30 +382,30 @@ def precheck_open_advisor(
     if profile.key == "chase" and s == "LONG":
         if rsi is not None and float(rsi) > CHASE_RSI_MAX:
             return False, (
-                f"策略「追涨做多」: RSI={rsi:.0f}>{CHASE_RSI_MAX}，代码预检 reject"
+                f"[chase] RSI={rsi:.0f}>{CHASE_RSI_MAX}, precheck reject"
             )
         if b7h is not None and float(b7h) > -CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:
             return False, (
-                f"策略「追涨做多」: below_7d_high={b7h:.1f}% 空间不足，代码预检 reject"
+                f"[chase] below_7d_high={b7h:.1f}% insufficient room, precheck reject"
             )
 
     if profile.key == "pullback" and s == "LONG":
         if rsi is not None and float(rsi) > PULLBACK_RSI_MAX:
             return False, (
-                f"策略「回调做多」: RSI={rsi:.0f}>{PULLBACK_RSI_MAX}，代码预检 reject"
+                f"[pullback] RSI={rsi:.0f}>{PULLBACK_RSI_MAX}, precheck reject"
             )
         if b7h is not None and float(b7h) > -2.0:
             return False, (
-                f"策略「回调做多」: below_7d_high={b7h:.1f}% 过近无像样回踩，代码预检 reject"
+                f"[pullback] below_7d_high={b7h:.1f}% too close, no real dip, precheck reject"
             )
 
     if profile.key == "dump" and s == "SHORT":
         if rsi is not None and float(rsi) > 55:
-            return False, f"策略「杀跌做空」: RSI={rsi:.0f}>55，更像反弹空而非杀跌，代码预检 reject"
+            return False, f"[dump] RSI={rsi:.0f}>55, looks like rebound short not breakdown, precheck reject"
 
     if profile.key == "rebound" and s == "SHORT":
         if rsi is not None and float(rsi) < 40:
-            return False, f"策略「反弹做空」: RSI={rsi:.0f}<40 偏低，代码预检 reject"
+            return False, f"[rebound] RSI={rsi:.0f}<40 too low for rebound short, precheck reject"
 
     return True, ""
 
@@ -424,75 +425,21 @@ def build_open_advisor_prompt(
     ctx: dict,
     format_kline_table: Callable[[list], str],
 ) -> str:
-    """组装开仓顾问 prompt — 每策略注入不同 rubric + 审核步骤 + 量化块."""
-    big4_block = build_big4_subjective_block(
-        ctx.get("big4_signal", "NEUTRAL"),
-        float(ctx.get("big4_strength") or 0),
-        bool(ctx.get("allow_long", True)),
-        bool(ctx.get("allow_short", True)),
-        side,
-        float(ctx.get("btc_6h_change") or 0),
-        float(ctx.get("eth_6h_change") or 0),
+    """English open-advisor prompt (Gemini / DeepSeek / GPT production)."""
+    return build_gpt_open_advisor_prompt(
+        profile=profile,
+        symbol=symbol,
+        side=side,
+        price=price,
+        source=source,
+        catalyst=catalyst,
+        leverage=leverage,
+        sl_pct=sl_pct,
+        tp_pct=tp_pct,
+        hold_hours=hold_hours,
+        ctx=ctx,
+        format_kline_table=format_kline_table,
     )
-    klines_15m = format_kline_table(ctx.get("klines_15m", []))
-    klines_1h = format_kline_table(ctx.get("klines_1h", []))
-    narr_1h = (ctx.get("narrative_1h") or "").strip() or "(缓存暂无，以上表为准)"
-    narr_15m = (ctx.get("narrative_15m") or "").strip() or "(无)"
-    tech_block = build_tech_metrics_block(profile, ctx)
-    review_steps = build_strategy_review_steps(profile)
-    sl_s = f"{sl_pct}%" if sl_pct is not None else "默认"
-    tp_s = f"{tp_pct}%" if tp_pct is not None else "默认"
-    hold_s = f"{hold_hours}h" if hold_hours is not None else "策略默认"
-    return f"""你是超级交易大师。系统在**开模拟仓之前**请你审核是否允许开仓。
-
-## 重要
-- 本笔 **唯一** 审核标准：下方「{profile.title_zh}」专属 rubric（profile={profile.key}）。
-- **禁止**用其它策略的标准审本单（例如用「追涨」标准审「回调」单）。
-
-## 本笔策略
-  策略名:     {profile.title_zh}
-  profile:    {profile.key}
-  source:     {source}
-  固定方向:   {profile.expected_side or '按信号 LONG/SHORT'}
-
-### 「{profile.title_zh}」专属审核标准（仅此一节有效）
-{profile.rubric}
-
-{_KLINE_1H_READING}
-
-{tech_block}
-
-{big4_block}
-
-## 拟开仓
-  Symbol:     {symbol}
-  Direction:  {side}
-  Entry:      {price}
-  Leverage:   {leverage}x
-  SL/TP:      {sl_s} / {tp_s}
-  Plan hold:  {hold_s}
-  Catalyst:   {(catalyst or '')[:500]}
-
-## 市场数据
-  candidate_pool 1h 叙事:
-{narr_1h}
-  candidate_pool 15m 叙事:
-{narr_15m}
-
-## 近 24 根 1h K 线 (oldest → newest)
-{klines_1h}
-
-## 近 4h 15m K 线
-{klines_15m}
-
-{review_steps}
-
-Output ONLY JSON:
-{{
-  "decision": "approve" | "reject",
-  "reason": "<50字中文，必须写明策略名「{profile.title_zh}」+通过/驳回要点>"
-}}
-"""
 
 
 _GPT_PROFILE_TITLE_EN: dict[str, str] = {
@@ -702,7 +649,7 @@ def build_gpt_open_advisor_prompt(
     ctx: dict,
     format_kline_table: Callable[[list], str],
 ) -> str:
-    """GPT open advisor — English instructions; reason still Chinese for Web UI."""
+    """English open-advisor prompt (all teachers)."""
     title_en = _GPT_PROFILE_TITLE_EN.get(profile.key, profile.title_zh)
     rubric_en = _gpt_rubric_en(profile)
     big4_block = build_gpt_big4_subjective_block(
@@ -764,6 +711,6 @@ def build_gpt_open_advisor_prompt(
 Output ONLY JSON:
 {{
   "decision": "approve" | "reject",
-  "reason": "<=80 Chinese chars for operator UI; must cite strategy「{profile.title_zh}」and key pass/fail point>"
+  "reason": "<=120 English words; cite strategy [{title_en}] and key pass/fail point>"
 }}
 """
