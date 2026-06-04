@@ -23,12 +23,8 @@ from app.services.ai_explore_prompt import (
     explore_catalyst_technical_ok,
     parse_explore_llm_json,
 )
-from app.services.ai_predict_schedule import (
-    GPT_EXPLORE_NEXT_DUE_KEY,
-    PREDICT_ROUND_INTERVAL_HOURS,
-    predict_claim_next_slot,
-    predict_round_is_due,
-)
+from app.services.ai_explore_prompt import EXPLORE_MIN_INTERVAL_HOURS
+from app.services.ai_predict_schedule import explore_round_is_due
 from app.services.gemini_explore_worker import _get_current_price, _would_instant_tp
 from app.services.gemini_swan_worker import _read_setting
 from app.utils.futures_symbol import futures_symbol_rating_canonical, resolve_futures_universe_item
@@ -225,10 +221,13 @@ def _run_explore_round_body(triggered_by: str = "scheduler") -> Optional[int]:
                 logger.info(f"[GPT探索] kill switch=0, 跳过 (triggered_by={triggered_by})")
                 return None
 
-            due, due_reason = predict_round_is_due(
+            if not GPT_API_KEY:
+                logger.error("[GPT探索] OPENAI_API_KEY 未设置, 跳过 (请配置 .env)")
+                return None
+
+            due, due_reason = explore_round_is_due(
                 conn_chk,
                 runs_table="gpt_explore_runs",
-                next_due_key=GPT_EXPLORE_NEXT_DUE_KEY,
                 now=asof_utc,
                 manual=manual,
                 log_tag="GPT探索",
@@ -236,21 +235,13 @@ def _run_explore_round_body(triggered_by: str = "scheduler") -> Optional[int]:
             if not due:
                 logger.info(f"[GPT探索] {due_reason}, 跳过 (triggered_by={triggered_by})")
                 return None
-
-            if not manual:
-                predict_claim_next_slot(
-                    conn_chk,
-                    next_due_key=GPT_EXPLORE_NEXT_DUE_KEY,
-                    now=asof_utc,
-                    log_tag="GPT探索",
-                )
     except Exception as e:
         logger.error(f"[GPT探索] 调度检查失败, 保守跳过: {e}")
         return None
 
     logger.info(
         f"[GPT探索] === 一轮开始 (triggered_by={triggered_by}, "
-        f"周期={PREDICT_ROUND_INTERVAL_HOURS}h) ==="
+        f"周期={EXPLORE_MIN_INTERVAL_HOURS:.0f}h) ==="
     )
 
     try:

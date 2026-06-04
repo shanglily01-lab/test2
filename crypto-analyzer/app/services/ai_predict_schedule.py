@@ -1,7 +1,9 @@
-"""Gemini / DeepSeek 预测 — 统一 4h 调度防重 (保证每 4h 至少执行一轮).
+"""Gemini / DeepSeek / GPT 预测 — 统一 4h 调度防重 (保证每 4h 至少执行一轮).
 
 调度器每 5 分钟轮询 + worker 内秒级防重 + system_settings 认领下一窗口,
 避免 schedule.every(4).hours 在进程重启后计时清零导致长期不跑。
+
+主探索 (gemini/deepseek/gpt explore) 仅用「距上次 status=ok ≥4h」防重, 不用 next_due。
 """
 from __future__ import annotations
 
@@ -9,6 +11,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
 from loguru import logger
+
+from app.services.ai_explore_prompt import EXPLORE_MIN_INTERVAL_HOURS
 
 PREDICT_ROUND_INTERVAL_HOURS = 4
 PREDICT_ROUND_INTERVAL_SECONDS = PREDICT_ROUND_INTERVAL_HOURS * 3600
@@ -72,6 +76,37 @@ def _last_run_at(cur, runs_table: str) -> Optional[datetime]:
     if getattr(last_at, "tzinfo", None) is not None:
         return last_at.astimezone(timezone.utc).replace(tzinfo=None)
     return last_at
+
+
+def explore_round_is_due(
+    conn,
+    *,
+    runs_table: str,
+    now: Optional[datetime] = None,
+    manual: bool = False,
+    log_tag: str = "Explore",
+    interval_hours: float = EXPLORE_MIN_INTERVAL_HOURS,
+) -> Tuple[bool, str]:
+    """主探索 4h 防重: 仅看上次 status=ok (与 Gemini/DeepSeek explore 一致)."""
+    if manual:
+        return True, "manual"
+
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    with conn.cursor() as cur:
+        cur.execute(
+            f"SELECT MAX(asof_utc) AS last_run FROM `{runs_table}` WHERE status='ok'"
+        )
+        row = cur.fetchone()
+        last_run = (row or {}).get("last_run")
+        if last_run is not None:
+            if getattr(last_run, "tzinfo", None) is not None:
+                last_run = last_run.astimezone(timezone.utc).replace(tzinfo=None)
+            elapsed_h = (now - last_run).total_seconds() / 3600
+            if elapsed_h < interval_hours:
+                return False, (
+                    f"上次成功距今 {elapsed_h:.1f}h < {interval_hours:.0f}h"
+                )
+    return True, "due"
 
 
 def predict_round_is_due(

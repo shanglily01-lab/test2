@@ -1608,7 +1608,6 @@ class UnifiedDataScheduler:
         _launch_ai_init_task("GPT探索",      "app.services.gpt_explore_worker",       "run_explore_round", 120)
         _launch_predict_catchup("Gemini预测", "app.services.gemini_predictor", "run_predict_round", 45)
         _launch_predict_catchup("DeepSeek预测", "app.services.deepseek_predictor", "run_predict_round", 50)
-        _launch_predict_catchup("GPT探索", "app.services.gpt_explore_worker", "run_explore_round", 52)
         _launch_predict_catchup("GPT预测", "app.services.gpt_predictor", "run_predict_round", 55)
 
         def _launch_tactical_catchup():

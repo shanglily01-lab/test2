@@ -806,6 +806,10 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                 logger.info(f"[GPT预测] kill switch=0, 跳过 (triggered_by={triggered_by})")
                 return None
 
+            if not GPT_API_KEY:
+                logger.error('[GPT预测] OPENAI_API_KEY 未设置, 跳过 (请配置 .env)')
+                return None
+
             due, due_reason = predict_round_is_due(
                 conn_chk,
                 runs_table='gpt_predict_runs',
