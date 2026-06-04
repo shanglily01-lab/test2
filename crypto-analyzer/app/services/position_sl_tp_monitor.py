@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as _dt
 import os
 import time
 from typing import Any, Dict, List, Optional
@@ -164,6 +165,28 @@ class PositionSLTPMonitor:
                 continue
             if entry_price <= 0:
                 continue
+
+            # 计划持仓到期（AI 探索/预测等为 4h）— 与 SmartExitOptimizer 互补；
+            # 本服务随 FastAPI 常驻，避免仅 smart_trader 在跑时才到期平仓。
+            pct = pos.get("planned_close_time")
+            if pct is not None:
+                if isinstance(pct, _dt.datetime):
+                    if pct.tzinfo is not None:
+                        pct = pct.replace(tzinfo=None)
+                    if _dt.datetime.now() >= pct:
+                        price = self._get_live_price(ws, symbol) or entry_price
+                        logger.warning(
+                            f"[SL/TP Monitor] 计划平仓到期 pid={pid} {symbol} {side} "
+                            f"planned={pct.strftime('%Y-%m-%d %H:%M:%S')}"
+                        )
+                        self._cooldown[pid] = now + self._cooldown_seconds
+                        self._peak_pnl_map.pop(pid, None)
+                        self._do_close(
+                            pid, symbol, side,
+                            "planned_close_time_expired",
+                            price, now,
+                        )
+                        continue
 
             price = self._get_live_price(ws, symbol)
             if price is None or price <= 0:
@@ -336,7 +359,8 @@ class PositionSLTPMonitor:
     def _fetch_open_positions(self) -> List[Dict[str, Any]]:
         sql = (
             "SELECT id, symbol, position_side, entry_price, "
-            "       stop_loss_price, take_profit_price, source, open_time "
+            "       stop_loss_price, take_profit_price, source, open_time, "
+            "       planned_close_time "
             "FROM futures_positions "
             "WHERE status='open' "
             "  AND (source LIKE %s) "

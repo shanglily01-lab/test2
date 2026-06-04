@@ -801,54 +801,66 @@ Output ONLY JSON:
             )
 
         close_price = None
-        live_pnl = None
-        live_row = None
+        live_rows: List[dict] = []
 
         try:
-            # ---- 1. 找对应的实盘记录 ----
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute(
-                "SELECT id, account_id FROM live_futures_positions "
-                "WHERE paper_position_id=%s AND status='OPEN' LIMIT 1",
+                "SELECT id, account_id, quantity, entry_price FROM live_futures_positions "
+                "WHERE paper_position_id=%s AND status='OPEN'",
                 (position['id'],)
             )
-            live_row = cur.fetchone()
+            live_rows = cur.fetchall() or []
             cur.close(); conn.close()
         except Exception as e:
             logger.warning(f"[Gemini顾问] 查实盘记录异常 id={position['id']}: {e}")
 
-        # ---- 2. 尝试平实盘 ----
-        if live_row:
+        any_live_closed = False
+        if live_rows:
             try:
                 from app.services.api_key_service import APIKeyService
                 from app.trading.binance_futures_engine import BinanceFuturesEngine
 
                 svc = APIKeyService(self.db_config)
                 keys = svc.get_all_active_api_keys('binance')
-                target_key = next((k for k in keys if k['id'] == live_row['account_id']), None)
+                keys_by_id = {k['id']: k for k in keys}
 
-                if target_key:
-                    engine = BinanceFuturesEngine(
-                        self.db_config,
-                        api_key=target_key['api_key'],
-                        api_secret=target_key['api_secret'],
-                    )
-                    result = engine.close_position_direct(
-                        symbol=position['symbol'],
-                        position_side=position['position_side'],
-                        quantity=Decimal(str(position['quantity'])),
-                        entry_price=Decimal(str(position['entry_price'])),
-                        reason=reason,
-                        strategy_name=source or advisor_tag,
-                        open_time=position.get('open_time'),
-                    )
-                    if result.get('success'):
-                        close_price = result.get('close_price', 0)
+                for live_row in live_rows:
+                    target_key = keys_by_id.get(live_row['account_id'])
+                    if not target_key:
+                        logger.warning(
+                            f"[Gemini顾问] account_id={live_row['account_id']} 无活跃 API key, "
+                            f"跳过 live_id={live_row['id']}"
+                        )
+                        continue
+                    try:
+                        engine = BinanceFuturesEngine(
+                            self.db_config,
+                            api_key=target_key['api_key'],
+                            api_secret=target_key['api_secret'],
+                        )
+                        result = engine.close_position_direct(
+                            symbol=position['symbol'],
+                            position_side=position['position_side'],
+                            quantity=Decimal(str(live_row['quantity'])),
+                            entry_price=Decimal(str(live_row['entry_price'])),
+                            reason=reason,
+                            strategy_name=source or advisor_tag,
+                            open_time=position.get('open_time'),
+                        )
+                        if not result.get('success'):
+                            logger.error(
+                                f"[Gemini顾问] 平实盘失败 live_id={live_row['id']}: "
+                                f"{result.get('error', '')}"
+                            )
+                            continue
+
+                        any_live_closed = True
+                        close_price = result.get('close_price', 0) or close_price
                         live_pnl = result.get('realized_pnl', 0)
                         close_price_f = float(close_price) if close_price else None
 
-                        # ---- 3. 更新 live_futures_positions ----
                         conn2 = self._get_conn()
                         cur2 = conn2.cursor()
                         cur2.execute(
@@ -871,27 +883,22 @@ Output ONLY JSON:
                                 f"{position['symbol']} pnl={live_pnl}"
                             )
                         cur2.close(); conn2.close()
-
-                        # TG 平仓通知由 BinanceFuturesEngine.close_position_direct 统一发送
-
-                        # 实盘平成功，用实盘成交价关模拟仓
-                        self._close_paper_only(
-                            position, reason, close_price_f or float(position['entry_price']),
-                            advisor_tag=advisor_tag,
-                        )
-                        return True
-                    else:
+                    except Exception as e:
                         logger.error(
-                            f"[Gemini顾问] 平实盘失败 id={live_row['id']}: {result.get('error', '')}"
+                            f"[Gemini顾问] 平实盘异常 live_id={live_row.get('id')}: {e}"
                         )
-                else:
-                    logger.warning(
-                        f"[Gemini顾问] account_id={live_row['account_id']} 无活跃 API key, 跳过平实盘"
-                    )
-            except Exception as e:
-                logger.error(f"[Gemini顾问] 平实盘异常 id={live_row['id'] if live_row else '?'}: {e}")
 
-        # ---- 5. 实盘平失败 / 无实盘记录，只关模拟仓 ----
+                if any_live_closed:
+                    close_price_f = float(close_price) if close_price else float(position['entry_price'])
+                    self._close_paper_only(
+                        position, reason, close_price_f,
+                        advisor_tag=advisor_tag,
+                    )
+                    return True
+            except Exception as e:
+                logger.error(f"[Gemini顾问] 批量平实盘异常 id={position['id']}: {e}")
+
+        # 实盘平失败 / 无实盘记录，只关模拟仓
         if not close_price:
             current_price = self._get_current_price(position['symbol'])
             close_price = current_price or float(position['entry_price'])
