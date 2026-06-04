@@ -3,21 +3,21 @@
 """
 六策略量化交易服务 (v3 — 2026-05-28 清理无效策略版)
 
-已清理策略（从未有效开仓，移除代码+系统设置控件）:
+已清理策略（从未有效开仓或已下线，移除代码+系统设置控件）:
 - S2 回调做多
 - S3 顶部做空
 - S4 反弹衰竭做空
+- S5 大币超卖 (2026-06-04)
 - S7 MA支撑反弹
 - S8 顶部反转做空
 
 保留策略:
 - S1: 早期做多 — RSI+MA20
-- S5: 大币超卖 — RSI<32 止损反弹
 - S6: 小币量能异动 — 量能先行
 - S9: Gemini AI 抄底反转做多 — 每6h
 
 调度方式: 在 smart_trader_service.py 主循环中调用
-- run_slow(): 每30分钟, 负责 S1+S5+S6+S9 (内部限速)
+- run_slow(): 每30分钟, 负责 S1+S6+S9 (内部限速)
 """
 
 import sys
@@ -50,13 +50,6 @@ class MultiStrategyService:
     S1_MAX_POSITIONS = 999  # 测试阶段不限制，上线后改回 3
     S1_SOURCE = 's1_early_long'
 
-    # 策略5: 大币4H超卖反弹做多 (BTC/ETH/SOL/BNB/XRP)
-    S5_LEVERAGE = 5
-    S5_MARGIN = 500
-    S5_MAX_POSITIONS = 3
-    S5_SOURCE = 's5_large_oversold'
-    S5_SYMBOLS = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'XRP/USDT']
-
     # 策略6: 小币量能异动做多 (排除大市值)
     S6_LEVERAGE = 5
     S6_MARGIN = 500
@@ -88,7 +81,7 @@ class MultiStrategyService:
     S9_PER_SYMBOL_DELAY_S = 1.0  # 每个 symbol 调 Gemini 间隔, 防 rate limit
 
     ALL_SOURCES = (
-        S1_SOURCE, S5_SOURCE, S6_SOURCE, S9_SOURCE,
+        S1_SOURCE, S6_SOURCE, S9_SOURCE,
     )
     SLOW_SCAN_INTERVAL_SEC = 1800  # 30 分钟
 
@@ -558,71 +551,6 @@ class MultiStrategyService:
             logger.info(f"[S1] 本轮新开 {opened} 单")
 
     # ─────────────────────────────────────────
-    # 策略5: 大币4H超卖反弹做多
-    # ─────────────────────────────────────────
-
-    def scan_s5_large_oversold(self):
-        """S5: BTC/ETH/SOL/BNB/XRP 的 4H RSI<32 已回升 + 价格低于日MA20 做多
-        精简: 去掉"RSI仍在下降则跳过"（等回升确认=错过最低点）
-        """
-        if not self._read_setting_bool('s5_large_oversold_enabled', default=False):
-            return
-        if self._strategy_position_count(self.S5_SOURCE) >= self.S5_MAX_POSITIONS:
-            return
-
-        big4 = self._get_big4_signal()
-        if big4 in ('STRONG_BEARISH',):
-            logger.info("[S5] Big4强熊市，跳过大币超卖")
-            return
-
-        opened = 0
-        for symbol in self.S5_SYMBOLS:
-            if self._strategy_position_count(self.S5_SOURCE) + opened >= self.S5_MAX_POSITIONS:
-                break
-            if self._has_multi_strategy_position(symbol):
-                continue
-
-            try:
-                # 4H RSI < 32（深度超卖）
-                df_4h = self._get_klines(symbol, '4h', 40)
-                if df_4h is None or len(df_4h) < 20:
-                    continue
-                rsi_4h = self.ti.calculate_rsi(df_4h)
-                if len(rsi_4h) < 2:
-                    continue
-                last_rsi_4h = float(rsi_4h.iloc[-1])
-                if last_rsi_4h >= 32:
-                    continue
-
-                # 价格低于日线MA20（处于均线下方，有均值回归空间）
-                df_1d = self._get_klines(symbol, '1d', 25)
-                if df_1d is None or len(df_1d) < 21:
-                    continue
-                ma20_1d = float(df_1d['close'].rolling(20).mean().iloc[-1])
-                cur_price = float(df_1d['close'].iloc[-1])
-                if cur_price >= ma20_1d:
-                    continue
-
-                price_vs_ma = cur_price / ma20_1d
-
-                reason = (
-                    f"S5:4H_RSI={last_rsi_4h:.1f}(超卖),"
-                    f"价格={cur_price:.4g},日MA20={ma20_1d:.4g}({price_vs_ma * 100:.1f}%)"
-                )
-                _sl, _tp, _hold = self._get_runtime_sl_tp_hold()
-                if self._open_position(
-                    symbol, 'LONG', self.S5_MARGIN, self.S5_LEVERAGE,
-                    _tp, _sl, _hold, self.S5_SOURCE, reason
-                ):
-                    opened += 1
-
-            except Exception as e:
-                logger.warning(f"[S5] 扫描 {symbol} 异常: {e}")
-
-        if opened:
-            logger.info(f"[S5] 本轮新开 {opened} 单")
-
-    # ─────────────────────────────────────────
     # 策略6: 小币量能异动做多
     # ─────────────────────────────────────────
 
@@ -1086,21 +1014,17 @@ Output ONLY a single valid JSON object, no markdown fence, no extra text:
     # ─────────────────────────────────────────
 
     def run_slow(self):
-        """每30分钟调度：S1+S5+S6+S9；内部限速防重复"""
+        """每30分钟调度：S1+S6+S9；内部限速防重复"""
         now = datetime.now()
         if (self._last_slow_scan and
                 (now - self._last_slow_scan).total_seconds() < self.SLOW_SCAN_INTERVAL_SEC):
             return
         self._last_slow_scan = now
-        logger.info("[多策略] S1+S5+S6+S9 慢速扫描开始")
+        logger.info("[多策略] S1+S6+S9 慢速扫描开始")
         try:
             self.scan_s1_early_long()
         except Exception as e:
             logger.error(f"[S1] 扫描异常: {e}")
-        try:
-            self.scan_s5_large_oversold()
-        except Exception as e:
-            logger.error(f"[S5] 扫描异常: {e}")
         try:
             self.scan_s6_vol_spike()
         except Exception as e:

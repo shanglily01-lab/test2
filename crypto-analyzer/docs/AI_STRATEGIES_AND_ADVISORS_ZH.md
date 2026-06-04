@@ -243,7 +243,7 @@ gate_simulated_open (paper_open_gate.py)
 | `gemini_*` | 仅 Gemini |
 | `deepseek_*` | 仅 DeepSeek |
 | `gpt_*` | 仅 GPT |
-| 其他（S1/S5/S6/S9/smart_trader 等） | **Gemini + DeepSeek 双审** |
+| 其他（S1/S6/S9/smart_trader 等） | **Gemini + DeepSeek 双审** |
 
 ### 7.3 审查步骤（`open_advisor_strategy_rubrics.py`）
 

@@ -678,7 +678,7 @@ class BinanceFuturesEngine:
             # 对 S1~S9 / BTC_MOMENTUM / PREDICTOR 等策略加上前缀，方便在 Binance 后台识别
             source_prefix = source.lower().replace(' ', '_')
             known_sources = {
-                's1_early_long', 's5_large_oversold', 's6_vol_spike', 's9_gemini_ai',
+                's1_early_long', 's6_vol_spike', 's9_gemini_ai',
                 'btc_momentum', 'predictor',
             }
             if source_prefix in known_sources:

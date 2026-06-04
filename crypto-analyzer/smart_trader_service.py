@@ -3749,7 +3749,7 @@ class SmartTraderService:
                     time.sleep(self.scan_interval)
                     continue
 
-                # 0.66. 多策略服务: S1+S5+S6+S9 (run_slow, 内部限速 30 min/次)
+                # 0.66. 多策略服务: S1+S6+S9 (run_slow, 内部限速 30 min/次)
                 # run_fast 已删除; 无效策略 S2/S3/S4/S7/S8 已从代码中完全清理
                 # 放在 trend_following_enabled 检查之后，随趋势开关一同禁用
                 if self.multi_strategy_svc:

@@ -32,7 +32,6 @@ def test_source_mapping():
         ("gemini_explore", "explore", None),
         ("gemini_predict", "predict", None),
         ("s1_early_long", "s1", "LONG"),
-        ("s5_large_oversold", "s5", "LONG"),
         ("BTC_MOMENTUM", "btc_momentum", None),
         ("smart_trader", "smart_trader", None),
         ("trend_follow", "smart_trader", None),

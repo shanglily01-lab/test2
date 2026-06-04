@@ -154,17 +154,17 @@
 
 保留策略:
 - **S1** 早期做多 (5x, RSI+MA20)
-- **S5** 大币超卖 (5x, BTC/ETH/BNB/SOL/XRP, RSI<32)
 - **S6** 小币量能异动 (5x, 量能先行)
 - **S9** Gemini AI 抄底反转 (5x, LONG-only, 每6h)
 
-已清理策略 (2026-05-28, 从未有效开仓, 移除代码+系统设置控件):
+已清理策略 (2026-05-28 起, 移除代码+系统设置控件):
 - S2 回调做多 / S3 顶部做空 / S4 反弹做空 / S7 MA支撑 / S8 顶部反转做空
-- `run_fast()` 方法已删除, `run_slow()` 只调 S1/S5/S6/S9
+- **S5** 大币超卖 (2026-06-04 下线)
+- `run_fast()` 方法已删除, `run_slow()` 只调 S1/S6/S9
 
 ## 实盘控制
 
-- **按 source 白名单**（`app/services/trading_gates.py`）：`gemini_explore`、`deepseek_explore`、`gemini_predict`、`deepseek_predict` 可开/平实盘；其余策略（S1/S5/S6/S9、战术、反转、GPT、smart_trader 等）只写模拟仓
+- **按 source 白名单**（`app/services/trading_gates.py`）：`gemini_explore`、`deepseek_explore`、`gemini_predict`、`deepseek_predict` 可开/平实盘；其余策略（S1/S6/S9、战术、反转、GPT、smart_trader 等）只写模拟仓
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)
 - **平仓总开关**: `system_settings.live_close_enabled` (1=开启；模拟平仓时同步交易所；持仓顾问 sell 亦受此规则)
 - **TOP50 实仓闸门**: `system_settings.live_top50_required` (默认 1，TOP50 内可开实仓)

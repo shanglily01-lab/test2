@@ -18,7 +18,7 @@
 
 **正常部署只需启动 3 个核心服务**:
 1. crypto-app-main
-2. crypto-smart-trader  (内含 S1/S5/S6/S9 多策略 + BTC动量 + 主策略)
+2. crypto-smart-trader  (内含 S1/S6/S9 多策略 + BTC动量 + 主策略)
 3. crypto-fast-collector
 
 `crypto-strategy-live` 和 `crypto-strategy-bigmid` 仅作 **rollback fallback** 保留,

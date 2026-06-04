@@ -243,7 +243,7 @@ gate_simulated_open (paper_open_gate.py)
 | `gemini_*` | Gemini only |
 | `deepseek_*` | DeepSeek only |
 | `gpt_*` | GPT only |
-| Other (S1/S5/S6/S9/smart_trader, …) | **Gemini + DeepSeek** |
+| Other (S1/S6/S9/smart_trader, …) | **Gemini + DeepSeek** |
 
 ### 7.3 Steps (`open_advisor_strategy_rubrics.py`)
 

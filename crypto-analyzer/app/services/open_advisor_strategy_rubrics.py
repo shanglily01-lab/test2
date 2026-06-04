@@ -39,8 +39,6 @@ def _match_source(source: str) -> str:
         return "explore"
     if s.startswith("s1_") or "early_long" in s:
         return "s1"
-    if s.startswith("s5_") or "large_oversold" in s or "oversold" in s:
-        return "s5"
     if s.startswith("s6_") or "vol_spike" in s:
         return "s6"
     if s.startswith("s9_") or "gemini" in s and "strategy" in s:
@@ -149,15 +147,6 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         rubric=(
             "仅 LONG。须 RSI+MA20 类早期多头结构；"
             "非下跌趋势抄底、非顶部追高。"
-        ),
-    ),
-    "s5": OpenAdvisorStrategyProfile(
-        key="s5",
-        title_zh="S5 大币超卖反弹",
-        expected_side="LONG",
-        rubric=(
-            "仅 LONG；大币(BTC/ETH等)超卖反弹；"
-            "须有超卖+止跌证据，非下跌中继。"
         ),
     ),
     "s6": OpenAdvisorStrategyProfile(
@@ -347,7 +336,7 @@ def build_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
     elif key == "predict":
         lines.append("3. 审 4h 预测逻辑与多周期依据，**勿**用战术或探索 checklist。")
         lines.append("4. catalyst 与 proposed side 自洽才 approve。")
-    elif key in ("s1", "s5", "s6", "s9"):
+    elif key in ("s1", "s6", "s9"):
         lines.append(f"3. 仅审 **{title}** 定义（RSI/量能/超卖等），勿混用 AI 战术标准。")
         lines.append("4. 不符合该多策略定义 → reject。")
     else:
@@ -464,7 +453,6 @@ _GPT_PROFILE_TITLE_EN: dict[str, str] = {
     "explore": "AI main explore (event/structure)",
     "predict": "AI predict (4h direction)",
     "s1": "S1 early long",
-    "s5": "S5 large-cap oversold",
     "s6": "S6 small-cap volume spike",
     "s9": "S9 Gemini bottom reversal",
     "btc_momentum": "BTC momentum",
@@ -523,7 +511,6 @@ _GPT_RUBRIC_EN: dict[str, str] = {
         "Catalyst needs 1h/15m direction logic; severe Big4 conflict without coin-specific case → reject."
     ),
     "s1": "LONG only; early bull RSI+MA20 structure; no downtrend knife-catch.",
-    "s5": "LONG only; large-cap oversold bounce with evidence; not mid-bear continuation.",
     "s6": "LONG only; volume leads price; hollow pump narrative → reject.",
     "s9": "LONG only; bottom reversal structure; no counter-trend catch in strong bear.",
     "btc_momentum": "Side must align with BTC short-term momentum unless catalyst is exceptional.",
