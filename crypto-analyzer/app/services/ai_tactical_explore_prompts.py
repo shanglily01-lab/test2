@@ -766,8 +766,14 @@ def _rebound_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) ->
 
     vol_weak = _has_any(low, (
         "量能", "缩量", "萎缩", "背离", "不支持", "乏力", "无量",
-        "volume", "weak", "diverg", "no follow",
+        "volume", "weak", "diverg", "no follow", "thin", "light volume",
+        "lack of follow", "failed rally",
     ))
+    if not vol_weak and _has_any(narr, (
+        "缩量", "量能", "萎缩", "乏力", "无量", "背离", "weak volume",
+        "no follow", "thin volume",
+    )):
+        vol_weak = True
     if not vol_weak:
         return False, "反弹做空须写明反弹量能不足/缩量/量价不支持"
 

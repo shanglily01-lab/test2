@@ -9,7 +9,6 @@ from loguru import logger
 
 from app.services.gemini_position_advisor import GEMINI_PER_CALL_DELAY_S
 from app.services.deepseek_position_advisor import DEEPSEEK_PER_CALL_DELAY_S
-from app.services.gpt_position_advisor import GPT_PER_CALL_DELAY_S
 from app.services.open_advisor_routing import resolve_open_advisors
 
 _open_gate_lock = threading.Lock()
@@ -18,7 +17,6 @@ _open_gate_waiting = 0
 _PROVIDER_DELAY = {
     "gemini": GEMINI_PER_CALL_DELAY_S,
     "deepseek": DEEPSEEK_PER_CALL_DELAY_S,
-    "gpt": GPT_PER_CALL_DELAY_S,
 }
 
 
@@ -36,7 +34,7 @@ def gate_simulated_open(
 ) -> Tuple[bool, str]:
     """
     开仓前审核。返回 (允许开仓, 原因).
-    Gemini 订单仅 Gemini 审；DeepSeek 仅 DeepSeek；GPT 仅 GPT；其余双审 Gemini+DeepSeek。
+    gemini_* / gpt_* → Gemini 审；deepseek_* → DeepSeek；其余双审 Gemini+DeepSeek。
     顾问关闭 / API 异常时放行 (降级), 仅明确 reject 时拦截。
     """
     global _open_gate_waiting
@@ -68,20 +66,6 @@ def gate_simulated_open(
                 elif provider == "deepseek":
                     from app.services.deepseek_position_advisor import get_deepseek_advisor
                     allowed, reason = get_deepseek_advisor().review_open(
-                        symbol=symbol,
-                        side=side,
-                        price=price,
-                        source=source,
-                        catalyst=catalyst,
-                        leverage=leverage,
-                        sl_pct=sl_pct,
-                        tp_pct=tp_pct,
-                        hold_hours=hold_hours,
-                        conn=conn,
-                    )
-                elif provider == "gpt":
-                    from app.services.gpt_position_advisor import get_gpt_advisor
-                    allowed, reason = get_gpt_advisor().review_open(
                         symbol=symbol,
                         side=side,
                         price=price,

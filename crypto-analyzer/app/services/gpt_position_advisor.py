@@ -25,6 +25,7 @@ from app.services.open_advisor_strategy_rubrics import (
     check_expected_side,
     precheck_open_advisor,
     resolve_strategy_profile,
+    should_skip_llm_for_tactical_open,
 )
 
 GPT_PER_CALL_DELAY_S = 1.0
@@ -237,6 +238,21 @@ class GPTPositionAdvisor:
                 entry_price=price, leverage=leverage, reason=pre_reason, catalyst=catalyst, conn=conn,
             )
             return False, pre_reason
+
+        if should_skip_llm_for_tactical_open(
+            profile,
+            source,
+            tactical_llm_enabled=self._read_setting_bool(
+                "tactical_open_advisor_llm_enabled", "1"
+            ),
+        ):
+            log_gpt_advisor_review(
+                "open", "approve", symbol, position_side=side, source=source,
+                entry_price=price, leverage=leverage,
+                reason="tactical_upstream_gated_code_only",
+                catalyst=catalyst, conn=conn,
+            )
+            return True, "tactical_upstream_gated_code_only"
 
         prompt = self._build_gpt_open_prompt(
             symbol, side, price, source, catalyst, leverage, sl_pct, tp_pct, hold_hours, ctx,

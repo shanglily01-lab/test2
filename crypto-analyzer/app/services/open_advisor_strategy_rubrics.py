@@ -218,6 +218,19 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
 }
 
 _TACTICAL_PROFILE_KEYS = frozenset({"pullback", "rebound", "chase", "dump"})
+_UPSTREAM_GATED_OPEN_PROFILES = _TACTICAL_PROFILE_KEYS | {"reversal"}
+
+
+def should_skip_llm_for_tactical_open(
+    profile: OpenAdvisorStrategyProfile,
+    source: str,
+    *,
+    tactical_llm_enabled: bool = True,
+) -> bool:
+    """战术/反转上游已过 catalyst 门槛时，可跳过开仓顾问 LLM 复审."""
+    if profile.key not in _UPSTREAM_GATED_OPEN_PROFILES:
+        return False
+    return not tactical_llm_enabled
 
 
 def resolve_strategy_profile(source: str) -> OpenAdvisorStrategyProfile:

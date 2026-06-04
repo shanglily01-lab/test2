@@ -25,14 +25,15 @@ import pymysql.cursors
 from loguru import logger
 
 from app.services.gemini_advisor_reviews import log_advisor_review
-from app.services.open_advisor_routing import is_gemini_order_source
 from app.services.open_advisor_routing import should_use_gemini_hold_advisor
+from app.services.open_advisor_routing import uses_gemini_open_advisor
 from app.services.open_advisor_strategy_rubrics import (
     build_open_advisor_prompt,
     check_direction_gates,
     check_expected_side,
     precheck_open_advisor,
     resolve_strategy_profile,
+    should_skip_llm_for_tactical_open,
 )
 
 
@@ -613,8 +614,8 @@ Output ONLY JSON:
         conn=None,
     ) -> Tuple[bool, str]:
         """返回 (允许开仓, 原因). reject 时禁止开仓."""
-        if not is_gemini_order_source(source):
-            return True, "non_gemini_source_skip"
+        if not uses_gemini_open_advisor(source):
+            return True, "non_gemini_advised_source_skip"
         if not self._is_open_advisor_enabled():
             return True, "open_advisor_disabled"
 
@@ -647,6 +648,21 @@ Output ONLY JSON:
                 leverage=leverage, reason=pre_reason, catalyst=catalyst, conn=conn,
             )
             return False, pre_reason
+
+        if should_skip_llm_for_tactical_open(
+            profile,
+            source,
+            tactical_llm_enabled=self._read_setting_bool(
+                "tactical_open_advisor_llm_enabled", "1"
+            ),
+        ):
+            log_advisor_review(
+                "open", "approve", symbol,
+                position_side=side, source=source, entry_price=price,
+                leverage=leverage, reason="tactical_upstream_gated_code_only",
+                catalyst=catalyst, conn=conn,
+            )
+            return True, "tactical_upstream_gated_code_only"
 
         prompt = self._build_open_prompt(
             symbol, side, price, source, catalyst, leverage,

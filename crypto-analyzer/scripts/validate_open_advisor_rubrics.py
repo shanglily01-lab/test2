@@ -16,6 +16,7 @@ from app.services.open_advisor_strategy_rubrics import (
     check_expected_side,
     precheck_open_advisor,
     resolve_strategy_profile,
+    should_skip_llm_for_tactical_open,
 )
 from app.services.gemini_position_advisor import GeminiPositionAdvisor
 from app.services.gpt_position_advisor import GPTPositionAdvisor
@@ -108,6 +109,34 @@ def test_precheck_chase_rsi():
     )
     assert ok2
     print("[PASS] precheck_chase_rsi")
+
+
+def test_tactical_skip_llm_routing():
+    assert not should_skip_llm_for_tactical_open(
+        resolve_strategy_profile("gemini_dump"), "gemini_dump", tactical_llm_enabled=True
+    )
+    assert should_skip_llm_for_tactical_open(
+        resolve_strategy_profile("gemini_dump"), "gemini_dump", tactical_llm_enabled=False
+    )
+    assert not should_skip_llm_for_tactical_open(
+        resolve_strategy_profile("gemini_explore"), "gemini_explore", tactical_llm_enabled=False
+    )
+    print("[PASS] tactical_skip_llm_routing")
+
+
+def test_gpt_uses_gemini_advisors():
+    from app.services.open_advisor_routing import (
+        resolve_open_advisors,
+        should_use_gemini_hold_advisor,
+        should_use_gpt_hold_advisor,
+        uses_gemini_open_advisor,
+    )
+
+    assert resolve_open_advisors("gpt_pullback") == ("gemini",)
+    assert uses_gemini_open_advisor("gpt_explore")
+    assert should_use_gemini_hold_advisor("gpt_predict")
+    assert not should_use_gpt_hold_advisor("gpt_predict")
+    print("[PASS] gpt_uses_gemini_advisors")
 
 
 def test_review_steps_by_profile():
@@ -246,6 +275,8 @@ def main():
     test_expected_side()
     test_per_strategy_prompts_differ()
     test_precheck_chase_rsi()
+    test_tactical_skip_llm_routing()
+    test_gpt_uses_gemini_advisors()
     test_review_steps_by_profile()
     test_open_prompt_contains_rubric()
     test_gpt_open_prompt_english_tactical()

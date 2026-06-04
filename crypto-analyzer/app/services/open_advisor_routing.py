@@ -1,4 +1,4 @@
-"""开仓顾问路由 — 按订单 source 决定 Gemini / DeepSeek / 双审."""
+"""开仓/持仓顾问路由 — 按订单 source 决定 Gemini / DeepSeek / 双审."""
 from __future__ import annotations
 
 
@@ -17,24 +17,27 @@ def is_gpt_order_source(source: str) -> bool:
     return s.startswith("gpt_")
 
 
+def uses_gemini_open_advisor(source: str) -> bool:
+    """gemini_* 与 gpt_* 均走 Gemini 开仓顾问（GPT 不再自审）。"""
+    return is_gemini_order_source(source) or is_gpt_order_source(source)
+
+
 def resolve_open_advisors(source: str) -> tuple[str, ...]:
     """
-    Gemini 订单 → 仅 Gemini 顾问；
-    DeepSeek 订单 → 仅 DeepSeek 顾问；
-    其他策略 → Gemini + DeepSeek 均须通过。
+    gemini_* / gpt_* → 仅 Gemini 开仓顾问；
+    deepseek_* → 仅 DeepSeek 顾问；
+    其他策略 → Gemini + DeepSeek 双审。
     """
-    if is_gemini_order_source(source):
+    if uses_gemini_open_advisor(source):
         return ("gemini",)
     if is_deepseek_order_source(source):
         return ("deepseek",)
-    if is_gpt_order_source(source):
-        return ("gpt",)
     return ("gemini", "deepseek")
 
 
 def should_use_gemini_hold_advisor(source: str) -> bool:
-    """非 deepseek_* 模拟仓由 Gemini 持仓顾问监管."""
-    return not is_deepseek_order_source(source) and not is_gpt_order_source(source)
+    """非 deepseek_* 模拟仓（含 gpt_*）由 Gemini 持仓顾问监管."""
+    return not is_deepseek_order_source(source)
 
 
 def should_use_deepseek_hold_advisor(source: str) -> bool:
@@ -43,5 +46,5 @@ def should_use_deepseek_hold_advisor(source: str) -> bool:
 
 
 def should_use_gpt_hold_advisor(source: str) -> bool:
-    """gpt_* 模拟仓由 GPT 持仓顾问监管."""
-    return is_gpt_order_source(source)
+    """已废弃：gpt_* 改由 Gemini 持仓顾问监管。"""
+    return False
