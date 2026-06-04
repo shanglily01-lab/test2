@@ -55,8 +55,10 @@ data/*.xlsx
 Thumbs.db
 desktop.ini
 
-# 临时测试文件
+# 临时测试文件（不入库）
 test_*.py
+integration_test_*.py
+*_for_test.py
 check_*.py
 debug_*.py
 
