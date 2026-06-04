@@ -242,9 +242,9 @@ def check_direction_gates(
 ) -> Tuple[bool, str]:
     s = (side or "").upper()
     if s == "LONG" and not allow_long:
-        return False, "System disallows LONG (allow_long=0)"
+        return False, "系统禁止做多 (allow_long=0)"
     if s == "SHORT" and not allow_short:
-        return False, "System disallows SHORT (allow_short=0)"
+        return False, "系统禁止做空 (allow_short=0)"
     return True, ""
 
 
@@ -253,10 +253,9 @@ def check_expected_side(profile: OpenAdvisorStrategyProfile, side: str) -> Tuple
         return True, ""
     s = (side or "").upper()
     if s != profile.expected_side:
-        title = _GPT_PROFILE_TITLE_EN.get(profile.key, profile.title_zh)
         return (
             False,
-            f"Strategy [{title}] allows {profile.expected_side} only, got {s}",
+            f"策略「{profile.title_zh}」仅允许 {profile.expected_side}，当前为 {s}",
         )
     return True, ""
 
@@ -399,30 +398,34 @@ def precheck_open_advisor(
     if profile.key == "chase" and s == "LONG":
         if rsi is not None and float(rsi) > CHASE_RSI_MAX:
             return False, (
-                f"[chase] RSI={rsi:.0f}>{CHASE_RSI_MAX}, precheck reject"
+                f"[追涨] RSI={rsi:.0f}>{CHASE_RSI_MAX}，预检驳回"
             )
         if b7h is not None and float(b7h) > -CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:
             return False, (
-                f"[chase] below_7d_high={b7h:.1f}% insufficient room, precheck reject"
+                f"[追涨] below_7d_high={b7h:.1f}% 距高点空间不足，预检驳回"
             )
 
     if profile.key == "pullback" and s == "LONG":
         if rsi is not None and float(rsi) > PULLBACK_RSI_MAX:
             return False, (
-                f"[pullback] RSI={rsi:.0f}>{PULLBACK_RSI_MAX}, precheck reject"
+                f"[回调] RSI={rsi:.0f}>{PULLBACK_RSI_MAX}，预检驳回"
             )
         if b7h is not None and float(b7h) > -2.0:
             return False, (
-                f"[pullback] below_7d_high={b7h:.1f}% too close, no real dip, precheck reject"
+                f"[回调] below_7d_high={b7h:.1f}% 距高点过近，非有效回踩，预检驳回"
             )
 
     if profile.key == "dump" and s == "SHORT":
         if rsi is not None and float(rsi) > 55:
-            return False, f"[dump] RSI={rsi:.0f}>55, looks like rebound short not breakdown, precheck reject"
+            return False, (
+                f"[杀跌] RSI={rsi:.0f}>55，更像反弹做空而非破位，预检驳回"
+            )
 
     if profile.key == "rebound" and s == "SHORT":
         if rsi is not None and float(rsi) < 40:
-            return False, f"[rebound] RSI={rsi:.0f}<40 too low for rebound short, precheck reject"
+            return False, (
+                f"[反弹做空] RSI={rsi:.0f}<40 过低，预检驳回"
+            )
 
     return True, ""
 

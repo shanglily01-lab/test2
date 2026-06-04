@@ -466,6 +466,67 @@ def _recover_stale_partial_runs(conn, cfg: ReversalExploreConfig) -> int:
     return n
 
 
+def _persist_explore_screen_records(
+    conn,
+    source: str,
+    strategy_key: str,
+    run_id: int,
+    screen_records: List[dict],
+) -> None:
+    if not screen_records:
+        return
+    rows = []
+    for rec in screen_records:
+        if not isinstance(rec, dict):
+            continue
+        sym = str(rec.get("symbol") or "").upper().replace("/", "")
+        if not sym:
+            continue
+        rows.append((
+            run_id,
+            source,
+            strategy_key,
+            sym,
+            rec.get("stage") or "dropped",
+            (rec.get("screen_side") or "")[:16] or None,
+            rec.get("score"),
+            rec.get("rsi_1h"),
+            rec.get("below_7d_high_pct"),
+            rec.get("above_7d_low_pct"),
+            (rec.get("volume_note") or "")[:120] or None,
+            (rec.get("reason") or "")[:255] or None,
+            1 if rec.get("sent_to_llm") else 0,
+        ))
+    if not rows:
+        return
+    try:
+        with conn.cursor() as cur:
+            cur.executemany(
+                """
+                INSERT INTO tactical_explore_screened
+                  (run_id, source, strategy_key, symbol, stage, screen_side,
+                   score, rsi_1h, below_7d_high_pct, above_7d_low_pct,
+                   volume_note, reason, sent_to_llm)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                rows,
+            )
+    except Exception as e:
+        logger.warning(f"[{source}] 预筛记录写入失败 run_id={run_id}: {e}")
+
+
+def _screen_strategy_key(cfg: ReversalExploreConfig) -> str:
+    src = cfg.source or ""
+    if src.endswith("_reversal"):
+        return "reversal"
+    for sk in ("pullback", "rebound", "chase", "dump"):
+        if src.endswith(f"_{sk}"):
+            return sk
+    if "_" in src:
+        return src.split("_", 1)[1]
+    return src
+
+
 def _insert_verdicts(
     conn,
     cfg: ReversalExploreConfig,
@@ -501,18 +562,24 @@ def run_tactical_explore_round(
     *,
     category_to_side: Callable[[str, float], Optional[str]],
     catalyst_ok: Callable[..., Tuple[bool, str]],
+    preloaded_bundle: Optional[Tuple[dict, dict]] = None,
+    skip_lock: bool = False,
+    skip_schedule: bool = False,
 ) -> Optional[int]:
     """战术探索一轮：无 kill switch；不做实盘同步."""
     lock = _get_lock(cfg.source)
-    if not lock.acquire(blocking=False):
-        logger.warning(f"[{cfg.log_tag}] 上一轮未结束, 跳过")
-        return None
+    lock_acquired = False
+    if not skip_lock:
+        if not lock.acquire(blocking=False):
+            logger.warning(f"[{cfg.log_tag}] 上一轮未结束, 跳过")
+            return None
+        lock_acquired = True
 
     t0 = time.time()
     asof_utc = datetime.now(timezone.utc).replace(tzinfo=None)
     manual = triggered_by == "manual"
 
-    if not manual:
+    if not manual and not skip_schedule:
         try:
             with _connect() as conn_chk:
                 due, due_reason = tactical_round_is_due(
@@ -525,7 +592,8 @@ def run_tactical_explore_round(
                 )
                 if not due:
                     logger.info(f"[{cfg.log_tag}] {due_reason}, 跳过")
-                    lock.release()
+                    if lock_acquired:
+                        lock.release()
                     return None
                 tactical_claim_next_slot(
                     conn_chk,
@@ -536,7 +604,8 @@ def run_tactical_explore_round(
                 conn_chk.commit()
         except Exception as e:
             logger.warning(f"[{cfg.log_tag}] 调度检查失败, 保守跳过: {e}")
-            lock.release()
+            if lock_acquired:
+                lock.release()
             return None
 
     logger.info(f"[{cfg.log_tag}] === 一轮开始 ({triggered_by}) ===")
@@ -546,7 +615,8 @@ def run_tactical_explore_round(
         conn = _connect()
     except Exception as e:
         logger.error(f"[{cfg.log_tag}] DB 连接失败: {e}")
-        lock.release()
+        if lock_acquired:
+            lock.release()
         return None
 
     def _close_run(
@@ -574,9 +644,13 @@ def run_tactical_explore_round(
         )
 
         allow_rebuild = triggered_by in ("manual", "scheduler", "scheduler_init", "test")
-        universe, global_ctx, _cache_hit = get_explore_prepared_bundle(
-            conn, cfg.log_tag, allow_rebuild=allow_rebuild,
-        )
+        if preloaded_bundle is not None:
+            universe, global_ctx = preloaded_bundle
+            _cache_hit = True
+        else:
+            universe, global_ctx, _cache_hit = get_explore_prepared_bundle(
+                conn, cfg.log_tag, allow_rebuild=allow_rebuild,
+            )
         if len(universe) == 0 and not allow_rebuild:
             logger.warning(
                 f"[{cfg.log_tag}] 共用探索包为空/过期, 现场构建 universe (scheduler)"
@@ -625,6 +699,16 @@ def run_tactical_explore_round(
             return run_id
         saved_prompt = llm_response.get("_prompt") or saved_prompt
         saved_raw = llm_response.get("_raw_response") or saved_raw
+
+        screen_records = llm_response.get("_screen_records") or []
+        if screen_records and run_id:
+            _persist_explore_screen_records(
+                conn,
+                cfg.source,
+                _screen_strategy_key(cfg),
+                run_id,
+                screen_records,
+            )
 
         summary_zh = (llm_response.get("summary_zh") or "")[:1000]
         verdicts = llm_response.get("verdicts") or []
@@ -826,7 +910,8 @@ def run_tactical_explore_round(
         except Exception:
             pass
         try:
-            lock.release()
+            if lock_acquired:
+                lock.release()
         except Exception:
             pass
 

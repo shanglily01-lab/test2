@@ -1,7 +1,7 @@
 """
 战术探索统一调度 — 每策略 4h 必跑 + 15min 轮询 + DB next_due (重启不丢).
 
-15 任务首次初始化 next_due 按 24min 错峰; 之后每轮认领 now+4h.
+9 任务: 顶空底多 ×3 + 回多返空(回调+反弹) ×3 + 追涨杀跌(追涨+杀跌) ×3.
 同一 poll 若多个任务 overdue, 先跑 next_due 最早的一个, 避免 LLM 并发风暴.
 """
 from __future__ import annotations
@@ -19,7 +19,9 @@ from app.services.ai_tactical_explore_schedule import (
     TACTICAL_POLL_MINUTES,
     TACTICAL_ROUND_INTERVAL_HOURS,
     TACTICAL_SLOT_STEP_MINUTES,
+    ensure_tactical_group_next_due,
     ensure_tactical_next_due,
+    tactical_group_round_is_due,
     tactical_next_due_key,
     tactical_round_is_due,
 )
@@ -28,14 +30,20 @@ from app.services.gemini_explore_worker import _connect
 from app.services.gemini_reversal_explore_worker import run_gemini_reversal_explore_round
 from app.services.gpt_reversal_explore_worker import run_gpt_reversal_explore_round
 from app.services.tactical_explore_workers import (
+    run_deepseek_ch_dm_explore_round,
+    run_deepseek_pb_rb_explore_round,
     run_deepseek_chase_explore_round,
     run_deepseek_dump_explore_round,
     run_deepseek_pullback_explore_round,
     run_deepseek_rebound_explore_round,
+    run_gemini_ch_dm_explore_round,
+    run_gemini_pb_rb_explore_round,
     run_gemini_chase_explore_round,
     run_gemini_dump_explore_round,
     run_gemini_pullback_explore_round,
     run_gemini_rebound_explore_round,
+    run_gpt_ch_dm_explore_round,
+    run_gpt_pb_rb_explore_round,
     run_gpt_chase_explore_round,
     run_gpt_dump_explore_round,
     run_gpt_pullback_explore_round,
@@ -47,9 +55,10 @@ from app.services.tactical_explore_workers import (
 class TacticalScheduleJob:
     label: str
     run_fn: Callable[[str], Optional[int]]
-    slot_index: int  # 0..9, 仅用于首次 next_due 错峰
+    slot_index: int  # 0..8, 仅用于首次 next_due 错峰
     source: str
     runs_table: str
+    group_runs_tables: Tuple[str, ...] = ()
 
     @property
     def next_due_key(self) -> str:
@@ -67,34 +76,28 @@ def _utc_now_naive() -> datetime:
 TACTICAL_SCHEDULE_JOBS: List[TacticalScheduleJob] = [
     TacticalScheduleJob("Gemini顶空底多", run_gemini_reversal_explore_round, 0,
                         "gemini_reversal", "gemini_reversal_explore_runs"),
-    TacticalScheduleJob("Gemini回调做多", run_gemini_pullback_explore_round, 1,
-                        "gemini_pullback", "gemini_pullback_explore_runs"),
-    TacticalScheduleJob("Gemini反弹做空", run_gemini_rebound_explore_round, 2,
-                        "gemini_rebound", "gemini_rebound_explore_runs"),
-    TacticalScheduleJob("Gemini追涨做多", run_gemini_chase_explore_round, 3,
-                        "gemini_chase", "gemini_chase_explore_runs"),
-    TacticalScheduleJob("Gemini杀跌做空", run_gemini_dump_explore_round, 4,
-                        "gemini_dump", "gemini_dump_explore_runs"),
-    TacticalScheduleJob("DeepSeek顶空底多", run_deepseek_reversal_explore_round, 5,
+    TacticalScheduleJob("Gemini回多返空", run_gemini_pb_rb_explore_round, 1,
+                        "gemini_pb_rb", "gemini_pullback_explore_runs",
+                        ("gemini_pullback_explore_runs", "gemini_rebound_explore_runs")),
+    TacticalScheduleJob("Gemini追涨杀跌", run_gemini_ch_dm_explore_round, 2,
+                        "gemini_ch_dm", "gemini_chase_explore_runs",
+                        ("gemini_chase_explore_runs", "gemini_dump_explore_runs")),
+    TacticalScheduleJob("DeepSeek顶空底多", run_deepseek_reversal_explore_round, 3,
                         "deepseek_reversal", "deepseek_reversal_explore_runs"),
-    TacticalScheduleJob("DeepSeek回调做多", run_deepseek_pullback_explore_round, 6,
-                        "deepseek_pullback", "deepseek_pullback_explore_runs"),
-    TacticalScheduleJob("DeepSeek反弹做空", run_deepseek_rebound_explore_round, 7,
-                        "deepseek_rebound", "deepseek_rebound_explore_runs"),
-    TacticalScheduleJob("DeepSeek追涨做多", run_deepseek_chase_explore_round, 8,
-                        "deepseek_chase", "deepseek_chase_explore_runs"),
-    TacticalScheduleJob("DeepSeek杀跌做空", run_deepseek_dump_explore_round, 9,
-                        "deepseek_dump", "deepseek_dump_explore_runs"),
-    TacticalScheduleJob("GPT顶空底多", run_gpt_reversal_explore_round, 10,
+    TacticalScheduleJob("DeepSeek回多返空", run_deepseek_pb_rb_explore_round, 4,
+                        "deepseek_pb_rb", "deepseek_pullback_explore_runs",
+                        ("deepseek_pullback_explore_runs", "deepseek_rebound_explore_runs")),
+    TacticalScheduleJob("DeepSeek追涨杀跌", run_deepseek_ch_dm_explore_round, 5,
+                        "deepseek_ch_dm", "deepseek_chase_explore_runs",
+                        ("deepseek_chase_explore_runs", "deepseek_dump_explore_runs")),
+    TacticalScheduleJob("GPT顶空底多", run_gpt_reversal_explore_round, 6,
                         "gpt_reversal", "gpt_reversal_explore_runs"),
-    TacticalScheduleJob("GPT回调做多", run_gpt_pullback_explore_round, 11,
-                        "gpt_pullback", "gpt_pullback_explore_runs"),
-    TacticalScheduleJob("GPT反弹做空", run_gpt_rebound_explore_round, 12,
-                        "gpt_rebound", "gpt_rebound_explore_runs"),
-    TacticalScheduleJob("GPT追涨做多", run_gpt_chase_explore_round, 13,
-                        "gpt_chase", "gpt_chase_explore_runs"),
-    TacticalScheduleJob("GPT杀跌做空", run_gpt_dump_explore_round, 14,
-                        "gpt_dump", "gpt_dump_explore_runs"),
+    TacticalScheduleJob("GPT回多返空", run_gpt_pb_rb_explore_round, 7,
+                        "gpt_pb_rb", "gpt_pullback_explore_runs",
+                        ("gpt_pullback_explore_runs", "gpt_rebound_explore_runs")),
+    TacticalScheduleJob("GPT追涨杀跌", run_gpt_ch_dm_explore_round, 8,
+                        "gpt_ch_dm", "gpt_chase_explore_runs",
+                        ("gpt_chase_explore_runs", "gpt_dump_explore_runs")),
 ]
 
 
@@ -110,22 +113,40 @@ def _collect_due_jobs(now: datetime) -> List[Tuple[TacticalScheduleJob, str, Opt
     try:
         with conn.cursor() as cur:
             for job in TACTICAL_SCHEDULE_JOBS:
-                ensure_tactical_next_due(
-                    conn,
-                    source=job.source,
-                    runs_table=job.runs_table,
-                    slot_index=job.slot_index,
-                    log_tag=job.label,
-                    now=now,
-                )
-                ok, reason = tactical_round_is_due(
-                    conn,
-                    runs_table=job.runs_table,
-                    next_due_key=job.next_due_key,
-                    now=now,
-                    manual=False,
-                    log_tag=job.label,
-                )
+                if job.group_runs_tables:
+                    ensure_tactical_group_next_due(
+                        conn,
+                        group_source=job.source,
+                        runs_tables=job.group_runs_tables,
+                        slot_index=job.slot_index,
+                        log_tag=job.label,
+                        now=now,
+                    )
+                    ok, reason = tactical_group_round_is_due(
+                        conn,
+                        runs_tables=job.group_runs_tables,
+                        next_due_key=job.next_due_key,
+                        now=now,
+                        manual=False,
+                        log_tag=job.label,
+                    )
+                else:
+                    ensure_tactical_next_due(
+                        conn,
+                        source=job.source,
+                        runs_table=job.runs_table,
+                        slot_index=job.slot_index,
+                        log_tag=job.label,
+                        now=now,
+                    )
+                    ok, reason = tactical_round_is_due(
+                        conn,
+                        runs_table=job.runs_table,
+                        next_due_key=job.next_due_key,
+                        now=now,
+                        manual=False,
+                        log_tag=job.label,
+                    )
                 if not ok:
                     continue
                 nd = _read_setting_dt(cur, job.next_due_key)

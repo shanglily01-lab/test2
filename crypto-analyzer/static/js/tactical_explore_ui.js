@@ -60,6 +60,16 @@
       '" class="px-4 py-6 text-center text-on-surface-variant">加载中...</td></tr></tbody></table></div></section>';
   }
 
+  function isPanelVisible(el) {
+    if (!el || el.classList.contains('hidden')) return false;
+    var node = el.parentElement;
+    while (node) {
+      if (node.classList && node.classList.contains('hidden')) return false;
+      node = node.parentElement;
+    }
+    return true;
+  }
+
   function st(cfg) {
     if (!states[cfg.tab]) {
       states[cfg.tab] = { api: cfg.api, prefix: cfg.prefix, realized: 0, floating: 0, cache: {}, loaded: false };
@@ -262,7 +272,7 @@
     setInterval(function () {
       configs.forEach(function (cfg) {
         var tabEl = document.getElementById('tab-' + cfg.tab);
-        if (tabEl && !tabEl.classList.contains('hidden') && st(cfg).loaded) {
+        if (isPanelVisible(tabEl) && st(cfg).loaded) {
           loadOpen(cfg);
         }
       });
@@ -274,5 +284,101 @@
     else loadOpen(cfg);
   }
 
-  global.TacticalExploreUI = { init: init, onTabShow: onTabShow, loadAll: loadAll };
+  var MERGED_TACTICAL_GROUPS = {
+    pb_rb: {
+      subs: ['pullback', 'rebound'],
+      defaultSub: 'pullback',
+      subLabels: { pullback: '回调做多', rebound: '反弹做空' }
+    },
+    ch_dm: {
+      subs: ['chase', 'dump'],
+      defaultSub: 'chase',
+      subLabels: { chase: '追涨做多', dump: '杀跌做空' }
+    }
+  };
+  var _mergedActiveSub = { pb_rb: 'pullback', ch_dm: 'chase' };
+  var _tabSwitcherOpts = null;
+
+  var _topActiveCls = 'px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors';
+  var _topIdleCls = 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
+  var _subActiveCls = 'px-5 py-2.5 text-xs font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors';
+  var _subIdleCls = 'px-5 py-2.5 text-xs font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
+
+  function mergedGroupForTab(tab) {
+    if (tab === 'pullback' || tab === 'rebound') return 'pb_rb';
+    if (tab === 'chase' || tab === 'dump') return 'ch_dm';
+    if (MERGED_TACTICAL_GROUPS[tab]) return tab;
+    return null;
+  }
+
+  function normalizeExploreTab(tab) {
+    var groupId = mergedGroupForTab(tab);
+    if (groupId) {
+      var group = MERGED_TACTICAL_GROUPS[groupId];
+      var sub = group.subs.indexOf(tab) >= 0 ? tab : (_mergedActiveSub[groupId] || group.defaultSub);
+      return { top: groupId, sub: sub };
+    }
+    return { top: tab, sub: null };
+  }
+
+  function styleSubButtons(groupId, activeSub) {
+    var group = MERGED_TACTICAL_GROUPS[groupId];
+    if (!group) return;
+    group.subs.forEach(function (sub) {
+      var btn = document.getElementById('sub-' + groupId + '-' + sub + '-btn');
+      if (btn) btn.className = (sub === activeSub) ? _subActiveCls : _subIdleCls;
+    });
+  }
+
+  function showMergedSub(groupId, subTab, configs) {
+    var group = MERGED_TACTICAL_GROUPS[groupId];
+    if (!group || group.subs.indexOf(subTab) < 0) return;
+    _mergedActiveSub[groupId] = subTab;
+    group.subs.forEach(function (sub) {
+      var el = document.getElementById('tab-' + sub);
+      if (el) el.classList.toggle('hidden', sub !== subTab);
+    });
+    styleSubButtons(groupId, subTab);
+    var cfg = (configs || []).find(function (c) { return c.tab === subTab; });
+    if (cfg) onTabShow(cfg);
+  }
+
+  function bindTabSwitcher(opts) {
+    _tabSwitcherOpts = opts;
+    global.switchTacSub = function (groupId, subTab) {
+      showMergedSub(groupId, subTab, opts.configs || []);
+    };
+    global.switchTab = function (tab) {
+      var resolved = normalizeExploreTab(tab || 'explore');
+      var top = resolved.top;
+      var sub = resolved.sub;
+      (opts.topTabIds || []).forEach(function (id) {
+        var el = document.getElementById('tab-' + id);
+        if (el) el.classList.toggle('hidden', id !== top);
+      });
+      (opts.topBtnIds || []).forEach(function (btnId) {
+        var btn = document.getElementById(btnId);
+        if (!btn) return;
+        var t = btnId.replace('tab-', '').replace('-btn', '');
+        btn.className = (t === top) ? _topActiveCls : _topIdleCls;
+      });
+      if (sub && MERGED_TACTICAL_GROUPS[top]) {
+        showMergedSub(top, sub, opts.configs || []);
+      }
+      if (typeof opts.onSwitch === 'function') opts.onSwitch(top, sub);
+      if (!sub) {
+        var tac = (opts.configs || []).find(function (c) { return c.tab === top; });
+        if (tac && window.TacticalExploreUI) onTabShow(tac);
+      }
+    };
+  }
+
+  global.TacticalExploreUI = {
+    init: init,
+    onTabShow: onTabShow,
+    loadAll: loadAll,
+    bindTabSwitcher: bindTabSwitcher,
+    normalizeExploreTab: normalizeExploreTab,
+    MERGED_TACTICAL_GROUPS: MERGED_TACTICAL_GROUPS
+  };
 })(window);

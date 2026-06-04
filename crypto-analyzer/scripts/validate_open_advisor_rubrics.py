@@ -49,7 +49,7 @@ def test_direction_gates():
     ok, r = check_direction_gates("SHORT", True, False)
     assert not ok and "allow_short" in r
     ok, r = check_direction_gates("LONG", False, True)
-    assert not ok and "allow_long" in r
+    assert not ok and "禁止做多" in r
     print("[PASS] direction_gates")
 
 
@@ -58,7 +58,7 @@ def test_expected_side():
     ok, _ = check_expected_side(p, "LONG")
     assert ok
     ok, r = check_expected_side(p, "SHORT")
-    assert not ok and "Pullback long" in r
+    assert not ok and "回调做多" in r
     print("[PASS] expected_side")
 
 
@@ -102,7 +102,7 @@ def test_precheck_chase_rsi():
     ok, reason = precheck_open_advisor(
         p, "LONG", {"rsi_14_1h": 72.0, "below_7d_high_pct": -10.0},
     )
-    assert not ok and "chase" in reason and "precheck" in reason
+    assert not ok and "追涨" in reason and "预检" in reason
     ok2, _ = precheck_open_advisor(
         p, "LONG", {"rsi_14_1h": 62.0, "below_7d_high_pct": -10.0},
     )
@@ -206,6 +206,9 @@ def test_hold_prompt_kline_focus():
     assert "盈亏" in prompt or "档位" in prompt
     assert "客观统计" in prompt
     assert "持仓监管" in prompt
+    assert "50字中文" in prompt
+    assert "顺向=" in prompt
+    assert "盈亏档位" in prompt
     print("[PASS] hold_prompt_kline_focus")
 
 
@@ -257,7 +260,7 @@ def test_losing_hold_temper():
         -16.0, "hold", "still ok", "LONG", s15_bad, s1h_bad,
     )
     assert act == "sell", act
-    assert "review:" in reason
+    assert "复核:" in reason
 
     s15_ok = {"for": 4, "against": 2, "trail_against": 0, "last3": "GGR", "summary": ""}
     s1h_ok = {"for": 3, "against": 1, "trail_against": 0, "last3": "GGR", "summary": ""}

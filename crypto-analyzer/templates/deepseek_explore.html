@@ -125,10 +125,8 @@
     <button onclick="switchTab('reversal')" id="tab-reversal-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
       <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">swap_vert</span>顶空底多
     </button>
-    <button onclick="switchTab('pullback')" id="tab-pullback-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">回调做多</button>
-    <button onclick="switchTab('rebound')" id="tab-rebound-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">反弹做空</button>
-    <button onclick="switchTab('chase')" id="tab-chase-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">追涨做多</button>
-    <button onclick="switchTab('dump')" id="tab-dump-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">杀跌做空</button>
+    <button onclick="switchTab('pb_rb')" id="tab-pb_rb-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">回多返空</button>
+    <button onclick="switchTab('ch_dm')" id="tab-ch_dm-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">追涨杀跌</button>
     <button onclick="switchTab('predict')" id="tab-predict-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
       <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">auto_graph</span>DeepSeek 预测
     </button>
@@ -293,10 +291,22 @@
 </div><!-- /tab-explore -->
 
 <div id="tab-reversal" class="hidden"></div>
-<div id="tab-pullback" class="hidden"></div>
-<div id="tab-rebound" class="hidden"></div>
-<div id="tab-chase" class="hidden"></div>
-<div id="tab-dump" class="hidden"></div>
+<div id="tab-pb_rb" class="hidden">
+  <div class="flex gap-0 border-b border-outline-variant/10 px-8 bg-surface/20">
+    <button type="button" onclick="switchTacSub('pb_rb','pullback')" id="sub-pb_rb-pullback-btn" class="px-5 py-2.5 text-xs font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors">回调做多</button>
+    <button type="button" onclick="switchTacSub('pb_rb','rebound')" id="sub-pb_rb-rebound-btn" class="px-5 py-2.5 text-xs font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">反弹做空</button>
+  </div>
+  <div id="tab-pullback"></div>
+  <div id="tab-rebound" class="hidden"></div>
+</div>
+<div id="tab-ch_dm" class="hidden">
+  <div class="flex gap-0 border-b border-outline-variant/10 px-8 bg-surface/20">
+    <button type="button" onclick="switchTacSub('ch_dm','chase')" id="sub-ch_dm-chase-btn" class="px-5 py-2.5 text-xs font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors">追涨做多</button>
+    <button type="button" onclick="switchTacSub('ch_dm','dump')" id="sub-ch_dm-dump-btn" class="px-5 py-2.5 text-xs font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">杀跌做空</button>
+  </div>
+  <div id="tab-chase"></div>
+  <div id="tab-dump" class="hidden"></div>
+</div>
 
 <!-- ============================================================ -->
 <!-- TAB: DeepSeek 预测 -->
@@ -833,34 +843,24 @@ var DEEPSEEK_TACTICAL_CFGS = [
   { tab: 'chase', prefix: 'ch', api: '/api/deepseek-chase-explore', pageTitle: 'DeepSeek 追涨做多', subtitle: '突破后趋势延续', sideHint: '仅 LONG' },
   { tab: 'dump', prefix: 'dm', api: '/api/deepseek-dump-explore', pageTitle: 'DeepSeek 杀跌做空', subtitle: '跌破后趋势延续', sideHint: '仅 SHORT' }
 ];
-var _tacTabIds = ['explore', 'reversal', 'pullback', 'rebound', 'chase', 'dump', 'predict', 'big4'];
-var _tacBtnIds = ['tab-explore-btn', 'tab-reversal-btn', 'tab-pullback-btn', 'tab-rebound-btn', 'tab-chase-btn', 'tab-dump-btn', 'tab-predict-btn', 'tab-big4-btn'];
-
-function switchTab(tab) {
-  _tacTabIds.forEach(function(id) {
-    var el = document.getElementById('tab-' + id);
-    if (el) el.classList.toggle('hidden', id !== tab);
+if (window.TacticalExploreUI) {
+  TacticalExploreUI.init(DEEPSEEK_TACTICAL_CFGS);
+  TacticalExploreUI.bindTabSwitcher({
+    topTabIds: ['explore', 'reversal', 'pb_rb', 'ch_dm', 'predict', 'big4'],
+    topBtnIds: ['tab-explore-btn', 'tab-reversal-btn', 'tab-pb_rb-btn', 'tab-ch_dm-btn', 'tab-predict-btn', 'tab-big4-btn'],
+    configs: DEEPSEEK_TACTICAL_CFGS,
+    onSwitch: function(top) {
+      if (top === 'predict' && !window._predictLoaded) {
+        window._predictLoaded = true;
+        loadPredictAll();
+      }
+      if (top === 'big4' && !window._big4Loaded) {
+        window._big4Loaded = true;
+        Big4AnalysisTab.loadAll({ api: '/api/deepseek-big4-analysis' });
+      }
+    }
   });
-  var active = 'px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors';
-  var idle = 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
-  _tacBtnIds.forEach(function(btnId) {
-    var btn = document.getElementById(btnId);
-    if (!btn) return;
-    var t = btnId.replace('tab-', '').replace('-btn', '');
-    btn.className = (t === tab) ? active : idle;
-  });
-  if (tab === 'predict' && !window._predictLoaded) {
-    window._predictLoaded = true;
-    loadPredictAll();
-  }
-  if (tab === 'big4' && !window._big4Loaded) {
-    window._big4Loaded = true;
-    Big4AnalysisTab.loadAll({ api: '/api/deepseek-big4-analysis' });
-  }
-  var tac = DEEPSEEK_TACTICAL_CFGS.find(function(c) { return c.tab === tab; });
-  if (tac && window.TacticalExploreUI) TacticalExploreUI.onTabShow(tac);
 }
-if (window.TacticalExploreUI) TacticalExploreUI.init(DEEPSEEK_TACTICAL_CFGS);
 
 // ============================================================
 // INIT

@@ -190,34 +190,11 @@ def prepare_tactical_universe_for_llm(
     universe: dict,
     max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
 ) -> Tuple[List[dict], Dict[str, Any]]:
-    pool = list(universe.values())
-    eligible = []
-    precheck_dropped = 0
-    for item in pool:
-        if _symbol_hard_precheck_fail(definition, item):
-            precheck_dropped += 1
-            continue
-        eligible.append(item)
-    if not eligible:
-        eligible = pool
-        precheck_dropped = 0
-    items = sorted(
-        eligible,
-        key=lambda x: _tactical_universe_score(definition, x),
-        reverse=True,
+    from app.services.tactical_symbol_screener import screen_tactical_universe
+
+    selected, _records, meta = screen_tactical_universe(
+        definition.key, universe, max_symbols=max_symbols,
     )
-    for item in items:
-        item.pop("k_1d_ohlc", None)
-        item.pop("k_1h_ohlc", None)
-        item.pop("k_15m_ohlc", None)
-    selected = items[:max_symbols]
-    meta = {
-        "universe_total": len(pool),
-        "llm_symbol_count": len(selected),
-        "llm_symbols_truncated": max(0, len(items) - len(selected)),
-        "precheck_dropped": precheck_dropped,
-        "selection": f"tactical_{definition.key}",
-    }
     return selected, meta
 
 

@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
-from typing import Callable, Optional, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 from loguru import logger
 
@@ -90,6 +91,7 @@ def _call_gemini(defn: TacticalStrategyDef, strategy_key: str):
             return explore_llm_stub_with_trace(prompt, text), f"JSON: {err}"
         parsed["_prompt"] = prompt
         parsed["_raw_response"] = text
+        parsed["_screen_records"] = meta.get("screen_records") or []
         return parsed, None
     return _inner
 
@@ -126,6 +128,7 @@ def _call_deepseek(defn: TacticalStrategyDef, strategy_key: str):
             return explore_llm_stub_with_trace(prompt, text), f"JSON: {err}"
         parsed["_prompt"] = prompt
         parsed["_raw_response"] = text
+        parsed["_screen_records"] = meta.get("screen_records") or []
         return parsed, None
     return _inner
 
@@ -163,6 +166,7 @@ def _call_gpt(defn: TacticalStrategyDef, strategy_key: str):
             return explore_llm_stub_with_trace(prompt, text), f"JSON: {err}"
         parsed["_prompt"] = prompt
         parsed["_raw_response"] = text
+        parsed["_screen_records"] = meta.get("screen_records") or []
         return parsed, None
     return _inner
 
@@ -207,3 +211,145 @@ run_gpt_pullback_explore_round = _make_runner("gpt", "pullback")
 run_gpt_rebound_explore_round = _make_runner("gpt", "rebound")
 run_gpt_chase_explore_round = _make_runner("gpt", "chase")
 run_gpt_dump_explore_round = _make_runner("gpt", "dump")
+
+TACTICAL_GROUP_SPECS: Dict[str, Tuple[str, ...]] = {
+    "pb_rb": ("pullback", "rebound"),
+    "ch_dm": ("chase", "dump"),
+}
+TACTICAL_GROUP_LABELS = {
+    "pb_rb": "回多返空",
+    "ch_dm": "追涨杀跌",
+}
+_group_locks: Dict[str, threading.Lock] = {}
+
+
+def _get_group_lock(key: str) -> threading.Lock:
+    if key not in _group_locks:
+        _group_locks[key] = threading.Lock()
+    return _group_locks[key]
+
+
+def _make_group_runner(teacher: str, group_key: str) -> Callable[[str], Optional[int]]:
+    strategies = TACTICAL_GROUP_SPECS[group_key]
+    group_source = f"{teacher}_{group_key}"
+    group_label = TACTICAL_GROUP_LABELS[group_key]
+    runs_tables = tuple(f"{teacher}_{sk}_explore_runs" for sk in strategies)
+    teacher_label = {"gemini": "Gemini", "deepseek": "DeepSeek", "gpt": "GPT"}[teacher]
+
+    def run(triggered_by: str = "scheduler") -> Optional[int]:
+        from datetime import datetime, timezone
+
+        from app.services.ai_tactical_explore_schedule import (
+            tactical_claim_next_slot,
+            tactical_group_round_is_due,
+            tactical_next_due_key,
+        )
+        from app.services.explore_prepared_bundle import get_explore_prepared_bundle
+        from app.services.gemini_explore_worker import _connect
+        from app.services.reversal_explore_runner import run_tactical_explore_round
+        from app.services.tactical_symbol_screener import screen_tactical_group
+
+        lock = _get_group_lock(group_source)
+        if not lock.acquire(blocking=False):
+            logger.warning(f"[{teacher_label}{group_label}] 上一轮未结束, 跳过")
+            return None
+
+        log_tag = f"{teacher_label}{group_label}"
+        asof_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+        manual = triggered_by == "manual"
+        last_run_id: Optional[int] = None
+
+        try:
+            if not manual:
+                conn_chk = _connect()
+                try:
+                    due, due_reason = tactical_group_round_is_due(
+                        conn_chk,
+                        runs_tables=runs_tables,
+                        next_due_key=tactical_next_due_key(group_source),
+                        now=asof_utc,
+                        manual=False,
+                        log_tag=log_tag,
+                    )
+                    if not due:
+                        logger.info(f"[{log_tag}] {due_reason}, 跳过")
+                        return None
+                    tactical_claim_next_slot(
+                        conn_chk,
+                        next_due_key=tactical_next_due_key(group_source),
+                        now=asof_utc,
+                        log_tag=log_tag,
+                    )
+                    conn_chk.commit()
+                finally:
+                    conn_chk.close()
+
+            logger.info(f"[{log_tag}] === 合并组开始 ({triggered_by}) ===")
+            conn = _connect()
+            try:
+                allow_rebuild = triggered_by in (
+                    "manual", "scheduler", "scheduler_init", "test",
+                )
+                universe, global_ctx, _ = get_explore_prepared_bundle(
+                    conn, log_tag, allow_rebuild=allow_rebuild,
+                )
+                if len(universe) == 0 and not allow_rebuild:
+                    universe, global_ctx, _ = get_explore_prepared_bundle(
+                        conn, log_tag, allow_rebuild=True,
+                    )
+                by_strategy, _records, group_meta = screen_tactical_group(
+                    strategies, universe,
+                )
+                logger.info(
+                    f"[{log_tag}] 组预筛: "
+                    + ", ".join(
+                        f"{sk}={group_meta['strategies'][sk]['llm_symbol_count']}"
+                        for sk in strategies
+                    )
+                )
+                bundle = (universe, global_ctx)
+                for sk in strategies:
+                    n_cand = len(by_strategy.get(sk) or [])
+                    if n_cand == 0:
+                        logger.info(f"[{log_tag}] {sk} 预筛无候选, 跳过 LLM")
+                        continue
+                    defn = TACTICAL_STRATEGIES[sk]
+                    cfg = _make_cfg(teacher, sk, defn)
+                    if teacher == "gemini":
+                        call_llm = _call_gemini(defn, sk)
+                    elif teacher == "gpt":
+                        call_llm = _call_gpt(defn, sk)
+                    else:
+                        call_llm = _call_deepseek(defn, sk)
+                    rid = run_tactical_explore_round(
+                        cfg,
+                        call_llm,
+                        triggered_by,
+                        category_to_side=lambda cat, conf, d=defn: tactical_category_to_side(
+                            d, cat, conf,
+                        ),
+                        catalyst_ok=lambda cat, catl, sig, sym, conf=0.0, d=defn: tactical_catalyst_ok(
+                            d, catl, sig, sym, conf,
+                        ),
+                        preloaded_bundle=bundle,
+                        skip_lock=True,
+                        skip_schedule=True,
+                    )
+                    if rid:
+                        last_run_id = rid
+            finally:
+                conn.close()
+            logger.info(f"[{log_tag}] === 合并组结束 last_run_id={last_run_id} ===")
+            return last_run_id
+        finally:
+            lock.release()
+
+    return run
+
+
+run_gemini_pb_rb_explore_round = _make_group_runner("gemini", "pb_rb")
+run_gemini_ch_dm_explore_round = _make_group_runner("gemini", "ch_dm")
+run_deepseek_pb_rb_explore_round = _make_group_runner("deepseek", "pb_rb")
+run_deepseek_ch_dm_explore_round = _make_group_runner("deepseek", "ch_dm")
+run_gpt_pb_rb_explore_round = _make_group_runner("gpt", "pb_rb")
+run_gpt_ch_dm_explore_round = _make_group_runner("gpt", "ch_dm")

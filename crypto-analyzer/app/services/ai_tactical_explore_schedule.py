@@ -111,3 +111,93 @@ def tactical_claim_next_slot(
         now=now,
         log_tag=log_tag,
     )
+
+
+def _last_ok_run_at_tables(conn, runs_tables: Tuple[str, ...]) -> Optional[datetime]:
+    from app.services.ai_predict_schedule import _last_ok_run_at
+
+    latest: Optional[datetime] = None
+    with conn.cursor() as cur:
+        for tbl in runs_tables:
+            t = _last_ok_run_at(cur, tbl)
+            if t and (latest is None or t > latest):
+                latest = t
+    return latest
+
+
+def ensure_tactical_group_next_due(
+    conn,
+    *,
+    group_source: str,
+    runs_tables: Tuple[str, ...],
+    slot_index: int,
+    log_tag: str,
+    now: Optional[datetime] = None,
+) -> None:
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    key = tactical_next_due_key(group_source)
+    with conn.cursor() as cur:
+        if _read_setting_dt(cur, key):
+            return
+        last_at = _last_ok_run_at_tables(conn, runs_tables)
+        if last_at:
+            next_due = last_at + timedelta(seconds=PREDICT_ROUND_INTERVAL_SECONDS)
+            if next_due < now:
+                next_due = now
+        else:
+            offset_min = TACTICAL_BLOCK_FIRST_OFFSET_MIN + slot_index * TACTICAL_SLOT_STEP_MINUTES
+            next_due = now + timedelta(minutes=offset_min)
+        value = next_due.strftime("%Y-%m-%dT%H:%M:%S")
+        cur.execute(
+            """
+            INSERT INTO system_settings
+              (setting_key, setting_value, description, updated_by, updated_at)
+            VALUES (%s, %s, %s, 'ai_tactical_explore_schedule', NOW())
+            ON DUPLICATE KEY UPDATE
+              setting_value = VALUES(setting_value),
+              updated_by = 'ai_tactical_explore_schedule',
+              updated_at = NOW()
+            """,
+            (
+                key,
+                value,
+                f"{log_tag} 下一轮最早执行 UTC ({TACTICAL_ROUND_INTERVAL_HOURS}h 周期)",
+            ),
+        )
+    conn.commit()
+    logger.info(f"[{log_tag}] 初始化 next_due_utc={value}")
+
+
+def tactical_group_round_is_due(
+    conn,
+    *,
+    runs_tables: Tuple[str, ...],
+    next_due_key: str,
+    now: Optional[datetime] = None,
+    manual: bool = False,
+    log_tag: str = "TacticalGroup",
+) -> Tuple[bool, str]:
+    if manual:
+        return True, "manual"
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    last_ok = _last_ok_run_at_tables(conn, runs_tables)
+    with conn.cursor() as cur:
+        if last_ok:
+            elapsed_s = (now - last_ok).total_seconds()
+            if elapsed_s >= PREDICT_ROUND_INTERVAL_SECONDS:
+                return True, (
+                    f"逾期补跑 距上次成功 {elapsed_s / 3600:.2f}h >= "
+                    f"{PREDICT_ROUND_INTERVAL_HOURS}h (last_ok={last_ok.isoformat()})"
+                )
+        next_due = _read_setting_dt(cur, next_due_key)
+        if next_due and now < next_due:
+            remain_s = (next_due - now).total_seconds()
+            return False, f"未到点 剩余 {remain_s / 3600:.2f}h (next_due={next_due.isoformat()})"
+        if last_ok:
+            elapsed_s = (now - last_ok).total_seconds()
+            if elapsed_s < PREDICT_ROUND_INTERVAL_SECONDS:
+                return False, (
+                    f"距上次成功 {elapsed_s / 3600:.2f}h < {PREDICT_ROUND_INTERVAL_HOURS}h "
+                    f"(last_ok={last_ok.isoformat()})"
+                )
+    return True, "next_due 已到"

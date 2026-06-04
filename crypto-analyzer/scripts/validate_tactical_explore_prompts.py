@@ -180,7 +180,7 @@ def test_prompt_build():
     }
     for key in TACTICAL_STRATEGIES:
         prompt, meta = build_strategy_prompt(key, u, {}, {})
-        assert meta["selection"] == f"tactical_{key}"
+        assert meta["selection"] == f"tactical_screen_{key}"
         assert "24h" in prompt or "|24h|" in prompt
         if key == "pullback":
             assert "回调" in prompt or "pullback" in prompt.lower()
@@ -253,6 +253,48 @@ def test_normalize_preserves_prompt_meta():
     assert out2 and out2.get("_prompt") == "nested"
 
 
+def test_screener_records():
+    from app.services.tactical_symbol_screener import (
+        screen_reversal_universe,
+        screen_tactical_group,
+        screen_tactical_universe,
+    )
+
+    u = {
+        "TOP/USDT": {
+            "symbol": "TOP/USDT",
+            "change_24h": 12,
+            "quote_volume_24h": 30_000_000,
+            "tech": {"rsi_14_1h": 72, "below_7d_high_pct": -4, "above_7d_low_pct": 20},
+            "kline_narrative": {"1h": "偏多 上升 滞涨 上影 连阳"},
+        },
+        "BOT/USDT": {
+            "symbol": "BOT/USDT",
+            "change_24h": -8,
+            "tech": {"rsi_14_1h": 32, "below_7d_high_pct": -30, "above_7d_low_pct": 8},
+            "kline_narrative": {"1h": "偏空 连阴 止跌 下影"},
+        },
+        "MID/USDT": {
+            "symbol": "MID/USDT",
+            "change_24h": 1,
+            "tech": {"rsi_14_1h": 50, "below_7d_high_pct": -15, "above_7d_low_pct": 15},
+            "kline_narrative": {"1h": "震荡 横盘"},
+        },
+    }
+    rev_sel, rev_recs, rev_meta = screen_reversal_universe(u, max_symbols=10)
+    assert len(rev_sel) >= 2
+    assert rev_meta.get("screen_records")
+    assert any(r.sent_to_llm for r in rev_recs)
+
+    pb_sel, pb_recs, pb_meta = screen_tactical_universe("pullback", u, max_symbols=10)
+    assert pb_meta["selection"] == "tactical_screen_pullback"
+    assert pb_meta.get("screen_records")
+
+    by_strat, group_recs, group_meta = screen_tactical_group(("pullback", "rebound"), u)
+    assert "pullback" in by_strat and "rebound" in by_strat
+    assert group_meta.get("screen_records")
+
+
 def main():
     tests = [
         ("normalize prompt meta", test_normalize_preserves_prompt_meta),
@@ -266,6 +308,7 @@ def main():
         ("dump gates", test_dump_gates),
         ("strategy differentiation", test_prompt_has_strategy_differentiation),
         ("prompt build", test_prompt_build),
+        ("screener records", test_screener_records),
         ("DB bundle", test_db_bundle_optional),
     ]
     failed = 0

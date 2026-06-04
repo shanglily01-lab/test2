@@ -71,6 +71,7 @@ def _call_gpt_reversal(
         return explore_llm_stub_with_trace(prompt, text), f"JSON解析失败: {parse_err}"
     parsed["_prompt"] = prompt
     parsed["_raw_response"] = text
+    parsed["_screen_records"] = meta.get("screen_records") or []
     return parsed, None
 
 

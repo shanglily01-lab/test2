@@ -48,6 +48,20 @@ HOLD_LOSS_MILD_ROI = -5.0       # 保证金 ROI %，轻微亏损
 HOLD_LOSS_MODERATE_ROI = -12.0  # 中度亏损
 HOLD_LOSS_SEVERE_ROI = -15.0    # 严重亏损（近策略 SL）
 
+# DeepSeek/GPT 持仓顾问 system（与 user prompt 中文 reason 一致）
+HOLD_ADVISOR_JSON_SYSTEM_ZH = (
+    "你是模拟仓持仓监管顾问。"
+    "仅输出合法 JSON：action 为 hold|observe|sell；"
+    "reason 为50字以内中文，必须引用 15m/1h K 线形态，不得空泛或只写 Big4。"
+)
+
+# DeepSeek/GPT 开仓顾问 system（与 build_open_advisor_prompt 中文 reason 一致）
+OPEN_ADVISOR_JSON_SYSTEM_ZH = (
+    "你是模拟仓开仓审核顾问。"
+    "仅输出合法 JSON：decision 为 approve|reject；"
+    "reason 为50字以内中文，必须写明本笔策略名及通过/驳回要点，引用 K 线或量化指标。"
+)
+
 
 def _normalize_symbol_for_db(symbol: str) -> str:
     """kline_data / candidate_pool 存 BTC/USDT；部分模拟仓为 BTCUSDT."""
@@ -325,7 +339,7 @@ class GeminiPositionAdvisor:
         """客观统计 K 线对持仓方向的支持/反向根数（供 prompt + 代码复核）."""
         empty = {
             "for": 0, "against": 0, "last3": "", "trail_against": 0,
-            "summary": "insufficient data",
+            "summary": "数据不足",
         }
         if not klines:
             return empty
@@ -362,8 +376,8 @@ class GeminiPositionAdvisor:
                 break
         last3 = "".join(dirs[-3:])
         summary = (
-            f"with_trend={for_count} against={against_count} "
-            f"last3={last3} trail_against={trail_against}"
+            f"顺向={for_count} 反向={against_count} "
+            f"末3根={last3} 连反向={trail_against}"
         )
         return {
             "for": for_count,
@@ -376,43 +390,40 @@ class GeminiPositionAdvisor:
     @staticmethod
     def _loss_tier_label(roi_pct: float) -> str:
         if roi_pct >= 0:
-            return "profit/breakeven"
+            return "盈利/保本"
         if roi_pct > HOLD_LOSS_MILD_ROI:
-            return "mild_loss"
+            return "轻微亏损"
         if roi_pct > HOLD_LOSS_MODERATE_ROI:
-            return "moderate_loss"
-        return "severe_loss"
+            return "中度亏损"
+        return "严重亏损"
 
     @staticmethod
     def _loss_tier_rules(roi_pct: float, side: str) -> str:
-        tier = GeminiPositionAdvisor._loss_tier_label(roi_pct)
-        if tier == "profit/breakeven":
+        side_cn = "做多" if side == "LONG" else "做空"
+        if roi_pct >= 0:
             return (
-                "## PnL tier: profit / breakeven\n"
-                "- **hold** only if 15m+1h still support the position side; clear reversal → **sell** to lock profit.\n"
-                "- ROI ≥ +20% with 15m reversal pattern → prefer **sell**."
+                "## 盈亏档位：盈利/保本\n"
+                "- **hold** 须 15m+1h 仍支持持仓方向；明确反转 → **sell** 锁利。\n"
+                "- ROI ≥ +20% 且 15m 出现反转形态 → 倾向 **sell**。"
             )
-        if tier == "mild_loss":
+        if roi_pct > HOLD_LOSS_MILD_ROI:
             return (
-                "## PnL tier: mild loss (ROI > -5%)\n"
-                "- Do **not** sell on small loss alone; need 15m majority against + ≥2 confirming 1h bars.\n"
-                "- If K-lines still support side → **hold**; mixed → **observe** (avoid weak hold)."
+                "## 盈亏档位：轻微亏损 (ROI > -5%)\n"
+                "- 勿因小幅亏损单独 **sell**；须 15m 多数反向 + ≥2 根 1h 确认。\n"
+                "- K 线仍支持方向 → **hold**；信号混杂 → **observe**（避免弱 hold）。"
             )
-        if tier == "moderate_loss":
+        if roi_pct > HOLD_LOSS_MODERATE_ROI:
             return (
-                "## PnL tier: moderate loss (-12% < ROI ≤ -5%)\n"
-                "- **Higher hold bar**: 15m with_trend ≥ against and last 2x1h still support "
-                f"{side} (cite bars in reason).\n"
-                "- 15m trail_against ≥3 or 1h against ≥2 → lean **sell**; unclear → **observe** (not hold).\n"
-                "- Big4 cannot replace K-line evidence."
+                "## 盈亏档位：中度亏损 (-12% < ROI ≤ -5%)\n"
+                f"- **hold 门槛更高**：15m 顺向≥反向，且近 2 根 1h 仍支持 {side_cn}（reason 须引用 K 线）。\n"
+                "- 15m 连反向≥3 或 1h 反向≥2 → 倾向 **sell**；结构不清 → **observe**（勿 hold）。\n"
+                "- Big4 不能替代 K 线证据。"
             )
         return (
-            "## PnL tier: severe loss (ROI ≤ -12%)\n"
-            "- **Default stop-loss bias**: unless 15m shows clear stabilization/reversal "
-            f"(e.g. long lower wick + bullish engulf for LONG), prefer **sell** or **observe**, rarely **hold**.\n"
-            "- **hold** only if: (1) 15m with_trend ≥ against and trail_against ≤1; "
-            "(2) last 2x1h not extending loss direction; (3) reason cites table bars.\n"
-            "- ROI ≤ -15% with no 15m stabilization → **must sell**."
+            "## 盈亏档位：严重亏损 (ROI ≤ -12%)\n"
+            f"- **默认止损倾向**：除非 15m 明确企稳/反转（如 LONG 长下影+阳吞），优先 **sell** 或 **observe**，极少 **hold**。\n"
+            "- **hold** 须同时：(1) 15m 顺向≥反向且连反向≤1；(2) 近 2 根 1h 未延续亏损方向；(3) reason 引用表格 K 线。\n"
+            "- ROI ≤ -15% 且 15m 无企稳 → **必须 sell**。"
         )
 
     @staticmethod
@@ -432,31 +443,31 @@ class GeminiPositionAdvisor:
         if roi_pct <= HOLD_LOSS_SEVERE_ROI:
             if s15.get("trail_against", 0) >= 2 or s15.get("against", 0) >= 4:
                 action = 'sell'
-                override = "severe_loss+15m_against"
+                override = "严重亏损+15m连续反向"
             elif s15.get("for", 0) < s15.get("against", 0):
                 action = 'observe'
-                override = "severe_loss+15m_no_base"
+                override = "严重亏损+15m无顺向支撑"
         elif roi_pct <= HOLD_LOSS_MODERATE_ROI:
             if (
                 s15.get("against", 0) > s15.get("for", 0)
                 and s15.get("trail_against", 0) >= 2
             ):
                 action = 'sell'
-                override = "moderate_loss+15m_trail_against"
+                override = "中度亏损+15m连反向"
             elif s15.get("for", 0) < 2 and s1h.get("against", 0) >= 2:
                 action = 'observe'
-                override = "moderate_loss+1h_15m_weak"
+                override = "中度亏损+1h/15m偏弱"
         elif roi_pct <= HOLD_LOSS_MILD_ROI:
             if (
                 s15.get("against", 0) >= s15.get("for", 0) + 2
                 and s1h.get("against", 0) >= 2
             ):
                 action = 'observe'
-                override = "mild_loss+kline_against"
+                override = "轻微亏损+K线反向"
 
         if override:
-            reason = f"{reason[:80]}|review:{override}"[:200]
-            logger.info(f"[Gemini advisor] losing hold review → {action} ({override})")
+            reason = f"{reason[:80]}|复核:{override}"[:200]
+            logger.info(f"[Gemini顾问] 亏损 hold 复核 → {action} ({override})")
         return action, reason
 
     @staticmethod
@@ -620,7 +631,7 @@ Output ONLY JSON:
         if not uses_gemini_open_advisor(source):
             return True, "non_gemini_advised_source_skip"
         if not self._is_open_advisor_enabled():
-            return True, "open_advisor_disabled"
+            return True, "开仓顾问已关闭"
 
         profile = resolve_strategy_profile(source)
         allow_long, allow_short = self._read_direction_gates()
@@ -665,10 +676,10 @@ Output ONLY JSON:
             log_advisor_review(
                 "open", "approve", symbol,
                 position_side=side, source=source, entry_price=price,
-                leverage=leverage, reason="upstream_catalyst_gated_skip_llm",
+                leverage=leverage, reason="上游已通过 catalyst 门槛，跳过 LLM 复审",
                 catalyst=catalyst, conn=conn,
             )
-            return True, "upstream_catalyst_gated_skip_llm"
+            return True, "上游已通过 catalyst 门槛，跳过 LLM 复审"
 
         prompt = self._build_open_prompt(
             symbol, side, price, source, catalyst, leverage,
@@ -679,10 +690,10 @@ Output ONLY JSON:
             log_advisor_review(
                 "open", "approve", symbol,
                 position_side=side, source=source, entry_price=price,
-                leverage=leverage, reason="gemini_api_error_allow",
+                leverage=leverage, reason="Gemini API 异常，默认放行",
                 catalyst=catalyst, conn=conn,
             )
-            return True, "gemini_api_error_allow"
+            return True, "Gemini API 异常，默认放行"
 
         decision = str(result.get("decision", "approve")).lower()
         reason = str(result.get("reason", ""))[:500]

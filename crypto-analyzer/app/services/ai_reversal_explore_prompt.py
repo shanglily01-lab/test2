@@ -162,28 +162,16 @@ def prepare_reversal_universe_for_llm(
     universe: dict,
     max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
 ) -> Tuple[List[dict], Dict[str, Any]]:
-    """按 RSI / 距 7d 高低极端程度选 TOP N，供顶空底多 LLM."""
-    items = sorted(
-        universe.values(),
-        key=_reversal_extremity_score,
-        reverse=True,
-    )
-    for item in items:
-        item.pop("k_1d_ohlc", None)
-        item.pop("k_1h_ohlc", None)
-        item.pop("k_15m_ohlc", None)
+    """RSI / 7d 高低 / 成交量 / 叙事预筛顶底特征，再送模 TOP N."""
+    from app.services.tactical_symbol_screener import screen_reversal_universe
 
-    selected = items[:max_symbols]
-    meta = {
-        "universe_total": len(items),
-        "llm_symbol_count": len(selected),
-        "llm_symbols_truncated": max(0, len(items) - len(selected)),
-        "selection": "reversal_extremity",
-    }
-    if meta["llm_symbols_truncated"]:
+    selected, _records, meta = screen_reversal_universe(
+        universe, max_symbols=max_symbols,
+    )
+    if meta.get("llm_symbols_truncated"):
         logger.info(
             f"[Reversal] LLM 候选截断: 全池 {meta['universe_total']} → "
-            f"送模 {meta['llm_symbol_count']} (RSI/7d极端 TOP{max_symbols})"
+            f"送模 {meta['llm_symbol_count']} (顶/底预筛 TOP{max_symbols})"
         )
     return selected, meta
 

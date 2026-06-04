@@ -13,9 +13,11 @@ from app.services.gemini_position_advisor import (
     GeminiPositionAdvisor,
     HOLD_15M_BARS,
     HOLD_1H_BARS,
+    HOLD_ADVISOR_JSON_SYSTEM_ZH,
     HOLD_CHECK_INTERVAL_S,
     HOLD_MIN_HOURS,
     HOLD_MIN_MINUTES,
+    OPEN_ADVISOR_JSON_SYSTEM_ZH,
 )
 from app.services.gpt_advisor_reviews import log_gpt_advisor_review
 from app.services.open_advisor_routing import is_gpt_order_source, should_use_gpt_hold_advisor
@@ -98,15 +100,9 @@ class GPTPositionAdvisor:
         except ImportError:
             logger.warning("[GPT顾问] 缺 openai 库")
             return None
-        system_msg = (
-            "You are a crypto futures paper-trading open reviewer. "
-            "Output ONLY valid JSON with decision (approve|reject) and reason (English)."
-        )
+        system_msg = OPEN_ADVISOR_JSON_SYSTEM_ZH
         if hold_mode:
-            system_msg = (
-                "You are a paper position supervisor. "
-                "Output ONLY valid JSON with action (hold|observe|sell) and reason (English)."
-            )
+            system_msg = HOLD_ADVISOR_JSON_SYSTEM_ZH
         try:
             client = OpenAI(api_key=GPT_API_KEY, base_url=GPT_BASE_URL)
             resp = client.chat.completions.create(
@@ -211,7 +207,7 @@ class GPTPositionAdvisor:
         if not is_gpt_order_source(source):
             return True, "non_gpt_source_skip"
         if not self._is_open_advisor_enabled():
-            return True, "gpt_open_advisor_disabled"
+            return True, "GPT 开仓顾问已关闭"
 
         profile = resolve_strategy_profile(source)
         allow_long, allow_short = self._read_direction_gates()
@@ -252,10 +248,10 @@ class GPTPositionAdvisor:
             log_gpt_advisor_review(
                 "open", "approve", symbol, position_side=side, source=source,
                 entry_price=price, leverage=leverage,
-                reason="upstream_catalyst_gated_skip_llm",
+                reason="上游已通过 catalyst 门槛，跳过 LLM 复审",
                 catalyst=catalyst, conn=conn,
             )
-            return True, "upstream_catalyst_gated_skip_llm"
+            return True, "上游已通过 catalyst 门槛，跳过 LLM 复审"
 
         prompt = self._build_gpt_open_prompt(
             symbol, side, price, source, catalyst, leverage, sl_pct, tp_pct, hold_hours, ctx,
@@ -264,10 +260,10 @@ class GPTPositionAdvisor:
         if not result:
             log_gpt_advisor_review(
                 "open", "approve", symbol, position_side=side, source=source,
-                entry_price=price, leverage=leverage, reason="gpt_api_error_allow",
+                entry_price=price, leverage=leverage, reason="GPT API 异常，默认放行",
                 catalyst=catalyst, conn=conn,
             )
-            return True, "gpt_api_error_allow"
+            return True, "GPT API 异常，默认放行"
 
         approved = str(result.get("decision", "approve")).lower() == "approve"
         reason = str(result.get("reason", ""))[:500]
