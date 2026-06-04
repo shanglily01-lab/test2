@@ -245,14 +245,17 @@ class GPTPositionAdvisor:
             tactical_llm_enabled=self._read_setting_bool(
                 "tactical_open_advisor_llm_enabled", "1"
             ),
+            explore_predict_llm_enabled=self._read_setting_bool(
+                "explore_predict_open_advisor_llm_enabled", "0"
+            ),
         ):
             log_gpt_advisor_review(
                 "open", "approve", symbol, position_side=side, source=source,
                 entry_price=price, leverage=leverage,
-                reason="tactical_upstream_gated_code_only",
+                reason="upstream_catalyst_gated_skip_llm",
                 catalyst=catalyst, conn=conn,
             )
-            return True, "tactical_upstream_gated_code_only"
+            return True, "upstream_catalyst_gated_skip_llm"
 
         prompt = self._build_gpt_open_prompt(
             symbol, side, price, source, catalyst, leverage, sl_pct, tp_pct, hold_hours, ctx,

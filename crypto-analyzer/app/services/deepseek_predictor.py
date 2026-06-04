@@ -40,8 +40,10 @@ from app.services.ai_explore_prompt import (
     AI_POSITION_HOLD_HOURS,
     AI_POSITION_SL_PCT,
     AI_POSITION_TP_PCT,
+    EXPLORE_LLM_MAX_OUTPUT_TOKENS,
     PREDICT_CONFIDENCE_THRESHOLD,
     explore_catalyst_technical_ok,
+    parse_explore_llm_json,
     sym_data_for_catalyst_gate,
 )
 from app.services.ai_predict_prompt import build_predict_prompt
@@ -456,7 +458,7 @@ def _call_deepseek_predict(symbols_data: List[Dict], global_ctx: dict) -> Option
                 {"role": "user", "content": prompt},
             ],
             temperature=0.1,
-            max_tokens=4096,
+            max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
             timeout=DEEPSEEK_TIMEOUT_S,
             response_format={"type": "json_object"},
         )
@@ -465,21 +467,18 @@ def _call_deepseek_predict(symbols_data: List[Dict], global_ctx: dict) -> Option
         return None
 
     text = (resp.choices[0].message.content or "").strip()
-    if text.startswith("```"):
-        text = text.strip("`").lstrip("json").strip()
     logger.info(f"[DeepSeek预测] DeepSeek 用时 {time.time()-t0:.1f}s, output_len={len(text)}")
 
-    try:
-        parsed = json.loads(text)
-        if not isinstance(parsed.get('verdicts'), list):
-            logger.warning("[DeepSeek预测] DeepSeek 返回格式异常, verdicts 非 list")
-            parsed['verdicts'] = []
-        parsed['_prompt'] = prompt
-        parsed['_raw_response'] = text
-        return parsed
-    except json.JSONDecodeError as e:
-        logger.error(f"[DeepSeek预测] JSON 解析失败: {e}; raw[:500]={text[:500]}")
+    parsed, parse_err = parse_explore_llm_json(text, "DeepSeek预测")
+    if parsed is None:
+        logger.error(f"[DeepSeek预测] JSON 解析失败: {parse_err}; raw[:500]={text[:500]}")
         return None
+    if not isinstance(parsed.get("verdicts"), list):
+        logger.warning("[DeepSeek预测] DeepSeek 返回格式异常, verdicts 非 list")
+        parsed["verdicts"] = []
+    parsed["_prompt"] = prompt
+    parsed["_raw_response"] = text
+    return parsed
 
 
 # ============================================================

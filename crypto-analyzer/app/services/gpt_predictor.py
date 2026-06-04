@@ -40,8 +40,10 @@ from app.services.ai_explore_prompt import (
     AI_POSITION_HOLD_HOURS,
     AI_POSITION_SL_PCT,
     AI_POSITION_TP_PCT,
+    EXPLORE_LLM_MAX_OUTPUT_TOKENS,
     PREDICT_CONFIDENCE_THRESHOLD,
     explore_catalyst_technical_ok,
+    parse_explore_llm_json,
     sym_data_for_catalyst_gate,
 )
 from app.services.ai_predict_prompt import build_predict_prompt
@@ -448,28 +450,25 @@ def _call_gpt_predict(symbols_data: List[Dict], global_ctx: dict) -> Optional[di
         text = gpt_chat_json(
             client,
             user_prompt=prompt,
-            max_tokens=4096,
+            max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
             timeout=GPT_TIMEOUT_S,
             system_prompt=GPT_JSON_SYSTEM_ZH,
         )
     except Exception as e:
         logger.error(f"[GPT预测] GPT 调用失败: {e}")
         return None
-    if text.startswith("```"):
-        text = text.strip("`").lstrip("json").strip()
     logger.info(f"[GPT预测] GPT 用时 {time.time()-t0:.1f}s, output_len={len(text)}")
 
-    try:
-        parsed = json.loads(text)
-        if not isinstance(parsed.get('verdicts'), list):
-            logger.warning("[GPT预测] GPT 返回格式异常, verdicts 非 list")
-            parsed['verdicts'] = []
-        parsed['_prompt'] = prompt
-        parsed['_raw_response'] = text
-        return parsed
-    except json.JSONDecodeError as e:
-        logger.error(f"[GPT预测] JSON 解析失败: {e}; raw[:500]={text[:500]}")
+    parsed, parse_err = parse_explore_llm_json(text, "GPT预测")
+    if parsed is None:
+        logger.error(f"[GPT预测] JSON 解析失败: {parse_err}; raw[:500]={text[:500]}")
         return None
+    if not isinstance(parsed.get("verdicts"), list):
+        logger.warning("[GPT预测] GPT 返回格式异常, verdicts 非 list")
+        parsed["verdicts"] = []
+    parsed["_prompt"] = prompt
+    parsed["_raw_response"] = text
+    return parsed
 
 
 # ============================================================

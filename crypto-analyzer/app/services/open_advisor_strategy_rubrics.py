@@ -122,11 +122,15 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         title_zh="AI 主探索（事件/结构）",
         expected_side=None,
         rubric=(
-            "【探索专属，勿用战术四策略标准】\n"
-            "须有多周期 K 线 + 事件/结构 catalyst（非纯24h涨跌）。\n"
-            "- LONG：下跌后反转/利好结构；SHORT：上涨后衰竭/利空结构。\n"
-            "- 禁止用「回调做多/追涨/反弹空/杀跌」战术 checklist 替代本 rubric。\n"
-            "- 结构不清晰、与 catalyst 矛盾、极端追涨杀跌 → reject。"
+            "【探索专属，与探索 prompt 一致；勿用战术四策略标准】\n"
+            "上游已通过 catalyst 技术面门槛；你做**矛盾复核**，勿用单一 RSI 否决整笔。\n"
+            "- **允许趋势延续**（与探索 A 类一致）：catalyst 写清 1h 整体+近4~6根与方向同向、"
+            "可有 15m 共振时，下跌趋势中 SHORT、上涨趋势中 LONG → 可 approve。\n"
+            "- 亦允许：LONG=下跌后反转/利好结构；SHORT=上涨后衰竭/利空结构。\n"
+            "- **禁止**仅因「RSI 偏低不能做空」「RSI 偏高不能做多」「距7d 低点近」"
+            "单独 reject；须判断 catalyst 描述的是延续还是逆势摸顶/抄底。\n"
+            "- **必须 reject**：catalyst 与 proposed side 明显矛盾；仅 24h 涨跌幅/费率无 K 线；"
+            "结构叙述空泛；与用户方向闸门或 Big4 硬冲突（见上节）。"
         ),
     ),
     "predict": OpenAdvisorStrategyProfile(
@@ -134,8 +138,9 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         title_zh="AI 预测（4h 方向）",
         expected_side=None,
         rubric=(
-            "【预测专属，勿用战术/探索混审】\n"
-            "catalyst 须含 1h/15m 方向依据 + 置信逻辑；\n"
+            "【预测专属，与预测 prompt 一致；勿用战术/探索混审】\n"
+            "上游已通过 catalyst 门槛；勿用单一 RSI 否决。\n"
+            "catalyst 须含 1h/15m 方向依据；允许趋势延续与反转两类，只要与 side 自洽。\n"
             "与 Big4 严重冲突且个股 catalyst 不足 → reject；"
             "非极端行情下允许与 Big4 反向但须在 catalyst 中自洽。"
         ),
@@ -207,7 +212,7 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
 }
 
 _TACTICAL_PROFILE_KEYS = frozenset({"pullback", "rebound", "chase", "dump"})
-_UPSTREAM_GATED_OPEN_PROFILES = _TACTICAL_PROFILE_KEYS | {"reversal"}
+_UPSTREAM_GATED_OPEN_PROFILES = _TACTICAL_PROFILE_KEYS | {"reversal", "explore", "predict"}
 
 
 def should_skip_llm_for_tactical_open(
@@ -215,10 +220,13 @@ def should_skip_llm_for_tactical_open(
     source: str,
     *,
     tactical_llm_enabled: bool = True,
+    explore_predict_llm_enabled: bool = False,
 ) -> bool:
-    """战术/反转上游已过 catalyst 门槛时，可跳过开仓顾问 LLM 复审."""
+    """上游已过 catalyst 门槛时，可跳过开仓顾问 LLM 复审（避免与探索/预测 prompt 双标全拒）."""
     if profile.key not in _UPSTREAM_GATED_OPEN_PROFILES:
         return False
+    if profile.key in ("explore", "predict"):
+        return not explore_predict_llm_enabled
     return not tactical_llm_enabled
 
 
@@ -331,11 +339,18 @@ def build_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
         lines.append("4. 勿按回调/追涨/杀跌战术 checklist 审核反转单。")
         lines.append("5. 完全符合反转定义才 approve。")
     elif key == "explore":
-        lines.append("3. 审事件/结构 catalyst，**勿**用四战术互斥 checklist。")
-        lines.append("4. 红/黑天鹅逻辑与方向自洽才 approve。")
+        lines.append(
+            "3. 以探索 catalyst 为主：延续/反转均可；**勿**用四战术互斥 checklist。"
+        )
+        lines.append(
+            "4. 仅当 catalyst 与 K 线/方向矛盾、或纯涨跌幅追价 → reject；"
+            "存疑且 catalyst 已写清多周期结构时 → approve。"
+        )
     elif key == "predict":
-        lines.append("3. 审 4h 预测逻辑与多周期依据，**勿**用战术或探索 checklist。")
-        lines.append("4. catalyst 与 proposed side 自洽才 approve。")
+        lines.append("3. 审 4h 预测逻辑与多周期依据，**勿**用战术 checklist。")
+        lines.append(
+            "4. catalyst 与 side 自洽即可 approve；勿因 RSI 高低单独否决。"
+        )
     elif key in ("s1", "s6", "s9"):
         lines.append(f"3. 仅审 **{title}** 定义（RSI/量能/超卖等），勿混用 AI 战术标准。")
         lines.append("4. 不符合该多策略定义 → reject。")
@@ -556,13 +571,16 @@ _GPT_RUBRIC_EN: dict[str, str] = {
         "4. STRONG_BEARISH Big4 **aligns** with dump SHORT — bearish macro is NOT a reject reason."
     ),
     "explore": (
-        "Explore-only rubric (not tactical four-way checklist).\n"
-        "Multi-TF K-lines + event/structure catalyst (not 24h % only).\n"
-        "Unclear structure or catalyst/side mismatch → reject."
+        "Explore-only (aligned with explore worker prompt). Upstream catalyst gate already passed.\n"
+        "Approve trend continuation when catalyst cites 1h+recent bars aligned with side "
+        "(SHORT in downtrend / LONG in uptrend is OK).\n"
+        "Do NOT reject solely for low/high RSI or proximity to 7d low/high.\n"
+        "Reject only: catalyst contradicts side, 24h%-only narrative, vague structure, or hard gate conflict."
     ),
     "predict": (
-        "Predict-only rubric.\n"
-        "Catalyst needs 1h/15m direction logic; severe Big4 conflict without coin-specific case → reject."
+        "Predict-only. Upstream catalyst gate passed.\n"
+        "Catalyst needs 1h/15m logic; continuation or reversal OK if self-consistent.\n"
+        "Do not reject on RSI alone; severe Big4 conflict without coin case → reject."
     ),
     "s1": "LONG only; early bull RSI+MA20 structure; no downtrend knife-catch.",
     "s6": "LONG only; volume leads price; hollow pump narrative → reject.",
