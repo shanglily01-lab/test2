@@ -478,10 +478,11 @@ _GPT_RUBRIC_EN: dict[str, str] = {
         "5. Side must LONG; narrative is pure momentum chase without dip → reject."
     ),
     "rebound": (
-        "ALL required:\n"
+        "ALL required (SHORT only — **Rebound** = short a **price** bounce inside a downtrend, NOT a bullish market):\n"
         "1. Prior top then downtrend on 24x1h.\n"
         "2. Last 4-6x1h: bounce but weak volume (state divergence in reason).\n"
-        "3. Near resistance / relative high; SHORT only; no fresh breakout high short."
+        "3. Near resistance / relative high; SHORT only; no fresh breakout high short.\n"
+        "4. STRONG_BEARISH / bearish Big4 is **supportive** for this SHORT — never reject because macro is bearish."
     ),
     "chase": (
         "ALL required (aligned with code gates):\n"
@@ -492,10 +493,12 @@ _GPT_RUBRIC_EN: dict[str, str] = {
         "5. LONG only; narrative is dip/support bounce → reject (pullback)."
     ),
     "dump": (
-        "ALL required:\n"
+        "ALL required (SHORT only):\n"
         "1. 24x1h downtrend intact.\n"
-        "2. Bounce lacks volume support or fails (describe last 4-6 bars).\n"
-        "3. SHORT only; not bottom-fishing bounce."
+        "2. Bounce lacks volume support or fails (describe last 4-6 bars); "
+        "ongoing grind-down without a clean bounce is OK if last 4-6 show lower highs / weak relief.\n"
+        "3. SHORT only; not bottom-fishing bounce.\n"
+        "4. STRONG_BEARISH Big4 **aligns** with dump SHORT — bearish macro is NOT a reject reason."
     ),
     "explore": (
         "Explore-only rubric (not tactical four-way checklist).\n"
@@ -532,8 +535,11 @@ def build_gpt_big4_subjective_block(
     side: str,
     btc_6h: float = 0.0,
     eth_6h: float = 0.0,
+    profile_key: str = "",
 ) -> str:
     s = (side or "").upper()
+    key = (profile_key or "").strip().lower()
+    upstream_gated = key in _TACTICAL_PROFILE_KEYS | {"reversal", "explore", "predict"}
     lines = [
         "## Big4 & direction gates (mandatory)",
         f"- User switches: allow_long={'yes' if allow_long else '**no**'} | "
@@ -545,10 +551,17 @@ def build_gpt_big4_subjective_block(
     if s == "SHORT" and not allow_short:
         lines.append("- **Hard rule**: shorts disabled → reject.")
     if allow_long and allow_short:
-        lines.append(
-            "- Both sides allowed: weigh Big4 vs proposed side; "
-            "STRONG_BEARISH long / STRONG_BULLISH short needs exceptional structure else reject."
-        )
+        if upstream_gated:
+            lines.append(
+                "- Both sides allowed. Upstream strategy already passed catalyst/code gates; "
+                "Big4 is **macro context only**. **Do not reject solely** because Big4 is "
+                "STRONG_BEARISH/STRONG_BULLISH if the strategy rubric below is satisfied."
+            )
+        else:
+            lines.append(
+                "- Both sides allowed: weigh Big4 vs proposed side; "
+                "STRONG_BEARISH long / STRONG_BULLISH short needs exceptional structure else reject."
+            )
     elif allow_long and not allow_short:
         lines.append(
             "- **Long-only mode**: any SHORT → reject; "
@@ -561,12 +574,23 @@ def build_gpt_big4_subjective_block(
         )
     else:
         lines.append("- Both long and short disabled → reject.")
+    sig = (big4_signal or "").upper()
+    if s == "SHORT" and "BEAR" in sig:
+        lines.append(
+            "- **Macro aligned**: SHORT + bearish/STRONG_BEARISH Big4 is supportive — "
+            "do NOT treat bearish Big4 as a conflict for SHORT entries."
+        )
+    elif s == "LONG" and "BULL" in sig:
+        lines.append(
+            "- **Macro aligned**: LONG + bullish/STRONG_BULLISH Big4 is supportive — "
+            "do NOT treat bullish Big4 as a conflict for LONG entries."
+        )
     lines.append(
-        "- Big4 cannot replace K-lines; conflict with gates and weak coin structure → reject."
+        "- Big4 cannot replace K-lines; reject only when rubric/K-lines fail, not macro label alone."
     )
     lines.append(
-        "- Exploration already passed code + catalyst gates; do not batch-reject on macro FUD alone "
-        "if the tactical rubric below is satisfied."
+        "- Upstream passed catalyst/code gates; do not batch-reject on macro alone "
+        "if the strategy rubric below is satisfied."
     )
     return "\n".join(lines)
 
@@ -574,10 +598,26 @@ def build_gpt_big4_subjective_block(
 def build_gpt_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
     title = _GPT_PROFILE_TITLE_EN.get(profile.key, profile.title_zh)
     key = profile.key
+    if key in _TACTICAL_PROFILE_KEYS:
+        step1 = (
+            "1. **Hard**: allow_long/allow_short switches. **Soft**: Big4 — never reject on macro alone; "
+            "need tactical rubric failure."
+        )
+    elif key == "reversal":
+        step1 = (
+            "1. **Hard**: direction switches. Big4 vs side needs **coin-level** reversal proof in rubric, "
+            "not macro-only reject."
+        )
+    elif key in ("explore", "predict"):
+        step1 = (
+            "1. **Hard**: direction switches. Big4 severe conflict **without** matching catalyst/K-lines → reject."
+        )
+    else:
+        step1 = "1. Direction gates + Big4 — conflict → reject."
     lines = [
         "## Review steps (this strategy only)",
         f"- Audit **only** profile `{key}` ({title}); do not substitute another strategy's checklist.",
-        "1. Direction gates + Big4 — conflict → reject.",
+        step1,
         f"2. Apply the **{title}** rubric below against K-line tables and metrics.",
     ]
     if key in _TACTICAL_PROFILE_KEYS:
@@ -660,6 +700,7 @@ def build_gpt_open_advisor_prompt(
         side,
         float(ctx.get("btc_6h_change") or 0),
         float(ctx.get("eth_6h_change") or 0),
+        profile_key=profile.key,
     )
     klines_15m = format_kline_table(ctx.get("klines_15m", []))
     klines_1h = format_kline_table(ctx.get("klines_1h", []))

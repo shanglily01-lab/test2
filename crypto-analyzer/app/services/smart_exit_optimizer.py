@@ -1066,7 +1066,8 @@ class SmartExitOptimizer:
                             position_side=direction,
                             quantity=_Dec(str(row['quantity'])),
                             entry_price=_Dec(str(row['entry_price'])),
-                            reason=reason
+                            reason=reason,
+                            strategy_name=paper_source or None,
                         )
                         if result.get('success'):
                             logger.info(f"[实盘平仓] {key_info.get('account_name',account_id)} {symbol} {direction} 平仓成功")

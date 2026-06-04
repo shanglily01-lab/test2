@@ -78,6 +78,50 @@ class BinanceFuturesEngine:
 
         logger.info("币安实盘合约交易引擎初始化完成")
 
+    def _resolve_trade_notifier(self):
+        if self.trade_notifier:
+            return self.trade_notifier
+        if get_trade_notifier:
+            return get_trade_notifier()
+        return None
+
+    def _notify_live_close_telegram(
+        self,
+        symbol: str,
+        position_side: str,
+        executed_qty,
+        entry_price,
+        avg_price,
+        pnl,
+        roi,
+        reason: str,
+        strategy_name: Optional[str] = None,
+        open_time=None,
+    ) -> None:
+        """实盘平仓成功后发送 Telegram（与开仓 notify_open_position 对称）。"""
+        try:
+            from app.services.trade_notifier import format_hold_time_from_open
+
+            notifier = self._resolve_trade_notifier()
+            if not notifier:
+                logger.debug(f"[实盘平仓] TradeNotifier 未初始化,跳过 TG {symbol}")
+                return
+            notifier.notify_close_position(
+                symbol=symbol,
+                direction=position_side,
+                quantity=float(executed_qty),
+                entry_price=float(entry_price),
+                exit_price=float(avg_price),
+                pnl=float(pnl),
+                pnl_pct=float(roi),
+                reason=reason,
+                hold_time=format_hold_time_from_open(open_time),
+                strategy_name=strategy_name,
+                is_paper=False,
+            )
+        except Exception as notify_err:
+            logger.warning(f"[实盘平仓] 发送TG通知失败 {symbol}: {notify_err}")
+
     def _load_api_config(self):
         """从配置文件加载API配置"""
         try:
@@ -1151,41 +1195,13 @@ class BinanceFuturesEngine:
             # 7. 取消相关止盈止损单
             self._cancel_position_orders(position)
 
-            # 8. 发送Telegram通知
-            try:
-                notifier = get_trade_notifier() if get_trade_notifier else None
-                if notifier:
-                    # 计算持仓时间
-                    hold_time = None
-                    if position.get('open_time'):
-                        open_time = position['open_time']
-                        if isinstance(open_time, str):
-                            open_time = datetime.strptime(open_time, '%Y-%m-%d %H:%M:%S')
-                        hold_duration = datetime.now() - open_time
-                        hours, remainder = divmod(hold_duration.total_seconds(), 3600)
-                        minutes = remainder // 60
-                        if hours >= 24:
-                            days = int(hours // 24)
-                            hours = int(hours % 24)
-                            hold_time = f"{days}天{int(hours)}小时{int(minutes)}分钟"
-                        elif hours >= 1:
-                            hold_time = f"{int(hours)}小时{int(minutes)}分钟"
-                        else:
-                            hold_time = f"{int(minutes)}分钟"
-
-                    notifier.notify_close_position(
-                        symbol=symbol,
-                        direction=position_side,
-                        quantity=float(executed_qty),
-                        entry_price=float(entry_price),
-                        exit_price=float(avg_price),
-                        pnl=float(pnl),
-                        pnl_pct=float(roi),
-                        reason=reason,
-                        hold_time=hold_time
-                    )
-            except Exception as notify_err:
-                logger.warning(f"发送平仓通知失败: {notify_err}")
+            # 8. 发送 Telegram 实盘平仓通知
+            self._notify_live_close_telegram(
+                symbol, position_side, executed_qty, entry_price, avg_price,
+                pnl, roi, reason,
+                strategy_name=position.get('source'),
+                open_time=position.get('open_time'),
+            )
 
             # 清除挂单缓存，确保下次查询获取最新数据
             self.invalidate_orders_cache()
@@ -1217,7 +1233,9 @@ class BinanceFuturesEngine:
         position_side: str,
         quantity: Decimal,
         entry_price: Decimal,
-        reason: str = 'paper_sync'
+        reason: str = 'paper_sync',
+        strategy_name: Optional[str] = None,
+        open_time=None,
     ) -> Dict:
         """
         直接用已知数量平仓，不调用 get_open_positions()。
@@ -1260,22 +1278,12 @@ class BinanceFuturesEngine:
 
             roi = (pnl / (entry_price * executed_qty)) * 100 if entry_price > 0 and executed_qty > 0 else Decimal('0')
 
-            # 发送 Telegram 平仓通知 (修复: 之前缺这段, SmartExitOptimizer 走此路径平仓无 TG)
-            try:
-                notifier = get_trade_notifier() if get_trade_notifier else None
-                if notifier:
-                    notifier.notify_close_position(
-                        symbol=symbol,
-                        direction=position_side,
-                        quantity=float(executed_qty),
-                        entry_price=float(entry_price),
-                        exit_price=float(avg_price),
-                        pnl=float(pnl),
-                        pnl_pct=float(roi),
-                        reason=reason,
-                    )
-            except Exception as notify_err:
-                logger.warning(f"[实盘直接平仓] 发送TG通知失败: {notify_err}")
+            self._notify_live_close_telegram(
+                symbol, position_side, executed_qty, entry_price, avg_price,
+                pnl, roi, reason,
+                strategy_name=strategy_name,
+                open_time=open_time,
+            )
 
             return {
                 'success': True,
@@ -1395,23 +1403,10 @@ class BinanceFuturesEngine:
 
             logger.info(f"[实盘] 平仓成功: {symbol} {executed_qty} @ {avg_price}, PnL={pnl:.2f} USDT")
 
-            # 6. 发送Telegram通知
-            try:
-                if self.trade_notifier:
-                    self.trade_notifier.notify_close_position(
-                        symbol=symbol,
-                        direction=position_side,
-                        quantity=float(executed_qty),
-                        entry_price=float(entry_price),
-                        exit_price=float(avg_price),
-                        pnl=float(pnl),
-                        pnl_pct=float(roi),
-                        reason=reason,
-                        hold_time=None,  # 无法获取持仓时间
-                        is_paper=False  # 实盘平仓
-                    )
-            except Exception as notify_err:
-                logger.warning(f"发送平仓通知失败: {notify_err}")
+            self._notify_live_close_telegram(
+                symbol, position_side, executed_qty, entry_price, avg_price,
+                pnl, roi, reason,
+            )
 
             return {
                 'success': True,

@@ -12,6 +12,27 @@ from decimal import Decimal
 logger = logging.getLogger(__name__)
 
 
+def format_hold_time_from_open(open_time) -> Optional[str]:
+    """从 open_time 生成持仓时长文案。"""
+    if not open_time:
+        return None
+    try:
+        if isinstance(open_time, str):
+            open_time = datetime.strptime(open_time[:19], '%Y-%m-%d %H:%M:%S')
+        hold_duration = datetime.now() - open_time
+        hours, remainder = divmod(hold_duration.total_seconds(), 3600)
+        minutes = int(remainder // 60)
+        if hours >= 24:
+            days = int(hours // 24)
+            hours = int(hours % 24)
+            return f"{days}天{hours}小时{minutes}分钟"
+        if hours >= 1:
+            return f"{int(hours)}小时{minutes}分钟"
+        return f"{minutes}分钟"
+    except Exception:
+        return None
+
+
 class TradeNotifier:
     """实盘交易通知器"""
 
@@ -222,9 +243,18 @@ class TradeNotifier:
             'take_profit': '🎯 止盈触发',
             'signal_reverse': '📊 信号反转',
             'liquidation': '⚠️ 强制平仓',
-            'backtest_end': '回测结束'
+            'backtest_end': '回测结束',
+            'paper_sync': '🔄 模拟仓同步平实盘',
         }
-        reason_text = reason_map.get(reason, reason)
+        reason_lower = (reason or '').lower()
+        if reason in reason_map:
+            reason_text = reason_map[reason]
+        elif reason_lower.startswith('paper_sync'):
+            reason_text = reason_map['paper_sync']
+        elif 'advisor' in reason_lower or reason_lower.startswith('gemini_advisor'):
+            reason_text = '🤖 持仓顾问 SELL'
+        else:
+            reason_text = (reason or 'manual')[:120]
 
         # 区分模拟盘和实盘
         trade_type = "模拟盘平仓" if is_paper else "实盘平仓"
@@ -249,7 +279,12 @@ class TradeNotifier:
 
         message += f"\n⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
-        self._send_telegram(message)
+        result = self._send_telegram(message)
+        if result:
+            logger.info(f"✅ 平仓通知已发送: {symbol}")
+        else:
+            logger.warning(f"⚠️ 平仓通知发送失败: {symbol}")
+        return result
 
     def notify_order_placed(
         self,
@@ -456,6 +491,19 @@ class TradeNotifier:
 _trade_notifier: Optional[TradeNotifier] = None
 
 
+def _load_project_notifier_config() -> Optional[Dict]:
+    """从 config.yaml + .env 加载 notifications 配置（供懒初始化）。"""
+    try:
+        from pathlib import Path
+        from app.utils.config_loader import load_config
+
+        root = Path(__file__).resolve().parent.parent.parent
+        return load_config(root / "config.yaml")
+    except Exception as e:
+        logger.warning(f"加载 TradeNotifier 配置失败: {e}")
+        return None
+
+
 def get_trade_notifier(config: Dict = None) -> Optional[TradeNotifier]:
     """
     获取交易通知器单例
@@ -468,8 +516,13 @@ def get_trade_notifier(config: Dict = None) -> Optional[TradeNotifier]:
     """
     global _trade_notifier
 
-    if _trade_notifier is None and config is not None:
-        _trade_notifier = TradeNotifier(config)
+    if _trade_notifier is None:
+        if config is not None:
+            _trade_notifier = TradeNotifier(config)
+        else:
+            cfg = _load_project_notifier_config()
+            if cfg is not None:
+                _trade_notifier = TradeNotifier(cfg)
 
     return _trade_notifier
 

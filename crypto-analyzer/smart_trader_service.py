@@ -1317,18 +1317,19 @@ class SmartTraderService:
 
         logger.info("🔱 Big4趋势检测器已启动 (实时检测模式)")
 
-        # Telegram 通知（熔断/告警直接调用 self.telegram_notifier.send_message(...)）
-        from app.services.trade_notifier import TradeNotifier as _TradeNotifier
-        self.telegram_notifier = _TradeNotifier({
+        # Telegram 通知（熔断/告警 + 实盘开/平仓；注册全局单例供顾问/引擎 get_trade_notifier）
+        from app.services.trade_notifier import init_trade_notifier
+        _tg_cfg = {
             'notifications': {
                 'telegram': {
                     'enabled': bool(os.getenv('TELEGRAM_BOT_TOKEN')),
                     'bot_token': os.getenv('TELEGRAM_BOT_TOKEN', ''),
                     'chat_id': os.getenv('TELEGRAM_CHAT_ID', ''),
-                    'notify_events': ['all']
+                    'notify_events': ['all'],
                 }
             }
-        })
+        }
+        self.telegram_notifier = init_trade_notifier(_tg_cfg)
 
         logger.info("=" * 60)
         logger.info("智能自动交易服务已启动")
@@ -3062,13 +3063,16 @@ class SmartTraderService:
                             except Exception:
                                 _lq_row = None
 
+                            _paper_src = (positions[0].get('source') if positions else '') or ''
                             if _lq_row and _lq_row.get('quantity'):
                                 _res = _engine.close_position_direct(
                                     symbol=symbol,
                                     position_side=side,
                                     quantity=_Dec(str(_lq_row['quantity'])),
                                     entry_price=_Dec(str(_lq_row['entry_price'])),
-                                    reason=f'paper_sync_{reason}'
+                                    reason=f'paper_sync_{reason}',
+                                    strategy_name=_paper_src or None,
+                                    open_time=positions[0].get('open_time') if positions else None,
                                 )
                             else:
                                 # fallback：无 live 记录时仍用 close_position_by_symbol

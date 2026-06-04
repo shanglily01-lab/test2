@@ -1300,7 +1300,9 @@ class FuturesTradingEngine:
                                             position_side=position_side,
                                             quantity=_Dec(str(row['quantity'])),
                                             entry_price=_Dec(str(row['entry_price'])),
-                                            reason=f'paper_sync_{reason}'
+                                            reason=f'paper_sync_{reason}',
+                                            strategy_name=paper_source or None,
+                                            open_time=position.get('open_time'),
                                         )
                                         if live_result.get('success'):
                                             logger.info(

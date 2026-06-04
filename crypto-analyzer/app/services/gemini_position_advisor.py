@@ -824,6 +824,8 @@ Output ONLY JSON:
                         quantity=Decimal(str(position['quantity'])),
                         entry_price=Decimal(str(position['entry_price'])),
                         reason=reason,
+                        strategy_name=source or advisor_tag,
+                        open_time=position.get('open_time'),
                     )
                     if result.get('success'):
                         close_price = result.get('close_price', 0)
@@ -854,17 +856,7 @@ Output ONLY JSON:
                             )
                         cur2.close(); conn2.close()
 
-                        # ---- 4. Telegram ----
-                        try:
-                            from app.services.trade_notifier import get_trade_notifier
-                            notif = get_trade_notifier()
-                            if notif:
-                                notif.send_message(
-                                    f"[{advisor_tag} SELL] {position['symbol']} {position['position_side']} "
-                                    f"已平仓 pnl={live_pnl}U\nreason={reason[:60]}"
-                                )
-                        except Exception:
-                            pass
+                        # TG 平仓通知由 BinanceFuturesEngine.close_position_direct 统一发送
 
                         # 实盘平成功，用实盘成交价关模拟仓
                         self._close_paper_only(
