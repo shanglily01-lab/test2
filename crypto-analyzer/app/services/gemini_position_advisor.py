@@ -500,64 +500,67 @@ class GeminiPositionAdvisor:
         btc_6h = ctx.get('btc_6h_change', 0)
         eth_6h = ctx.get('eth_6h_change', 0)
 
-        side_label = f"{side} (LONG)" if side == 'LONG' else f"{side} (SHORT)"
-        return f"""You are a **paper position** supervisor. Decide **hold**, **observe**, or **sell** from **this coin's recent K-line structure**.
+        side_cn = "做多 LONG" if side == 'LONG' else "做空 SHORT"
+        return f"""你是模拟仓**持仓监管**顾问。根据**本币最近 K 线客观结构**决定 hold / observe / sell。
 
-## Invalid reasons (reject vague answers)
-- Do **not** decide mainly from Big4/BTC/ETH macro alone
-- Do **not** use vague sentiment ("feels weak", "market bad"); **reason** must cite 15m/1h table patterns
-- If K-lines conflict with position side, prioritize K-lines; Big4 alone cannot trigger sell
+## 禁止（违反则 reason 无效）
+- **不得**主要因 Big4/BTC/ETH 宏观偏多偏空就 sell 或 hold
+- **不得**空泛主观（「感觉要跌」「大盘不好」）；reason 必须引用下方 15m/1h 表格中的具体形态
+- K 线与持仓方向不一致时优先看 K 线，Big4 不能单独触发 sell
 
-## Position
+## 仓位
   Symbol:          {symbol}
-  Direction:       {side_label}
+  Direction:       {side_cn}
   Entry:           {entry}
   Current:         {current_price}
   Leverage:        {leverage}x
   Hold:            {hold_h:.1f}h
   Price change:    {price_change_pct:+.2f}%
-  ROI on margin:   {roi_pct:+.2f}%  (tier: {loss_tier})
+  ROI on margin:   {roi_pct:+.2f}%  （档位: {loss_tier}）
   Source:          {source}
   {rsi_line}
 
-## Objective stats (must match reason)
-  15m ({HOLD_15M_BARS} bars): {s15['summary']}
-  1h ({HOLD_1H_BARS} bars):  {s1h['summary']}
+## 客观统计（须与 reason 一致，勿矛盾）
+  15m({HOLD_15M_BARS}根): {s15['summary']}
+  1h({HOLD_1H_BARS}根):  {s1h['summary']}
 
 {loss_rules}
 
-## K-line rules (primary)
-1. **Last {HOLD_1H_BARS}x1h** (table): still supports {side}?
-   - LONG: higher highs/lows or last 2x1h still bullish (green bodies / lower-wick support)
-   - SHORT: lower highs/lows or last 2x1h still bearish (red bodies / upper-wick rejection)
-2. **Last {HOLD_15M_BARS}x15m** (table): short-term **reversal** against the position?
-   - Count streaks, engulfing, long wicks, volume on reversal bars
-3. Example reason: "last 5x15m four red bars break prior low + last 2x1h red bodies"
+## K 线读法（主判据）
+1. **近 {HOLD_1H_BARS} 根 1h**（下表）：结构是否仍支持 {side}？
+   - LONG：高点/低点抬高，或最近 2 根 1h 仍偏多（阳线/下影支撑）
+   - SHORT：高点/低点降低，或最近 2 根 1h 仍偏空（阴线/上影承压）
+2. **近 {HOLD_15M_BARS} 根 15m**（下表）：短线是否**已反转**持仓方向？
+   - 数连阴/连阳、吞没、长上影/下影、是否放量反转
+3. reason 须写清形态，例如「近5根15m四连阴破前低 + 近2根1h末两根阴线」
 
-## Last {HOLD_1H_BARS}x1h K-lines (oldest → newest)
+## 近 {HOLD_1H_BARS} 根 1h K 线 (oldest → newest)
 {klines_1h_str}
 
-## Last {HOLD_15M_BARS}x15m K-lines (oldest → newest)
+## 近 {HOLD_15M_BARS} 根 15m K 线 (oldest → newest)
 {klines_15m_str}
 
-## Macro (secondary)
+## 宏观（辅证，权重低于 K 线）
   Big4: {big4} (strength {big4_strength:.0f}) | BTC 6h {btc_6h:+.2f}% | ETH 6h {eth_6h:+.2f}%
-  Cite Big4 only when K-lines already show reversal; never sell on Big4 alone.
+  仅当 K 线已明确反向时，方可引用 Big4 加强 sell 理由；不得单独因 Big4 sell。
 
-## Decision
-- **hold**: last {HOLD_1H_BARS}x1h + {HOLD_15M_BARS}x15m still support {side}, no clear reversal
-  (losing positions need higher bar; moderate/severe loss without stabilization → not hold)
-- **observe**: mixed 15m/1h, chop, or insufficient data (mild/moderate loss + unclear → prefer observe)
-- **sell**: when (A) {HOLD_15M_BARS}x15m majority against position (cite pattern), AND
-  (B) last 2x1h confirm reversal; OR severe loss without 15m base; OR ROI≤-15% no 15m reversal;
-  OR ROI≥+20% with clear 15m reversal (take profit)
+## 决策
+- **hold**: 近 {HOLD_1H_BARS} 根 1h + 近 {HOLD_15M_BARS} 根 15m **整体仍支持** {side}，无明确反转
+  （**亏损档 hold 门槛更高**，见上「盈亏档位」；中度/严重亏损无明确企稳 → 不得 hold）
+- **observe**: 15m 与 1h 信号混杂、震荡、或数据不足以判断（**轻微/中度亏损且结构不清 → 优先 observe**）
+- **sell**: 须同时满足：
+  (A) 近 {HOLD_15M_BARS} 根 15m **多数反向**持仓（连阴/连阳+放量等，写进 reason）
+  (B) 近 {HOLD_1H_BARS} 根 1h **至少最近 2 根确认**同向反转
+  或：**严重亏损**且 15m 无企稳；ROI ≤ -15% 且 15m 无反转；ROI ≥ +20% 且 15m 明确反转
 
-Deeper loss needs bar-by-bar evidence to hold. Unclear → **observe**; severe loss → **sell** unless 15m reverses.
+亏损越深，越需 **K 线逐根证据** 才能 hold；不得「亏损已深仍笼统 hold」。
+
+K 线方向不明时默认 **observe**；**严重亏损**默认 **sell**（除非 15m 明确反转）。
 
 Output ONLY JSON:
 {{
   "action": "hold" | "observe" | "sell",
-  "reason": "<=120 English words; must cite 15m/1h patterns, not Big4 alone>"
+  "reason": "<50字中文，必须含15m/1h形态，勿只写Big4>"
 }}
 """
 

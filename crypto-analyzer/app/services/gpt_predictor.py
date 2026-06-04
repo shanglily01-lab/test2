@@ -56,7 +56,7 @@ from app.services.ai_predict_schedule import (
     predict_round_is_due,
 )
 from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_MODEL, GPT_TIMEOUT_S
-from app.services.gpt_llm_client import GPT_JSON_SYSTEM_EN, gpt_chat_json
+from app.services.gpt_llm_client import GPT_JSON_SYSTEM_ZH, gpt_chat_json
 
 # ── data_cache 层: 尝试从缓存读取, 失败回退 ──
 _DATA_CACHE_AVAILABLE_PREDICT = False
@@ -471,7 +471,7 @@ def _call_gpt_predict(symbols_data: List[Dict], global_ctx: dict) -> Optional[di
             user_prompt=prompt,
             max_tokens=4096,
             timeout=GPT_TIMEOUT_S,
-            system_prompt=GPT_JSON_SYSTEM_EN,
+            system_prompt=GPT_JSON_SYSTEM_ZH,
         )
     except Exception as e:
         logger.error(f"[GPT预测] GPT 调用失败: {e}")

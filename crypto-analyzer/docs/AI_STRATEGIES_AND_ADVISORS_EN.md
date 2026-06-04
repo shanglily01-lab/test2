@@ -1,6 +1,6 @@
 # AI Strategies & Advisors — Reference (English)
 
-> Version: 2026-06-05 · Aligned with production code (main explore/predict/tactical/reversal **LLM prompts are English**; live sync limited to `LIVE_SYNC_SOURCES` + TOP50/whitelist on open)
+> Version: 2026-06-05 · Aligned with production code (main explore/predict/tactical/reversal/advisors **LLM prompts are Chinese**; live sync limited to `LIVE_SYNC_SOURCES` + TOP50/whitelist on open)
 
 ## 1. Overview
 

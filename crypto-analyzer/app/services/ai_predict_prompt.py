@@ -137,8 +137,8 @@ def build_predict_prompt(
     symbols_data: List[Dict[str, Any]],
     global_ctx: dict,
 ) -> str:
-    """Production default: English predict prompt."""
-    return build_predict_prompt_en(symbols_data, global_ctx)
+    """Production default: Chinese predict prompt."""
+    return build_predict_prompt_zh(symbols_data, global_ctx)
 
 
 def build_predict_prompt_en(

@@ -87,7 +87,7 @@
 
 **启动 init 错峰** (`scheduler_init`): Gemini探索 +15s, 情绪 +25s, DeepSeek探索 +90s, GPT探索 +120s；预测补跑 +45s/+50s/+55s。
 
-**生产 LLM prompt 语言 (2026-06)**: 主探索/预测/战术/反转/开仓顾问/持仓顾问 **英文**（`build_*_prompt()` → `*_en`）；顾问 `reason` 英文。完整说明见 `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md` / `AI_STRATEGIES_AND_ADVISORS_EN.md`。
+**生产 LLM prompt 语言 (2026-06-05)**: 主探索/预测/战术/反转/开仓顾问/持仓顾问 **中文**（`build_*_prompt()` → `*_zh`）；顾问 `reason` 中文；GPT 用 `GPT_JSON_SYSTEM_ZH`。完整说明见 `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md`。
 
 **日志** (非 journalctl): `logs/scheduler_YYYY-MM-DD.log`；排查:
 `grep -E "一轮开始|一轮结束|candidate_pool_snapshot 读取|回退 kline|上一轮还未结束|skipped_weak_catalyst" logs/scheduler_$(date -u +%Y-%m-%d).log`
@@ -126,7 +126,7 @@
 ### 开仓 / 持仓顾问
 - **开仓**: `paper_open_gate` — `gemini_*`→Gemini；`deepseek_*`→DeepSeek；`gpt_*`→GPT；**其它→Gemini+DeepSeek 双审**
 - **持仓**: Gemini 管非 deepseek/gpt；DeepSeek 管 `deepseek_*`；GPT 管 `gpt_*`；`smart_trader` 每 15min tick
-- Prompt/rubric/**reason 生产环境为英文**；开关 `*_open_advisor_enabled` / `*_position_advisor_enabled`
+- Prompt/rubric/**reason 生产环境为中文**；开关 `*_open_advisor_enabled` / `*_position_advisor_enabled`
 - 表 `gemini/deepseek/gpt_advisor_reviews`；Web `/gemini-advisor-reviews`
 
 ### gemini_sentiment_analyzer (情绪)
@@ -138,7 +138,7 @@
 |------|------|
 | `validate_explore_predict_prompts.py` | 主探索/预测门槛与 prompt |
 | `validate_tactical_explore_prompts.py` | 四战术 + 顶空底多 catalyst |
-| `validate_open_advisor_rubrics.py` | 开仓/持仓顾问英文 rubric |
+| `validate_open_advisor_rubrics.py` | 开仓/持仓顾问中文 rubric |
 | `benchmark_*_prompt_lang.py` | 主/战术/顾问 prompt 中英对照（无 API） |
 | `validate_tactical_explore_db.py` | 战术表结构 |
 | `ai_win_rate_report.py` | **AI 按日胜率巡检** (见下) |

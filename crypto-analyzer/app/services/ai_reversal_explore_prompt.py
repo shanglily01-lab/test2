@@ -188,6 +188,26 @@ def prepare_reversal_universe_for_llm(
     return selected, meta
 
 
+def build_reversal_explore_prompt_zh(
+    universe: dict,
+    global_ctx: dict,
+    historical_stats: dict,
+) -> Tuple[str, Dict[str, Any]]:
+    universe_list, meta = prepare_reversal_universe_for_llm(universe)
+    compact = {"ensure_ascii": False, "separators": (",", ":"), "default": str}
+    prompt = REVERSAL_PROMPT_TEMPLATE.format(
+        big4_block=BIG4_PROMPT_BLOCK_EXPLORE,
+        global_context_json=json.dumps(global_ctx, **compact),
+        universe_json=json.dumps(universe_list, **compact),
+        historical_stats_json=json.dumps(historical_stats, **compact),
+        llm_universe_note=(
+            f"技术面 TOP {meta['llm_symbol_count']} / 全池 {meta['universe_total']} "
+            f"(按 RSI/距7d高低极端排序，非 |24h| 涨跌幅)。仅对列表内 symbol 输出 verdict。"
+        ),
+    )
+    return prompt, meta
+
+
 def build_reversal_explore_prompt_en(
     universe: dict,
     global_ctx: dict,
@@ -213,8 +233,8 @@ def build_reversal_explore_prompt(
     global_ctx: dict,
     historical_stats: dict,
 ) -> Tuple[str, Dict[str, Any]]:
-    """Production default: English reversal explore prompt."""
-    return build_reversal_explore_prompt_en(universe, global_ctx, historical_stats)
+    """Production default: Chinese reversal explore prompt."""
+    return build_reversal_explore_prompt_zh(universe, global_ctx, historical_stats)
 
 
 def parse_reversal_llm_json(text: str, tag: str = "Reversal") -> Tuple[Optional[dict], Optional[str]]:

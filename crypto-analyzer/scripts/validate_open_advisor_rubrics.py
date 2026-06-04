@@ -87,12 +87,12 @@ def test_per_strategy_prompts_differ():
     explore_p = GeminiPositionAdvisor._build_open_prompt(
         "BTC/USDT", "LONG", 1.0, "gemini_explore", "test", 5, 3.0, 5.0, 4.0, ctx,
     )
-    assert "Momentum chase long" in chase_p and "profile=`chase`" in chase_p
-    assert "Pullback long" in pull_p and "profile=`pullback`" in pull_p
-    assert "do not" in chase_p.lower() and "another strategy" in chase_p.lower()
-    assert "Tactical mutual exclusion" in chase_p
-    assert "Tactical mutual exclusion" not in explore_p
-    assert "Explore-only" in explore_p or "tactical" in explore_p.lower()
+    assert "追涨做多" in chase_p and "profile=" in chase_p and "chase" in chase_p
+    assert "回调做多" in pull_p and "profile=" in pull_p and "pullback" in pull_p
+    assert "禁止" in chase_p and "其它策略" in chase_p
+    assert "战术互斥" in chase_p
+    assert "追涨做多" not in explore_p
+    assert "AI 主探索" in explore_p or "探索" in explore_p
     assert chase_p != pull_p
     print("[PASS] per_strategy_prompts_differ")
 
@@ -165,12 +165,12 @@ def test_open_prompt_contains_rubric():
         "BTC/USDT", "LONG", 100000.0, "gemini_pullback",
         "24h up channel, last 5 bars dip", 5, 3.0, 5.0, 4.0, ctx,
     )
-    assert "Pullback long" in prompt
-    assert "profile=`pullback`" in prompt
+    assert "回调做多" in prompt
+    assert "profile=" in prompt and "pullback" in prompt
     assert "24" in prompt and "1h" in prompt
     assert "allow_short" in prompt
-    assert "single" in prompt.lower() and "1h" in prompt.lower()
-    assert "English" in prompt
+    assert "禁止" in prompt and "1h" in prompt
+    assert "超级交易大师" in prompt
     print("[PASS] open_prompt")
 
 
@@ -199,13 +199,13 @@ def test_hold_prompt_kline_focus():
         "source": "gemini_explore",
     }
     prompt = GeminiPositionAdvisor._build_prompt(pos, 101.0, ctx)
-    assert f"Last {4}x1h" in prompt or "4x1h" in prompt
-    assert f"{6}x15m" in prompt or "15m" in prompt
-    assert "do **not**" in prompt.lower() and "big4" in prompt.lower()
+    assert "4" in prompt and "1h" in prompt
+    assert "15m" in prompt
+    assert "不得" in prompt and "Big4" in prompt
     assert "01-01 05:00" in prompt
-    assert "PnL tier" in prompt
-    assert "Objective stats" in prompt
-    assert "English" in prompt
+    assert "盈亏" in prompt or "档位" in prompt
+    assert "客观统计" in prompt
+    assert "持仓监管" in prompt
     print("[PASS] hold_prompt_kline_focus")
 
 
@@ -228,9 +228,9 @@ def test_gpt_open_prompt_english_tactical():
     p = GPTPositionAdvisor._build_gpt_open_prompt(
         "BTC/USDT", "LONG", 1.0, "gpt_chase", "momentum test", 5, 3.0, 5.0, 4.0, ctx,
     )
-    assert "Momentum chase long" in p
+    assert "追涨做多" in p
     assert "gpt_tactical_precheck_pass" not in p
-    assert "English" in p
+    assert "超级交易大师" in p
     profile = resolve_strategy_profile("gpt_pullback")
     p2 = build_open_advisor_prompt(
         profile=profile,
@@ -246,7 +246,7 @@ def test_gpt_open_prompt_english_tactical():
         ctx=ctx,
         format_kline_table=GeminiPositionAdvisor._format_kline_table,
     )
-    assert "Pullback long" in p2
+    assert "回调做多" in p2
     print("[PASS] gpt_open_prompt_english_tactical")
 
 

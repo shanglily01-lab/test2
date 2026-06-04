@@ -1006,8 +1006,8 @@ def build_strategy_prompt(
     *,
     max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
 ) -> Tuple[str, Dict[str, Any]]:
-    """Production default: English tactical prompt."""
-    return build_strategy_prompt_en(
+    """Production default: Chinese tactical prompt."""
+    return build_strategy_prompt_zh(
         strategy_key, universe, global_ctx, historical_stats, max_symbols=max_symbols,
     )
 

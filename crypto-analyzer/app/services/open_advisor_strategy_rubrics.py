@@ -427,21 +427,75 @@ def build_open_advisor_prompt(
     ctx: dict,
     format_kline_table: Callable[[list], str],
 ) -> str:
-    """English open-advisor prompt (Gemini / DeepSeek / GPT production)."""
-    return build_gpt_open_advisor_prompt(
-        profile=profile,
-        symbol=symbol,
-        side=side,
-        price=price,
-        source=source,
-        catalyst=catalyst,
-        leverage=leverage,
-        sl_pct=sl_pct,
-        tp_pct=tp_pct,
-        hold_hours=hold_hours,
-        ctx=ctx,
-        format_kline_table=format_kline_table,
+    """Chinese open-advisor prompt (Gemini / DeepSeek / GPT production)."""
+    big4_block = build_big4_subjective_block(
+        ctx.get("big4_signal", "NEUTRAL"),
+        float(ctx.get("big4_strength") or 0),
+        bool(ctx.get("allow_long", True)),
+        bool(ctx.get("allow_short", True)),
+        side,
+        float(ctx.get("btc_6h_change") or 0),
+        float(ctx.get("eth_6h_change") or 0),
     )
+    klines_15m = format_kline_table(ctx.get("klines_15m", []))
+    klines_1h = format_kline_table(ctx.get("klines_1h", []))
+    narr_1h = (ctx.get("narrative_1h") or "").strip() or "(缓存暂无，以上表为准)"
+    narr_15m = (ctx.get("narrative_15m") or "").strip() or "(无)"
+    tech_block = build_tech_metrics_block(profile, ctx)
+    review_steps = build_strategy_review_steps(profile)
+    sl_s = f"{sl_pct}%" if sl_pct is not None else "默认"
+    tp_s = f"{tp_pct}%" if tp_pct is not None else "默认"
+    hold_s = f"{hold_hours}h" if hold_hours is not None else "策略默认"
+    return f"""你是超级交易大师。系统在**开模拟仓之前**请你审核是否允许开仓。
+
+## 重要
+- 本笔 **唯一** 审核标准：下方「{profile.title_zh}」专属 rubric（profile={profile.key}）。
+- **禁止**用其它策略的标准审本单（例如用「追涨」标准审「回调」单）。
+
+## 本笔策略
+  策略名:     {profile.title_zh}
+  profile:    {profile.key}
+  source:     {source}
+  固定方向:   {profile.expected_side or '按信号 LONG/SHORT'}
+
+### 「{profile.title_zh}」专属审核标准（仅此一节有效）
+{profile.rubric}
+
+{_KLINE_1H_READING}
+
+{tech_block}
+
+{big4_block}
+
+## 拟开仓
+  Symbol:     {symbol}
+  Direction:  {side}
+  Entry:      {price}
+  Leverage:   {leverage}x
+  SL/TP:      {sl_s} / {tp_s}
+  Plan hold:  {hold_s}
+  Catalyst:   {(catalyst or '')[:500]}
+
+## 市场数据
+  candidate_pool 1h 叙事:
+{narr_1h}
+  candidate_pool 15m 叙事:
+{narr_15m}
+
+## 近 24 根 1h K 线 (oldest → newest)
+{klines_1h}
+
+## 近 4h 15m K 线
+{klines_15m}
+
+{review_steps}
+
+Output ONLY JSON:
+{{
+  "decision": "approve" | "reject",
+  "reason": "<50字中文，必须写明策略名「{profile.title_zh}」通过/驳回要点>"
+}}
+"""
 
 
 _GPT_PROFILE_TITLE_EN: dict[str, str] = {

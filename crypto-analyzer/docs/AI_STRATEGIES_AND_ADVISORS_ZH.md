@@ -1,6 +1,6 @@
 # AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-06-05 · 与生产代码对齐（主探索/预测/战术/反转 **LLM prompt 为英文**；实盘按 `LIVE_SYNC_SOURCES` 三策略 + TOP50/白名单开仓闸）
+> 文档版本：2026-06-05 · 与生产代码对齐（主探索/预测/战术/反转/顾问 **LLM prompt 为中文**；实盘按 `LIVE_SYNC_SOURCES` 三策略 + TOP50/白名单开仓闸）
 
 ## 1. 总览
 
@@ -44,18 +44,19 @@ smart_trader_service (每 900s)
 
 **禁止** `refresh_candidate_pool` 开头全表 `DELETE`（已改为 UPSERT）。探索应使用 `load_candidate_pool_for_explore()`，避免回退 `kline_data` 慢查询占锁。
 
-### 2.2 生产 Prompt 语言（2026-06）
+### 2.2 生产 Prompt 语言（2026-06-05 已回滚中文）
 
 | 模块 | 生产入口 | 说明 |
 |------|----------|------|
-| 主探索 | `build_explore_prompt()` → `build_explore_prompt_en()` | `ai_explore_prompt.py` |
-| 主预测 | `build_predict_prompt()` → `build_predict_prompt_en()` | `ai_predict_prompt.py` |
-| 战术四策略 | `build_strategy_prompt()` → `build_strategy_prompt_en()` | `ai_tactical_explore_prompts.py` |
-| 顶空底多 | `build_reversal_explore_prompt()` → EN | `ai_reversal_explore_prompt.py` |
-| 开仓顾问 | `build_open_advisor_prompt()` → `build_gpt_open_advisor_prompt()` | 三教师共用英文 rubric |
-| 持仓顾问 | `GeminiPositionAdvisor._build_prompt()` | 英文；DeepSeek/GPT 继承同一 prompt 结构 |
+| 主探索 | `build_explore_prompt()` → `build_explore_prompt_zh()` | `ai_explore_prompt.py` |
+| 主预测 | `build_predict_prompt()` → `build_predict_prompt_zh()` | `ai_predict_prompt.py` |
+| 战术四策略 | `build_strategy_prompt()` → `build_strategy_prompt_zh()` | `ai_tactical_explore_prompts.py` |
+| 顶空底多 | `build_reversal_explore_prompt()` → 中文模板 | `ai_reversal_explore_prompt.py` |
+| 开仓顾问 | `build_open_advisor_prompt()` | 中文 rubric（三教师共用） |
+| 持仓顾问 | `GeminiPositionAdvisor._build_prompt()` | 中文；DeepSeek/GPT 继承 |
+| GPT system | `GPT_JSON_SYSTEM_ZH` | `gpt_*_worker` / 战术 GPT |
 
-A/B 或回归仍可用 `*_zh()` 与 `scripts/benchmark_*_prompt_lang.py`。
+A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 2.3 共用硬门槛
 

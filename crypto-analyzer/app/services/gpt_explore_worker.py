@@ -12,7 +12,7 @@ from loguru import logger
 
 from app.services.ai_explore_prompt import EXPLORE_LLM_MAX_OUTPUT_TOKENS
 from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_MODEL, GPT_TIMEOUT_S
-from app.services.gpt_llm_client import GPT_JSON_SYSTEM_EN, gpt_chat_json
+from app.services.gpt_llm_client import GPT_JSON_SYSTEM_ZH, gpt_chat_json
 from app.services.ai_big4_prompt import big4_conflict_risk_note
 from app.services.ai_explore_prompt import (
     AI_POSITION_HOLD_HOURS,
@@ -90,7 +90,7 @@ def _call_gpt_explore(universe: dict, global_ctx: dict, historical_stats: dict):
             user_prompt=prompt,
             max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
             timeout=GPT_TIMEOUT_S,
-            system_prompt=GPT_JSON_SYSTEM_EN,
+            system_prompt=GPT_JSON_SYSTEM_ZH,
         )
     except Exception as e:
         return None, f"GPT API 调用失败: {e}"

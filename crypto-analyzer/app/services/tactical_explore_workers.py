@@ -21,7 +21,7 @@ from app.services.ai_tactical_explore_prompts import (
 )
 from app.services.gemini_swan_worker import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT_S
 from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_MODEL, GPT_TIMEOUT_S
-from app.services.gpt_llm_client import GPT_JSON_SYSTEM_EN, gpt_chat_json
+from app.services.gpt_llm_client import GPT_JSON_SYSTEM_ZH, gpt_chat_json
 from app.services.reversal_explore_runner import (
     TacticalExploreConfig,
     run_tactical_explore_round,
@@ -153,7 +153,7 @@ def _call_gpt(defn: TacticalStrategyDef, strategy_key: str):
                 user_prompt=prompt,
                 max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
                 timeout=GPT_TIMEOUT_S,
-                system_prompt=GPT_JSON_SYSTEM_EN,
+                system_prompt=GPT_JSON_SYSTEM_ZH,
             )
         except Exception as e:
             return None, f"API: {e}"

@@ -310,8 +310,8 @@ def build_explore_prompt(
     *,
     max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
 ) -> Tuple[str, Dict[str, Any]]:
-    """Production default: English main explore prompt."""
-    return build_explore_prompt_en(
+    """Production default: Chinese main explore prompt."""
+    return build_explore_prompt_zh(
         universe, global_ctx, historical_stats, max_symbols=max_symbols,
     )
 

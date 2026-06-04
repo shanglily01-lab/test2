@@ -58,9 +58,10 @@ def test_explore_prompt():
         }
     }
     p, meta = build_explore_prompt(u, {}, {})
-    assert "24-bar" in p.lower() or "24 bar" in p.lower()
-    assert "technical score" in p.lower()
-    print(f"[PASS] explore prompt EN ({len(p)} chars, {meta['llm_symbol_count']} syms)")
+    assert "24" in p and "1h" in p
+    assert "技术面" in p or "TOP" in p
+    assert "你是" in p or "分析师" in p
+    print(f"[PASS] explore prompt ZH ({len(p)} chars, {meta['llm_symbol_count']} syms)")
 
 
 def test_predict_prompt():
@@ -73,11 +74,12 @@ def test_predict_prompt():
         [{"symbol": "AAA/USDT", "kline_narrative": {"1h": "x"}, "current_price": 1.0}],
         {"big4_signal": "NEUTRAL"},
     )
-    assert "4 hours" in p
-    assert "24-bar" in p.lower() or "24 bar" in p.lower()
+    assert "4" in p and "小时" in p
+    assert "24" in p and "1h" in p
+    assert "超级交易大师" in p or "预测" in p
     assert "build_predict_prompt" in inspect.getsource(gp._call_gemini_predict)
     assert "build_predict_prompt" in inspect.getsource(dp._call_deepseek_predict)
-    print("[PASS] predict prompts EN (shared ai_predict_prompt)")
+    print("[PASS] predict prompts ZH (shared ai_predict_prompt)")
 
 
 def test_catalyst_gate_predict():
@@ -108,25 +110,29 @@ def test_sym_data_for_gate():
     print("[PASS] sym_data_for_catalyst_gate")
 
 
-def test_gpt_en_prompts():
-    from app.services.gpt_llm_client import GPT_JSON_SYSTEM_EN
+def test_gpt_zh_prompts():
+    from app.services.gpt_llm_client import GPT_JSON_SYSTEM_ZH
     import inspect
     import app.services.gpt_explore_worker as gew
     import app.services.gpt_predictor as gp
 
-    assert "JSON" in GPT_JSON_SYSTEM_EN
+    assert "量化" in GPT_JSON_SYSTEM_ZH
     explore_src = inspect.getsource(gew._call_gpt_explore)
     assert "build_explore_prompt" in explore_src
-    assert "GPT_JSON_SYSTEM_EN" in explore_src
+    assert "GPT_JSON_SYSTEM_ZH" in explore_src
     predict_src = inspect.getsource(gp._call_gpt_predict)
     assert "build_predict_prompt" in predict_src
-    assert "GPT_JSON_SYSTEM_EN" in predict_src
+    assert "GPT_JSON_SYSTEM_ZH" in predict_src
+    import app.services.ai_explore_prompt as ep
+    import app.services.ai_predict_prompt as pp
+    assert "build_explore_prompt_zh" in inspect.getsource(ep.build_explore_prompt)
+    assert "build_predict_prompt_zh" in inspect.getsource(pp.build_predict_prompt)
     import app.services.gemini_position_advisor as gpa
     open_src = inspect.getsource(gpa.GeminiPositionAdvisor._build_open_prompt)
     hold_src = inspect.getsource(gpa.GeminiPositionAdvisor._build_prompt)
     assert "build_open_advisor_prompt" in open_src
-    assert "paper position" in hold_src.lower()
-    print("[PASS] GPT + advisor prompts English")
+    assert "持仓监管" in hold_src
+    print("[PASS] GPT + advisor prompts Chinese")
 
 
 def test_gpt_llm_aligns_gemini():
@@ -151,7 +157,7 @@ def main():
         test_predict_prompt,
         test_catalyst_gate_predict,
         test_sym_data_for_gate,
-        test_gpt_en_prompts,
+        test_gpt_zh_prompts,
         test_gpt_llm_aligns_gemini,
     ]
     failed = 0
