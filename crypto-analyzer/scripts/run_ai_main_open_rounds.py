@@ -9,8 +9,7 @@
   python scripts/run_ai_main_open_rounds.py --main --require-open
   python scripts/run_ai_main_open_rounds.py --full
 
-先启用 kill switch:
-  python scripts/enable_ai_main_strategies.py
+（kill switch 在 Web 系统设置中配置）
 
 退出码: 0 = 全部通过；1 = 有失败或未满足 --require-open
 """
