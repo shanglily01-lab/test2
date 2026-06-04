@@ -55,7 +55,7 @@ from app.services.ai_predict_schedule import (
     predict_claim_next_slot,
     predict_round_is_due,
 )
-from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_TIMEOUT_S
+from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_MODEL, GPT_TIMEOUT_S
 from app.services.gpt_llm_client import GPT_JSON_SYSTEM_EN, gpt_chat_json
 
 # ── data_cache 层: 尝试从缓存读取, 失败回退 ──
