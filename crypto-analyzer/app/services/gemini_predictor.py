@@ -79,10 +79,10 @@ def _try_candidate(symbol: str) -> Optional[Dict]:
     if not _DATA_CACHE_AVAILABLE_PREDICT:
         return None
     try:
+        from app.utils.futures_price import candidate_pool_row
+
         pool = get_candidate_pool(min_volume=0, limit=500)
-        for r in pool:
-            if r["symbol"] == symbol:
-                return r
+        return candidate_pool_row(pool, symbol)
     except Exception:
         pass
     return None
@@ -157,31 +157,10 @@ def _get_top50_symbols(conn) -> List[str]:
 
 
 def _get_current_price(conn, symbol: str) -> Optional[float]:
-    """实时取当前价, 用于开仓."""
-    try:
-        from app.services.binance_data_hub import get_global_data_hub
-        hub = get_global_data_hub()
-        if hub is not None:
-            p = hub.get_price_sync(symbol, max_age_seconds=90)
-            if p is not None and p > 0:
-                return float(p)
-    except Exception:
-        pass
+    """实时取当前价 (U 本位 mark 优先), 用于开仓."""
+    from app.utils.futures_price import get_futures_trade_price
 
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "SELECT close_price FROM kline_data "
-                "WHERE symbol=%s AND timeframe='5m' AND exchange='binance_futures' "
-                "ORDER BY open_time DESC LIMIT 1",
-                (symbol,),
-            )
-            row = cur.fetchone()
-            if row and row.get('close_price'):
-                return float(row['close_price'])
-    except Exception:
-        pass
-    return None
+    return get_futures_trade_price(conn, symbol, log_tag="Gemini预测")
 
 
 # ============================================================

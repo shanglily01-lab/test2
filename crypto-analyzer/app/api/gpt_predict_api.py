@@ -51,30 +51,23 @@ def _get_price_hub():
 
 
 def _live_price(symbol: str, hub) -> Optional[float]:
-    if hub is not None:
-        try:
-            lp = hub.get_price_sync(symbol, max_age_seconds=90)
-            if lp is not None and lp > 0:
-                return float(lp)
-        except Exception:
-            pass
     try:
+        from app.utils.futures_price import get_futures_trade_price
+
         conn = _connect()
         try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT close_price FROM kline_data "
-                    "WHERE symbol=%s AND timeframe='5m' AND exchange='binance_futures' "
-                    "ORDER BY open_time DESC LIMIT 1",
-                    (symbol,),
-                )
-                row = cur.fetchone()
-                if row and row.get('close_price'):
-                    return float(row['close_price'])
+            return get_futures_trade_price(conn, symbol, log_tag="GPT预测展示")
         finally:
             conn.close()
     except Exception:
         pass
+    if hub is not None:
+        try:
+            lp = hub.get_trade_price_sync(symbol, max_age_seconds=90)
+            if lp is not None and lp > 0:
+                return float(lp)
+        except Exception:
+            pass
     return None
 
 

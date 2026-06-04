@@ -86,6 +86,7 @@ class BinanceDataHub:
     # 单拉端点 (兜底)
     FAPI_KLINES = "https://fapi.binance.com/fapi/v1/klines"
     FAPI_TICKER_PRICE = "https://fapi.binance.com/fapi/v1/ticker/price"
+    FAPI_PREMIUM_INDEX = "https://fapi.binance.com/fapi/v1/premiumIndex"
 
     # 全市场刷新周期 (秒) - 60s 是设计目标, 见模块 docstring
     PERIODIC_FETCH_INTERVAL = 60
@@ -271,6 +272,50 @@ class BinanceDataHub:
 
         if not allow_rest_fallback:
             return None
+        return self._rest_single_price_sync(symbol, symbol_clean)
+
+    def get_trade_price_sync(
+        self,
+        symbol: str,
+        max_age_seconds: int = 90,
+        allow_rest_fallback: bool = True,
+    ) -> Optional[Decimal]:
+        """
+        模拟开仓/平仓用价 — 优先 U 本位 mark（WS / premiumIndex），再 last / 5m 收盘。
+        """
+        is_coin = symbol.endswith("/USD") and not symbol.endswith("/USDT")
+        if is_coin:
+            return None
+
+        symbol_clean = symbol.replace("/", "").upper()
+
+        ws = self._get_ws_futures()
+        if ws is not None:
+            try:
+                p = ws.get_price(symbol, max_age_seconds=max_age_seconds)
+                if p is not None and p > 0:
+                    return Decimal(str(p))
+            except Exception as e:
+                logger.debug(f"[DataHub] {symbol} WS mark 取价异常: {e}")
+
+        mark_cached = self._cache_get_mark_price(symbol_clean, max_age_seconds)
+        if mark_cached is not None and mark_cached > 0:
+            return mark_cached
+
+        cached = self._cache_get_ticker(symbol_clean, max_age_seconds)
+        if cached is not None:
+            return cached
+
+        db_price = self._db_kline_fallback(symbol)
+        if db_price is not None:
+            return db_price
+
+        if not allow_rest_fallback:
+            return None
+
+        mark_rest = self._rest_mark_price_sync(symbol, symbol_clean)
+        if mark_rest is not None:
+            return mark_rest
         return self._rest_single_price_sync(symbol, symbol_clean)
 
     async def get_prices_batch(
@@ -610,9 +655,20 @@ class BinanceDataHub:
             entry = self._ticker_cache.get(symbol_clean)
             if not entry:
                 return None
+            if entry.get("source") != "fapi":
+                return None
             if (time.time() - entry["ts"]) > max_age_seconds:
                 return None
             return entry["price"]
+
+    def _cache_get_mark_price(self, symbol_clean: str, max_age_seconds: int) -> Optional[Decimal]:
+        with self._cache_lock:
+            entry = self._premium_cache.get(symbol_clean)
+            if not entry or entry.get("source") != "fapi":
+                return None
+            if (time.time() - entry["ts"]) > max_age_seconds:
+                return None
+            return entry.get("mark_price")
 
     def _db_kline_fallback(self, symbol: str, max_age_minutes: int = 15) -> Optional[Decimal]:
         """从 kline_data 读最近一根 K 线收盘价（兼容 BASEUSDT / BASE/USDT）。"""
@@ -635,7 +691,7 @@ class BinanceDataHub:
                         for tf in ("1m", "5m"):
                             cur.execute(
                                 "SELECT close_price, open_time FROM kline_data "
-                                "WHERE symbol=%s AND timeframe=%s "
+                                "WHERE symbol=%s AND timeframe=%s AND exchange='binance_futures' "
                                 "ORDER BY open_time DESC LIMIT 1",
                                 (sym_key, tf),
                             )
@@ -772,6 +828,51 @@ class BinanceDataHub:
                 with self._cache_lock:
                     self._ticker_cache[symbol_clean] = {
                         "price": dec, "ts": time.time(),
+                        "source": "fapi",
+                    }
+                return dec
+        except Exception:
+            return None
+        return None
+
+    def _rest_mark_price_sync(
+        self, symbol: str, symbol_clean: str
+    ) -> Optional[Decimal]:
+        """REST 单 symbol 拉 markPrice (premiumIndex)."""
+        if rate_guard.is_banned():
+            self._stat_rest_rejected_by_ban += 1
+            return None
+        if not self._rate_limiter.try_acquire(1):
+            self._stat_rest_rejected_by_bucket += 1
+            return None
+
+        sess = self._get_sync_session()
+        try:
+            self._stat_rest_calls += 1
+            r = sess.get(
+                self.FAPI_PREMIUM_INDEX,
+                params={"symbol": symbol_clean},
+                timeout=3,
+            )
+            if r.status_code != 200:
+                self._maybe_record_ban(r.status_code, r.text, src="hub:premium:single")
+                return None
+            data = r.json()
+        except Exception as e:
+            logger.warning(f"[DataHub] {symbol} premiumIndex 同步拉取异常: {e}")
+            return None
+
+        if not isinstance(data, dict) or data.get("markPrice") is None:
+            return None
+        try:
+            dec = Decimal(str(data["markPrice"]))
+            if dec > 0:
+                now = time.time()
+                with self._cache_lock:
+                    self._premium_cache[symbol_clean] = {
+                        "mark_price": dec,
+                        "funding_rate": None,
+                        "ts": now,
                         "source": "fapi",
                     }
                 return dec
