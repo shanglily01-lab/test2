@@ -225,66 +225,88 @@ If nothing qualifies, use verdicts=[] — do not list skips one-by-one.
 
 _TACTICAL_PROMPT_EN: Dict[str, Dict[str, str]] = {
     "pullback": {
-        "title": "Pullback long",
+        "title": "Pullback long (counter-move in uptrend)",
         "body": (
-            "## Strategy definition (ALL required for entry)\n"
-            "1. **24x1h** overall uptrend (higher highs/channel).\n"
-            "2. **Last 4-6x1h** pullback/dip with support hold (not knife-catch).\n"
-            "3. **RSI 1h <= 68**; shallow dip at RSI>68 → reject (chase/skip).\n"
-            "4. **LONG only**; pure momentum chase narrative → reject.\n"
-            "Example catalyst: 24h up channel; last 5 bars red dip to EMA20; 15m lower wick; RSI 48."
+            "## Core (counter-trend within uptrend)\n"
+            "**24x1h uptrend** + **last 4-6 bars pullback** ending at support — NOT momentum continuation.\n\n"
+            "### Required\n"
+            "1. 24-bar 1h: higher highs / up channel (check kline_narrative).\n"
+            "2. Last 4-6 bars: red streak / dip / retrace (multi-bar, not one bar).\n"
+            "3. Support hold: EMA / prior low / lower wick / box bottom — state stabilization.\n"
+            "4. RSI 1h <= 68; shallow dip at RSI>68 → reject (→ momentum chase).\n"
+            "5. LONG only; no knife-catch in downtrend.\n\n"
+            "Example: 24h up channel; last 5 bars dip to EMA20; 15m lower wick; RSI 48."
         ),
         "contrast": (
-            "## Boundaries\n"
-            "✅ Uptrend pullback long only.\n"
-            "❌ Not: late chase (→ momentum chase), deep dump bounce, top short."
+            "## vs sibling tactics\n"
+            "| vs | Pullback long | NOT this strategy |\n"
+            "| Momentum chase | dip then stabilize | last 6 bars still pushing up, no real dip |\n"
+            "| Rebound short | uptrend + dip long | downtrend + bounce short |\n"
+            "| Dump short | — | downtrend continuation short |"
         ),
     },
     "rebound": {
-        "title": "Rebound short",
+        "title": "Rebound short (fade weak rally in downtrend)",
         "body": (
-            "## Strategy definition (ALL required)\n"
-            "1. Prior top then **downtrend** on 24x1h.\n"
-            "2. **Last 4-6x1h** bounce with **weak volume** (state clearly).\n"
-            "3. Near resistance / relative high; **SHORT only**.\n"
-            "Example: 24h down channel; last 4 bars weak bounce at prior high; RSI ~52."
+            "## Core (counter-move within downtrend)\n"
+            "**24x1h downtrend** + **last 4-6 bars weak bounce** failing at resistance — NOT breakdown chase.\n\n"
+            "### Required\n"
+            "1. 24-bar 1h: down channel / lower highs (no need for literal 'topped yesterday').\n"
+            "2. Last 4-6 bars: bounce / relief rally (multi-bar greens or retrace up).\n"
+            "3. **Weak volume** on bounce — must state thin volume / no follow / divergence.\n"
+            "4. At relative high / resistance / near 7d high / upper wick rejection.\n"
+            "5. SHORT only; RSI not extremely low (<40 →更像 dump chase).\n\n"
+            "Example: 24h down channel; last 4 bars weak bounce at prior high; RSI 52; volume thin."
         ),
         "contrast": (
-            "## Boundaries\n"
-            "✅ Short weak bounce in downtrend.\n"
-            "❌ Not: breakdown chase (→ dump short), fresh breakout high."
+            "## vs sibling tactics\n"
+            "| vs | Rebound short | NOT this strategy |\n"
+            "| Dump short | bounce then fail at resistance | no bounce story, straight selloff |\n"
+            "| Pullback long | — | uptrend dip long |\n"
+            "| Momentum chase | — | uptrend continuation long |"
         ),
     },
     "chase": {
-        "title": "Momentum chase long",
+        "title": "Momentum chase long (trend continuation)",
         "body": (
-            "## Strategy definition (ALL required)\n"
-            "1. **24x1h** up; **last 4-6** still extend without deep pullback.\n"
-            "2. Volume not required; flat volume OK if structure holds.\n"
-            "3. **RSI 1h <= 68**; >68 → reject.\n"
-            "4. **below_7d_high_pct <= -3** (room to 7d high).\n"
-            "5. **LONG only**; dip-buy narrative → reject (pullback).\n"
+            "## Core (with-trend continuation)\n"
+            "**24x1h uptrend** + **last 4-6 bars still extend up** without deep pullback — NOT buy-the-dip.\n\n"
+            "### Required\n"
+            "1. 24-bar 1h up; last 4-6 still advancing (streak / channel / higher highs).\n"
+            "2. No deep retrace narrative ('pullback to support ready' → reject).\n"
+            "3. RSI 1h <= 68; >68 reject.\n"
+            "4. below_7d_high_pct <= -3 (room to 7d high for 6% TP).\n"
+            "5. Volume not required; flat OK if structure holds.\n"
+            "6. LONG only.\n\n"
             "Example: 24h bullish; last 6 bars up streak; below_7d_high=-8%; RSI 62."
         ),
         "contrast": (
-            "## Boundaries\n"
-            "✅ Trend continuation long with room below 7d high.\n"
-            "❌ Not: deep pullback long, top short, 24h % only."
+            "## vs sibling tactics\n"
+            "| vs | Momentum chase | NOT this strategy |\n"
+            "| Pullback long | still pushing, no deep dip | multi-bar dip + support hold |\n"
+            "| Rebound short | — | downtrend bounce short |\n"
+            "Do not entry solely on 24h % change."
         ),
     },
     "dump": {
-        "title": "Breakdown short",
+        "title": "Breakdown short (downtrend continuation)",
         "body": (
-            "## Strategy definition (ALL required)\n"
-            "1. **24x1h** downtrend intact.\n"
-            "2. Bounce lacks volume or fails (last 4-6 bars).\n"
-            "3. **SHORT only**; not bottom fishing.\n"
-            "Example: 24h down; last 5 bars weak bounce; 15m fail; RSI 38."
+            "## Core (with-trend continuation)\n"
+            "**24x1h downtrend** + **no meaningful bounce** or bounce failed — NOT shorting a relief rally at resistance.\n\n"
+            "### Required\n"
+            "1. 24-bar 1h down channel intact.\n"
+            "2. Last 4-6: selloff continues OR bounce lacks volume / fails quickly.\n"
+            "3. Narrative focus: trend continuation, not 'rally to resistance then short'.\n"
+            "4. RSI 1h <= 55 preferred; >55 reject.\n"
+            "5. SHORT only; no bottom fishing.\n\n"
+            "Example: 24h down; last 5 bars weak/no bounce; 15m fail; RSI 38."
         ),
         "contrast": (
-            "## Boundaries\n"
-            "✅ Short trend continuation after failed bounce.\n"
-            "❌ Not: rebound short at resistance, bottom reversal long."
+            "## vs sibling tactics\n"
+            "| vs | Dump short | NOT this strategy |\n"
+            "| Rebound short | straight down / failed micro-bounce | explicit multi-bar bounce at resistance + thin volume |\n"
+            "| Pullback long | — | uptrend dip long |\n"
+            "If catalyst主调是「缩量反弹至前高」→ use rebound short, not dump."
         ),
     },
 }
@@ -321,6 +343,27 @@ def _strategy_quant_rules_en(strategy_key: str) -> str:
     return rules.get(strategy_key, "- Follow strategy definition and multi-bar 1h structure.")
 
 
+def _tactical_family_block(defn: TacticalStrategyDef) -> str:
+    """回多反空 vs 追涨杀跌 — 写入 prompt 顶部，减少 LLM 混策略."""
+    if defn.key in ("pullback", "rebound"):
+        return (
+            "## 战术族：回多反空（顺大势、逆小势）\n"
+            "与「追涨杀跌」不同：先确认 **24 根 1h 大势方向**，再在小级别找 **与大势相反的一小段** 结束点。\n"
+            "| 本族 | 大势 | 小级别 | 方向 |\n"
+            "| 回调做多 | 上涨/通道多 | 回落、阴线、回踩后企稳 | LONG |\n"
+            "| 反弹做空 | 下跌/通道空 | 缩量反弹、反抽至阻力后衰竭 | SHORT |\n"
+            "**禁止**把「顺势连阳上攻」当回调做多，**禁止**把「顺势连阴杀跌」当反弹做空（后者归追涨/杀跌族）。\n"
+        )
+    return (
+        "## 战术族：追涨杀跌（顺大势、顺小势）\n"
+        "与「回多反空」不同：大势与小级别 **同向延续**，不是等深回踩或等像样反弹。\n"
+        "| 本族 | 大势 | 小级别 | 方向 |\n"
+        "| 追涨做多 | 上涨/通道多 | 近 6 根仍延续上攻、无深度回踩 | LONG |\n"
+        "| 杀跌做空 | 下跌/通道空 | 跌势延续、反弹无量或极弱 | SHORT |\n"
+        "**禁止**用「回踩支撑企稳」当追涨；**禁止**用「缩量反弹碰前高」当杀跌（后者归回多反空·反弹做空）。\n"
+    )
+
+
 def _build_prompt(
     definition: TacticalStrategyDef,
     universe: dict,
@@ -336,9 +379,11 @@ def _build_prompt(
     side_note = "做多" if definition.fixed_side == "LONG" else "做空"
     contrast = (definition.contrast_block or "").strip()
     contrast_section = f"{contrast}\n\n" if contrast else ""
+    family = _tactical_family_block(definition)
     prompt = (
         f"你是加密货币 U 本位合约的**{definition.title_zh}**专属分析师（非泛化多空评论）。"
         f"只输出**符合下述定义**的 {side_note} entry；其它战术形态一律不要塞进本 JSON。\n\n"
+        f"{family}\n"
         f"{definition.prompt_body}\n\n"
         f"{contrast_section}"
         f"{_KLINE_1H_RULES}\n"
@@ -625,12 +670,12 @@ def _strategy_quant_rules(strategy_key: str) -> str:
             "- 近 6 根须**延续上行**、无深度回踩；叙事主调不得是「回调到位」。"
         ),
         "rebound": (
-            "- 须下降趋势 + 近 4~6 根缩量/无力反弹 + 相对阻力区；禁止突破新高追空。\n"
-            "- RSI 不宜极低钝化区盲目空（须写明反弹衰竭）。"
+            "- 24h **下降通道** + 近 4~6 根**像样反弹** + **缩量/无力** + 阻力区；RSI 不宜 <40。\n"
+            "- 主叙事是「反弹衰竭空」，不是「顺势杀跌」（后者→杀跌做空）。"
         ),
         "dump": (
-            "- 须下跌趋势延续 + 反弹无量/失败；RSI 1h 不宜 >55。\n"
-            "- 禁止底部博反弹叙事。"
+            "- 24h **下跌延续** + 反弹无量/极弱/无像样反弹；RSI 1h 不宜 >55。\n"
+            "- 主叙事是「跌势延续空」，不是「缩量反弹碰前高」（后者→反弹做空）。"
         ),
     }
     return rules.get(strategy_key, "- 遵守策略定义与多周期 K 线结构。")
@@ -736,10 +781,10 @@ def _rebound_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) ->
         return False, "反弹做空须写明近 4~6 根 1h 存在反弹"
 
     if not _has_any(low, (
-        "见顶", "高点", "下降", "下跌", "下行", "偏空", "连阴", "跌破",
-        "downtrend", "bearish", "top", "lower high",
+        "下降", "下跌", "下行", "偏空", "连阴", "通道", "趋势", "新低", "跌破",
+        "downtrend", "bearish", "lower high", "down channel",
     )):
-        return False, "反弹做空须写明此前见顶/已进入下降趋势"
+        return False, "反弹做空须写明 24h/近24根 1h 处于下降趋势（不必写「曾见顶」）"
 
     vol_weak = _has_any(low, (
         "量能", "缩量", "萎缩", "背离", "不支持", "乏力", "无量",
@@ -871,19 +916,22 @@ PULLBACK_LONG = TacticalStrategyDef(
     title_zh="回调做多",
     fixed_side="LONG",
     prompt_body=(
-        "## 策略定义（必须全部满足才 entry）\n"
-        "1. **大前提**：**近 24 根 1h** 整体处于**上涨趋势**（高点抬高/通道上行；见 kline_narrative 整体形态）。\n"
-        "2. **近 4~6 根 1h**：出现**回落/回调**（多根阴线、回踩、短线下跌），而非仅凭 1 根阴线。\n"
-        "3. **支撑有效**：回踩至支撑（EMA/前低/箱体下沿/下影线企稳）并有止跌迹象。\n"
-        "4. **RSI**：1h RSI 须 **≤68**；宜写「从 XX 回落至 YY」，禁止在 RSI>68 时把浅调当健康回调。\n"
-        "5. **方向**：仅 **做多**；禁止在单边下跌或无趋势时「跌多了抄底」。\n"
-        "典型 catalyst 示例：「1h 近24根上升通道；近5根连续阴线回踩 EMA20；"
-        "15m 下影企稳；RSI 1h 从 58 回落至 48」。"
+        "## 本任务：回调做多（回多反空 · 多）\n"
+        "**一句话**：大势向上，小级别回落结束、支撑企稳 → 做多。\n\n"
+        "### 判定顺序（缺任一步 → 勿 entry）\n"
+        "1. **大势多**：近 24 根 1h 上升通道 / 高点抬高（读 kline_narrative 整体段，勿只看 24h 涨跌幅）。\n"
+        "2. **小级别回落**：近 4~6 根出现连续阴线、回踩、短线下跌（须多根，禁止只写 1 根 1h）。\n"
+        "3. **企稳证据**：EMA/前低/箱体下沿/下影线/止跌 — catalyst 须写清「回踩 + 企稳」。\n"
+        "4. **RSI**：1h RSI ≤68；从高位回落更佳；RSI>68 的浅调 → skip 或归**追涨做多**。\n"
+        "5. **方向**：仅 LONG；单边下跌「跌多了」→ skip。\n\n"
+        "**典型 catalyst**：「1h 近24根上升通道；近5根阴线回踩 EMA20 企稳；15m 下影；RSI 1h 58→48」。"
     ),
     contrast_block=(
-        "## 本策略边界（勿混淆）\n"
-        "✅ 只找：**上涨趋势里**的回踩做多。\n"
-        "❌ 不是：连阳末端追高（→**追涨做多**）、跌深反弹（→反转/探索）、顶部做空（→反弹做空）。"
+        "## 与易混战术对照\n"
+        "| 对比 | 回调做多 ✅ | 不是本策略 ❌ |\n"
+        "| vs 追涨做多 | 近6根先回落再企稳 | 近6根仍连阳上攻、无明显回踩 |\n"
+        "| vs 反弹做空 | 大势多 + 回踩多 | 大势空 + 反弹空 |\n"
+        "| vs 杀跌做空 | — | 大势空顺势空 |"
     ),
     extra_catalyst_check=_pullback_extra,
 )
@@ -892,20 +940,24 @@ REBOUND_SHORT = TacticalStrategyDef(
     key="rebound",
     title_zh="反弹做空",
     fixed_side="SHORT",
-    contrast_block=(
-        "## 本策略边界（勿混淆）\n"
-        "✅ 只找：**下降通道里**的缩量反弹至阻力做空。\n"
-        "❌ 不是：顺势杀跌（→杀跌做空）、强势突破新高（应 skip）、底部抄底（→反转/探索）。"
-    ),
     prompt_body=(
-        "## 策略定义（必须全部满足才 entry）\n"
-        "1. **曾见顶**：此前出现相对**最高价/阶段顶**，之后进入**下降趋势**（1h/1d 结构转弱）。\n"
-        "2. **近 4~6 根 1h**：出现**反弹**（多根阳线/反抽/触及均线或前高），非单根异动。\n"
-        "3. **量能不支持反弹**：反弹缩量、量价背离或量能未跟上（须写明）。\n"
-        "4. **位置**：当前处于**相对高点/阻力区**（距 7d 高点较近或上影受阻）。\n"
-        "5. **方向**：仅 **做空**；禁止在强趋势突破新高时做空。\n"
-        "典型：「1h 近24根下降通道；近4根缩量反弹碰前高；"
-        "15m 上影；RSI 1h 52 反弹无力」。"
+        "## 本任务：反弹做空（回多反空 · 空）\n"
+        "**一句话**：大势向下，小级别出现缩量/无力反弹至阻力 → 做空。\n\n"
+        "### 判定顺序（缺任一步 → 勿 entry）\n"
+        "1. **大势空**：近 24 根 1h 下降通道 / 低点降低（**不要求**写「昨天见顶」；看 24 根结构即可）。\n"
+        "2. **小级别反弹**：近 4~6 根阳线、反抽、触及均线或前高（须多根，非单根异动）。\n"
+        "3. **反弹衰竭**：须写明缩量、量能未跟上、量价背离或反弹乏力（缺一不可）。\n"
+        "4. **位置**：相对高点 / 阻力 / 7d 高附近 / 上影遇阻（非下跌中继深坑盲目空）。\n"
+        "5. **RSI**：宜 40~65；RSI<40 更像**杀跌做空**（跌势中段），勿与本策略混用。\n"
+        "6. **方向**：仅 SHORT；突破新高强趋势 → skip。\n\n"
+        "**典型 catalyst**：「1h 近24根下降通道；近4根缩量反弹碰前高；15m 上影；RSI 1h 52 无力」。"
+    ),
+    contrast_block=(
+        "## 与易混战术对照\n"
+        "| 对比 | 反弹做空 ✅ | 不是本策略 ❌ |\n"
+        "| vs 杀跌做空 | 先有一段像样反弹再空 | 几乎无反弹、连阴顺势下杀 |\n"
+        "| vs 回调做多 | 大势空 + 反弹空 | 大势多 + 回踩多 |\n"
+        "| vs 追涨做多 | — | 大势多顺势追多 |"
     ),
     extra_catalyst_check=_rebound_extra,
 )
@@ -915,19 +967,24 @@ CHASE_LONG = TacticalStrategyDef(
     title_zh="追涨做多",
     fixed_side="LONG",
     prompt_body=(
-        "## 策略定义（必须全部满足才 entry）\n"
-        "1. **持续上涨**：**近 24 根 1h** 趋势向上，**近 4~6 根** 仍延续上行、**无明显深度回调**。\n"
-        "2. **量能**：**不要求放量**；量能平平但结构未破仍可 entry。\n"
-        "3. **RSI**：1h RSI 须 **≤68**；>68 禁止 entry（超买延伸，4h 内易回撤打 SL）。\n"
-        "4. **空间**：`tech.below_7d_high_pct` 须 **≤-3**（距 7d 高点至少约 3% 上行空间）。\n"
-        "5. **禁止**：把「大幅回踩支撑」当追涨——那是**回调做多**。\n"
-        "6. **方向**：仅 **做多**；须有连阳/通道/高点抬升等延续证据。\n"
-        "典型：「1h 近24根偏多；近6根连阳无像样回调；below_7d_high=-8%；RSI 1h 62」。"
+        "## 本任务：追涨做多（追涨杀跌 · 多）\n"
+        "**一句话**：大势向上，小级别仍同向上攻、未深度回踩 → 顺势做多。\n\n"
+        "### 判定顺序（缺任一步 → 勿 entry）\n"
+        "1. **大势多**：近 24 根 1h 趋势向上。\n"
+        "2. **小级别延续**：近 4~6 根仍延续上行（连阳、通道、高点抬升），**无深度回调**。\n"
+        "3. **禁止回踩叙事**：catalyst 主调不得是「大幅回踩/回调到位/支撑反弹」→ 那是**回调做多**。\n"
+        "4. **RSI**：1h RSI ≤68；>68 禁止（超买延伸易 4h 内打 SL）。\n"
+        "5. **空间**：tech.below_7d_high_pct ≤ -3（距 7d 高至少约 3%，否则 TP6% 难达成）。\n"
+        "6. **量能**：不要求放量；结构未破即可。\n"
+        "7. **方向**：仅 LONG。\n\n"
+        "**典型 catalyst**：「1h 近24根偏多；近6根连阳无像样回调；below_7d_high=-8%；RSI 1h 62」。"
     ),
     contrast_block=(
-        "## 本策略边界（勿混淆）\n"
-        "✅ 只找：趋势延续中的**顺势追多**（尚未超买、距 7d 高有空间）。\n"
-        "❌ 不是：深回踩后做多（→回调做多）、涨多了摸顶空、仅因 24h 大涨而多。"
+        "## 与易混战术对照\n"
+        "| 对比 | 追涨做多 ✅ | 不是本策略 ❌ |\n"
+        "| vs 回调做多 | 仍在上攻、无深调 | 先多根回落再企稳 |\n"
+        "| vs 反弹做空 | — | 大势空 |\n"
+        "禁止仅因 24h 涨幅大就 entry。"
     ),
     extra_catalyst_check=_chase_extra,
 )
@@ -936,18 +993,24 @@ DUMP_SHORT = TacticalStrategyDef(
     key="dump",
     title_zh="杀跌做空",
     fixed_side="SHORT",
-    contrast_block=(
-        "## 本策略边界（勿混淆）\n"
-        "✅ 只找：**下跌趋势延续**中的顺势做空（反弹无力）。\n"
-        "❌ 不是：下降通道里的缩量反弹空（→反弹做空）、见底反转多。"
-    ),
     prompt_body=(
-        "## 策略定义（必须全部满足才 entry）\n"
-        "1. **下跌趋势**：**近 24 根 1h** 处于**下降通道**，趋势**未扭转**。\n"
-        "2. **反弹无力**：无明显量价支持的反弹，或反弹缩量、反弹失败（须写明）。\n"
-        "3. **追空**：顺势**做空**延续下跌，非在底部博反弹。\n"
+        "## 本任务：杀跌做空（追涨杀跌 · 空）\n"
+        "**一句话**：大势向下，小级别跌势延续、反弹无量或极弱 → 顺势做空。\n\n"
+        "### 判定顺序（缺任一步 → 勿 entry）\n"
+        "1. **大势空**：近 24 根 1h 下降通道，趋势未扭转。\n"
+        "2. **小级别同向**：近 4~6 根连阴/下杀延续，或仅有极弱、无量反弹后立即再跌。\n"
+        "3. **禁止反弹空叙事**：主调若是「缩量反弹至前高/阻力区遇阻」→ 那是**反弹做空**，不是杀跌。\n"
         "4. **量能**：不要求杀跌必须放量；关键是**没有**像样的放量反弹。\n"
-        "典型：「1h 近24根连阴下行；近5根反弹无量；15m 反抽失败；RSI 1h 38」。"
+        "5. **RSI**：1h RSI ≤55；偏高则 skip。\n"
+        "6. **方向**：仅 SHORT；底部博反弹 → skip。\n\n"
+        "**典型 catalyst**：「1h 近24根连阴下行；近5根无明显反弹或反弹无量；15m 反抽失败；RSI 1h 38」。"
+    ),
+    contrast_block=(
+        "## 与易混战术对照\n"
+        "| 对比 | 杀跌做空 ✅ | 不是本策略 ❌ |\n"
+        "| vs 反弹做空 | 顺势下杀 / 微反弹即失败 | 多根缩量反弹碰阻力后再空 |\n"
+        "| vs 回调做多 | — | 大势多 |\n"
+        "若 catalyst 大半在描述「反弹至阻力」，请改判反弹做空或 skip。"
     ),
     extra_catalyst_check=_dump_extra,
 )

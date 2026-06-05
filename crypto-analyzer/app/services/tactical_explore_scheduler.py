@@ -1,7 +1,7 @@
 """
 战术探索统一调度 — 每策略 4h 必跑 + 15min 轮询 + DB next_due (重启不丢).
 
-9 任务: 顶空底多 ×3 + 回多返空(回调+反弹) ×3 + 追涨杀跌(追涨+杀跌) ×3.
+9 任务: 顶空底多 ×3 + 回多反空(回调+反弹) ×3 + 追涨杀跌(追涨+杀跌) ×3.
 同一 poll 若多个任务 overdue, 先跑 next_due 最早的一个, 避免 LLM 并发风暴.
 """
 from __future__ import annotations
@@ -76,7 +76,7 @@ def _utc_now_naive() -> datetime:
 TACTICAL_SCHEDULE_JOBS: List[TacticalScheduleJob] = [
     TacticalScheduleJob("Gemini顶空底多", run_gemini_reversal_explore_round, 0,
                         "gemini_reversal", "gemini_reversal_explore_runs"),
-    TacticalScheduleJob("Gemini回多返空", run_gemini_pb_rb_explore_round, 1,
+    TacticalScheduleJob("Gemini回多反空", run_gemini_pb_rb_explore_round, 1,
                         "gemini_pb_rb", "gemini_pullback_explore_runs",
                         ("gemini_pullback_explore_runs", "gemini_rebound_explore_runs")),
     TacticalScheduleJob("Gemini追涨杀跌", run_gemini_ch_dm_explore_round, 2,
@@ -84,7 +84,7 @@ TACTICAL_SCHEDULE_JOBS: List[TacticalScheduleJob] = [
                         ("gemini_chase_explore_runs", "gemini_dump_explore_runs")),
     TacticalScheduleJob("DeepSeek顶空底多", run_deepseek_reversal_explore_round, 3,
                         "deepseek_reversal", "deepseek_reversal_explore_runs"),
-    TacticalScheduleJob("DeepSeek回多返空", run_deepseek_pb_rb_explore_round, 4,
+    TacticalScheduleJob("DeepSeek回多反空", run_deepseek_pb_rb_explore_round, 4,
                         "deepseek_pb_rb", "deepseek_pullback_explore_runs",
                         ("deepseek_pullback_explore_runs", "deepseek_rebound_explore_runs")),
     TacticalScheduleJob("DeepSeek追涨杀跌", run_deepseek_ch_dm_explore_round, 5,
@@ -92,7 +92,7 @@ TACTICAL_SCHEDULE_JOBS: List[TacticalScheduleJob] = [
                         ("deepseek_chase_explore_runs", "deepseek_dump_explore_runs")),
     TacticalScheduleJob("GPT顶空底多", run_gpt_reversal_explore_round, 6,
                         "gpt_reversal", "gpt_reversal_explore_runs"),
-    TacticalScheduleJob("GPT回多返空", run_gpt_pb_rb_explore_round, 7,
+    TacticalScheduleJob("GPT回多反空", run_gpt_pb_rb_explore_round, 7,
                         "gpt_pb_rb", "gpt_pullback_explore_runs",
                         ("gpt_pullback_explore_runs", "gpt_rebound_explore_runs")),
     TacticalScheduleJob("GPT追涨杀跌", run_gpt_ch_dm_explore_round, 8,

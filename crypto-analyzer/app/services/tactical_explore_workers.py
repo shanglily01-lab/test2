@@ -217,7 +217,7 @@ TACTICAL_GROUP_SPECS: Dict[str, Tuple[str, ...]] = {
     "ch_dm": ("chase", "dump"),
 }
 TACTICAL_GROUP_LABELS = {
-    "pb_rb": "回多返空",
+    "pb_rb": "回多反空",
     "ch_dm": "追涨杀跌",
 }
 _group_locks: Dict[str, threading.Lock] = {}
