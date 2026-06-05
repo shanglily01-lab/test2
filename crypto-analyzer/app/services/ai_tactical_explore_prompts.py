@@ -23,10 +23,16 @@ TACTICAL_CONFIDENCE_THRESHOLD = 0.55
 GPT_TACTICAL_MIN_ENTRIES = 2
 GPT_TACTICAL_MAX_ENTRIES = 3
 GPT_FALLBACK_SCAN_TOP = 40
-# 与代码门槛 / 开仓顾问 rubric 对齐（改一处须同步另两处）
+# 与代码门槛 / 开仓顾问 rubric / tactical_symbol_screener 对齐（改一处须同步）
 CHASE_RSI_MAX = 68
+CHASE_RSI_MIN = 48
 PULLBACK_RSI_MAX = 68
+PULLBACK_MAX_BELOW_7D_HIGH_PCT = -2.0  # below_7d_high_pct > -2 且无深回踩 → reject
 CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT = 3.0  # below_7d_high_pct 须 ≤ -3（距 7d 高至少 3% 空间）
+REBOUND_NEAR_7D_HIGH_PCT = -12.0  # below_7d_high_pct 须 > -12（距 7d 高 12% 内才算阻力区）
+REBOUND_RSI_MIN = 40
+REBOUND_RSI_MAX = 65
+DUMP_RSI_MAX = 55
 
 _KLINE_1H_RULES = """
 ## 1h K 线读法（必读，禁止只看 1 根）
@@ -112,23 +118,29 @@ def _symbol_hard_precheck_fail(defn: TacticalStrategyDef, item: dict) -> Optiona
             return f"RSI={rsi:.0f}>{PULLBACK_RSI_MAX}"
         if bear_narr and not bull_narr:
             return "1h叙事偏空"
-        if b7h is not None and b7h > -2.0:
+        if b7h is not None and b7h > PULLBACK_MAX_BELOW_7D_HIGH_PCT:
             return f"below_7d_high={b7h:.1f}%过近"
     elif defn.key == "chase":
         if rsi is not None and rsi > CHASE_RSI_MAX:
             return f"RSI={rsi:.0f}>{CHASE_RSI_MAX}"
+        if rsi is not None and rsi < CHASE_RSI_MIN:
+            return f"RSI={rsi:.0f}<{CHASE_RSI_MIN}"
         if b7h is not None and b7h > -CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:
             return f"below_7d_high={b7h:.1f}%空间不足"
         if bear_narr and not bull_narr:
             return "1h叙事偏空"
     elif defn.key == "rebound":
-        if rsi is not None and rsi < 40:
-            return f"RSI={rsi:.0f}<40"
+        if rsi is not None and rsi < REBOUND_RSI_MIN:
+            return f"RSI={rsi:.0f}<{REBOUND_RSI_MIN}"
+        if rsi is not None and rsi > REBOUND_RSI_MAX:
+            return f"RSI={rsi:.0f}>{REBOUND_RSI_MAX}"
         if bull_narr and not bear_narr:
             return "1h叙事仍偏多"
+        if b7h is not None and b7h <= REBOUND_NEAR_7D_HIGH_PCT:
+            return f"below_7d_high={b7h:.1f}%离7d高点过远"
     elif defn.key == "dump":
-        if rsi is not None and rsi > 55:
-            return f"RSI={rsi:.0f}>55"
+        if rsi is not None and rsi > DUMP_RSI_MAX:
+            return f"RSI={rsi:.0f}>{DUMP_RSI_MAX}"
         if bull_narr and not bear_narr:
             return "1h叙事仍偏强"
     return None
@@ -322,22 +334,22 @@ _BIG4_PROMPT_BLOCK_EXPLORE_EN = """
 def _strategy_quant_rules_en(strategy_key: str) -> str:
     rules = {
         "pullback": (
-            f"- RSI 1h <= {PULLBACK_RSI_MAX}; higher → skip or chase.\n"
-            "- Confirm 24h uptrend then 4-6 bar pullback with support.\n"
+            f"- RSI 1h <= {PULLBACK_RSI_MAX}; below_7d_high_pct <= {PULLBACK_MAX_BELOW_7D_HIGH_PCT:.0f}.\n"
+            "- 24h uptrend then 4-6 bar pullback with support.\n"
             "- No knife-catch in downtrend."
         ),
         "chase": (
-            f"- RSI 1h <= {CHASE_RSI_MAX}; >68 reject.\n"
+            f"- RSI 1h {CHASE_RSI_MIN}~{CHASE_RSI_MAX}; >{CHASE_RSI_MAX} reject.\n"
             f"- below_7d_high_pct <= -{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}.\n"
             "- Last 6 bars must extend up; not 'pullback ready' narrative."
         ),
         "rebound": (
-            "- Downtrend + 4-6 bar weak bounce + resistance; no fresh breakout high short.\n"
-            "- RSI not extremely low without exhaustion story."
+            f"- Downtrend + weak bounce + thin volume; below_7d_high_pct > {REBOUND_NEAR_7D_HIGH_PCT:.0f}%.\n"
+            f"- RSI {REBOUND_RSI_MIN}~{REBOUND_RSI_MAX}; not dump chase."
         ),
         "dump": (
-            "- Downtrend + failed bounce; RSI 1h not >55.\n"
-            "- No bottom-fishing narrative."
+            f"- Downtrend + failed bounce; RSI 1h <= {DUMP_RSI_MAX}.\n"
+            "- If mentioning bounce, must cite weak/no volume phrases."
         ),
     }
     return rules.get(strategy_key, "- Follow strategy definition and multi-bar 1h structure.")
@@ -358,8 +370,8 @@ def _tactical_sibling_block(defn: TacticalStrategyDef) -> str:
             "1. **大势空**：近 24 根 1h 下降通道 / 低点降低。\n"
             "2. **小级别反弹**：近 4~6 根阳线、反抽、触及均线或前高。\n"
             "3. **反弹衰竭**：须写明缩量、量能未跟上或反弹乏力。\n"
-            "4. **位置**：相对高点 / 阻力 / 7d 高附近 / 上影遇阻。\n"
-            "5. **方向**：仅 SHORT；RSI 宜 40~65。\n"
+            f"4. **位置**：阻力/前高/上影；或 below_7d_high > {REBOUND_NEAR_7D_HIGH_PCT:.0f}%。\n"
+            f"5. **方向**：仅 SHORT；RSI {REBOUND_RSI_MIN}~{REBOUND_RSI_MAX}。\n"
             "若标的符合上列反弹做空而非回调做多，**勿**写入本 JSON verdicts。\n"
         ),
         "rebound": (
@@ -368,7 +380,7 @@ def _tactical_sibling_block(defn: TacticalStrategyDef) -> str:
             "1. **大势多**：近 24 根 1h 上升通道 / 高点抬高。\n"
             "2. **小级别回落**：近 4~6 根连续阴线、回踩、短线下跌。\n"
             "3. **企稳证据**：EMA/前低/下影线/止跌 — 须写「回踩 + 企稳」。\n"
-            "4. **RSI**：1h RSI ≤68。\n"
+            f"4. **RSI**：1h RSI ≤{PULLBACK_RSI_MAX}；below_7d_high ≤ {PULLBACK_MAX_BELOW_7D_HIGH_PCT:.0f}%。\n"
             "5. **方向**：仅 LONG。\n"
             "若标的符合上列回调做多而非反弹做空，**勿**写入本 JSON verdicts。\n"
         ),
@@ -378,7 +390,7 @@ def _tactical_sibling_block(defn: TacticalStrategyDef) -> str:
             "1. **大势空**：近 24 根 1h 下降通道，趋势未扭转。\n"
             "2. **小级别同向**：近 4~6 根连阴/下杀延续，或仅有极弱、无量反弹后立即再跌。\n"
             "3. **禁止反弹空叙事**：主调若是「缩量反弹至前高/阻力区遇阻」→ 那是**反弹做空**（回多反空族），不是杀跌。\n"
-            "4. **RSI**：1h RSI ≤55；偏高则不属于杀跌做空。\n"
+            f"4. **RSI**：1h RSI ≤{DUMP_RSI_MAX}；偏高则不属于杀跌做空。\n"
             "5. **方向**：仅 SHORT。\n"
             "若标的符合上列杀跌做空而非追涨做多，**勿**写入本 JSON verdicts。\n"
         ),
@@ -388,8 +400,8 @@ def _tactical_sibling_block(defn: TacticalStrategyDef) -> str:
             "1. **大势多**：近 24 根 1h 趋势向上。\n"
             "2. **小级别延续**：近 4~6 根仍延续上行（连阳、通道），**无深度回调**。\n"
             "3. **禁止回踩叙事**：主调不得是「大幅回踩/回调到位/支撑反弹」→ 那是**回调做多**（回多反空族）。\n"
-            "4. **RSI**：1h RSI ≤68；>68 不属于追涨做多。\n"
-            "5. **空间**：below_7d_high_pct ≤ -3（距 7d 高至少约 3%）。\n"
+            f"4. **RSI**：1h RSI {CHASE_RSI_MIN}~{CHASE_RSI_MAX}。\n"
+            f"5. **空间**：below_7d_high_pct ≤ -{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}。\n"
             "6. **方向**：仅 LONG。\n"
             "若标的符合上列追涨做多而非杀跌做空，**勿**写入本 JSON verdicts。\n"
         ),
@@ -409,13 +421,13 @@ def _tactical_family_block(defn: TacticalStrategyDef) -> str:
             "**一句话**：大势向上，小级别回落结束、支撑企稳 → 做多。\n"
             "1. 大势多：近 24 根 1h 上升通道 / 高点抬高。\n"
             "2. 小级别回落：近 4~6 根阴线、回踩、短线下跌。\n"
-            "3. 企稳：EMA/前低/下影/止跌；RSI 1h ≤68。\n"
+            f"3. 企稳：EMA/前低/下影/止跌；RSI ≤{PULLBACK_RSI_MAX}；below_7d_high ≤ {PULLBACK_MAX_BELOW_7D_HIGH_PCT:.0f}%。\n"
             "4. 禁止把「顺势连阳上攻」当回调（→ 追涨做多 / 追涨杀跌族）。\n\n"
             "### 反弹做空（SHORT）\n"
             "**一句话**：大势向下，小级别缩量/无力反弹至阻力 → 做空。\n"
             "1. 大势空：近 24 根 1h 下降通道 / 低点降低。\n"
             "2. 小级别反弹：近 4~6 根阳线、反抽至阻力或前高。\n"
-            "3. 反弹衰竭：须写明缩量/量能不支持；RSI 宜 40~65。\n"
+            f"3. 反弹衰竭：缩量/量能不支持；below_7d_high > {REBOUND_NEAR_7D_HIGH_PCT:.0f}%；RSI {REBOUND_RSI_MIN}~{REBOUND_RSI_MAX}。\n"
             "4. 禁止把「顺势连阴杀跌」当反弹空（→ 杀跌做空 / 追涨杀跌族）。\n\n"
             "**禁止**混淆回多反空与追涨杀跌两族。\n"
         )
@@ -428,13 +440,13 @@ def _tactical_family_block(defn: TacticalStrategyDef) -> str:
         "**一句话**：大势向上，小级别仍同向上攻、未深度回踩 → 顺势做多。\n"
         "1. 大势多：近 24 根 1h 趋势向上。\n"
         "2. 小级别延续：近 4~6 根仍延续上行，**无深度回调**。\n"
-        "3. RSI 1h ≤68；below_7d_high_pct ≤ -3。\n"
+        f"3. RSI {CHASE_RSI_MIN}~{CHASE_RSI_MAX}；below_7d_high_pct ≤ -{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}。\n"
         "4. 禁止把「回踩支撑企稳」当追涨（→ 回调做多 / 回多反空族）。\n\n"
         "### 杀跌做空（SHORT）\n"
         "**一句话**：大势向下，小级别跌势延续、反弹无量或极弱 → 顺势做空。\n"
         "1. 大势空：近 24 根 1h 下降通道，趋势未扭转。\n"
         "2. 小级别同向：近 4~6 根连阴/下杀延续，或极弱无量反弹后再跌。\n"
-        "3. RSI 1h ≤55；禁止底部博反弹叙事。\n"
+        f"3. RSI 1h ≤{DUMP_RSI_MAX}；禁止底部博反弹叙事。\n"
         "4. 禁止把「缩量反弹至前高/阻力」当杀跌（→ 反弹做空 / 回多反空族）。\n\n"
         "**禁止**用「回踩支撑企稳」当追涨；**禁止**用「缩量反弹碰前高」当杀跌。\n"
     )
@@ -470,6 +482,7 @@ def _build_prompt(
         f"{_KLINE_1H_RULES}\n"
         f"## 本策略量化硬门槛（与代码校验一致，违反则勿 entry）\n"
         f"{_strategy_quant_rules(definition.key)}\n"
+        f"{_tactical_catalyst_keywords(definition.key)}\n\n"
         "## 通用输出规则\n"
         "1. catalyst 须写明 1h **24 根整体趋势** + **近 4~6 根结构**，并辅以 15m/1d + 量化技术位 (RSI/EMA/7d/阳阴根数)。\n"
         "2. 禁止仅用 24h 涨跌幅或资金费率做主因。\n"
@@ -511,14 +524,22 @@ def _build_prompt_en(
     contrast = (pack.get("contrast") or definition.contrast_block or "").strip()
     contrast_section = f"{contrast}\n\n" if contrast else ""
     side_en = "LONG" if definition.fixed_side == "LONG" else "SHORT"
+    family_label = _tactical_family_label(definition)
+    family = _tactical_family_block(definition)
+    sibling = _tactical_sibling_block(definition)
+    sibling_section = f"{sibling}\n" if sibling else ""
     prompt = (
-        f"You are a dedicated **{title_en}** analyst for USDT-M futures. "
-        f"Output only **{side_en}** entries matching the definition below; do not mix other tactics.\n\n"
+        f"You are the **{title_en}** analyst within the **{family_label}** tactical family "
+        f"for USDT-M futures. Output only **{side_en}** entries matching **this** sub-strategy; "
+        f"do not mix the sibling sub-strategy or other families.\n\n"
+        f"{family}\n"
+        f"{sibling_section}"
         f"{body_en}\n\n"
         f"{contrast_section}"
         f"{_KLINE_1H_RULES_EN}\n"
         f"## Quant hard lines (code-validated; violating → no entry)\n"
         f"{_strategy_quant_rules_en(definition.key)}\n"
+        f"{_tactical_catalyst_keywords(definition.key)}\n\n"
         "## Output rules\n"
         "1. catalyst: 1h **24-bar trend** + **last 4-6 bars** + 15m/1d + RSI/EMA/7d/bar counts.\n"
         "2. Do not use 24h % or funding rate as primary reason.\n"
@@ -736,26 +757,69 @@ def tactical_catalyst_ok(
     return True, ""
 
 
+def _tactical_catalyst_keywords(strategy_key: str) -> str:
+    """catalyst 必含表述 — 与 extra_* 关键词校验一致."""
+    blocks = {
+        "pullback": (
+            "## catalyst 必含表述（缺任一类 → 代码驳回）\n"
+            "1. **24 根整体**：须写「近24根/24根/整体」+ 上涨/通道/偏多（或 kline_narrative 已含「整体」）。\n"
+            "2. **近 4~6 根回落**：回调/回踩/回落/阴线/探底/pullback 等（禁止只写「最近1根1h」）。\n"
+            "3. **企稳**：支撑/企稳/止跌/下影/前低/EMA/箱体下沿 等。\n"
+            f"4. **RSI** 1h ≤{PULLBACK_RSI_MAX}；**below_7d_high_pct** 须 ≤ {PULLBACK_MAX_BELOW_7D_HIGH_PCT:.0f}"
+            "（距 7d 高至少约 2% 回踩深度，否则非有效回调）。"
+        ),
+        "rebound": (
+            "## catalyst 必含表述（缺任一类 → 代码驳回）\n"
+            "1. **24 根整体**：下降/下行/偏空/连阴/通道 等下跌趋势词。\n"
+            "2. **近 4~6 根反弹**：反弹/反抽/回升/rebound 等。\n"
+            "3. **量能不支持**：缩量/量能萎缩/背离/乏力/无量/volume weak 等（须写明）。\n"
+            "4. **相对高点**：阻力/前高/上影/遇阻/相对高；或 tech.below_7d_high_pct > -12（距 7d 高 12% 内）。\n"
+            f"5. **RSI** 1h 宜 {REBOUND_RSI_MIN}~{REBOUND_RSI_MAX}；<{REBOUND_RSI_MIN} 归杀跌，>{REBOUND_RSI_MAX} 超买区不宜反弹空。"
+        ),
+        "chase": (
+            "## catalyst 必含表述（缺任一类 → 代码驳回）\n"
+            "1. **24 根 + 近 4~6 根**：须写多根结构（禁止只写单根 1h）。\n"
+            "2. **延续上攻**：上涨/上行/延续/连阳/通道/新高 等；**不得**主调「回调到位/大幅回踩/支撑反弹」。\n"
+            f"3. **RSI** 1h **{CHASE_RSI_MIN}~{CHASE_RSI_MAX}**（<{CHASE_RSI_MIN} 偏弱不宜追，>{CHASE_RSI_MAX} 超买禁止）。\n"
+            f"4. **below_7d_high_pct ≤ -{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}**（须与 universe tech 一致）。"
+        ),
+        "dump": (
+            "## catalyst 必含表述（缺任一类 → 代码驳回）\n"
+            "1. **24 根 + 下跌趋势**：下跌/下行/下降/连阴/跌破/downtrend 等。\n"
+            "2. **反弹无力**：须写「无量反弹/反弹乏力/缩量反弹/量价不支持/无反弹/反弹无力」等；"
+            "若写反弹却无上述无力词 → 驳回（改判反弹做空或 skip）。\n"
+            "3. **禁止**主调「缩量反弹至前高/阻力遇阻」（→ 反弹做空）。\n"
+            f"4. **RSI** 1h ≤{DUMP_RSI_MAX}。"
+        ),
+    }
+    return blocks.get(strategy_key, "")
+
+
 def _strategy_quant_rules(strategy_key: str) -> str:
     """各战术专属量化红线（写入 prompt，与 extra_catalyst_check 一致）."""
     rules = {
         "pullback": (
             f"- RSI 1h 须 ≤ {PULLBACK_RSI_MAX}；高于此多为强势末端浅调，应 skip 或归追涨。\n"
-            f"- 须先确认 24h 上涨趋势，再在近 4~6 根出现**回落/阴线/回踩**；须写支撑企稳。\n"
+            f"- below_7d_high_pct 须 ≤ {PULLBACK_MAX_BELOW_7D_HIGH_PCT:.0f}（距 7d 高至少约 2% 回踩；过近 → reject）。\n"
+            "- 须先确认 24h 上涨趋势，再在近 4~6 根出现**回落/阴线/回踩**；须写支撑企稳。\n"
             "- 禁止「跌多了抄底」、禁止单边下跌中继。"
         ),
         "chase": (
-            f"- RSI 1h 须 ≤ {CHASE_RSI_MAX}；>68 禁止追涨（超买延伸段）。\n"
+            f"- RSI 1h 须 **{CHASE_RSI_MIN}~{CHASE_RSI_MAX}**；<{CHASE_RSI_MIN} 偏弱不宜追，>{CHASE_RSI_MAX} 禁止追涨。\n"
             f"- tech.below_7d_high_pct 须 ≤ -{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}"
             f"（距 7d 高点至少 3% 上行空间，否则 TP=6% 不现实）。\n"
             "- 近 6 根须**延续上行**、无深度回踩；叙事主调不得是「回调到位」。"
         ),
         "rebound": (
-            "- 24h **下降通道** + 近 4~6 根**像样反弹** + **缩量/无力** + 阻力区；RSI 不宜 <40。\n"
+            "- 24h **下降通道** + 近 4~6 根**像样反弹** + **缩量/无力**（catalyst 须写明）。\n"
+            f"- **相对高点**：阻力/前高/上影，或 below_7d_high_pct > {REBOUND_NEAR_7D_HIGH_PCT:.0f}（12% 内）；"
+            f"离 7d 高过远（≤{REBOUND_NEAR_7D_HIGH_PCT:.0f}%）→ reject。\n"
+            f"- RSI 1h 宜 **{REBOUND_RSI_MIN}~{REBOUND_RSI_MAX}**；<{REBOUND_RSI_MIN} 更像杀跌做空。\n"
             "- 主叙事是「反弹衰竭空」，不是「顺势杀跌」（后者→杀跌做空）。"
         ),
         "dump": (
-            "- 24h **下跌延续** + 反弹无量/极弱/无像样反弹；RSI 1h 不宜 >55。\n"
+            f"- 24h **下跌延续** + 反弹无量/极弱/无像样反弹；RSI 1h ≤ {DUMP_RSI_MAX}。\n"
+            "- catalyst 若提反弹，须同时写无力/缩量/无量等词，否则驳回。\n"
             "- 主叙事是「跌势延续空」，不是「缩量反弹碰前高」（后者→反弹做空）。"
         ),
     }
@@ -839,10 +903,10 @@ def _pullback_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -
         )
 
     b7h = _below_7d_high_pct(sym_data)
-    if b7h is not None and b7h > -2.0:
+    if b7h is not None and b7h > PULLBACK_MAX_BELOW_7D_HIGH_PCT:
         return False, (
             f"距7d高点仅{-b7h:.1f}%（below_7d_high_pct={b7h:.1f}），"
-            "回调做多需更深回踩或更大上行空间"
+            f"回调做多需 below_7d_high ≤ {PULLBACK_MAX_BELOW_7D_HIGH_PCT:.0f}%"
         )
 
     return True, ""
@@ -886,15 +950,17 @@ def _rebound_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) ->
     ))
     try:
         b7h = tech.get("below_7d_high_pct")
-        if b7h is not None and float(b7h) > -12:
+        if b7h is not None and float(b7h) > REBOUND_NEAR_7D_HIGH_PCT:
             at_high = True
     except (TypeError, ValueError):
         pass
     if not at_high:
         return False, "反弹做空须处于相对高点/阻力区（非下跌中继低位）"
 
-    if rsi is not None and rsi < 40:
-        return False, f"1h RSI={rsi} 偏低，更像杀跌追空而非反弹空"
+    if rsi is not None and rsi < REBOUND_RSI_MIN:
+        return False, f"1h RSI={rsi}<{REBOUND_RSI_MIN}，更像杀跌追空而非反弹空"
+    if rsi is not None and rsi > REBOUND_RSI_MAX:
+        return False, f"1h RSI={rsi}>{REBOUND_RSI_MAX}，超买区不宜按反弹做空 entry"
 
     if _has_any(narr, ("强势上升", "偏多", "突破", "连阳")) and not _has_any(
         narr, ("偏空", "下降", "回落", "连阴")
@@ -937,8 +1003,8 @@ def _chase_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -> T
     if not no_pullback and _has_any(low, ("回调", "回踩", "探底", "支撑反弹")):
         return False, "叙事以回调做多为主，应交给回调策略而非追涨"
 
-    if rsi is not None and rsi < 48:
-        return False, f"1h RSI={rsi} 偏弱，不宜追涨"
+    if rsi is not None and rsi < CHASE_RSI_MIN:
+        return False, f"1h RSI={rsi}<{CHASE_RSI_MIN}，偏弱不宜追涨"
 
     if rsi is not None and rsi > CHASE_RSI_MAX:
         return False, f"1h RSI={rsi:.0f}>{CHASE_RSI_MAX}，超买追涨禁止（延伸段易触发 SL）"
@@ -981,8 +1047,8 @@ def _dump_extra(catalyst: str, data_signal: str, sym_data: Optional[dict]) -> Tu
     if _has_any(low, ("见顶回调", "支撑", "抄底", "做多")):
         return False, "叙事偏做多/抄底，不符合杀跌追空"
 
-    if rsi is not None and rsi > 55:
-        return False, f"1h RSI={rsi} 偏高，不宜杀跌追空"
+    if rsi is not None and rsi > DUMP_RSI_MAX:
+        return False, f"1h RSI={rsi}>{DUMP_RSI_MAX}，偏高不宜杀跌追空"
 
     if _has_any(narr, ("偏多", "强势上升", "突破", "连阳")) and not _has_any(
         narr, ("偏空", "下降", "下杀", "连阴")
@@ -1003,8 +1069,9 @@ PULLBACK_LONG = TacticalStrategyDef(
         "1. **大势多**：近 24 根 1h 上升通道 / 高点抬高（读 kline_narrative 整体段，勿只看 24h 涨跌幅）。\n"
         "2. **小级别回落**：近 4~6 根出现连续阴线、回踩、短线下跌（须多根，禁止只写 1 根 1h）。\n"
         "3. **企稳证据**：EMA/前低/箱体下沿/下影线/止跌 — catalyst 须写清「回踩 + 企稳」。\n"
-        "4. **RSI**：1h RSI ≤68；从高位回落更佳；RSI>68 的浅调 → skip 或归**追涨做多**。\n"
-        "5. **方向**：仅 LONG；单边下跌「跌多了」→ skip。\n\n"
+        f"4. **RSI**：1h RSI ≤{PULLBACK_RSI_MAX}；从高位回落更佳；RSI>{PULLBACK_RSI_MAX} → skip 或归**追涨做多**。\n"
+        f"5. **空间**：below_7d_high_pct ≤ {PULLBACK_MAX_BELOW_7D_HIGH_PCT:.0f}%（距 7d 高至少约 2% 回踩深度）。\n"
+        "6. **方向**：仅 LONG；单边下跌「跌多了」→ skip。\n\n"
         "**典型 catalyst**：「1h 近24根上升通道；近5根阴线回踩 EMA20 企稳；15m 下影；RSI 1h 58→48」。"
     ),
     contrast_block=(
@@ -1028,8 +1095,8 @@ REBOUND_SHORT = TacticalStrategyDef(
         "1. **大势空**：近 24 根 1h 下降通道 / 低点降低（**不要求**写「昨天见顶」；看 24 根结构即可）。\n"
         "2. **小级别反弹**：近 4~6 根阳线、反抽、触及均线或前高（须多根，非单根异动）。\n"
         "3. **反弹衰竭**：须写明缩量、量能未跟上、量价背离或反弹乏力（缺一不可）。\n"
-        "4. **位置**：相对高点 / 阻力 / 7d 高附近 / 上影遇阻（非下跌中继深坑盲目空）。\n"
-        "5. **RSI**：宜 40~65；RSI<40 更像**杀跌做空**（跌势中段），勿与本策略混用。\n"
+        f"4. **位置**：相对高点 / 阻力 / 上影遇阻；或 below_7d_high_pct > {REBOUND_NEAR_7D_HIGH_PCT:.0f}%（12% 内算近高）。\n"
+        f"5. **RSI**：{REBOUND_RSI_MIN}~{REBOUND_RSI_MAX}；<{REBOUND_RSI_MIN} → **杀跌做空**；>{REBOUND_RSI_MAX} → skip。\n"
         "6. **方向**：仅 SHORT；突破新高强趋势 → skip。\n\n"
         "**典型 catalyst**：「1h 近24根下降通道；近4根缩量反弹碰前高；15m 上影；RSI 1h 52 无力」。"
     ),
@@ -1054,8 +1121,8 @@ CHASE_LONG = TacticalStrategyDef(
         "1. **大势多**：近 24 根 1h 趋势向上。\n"
         "2. **小级别延续**：近 4~6 根仍延续上行（连阳、通道、高点抬升），**无深度回调**。\n"
         "3. **禁止回踩叙事**：catalyst 主调不得是「大幅回踩/回调到位/支撑反弹」→ 那是**回调做多**。\n"
-        "4. **RSI**：1h RSI ≤68；>68 禁止（超买延伸易 4h 内打 SL）。\n"
-        "5. **空间**：tech.below_7d_high_pct ≤ -3（距 7d 高至少约 3%，否则 TP6% 难达成）。\n"
+        f"4. **RSI**：1h RSI **{CHASE_RSI_MIN}~{CHASE_RSI_MAX}**；<{CHASE_RSI_MIN} 偏弱，>{CHASE_RSI_MAX} 超买禁止。\n"
+        f"5. **空间**：tech.below_7d_high_pct ≤ -{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}（距 7d 高至少约 3%，否则 TP6% 难达成）。\n"
         "6. **量能**：不要求放量；结构未破即可。\n"
         "7. **方向**：仅 LONG。\n\n"
         "**典型 catalyst**：「1h 近24根偏多；近6根连阳无像样回调；below_7d_high=-8%；RSI 1h 62」。"
@@ -1082,9 +1149,10 @@ DUMP_SHORT = TacticalStrategyDef(
         "2. **小级别同向**：近 4~6 根连阴/下杀延续，或仅有极弱、无量反弹后立即再跌。\n"
         "3. **禁止反弹空叙事**：主调若是「缩量反弹至前高/阻力区遇阻」→ 那是**反弹做空**，不是杀跌。\n"
         "4. **量能**：不要求杀跌必须放量；关键是**没有**像样的放量反弹。\n"
-        "5. **RSI**：1h RSI ≤55；偏高则 skip。\n"
-        "6. **方向**：仅 SHORT；底部博反弹 → skip。\n\n"
-        "**典型 catalyst**：「1h 近24根连阴下行；近5根无明显反弹或反弹无量；15m 反抽失败；RSI 1h 38」。"
+        f"5. **RSI**：1h RSI ≤{DUMP_RSI_MAX}；偏高则 skip。\n"
+        "6. **catalyst 用词**：若提反弹，须写无量/乏力/缩量/不支持等；否则改判反弹做空。\n"
+        "7. **方向**：仅 SHORT；底部博反弹 → skip。\n\n"
+        "**典型 catalyst**：「1h 近24根连阴下行；近5根反弹无量/乏力；15m 反抽失败；RSI 1h 38」。"
     ),
     contrast_block=(
         "## 与易混战术对照\n"

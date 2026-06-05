@@ -40,11 +40,16 @@ REVERSAL_PROMPT_TEMPLATE = """你是加密货币 U 本位合约的**反转交易
 
 ## 硬性规则
 1. 每个 verdict 的 catalyst 必须写明 **至少两个周期** (1h/15m/1d) 的 K 线形态 + **量化技术位** (RSI 数值、EMA 偏离、7d 高低距离、阳阴根数等)。
-2. 禁止仅用「涨多了做空 / 跌多了做多」；须有多周期结构证据。
+2. 禁止仅用「涨多了做空 / 跌多了做多」；须有多周期结构证据（上影/滞涨/假突破/连阴 或 下影/止跌/假跌破/连阳）。
 3. 全池仅对下方 universe 列表中的 symbol 输出 verdict；其余忽略。
 4. confidence 0~1；仅当结构清晰时给 ≥0.65。
 5. 宁缺毋滥：无把握一律 skip。
 6. 引用 K 线涨跌幅须合理（单根通常 <20%）；须与 universe 中 tech / kline_narrative 一致。
+
+## 量化硬门槛（与代码 reversal_catalyst_technical_ok 一致）
+- **top_reversal → SHORT**：1h RSI ≥58 **或** below_7d_high_pct > -15%（距 7d 高 15% 内）；若 RSI<52 且无近高结构 → skip。
+- **bottom_reversal → LONG**：1h RSI ≤42 **或** above_7d_low_pct ≤18%（距 7d 低 18% 内）；若 RSI>48 且无近低结构 → skip。
+- catalyst 须与各行 tech 数值一致，禁止编造 RSI/7d 距离。
 
 {llm_universe_note}
 

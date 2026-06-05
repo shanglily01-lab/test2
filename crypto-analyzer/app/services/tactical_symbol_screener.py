@@ -8,10 +8,18 @@ from loguru import logger
 
 from app.services.ai_explore_prompt import EXPLORE_LLM_MAX_SYMBOLS
 
-# 与 ai_tactical_explore_prompts 门槛对齐
-PULLBACK_RSI_MAX = 68
-CHASE_RSI_MAX = 68
-CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT = 3.0
+# 与 ai_tactical_explore_prompts 门槛对齐（改 prompt 常量时同步此处 import）
+from app.services.ai_tactical_explore_prompts import (
+    CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT,
+    CHASE_RSI_MAX,
+    CHASE_RSI_MIN,
+    DUMP_RSI_MAX,
+    PULLBACK_MAX_BELOW_7D_HIGH_PCT,
+    PULLBACK_RSI_MAX,
+    REBOUND_NEAR_7D_HIGH_PCT,
+    REBOUND_RSI_MAX,
+    REBOUND_RSI_MIN,
+)
 REVERSAL_TOP_RSI_MIN = 58
 REVERSAL_BOTTOM_RSI_MAX = 42
 REVERSAL_NEAR_7D_HIGH_PCT = -10.0
@@ -235,7 +243,7 @@ def _tactical_pullback_fail(item: dict) -> Optional[str]:
         narr, ("偏多", "上升", "上攻", "连阳", "上升通道", "回踩")
     ):
         return "1h叙事偏空无回调结构"
-    if b7h is not None and b7h > -2.0:
+    if b7h is not None and b7h > PULLBACK_MAX_BELOW_7D_HIGH_PCT:
         return f"below_7d_high={b7h:.1f}%过近"
     if not _has_any(narr, ("回调", "回踩", "阴线", "dip", "pullback", "上升", "偏多", "连阳")):
         return "无回调/上升结构叙事"
@@ -246,14 +254,16 @@ def _tactical_rebound_fail(item: dict) -> Optional[str]:
     rsi = _rsi_1h(item)
     narr = _narrative_text(item).lower()
     b7h = _below_7d_high_pct(item)
-    if rsi is not None and rsi < 40:
-        return f"RSI={rsi:.0f}<40"
+    if rsi is not None and rsi < REBOUND_RSI_MIN:
+        return f"RSI={rsi:.0f}<{REBOUND_RSI_MIN}"
+    if rsi is not None and rsi > REBOUND_RSI_MAX:
+        return f"RSI={rsi:.0f}>{REBOUND_RSI_MAX}"
     if _has_any(narr, ("偏多", "上升", "上攻", "连阳")) and not _has_any(
         narr, ("偏空", "回落", "下降", "连阴", "反弹", "rebound")
     ):
         return "1h叙事仍偏多"
-    if b7h is not None and b7h > -3.0:
-        return f"below_7d_high={b7h:.1f}%距顶过近"
+    if b7h is not None and b7h <= REBOUND_NEAR_7D_HIGH_PCT:
+        return f"below_7d_high={b7h:.1f}%离7d高点过远"
     if not _has_any(narr, ("偏空", "回落", "下降", "连阴", "反弹", "rebound", "缩量")):
         return "无下跌反弹结构叙事"
     return None
@@ -265,6 +275,8 @@ def _tactical_chase_fail(item: dict) -> Optional[str]:
     b7h = _below_7d_high_pct(item)
     if rsi is not None and rsi > CHASE_RSI_MAX:
         return f"RSI={rsi:.0f}>{CHASE_RSI_MAX}"
+    if rsi is not None and rsi < CHASE_RSI_MIN:
+        return f"RSI={rsi:.0f}<{CHASE_RSI_MIN}"
     if b7h is not None and b7h > -CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:
         return f"below_7d_high={b7h:.1f}%空间不足"
     if _has_any(narr, ("偏空", "连阴", "下行", "下跌")) and not _has_any(
@@ -280,8 +292,8 @@ def _tactical_dump_fail(item: dict) -> Optional[str]:
     rsi = _rsi_1h(item)
     narr = _narrative_text(item).lower()
     a7l = _above_7d_low_pct(item)
-    if rsi is not None and rsi > 55:
-        return f"RSI={rsi:.0f}>55"
+    if rsi is not None and rsi > DUMP_RSI_MAX:
+        return f"RSI={rsi:.0f}>{DUMP_RSI_MAX}"
     if _has_any(narr, ("偏多", "上升", "上攻", "连阳")) and not _has_any(
         narr, ("偏空", "连阴", "下行", "下跌", "杀跌")
     ):

@@ -7,7 +7,13 @@ from typing import Callable, Optional, Tuple
 from app.services.ai_tactical_explore_prompts import (
     CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT,
     CHASE_RSI_MAX,
+    CHASE_RSI_MIN,
+    DUMP_RSI_MAX,
+    PULLBACK_MAX_BELOW_7D_HIGH_PCT,
     PULLBACK_RSI_MAX,
+    REBOUND_NEAR_7D_HIGH_PCT,
+    REBOUND_RSI_MAX,
+    REBOUND_RSI_MIN,
 )
 
 
@@ -77,7 +83,7 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
             "1. **近24根1h** 整体上涨趋势（通道/高点抬高）。\n"
             "2. **近4~6根1h** 回落/回踩/阴线，且有支撑企稳（非单边下跌抄底）。\n"
             "3. **RSI 1h ≤68**；若 RSI>68 仅浅调 → reject（应归追涨或 skip）。\n"
-            "4. 距 7d 高点过近（below_7d_high_pct > -2）且无深回踩 → reject。\n"
+            f"4. below_7d_high_pct > {PULLBACK_MAX_BELOW_7D_HIGH_PCT:.0f}%（距 7d 高过近、回踩不深）→ reject。\n"
             "5. 方向必须 LONG；叙事主调是「连阳追高/无明显回调」→ reject（应属追涨）。"
         ),
     ),
@@ -86,10 +92,11 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         title_zh="反弹做空",
         expected_side="SHORT",
         rubric=(
-            "须全部符合才 approve：\n"
-            "1. 曾见顶后进入**下降趋势**（近24根1h）。\n"
-            "2. **近4~6根1h** 有反弹，但**量能不支持**（缩量/背离须写明）。\n"
-            "3. 处于**相对高点/阻力**；方向 SHORT。禁止强突破新高追空。"
+            "须全部符合才 approve（与战术探索代码一致）：\n"
+            "1. **近24根1h** 下降通道（不要求写「曾见顶」）。\n"
+            "2. **近4~6根1h** 有反弹，且**量能不支持**（缩量/乏力/背离须写明）。\n"
+            f"3. **相对高点**：阻力/前高/上影，或 below_7d_high_pct > {REBOUND_NEAR_7D_HIGH_PCT:.0f}%。\n"
+            f"4. RSI 1h **{REBOUND_RSI_MIN}~{REBOUND_RSI_MAX}**；方向 SHORT。禁止强突破新高追空。"
         ),
     ),
     "chase": OpenAdvisorStrategyProfile(
@@ -99,7 +106,7 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         rubric=(
             "须全部符合才 approve（与代码门槛一致）：\n"
             "1. **近24根1h** 持续上涨，**近4~6根** 仍延续、无明显深度回踩。\n"
-            "2. **RSI 1h ≤68**；>68 一律 reject（超买延伸段，48h 实盘胜率极差）。\n"
+            f"2. **RSI 1h {CHASE_RSI_MIN}~{CHASE_RSI_MAX}**；<{CHASE_RSI_MIN} 或 >{CHASE_RSI_MAX} → reject。\n"
             "3. **below_7d_high_pct ≤ -3**（距 7d 高至少约 3% 空间）；不足则 reject。\n"
             "4. 量能平平可 approve，但不得仅有 24h 涨幅叙事。\n"
             "5. 方向 LONG；主叙事是「回踩/支撑反弹」→ reject（应属回调做多）。\n"
@@ -111,10 +118,11 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         title_zh="杀跌做空",
         expected_side="SHORT",
         rubric=(
-            "须全部符合才 approve：\n"
+            "须全部符合才 approve（与战术探索代码一致）：\n"
             "1. **近24根1h** 下跌趋势未扭转。\n"
-            "2. 反弹**无量价支持**或反弹失败（近4~6根描述清楚）。\n"
-            "3. 方向 SHORT；非底部博反弹。"
+            "2. 反弹**无量/乏力/不支持**或几乎无反弹（近4~6根描述清楚）。\n"
+            f"3. RSI 1h ≤{DUMP_RSI_MAX}；主叙事非「缩量反弹至前高」（那是反弹做空）。\n"
+            "4. 方向 SHORT；非底部博反弹。"
         ),
     ),
     "explore": OpenAdvisorStrategyProfile(
@@ -372,10 +380,21 @@ def build_tech_metrics_block(profile: OpenAdvisorStrategyProfile, ctx: dict) -> 
     extra = ""
     if profile.key == "chase":
         extra = (
-            f"\n- 追涨硬线: RSI≤{CHASE_RSI_MAX}, below_7d_high≤-{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}%"
+            f"\n- 追涨硬线: RSI {CHASE_RSI_MIN}~{CHASE_RSI_MAX}, "
+            f"below_7d_high≤-{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}%"
         )
     elif profile.key == "pullback":
-        extra = f"\n- 回调硬线: RSI≤{PULLBACK_RSI_MAX}, 深回踩时 below_7d_high 不宜 >-2%"
+        extra = (
+            f"\n- 回调硬线: RSI≤{PULLBACK_RSI_MAX}, "
+            f"below_7d_high≤{PULLBACK_MAX_BELOW_7D_HIGH_PCT:.0f}%"
+        )
+    elif profile.key == "rebound":
+        extra = (
+            f"\n- 反弹空硬线: RSI {REBOUND_RSI_MIN}~{REBOUND_RSI_MAX}, "
+            f"below_7d_high>{REBOUND_NEAR_7D_HIGH_PCT:.0f}%"
+        )
+    elif profile.key == "dump":
+        extra = f"\n- 杀跌硬线: RSI≤{DUMP_RSI_MAX}"
     return (
         "## 量化指标（须与 rubric 交叉验证）\n"
         f"- RSI(1h): {rsi_s}\n"
@@ -400,6 +419,10 @@ def precheck_open_advisor(
             return False, (
                 f"[追涨] RSI={rsi:.0f}>{CHASE_RSI_MAX}，预检驳回"
             )
+        if rsi is not None and float(rsi) < CHASE_RSI_MIN:
+            return False, (
+                f"[追涨] RSI={rsi:.0f}<{CHASE_RSI_MIN}，预检驳回"
+            )
         if b7h is not None and float(b7h) > -CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:
             return False, (
                 f"[追涨] below_7d_high={b7h:.1f}% 距高点空间不足，预检驳回"
@@ -410,21 +433,29 @@ def precheck_open_advisor(
             return False, (
                 f"[回调] RSI={rsi:.0f}>{PULLBACK_RSI_MAX}，预检驳回"
             )
-        if b7h is not None and float(b7h) > -2.0:
+        if b7h is not None and float(b7h) > PULLBACK_MAX_BELOW_7D_HIGH_PCT:
             return False, (
                 f"[回调] below_7d_high={b7h:.1f}% 距高点过近，非有效回踩，预检驳回"
             )
 
     if profile.key == "dump" and s == "SHORT":
-        if rsi is not None and float(rsi) > 55:
+        if rsi is not None and float(rsi) > DUMP_RSI_MAX:
             return False, (
-                f"[杀跌] RSI={rsi:.0f}>55，更像反弹做空而非破位，预检驳回"
+                f"[杀跌] RSI={rsi:.0f}>{DUMP_RSI_MAX}，更像反弹做空而非破位，预检驳回"
             )
 
     if profile.key == "rebound" and s == "SHORT":
-        if rsi is not None and float(rsi) < 40:
+        if rsi is not None and float(rsi) < REBOUND_RSI_MIN:
             return False, (
-                f"[反弹做空] RSI={rsi:.0f}<40 过低，预检驳回"
+                f"[反弹做空] RSI={rsi:.0f}<{REBOUND_RSI_MIN} 过低，预检驳回"
+            )
+        if rsi is not None and float(rsi) > REBOUND_RSI_MAX:
+            return False, (
+                f"[反弹做空] RSI={rsi:.0f}>{REBOUND_RSI_MAX} 过高，预检驳回"
+            )
+        if b7h is not None and float(b7h) <= REBOUND_NEAR_7D_HIGH_PCT:
+            return False, (
+                f"[反弹做空] below_7d_high={b7h:.1f}% 离7d高点过远，预检驳回"
             )
 
     return True, ""

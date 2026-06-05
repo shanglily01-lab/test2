@@ -1,4 +1,4 @@
-"""主预测 prompt 构建 — GPT 生产用英文版 + 中英对照测试."""
+"""主预测 prompt 构建 — 生产默认中文（build_predict_prompt）；英文仅 A/B 对照。"""
 from __future__ import annotations
 
 import json
