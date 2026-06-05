@@ -12,7 +12,7 @@ from loguru import logger
 
 from app.services.ai_explore_prompt import EXPLORE_LLM_MAX_OUTPUT_TOKENS
 from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_MODEL, GPT_TIMEOUT_S
-from app.services.gpt_llm_client import GPT_JSON_SYSTEM_ZH, gpt_chat_json
+from app.services.gpt_llm_client import GPT_JSON_SYSTEM_EN, GPT_JSON_SYSTEM_ZH, gpt_chat_json
 from app.services.ai_big4_prompt import big4_conflict_risk_note
 from app.services.ai_explore_prompt import (
     AI_POSITION_HOLD_HOURS,
@@ -20,6 +20,7 @@ from app.services.ai_explore_prompt import (
     AI_POSITION_TP_PCT,
     EXPLORE_CONFIDENCE_THRESHOLD,
     build_explore_prompt,
+    build_explore_prompt_en,
     explore_catalyst_technical_ok,
     parse_explore_llm_json,
 )
@@ -81,7 +82,7 @@ def _has_open_position(conn, symbol: str) -> bool:
 def _call_gpt_explore(universe: dict, global_ctx: dict, historical_stats: dict):
     if not GPT_API_KEY:
         return None, "OPENAI_API_KEY 未设置"
-    prompt, _ = build_explore_prompt(universe, global_ctx, historical_stats)
+    prompt, _ = build_explore_prompt_en(universe, global_ctx, historical_stats)
     try:
         from openai import OpenAI
         client = OpenAI(api_key=GPT_API_KEY, base_url=GPT_BASE_URL)
@@ -90,7 +91,7 @@ def _call_gpt_explore(universe: dict, global_ctx: dict, historical_stats: dict):
             user_prompt=prompt,
             max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
             timeout=GPT_TIMEOUT_S,
-            system_prompt=GPT_JSON_SYSTEM_ZH,
+            system_prompt=GPT_JSON_SYSTEM_EN,
         )
     except Exception as e:
         return None, f"GPT API 调用失败: {e}"

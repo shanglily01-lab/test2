@@ -15,10 +15,11 @@ from app.services.ai_reversal_explore_prompt import (
     REVERSAL_SL_PCT,
     REVERSAL_TP_PCT,
     build_reversal_explore_prompt,
+    build_reversal_explore_prompt_en,
     parse_reversal_llm_json,
 )
 from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_MODEL, GPT_TIMEOUT_S
-from app.services.gpt_llm_client import gpt_chat_json
+from app.services.gpt_llm_client import GPT_JSON_SYSTEM_EN, gpt_chat_json
 from app.services.reversal_explore_runner import (
     ReversalExploreConfig,
     run_reversal_explore_round,
@@ -47,7 +48,7 @@ def _call_gpt_reversal(
     except ImportError:
         return None, "缺 openai 依赖"
 
-    prompt, meta = build_reversal_explore_prompt(universe, global_ctx, historical_stats)
+    prompt, meta = build_reversal_explore_prompt_en(universe, global_ctx, historical_stats)
     logger.info(
         f"[GPT顶空底多] prompt {len(prompt)} chars, "
         f"symbols {meta['llm_symbol_count']}/{meta['universe_total']}"
@@ -61,6 +62,7 @@ def _call_gpt_reversal(
             user_prompt=prompt,
             max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
             timeout=GPT_TIMEOUT_S,
+            system_prompt=GPT_JSON_SYSTEM_EN,
         )
     except Exception as e:
         return None, f"API: {e}"

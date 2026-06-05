@@ -25,7 +25,7 @@ GPT_TACTICAL_MAX_ENTRIES = 3
 GPT_FALLBACK_SCAN_TOP = 40
 # 与代码门槛 / 开仓顾问 rubric / tactical_symbol_screener 对齐（改一处须同步）
 CHASE_RSI_MAX = 68
-CHASE_RSI_MIN = 48
+CHASE_RSI_MIN = 54
 PULLBACK_RSI_MAX = 68
 PULLBACK_MAX_BELOW_7D_HIGH_PCT = -2.0  # below_7d_high_pct > -2 且无深回踩 → reject
 CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT = 3.0  # below_7d_high_pct 须 ≤ -3（距 7d 高至少 3% 空间）

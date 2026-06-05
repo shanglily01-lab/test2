@@ -16,6 +16,7 @@ from app.services.ai_reversal_explore_prompt import (
     REVERSAL_SL_PCT,
     REVERSAL_TP_PCT,
     build_reversal_explore_prompt,
+    build_reversal_explore_prompt_en,
     parse_reversal_llm_json,
 )
 from app.services.reversal_explore_runner import (
@@ -51,7 +52,7 @@ def _call_deepseek_reversal(
     except ImportError:
         return None, "缺 openai 依赖"
 
-    prompt, meta = build_reversal_explore_prompt(universe, global_ctx, historical_stats)
+    prompt, meta = build_reversal_explore_prompt_en(universe, global_ctx, historical_stats)
     logger.info(
         f"[DeepSeek顶空底多] prompt {len(prompt)} chars, "
         f"symbols {meta['llm_symbol_count']}/{meta['universe_total']}"

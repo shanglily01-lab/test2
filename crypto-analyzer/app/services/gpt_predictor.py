@@ -46,7 +46,7 @@ from app.services.ai_explore_prompt import (
     parse_explore_llm_json,
     sym_data_for_catalyst_gate,
 )
-from app.services.ai_predict_prompt import build_predict_prompt
+from app.services.ai_predict_prompt import build_predict_prompt, build_predict_prompt_en
 from app.services.gemini_swan_worker import (
     _is_excluded,
     _read_setting,
@@ -58,7 +58,7 @@ from app.services.ai_predict_schedule import (
     predict_round_is_due,
 )
 from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_MODEL, GPT_TIMEOUT_S
-from app.services.gpt_llm_client import GPT_JSON_SYSTEM_ZH, gpt_chat_json
+from app.services.gpt_llm_client import GPT_JSON_SYSTEM_EN, GPT_JSON_SYSTEM_ZH, gpt_chat_json
 
 # ── data_cache 层: 尝试从缓存读取, 失败回退 ──
 _DATA_CACHE_AVAILABLE_PREDICT = False
@@ -439,7 +439,7 @@ def _call_gpt_predict(symbols_data: List[Dict], global_ctx: dict) -> Optional[di
         logger.error("[GPT预测] 缺依赖, 请 pip install openai")
         return None
 
-    prompt = build_predict_prompt(symbols_data, global_ctx)
+    prompt = build_predict_prompt_en(symbols_data, global_ctx)
 
     logger.info(f"[GPT预测] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens)")
 
@@ -452,7 +452,7 @@ def _call_gpt_predict(symbols_data: List[Dict], global_ctx: dict) -> Optional[di
             user_prompt=prompt,
             max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
             timeout=GPT_TIMEOUT_S,
-            system_prompt=GPT_JSON_SYSTEM_ZH,
+            system_prompt=GPT_JSON_SYSTEM_EN,
         )
     except Exception as e:
         logger.error(f"[GPT预测] GPT 调用失败: {e}")

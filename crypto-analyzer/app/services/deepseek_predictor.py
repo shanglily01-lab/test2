@@ -46,7 +46,7 @@ from app.services.ai_explore_prompt import (
     parse_explore_llm_json,
     sym_data_for_catalyst_gate,
 )
-from app.services.ai_predict_prompt import build_predict_prompt
+from app.services.ai_predict_prompt import build_predict_prompt, build_predict_prompt_en
 from app.services.gemini_swan_worker import (
     _is_excluded,
     _read_setting,
@@ -443,7 +443,7 @@ def _call_deepseek_predict(symbols_data: List[Dict], global_ctx: dict) -> Option
         logger.error("[DeepSeek预测] 缺依赖, 请 pip install openai")
         return None
 
-    prompt = build_predict_prompt(symbols_data, global_ctx)
+    prompt = build_predict_prompt_en(symbols_data, global_ctx)
 
     logger.info(f"[DeepSeek预测] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens)")
 

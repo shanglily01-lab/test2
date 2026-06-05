@@ -47,8 +47,8 @@ REVERSAL_PROMPT_TEMPLATE = """你是加密货币 U 本位合约的**反转交易
 6. 引用 K 线涨跌幅须合理（单根通常 <20%）；须与 universe 中 tech / kline_narrative 一致。
 
 ## 量化硬门槛（与代码 reversal_catalyst_technical_ok 一致）
-- **top_reversal → SHORT**：1h RSI ≥58 **或** below_7d_high_pct > -15%（距 7d 高 15% 内）；若 RSI<52 且无近高结构 → skip。
-- **bottom_reversal → LONG**：1h RSI ≤42 **或** above_7d_low_pct ≤18%（距 7d 低 18% 内）；若 RSI>48 且无近低结构 → skip。
+- **top_reversal → SHORT**：1h RSI ≥62 **或** below_7d_high_pct > -12%（距 7d 高 12% 内）；若 RSI<55 且无近高结构 → skip。
+- **bottom_reversal → LONG**：1h RSI ≤38 **或** above_7d_low_pct ≤15%（距 7d 低 15% 内）；若 RSI>45 且无近低结构 → skip。
 - catalyst 须与各行 tech 数值一致，禁止编造 RSI/7d 距离。
 
 {llm_universe_note}
@@ -95,6 +95,10 @@ REVERSAL_PROMPT_TEMPLATE_EN = """You are a **reversal** analyst for USDT-M perpe
 4. confidence 0~1; use ≥0.65 only when structure is clear.
 5. Prefer skip when unsure.
 6. Bar % moves must be plausible (<20% per bar) and match universe tech / kline_narrative.
+
+## Quant hard gates (code-enforced)
+- **top_reversal → SHORT**: 1h RSI ≥62 OR below_7d_high_pct > -12% (within 12% of 7d high); RSI<55 and no near-high → skip.
+- **bottom_reversal → LONG**: 1h RSI ≤38 OR above_7d_low_pct ≤15% (within 15% of 7d low); RSI>45 and no near-low → skip.
 
 {llm_universe_note}
 
@@ -362,23 +366,23 @@ def reversal_catalyst_technical_ok(
     b7h = tech.get("below_7d_high_pct")
     a7l = tech.get("above_7d_low_pct")
     try:
-        near_high = b7h is not None and float(b7h) > -15
+        near_high = b7h is not None and float(b7h) > -12
     except (TypeError, ValueError):
         near_high = False
     try:
-        near_low = a7l is not None and float(a7l) <= 18
+        near_low = a7l is not None and float(a7l) <= 15
     except (TypeError, ValueError):
         near_low = False
 
     if cat == "top_reversal":
-        rsi_top = rsi_f is not None and rsi_f >= 58
+        rsi_top = rsi_f is not None and rsi_f >= 62
         if not rsi_top and not near_high:
             if "超买" not in text and "overbought" not in text:
                 return False, (
-                    f"顶部做空需 1h RSI≥58 或距 7d 高点<15% "
+                    f"顶部做空需 1h RSI≥62 或距 7d 高点<12% "
                     f"(RSI={rsi_f}, below_7d_high={b7h}%)"
                 )
-        if rsi_f is not None and rsi_f < 52 and not near_high:
+        if rsi_f is not None and rsi_f < 55 and not near_high:
             return False, f"顶部做空 1h RSI={rsi_f} 偏低且无近高结构"
         weak_top = ("涨多了", "涨幅过大", "已经涨", "24h涨") and not any(
             x in text for x in ("上影", "滞涨", "假突破", "连阴", "回落", "阻力")
@@ -387,14 +391,14 @@ def reversal_catalyst_technical_ok(
             return False, "顶部做空不能仅因涨幅大，须写明滞涨/上影/假突破等结构"
 
     if cat == "bottom_reversal":
-        rsi_bot = rsi_f is not None and rsi_f <= 42
+        rsi_bot = rsi_f is not None and rsi_f <= 38
         if not rsi_bot and not near_low:
             if "超卖" not in text and "oversold" not in text:
                 return False, (
-                    f"底部做多需 1h RSI≤42 或距 7d 低点<18% "
+                    f"底部做多需 1h RSI≤38 或距 7d 低点<15% "
                     f"(RSI={rsi_f}, above_7d_low={a7l}%)"
                 )
-        if rsi_f is not None and rsi_f > 48 and not near_low:
+        if rsi_f is not None and rsi_f > 45 and not near_low:
             return False, f"底部做多 1h RSI={rsi_f} 偏高且无近低结构"
         weak_bot = ("跌多了", "跌幅过大", "已经跌", "24h跌") and not any(
             x in text for x in ("下影", "止跌", "假跌破", "连阳", "反弹", "支撑")
