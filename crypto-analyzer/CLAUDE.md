@@ -1,4 +1,4 @@
-# 超级大脑量化交易系统 — 项目上下文
+﻿# 超级大脑量化交易系统 — 项目上下文
 
 ## 项目概览
 
@@ -152,7 +152,6 @@
 
 ## 已下线策略 (2026-06-05)
 
-- **S1/S6/S9** (`multi_strategy_service`) — 早期做多 / 量能异动 / Gemini 抄底
 - **市场预测器** (`PREDICTOR` / `market_predictor.py`) — 旧版 6h 预测神器
 - 历史持仓 `source` 仍可在复盘页显示；不再新开仓
 
@@ -184,3 +183,5 @@
 - `app/scheduler.py` (crypto-scheduler) 统一调度价格采集、Gemini 等
 - `app/main.py` (FastAPI) 提供 Web 界面
 - 核心进程需全部启动。某个挂了其他仍能运行，但对应功能会缺失
+
+

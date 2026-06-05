@@ -63,28 +63,13 @@
       <optgroup label="Gemini">
         <option value="gemini_explore">gemini_explore</option>
         <option value="gemini_predict">gemini_predict</option>
-        <option value="gemini_chase">gemini_chase</option>
-        <option value="gemini_pullback">gemini_pullback</option>
-        <option value="gemini_rebound">gemini_rebound</option>
-        <option value="gemini_dump">gemini_dump</option>
-        <option value="gemini_reversal">gemini_reversal</option>
       </optgroup>
       <optgroup label="DeepSeek">
         <option value="deepseek_explore">deepseek_explore</option>
         <option value="deepseek_predict">deepseek_predict</option>
-        <option value="deepseek_chase">deepseek_chase</option>
-        <option value="deepseek_pullback">deepseek_pullback</option>
-        <option value="deepseek_rebound">deepseek_rebound</option>
-        <option value="deepseek_dump">deepseek_dump</option>
-        <option value="deepseek_reversal">deepseek_reversal</option>
       </optgroup>
       <optgroup label="GPT">
-        <option value="gpt_chase">gpt_chase</option>
-        <option value="gpt_pullback">gpt_pullback</option>
-        <option value="gpt_rebound">gpt_rebound</option>
-        <option value="gpt_dump">gpt_dump</option>
         <option value="gpt_predict">gpt_predict</option>
-        <option value="gpt_reversal">gpt_reversal</option>
       </optgroup>
     </select>
     <button onclick="loadAll()" class="flex items-center gap-1 px-3 py-2 rounded-lg bg-[#151a20] hover:bg-[#1a2027] text-xs">
@@ -186,10 +171,9 @@ function fmtConf(v) {
 }
 
 var STRATEGY_ZH = {
-  explore: '探索', predict: '预测', chase: '追涨', pullback: '回调',
-  rebound: '反弹', dump: '杀跌', reversal: '顶空底多'
+  explore: '探索', predict: '预测'
 };
-var STRATEGY_ORDER = ['explore', 'predict', 'pullback', 'chase', 'rebound', 'dump', 'reversal'];
+var STRATEGY_ORDER = ['explore', 'predict'];
 var PROVIDER_META = {
   gemini: { label: 'Gemini', cls: 'provider-gemini' },
   deepseek: { label: 'DeepSeek', cls: 'provider-deepseek' },
@@ -368,3 +352,5 @@ loadAll();
 setInterval(loadAll, 120000);
 </script>
 </body></html>
+
+

@@ -1,5 +1,5 @@
 """
-AI Shadow 对比 — Teacher (Gemini/DeepSeek 探索/预测/战术/顶空底多) 跑完后,
+AI Shadow 对比 — Teacher (Gemini/DeepSeek 探索/预测) 跑完后,
 用相同 universe 跑规则引擎.
 
 不开仓, 只落库对比 category/confidence, 积累样本用于后续蒸馏超级策略.
@@ -40,16 +40,12 @@ def _normalize_category(cat: str) -> str:
 
 
 def _normalize_teacher_category(cat: str, teacher_source: str) -> str:
-    """探索/预测用 bullish/bearish; 战术 entry / 顶空底多映射为同向 category."""
+    """探索/预测用 bullish/bearish; 旧战术 entry 映射为同向 category."""
     c = (cat or "skip").lower().strip()
     if c in ("bullish", "long", "buy"):
         return "bullish"
     if c in ("bearish", "short", "sell"):
         return "bearish"
-    if c == "top_reversal":
-        return "bearish"
-    if c == "bottom_reversal":
-        return "bullish"
     if c in ("entry", "signal", "trade"):
         src = (teacher_source or "").lower()
         if src.endswith(("_pullback", "_chase")):
@@ -265,7 +261,7 @@ def run_shadow_after_teacher_explore(
     conn=None,
 ) -> Optional[int]:
     """
-    Teacher 策略轮次成功后立即调用 (探索/预测/战术/顶空底多).
+    Teacher 策略轮次成功后立即调用 (探索/预测).
     使用内存中同一 universe/global_ctx, 不开仓. 返回 shadow_run_id 或 None.
     """
     own_conn = conn is None

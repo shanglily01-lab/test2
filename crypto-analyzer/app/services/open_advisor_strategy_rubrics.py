@@ -1,20 +1,18 @@
-"""开仓顾问 — 按 source 映射策略审核标准 + Big4/方向闸门文案."""
+﻿"""开仓顾问 — 按 source 映射策略审核标准 + Big4/方向闸门文案."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Callable, Optional, Tuple
 
-from app.services.ai_tactical_explore_prompts import (
-    CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT,
-    CHASE_RSI_MAX,
-    CHASE_RSI_MIN,
-    DUMP_RSI_MAX,
-    PULLBACK_MAX_BELOW_7D_HIGH_PCT,
-    PULLBACK_RSI_MAX,
-    REBOUND_NEAR_7D_HIGH_PCT,
-    REBOUND_RSI_MAX,
-    REBOUND_RSI_MIN,
-)
+CHASE_RSI_MAX = 68
+CHASE_RSI_MIN = 54
+DUMP_RSI_MAX = 55
+PULLBACK_RSI_MAX = 68
+PULLBACK_MAX_BELOW_7D_HIGH_PCT = -2.0
+CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT = 3.0
+REBOUND_NEAR_7D_HIGH_PCT = -12.0
+REBOUND_RSI_MIN = 40
+REBOUND_RSI_MAX = 65
 
 
 @dataclass(frozen=True)
@@ -29,8 +27,6 @@ def _match_source(source: str) -> str:
     s = (source or "").strip().lower()
     if not s:
         return "generic"
-    if "reversal" in s:
-        return "reversal"
     if "pullback" in s:
         return "pullback"
     if "rebound" in s:
@@ -43,12 +39,6 @@ def _match_source(source: str) -> str:
         return "predict"
     if "explore" in s:
         return "explore"
-    if s.startswith("s1_") or "early_long" in s:
-        return "s1"
-    if s.startswith("s6_") or "vol_spike" in s:
-        return "s6"
-    if s.startswith("s9_") or "gemini" in s and "strategy" in s:
-        return "s9"
     if "btc_momentum" in s or s == "btc_momentum":
         return "btc_momentum"
     if s in ("smart_trader", "smart_trader_sync") or "signal_confirm" in s or "trend_follow" in s:
@@ -61,19 +51,6 @@ def _match_source(source: str) -> str:
 
 
 _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
-    "reversal": OpenAdvisorStrategyProfile(
-        key="reversal",
-        title_zh="顶空底多（反转）",
-        expected_side=None,
-        rubric=(
-            "审核要点（1h：整体用近24根判断趋势，近期用近4~6根）：\n"
-            "- **SHORT**：须为真·**顶部反转**——此前阶段顶/7d 高位滞涨，多周期转弱，"
-            "近4~6根有反弹或上影但**无力创新高**；禁止「涨多了」无结构做空。\n"
-            "- **LONG**：须为真·**底部反转**——此前阶段底/超卖止跌，近4~6根下影/连阳确认；"
-            "禁止单边下跌中继抄底。\n"
-            "- catalyst 须与方向一致；仅24h涨跌幅不足以 approve。"
-        ),
-    ),
     "pullback": OpenAdvisorStrategyProfile(
         key="pullback",
         title_zh="回调做多",
@@ -130,7 +107,7 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         title_zh="AI 主探索（事件/结构）",
         expected_side=None,
         rubric=(
-            "【探索专属，与探索 prompt 一致；勿用战术四策略标准】\n"
+            "【探索专属，与探索 prompt 一致；勿用已移除战术标准】\n"
             "上游已通过 catalyst 技术面门槛；你做**矛盾复核**，勿用单一 RSI 否决整笔。\n"
             "- **允许趋势延续**（与探索 A 类一致）：catalyst 写清 1h 整体+近4~6根与方向同向、"
             "可有 15m 共振时，下跌趋势中 SHORT、上涨趋势中 LONG → 可 approve。\n"
@@ -151,33 +128,6 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
             "catalyst 须含 1h/15m 方向依据；允许趋势延续与反转两类，只要与 side 自洽。\n"
             "与 Big4 严重冲突且个股 catalyst 不足 → reject；"
             "非极端行情下允许与 Big4 反向但须在 catalyst 中自洽。"
-        ),
-    ),
-    "s1": OpenAdvisorStrategyProfile(
-        key="s1",
-        title_zh="S1 早期做多",
-        expected_side="LONG",
-        rubric=(
-            "仅 LONG。须 RSI+MA20 类早期多头结构；"
-            "非下跌趋势抄底、非顶部追高。"
-        ),
-    ),
-    "s6": OpenAdvisorStrategyProfile(
-        key="s6",
-        title_zh="S6 小币量能异动",
-        expected_side="LONG",
-        rubric=(
-            "仅 LONG；量能先行+价格跟进；"
-            "无量拉升或叙事仅「涨得多」→ reject。"
-        ),
-    ),
-    "s9": OpenAdvisorStrategyProfile(
-        key="s9",
-        title_zh="S9 Gemini 抄底反转",
-        expected_side="LONG",
-        rubric=(
-            "仅 LONG；AI 抄底反转须接近底部结构（超卖/下影/止跌）；"
-            "禁止趋势空头中的逆势摸底。"
         ),
     ),
     "btc_momentum": OpenAdvisorStrategyProfile(
@@ -220,7 +170,7 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
 }
 
 _TACTICAL_PROFILE_KEYS = frozenset({"pullback", "rebound", "chase", "dump"})
-_UPSTREAM_GATED_OPEN_PROFILES = _TACTICAL_PROFILE_KEYS | {"reversal", "explore", "predict"}
+_UPSTREAM_GATED_OPEN_PROFILES = _TACTICAL_PROFILE_KEYS | {"explore", "predict"}
 
 
 def should_skip_llm_for_tactical_open(
@@ -327,7 +277,7 @@ def build_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
     lines = [
         "## 审核步骤（仅适用于本策略）",
         f"- 本笔仅按 **「{title}」**（profile=`{key}`）审核；"
-        "**禁止**用其它策略（回调/追涨/探索/预测/S1 等）的标准替代下文 rubric。",
+        "**禁止**用其它策略（回调/追涨/探索/预测等）的标准替代下文 rubric。",
         "1. 方向闸门 + Big4（上节）— 冲突则 reject。",
         f"2. **仅执行上文「{title}」专属 rubric** — 与 K 线表、下方量化指标交叉验证。",
     ]
@@ -358,9 +308,6 @@ def build_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
         lines.append(
             "4. catalyst 与 side 自洽即可 approve；勿因 RSI 高低单独否决。"
         )
-    elif key in ("s1", "s6", "s9"):
-        lines.append(f"3. 仅审 **{title}** 定义（RSI/量能/超卖等），勿混用 AI 战术标准。")
-        lines.append("4. 不符合该多策略定义 → reject。")
     else:
         lines.append("3. entry_reason/catalyst 与方向、K 线一致；含糊或与闸门冲突 → reject。")
         lines.append("4. 勿套用未列出的其它策略专属标准。")
@@ -369,7 +316,7 @@ def build_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
 
 def build_tech_metrics_block(profile: OpenAdvisorStrategyProfile, ctx: dict) -> str:
     """战术/探索类顾问可见的量化字段（便于按策略核对，非通用模糊描述）."""
-    if profile.key not in _TACTICAL_PROFILE_KEYS | {"reversal", "explore", "predict"}:
+    if profile.key not in _TACTICAL_PROFILE_KEYS | {"explore", "predict"}:
         return ""
     rsi = ctx.get("rsi_14_1h")
     b7h = ctx.get("below_7d_high_pct")
@@ -548,16 +495,12 @@ Output ONLY JSON:
 
 
 _GPT_PROFILE_TITLE_EN: dict[str, str] = {
-    "reversal": "Top-short / Bottom-long (reversal)",
     "pullback": "Pullback long",
     "rebound": "Rebound short",
     "chase": "Momentum chase long",
     "dump": "Breakdown short",
     "explore": "AI main explore (event/structure)",
     "predict": "AI predict (4h direction)",
-    "s1": "S1 early long",
-    "s6": "S6 small-cap volume spike",
-    "s9": "S9 Gemini bottom reversal",
     "btc_momentum": "BTC momentum",
     "smart_trader": "Main strategy / smart_trader",
     "mean_reversion": "Bollinger mean reversion",
@@ -565,14 +508,6 @@ _GPT_PROFILE_TITLE_EN: dict[str, str] = {
 }
 
 _GPT_RUBRIC_EN: dict[str, str] = {
-    "reversal": (
-        "1h: use last 24 bars for trend, last 4-6 for local structure.\n"
-        "- SHORT: true top reversal — prior stage high / 7d stall, multi-TF weakness; "
-        "recent bars show failed breakout / upper wicks, not 'up a lot' without structure.\n"
-        "- LONG: true bottom reversal — oversold base, lower wicks / bullish follow-through; "
-        "not bear-flag continuation.\n"
-        "- Catalyst must match side; 24h % alone is insufficient."
-    ),
     "pullback": (
         "ALL required (aligned with code gates):\n"
         "1. Last 24x1h: overall uptrend (higher highs/channel).\n"
@@ -616,9 +551,6 @@ _GPT_RUBRIC_EN: dict[str, str] = {
         "Catalyst needs 1h/15m logic; continuation or reversal OK if self-consistent.\n"
         "Do not reject on RSI alone; severe Big4 conflict without coin case → reject."
     ),
-    "s1": "LONG only; early bull RSI+MA20 structure; no downtrend knife-catch.",
-    "s6": "LONG only; volume leads price; hollow pump narrative → reject.",
-    "s9": "LONG only; bottom reversal structure; no counter-trend catch in strong bear.",
     "btc_momentum": "Side must align with BTC short-term momentum unless catalyst is exceptional.",
     "smart_trader": "entry_reason/catalyst matches side and K-line regime; vague signal → reject.",
     "mean_reversion": "Range-edge mean reversion; strong trend breakout chase → reject.",
@@ -645,7 +577,7 @@ def build_gpt_big4_subjective_block(
 ) -> str:
     s = (side or "").upper()
     key = (profile_key or "").strip().lower()
-    upstream_gated = key in _TACTICAL_PROFILE_KEYS | {"reversal", "explore", "predict"}
+    upstream_gated = key in _TACTICAL_PROFILE_KEYS | {"explore", "predict"}
     lines = [
         "## Big4 & direction gates (mandatory)",
         f"- User switches: allow_long={'yes' if allow_long else '**no**'} | "
@@ -734,9 +666,6 @@ def build_gpt_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
             "4. Catalyst must match RSI / below_7d_high_pct; single 1h bar or 24h % only → reject."
         )
         lines.append("5. Approve only on full rubric fit; doubt → reject.")
-    elif key == "reversal":
-        lines.append("3. SHORT = true top reversal; LONG = true bottom reversal.")
-        lines.append("4. Do not use tactical four-way checklist for reversal.")
     elif key == "explore":
         lines.append("3. Event/structure catalyst; no tactical four-way checklist.")
     elif key == "predict":
@@ -747,7 +676,7 @@ def build_gpt_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
 
 
 def build_gpt_tech_metrics_block(profile: OpenAdvisorStrategyProfile, ctx: dict) -> str:
-    if profile.key not in _TACTICAL_PROFILE_KEYS | {"reversal", "explore", "predict"}:
+    if profile.key not in _TACTICAL_PROFILE_KEYS | {"explore", "predict"}:
         return ""
     rsi = ctx.get("rsi_14_1h")
     b7h = ctx.get("below_7d_high_pct")
@@ -861,3 +790,5 @@ Output ONLY JSON:
   "reason": "<=120 English words; cite strategy [{title_en}] and key pass/fail point>"
 }}
 """
+
+

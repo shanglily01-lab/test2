@@ -75,12 +75,7 @@
     <button onclick="switchTab('explore')" id="tab-explore-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors">
       <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">psychology</span>DeepSeek 探索
     </button>
-    <button onclick="switchTab('reversal')" id="tab-reversal-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
-      <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">swap_vert</span>顶空底多
-    </button>
-    <button onclick="switchTab('pb_rb')" id="tab-pb_rb-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">回多反空</button>
-    <button onclick="switchTab('ch_dm')" id="tab-ch_dm-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">追涨杀跌</button>
-    <button onclick="switchTab('predict')" id="tab-predict-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
+<button onclick="switchTab('predict')" id="tab-predict-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
       <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">auto_graph</span>DeepSeek 预测
     </button>
     <button onclick="switchTab('big4')" id="tab-big4-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
@@ -243,23 +238,6 @@
 
 </div><!-- /tab-explore -->
 
-<div id="tab-reversal" class="hidden"></div>
-<div id="tab-pb_rb" class="hidden">
-  <div class="flex gap-0 border-b border-outline-variant/10 px-8 bg-surface/20">
-    <button type="button" onclick="switchTacSub('pb_rb','pullback')" id="sub-pb_rb-pullback-btn" class="px-5 py-2.5 text-xs font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors">回调做多</button>
-    <button type="button" onclick="switchTacSub('pb_rb','rebound')" id="sub-pb_rb-rebound-btn" class="px-5 py-2.5 text-xs font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">反弹做空</button>
-  </div>
-  <div id="tab-pullback"></div>
-  <div id="tab-rebound" class="hidden"></div>
-</div>
-<div id="tab-ch_dm" class="hidden">
-  <div class="flex gap-0 border-b border-outline-variant/10 px-8 bg-surface/20">
-    <button type="button" onclick="switchTacSub('ch_dm','chase')" id="sub-ch_dm-chase-btn" class="px-5 py-2.5 text-xs font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors">追涨做多</button>
-    <button type="button" onclick="switchTacSub('ch_dm','dump')" id="sub-ch_dm-dump-btn" class="px-5 py-2.5 text-xs font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">杀跌做空</button>
-  </div>
-  <div id="tab-chase"></div>
-  <div id="tab-dump" class="hidden"></div>
-</div>
 
 <!-- ============================================================ -->
 <!-- TAB: DeepSeek 预测 -->
@@ -424,7 +402,7 @@
 <header class="border-b border-outline-variant/10 px-8 py-5 flex items-center justify-between">
   <div>
     <h1 class="text-2xl font-bold tracking-tight">Big4 综合行情</h1>
-    <p class="text-[11px] text-on-surface-variant mt-1 uppercase tracking-widest">每 2h 调用 DeepSeek 分析 BTC/ETH/BNB/SOL · 7×1d + 24×1h + 48×15m K 线 · 不做下单依据</p>
+    <p class="text-[11px] text-on-surface-variant mt-1 uppercase tracking-widest">每 4h 调用 DeepSeek 分析 BTC/ETH/BNB/SOL · 7×1d + 24×1h + 48×15m K 线 · 不做下单依据</p>
   </div>
   <div class="flex items-center gap-4">
     <span id="b4-status-chip" class="chip chip-off"><span class="material-symbols-outlined text-[14px]">power_off</span><span id="b4-status-label">已禁用</span></span>
@@ -587,7 +565,6 @@ function escapeHtml(s) {
 
 </script>
 <script src="/static/js/explore_page_common.js"></script>
-<script src="/static/js/tactical_explore_ui.js"></script>
 <script>
 // ============================================================
 // STATUS
@@ -787,34 +764,26 @@ function toggleVerdicts(runId) {
 }
 
 // ============================================================
-// TAB SWITCHING (tactical tabs via tactical_explore_ui.js)
+// TAB SWITCHING
 // ============================================================
-var DEEPSEEK_TACTICAL_CFGS = [
-  { tab: 'reversal', prefix: 'rev', api: '/api/deepseek-reversal-explore', pageTitle: 'DeepSeek 顶空底多', subtitle: '顶部做空 · 底部做多', sideHint: '双向反转' },
-  { tab: 'pullback', prefix: 'pb', api: '/api/deepseek-pullback-explore', pageTitle: 'DeepSeek 回调做多', subtitle: '上升趋势回踩支撑', sideHint: '仅 LONG' },
-  { tab: 'rebound', prefix: 'rb', api: '/api/deepseek-rebound-explore', pageTitle: 'DeepSeek 反弹做空', subtitle: '下降趋势反弹受阻', sideHint: '仅 SHORT' },
-  { tab: 'chase', prefix: 'ch', api: '/api/deepseek-chase-explore', pageTitle: 'DeepSeek 追涨做多', subtitle: '突破后趋势延续', sideHint: '仅 LONG' },
-  { tab: 'dump', prefix: 'dm', api: '/api/deepseek-dump-explore', pageTitle: 'DeepSeek 杀跌做空', subtitle: '跌破后趋势延续', sideHint: '仅 SHORT' }
-];
-if (window.TacticalExploreUI) {
-  TacticalExploreUI.init(DEEPSEEK_TACTICAL_CFGS);
-  TacticalExploreUI.bindTabSwitcher({
-    topTabIds: ['explore', 'reversal', 'pb_rb', 'ch_dm', 'predict', 'big4'],
-    topBtnIds: ['tab-explore-btn', 'tab-reversal-btn', 'tab-pb_rb-btn', 'tab-ch_dm-btn', 'tab-predict-btn', 'tab-big4-btn'],
-    configs: DEEPSEEK_TACTICAL_CFGS,
-    onSwitch: function(top) {
-      if (top === 'predict' && !window._predictLoaded) {
-        window._predictLoaded = true;
-        loadPredictAll();
-      }
-      if (top === 'big4' && !window._big4Loaded) {
-        window._big4Loaded = true;
-        Big4AnalysisTab.loadAll({ api: '/api/deepseek-big4-analysis' });
-      }
-    }
+function switchTab(tab) {
+  ['explore', 'predict', 'big4'].forEach(function(id) {
+    var el = document.getElementById('tab-' + id);
+    if (el) el.classList.toggle('hidden', id !== tab);
+    var btn = document.getElementById('tab-' + id + '-btn');
+    if (btn) btn.className = id === tab
+      ? 'px-6 py-3 text-sm font-medium border-b-2 border-[#49f4c8] text-[#49f4c8] transition-colors'
+      : 'px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors';
   });
+  if (tab === 'predict' && !window._predictLoaded) {
+    window._predictLoaded = true;
+    loadPredictAll();
+  }
+  if (tab === 'big4' && !window._big4Loaded) {
+    window._big4Loaded = true;
+    Big4AnalysisTab.loadAll({ api: window.location.pathname.indexOf('deepseek') >= 0 ? '/api/deepseek-big4-analysis' : '/api/gemini-big4-analysis' });
+  }
 }
-
 // ============================================================
 // INIT
 // ============================================================
@@ -1078,3 +1047,8 @@ setInterval(function(){
 
 </body>
 </html>
+
+
+
+
+

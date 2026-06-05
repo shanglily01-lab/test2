@@ -1,7 +1,7 @@
 """
 Big4 综合行情 LLM 分析 — Gemini / DeepSeek 共用 worker.
 
-每 2h 对 BTC/ETH/BNB/SOL 提供:
+每 4h 对 BTC/ETH/BNB/SOL 提供:
   - 7 根 1d K 线
   - 24 根 1h K 线
   - 48 根 15m K 线
@@ -40,7 +40,7 @@ BIG4_SYMBOLS: List[str] = [
     "SOL/USDT",
 ]
 
-INTERVAL_HOURS = 2
+INTERVAL_HOURS = 4
 ANALYSIS_TIMEOUT_S = int(os.getenv("BIG4_ANALYSIS_TIMEOUT_S", "300"))
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "") or os.getenv("DeepSeek_API_KEY", "")

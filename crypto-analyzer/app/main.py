@@ -1,4 +1,4 @@
-"""
+﻿"""
 加密货币交易分析系统 - 主程序
 FastAPI后端服务
 """
@@ -92,7 +92,7 @@ price_cache_service = None  # 价格缓存服务
 pending_order_executor = None  # 待成交订单自动执行器（现货限价单）
 futures_limit_order_executor = None  # 合约限价单自动执行器
 futures_monitor_service = None  # 合约止盈止损监控服务（已废弃，由 sl_tp_monitor 替代）
-sl_tp_monitor = None              # 止盈止损监控服务（负责所有模拟盘SL/TP检查，包括Gemini/S6）
+sl_tp_monitor = None              # 止盈止损监控服务（负责所有模拟盘SL/TP检查）
 
 # 技术信号页面API缓存配置（5分钟缓存）
 _technical_signals_cache = None
@@ -282,14 +282,14 @@ async def lifespan(app: FastAPI):
         futures_limit_order_executor = None
 
         # 合约止盈止损监控服务已停用 — 改用独立 PositionSLTPMonitor
-        # SmartExitOptimizer 只对非多策略持仓有效 (Gemini/S6 等被跳过 SL/TP),
+        # SmartExitOptimizer 只对非多策略持仓有效 (AI 策略等被跳过 SL/TP),
         # 因此需要 PositionSLTPMonitor 兜底所有模拟盘的硬 SL/TP 检查
         futures_monitor_service = None
 
         # 止盈止损监控服务（独立于 SmartExitOptimizer）
         # 负责所有模拟盘 (futures_positions) 的硬 SL/TP 检查
-        # 覆盖范围: gemini_explore, gemini_predict, s1-s7, 及其他所有 source
-        # SmartExitOptimizer 明确跳过 Gemini/S6 的 SL/TP, 所以此处必须启动
+        # 覆盖范围: gemini_explore, gemini_predict, 及其他所有 source
+        # SmartExitOptimizer 会跳过部分 AI 策略的 SL/TP, 所以此处必须启动
         sl_tp_monitor = None
         try:
             from app.services.position_sl_tp_monitor import init_sl_tp_monitor
@@ -1036,28 +1036,6 @@ try:
     logger.info("[GPT探索] API路由已注册")
 except Exception as e:
     logger.warning(f"[GPT探索] API路由注册失败: {e}")
-    import traceback
-    traceback.print_exc()
-
-# 注册 Gemini / DeepSeek 顶空底多探索 API
-try:
-    from app.api.reversal_explore_api import (
-        deepseek_reversal_router,
-        gemini_reversal_router,
-        gpt_reversal_router,
-        gpt_tactical_four_routers,
-        tactical_four_routers,
-    )
-    app.include_router(gemini_reversal_router)
-    app.include_router(deepseek_reversal_router)
-    app.include_router(gpt_reversal_router)
-    for r in tactical_four_routers:
-        app.include_router(r)
-    for r in gpt_tactical_four_routers:
-        app.include_router(r)
-    logger.info("[战术探索] API路由已注册 (顶空底多 + 四策略×3)")
-except Exception as e:
-    logger.warning(f"[顶空底多探索] API路由注册失败: {e}")
     import traceback
     traceback.print_exc()
 
@@ -5000,3 +4978,4 @@ if __name__ == "__main__":
         log_level="info",
         access_log=False  # 禁用访问日志
     )
+

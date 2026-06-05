@@ -1,4 +1,4 @@
-# AI 策略与顾问 — 完整说明（中文）
+﻿# AI 策略与顾问 — 完整说明（中文）
 
 > 文档版本：2026-06-05 · 与生产代码对齐（主探索/预测/战术/反转/顾问 **LLM prompt 为中文**；实盘按 `LIVE_SYNC_SOURCES` 三策略 + TOP50/白名单开仓闸）
 
@@ -28,7 +28,6 @@ smart_trader_service (每 900s)
 | 战术四策略 | 是 | `*_pullback` 等 | 否 |
 | 开仓/持仓顾问 | 是 | 按 source 路由 | 持仓 sell：仅上述四 source + `live_close_enabled=1` 时平交易所 |
 | 情绪分析 | 是 | 不下单 | — |
-| S9 抄底 | 是 | `s9_gemini_ai` | 规则多策略路径 |
 
 ---
 
@@ -244,7 +243,6 @@ gate_simulated_open (paper_open_gate.py)
 | `gemini_*` | 仅 Gemini |
 | `deepseek_*` | 仅 DeepSeek |
 | `gpt_*` | 仅 GPT |
-| 其他（S1/S6/S9/smart_trader 等） | **Gemini + DeepSeek 双审** |
 
 ### 7.3 审查步骤（`open_advisor_strategy_rubrics.py`）
 
@@ -253,7 +251,7 @@ gate_simulated_open (paper_open_gate.py)
 3. `precheck_open_advisor` — 战术量化硬线（RSI、7d 距离等）
 4. LLM：`decision` = `approve` | `reject`，`reason` **英文**（≤120 words）
 
-按 `source` 映射 profile：`explore` / `predict` / `pullback` / `reversal` / `s1`…（见 `resolve_strategy_profile`）。
+按 `source` 映射 profile：`explore` / `predict` / `pullback` / `btc_momentum`…（见 `resolve_strategy_profile`）。
 
 ### 7.4 Kill Switch
 
@@ -314,14 +312,6 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 - **API**：`POST /api/gemini-sentiment/run-now`
 
 ---
-
-## 10. S9 — 多策略 Gemini 抄底
-
-- **文件**：`multi_strategy_service.scan_s9_gemini_ai`（`run_slow` 每 30min 调度，S9 内部 **6h** 节流）
-- **source**：`s9_gemini_ai`，仅 LONG，5x，500U，最多 5 仓
-- **开关**：`s9_gemini_ai_enabled`（默认 false）
-- **Prompt**：内联于 `multi_strategy_service`（非 `ai_explore_prompt`）
-- **开仓**：走 `paper_open_gate`（双审 Gemini+DeepSeek）
 
 ---
 
@@ -392,3 +382,4 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | `smart_trader_service.py` | 顾问 tick + 部分 gate 调用 |
 
 英文对照文档：[AI_STRATEGIES_AND_ADVISORS_EN.md](./AI_STRATEGIES_AND_ADVISORS_EN.md)
+

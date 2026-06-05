@@ -54,9 +54,6 @@ ENTRY_GRACE_MIN          = 45
 _AI_HARD_SLTP_ONLY_SOURCES = frozenset({
     'gemini_explore', 'gemini_predict',
     'deepseek_explore', 'deepseek_predict',
-    'gemini_reversal', 'deepseek_reversal',
-    'gemini_pullback', 'gemini_rebound', 'gemini_chase', 'gemini_dump',
-    'deepseek_pullback', 'deepseek_rebound', 'deepseek_chase', 'deepseek_dump',
 })
 # 硬 TP 开仓保护：避免 entry 价与 monitor 市价源不一致时秒平（SL 仍立即生效）
 _AI_TP_GRACE_MIN = 5
@@ -68,7 +65,7 @@ def _is_ai_hard_sltp_source(src: str) -> bool:
     if src in _AI_HARD_SLTP_ONLY_SOURCES:
         return True
     if src.startswith(("gemini_", "deepseek_")):
-        for key in ("explore", "predict", "reversal", "pullback", "rebound", "chase", "dump"):
+        for key in ("explore", "predict"):
             if key in src:
                 return True
     return False

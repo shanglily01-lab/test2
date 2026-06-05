@@ -1,4 +1,4 @@
-# AI Strategies & Advisors — Reference (English)
+﻿# AI Strategies & Advisors — Reference (English)
 
 > Version: 2026-06-05 · Aligned with production code (main explore/predict/tactical/reversal/advisors **LLM prompts are Chinese**; live sync limited to `LIVE_SYNC_SOURCES` + TOP50/whitelist on open)
 
@@ -28,7 +28,6 @@ Any simulated open
 | Tactical four | Yes | `*_pullback`, etc. | No |
 | Open / hold advisors | Yes | Routed by `source` | `sell` closes exchange only for the four allowlisted sources + `live_close_enabled` |
 | Sentiment | Yes | No orders | — |
-| S9 bottom reversal | Yes | `s9_gemini_ai` | Multi-strategy path |
 
 ---
 
@@ -243,7 +242,6 @@ gate_simulated_open (paper_open_gate.py)
 | `gemini_*` | Gemini only |
 | `deepseek_*` | DeepSeek only |
 | `gpt_*` | GPT only |
-| Other (S1/S6/S9/smart_trader, …) | **Gemini + DeepSeek** |
 
 ### 7.3 Steps (`open_advisor_strategy_rubrics.py`)
 
@@ -252,7 +250,7 @@ gate_simulated_open (paper_open_gate.py)
 3. `precheck_open_advisor` — tactical numeric lines
 4. LLM JSON: `approve` | `reject`, **English `reason`** (≤120 words)
 
-Profile resolved from `source` (`explore`, `predict`, `pullback`, `reversal`, `s1`, …).
+Profile resolved from `source` (`explore`, `predict`, `pullback`, `btc_momentum`, …).
 
 ### 7.4 Kill switches
 
@@ -307,14 +305,6 @@ For OPEN paper positions held **≥30 minutes**, poll every **15 minutes/positio
 - **Table**: `gemini_sentiment_runs`
 
 ---
-
-## 10. S9 — Multi-Strategy Gemini Bottom Reversal
-
-- **File**: `multi_strategy_service.scan_s9_gemini_ai` (6h internal throttle)
-- **`source`**: `s9_gemini_ai`, LONG only, 5x, 500U, max 5 positions
-- **Switch**: `s9_gemini_ai_enabled` (default false)
-- **Prompt**: inline in `multi_strategy_service` (not shared explore prompt)
-- **Open**: `paper_open_gate` (Gemini + DeepSeek dual review)
 
 ---
 
@@ -381,3 +371,4 @@ Logs: `logs/scheduler_YYYY-MM-DD.log`. After Python deploy: `sudo systemctl rest
 | `smart_trader_service.py` | Hold advisor orchestration |
 
 Chinese reference: [AI_STRATEGIES_AND_ADVISORS_ZH.md](./AI_STRATEGIES_AND_ADVISORS_ZH.md)
+

@@ -1,4 +1,4 @@
-"""
+﻿"""
 统一数据采集调度器
 整合所有数据源的采集任务，按照不同频率定时执行
 
@@ -1352,29 +1352,6 @@ class UnifiedDataScheduler:
         schedule.every(10).minutes.do(_run_gpt_explore)
         logger.info("  ✓ gpt_explore - 每 4 小时 + 10 分钟到期轮询 (后台线程)")
 
-        # 战术探索 (顶空底多 + 四策略) × Gemini/DeepSeek — 4h 错峰槽位, 15min 轮询认领
-        def _run_tactical_explore_poll():
-            def wrapper():
-                try:
-                    from app.services.tactical_explore_scheduler import run_tactical_explore_poll
-                    run_tactical_explore_poll(triggered_by="scheduler")
-                except Exception as e:
-                    logger.error(f"[战术探索调度] 异常: {e}", exc_info=True)
-            threading.Thread(
-                target=wrapper, daemon=True, name="TacticalExplorePoll",
-            ).start()
-
-        schedule.every(15).minutes.do(_run_tactical_explore_poll)
-        try:
-            from app.services.tactical_explore_scheduler import format_schedule_plan
-            for line in format_schedule_plan().split("\n"):
-                logger.info(f"  {line}")
-        except Exception:
-            pass
-        logger.info(
-            "  ✓ tactical_explore (15 jobs) - 每策略 4h 必跑 + 15min 轮询 (next_due DB, 重启不丢)"
-        )
-
         # DeepSeek 预测 - 每 4h 调一次 DeepSeek 预测 TOP50 方向
         def _run_deepseek_predict():
             def wrapper():
@@ -1417,7 +1394,7 @@ class UnifiedDataScheduler:
         schedule.every(5).minutes.do(_run_gpt_predict)
         logger.info("  ✓ gpt_predict - 每 4h 周期 + 5 分钟到期轮询 (DB next_due 防重)")
 
-        # Big4 综合行情 LLM 分析 — 每 2h (Gemini + DeepSeek)
+        # Big4 综合行情 LLM 分析 — 每 4h (Gemini + DeepSeek)
         def _run_gemini_big4_analysis():
             def wrapper():
                 try:
@@ -1436,11 +1413,11 @@ class UnifiedDataScheduler:
                     logger.error(f"[DeepSeek Big4分析] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="DeepSeekBig4Analysis").start()
 
-        schedule.every(2).hours.do(_run_gemini_big4_analysis)
+        schedule.every(4).hours.do(_run_gemini_big4_analysis)
         schedule.every(10).minutes.do(_run_gemini_big4_analysis)
-        schedule.every(2).hours.do(_run_deepseek_big4_analysis)
+        schedule.every(4).hours.do(_run_deepseek_big4_analysis)
         schedule.every(10).minutes.do(_run_deepseek_big4_analysis)
-        logger.info("  ✓ big4_analysis - Gemini/DeepSeek 每 2h + 10min 轮询 (worker 内 2h 防重)")
+        logger.info("  ✓ big4_analysis - Gemini/DeepSeek 每 4h + 10min 轮询 (worker 内 4h 防重)")
 
         # Gemini 市场情绪 + 川普分析 - 每 8h 调一次
         def _run_gemini_sentiment():
@@ -1618,19 +1595,6 @@ class UnifiedDataScheduler:
         _launch_predict_catchup("Gemini预测", "app.services.gemini_predictor", "run_predict_round", 45)
         _launch_predict_catchup("DeepSeek预测", "app.services.deepseek_predictor", "run_predict_round", 50)
         _launch_predict_catchup("GPT预测", "app.services.gpt_predictor", "run_predict_round", 55)
-
-        def _launch_tactical_catchup():
-            import time
-            time.sleep(55)
-            try:
-                from app.services.tactical_explore_scheduler import run_tactical_explore_poll
-                run_tactical_explore_poll(triggered_by="scheduler")
-            except Exception as e:
-                logger.error(f"[战术探索] 启动补跑检查失败: {e}", exc_info=True)
-
-        threading.Thread(
-            target=_launch_tactical_catchup, daemon=True, name="TacticalCatchup",
-        ).start()
 
         # 定期打印状态 (每小时)
         schedule.every(1).hours.do(self.print_status)
@@ -1855,3 +1819,4 @@ if __name__ == '__main__':
     except ImportError:
         pass  # 老环境无 pid_lock 模块,不强制
     main()
+
