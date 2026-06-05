@@ -202,11 +202,30 @@ def prepare_tactical_universe_for_llm(
     universe: dict,
     max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
 ) -> Tuple[List[dict], Dict[str, Any]]:
-    from app.services.tactical_symbol_screener import screen_tactical_universe
+    """Return the shared explore universe without tactical pre-screening.
 
-    selected, _records, meta = screen_tactical_universe(
-        definition.key, universe, max_symbols=max_symbols,
-    )
+    The strategy-specific screen was useful for shrinking prompts, but it moves
+    work into the data-preparation path and can make the scheduler/database feel
+    stuck. Keep the prompt-side strategy rules and post-LLM catalyst gate, while
+    sending the same shared bundle shape that the main explore workers use.
+    """
+    pool = list((universe or {}).values())
+    selected: List[dict] = []
+    for item in pool[:max_symbols]:
+        clean = dict(item)
+        clean.pop("k_1d_ohlc", None)
+        clean.pop("k_1h_ohlc", None)
+        clean.pop("k_15m_ohlc", None)
+        selected.append(clean)
+
+    meta = {
+        "universe_total": len(pool),
+        "llm_symbol_count": len(selected),
+        "llm_symbols_truncated": max(0, len(pool) - len(selected)),
+        "precheck_dropped": 0,
+        "selection": "shared_universe_no_tactical_prefilter",
+        "screen_records": [],
+    }
     return selected, meta
 
 

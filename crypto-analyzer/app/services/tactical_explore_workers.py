@@ -248,7 +248,6 @@ def _make_group_runner(teacher: str, group_key: str) -> Callable[[str], Optional
         from app.services.explore_prepared_bundle import get_explore_prepared_bundle
         from app.services.gemini_explore_worker import _connect
         from app.services.reversal_explore_runner import run_tactical_explore_round
-        from app.services.tactical_symbol_screener import screen_tactical_group
 
         lock = _get_group_lock(group_source)
         if not lock.acquire(blocking=False):
@@ -298,11 +297,15 @@ def _make_group_runner(teacher: str, group_key: str) -> Callable[[str], Optional
                     universe, global_ctx, _ = get_explore_prepared_bundle(
                         conn, log_tag, allow_rebuild=True,
                     )
-                by_strategy, _records, group_meta = screen_tactical_group(
-                    strategies, universe,
-                )
+                group_meta = {
+                    "strategies": {
+                        sk: {"llm_symbol_count": len(universe)}
+                        for sk in strategies
+                    }
+                }
+                by_strategy = {sk: list(universe.values()) for sk in strategies}
                 logger.info(
-                    f"[{log_tag}] 组预筛: "
+                    f"[{log_tag}] 全量共享 universe: "
                     + ", ".join(
                         f"{sk}={group_meta['strategies'][sk]['llm_symbol_count']}"
                         for sk in strategies
