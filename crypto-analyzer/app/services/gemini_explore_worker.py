@@ -1013,7 +1013,7 @@ def _has_open_position(conn, symbol: str) -> bool:
 # ============================================================
 _KLINE_5M_MAX_AGE_S = 1800   # scheduler 无 WS 时允许 30min 内的 5m 收盘
 _KLINE_1H_MAX_AGE_S = 3900   # 与 BACKFILL 1h 滞后一致 (~65min)
-_OPEN_KLINE_5M_MAX_AGE_S = 900   # 开仓优先 5m，最长 15min
+_OPEN_KLINE_5M_MAX_AGE_S = 180   # 开仓 5m 兜底最长 3min，避免旧价开仓
 _OPEN_PRICE_MAX_DRIFT = 0.025    # 缓存价 vs live 偏离 >2.5% 则弃用缓存
 
 
@@ -1091,7 +1091,11 @@ def _get_hub_price(symbol: str, max_age_seconds: int = 90) -> Optional[float]:
         from app.services.binance_data_hub import get_global_data_hub
         hub = get_global_data_hub()
         if hub is not None:
-            p = hub.get_price_sync(symbol, max_age_seconds=max_age_seconds)
+            p = hub.get_trade_price_sync(
+                symbol,
+                max_age_seconds=max_age_seconds,
+                allow_db_fallback=False,
+            )
             if p is not None and p > 0:
                 return float(p)
     except Exception:
@@ -1101,7 +1105,7 @@ def _get_hub_price(symbol: str, max_age_seconds: int = 90) -> Optional[float]:
 
 def _get_live_reference_price(conn, symbol: str, tag: str = "探索市价") -> Optional[float]:
     """监控/开仓校验用：Hub → 5m kline，不用探索包缓存."""
-    p = _get_hub_price(symbol, 90)
+    p = _get_hub_price(symbol, 30)
     if p:
         return p
     return _price_from_kline_query(
@@ -1117,11 +1121,6 @@ def _get_open_price(
     """模拟开仓价：live 优先，禁止用过期探索包价导致「开仓即止盈」."""
     tag = "探索开仓价"
     live = _get_live_reference_price(conn, symbol, tag)
-    if not live:
-        live = _price_from_kline_query(
-            conn, symbol, "1h", _KLINE_1H_MAX_AGE_S, tag,
-        )
-
     cached = None
     if isinstance(sym_data, dict) and sym_data.get("current_price"):
         cached = float(sym_data["current_price"])
@@ -1138,11 +1137,7 @@ def _get_open_price(
                 )
         return float(live)
 
-    if cached and cached > 0:
-        logger.warning(f"[{tag}] {symbol} 无 live/kline, 回退 cached={cached}")
-        return float(cached)
-
-    logger.warning(f"[{tag}] {symbol} 所有取价路径失败")
+    logger.warning(f"[{tag}] {symbol} 无 30s Hub/3min 5m 新鲜价格，跳过开仓")
     return None
 
 

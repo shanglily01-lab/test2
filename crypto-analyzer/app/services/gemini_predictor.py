@@ -998,7 +998,14 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                 continue
 
             # 7f. 取实时价开仓
-            price = _get_current_price(conn, symbol)
+            from app.utils.futures_price import get_futures_trade_price
+            price = get_futures_trade_price(
+                conn,
+                symbol,
+                max_age_seconds=30,
+                log_tag="Gemini predict open",
+                require_fresh=True,
+            )
             if price is None or price <= 0:
                 verdict_rows.append((
                     run_id, symbol, category, confidence,

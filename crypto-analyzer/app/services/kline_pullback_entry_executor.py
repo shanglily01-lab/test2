@@ -149,20 +149,39 @@ class KlinePullbackEntryExecutor:
             if price and price > 0:
                 return float(price)
 
+        try:
+            from app.services.binance_data_hub import get_global_data_hub
+            hub = get_global_data_hub()
+            if hub is not None:
+                price = hub.get_trade_price_sync(
+                    symbol,
+                    max_age_seconds=30,
+                    allow_db_fallback=False,
+                )
+                if price and price > 0:
+                    return float(price)
+        except Exception as e:
+            logger.debug(f"[PRICE] DataHub fresh trade price failed {symbol}: {e}")
+
         # 回退到数据库
         conn = None
         try:
             conn = pymysql.connect(**self.db_config)
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT close_price FROM kline_data
+                SELECT close_price, open_time FROM kline_data
                 WHERE symbol = %s AND timeframe = '5m'
                 ORDER BY open_time DESC
                 LIMIT 1
             """, (symbol,))
             result = cursor.fetchone()
             if result:
-                return float(result[0])
+                close_price, open_time = result
+                import time
+                age_ms = int(time.time() * 1000) - int(open_time)
+                if age_ms <= 3 * 60 * 1000:
+                    return float(close_price)
+                logger.warning(f"[PRICE] {symbol} kline_data stale({age_ms//60000}m); skip entry")
         except Exception as e:
             logger.error(f"❌ 从数据库获取价格失败: {e}")
         finally:

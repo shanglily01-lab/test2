@@ -279,6 +279,7 @@ class BinanceDataHub:
         symbol: str,
         max_age_seconds: int = 90,
         allow_rest_fallback: bool = True,
+        allow_db_fallback: bool = True,
     ) -> Optional[Decimal]:
         """
         模拟开仓/平仓用价 — 优先 U 本位 mark（WS / premiumIndex），再 last / 5m 收盘。
@@ -306,9 +307,10 @@ class BinanceDataHub:
         if cached is not None:
             return cached
 
-        db_price = self._db_kline_fallback(symbol)
-        if db_price is not None:
-            return db_price
+        if allow_db_fallback:
+            db_price = self._db_kline_fallback(symbol)
+            if db_price is not None:
+                return db_price
 
         if not allow_rest_fallback:
             return None
@@ -1133,6 +1135,27 @@ class HubHttpProxy:
         data = self._sget(
             f"/api/datahub/price/{sym}",
             {"max_age_seconds": max_age_seconds, "allow_rest": "true" if allow_rest_fallback else "false"},
+        )
+        if not data:
+            return None
+        p = data.get("price")
+        return Decimal(p) if p else None
+
+    def get_trade_price_sync(
+        self,
+        symbol: str,
+        max_age_seconds: int = 90,
+        allow_rest_fallback: bool = True,
+        allow_db_fallback: bool = True,
+    ) -> Optional[Decimal]:
+        sym = symbol.replace("/", "%2F")
+        data = self._sget(
+            f"/api/datahub/trade-price/{sym}",
+            {
+                "max_age_seconds": max_age_seconds,
+                "allow_rest": "true" if allow_rest_fallback else "false",
+                "allow_db": "true" if allow_db_fallback else "false",
+            },
         )
         if not data:
             return None

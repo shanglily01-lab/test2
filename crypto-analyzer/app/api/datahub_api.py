@@ -63,6 +63,25 @@ async def datahub_get_price(
     return {"symbol": sym, "price": _dec_to_str(p)}
 
 
+@router.get("/trade-price/{symbol:path}")
+def datahub_get_trade_price(
+    symbol: str,
+    max_age_seconds: int = Query(90, ge=1, le=3600),
+    allow_rest: bool = Query(True),
+    allow_db: bool = Query(True),
+):
+    """Synchronous futures trade price: mark/ticker first, optional DB fallback."""
+    hub = _hub_or_503()
+    sym = symbol.replace("%2F", "/")
+    p = hub.get_trade_price_sync(
+        sym,
+        max_age_seconds=max_age_seconds,
+        allow_rest_fallback=allow_rest,
+        allow_db_fallback=allow_db,
+    )
+    return {"symbol": sym, "price": _dec_to_str(p)}
+
+
 @router.post("/prices/batch")
 async def datahub_get_prices_batch(
     symbols: List[str] = Body(..., embed=True),

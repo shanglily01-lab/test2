@@ -40,12 +40,13 @@ def get_futures_trade_price(
     symbol: str,
     max_age_seconds: int = 90,
     log_tag: str = "futures_price",
+    require_fresh: bool = False,
 ) -> Optional[float]:
     """
     开仓/浮盈计算用价: DataHub mark 优先; 若与 5m 合约收盘偏离过大则采用 5m。
     """
     sym = futures_symbol_rating_canonical(symbol)
-    ref = kline5m_futures_close(conn, sym)
+    ref = None if require_fresh else kline5m_futures_close(conn, sym)
 
     live: Optional[float] = None
     try:
@@ -53,13 +54,23 @@ def get_futures_trade_price(
 
         hub = get_global_data_hub()
         if hub is not None:
-            p = hub.get_trade_price_sync(sym, max_age_seconds=max_age_seconds)
+            p = hub.get_trade_price_sync(
+                sym,
+                max_age_seconds=max_age_seconds,
+                allow_db_fallback=not require_fresh,
+            )
             if p is not None and p > 0:
                 live = float(p)
     except Exception:
         pass
 
     if live is None or live <= 0:
+        if require_fresh:
+            logger.warning(
+                f"[{log_tag}] {sym} no fresh DataHub trade price "
+                f"(max_age={max_age_seconds}s); skip DB/kline fallback for open"
+            )
+            return None
         return ref
 
     if ref and ref > 0:

@@ -120,7 +120,21 @@ class SmartEntryExecutor:
             if price and price > 0:
                 return float(price)
 
-        # 回退到数据库（kline_data 5m，限30分钟内有效）
+        try:
+            from app.services.binance_data_hub import get_global_data_hub
+            hub = get_global_data_hub()
+            if hub is not None:
+                price = hub.get_trade_price_sync(
+                    symbol,
+                    max_age_seconds=30,
+                    allow_db_fallback=False,
+                )
+                if price and price > 0:
+                    return float(price)
+        except Exception as e:
+            logger.debug(f"[PRICE] DataHub fresh trade price failed {symbol}: {e}")
+
+        # 回退到数据库（kline_data 5m，限3分钟内有效）
         try:
             conn = pymysql.connect(**self.db_config, charset='utf8mb4')
             cursor = conn.cursor()
@@ -134,10 +148,10 @@ class SmartEntryExecutor:
             conn.close()
             if result:
                 close_price, open_time = result
-                # 数据必须在30分钟内，否则视为过期
+                # 数据必须在3分钟内，否则视为过期
                 import time
                 age_ms = int(time.time() * 1000) - int(open_time)
-                if age_ms <= 30 * 60 * 1000:
+                if age_ms <= 3 * 60 * 1000:
                     return float(close_price)
                 else:
                     logger.warning(f"[PRICE] {symbol} kline_data 数据过期({age_ms//60000}分钟前)，跳过")

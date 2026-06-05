@@ -984,7 +984,14 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                 predictions_made += 1
                 continue
 
-            price = _get_current_price(conn, symbol)
+            from app.utils.futures_price import get_futures_trade_price
+            price = get_futures_trade_price(
+                conn,
+                symbol,
+                max_age_seconds=30,
+                log_tag="GPT predict open",
+                require_fresh=True,
+            )
             if price is None or price <= 0:
                 verdict_rows.append((
                     run_id, symbol, category, confidence,
