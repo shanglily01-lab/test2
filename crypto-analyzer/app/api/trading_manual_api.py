@@ -30,12 +30,8 @@ router = APIRouter(prefix="/api/trading-manual", tags=["Trading Manual"])
 
 
 def _connect():
-    return pymysql.connect(
-        **get_db_config(),
-        charset='utf8mb4',
-        cursorclass=pymysql.cursors.DictCursor,
-        autocommit=True,
-    )
+    from app.database.connection_pool import get_api_connection
+    return get_api_connection()
 
 
 # ============================================================

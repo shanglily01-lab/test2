@@ -827,11 +827,11 @@ function loadAll() {
 }
 loadAll();
 // 持仓 + 实时盈亏: 每 3 秒刷
-setInterval(loadOpenPositions, 3000);
-// status + 顶部统计卡: 每 30 秒刷
-setInterval(loadStatus, 30000);
-// 盈亏统计: 每 30 秒刷
-setInterval(loadExploreStats, 30000);
+setInterval(loadOpenPositions, 15000);
+// status + 顶部统计卡: 每 60 秒刷
+setInterval(loadStatus, 60000);
+// 盈亏统计: 每 60 秒刷
+setInterval(loadExploreStats, 60000);
 
 // ============================================================
 // DEEPSEEK PREDICT - STATUS

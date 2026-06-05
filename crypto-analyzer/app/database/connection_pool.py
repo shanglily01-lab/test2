@@ -338,6 +338,30 @@ def close_global_pool():
         _global_pool = None
 
 
+def get_api_connection():
+    """获取一个由全局连接池管理的连接. conn.close() 实际归还到池中（非关 TCP）.
+
+    与 `with get_db_connection() as conn:` 不同，本函数兼容现有
+    `conn = _connect(); try: ... finally: conn.close()` 的调用模式.
+    """
+    pool = get_global_pool(get_db_config(), pool_size=10)
+    conn = pool._get_healthy_connection()
+    orig_close = conn.close
+
+    def _pool_close():
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        try:
+            pool._return_connection(conn)
+        except Exception:
+            pass
+
+    conn.close = _pool_close
+    return conn
+
+
 # 便捷函数
 @contextmanager
 def get_db_connection(db_config: Dict[str, Any] = None):

@@ -22,12 +22,8 @@ def _get_db_config():
 
 
 def _connect():
-    return pymysql.connect(
-        **_get_db_config(),
-        charset="utf8mb4",
-        cursorclass=pymysql.cursors.DictCursor,
-        autocommit=True,
-    )
+    from app.database.connection_pool import get_api_connection
+    return get_api_connection()
 
 
 def _get_price_hub():

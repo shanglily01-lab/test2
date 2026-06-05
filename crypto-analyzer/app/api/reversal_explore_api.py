@@ -19,12 +19,8 @@ def _get_db_config():
 
 
 def _connect():
-    return pymysql.connect(
-        **_get_db_config(),
-        charset="utf8mb4",
-        cursorclass=pymysql.cursors.DictCursor,
-        autocommit=True,
-    )
+    from app.database.connection_pool import get_api_connection
+    return get_api_connection()
 
 
 def _get_price_hub():
@@ -76,9 +72,11 @@ def _build_live_positions(positions):
     for p in positions:
         symbol = futures_symbol_rating_canonical(p["symbol"])
         side = p["position_side"]
-        entry = float(p["entry_price"])
-        qty = float(p["quantity"])
-        margin = float(p["margin"])
+        entry = float(p["entry_price"] or 0)
+        qty = float(p["quantity"] or 0)
+        margin = float(p["margin"] or 0)
+        sl_price = float(p["stop_loss_price"]) if p.get("stop_loss_price") else None
+        tp_price = float(p["take_profit_price"]) if p.get("take_profit_price") else None
         live_price = _live_price(symbol, hub)
         unrealized_pnl = None
         unrealized_pnl_pct = None
@@ -97,8 +95,8 @@ def _build_live_positions(positions):
             "entry_price": entry,
             "mark_price": live_price,
             "margin": margin,
-            "stop_loss_price": float(p["stop_loss_price"]) if p.get("stop_loss_price") else None,
-            "take_profit_price": float(p["take_profit_price"]) if p.get("take_profit_price") else None,
+            "stop_loss_price": sl_price,
+            "take_profit_price": tp_price,
             "unrealized_pnl": round(unrealized_pnl, 4) if unrealized_pnl is not None else None,
             "unrealized_pnl_pct": round(unrealized_pnl_pct, 2) if unrealized_pnl_pct is not None else None,
             "open_time": p["open_time"].isoformat() if p.get("open_time") else None,
@@ -316,6 +314,7 @@ def create_tactical_explore_router(
             result, summary = _build_live_positions(positions)
             return {"success": True, "data": result, "count": len(result), "summary": summary}
         except Exception as e:
+            logger.error(f"[{tag}] /positions/live 失败: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=str(e))
 
     @router.get("/stats")

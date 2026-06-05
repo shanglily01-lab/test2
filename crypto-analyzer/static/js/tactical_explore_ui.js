@@ -276,7 +276,7 @@
           loadOpen(cfg);
         }
       });
-    }, 5000);
+    }, 15000);
   }
 
   function onTabShow(cfg) {

@@ -13,13 +13,8 @@ router = APIRouter(prefix="/api/ai-shadow", tags=["AI Shadow对比"])
 
 
 def _connect():
-    from app.utils.config_loader import get_db_config
-    return pymysql.connect(
-        **get_db_config(),
-        charset="utf8mb4",
-        cursorclass=pymysql.cursors.DictCursor,
-        autocommit=True,
-    )
+    from app.database.connection_pool import get_api_connection
+    return get_api_connection()
 
 
 def _table_exists(cur, table: str) -> bool:
