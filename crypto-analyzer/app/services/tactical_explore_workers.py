@@ -17,8 +17,12 @@ from app.services.ai_tactical_explore_prompts import (
     TacticalStrategyDef,
     build_strategy_prompt,
     build_strategy_prompt_en,
+    build_tactical_family_prompt,
+    build_tactical_family_prompt_en,
     parse_tactical_llm_json,
+    parse_tactical_family_llm_json,
     tactical_catalyst_ok,
+    tactical_family_category_to_strategy,
     tactical_category_to_side,
 )
 from app.services.gemini_swan_worker import GEMINI_API_KEY, GEMINI_MODEL, GEMINI_TIMEOUT_S
@@ -172,6 +176,127 @@ def _call_gpt(defn: TacticalStrategyDef, strategy_key: str):
     return _inner
 
 
+def _call_family(teacher: str, group_key: str, group_label: str):
+    teacher_label = {"gemini": "Gemini", "deepseek": "DeepSeek", "gpt": "GPT"}[teacher]
+
+    def _inner(universe, global_ctx, historical_stats):
+        if teacher == "gemini":
+            if not GEMINI_API_KEY:
+                return None, "GEMINI_API_KEY missing"
+            try:
+                from google import genai
+                from google.genai import types
+            except ImportError:
+                return None, "missing google-genai"
+            prompt, meta = build_tactical_family_prompt(
+                group_key, universe, global_ctx, historical_stats,
+            )
+            logger.info(
+                f"[{teacher_label}{group_label}] family prompt {len(prompt)} chars, "
+                f"sym {meta['llm_symbol_count']}/{meta['universe_total']}"
+            )
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            gcfg = types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.1,
+                http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_S * 1000),
+                max_output_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
+            )
+            t0 = time.time()
+            try:
+                resp = client.models.generate_content(
+                    model=GEMINI_MODEL, contents=prompt, config=gcfg,
+                )
+            except Exception as e:
+                return None, f"API: {e}"
+            text = (resp.text or "").strip()
+        elif teacher == "gpt":
+            if not GPT_API_KEY:
+                return None, "OPENAI_API_KEY missing"
+            try:
+                from openai import OpenAI
+            except ImportError:
+                return None, "missing openai"
+            prompt, meta = build_tactical_family_prompt_en(
+                group_key, universe, global_ctx, historical_stats,
+            )
+            logger.info(
+                f"[{teacher_label}{group_label}] family prompt {len(prompt)} chars, "
+                f"sym {meta['llm_symbol_count']}/{meta['universe_total']}"
+            )
+            client = OpenAI(api_key=GPT_API_KEY, base_url=GPT_BASE_URL)
+            t0 = time.time()
+            try:
+                text = gpt_chat_json(
+                    client,
+                    user_prompt=prompt,
+                    max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
+                    timeout=GPT_TIMEOUT_S,
+                    system_prompt=GPT_JSON_SYSTEM_EN,
+                )
+            except Exception as e:
+                return None, f"API: {e}"
+        else:
+            if not DEEPSEEK_API_KEY:
+                return None, "DEEPSEEK_API_KEY missing"
+            try:
+                from openai import OpenAI
+            except ImportError:
+                return None, "missing openai"
+            prompt, meta = build_tactical_family_prompt_en(
+                group_key, universe, global_ctx, historical_stats,
+            )
+            logger.info(
+                f"[{teacher_label}{group_label}] family prompt {len(prompt)} chars, "
+                f"sym {meta['llm_symbol_count']}/{meta['universe_total']}"
+            )
+            client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+            t0 = time.time()
+            try:
+                resp = client.chat.completions.create(
+                    model=DEEPSEEK_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"},
+                    max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
+                    timeout=DEEPSEEK_TIMEOUT_S,
+                )
+            except Exception as e:
+                return None, f"API: {e}"
+            text = (resp.choices[0].message.content or "").strip()
+
+        logger.info(f"[{teacher_label}{group_label}] family {time.time()-t0:.1f}s out={len(text)}")
+        parsed, err = parse_tactical_family_llm_json(
+            text, f"{teacher_label}{group_label}", group_key,
+        )
+        if parsed is None:
+            return explore_llm_stub_with_trace(prompt, text), f"JSON: {err}"
+        parsed["_prompt"] = prompt
+        parsed["_raw_response"] = text
+        parsed["_screen_records"] = meta.get("screen_records") or []
+        return parsed, None
+
+    return _inner
+
+
+def _split_family_response(parsed: Optional[dict], strategy_key: str) -> Optional[dict]:
+    if parsed is None:
+        return None
+    out = dict(parsed)
+    verdicts = []
+    for verdict in parsed.get("verdicts") or []:
+        if not isinstance(verdict, dict):
+            continue
+        family_strategy = tactical_family_category_to_strategy(verdict.get("category") or "")
+        if family_strategy != strategy_key:
+            continue
+        item = dict(verdict)
+        item["family_category"] = item.get("category")
+        item["category"] = "entry"
+        verdicts.append(item)
+    out["verdicts"] = verdicts
+    return out
+
+
 def _make_runner(teacher: str, strategy_key: str) -> Callable[[str], Optional[int]]:
     defn = TACTICAL_STRATEGIES[strategy_key]
     cfg = _make_cfg(teacher, strategy_key, defn)
@@ -312,6 +437,8 @@ def _make_group_runner(teacher: str, group_key: str) -> Callable[[str], Optional
                     )
                 )
                 bundle = (universe, global_ctx)
+                family_call = _call_family(teacher, group_key, group_label)
+                family_response, family_err = family_call(universe, global_ctx, {})
                 for sk in strategies:
                     n_cand = len(by_strategy.get(sk) or [])
                     if n_cand == 0:
@@ -319,12 +446,13 @@ def _make_group_runner(teacher: str, group_key: str) -> Callable[[str], Optional
                         continue
                     defn = TACTICAL_STRATEGIES[sk]
                     cfg = _make_cfg(teacher, sk, defn)
-                    if teacher == "gemini":
-                        call_llm = _call_gemini(defn, sk)
-                    elif teacher == "gpt":
-                        call_llm = _call_gpt(defn, sk)
-                    else:
-                        call_llm = _call_deepseek(defn, sk)
+                    split_response = _split_family_response(family_response, sk)
+
+                    def call_llm(_universe, _global_ctx, _historical_stats, sr=split_response):
+                        if family_response is None:
+                            return None, family_err
+                        return sr, family_err
+
                     rid = run_tactical_explore_round(
                         cfg,
                         call_llm,

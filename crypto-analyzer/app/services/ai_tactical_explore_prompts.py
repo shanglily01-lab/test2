@@ -254,6 +254,54 @@ _JSON_OUTPUT_EN = """
 If nothing qualifies, use verdicts=[] — do not list skips one-by-one.
 """
 
+_TACTICAL_FAMILY_CATEGORIES = {
+    "pb_rb": ("pullback_long", "rebound_short"),
+    "ch_dm": ("chase_long", "dump_short"),
+}
+
+_TACTICAL_FAMILY_STRATEGY = {
+    "pullback_long": "pullback",
+    "rebound_short": "rebound",
+    "chase_long": "chase",
+    "dump_short": "dump",
+}
+
+_TACTICAL_FAMILY_JSON = """
+## 输出 JSON (仅此结构，无 markdown)
+{{
+  "summary_zh": "本轮两个方向的机会概况，1-3 句中文；无机会时说明原因",
+  "verdicts": [
+    {{
+      "symbol": "XXXUSDT",
+      "category": "pullback_long|rebound_short|chase_long|dump_short",
+      "confidence": 0.68,
+      "catalyst": "1h 24 根整体趋势 + 近 4~6 根结构 + RSI/EMA/7d/量能等量化描述",
+      "data_signal": "可选",
+      "risk_note": "可选"
+    }}
+  ]
+}}
+无符合两个方向任一硬线的标的时，verdicts 用空数组 []；不要逐条输出 skip。
+"""
+
+_TACTICAL_FAMILY_JSON_EN = """
+## Output JSON (this schema only, no markdown)
+{{
+  "summary_zh": "1-3 Chinese sentences covering both directions; if no setup, explain why",
+  "verdicts": [
+    {{
+      "symbol": "XXXUSDT",
+      "category": "pullback_long|rebound_short|chase_long|dump_short",
+      "confidence": 0.68,
+      "catalyst": "24x1h trend + last 4-6 bars + RSI/EMA/7d/volume evidence",
+      "data_signal": "optional one-liner",
+      "risk_note": "optional"
+    }}
+  ]
+}}
+If nothing qualifies for either direction, use verdicts=[]; do not list skips one-by-one.
+"""
+
 _TACTICAL_PROMPT_EN: Dict[str, Dict[str, str]] = {
     "pullback": {
         "title": "Pullback long (counter-move in uptrend)",
@@ -1189,6 +1237,197 @@ TACTICAL_STRATEGIES: Dict[str, TacticalStrategyDef] = {
     "chase": CHASE_LONG,
     "dump": DUMP_SHORT,
 }
+
+
+def tactical_family_category_to_strategy(category: str) -> Optional[str]:
+    cat = str(category or "").lower().strip()
+    aliases = {
+        "pullback": "pullback_long",
+        "pullback-long": "pullback_long",
+        "pullback long": "pullback_long",
+        "buy_dip": "pullback_long",
+        "buy-the-dip": "pullback_long",
+        "rebound": "rebound_short",
+        "rebound-short": "rebound_short",
+        "rebound short": "rebound_short",
+        "fade_rebound": "rebound_short",
+        "chase": "chase_long",
+        "chase-long": "chase_long",
+        "chase long": "chase_long",
+        "momentum_long": "chase_long",
+        "dump": "dump_short",
+        "dump-short": "dump_short",
+        "dump short": "dump_short",
+        "breakdown_short": "dump_short",
+    }
+    cat = aliases.get(cat, cat)
+    return _TACTICAL_FAMILY_STRATEGY.get(cat)
+
+
+def _family_defs(family_key: str) -> Tuple[TacticalStrategyDef, TacticalStrategyDef]:
+    if family_key == "pb_rb":
+        return TACTICAL_STRATEGIES["pullback"], TACTICAL_STRATEGIES["rebound"]
+    if family_key == "ch_dm":
+        return TACTICAL_STRATEGIES["chase"], TACTICAL_STRATEGIES["dump"]
+    raise KeyError(f"unknown tactical family: {family_key}")
+
+
+def _normalize_family_category(verdict: dict, family_key: str) -> str:
+    raw = str(verdict.get("category") or verdict.get("cat") or verdict.get("action") or "").lower().strip()
+    aliases = {
+        "long": _TACTICAL_FAMILY_CATEGORIES[family_key][0],
+        "buy": _TACTICAL_FAMILY_CATEGORIES[family_key][0],
+        "short": _TACTICAL_FAMILY_CATEGORIES[family_key][1],
+        "sell": _TACTICAL_FAMILY_CATEGORIES[family_key][1],
+        "entry_long": _TACTICAL_FAMILY_CATEGORIES[family_key][0],
+        "entry_short": _TACTICAL_FAMILY_CATEGORIES[family_key][1],
+    }
+    cat = aliases.get(raw, raw)
+    if cat in _TACTICAL_FAMILY_CATEGORIES[family_key]:
+        return cat
+    if cat in ("skip", "none", "hold", "wait", "neutral"):
+        return "skip"
+    return cat
+
+
+def _family_title(family_key: str) -> str:
+    return "回多反空" if family_key == "pb_rb" else "追涨杀跌"
+
+
+def _family_dual_intro(family_key: str) -> str:
+    if family_key == "pb_rb":
+        return (
+            "## 战术族定义：回多反空\n"
+            "- 回调做多：大势向上，近 4~6 根出现回落/回踩并企稳，寻找 LONG。\n"
+            "- 反弹做空：大势向下，近 4~6 根出现缩量/无力反弹到阻力，寻找 SHORT。\n"
+            "这两个方向同等重要，必须在同一个 universe 内同时比较。\n"
+        )
+    return (
+        "## 战术族定义：追涨杀跌\n"
+        "- 追涨做多：大势向上，近 4~6 根继续同向上攻，寻找 LONG。\n"
+        "- 杀跌做空：大势向下，近 4~6 根跌势延续或弱反弹后再跌，寻找 SHORT。\n"
+        "这两个方向同等重要，必须在同一个 universe 内同时比较。\n"
+    )
+
+
+def build_tactical_family_prompt(
+    family_key: str,
+    universe: dict,
+    global_ctx: dict,
+    historical_stats: dict,
+    *,
+    max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
+) -> Tuple[str, Dict[str, Any]]:
+    """Build one prompt that evaluates both directions in a tactical family."""
+    first, second = _family_defs(family_key)
+    universe_list, meta = prepare_tactical_universe_for_llm(
+        first, universe, max_symbols=max_symbols,
+    )
+    compact = {"ensure_ascii": False, "separators": (",", ":"), "default": str}
+    cats = _TACTICAL_FAMILY_CATEGORIES[family_key]
+    prompt = (
+        f"你是加密货币 U 本位合约 **{_family_title(family_key)}** 双方向战术分析师。\n"
+        f"本轮必须同时寻找两个方向：\n"
+        f"1. **{first.title_zh}**，输出 category={cats[0]}。\n"
+        f"2. **{second.title_zh}**，输出 category={cats[1]}。\n"
+        "不要只按单方向筛选；同一轮可以同时返回多头和空头机会，也可以只返回其中一个方向。\n"
+        "若某标的更符合另一方向，必须归入另一方向 category，而不是强行跳过。\n\n"
+        f"{_family_dual_intro(family_key)}\n"
+        f"## {first.title_zh} 硬门槛\n{_strategy_quant_rules(first.key)}\n"
+        f"{_tactical_catalyst_keywords(first.key)}\n\n"
+        f"## {second.title_zh} 硬门槛\n{_strategy_quant_rules(second.key)}\n"
+        f"{_tactical_catalyst_keywords(second.key)}\n\n"
+        f"{_KLINE_1H_RULES}\n"
+        "## 通用输出规则\n"
+        "1. 每条 catalyst 必须写清 1h 24 根整体趋势 + 近 4~6 根结构，并补充 15m/1d、RSI/EMA/7d/量能证据。\n"
+        "2. 禁止只用 24h 涨跌幅或资金费率做主因。\n"
+        f"3. verdicts 只输出符合 {cats[0]} 或 {cats[1]} 的 entry，最多 5 个。\n"
+        "4. confidence 必填 0.55-0.85；不符合任何方向时 verdicts=[]。\n"
+        "5. 禁止输出列表外币种；catalyst 必须与 universe 行内 tech/kline_narrative 一致。\n\n"
+        f"本列表为共享全量 universe：全池 {meta['universe_total']}，发送 LLM {meta['llm_symbol_count']}。\n\n"
+        f"## Big4 / 宏观 (仅参考)\n{BIG4_PROMPT_BLOCK_EXPLORE}\n\n"
+        f"## 全局市场\n{json.dumps(global_ctx, **compact)}\n\n"
+        f"## 本战术族历史 (30d closed)\n{json.dumps(historical_stats, **compact)}\n\n"
+        f"## universe\n{json.dumps(universe_list, **compact)}\n"
+        f"{_TACTICAL_FAMILY_JSON}".replace(
+            "pullback_long|rebound_short|chase_long|dump_short",
+            f"{cats[0]}|{cats[1]}",
+        )
+    )
+    meta["family_key"] = family_key
+    return prompt, meta
+
+
+def build_tactical_family_prompt_en(
+    family_key: str,
+    universe: dict,
+    global_ctx: dict,
+    historical_stats: dict,
+    *,
+    max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
+) -> Tuple[str, Dict[str, Any]]:
+    """English version for GPT/DeepSeek with Chinese summary output."""
+    first, second = _family_defs(family_key)
+    universe_list, meta = prepare_tactical_universe_for_llm(
+        first, universe, max_symbols=max_symbols,
+    )
+    compact = {"ensure_ascii": False, "separators": (",", ":"), "default": str}
+    cats = _TACTICAL_FAMILY_CATEGORIES[family_key]
+    first_pack = _TACTICAL_PROMPT_EN.get(first.key, {})
+    second_pack = _TACTICAL_PROMPT_EN.get(second.key, {})
+    prompt = (
+        f"You are the **{_family_title(family_key)}** tactical-family analyst for USDT-M futures.\n"
+        "Evaluate both directions in the same pass:\n"
+        f"1. **{first_pack.get('title', first.title_zh)}** => category={cats[0]}.\n"
+        f"2. **{second_pack.get('title', second.title_zh)}** => category={cats[1]}.\n"
+        "Do not behave as a single-direction prompt. Return either side or both sides when setups qualify.\n\n"
+        f"## Direction A\n{first_pack.get('body', first.prompt_body)}\n"
+        f"Hard lines:\n{_strategy_quant_rules_en(first.key)}\n\n"
+        f"## Direction B\n{second_pack.get('body', second.prompt_body)}\n"
+        f"Hard lines:\n{_strategy_quant_rules_en(second.key)}\n\n"
+        f"{_KLINE_1H_RULES_EN}\n"
+        "## Output rules\n"
+        "1. catalyst must cite 24x1h trend + last 4-6 bars + 15m/1d + RSI/EMA/7d/volume evidence.\n"
+        "2. Do not use 24h % or funding rate as primary reason.\n"
+        f"3. Only output entries with category={cats[0]} or category={cats[1]} (max 5).\n"
+        "4. confidence 0.55-0.85; use verdicts=[] only if neither direction qualifies.\n"
+        "5. Do not entry symbols outside the universe; catalyst must match row tech/narrative.\n\n"
+        f"Shared universe: {meta['universe_total']} pool, {meta['llm_symbol_count']} sent to LLM.\n\n"
+        f"## Big4 / macro (background)\n{_BIG4_PROMPT_BLOCK_EXPLORE_EN}\n\n"
+        f"## Global market\n{json.dumps(global_ctx, **compact)}\n\n"
+        f"## Tactical-family history (30d closed)\n{json.dumps(historical_stats, **compact)}\n\n"
+        f"## universe\n{json.dumps(universe_list, **compact)}\n"
+        f"{_TACTICAL_FAMILY_JSON_EN}".replace(
+            "pullback_long|rebound_short|chase_long|dump_short",
+            f"{cats[0]}|{cats[1]}",
+        )
+    )
+    meta["family_key"] = family_key
+    return prompt, meta
+
+
+def parse_tactical_family_llm_json(
+    text: str,
+    tag: str,
+    family_key: str,
+) -> Tuple[Optional[dict], Optional[str]]:
+    parsed, err = parse_explore_llm_json(text, tag)
+    if parsed is None:
+        return parsed, err
+    parsed = normalize_explore_llm_payload(parsed) or parsed
+    flat: List[dict] = []
+    for v in parsed.get("verdicts") or []:
+        if isinstance(v, dict):
+            flat.append(_coerce_verdict_fields(v))
+        elif isinstance(v, list):
+            for sub in v:
+                if isinstance(sub, dict):
+                    flat.append(_coerce_verdict_fields(sub))
+    parsed["verdicts"] = flat
+    for v in parsed["verdicts"]:
+        v["category"] = _normalize_family_category(v, family_key)
+        v["confidence"] = parse_tactical_confidence(v)
+    return parsed, err
 
 
 def build_strategy_prompt_zh(
