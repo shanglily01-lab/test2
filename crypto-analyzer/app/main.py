@@ -633,12 +633,16 @@ async def lifespan(app: FastAPI):
                     logger.warning(f"⚠️ 周期任务 [{name}] 超时，已终止")
                     try:
                         proc.kill()
+                        await proc.wait()
                     except Exception:
                         pass
                 except Exception as e:
                     logger.error(f"❌ 周期任务 [{name}] 异常: {e}")
 
-        asyncio.create_task(_periodic("update_all_coin_scores",            5 * 60,   "评分更新(5m)"))
+        if os.getenv("ENABLE_APP_COIN_SCORE_PROC", "0").strip().lower() in ("1", "true", "yes", "on"):
+            asyncio.create_task(_periodic("update_all_coin_scores",        5 * 60,   "评分更新(5m)"))
+        else:
+            logger.info("[评分更新] app 内 update_all_coin_scores 周期任务默认关闭；由 MySQL event 统一调度")
         asyncio.create_task(_periodic("update_technical_signals_cache",    15 * 60,  "技术信号缓存(15m)"))
         asyncio.create_task(_periodic("update_dashboard_hyperliquid_cache",30 * 60,  "Dashboard聪明钱(30m)"))
         asyncio.create_task(_periodic("update_data_management_stats_cache",2 * 3600, "数据管理统计(2h)"))

@@ -217,14 +217,10 @@ def refresh_market_movers() -> dict:
 
             # --- 资金费率最高 ---
             cur.execute(
-                f"SELECT t.symbol, t.funding_rate AS val "
-                f"FROM `{MAIN_DB}`.funding_rate_data t "
-                f"INNER JOIN ("
-                f"  SELECT symbol, MAX(funding_time) AS max_ft "
-                f"  FROM `{MAIN_DB}`.funding_rate_data "
-                f"  GROUP BY symbol"
-                f") latest ON t.symbol = latest.symbol AND t.funding_time = latest.max_ft "
-                f"ORDER BY t.funding_rate DESC LIMIT 10"
+                f"SELECT symbol, current_rate AS val "
+                f"FROM `{MAIN_DB}`.funding_rate_stats "
+                f"WHERE current_rate IS NOT NULL "
+                f"ORDER BY current_rate DESC LIMIT 10"
             )
             for rank, r in enumerate(cur.fetchall(), 1):
                 sym = futures_symbol_rating_canonical(r["symbol"])
@@ -239,14 +235,10 @@ def refresh_market_movers() -> dict:
 
             # --- 资金费率最低 ---
             cur.execute(
-                f"SELECT t.symbol, t.funding_rate AS val "
-                f"FROM `{MAIN_DB}`.funding_rate_data t "
-                f"INNER JOIN ("
-                f"  SELECT symbol, MAX(funding_time) AS max_ft "
-                f"  FROM `{MAIN_DB}`.funding_rate_data "
-                f"  GROUP BY symbol"
-                f") latest ON t.symbol = latest.symbol AND t.funding_time = latest.max_ft "
-                f"ORDER BY t.funding_rate ASC LIMIT 10"
+                f"SELECT symbol, current_rate AS val "
+                f"FROM `{MAIN_DB}`.funding_rate_stats "
+                f"WHERE current_rate IS NOT NULL "
+                f"ORDER BY current_rate ASC LIMIT 10"
             )
             for rank, r in enumerate(cur.fetchall(), 1):
                 sym = futures_symbol_rating_canonical(r["symbol"])
@@ -454,13 +446,9 @@ def refresh_candidate_pool() -> dict:
 
             # 3) 一次性获取所有资金费率
             cur.execute(
-                f"SELECT t.symbol, t.funding_rate "
-                f"FROM `{MAIN_DB}`.funding_rate_data t "
-                f"INNER JOIN ("
-                f"  SELECT symbol, MAX(funding_time) AS max_ft "
-                f"  FROM `{MAIN_DB}`.funding_rate_data "
-                f"  GROUP BY symbol"
-                f") latest ON t.symbol = latest.symbol AND t.funding_time = latest.max_ft"
+                f"SELECT symbol, current_rate AS funding_rate "
+                f"FROM `{MAIN_DB}`.funding_rate_stats "
+                f"WHERE current_rate IS NOT NULL"
             )
             funding_map = {}
             for r in cur.fetchall():

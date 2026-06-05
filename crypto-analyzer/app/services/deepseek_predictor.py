@@ -76,6 +76,23 @@ try:
 except ImportError:
     pass
 
+_candidate_pool_memo: Dict[str, Any] = {"ts": 0.0, "pool": []}
+_CANDIDATE_POOL_TTL_S = 60.0
+
+
+def _get_candidate_pool_cached() -> List[Dict]:
+    """Read candidate_pool_snapshot once per predict round instead of per symbol."""
+    if not _DATA_CACHE_AVAILABLE_PREDICT:
+        return []
+    now = time.time()
+    pool = _candidate_pool_memo.get("pool") or []
+    if pool and now - float(_candidate_pool_memo.get("ts") or 0.0) < _CANDIDATE_POOL_TTL_S:
+        return pool
+    pool = get_candidate_pool(min_volume=0, limit=500)
+    _candidate_pool_memo["ts"] = now
+    _candidate_pool_memo["pool"] = pool
+    return pool
+
 
 def _try_candidate(symbol: str) -> Optional[Dict]:
     """按 symbol 从缓存读取单个交易对数据."""
@@ -84,7 +101,7 @@ def _try_candidate(symbol: str) -> Optional[Dict]:
     try:
         from app.utils.futures_price import candidate_pool_row
 
-        pool = get_candidate_pool(min_volume=0, limit=500)
+        pool = _get_candidate_pool_cached()
         return candidate_pool_row(pool, symbol)
     except Exception:
         pass

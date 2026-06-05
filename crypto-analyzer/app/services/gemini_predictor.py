@@ -73,6 +73,23 @@ try:
 except ImportError:
     pass
 
+_candidate_pool_memo: Dict[str, Any] = {"ts": 0.0, "pool": []}
+_CANDIDATE_POOL_TTL_S = 60.0
+
+
+def _get_candidate_pool_cached() -> List[Dict]:
+    """Read candidate_pool_snapshot once per predict round instead of per symbol."""
+    if not _DATA_CACHE_AVAILABLE_PREDICT:
+        return []
+    now = time.time()
+    pool = _candidate_pool_memo.get("pool") or []
+    if pool and now - float(_candidate_pool_memo.get("ts") or 0.0) < _CANDIDATE_POOL_TTL_S:
+        return pool
+    pool = get_candidate_pool(min_volume=0, limit=500)
+    _candidate_pool_memo["ts"] = now
+    _candidate_pool_memo["pool"] = pool
+    return pool
+
 
 def _try_candidate(symbol: str) -> Optional[Dict]:
     """按 symbol 从缓存读取单个交易对数据."""
@@ -81,7 +98,7 @@ def _try_candidate(symbol: str) -> Optional[Dict]:
     try:
         from app.utils.futures_price import candidate_pool_row
 
-        pool = get_candidate_pool(min_volume=0, limit=500)
+        pool = _get_candidate_pool_cached()
         return candidate_pool_row(pool, symbol)
     except Exception:
         pass
@@ -736,9 +753,13 @@ def _insert_verdicts(conn, run_id: int, verdict_rows: List[Tuple]) -> None:
     for row in verdict_rows:
         row_list = list(row)
         row_list[2] = (row_list[2] or 'skip')[:20]       # category
+        row_list[4] = (str(row_list[4]) or '')[:500]     # catalyst
+        row_list[5] = (str(row_list[5]) or '')[:500]     # data_signal
+        row_list[6] = (str(row_list[6]) or '')[:500]     # risk_note
         row_list[8] = (row_list[8] or '')[:30]            # action_taken
         if row_list[10] is not None:
             row_list[10] = str(row_list[10])[:255]         # skip_reason
+        safe_rows.append(tuple(row_list))
     with conn.cursor() as cur:
         try:
             cur.executemany(
