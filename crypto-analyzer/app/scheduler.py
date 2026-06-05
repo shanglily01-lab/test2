@@ -1209,8 +1209,17 @@ class UnifiedDataScheduler:
             logger.info("  ℹ️  Hyperliquid 钱包监控已移至独立调度器 (app/hyperliquid_scheduler.py)")
             logger.info("     请单独运行: python app/hyperliquid_scheduler.py")
 
-        # 6.5 交易对评级更新 - 已移至 smart_trader_service.py
-        logger.info("  ℹ️  交易对评级更新已移至 smart_trader_service.py (每天凌晨2点自动运行)")
+        # 6.5 盈亏日终：Top50 榜单 + 白名单/L3 评级（crypto-scheduler 主责，02:05 错峰）
+        def _run_top50_daily_update():
+            from update_top_performers import update_top_performing_symbols
+            logger.info("[盈亏日终] scheduler 开始更新 Top50 + 评级联动...")
+            update_top_performing_symbols(account_id=2, top_n=50)
+            logger.info("[盈亏日终] scheduler 完成")
+
+        schedule.every().day.at("02:05").do(
+            lambda: self._run_sync_in_thread(_run_top50_daily_update)
+        )
+        logger.info("  ✓ 盈亏日终 Top50/白名单/L3 - 每天 02:05 (后台线程)")
 
         # 7. 缓存更新任务
         logger.info("\n  🚀 性能优化: 缓存自动更新")

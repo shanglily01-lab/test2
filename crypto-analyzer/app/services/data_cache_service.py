@@ -666,7 +666,7 @@ def refresh_position_stats() -> dict:
             # 清空旧数据
             cur.execute("DELETE FROM data_cache.position_stats_snapshot")
 
-            sources = ["gemini_explore", "gemini_predict", "PREDICTOR"]
+            sources = ["gemini_explore", "gemini_predict"]
             account_id = 2
 
             def _agg(src: str) -> dict:

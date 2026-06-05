@@ -80,7 +80,6 @@ class TradingServicesUpdate(BaseModel):
     live_close_enabled: Optional[bool] = None       # 2026-05-22 实盘平仓独立开关
     spot_trading_enabled: Optional[bool] = None      # 2026-05-23 现货交易开关
     spot_close_enabled: Optional[bool] = None         # 2026-05-23 现货自动卖出开关
-    predictor_enabled: Optional[bool] = None
     btc_momentum_enabled: Optional[bool] = None
     u_coin_style_enabled: Optional[bool] = None
     signal_confirmation_enabled: Optional[bool] = None
@@ -91,9 +90,6 @@ class TradingServicesUpdate(BaseModel):
     deepseek_predict_enabled: Optional[bool] = None   # DeepSeek 预测
     gpt_predict_enabled: Optional[bool] = None        # GPT 预测
     gpt_explore_enabled: Optional[bool] = None        # GPT 探索
-    s1_early_long_enabled: Optional[bool] = None     # 2026-05-27 S1 早期做多
-    s6_vol_spike_enabled: Optional[bool] = None         # 2026-05-27 S6 小币量能异动
-    s9_gemini_ai_enabled: Optional[bool] = None      # 2026-05-16 S9 Gemini AI 抄底反转
     gemini_position_advisor_enabled: Optional[bool] = None  # 兼容；同步 DeepSeek
     gemini_open_advisor_enabled: Optional[bool] = None      # 兼容；同步 DeepSeek
     gpt_position_advisor_enabled: Optional[bool] = None
@@ -421,15 +417,11 @@ async def get_trading_services():
             WHERE setting_key IN ('u_futures_trading_enabled',
                                   'live_trading_enabled', 'live_close_enabled',
                                   'spot_trading_enabled', 'spot_close_enabled',
-                                  'predictor_enabled',
                                   'btc_momentum_enabled', 'u_coin_style_enabled',
                                   'signal_confirmation_enabled', 'trend_following_enabled',
                                   'gemini_explore_enabled', 'gemini_predict_enabled',
                                   'deepseek_explore_enabled', 'gpt_predict_enabled', 'deepseek_predict_enabled',
                                   'gpt_explore_enabled',
-                                  's1_early_long_enabled',
-                                  's6_vol_spike_enabled',
-                                  's9_gemini_ai_enabled',
                                   'gemini_position_advisor_enabled',
                                   'gemini_open_advisor_enabled',
                                   'deepseek_position_advisor_enabled',
@@ -453,7 +445,6 @@ async def get_trading_services():
             'live_close_enabled': 'live_close_enabled',
             'spot_trading_enabled': 'spot_trading_enabled',
             'spot_close_enabled': 'spot_close_enabled',
-            'predictor_enabled': 'predictor_enabled',
             'btc_momentum_enabled': 'btc_momentum_enabled',
             'u_coin_style_enabled': 'u_coin_style_enabled',
             'signal_confirmation_enabled': 'signal_confirmation_enabled',
@@ -464,7 +455,6 @@ async def get_trading_services():
             'deepseek_predict_enabled': 'deepseek_predict_enabled',
             'gpt_predict_enabled': 'gpt_predict_enabled',
             'gpt_explore_enabled': 'gpt_explore_enabled',
-            's9_gemini_ai_enabled': 's9_gemini_ai_enabled',
             'gemini_position_advisor_enabled': 'gemini_position_advisor_enabled',
             'gemini_open_advisor_enabled': 'gemini_open_advisor_enabled',
             'deepseek_position_advisor_enabled': 'deepseek_position_advisor_enabled',
@@ -475,8 +465,6 @@ async def get_trading_services():
             'blacklist_level3_enabled': 'blacklist_level3_enabled',
             'live_top50_required': 'live_top50_required',
             'live_whitelist_enabled': 'live_whitelist_enabled',
-            's1_early_long_enabled': 's1_early_long_enabled',
-            's6_vol_spike_enabled': 's6_vol_spike_enabled',
         }
 
         result = {
@@ -485,7 +473,6 @@ async def get_trading_services():
             'live_close_enabled': True,
             'spot_trading_enabled': True,
             'spot_close_enabled': True,
-            'predictor_enabled': True,
             'btc_momentum_enabled': True,
             'u_coin_style_enabled': False,
             'signal_confirmation_enabled': False,
@@ -496,7 +483,6 @@ async def get_trading_services():
             'deepseek_predict_enabled': False,
             'gpt_predict_enabled': False,
             'gpt_explore_enabled': False,
-            's9_gemini_ai_enabled': False,
             'gemini_position_advisor_enabled': True,
             'gemini_open_advisor_enabled': True,
             'deepseek_position_advisor_enabled': True,
@@ -507,8 +493,6 @@ async def get_trading_services():
             'blacklist_level3_enabled': True,
             'live_top50_required': True,
             'live_whitelist_enabled': True,
-            's1_early_long_enabled': False,
-            's6_vol_spike_enabled': False,
             'stop_loss_pct': 0.02,
             'take_profit_pct': 0.05,
         }
@@ -629,19 +613,6 @@ async def update_trading_services(data: TradingServicesUpdate):
             status = '启动' if data.spot_close_enabled else '暂停'
             updates.append(f"现货卖出: {status}")
 
-        if data.predictor_enabled is not None:
-            value = '1' if data.predictor_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('predictor_enabled', %s, '市场预测器开关 (1=启用, 0=禁用)', 'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            status = '启动' if data.predictor_enabled else '暂停'
-            updates.append(f"市场预测器: {status}")
-
         if data.btc_momentum_enabled is not None:
             value = '1' if data.btc_momentum_enabled else '0'
             cursor.execute("""
@@ -691,34 +662,6 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (value,))
             updates.append(f"趋势跟随: {'启用' if data.trend_following_enabled else '禁用'}")
-
-        if data.s1_early_long_enabled is not None:
-            value = '1' if data.s1_early_long_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('s1_early_long_enabled', %s,
-                        'S1 早期做多开关 (1=启用, 0=禁用)',
-                        'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            updates.append(f"S1早期做多: {'启用' if data.s1_early_long_enabled else '禁用'}")
-
-        if data.s6_vol_spike_enabled is not None:
-            value = '1' if data.s6_vol_spike_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('s6_vol_spike_enabled', %s,
-                        'S6 小币量能异动做多开关 (1=启用, 0=禁用)',
-                        'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            updates.append(f"S6量能异动: {'启用' if data.s6_vol_spike_enabled else '禁用'}")
 
         if data.gemini_explore_enabled is not None:
             value = '1' if data.gemini_explore_enabled else '0'
@@ -815,20 +758,6 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (value,))
             updates.append(f"GPT开仓顾问: {'启用' if data.gpt_open_advisor_enabled else '禁用'}")
-
-        if data.s9_gemini_ai_enabled is not None:
-            value = '1' if data.s9_gemini_ai_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('s9_gemini_ai_enabled', %s,
-                        'S9 Gemini AI 抄底反转 LONG 开关 (1=启用, 0=禁用). 默认 0, Gemini API 收费',
-                        'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            updates.append(f"S9_Gemini: {'启用' if data.s9_gemini_ai_enabled else '禁用'}")
 
         if data.position_advisor_enabled is not None:
             _set_position_advisor_pair(cursor, data.position_advisor_enabled)
@@ -963,11 +892,6 @@ class MaxHoldHoursUpdate(BaseModel):
     hours: int  # 3~8
 
 
-class S1S9MaxHoldHoursUpdate(BaseModel):
-    """S1~S9 最大持仓时间更新"""
-    hours: int  # 3~12
-
-
 @router.get("/max-hold-hours")
 async def get_max_hold_hours():
     """获取最大持仓时间（小时）"""
@@ -1009,50 +933,6 @@ async def update_max_hold_hours(data: MaxHoldHoursUpdate):
         }
     except Exception as e:
         logger.error(f"更新max_hold_hours失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/s1s9-max-hold-hours")
-async def get_s1s9_max_hold_hours():
-    """获取 S1~S9 最大持仓时间（小时）"""
-    try:
-        db_config = get_db_config()
-        conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor, autocommit=True)
-        cursor = conn.cursor()
-        cursor.execute("SELECT setting_value FROM system_settings WHERE setting_key = 's1_s9_max_hold_hours'")
-        row = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        hours = int(row['setting_value']) if row else 6
-        return {'success': True, 'data': {'hours': hours}}
-    except Exception as e:
-        logger.error(f"获取s1_s9_max_hold_hours失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.put("/s1s9-max-hold-hours")
-async def update_s1s9_max_hold_hours(data: S1S9MaxHoldHoursUpdate):
-    """更新 S1~S9 最大持仓时间（3~12小时，实时生效）"""
-    hours = max(3, min(12, data.hours))
-    try:
-        db_config = get_db_config()
-        conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor, autocommit=True)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-            VALUES ('s1_s9_max_hold_hours', %s, 'S1~S9策略持仓时间（小时），范围3~12', 'web_ui', NOW())
-            ON DUPLICATE KEY UPDATE setting_value = %s, updated_by = 'web_ui', updated_at = NOW()
-        """, (str(hours), str(hours)))
-        cursor.close()
-        conn.close()
-        logger.info(f"[OK] s1_s9_max_hold_hours 已更新为: {hours}小时")
-        return {
-            'success': True,
-            'message': f'S1~S9 最大持仓时间已更新为 {hours} 小时',
-            'data': {'hours': hours, 'note': '下次开仓时生效，无需重启'}
-        }
-    except Exception as e:
-        logger.error(f"更新s1_s9_max_hold_hours失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

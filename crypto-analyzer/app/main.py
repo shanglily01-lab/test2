@@ -38,6 +38,8 @@ from contextlib import asynccontextmanager
 from loguru import logger
 import yaml
 
+from app.web.template_pages import render_desktop_page, render_desktop_html
+
 # 配置日志文件（按天轮转）
 log_dir = project_root / "logs"
 log_dir.mkdir(exist_ok=True)
@@ -582,20 +584,6 @@ async def lifespan(app: FastAPI):
                 logger.error(f"❌ 每日复盘报告异常: {e}")
 
         schedule.every().day.at("00:00").do(run_daily_review)
-
-        # 市场走势预测（每6小时）
-        _prediction_symbols = config.get('symbols', [])
-        def run_market_prediction():
-            """每6小时对所有交易对做1H+15M技术分析，预测未来6小时走势"""
-            try:
-                from app.services.market_predictor import MarketPredictor
-                from app.services.binance_ws_price import get_ws_price_service
-                predictor = MarketPredictor(db_config, ws_price_service=get_ws_price_service())
-                count = predictor.run_all(_prediction_symbols)
-                logger.info(f"[OK] 市场预测分析完成，共{count}个交易对")
-            except Exception as e:
-                logger.error(f"[FAIL] 市场预测分析失败: {e}")
-        schedule.every(4).hours.do(run_market_prediction)
 
         # 盈亏日终：Top50 + 评级 (每天 02:00) — update_top_performers.py
         # 白名单 L0: 盈利>200U 或 胜率>55% | L3: 亏损>200U 且 胜率<40%
@@ -1297,13 +1285,9 @@ async def register_page():
 
 
 @app.get("/api-keys")
-async def api_keys_page():
+async def api_keys_page(request: Request):
     """API密钥管理页面"""
-    page_path = project_root / "templates" / "api-keys.html"
-    if page_path.exists():
-        return FileResponse(str(page_path))
-    else:
-        raise HTTPException(status_code=404, detail="API密钥管理页面未找到")
+    return await _serve_desktop_template(request, "api-keys.html", "API密钥管理页面未找到")
 
 
 @app.get("/favicon.ico")
@@ -1340,33 +1324,23 @@ async def test_futures():
 
 @app.get("/corporate-treasury")
 @app.get("/corporate_treasury")
-async def corporate_treasury_page():
+async def corporate_treasury_page(request: Request):
     """企业金库监控页面"""
-    treasury_path = project_root / "templates" / "corporate_treasury.html"
-    if treasury_path.exists():
-        return FileResponse(str(treasury_path))
-    return {"error": "Page not found"}
+    return await _serve_desktop_template(request, "corporate_treasury.html", "Page not found")
 
 @app.get("/blockchain-gas")
 @app.get("/blockchain_gas")
-async def blockchain_gas_page():
+async def blockchain_gas_page(request: Request):
     """区块链Gas统计页面"""
-    gas_path = project_root / "templates" / "blockchain_gas.html"
-    if gas_path.exists():
-        return FileResponse(str(gas_path))
-    return {"error": "Page not found"}
+    return await _serve_desktop_template(request, "blockchain_gas.html", "Page not found")
 
 
 
 @app.get("/data_management")
 @app.get("/data-management")
-async def data_management_page():
+async def data_management_page(request: Request):
     """数据管理页面"""
-    data_management_path = project_root / "templates" / "data_management.html"
-    if data_management_path.exists():
-        return FileResponse(str(data_management_path))
-    else:
-        raise HTTPException(status_code=404, detail="数据管理页面未找到")
+    return await _serve_desktop_template(request, "data_management.html", "数据管理页面未找到")
 
 
 @app.get("/strategies")
@@ -1390,13 +1364,9 @@ async def trading_strategies_page():
 
 
 @app.get("/auto-trading")
-async def auto_trading_page():
+async def auto_trading_page(request: Request):
     """自动合约交易页面 - futures_trading.html"""
-    auto_trading_path = project_root / "templates" / "futures_trading.html"
-    if auto_trading_path.exists():
-        return FileResponse(str(auto_trading_path))
-    else:
-        raise HTTPException(status_code=404, detail="自动合约交易页面未找到")
+    return await _serve_desktop_template(request, "futures_trading.html", "自动合约交易页面未找到")
 
 
 def _parse_mobile_session(request: Request):
@@ -1448,6 +1418,14 @@ def _check_admin_cookie(request: Request) -> bool:
         return token == expected
     except Exception:
         return False
+
+
+async def _serve_desktop_template(request: Request, template_name: str, not_found: str = "Page not found"):
+    """Render desktop page with shared sidebar partial (Jinja2)."""
+    p = project_root / "templates" / template_name
+    if not p.exists():
+        raise HTTPException(status_code=404, detail=not_found)
+    return render_desktop_page(request, template_name)
 
 
 @app.get("/m/login")
@@ -1524,12 +1502,9 @@ async def mobile_live_page(request: Request):
 
 
 @app.get("/m/manual")
-async def mobile_manual_page():
+async def mobile_manual_page(request: Request):
     """手机端交易操作手册页面"""
-    p = project_root / "templates" / "trading_manual.html"
-    if p.exists():
-        return FileResponse(str(p))
-    raise HTTPException(status_code=404, detail="trading_manual.html not found")
+    return await _serve_desktop_template(request, "trading_manual.html", "trading_manual.html not found")
 
 
 @app.get("/health")
@@ -1548,15 +1523,11 @@ async def health_check():
 
 
 @app.get("/dashboard")
-async def dashboard_page():
+async def dashboard_page(request: Request):
     """
     增强版仪表盘页面
     """
-    dashboard_path = project_root / "templates" / "dashboard.html"
-    if dashboard_path.exists():
-        return FileResponse(str(dashboard_path))
-    else:
-        raise HTTPException(status_code=404, detail="Dashboard page not found")
+    return await _serve_desktop_template(request, "dashboard.html", "Dashboard page not found")
 
 
 
@@ -1574,15 +1545,11 @@ async def dashboard_new_page():
 
 
 @app.get("/system-settings")
-async def system_settings_page():
+async def system_settings_page(request: Request):
     """
     系统配置页面
     """
-    settings_path = project_root / "templates" / "system_settings.html"
-    if settings_path.exists():
-        return FileResponse(str(settings_path))
-    else:
-        raise HTTPException(status_code=404, detail="System settings page not found")
+    return await _serve_desktop_template(request, "system_settings.html", "System settings page not found")
 
 
 @app.get("/contract_trading_new")
@@ -1623,15 +1590,11 @@ async def paper_trading_new_page():
 
 @app.get("/etf-data")
 @app.get("/etf_data")
-async def etf_data_page():
+async def etf_data_page(request: Request):
     """
     ETF数据监控页面
     """
-    etf_path = project_root / "templates" / "etf_data.html"
-    if etf_path.exists():
-        return FileResponse(str(etf_path))
-    else:
-        raise HTTPException(status_code=404, detail="ETF data page not found")
+    return await _serve_desktop_template(request, "etf_data.html", "ETF data page not found")
 
 
 @app.get("/strategy")
@@ -1647,118 +1610,79 @@ async def strategy_manager_page():
 
 
 @app.get("/technical-signals")
-async def technical_signals_page():
+async def technical_signals_page(request: Request):
     """技术信号页面"""
-    signals_path = project_root / "templates" / "technical_signals.html"
-    if signals_path.exists():
-        return FileResponse(str(signals_path))
-    else:
-        raise HTTPException(status_code=404, detail="Technical signals page not found")
+    return await _serve_desktop_template(request, "technical_signals.html", "Technical signals page not found")
 
 
 @app.get("/templates/dashboard.html")
-async def dashboard_page_alt():
+async def dashboard_page_alt(request: Request):
     """
     增强版仪表盘页面 (备用路径)
     """
-    dashboard_path = project_root / "templates" / "dashboard.html"
-    if dashboard_path.exists():
-        return FileResponse(str(dashboard_path))
-    else:
-        raise HTTPException(status_code=404, detail="Dashboard page not found")
+    return await _serve_desktop_template(request, "dashboard.html", "Dashboard page not found")
 
 
 @app.get("/paper_trading")
-def paper_trading_page():
+async def paper_trading_page(request: Request):
     """
-    模拟交易页面（改为同步函数，避免阻塞）
+    模拟交易页面
     """
-    trading_path = project_root / "templates" / "paper_trading.html"
-
-    if trading_path.exists():
-        return FileResponse(str(trading_path))
-    else:
-        raise HTTPException(status_code=404, detail=f"Paper trading page not found at {trading_path}")
+    return await _serve_desktop_template(request, "paper_trading.html", "Paper trading page not found")
 
 
 @app.get("/top50")
-async def top50_page():
+async def top50_page(request: Request):
     """盈亏分析页面（TOP50盈利 / 白名单 / 亏损）"""
-    p = project_root / "templates" / "top50.html"
-    if p.exists():
-        return FileResponse(str(p))
-    raise HTTPException(status_code=404, detail="TOP100 page not found")
+    return await _serve_desktop_template(request, "top50.html", "TOP100 page not found")
 
 
 @app.get("/symbol_blacklist")
-async def symbol_blacklist_page():
+async def symbol_blacklist_page(request: Request):
     """黑名单管理页面"""
-    p = project_root / "templates" / "symbol_blacklist.html"
-    if p.exists():
-        return FileResponse(str(p))
-    raise HTTPException(status_code=404, detail="Symbol blacklist page not found")
+    return await _serve_desktop_template(request, "symbol_blacklist.html", "Symbol blacklist page not found")
 
 
 @app.get("/signal_blacklist")
-async def signal_blacklist_page():
+async def signal_blacklist_page(request: Request):
     """信号黑名单管理页面"""
-    p = project_root / "templates" / "signal_blacklist.html"
-    if p.exists():
-        return FileResponse(str(p))
-    raise HTTPException(status_code=404, detail="Signal blacklist page not found")
+    return await _serve_desktop_template(request, "signal_blacklist.html", "Signal blacklist page not found")
 
 
 @app.get("/binance-news")
-async def binance_news_page():
+async def binance_news_page(request: Request):
     """Binance 公告监控页面"""
-    p = project_root / "templates" / "binance_news.html"
-    if p.exists():
-        return FileResponse(str(p))
-    raise HTTPException(status_code=404, detail="Binance news page not found")
+    return await _serve_desktop_template(request, "binance_news.html", "Binance news page not found")
 
 
 @app.get("/trading-manual")
 @app.get("/trading_manual")
-async def trading_manual_page():
+async def trading_manual_page(request: Request):
     """交易操作手册页面"""
-    p = project_root / "templates" / "trading_manual.html"
-    if p.exists():
-        return FileResponse(str(p))
-    raise HTTPException(status_code=404, detail="Trading manual page not found")
+    return await _serve_desktop_template(request, "trading_manual.html", "Trading manual page not found")
 
 
 @app.get("/spot_trading")
 @app.get("/spot-trading")
-async def spot_trading_page():
+async def spot_trading_page(request: Request):
     """现货交易页面"""
-    p = project_root / "templates" / "spot_trading.html"
-    if p.exists():
-        return FileResponse(str(p))
-    raise HTTPException(status_code=404, detail="Spot trading page not found")
+    return await _serve_desktop_template(request, "spot_trading.html", "Spot trading page not found")
 
 
 @app.get("/futures_trading")
-async def futures_trading_page():
+async def futures_trading_page(request: Request):
     """
     合约交易页面（U本位模拟盘持仓监控）
     """
-    futures_path = project_root / "templates" / "futures_trading.html"
-    if futures_path.exists():
-        return FileResponse(str(futures_path))
-    else:
-        raise HTTPException(status_code=404, detail="Futures trading page not found")
+    return await _serve_desktop_template(request, "futures_trading.html", "Futures trading page not found")
 
 
 @app.get("/coin_futures_trading")
-async def coin_futures_trading_page():
+async def coin_futures_trading_page(request: Request):
     """
     交易记录页面（U本位历史成交）
     """
-    coin_futures_path = project_root / "templates" / "coin_futures_trading.html"
-    if coin_futures_path.exists():
-        return FileResponse(str(coin_futures_path))
-    else:
-        raise HTTPException(status_code=404, detail="Coin futures trading page not found")
+    return await _serve_desktop_template(request, "coin_futures_trading.html", "Coin futures trading page not found")
 
 
 @app.get("/live_trading")
@@ -1769,14 +1693,12 @@ async def live_trading_page(request: Request):
     live_path = project_root / "templates" / "live_trading.html"
     if not live_path.exists():
         raise HTTPException(status_code=404, detail="Live trading page not found")
-    # 从 Authorization header 或 cookie 中读取已有token并注入页面
     access_token = ''
     try:
         auth_header = request.headers.get('Authorization', '')
         if auth_header.startswith('Bearer '):
             access_token = auth_header[7:]
         if not access_token:
-            # 尝试从 mobile_session cookie 生成token
             user_id, role = _parse_mobile_session(request)
             if user_id:
                 import pymysql as _pymysql, os as _os
@@ -1793,35 +1715,26 @@ async def live_trading_page(request: Request):
                         user_id=_u['id'], username=_u['username'], role=_u['role'])
     except Exception:
         pass
-    html = live_path.read_text(encoding="utf-8")
+    html = render_desktop_html(request, "live_trading.html")
     inject = f'<script>window.__ACCESS_TOKEN__="{access_token}";</script>'
     html = html.replace("</head>", inject + "\n</head>", 1)
-    from fastapi.responses import HTMLResponse
     return HTMLResponse(html)
 
 
 @app.get("/futures_review")
-async def futures_review_page():
+async def futures_review_page(request: Request):
     """
     复盘合约(24H)页面
     """
-    review_path = project_root / "templates" / "futures_review.html"
-    if review_path.exists():
-        return FileResponse(str(review_path))
-    else:
-        raise HTTPException(status_code=404, detail="Futures review page not found")
+    return await _serve_desktop_template(request, "futures_review.html", "Futures review page not found")
 
 
 @app.get("/gemini_explore")
-async def gemini_explore_page():
+async def gemini_explore_page(request: Request):
     """
     Gemini 探索页面 (红黑天鹅 + 模拟单)
     """
-    page_path = project_root / "templates" / "gemini_explore.html"
-    if page_path.exists():
-        return FileResponse(str(page_path))
-    else:
-        raise HTTPException(status_code=404, detail="Gemini explore page not found")
+    return await _serve_desktop_template(request, "gemini_explore.html", "Gemini explore page not found")
 
 
 @app.get("/gemini_predict")
@@ -1832,42 +1745,29 @@ async def gemini_predict_page():
 
 
 @app.get("/deepseek_explore")
-async def deepseek_explore_page():
+async def deepseek_explore_page(request: Request):
     """
     DeepSeek 探索页面 (短时方向异动 + 模拟单)
     """
-    page_path = project_root / "templates" / "deepseek_explore.html"
-    if page_path.exists():
-        return FileResponse(str(page_path))
-    else:
-        raise HTTPException(status_code=404, detail="DeepSeek explore page not found")
+    return await _serve_desktop_template(request, "deepseek_explore.html", "DeepSeek explore page not found")
 
 
 @app.get("/gpt_explore")
-async def gpt_explore_page():
+async def gpt_explore_page(request: Request):
     """GPT 探索页面 (短时方向异动 + 模拟单)."""
-    page_path = project_root / "templates" / "gpt_explore.html"
-    if page_path.exists():
-        return FileResponse(str(page_path))
-    raise HTTPException(status_code=404, detail="GPT explore page not found")
+    return await _serve_desktop_template(request, "gpt_explore.html", "GPT explore page not found")
 
 
 @app.get("/ai_shadow_compare")
-async def ai_shadow_compare_page():
+async def ai_shadow_compare_page(request: Request):
     """AI Shadow 对比 — Teacher vs 规则引擎 (不开仓)."""
-    page_path = project_root / "templates" / "ai_shadow_compare.html"
-    if page_path.exists():
-        return FileResponse(str(page_path))
-    raise HTTPException(status_code=404, detail="AI Shadow compare page not found")
+    return await _serve_desktop_template(request, "ai_shadow_compare.html", "AI Shadow compare page not found")
 
 
 @app.get("/gemini_advisor_reviews")
-async def gemini_advisor_reviews_page():
+async def gemini_advisor_reviews_page(request: Request):
     """顾问审核记录 — 开仓 / 持仓 (Gemini + DeepSeek)."""
-    page_path = project_root / "templates" / "gemini_advisor_reviews.html"
-    if page_path.exists():
-        return FileResponse(str(page_path))
-    raise HTTPException(status_code=404, detail="Gemini advisor reviews page not found")
+    return await _serve_desktop_template(request, "gemini_advisor_reviews.html", "Gemini advisor reviews page not found")
 
 
 @app.get("/deepseek_predict")
@@ -1878,15 +1778,11 @@ async def deepseek_predict_page():
 
 
 @app.get("/market_regime")
-async def market_regime_page():
+async def market_regime_page(request: Request):
     """
     行情识别与策略自适应页面
     """
-    regime_path = project_root / "templates" / "market_regime.html"
-    if regime_path.exists():
-        return FileResponse(str(regime_path))
-    else:
-        raise HTTPException(status_code=404, detail="Market regime page not found")
+    return await _serve_desktop_template(request, "market_regime.html", "Market regime page not found")
 
 
 @app.get("/strategy_analyzer")

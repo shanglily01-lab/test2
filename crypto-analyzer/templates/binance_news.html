@@ -39,44 +39,7 @@
 </head>
 <body class="bg-[#070b10] text-gray-200 font-body antialiased">
 
-<!-- Sidebar -->
-<aside class="fixed left-0 top-0 h-screen w-[240px] bg-[#0d1117] border-r border-[#0f1520] flex flex-col py-6 z-50">
-  <div class="px-6 mb-8">
-    <a href="/" class="flex items-center gap-3">
-      <div class="w-8 h-8 bg-[#49f4c8]/10 rounded flex items-center justify-center">
-        <span class="material-symbols-outlined text-[#49f4c8]">psychology</span>
-      </div>
-      <div>
-        <h1 class="text-[#49f4c8] font-bold text-xl tracking-tight font-headline">超级大脑</h1>
-        <p class="text-[10px] text-gray-500 font-mono tracking-widest uppercase">Quant Trading Platform</p>
-      </div>
-    </a>
-  </div>
-  <nav class="flex-1 overflow-y-auto space-y-0.5 px-3" id="sidebar-nav">
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/dashboard" href="/dashboard"><span class="material-symbols-outlined text-lg">dashboard</span><span>Dashboard</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/futures_trading" href="/futures_trading"><span class="material-symbols-outlined text-lg">show_chart</span><span>合约交易</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/coin_futures_trading" href="/coin_futures_trading"><span class="material-symbols-outlined text-lg">history</span><span>交易记录</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/gemini_explore" href="/gemini_explore"><span class="material-symbols-outlined text-lg">auto_awesome</span><span>Gemini 探索</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/live_trading" href="/live_trading"><span class="material-symbols-outlined text-lg">precision_manufacturing</span><span>Live Trading</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/futures_review" href="/futures_review"><span class="material-symbols-outlined text-lg">history_edu</span><span>复盘分析</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/technical-signals" href="/technical-signals"><span class="material-symbols-outlined text-lg">sensors</span><span>信号分析</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/market_regime" href="/market_regime"><span class="material-symbols-outlined text-lg">pulse_alert</span><span>行情识别</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/symbol_blacklist" href="/symbol_blacklist"><span class="material-symbols-outlined text-lg">block</span><span>交易对黑名单</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/signal_blacklist" href="/signal_blacklist"><span class="material-symbols-outlined text-lg">do_not_disturb_on</span><span>信号黑名单</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/spot_trading" href="/spot_trading"><span class="material-symbols-outlined text-lg">currency_exchange</span><span>现货交易</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/etf_data" href="/etf_data"><span class="material-symbols-outlined text-lg">candlestick_chart</span><span>ETF 数据</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/blockchain_gas" href="/blockchain_gas"><span class="material-symbols-outlined text-lg">local_gas_station</span><span>Gas 监控</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/corporate_treasury" href="/corporate_treasury"><span class="material-symbols-outlined text-lg">account_balance</span><span>企业金库</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/data_management" href="/data_management"><span class="material-symbols-outlined text-lg">storage</span><span>数据管理</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/api-keys" href="/api-keys"><span class="material-symbols-outlined text-lg">api</span><span>API Keys</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/system-settings" href="/system-settings"><span class="material-symbols-outlined text-lg">settings</span><span>Settings</span></a>
-    <a class="nav-item flex items-center gap-3 px-3 py-2 text-gray-400 hover:bg-[#0f1520] hover:text-gray-200 rounded transition-colors duration-200 font-mono text-sm" data-path="/binance-news" href="/binance-news"><span class="material-symbols-outlined text-lg">campaign</span><span>公告监控</span></a>
-    <a href="/trading-manual" data-path="/trading-manual" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">menu_book</span><span>操作手册</span></a>
-<a href="/gemini_advisor_reviews" data-path="/gemini_advisor_reviews" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">fact_check</span><span>顾问审核</span></a>
-<a href="/ai_shadow_compare" data-path="/ai_shadow_compare" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">compare_arrows</span><span>AI Shadow 对比</span></a>
-  </nav>
-</aside>
-
+{% include "partials/desktop_sidebar.html" %}
 <!-- Main -->
 <main class="ml-[240px] min-h-screen p-8">
   <div class="flex gap-8">

@@ -1279,18 +1279,6 @@ class SmartTraderService:
         )
         logger.info("✅ BTC动量跟随策略已初始化")
 
-        # 初始化四策略服务（S1早期做多/S2无量回调/S3顶部做空/S4反弹做空）
-        try:
-            from app.services.multi_strategy_service import MultiStrategyService
-            self.multi_strategy_svc = MultiStrategyService(
-                db_config=self.db_config,
-                ws_price_service=self.ws_service,
-            )
-            logger.info("✅ 多策略服务已初始化 (S1-S7)")
-        except Exception as _e:
-            self.multi_strategy_svc = None
-            logger.warning(f"四策略服务初始化失败: {_e}")
-
         # 初始化价格采样建仓执行器（V1策略：15分钟价格采样找最优点，一次性开仓）
         self.smart_entry_executor = SmartEntryExecutor(
             db_config=self.db_config,
@@ -3748,15 +3736,6 @@ class SmartTraderService:
                     logger.info("[SKIP] trend_following_enabled=0，趋势策略已禁用，跳过本轮扫描")
                     time.sleep(self.scan_interval)
                     continue
-
-                # 0.66. 多策略服务: S1+S6+S9 (run_slow, 内部限速 30 min/次)
-                # run_fast 已删除; 无效策略 S2/S3/S4/S7/S8 已从代码中完全清理
-                # 放在 trend_following_enabled 检查之后，随趋势开关一同禁用
-                if self.multi_strategy_svc:
-                    try:
-                        self.multi_strategy_svc.run_slow()
-                    except Exception as _e:
-                        logger.warning(f"[多策略-慢] 异常: {_e}")
 
                 # 5. 🔥 强制只做趋势单,不再做震荡市场的单
                 logger.info(f"[SCAN] 模式: TREND (只做趋势) | 扫描 {len(self.brain.whitelist)} 个币种...")

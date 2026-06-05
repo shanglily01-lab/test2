@@ -164,16 +164,7 @@
             color: #64748b;
             margin-bottom: 0.625rem;
         }
-        /* 手机：侧栏抽屉；桌面保持固定展开 */
         @media (max-width: 767px) {
-            #app-sidebar {
-                transform: translateX(-100%);
-                transition: transform 0.22s ease-out;
-                box-shadow: 4px 0 32px rgba(0, 0, 0, 0.45);
-            }
-            #app-sidebar.sidebar-open {
-                transform: translateX(0);
-            }
             .cfg-row {
                 min-height: 44px;
                 align-items: center;
@@ -182,64 +173,10 @@
                 touch-action: manipulation;
             }
         }
-        @media (min-width: 768px) {
-            #app-sidebar {
-                transform: none !important;
-            }
-        }
-        .sidebar-overlay {
-            -webkit-tap-highlight-color: transparent;
-        }
     </style>
 </head>
 <body class="flex min-h-screen overflow-x-hidden md:overflow-hidden">
-<!-- SideNavBar -->
-<aside id="app-sidebar" class="fixed left-0 top-0 h-screen w-[240px] bg-[#0a0f14] border-r border-slate-800 flex flex-col py-6 z-[60] touch-pan-y overscroll-contain">
-<div class="px-5 mb-6">
-<a href="/" class="block group">
-<h1 class="text-xl font-black tracking-tighter text-[#49f4c8] group-hover:opacity-80 transition-opacity">NEURAL OBSIDIAN</h1>
-<p class="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">Quant Terminal</p>
-</a>
-</div>
-<nav id="sidebar-nav" class="flex-1 px-3 space-y-0.5 overflow-y-auto">
-<a href="/dashboard" data-path="/dashboard" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">dashboard</span><span>Dashboard</span></a>
-<a href="/futures_trading" data-path="/futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">show_chart</span><span>合约交易</span></a>
-<a href="/gemini_explore" data-path="/gemini_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">auto_awesome</span><span>Gemini 探索</span></a>
-<a href="/deepseek_explore" data-path="/deepseek_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">psychology</span><span>DeepSeek 探索</span></a>
-<a href="/gpt_explore" data-path="/gpt_explore" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">smart_toy</span><span>GPT 探索</span></a>
-<a href="/live_trading" data-path="/live_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">precision_manufacturing</span><span>Live Trading</span></a>
-<a href="/futures_review" data-path="/futures_review" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history_edu</span><span>复盘分析</span></a>
-<a href="/coin_futures_trading" data-path="/coin_futures_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">history</span><span>交易记录</span></a>
-<a href="/technical-signals" data-path="/technical-signals" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">sensors</span><span>信号分析</span></a>
-<a href="/market_regime" data-path="/market_regime" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">pulse_alert</span><span>行情识别</span></a>
-<a class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm" data-path="/top50" href="/top50"><span class="material-symbols-outlined text-lg">analytics</span><span>盈亏分析</span></a>
-    <a href="/symbol_blacklist" data-path="/symbol_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">block</span><span>交易对黑名单</span></a>
-    <a href="/signal_blacklist" data-path="/signal_blacklist" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">do_not_disturb_on</span><span>信号黑名单</span></a>
-<a href="/spot_trading" data-path="/spot_trading" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">currency_exchange</span><span>现货交易</span></a>
-<a href="/etf_data" data-path="/etf_data" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">candlestick_chart</span><span>ETF 数据</span></a>
-<a href="/blockchain_gas" data-path="/blockchain_gas" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">local_gas_station</span><span>Gas 监控</span></a>
-<a href="/corporate_treasury" data-path="/corporate_treasury" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">account_balance</span><span>企业金库</span></a>
-<a href="/data_management" data-path="/data_management" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">storage</span><span>数据管理</span></a>
-<a href="/api-keys" data-path="/api-keys" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">api</span><span>API Keys</span></a>
-<a href="/system-settings" data-path="/system-settings" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">settings</span><span>Settings</span></a>
-    <a href="/binance-news" data-path="/binance-news" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">campaign</span><span>公告监控</span></a>
-<a href="/trading-manual" data-path="/trading-manual" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">menu_book</span><span>操作手册</span></a>
-<a href="/gemini_advisor_reviews" data-path="/gemini_advisor_reviews" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">fact_check</span><span>顾问审核</span></a>
-<a href="/ai_shadow_compare" data-path="/ai_shadow_compare" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-[#49f4c8] hover:bg-[#151a20] transition-all duration-200 text-sm"><span class="material-symbols-outlined text-[18px]">compare_arrows</span><span>AI Shadow 对比</span></a>
-</nav>
-<script>
-(function(){
-  var path = window.location.pathname.replace(/\/$/, '') || '/';
-  document.querySelectorAll('#sidebar-nav .nav-item').forEach(function(a){
-    if(a.getAttribute('data-path') === path){
-      a.classList.remove('text-slate-400');
-      a.classList.add('text-[#49f4c8]','bg-[#151a20]','border-r-2','border-[#49f4c8]','font-semibold');
-    }
-  });
-})();
-</script>
-</aside>
-<div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 z-[55] bg-black/60 md:hidden opacity-0 pointer-events-none transition-opacity duration-200" aria-hidden="true"></div>
+{% include "partials/desktop_sidebar.html" %}
 <!-- Main Content Area：手机全宽，md+ 与侧栏 240px 对齐 -->
 <main class="ml-0 w-full min-w-0 md:ml-[240px] flex-1 min-h-screen md:h-screen overflow-y-auto bg-[#0a0f14] relative">
 <header class="sticky top-0 z-40 flex items-center justify-between pl-3 pr-4 sm:px-6 md:px-10 min-h-14 py-2 border-b border-slate-800/80 bg-[#0a0f14]/90 backdrop-blur-md">
@@ -331,15 +268,6 @@
 <p class="cfg-l2-label">2.1 子策略</p>
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#49f4c8] text-xl shrink-0">analytics</span>
-<div><div class="text-sm font-medium text-slate-200">市场预测器</div><p class="text-[11px] text-slate-500">预测神器</p></div>
-</div>
-<div id="predictorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#49f4c8] text-xl shrink-0">rocket_launch</span>
 <div><div class="text-sm font-medium text-slate-200">BTC 动量跟随</div></div>
 </div>
@@ -353,33 +281,6 @@
 <div><div class="text-sm font-medium text-slate-200">趋势策略</div><p class="text-[11px] text-slate-500">smart_trader 趋势跟随 · 仅模拟盘</p></div>
 </div>
 <div id="trendFollowingToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#9b59ff] text-xl shrink-0">smart_toy</span>
-<div><div class="text-sm font-medium text-slate-200">S9 Gemini AI 抄底</div><p class="text-[11px] text-slate-500">每 6h 调 Gemini · 收费 API · LONG-only</p></div>
-</div>
-<div id="s9GeminiToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#e91e63] text-xl shrink-0">trending_up</span>
-<div><div class="text-sm font-medium text-slate-200">S1 早期做多</div><p class="text-[11px] text-slate-500">RSI 25-52 + MA20 80-105%</p></div>
-</div>
-<div id="s1Toggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#9c27b0] text-xl shrink-0">bolt</span>
-<div><div class="text-sm font-medium text-slate-200">S6 量能异动</div><p class="text-[11px] text-slate-500">12H量峰&gt;3.5x + 当前量1.2-5x</p></div>
-</div>
-<div id="s6Toggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
 </div>
 </div>
@@ -477,7 +378,7 @@
 <div class="cfg-l2">
 <p class="cfg-l2-label">2.2 主策略模式</p>
 <p class="text-[11px] text-slate-500 mb-3 leading-relaxed border-l-2 border-slate-700/80 pl-3">
-  <strong class="text-slate-400">勾选才启用</strong>信号确认路径；Big4 STRONG_BULLISH/STRONG_BEARISH 时触发开仓。预测器 / BTC 动量为上方独立开关。
+  <strong class="text-slate-400">勾选才启用</strong>信号确认路径；Big4 STRONG_BULLISH/STRONG_BEARISH 时触发开仓。BTC 动量为上方独立开关。
 </p>
 <label class="flex items-start justify-between gap-4 py-3 cursor-pointer group">
 <div class="min-w-0">
@@ -504,24 +405,6 @@
 <label class="block text-xs text-slate-500 mb-2">Smart Trader 持仓时长</label>
 <div class="relative">
 <select id="maxHoldHoursSelect" class="w-full bg-[#151a20] border border-slate-800 rounded-xl py-3 px-3 pr-10 text-slate-200 text-sm font-mono appearance-none focus:ring-1 focus:ring-[#49f4c8]/40 focus:border-[#49f4c8]/30">
-<option value="3">3H</option>
-<option value="4">4H</option>
-<option value="5">5H</option>
-<option value="6" selected="">6H</option>
-<option value="7">7H</option>
-<option value="8">8H</option>
-<option value="9">9H</option>
-<option value="10">10H</option>
-<option value="11">11H</option>
-<option value="12">12H</option>
-</select>
-<span class="material-symbols-outlined absolute right-2 top-2.5 text-slate-500 pointer-events-none text-lg">expand_more</span>
-</div>
-</div>
-<div>
-<label class="block text-xs text-slate-500 mb-2 mt-6 sm:mt-[2.35rem]">S1~S9 持仓时长</label>
-<div class="relative">
-<select id="s1s9MaxHoldHoursSelect" class="w-full bg-[#151a20] border border-slate-800 rounded-xl py-3 px-3 pr-10 text-slate-200 text-sm font-mono appearance-none focus:ring-1 focus:ring-[#49f4c8]/40 focus:border-[#49f4c8]/30">
 <option value="3">3H</option>
 <option value="4">4H</option>
 <option value="5">5H</option>
@@ -640,45 +523,6 @@
 <div class="absolute bottom-1/4 right-1/4 w-64 h-64 bg-secondary/10 rounded-full blur-[100px]"></div>
 </div>
 </main>
-<script>
-(function () {
-    function initMobileNav() {
-        var aside = document.getElementById('app-sidebar');
-        var overlay = document.getElementById('sidebar-overlay');
-        var btn = document.getElementById('mobileMenuBtn');
-        if (!aside || !overlay || !btn) return;
-        function setOpen(open) {
-            aside.classList.toggle('sidebar-open', open);
-            overlay.classList.toggle('opacity-0', !open);
-            overlay.classList.toggle('pointer-events-none', !open);
-            overlay.classList.toggle('opacity-100', open);
-            overlay.classList.toggle('pointer-events-auto', open);
-            overlay.setAttribute('aria-hidden', open ? 'false' : 'true');
-            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-            document.body.style.overflow = open ? 'hidden' : '';
-        }
-        function close() {
-            setOpen(false);
-        }
-        btn.addEventListener('click', function () {
-            setOpen(!aside.classList.contains('sidebar-open'));
-        });
-        overlay.addEventListener('click', close);
-        window.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') close();
-        });
-        aside.querySelectorAll('a.nav-item').forEach(function (a) {
-            a.addEventListener('click', function () {
-                if (window.matchMedia('(max-width: 767px)').matches) close();
-            });
-        });
-        window.addEventListener('resize', function () {
-            if (window.matchMedia('(min-width: 768px)').matches) close();
-        });
-    }
-    initMobileNav();
-})();
-</script>
 <script>
     (function () {
         'use strict';
@@ -800,11 +644,10 @@
 
         async function loadAll() {
             try {
-                const [dirData, svcData, holdData, s1s9HoldData, big4SettingData, maxPosData] = await Promise.all([
+                const [dirData, svcData, holdData, big4SettingData, maxPosData] = await Promise.all([
                     apiGet('/trading-direction'),
                     apiGet('/trading-services'),
                     apiGet('/max-hold-hours'),
-                    apiGet('/s1s9-max-hold-hours'),
                     apiGet('/settings/big4_filter_enabled'),
                     apiGet('/settings/max_positions').catch(function() { return { data: { value: '50' } }; })
                 ]);
@@ -812,7 +655,6 @@
                 const dir  = dirData.data  || dirData;
                 const svc  = svcData.data  || svcData;
                 const hold = holdData.data || holdData;
-                const s1s9hold = s1s9HoldData.data || s1s9HoldData;
                 const big4Setting = big4SettingData.data || big4SettingData;
                 const maxPosSetting = maxPosData.data || maxPosData;
 
@@ -827,7 +669,6 @@
 
                 // 策略开关
                 setToggle('btcMomentumToggle', !!svc.btc_momentum_enabled);
-                setToggle('predictorToggle',   !!svc.predictor_enabled);
                 setToggle('trendFollowingToggle', !!svc.trend_following_enabled);
                 setToggle('geminiExploreToggle', !!svc.gemini_explore_enabled);
                 setToggle('geminiPredictToggle', !!svc.gemini_predict_enabled);
@@ -835,9 +676,6 @@
                 setToggle('deepseekPredictToggle', !!svc.deepseek_predict_enabled);
                 setToggle('gptPredictToggle', !!svc.gpt_predict_enabled);
                 setToggle('gptExploreToggle', !!svc.gpt_explore_enabled);
-                setToggle('s9GeminiToggle',    !!svc.s9_gemini_ai_enabled);
-                setToggle('s1Toggle',   !!svc.s1_early_long_enabled);
-                setToggle('s6Toggle',   !!svc.s6_vol_spike_enabled);
                 setToggle('geminiAdvisorToggle', svc.position_advisor_enabled !== false);
                 setToggle('geminiOpenAdvisorToggle', svc.open_advisor_enabled !== false);
                 setToggle('smartExitToggle', !!svc.smart_exit_enabled);
@@ -856,10 +694,6 @@
                 const sel = document.getElementById('maxHoldHoursSelect');
                 if (sel) {
                     sel.value = String(hold.hours ?? 6);
-                }
-                const s1s9Sel = document.getElementById('s1s9MaxHoldHoursSelect');
-                if (s1s9Sel) {
-                    s1s9Sel.value = String(s1s9hold.hours ?? 6);
                 }
 
                 // 止损/止盈
@@ -954,17 +788,6 @@
             }
         });
 
-        // 市场预测器
-        bindToggle('predictorToggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { predictor_enabled: enabled });
-                showToast('市场预测器已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
         // 趋势策略
         bindToggle('trendFollowingToggle', async function (enabled) {
             try {
@@ -1035,39 +858,6 @@
             try {
                 await apiPut('/trading-services', { gpt_explore_enabled: enabled });
                 showToast('GPT 探索已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
-        // S9 Gemini AI 抄底反转
-        bindToggle('s9GeminiToggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { s9_gemini_ai_enabled: enabled });
-                showToast('S9 Gemini AI 已' + (enabled ? '开启' : '关闭') + (enabled ? '(注意 API 收费)' : ''), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
-        // S1 早期做多
-        bindToggle('s1Toggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { s1_early_long_enabled: enabled });
-                showToast('S1 早期做多已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
-        // S6 量能异动
-        bindToggle('s6Toggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { s6_vol_spike_enabled: enabled });
-                showToast('S6 量能异动已' + (enabled ? '开启' : '关闭'), false);
             } catch (err) {
                 showToast('保存失败: ' + err.message, true);
                 return false;
@@ -1184,20 +974,6 @@
             });
         }
 
-        // S1~S9 持仓时长 select
-        const s1s9MaxHoldSel = document.getElementById('s1s9MaxHoldHoursSelect');
-        if (s1s9MaxHoldSel) {
-            s1s9MaxHoldSel.addEventListener('change', async function () {
-                const hours = parseInt(this.value, 10);
-                try {
-                    await apiPut('/s1s9-max-hold-hours', { hours: hours });
-                    showToast('S1~S9 持仓时长已设为 ' + hours + ' 小时', false);
-                } catch (err) {
-                    showToast('保存失败: ' + err.message, true);
-                }
-            });
-        }
-
         // ---------------------------------------------------------------
         // 保存按钮 - 一键保存全部当前开关状态
         // ---------------------------------------------------------------
@@ -1210,7 +986,6 @@
                 saveBtn.disabled = true;
                 try {
                     const hours = parseInt(maxHoldSel ? maxHoldSel.value : '6', 10);
-                    const s1s9Hours = parseInt(s1s9MaxHoldSel ? s1s9MaxHoldSel.value : '6', 10);
                     const slVal = parseFloat(document.getElementById('stopLossInput')?.value || '2') / 100;
                     const tpVal = parseFloat(document.getElementById('takeProfitInput')?.value || '6') / 100;
                     const mpVal = parseInt(document.getElementById('maxPositionsInput')?.value || '50', 10);
@@ -1224,7 +999,6 @@
                             live_trading_enabled: getToggle('liveToggle'),
                             usdt_futures_enabled: getToggle('usdtToggle'),
                             btc_momentum_enabled: getToggle('btcMomentumToggle'),
-                            predictor_enabled: getToggle('predictorToggle'),
                             gpt_explore_enabled: getToggle('gptExploreToggle'),
                             signal_confirmation_enabled: document.getElementById('signalConfirmCheckbox')?.checked ?? false,
                             smart_exit_enabled: getToggle('smartExitToggle'),
@@ -1236,7 +1010,6 @@
                         }),
                         apiPut('/big4-filter', { enabled: getToggle('big4Toggle') }),
                         apiPut('/max-hold-hours', { hours: hours }),
-                        apiPut('/s1s9-max-hold-hours', { hours: s1s9Hours }),
                         apiPut('/settings/max_positions', { setting_key: 'max_positions', setting_value: String(mpVal), description: '最大持仓数量' })
                     ]);
 

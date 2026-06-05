@@ -166,24 +166,8 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
                 <div class="toggle-wrap"><div id="btcMomentumToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
-                <span class="text-sm font-medium">预测器</span>
-                <div class="toggle-wrap"><div id="predictorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
-            </div>
-            <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <span class="text-sm font-medium">趋势策略 <span class="text-[10px] text-on-surface-variant">smart_trader · 仅模拟</span></span>
                 <div class="toggle-wrap"><div id="trendFollowingToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
-            </div>
-            <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
-                <span class="text-sm font-medium">S9 Gemini AI 抄底 <span class="text-[10px] text-amber-400">(收费)</span></span>
-                <div class="toggle-wrap"><div id="s9GeminiToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
-            </div>
-            <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
-                <span class="text-sm font-medium">S1 早期做多</span>
-                <div class="toggle-wrap"><div id="s1Toggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
-            </div>
-            <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
-                <span class="text-sm font-medium">S6 量能异动</span>
-                <div class="toggle-wrap"><div id="s6Toggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <div class="flex flex-col py-3 pr-4">
@@ -257,25 +241,6 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
                     <span class="text-[10px] text-on-surface-variant mt-0.5 leading-snug">范围 3～12 小时</span>
                 </div>
                 <select id="holdHours" onchange="autoSave('holdHours')" aria-label="Smart Trader持仓小时数"
-                    class="bg-surface-container-highest text-on-surface text-sm rounded-xl border-none focus:ring-2 focus:ring-primary/50 h-11 min-h-[44px] px-4 font-body mono-data w-full sm:w-auto sm:min-w-[100px] sm:ml-4 flex-shrink-0 touch-manipulation">
-                    <option value="3">3H</option>
-                    <option value="4">4H</option>
-                    <option value="5">5H</option>
-                    <option value="6">6H</option>
-                    <option value="7">7H</option>
-                    <option value="8">8H</option>
-                    <option value="9">9H</option>
-                    <option value="10">10H</option>
-                    <option value="11">11H</option>
-                    <option value="12">12H</option>
-                </select>
-            </div>
-            <div class="setting-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 border-b border-outline-variant/10 py-1">
-                <div class="flex flex-col py-2 min-w-0 pr-2">
-                    <span class="text-sm font-medium">S1~S9 持仓时长</span>
-                    <span class="text-[10px] text-on-surface-variant mt-0.5 leading-snug">范围 3～12 小时</span>
-                </div>
-                <select id="s1s9HoldHours" onchange="autoSave('s1s9HoldHours')" aria-label="S1~S9持仓小时数"
                     class="bg-surface-container-highest text-on-surface text-sm rounded-xl border-none focus:ring-2 focus:ring-primary/50 h-11 min-h-[44px] px-4 font-body mono-data w-full sm:w-auto sm:min-w-[100px] sm:ml-4 flex-shrink-0 touch-manipulation">
                     <option value="3">3H</option>
                     <option value="4">4H</option>
@@ -368,13 +333,9 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
                 <span class="text-sm font-medium">U本位引擎</span>
                 <span id="usdtStatus" class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-tight rounded-full border bg-primary/10 text-primary border-primary/20">--</span>
             </div>
-            <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
+            <div class="setting-row flex items-center justify-between px-4">
                 <span class="text-sm font-medium">实盘交易</span>
                 <span id="liveStatus" class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-tight rounded-full border bg-primary/10 text-primary border-primary/20">--</span>
-            </div>
-            <div class="setting-row flex items-center justify-between px-4">
-                <span class="text-sm font-medium">预测器</span>
-                <span id="predictorStatus" class="px-3 py-1.5 text-[10px] font-bold uppercase tracking-tight rounded-full border bg-primary/10 text-primary border-primary/20">--</span>
             </div>
         </div>
     </section>
@@ -546,12 +507,11 @@ function updateDirectionSummary() {
 // ── Load ──────────────────────────────────────────────────────────────
 async function loadAll() {
     try {
-        const [sysR, dirR, svcR, holdR, s1s9holdR, maxPosR] = await Promise.all([
+        const [sysR, dirR, svcR, holdR, maxPosR] = await Promise.all([
             fetch(`${SYS}/settings`).then(r => r.json()),
             fetch(`${SYS}/trading-direction`).then(r => r.json()),
             fetch(`${SYS}/trading-services`).then(r => r.json()),
             fetch(`${SYS}/max-hold-hours`).then(r => r.json()),
-            fetch(`${SYS}/s1s9-max-hold-hours`).then(r => r.json()),
             fetch(`${SYS}/settings/max_positions`).then(r => r.json()).catch(() => ({data:{value:'50'}})),
         ]);
         if (sysR.success) {
@@ -569,15 +529,12 @@ async function loadAll() {
             setToggle('usdtToggle', d.usdt_futures_enabled);
             setToggle('liveToggle', d.live_trading_enabled);
             setToggle('liveCloseToggle', d.live_close_enabled !== false);
-            setToggle('predictorToggle', d.predictor_enabled);
             setToggle('btcMomentumToggle', d.btc_momentum_enabled);
             setToggle('trendFollowingToggle', d.trend_following_enabled);
             setToggle('geminiExploreToggle', d.gemini_explore_enabled);
             setToggle('geminiPredictToggle', d.gemini_predict_enabled);
             setToggle('deepseekExploreToggle', d.deepseek_explore_enabled);
             setToggle('deepseekPredictToggle', d.deepseek_predict_enabled);
-            setToggle('s1Toggle', d.s1_early_long_enabled);
-            setToggle('s6Toggle', d.s6_vol_spike_enabled);
             setToggle('geminiAdvisorToggle', d.position_advisor_enabled !== false);
             setToggle('smartExitToggle', d.smart_exit_enabled);
             setToggle('blacklistL3Toggle', d.blacklist_level3_enabled !== false);
@@ -588,7 +545,6 @@ async function loadAll() {
             if (scCb) scCb.checked = !!d.signal_confirmation_enabled;
             setPill('usdtStatus', d.usdt_futures_enabled);
             setPill('liveStatus', d.live_trading_enabled);
-            setPill('predictorStatus', d.predictor_enabled);
             // 止损止盈
             const slEl = document.getElementById('stopLossInput');
             if (slEl && d.stop_loss_pct != null) slEl.value = (parseFloat(d.stop_loss_pct) * 100).toFixed(1);
@@ -598,11 +554,6 @@ async function loadAll() {
         if (holdR.success) {
             const h = Math.max(3, Math.min(12, parseInt(holdR.data.hours, 10) || 6));
             document.getElementById('holdHours').value = String(h);
-        }
-        if (s1s9holdR.success) {
-            const h = Math.max(3, Math.min(12, parseInt(s1s9holdR.data.hours, 10) || 6));
-            const sel = document.getElementById('s1s9HoldHours');
-            if (sel) sel.value = String(h);
         }
         if (maxPosR.success) {
             const mpEl = document.getElementById('maxPositionsInput');
@@ -625,15 +576,12 @@ async function save(type) {
             usdt_futures_enabled: getToggle('usdtToggle'),
             live_trading_enabled: getToggle('liveToggle'),
             live_close_enabled:   getToggle('liveCloseToggle'),
-            predictor_enabled:    getToggle('predictorToggle'),
             btc_momentum_enabled: getToggle('btcMomentumToggle'),
             trend_following_enabled: getToggle('trendFollowingToggle'),
             gemini_explore_enabled:  getToggle('geminiExploreToggle'),
             gemini_predict_enabled:  getToggle('geminiPredictToggle'),
             deepseek_explore_enabled: getToggle('deepseekExploreToggle'),
             deepseek_predict_enabled: getToggle('deepseekPredictToggle'),
-            s1_early_long_enabled:  getToggle('s1Toggle'),
-            s6_vol_spike_enabled:    getToggle('s6Toggle'),
             position_advisor_enabled: getToggle('geminiAdvisorToggle'),
             smart_exit_enabled: getToggle('smartExitToggle'),
             blacklist_level3_enabled: getToggle('blacklistL3Toggle'),
@@ -666,13 +614,6 @@ async function save(type) {
             method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ hours })
         }).then(r => r.json());
         if (r.success) toast(`Smart Trader 持仓时间已设为 ${hours} 小时`);
-        else toast('保存失败', 'err');
-    } else if (type === 's1s9HoldHours') {
-        const hours = Math.max(3, Math.min(12, parseInt(document.getElementById('s1s9HoldHours').value, 10) || 6));
-        const r = await fetch(`${SYS}/s1s9-max-hold-hours`, {
-            method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ hours })
-        }).then(r => r.json());
-        if (r.success) toast(`S1~S9 持仓时间已设为 ${hours} 小时`);
         else toast('保存失败', 'err');
     } else if (type === 'maxPositions') {
         const val = parseInt(document.getElementById('maxPositionsInput').value, 10) || 50;
@@ -709,7 +650,7 @@ async function initLock() {
 }
 
 // 绑定所有 toggle 点击事件
-['usdtToggle','liveToggle','liveCloseToggle','btcMomentumToggle','predictorToggle','trendFollowingToggle','geminiExploreToggle','geminiPredictToggle','deepseekExploreToggle','deepseekPredictToggle','uCoinStyleToggle','s1Toggle','s2Toggle','s3Toggle','s4Toggle','s6Toggle','s7Toggle','s8TopshortToggle','s9GeminiToggle','geminiAdvisorToggle','smartExitToggle','blacklistL3Toggle','liveTop50Toggle','liveWhitelistToggle','spotTradingToggle'].forEach(id => bindToggle(id, 'services'));
+['usdtToggle','liveToggle','liveCloseToggle','btcMomentumToggle','trendFollowingToggle','geminiExploreToggle','geminiPredictToggle','deepseekExploreToggle','deepseekPredictToggle','uCoinStyleToggle','geminiAdvisorToggle','smartExitToggle','blacklistL3Toggle','liveTop50Toggle','liveWhitelistToggle','spotTradingToggle'].forEach(id => bindToggle(id, 'services'));
 ['longToggle','shortToggle'].forEach(id => bindToggle(id, 'direction', updateDirectionSummary));
 bindToggle('big4Toggle', 'big4');
 

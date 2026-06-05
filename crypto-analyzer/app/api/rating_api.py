@@ -584,6 +584,20 @@ async def get_top50():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/api/top50/refresh")
+async def refresh_top50():
+    """手动触发盈亏日终：重算 Top50 榜单 + 白名单/L3 评级联动"""
+    import asyncio
+    try:
+        from update_top_performers import update_top_performing_symbols
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, update_top_performing_symbols, 2, 50)
+        return {'success': True, 'message': 'Top50 与白名单评级已更新'}
+    except Exception as e:
+        logger.error(f"手动盈亏日终失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/rating/symbol/{symbol}")
 async def get_symbol_rating(symbol: str, days: int = 7):
     """获取单个交易对的评级和表现分析"""
