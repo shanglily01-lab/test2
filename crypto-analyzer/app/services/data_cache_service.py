@@ -22,6 +22,7 @@ import pymysql
 import pymysql.cursors
 from loguru import logger
 
+from app.services.securities_filter import is_security
 from app.utils.config_loader import get_db_config
 from app.utils.futures_symbol import futures_symbol_rating_canonical
 
@@ -61,7 +62,7 @@ def _is_excluded(symbol: str) -> bool:
     for p in EXCLUDED_PREFIXES:
         if s.startswith(p) or s.endswith(p):
             return True
-    return False
+    return is_security(symbol)
 
 
 # ============================================================

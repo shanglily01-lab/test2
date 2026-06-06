@@ -10,6 +10,7 @@ from loguru import logger
 from app.services.gemini_position_advisor import GEMINI_PER_CALL_DELAY_S
 from app.services.deepseek_position_advisor import DEEPSEEK_PER_CALL_DELAY_S
 from app.services.open_advisor_routing import resolve_open_advisors
+from app.services.securities_filter import is_security
 
 _open_gate_lock = threading.Lock()
 _open_gate_waiting = 0
@@ -38,6 +39,13 @@ def gate_simulated_open(
     顾问关闭 / API 异常时放行 (降级), 仅明确 reject 时拦截。
     """
     global _open_gate_waiting
+    if is_security(symbol):
+        reason = f"non_crypto_symbol_blocked:{symbol}"
+        logger.info(
+            f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {reason}"
+        )
+        return False, reason
+
     providers = resolve_open_advisors(source)
     with _open_gate_lock:
         _open_gate_waiting += 1

@@ -22,6 +22,12 @@ EXCLUDED_STOCK_BASES: frozenset[str] = frozenset({
     "SPY", "T", "TSLA", "TSM",
 })
 
+EXCLUDED_COMMODITY_BASES: frozenset[str] = frozenset({
+    "XAG",   # silver
+    "XAU",   # gold
+    "PAXG",  # tokenized gold; exclude from strategy trading universe
+})
+
 
 SAFE_OVERRIDE: frozenset[str] = frozenset({
     "DASH",
@@ -42,4 +48,4 @@ def is_security(symbol: str) -> bool:
     b = base_of(symbol)
     if b in SAFE_OVERRIDE:
         return False
-    return b in EXCLUDED_STOCK_BASES
+    return b in EXCLUDED_STOCK_BASES or b in EXCLUDED_COMMODITY_BASES
