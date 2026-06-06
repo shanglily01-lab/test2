@@ -47,16 +47,6 @@ def _get_price_hub():
 
 
 def _live_price(symbol: str, hub) -> Optional[float]:
-    try:
-        from app.utils.futures_price import get_futures_trade_price
-
-        conn = _connect()
-        try:
-            return get_futures_trade_price(conn, symbol, log_tag="GPT预测展示")
-        finally:
-            conn.close()
-    except Exception:
-        pass
     if hub is not None:
         try:
             lp = hub.get_trade_price_sync(symbol, max_age_seconds=90)

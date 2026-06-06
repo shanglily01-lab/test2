@@ -916,12 +916,12 @@ function loadPredictAll() {
   loadPredictClosedPositions();
   loadPredictStats();
 }
-// Predict tab: 每 3 秒刷持仓
+// Predict tab: 每 15 秒刷持仓
 setInterval(function(){
   if (!document.getElementById('tab-predict').classList.contains('hidden')) {
     loadPredictOpenPositions();
   }
-}, 3000);
+}, 15000);
 // Predict tab: 每 30 秒刷状态
 setInterval(function(){
   if (!document.getElementById('tab-predict').classList.contains('hidden')) {
