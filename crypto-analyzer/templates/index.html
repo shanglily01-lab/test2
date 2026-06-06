@@ -1,696 +1,439 @@
 ﻿<!DOCTYPE html>
-
-
-
-<html class="dark" lang="zh-CN"><head>
-
-<meta charset="utf-8"/>
-
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
-
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-
-<script id="tailwind-config">
-
-        tailwind.config = {
-
-            darkMode: "class",
-
-            theme: {
-
-                extend: {
-
-                    colors: {
-
-                        "tertiary-dim": "#ff6e80",
-
-                        "on-tertiary-fixed-variant": "#780022",
-
-                        "on-primary-container": "#004132",
-
-                        "primary-dim": "#33e5ba",
-
-                        "error-dim": "#d7383b",
-
-                        "surface-dim": "#0a0f14",
-
-                        "primary": "#49f4c8",
-
-                        "inverse-surface": "#f8f9ff",
-
-                        "surface-container-lowest": "#000000",
-
-                        "on-error-container": "#ffa8a3",
-
-                        "inverse-primary": "#006c55",
-
-                        "on-background": "#ebeef5",
-
-                        "primary-container": "#00d4aa",
-
-                        "error-container": "#9f0519",
-
-                        "on-primary-fixed": "#004334",
-
-                        "on-tertiary": "#490011",
-
-                        "surface-tint": "#49f4c8",
-
-                        "secondary-container": "#005eb5",
-
-                        "on-secondary": "#002045",
-
-                        "tertiary-fixed": "#ff909a",
-
-                        "on-tertiary-fixed": "#39000b",
-
-                        "secondary": "#5b9eff",
-
-                        "on-secondary-fixed-variant": "#00509c",
-
-                        "secondary-fixed-dim": "#a4c5ff",
-
-                        "on-surface-variant": "#a8abb2",
-
-                        "primary-fixed": "#49f4c8",
-
-                        "secondary-dim": "#5b9eff",
-
-                        "outline": "#72767c",
-
-                        "error": "#ff716c",
-
-                        "outline-variant": "#44484e",
-
-                        "primary-fixed-dim": "#33e5ba",
-
-                        "surface-bright": "#262d35",
-
-                        "on-primary-fixed-variant": "#00624d",
-
-                        "on-error": "#490006",
-
-                        "on-primary": "#005745",
-
-                        "on-surface": "#ebeef5",
-
-                        "surface-variant": "#20262e",
-
-                        "surface-container-highest": "#20262e",
-
-                        "on-secondary-fixed": "#003469",
-
-                        "inverse-on-surface": "#51555c",
-
-                        "on-secondary-container": "#f6f7ff",
-
-                        "tertiary-fixed-dim": "#ff7987",
-
-                        "surface-container": "#151a20",
-
-                        "tertiary-container": "#fa4966",
-
-                        "secondary-fixed": "#bbd2ff",
-
-                        "surface-container-high": "#1a2027",
-
-                        "on-tertiary-container": "#100001",
-
-                        "background": "#0a0f14",
-
-                        "surface": "#0a0f14",
-
-                        "surface-container-low": "#0f1419",
-
-                        "tertiary": "#ff6e80"
-
-                    },
-
-                    fontFamily: {
-
-                        "headline": ["Space Grotesk"],
-
-                        "body": ["Manrope"],
-
-                        "label": ["Manrope"]
-
-                    },
-
-                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
-
-                },
-
-            },
-
+<html class="dark" lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NEURAL OBSIDIAN</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            background: "#0a0f14",
+            surface: "#0f1419",
+            "surface-2": "#151a20",
+            "surface-3": "#20262e",
+            primary: "#49f4c8",
+            "primary-dim": "#33e5ba",
+            secondary: "#5b9eff",
+            tertiary: "#ff6e80",
+            outline: "#44484e",
+            "on-surface": "#ebeef5",
+            "on-muted": "#a8abb2",
+            "on-primary": "#003b2f"
+          },
+          fontFamily: {
+            headline: ["Space Grotesk", "Manrope", "sans-serif"],
+            body: ["Manrope", "sans-serif"]
+          },
+          borderRadius: {
+            DEFAULT: "0.25rem",
+            lg: "0.5rem",
+            xl: "0.75rem",
+            full: "9999px"
+          }
         }
-
-    </script>
-
-<style>
-
-        .material-symbols-outlined {
-
-            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-
-        }
-
-        .neural-glow {
-
-            box-shadow: 0 0 20px 2px rgba(73, 244, 200, 0.1);
-
-        }
-
-        .glass-nav {
-
-            background: rgba(10, 15, 20, 0.8);
-
-            backdrop-filter: blur(20px);
-
-        }
-
-    </style>
-
+      }
+    };
+  </script>
+  <style>
+    .material-symbols-outlined {
+      font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+    }
+    .grid-field {
+      background-image:
+        linear-gradient(rgba(73, 244, 200, 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(73, 244, 200, 0.06) 1px, transparent 1px);
+      background-size: 36px 36px;
+      mask-image: radial-gradient(circle at center, black, transparent 72%);
+    }
+    .scanline {
+      background: linear-gradient(180deg, transparent, rgba(73, 244, 200, 0.14), transparent);
+      animation: scan 5s linear infinite;
+    }
+    @keyframes scan {
+      from { transform: translateY(-120%); }
+      to { transform: translateY(120%); }
+    }
+    .neural-glow {
+      box-shadow: 0 0 28px rgba(73, 244, 200, 0.18);
+    }
+    .metric-line {
+      background: linear-gradient(90deg, rgba(73, 244, 200, 0.75), rgba(91, 158, 255, 0.55), rgba(255, 110, 128, 0.45));
+    }
+  </style>
 </head>
-
 <body class="bg-background text-on-surface font-body selection:bg-primary/30">
-
-<!-- Top Navigation Bar -->
-
-<nav class="fixed top-0 w-full z-50 bg-[#0a0f14]/80 backdrop-blur-xl shadow-[0_8px_32px_0_rgba(73,244,200,0.05)] border-b border-outline-variant/10">
-
-<div class="flex justify-between items-center max-w-[1440px] mx-auto px-8 h-20">
-
-<div class="flex items-center gap-3">
-
-<div class="w-8 h-8 flex items-center justify-center bg-primary-container rounded-lg neural-glow">
-
-<span class="material-symbols-outlined text-on-primary-container" style="font-variation-settings: 'FILL' 1;">psychology</span>
-
-</div>
-
-<span class="text-2xl font-bold tracking-tighter text-[#49f4c8] font-headline">NEURAL OBSIDIAN</span>
-
-</div>
-
-<div class="hidden md:flex items-center space-x-10">
-
-<a class="font-['Space_Grotesk'] uppercase tracking-wider text-sm text-[#49f4c8] border-b-2 border-[#49f4c8] pb-1 transition-all" href="#">棣栭〉</a>
-
-<a class="font-['Space_Grotesk'] uppercase tracking-wider text-sm text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#features">鍔熻兘</a>
-
-<a class="font-['Space_Grotesk'] uppercase tracking-wider text-sm text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#docs">鏂囨。</a>
-
-<a class="font-['Space_Grotesk'] uppercase tracking-wider text-sm text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#about">鍏充簬</a>
-
-</div>
-
-<div class="flex items-center gap-6">
-
-<a href="/login" class="text-[#a8abb2] font-['Space_Grotesk'] uppercase tracking-wider text-sm hover:text-primary transition-colors hover:opacity-80 transition-all duration-300 scale-95 active:scale-90 transition-transform">鐧诲綍</a>
-
-<a href="/dashboard" class="bg-gradient-to-r from-primary to-primary-container text-on-primary font-['Space_Grotesk'] uppercase tracking-wider text-sm px-6 py-2.5 rounded-lg font-bold shadow-[0_0_20px_rgba(73,244,200,0.2)] hover:opacity-80 transition-all duration-300 scale-95 active:scale-90 transition-transform">杩涘叆绯荤粺</a>
-
-</div>
-
-</div>
-
-</nav>
-
-<main class="pt-20">
-
-<!-- Hero Section -->
-
-<section class="relative min-h-[921px] flex items-center overflow-hidden px-8 max-w-[1440px] mx-auto">
-
-<div class="grid lg:grid-cols-2 gap-16 items-center z-10">
-
-<div class="space-y-8">
-
-<div class="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/20 rounded-full">
-
-<span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
-
-<span class="text-xs font-bold tracking-widest text-primary uppercase font-headline">Quant Terminal 路 2026</span>
-
-</div>
-
-<h1 class="text-6xl md:text-8xl font-bold font-headline leading-tight tracking-tighter text-on-surface">
-
-                        NEURAL<br/>
-
-<span class="text-transparent bg-clip-text bg-gradient-to-r from-primary via-primary-container to-secondary">OBSIDIAN</span>
-
-</h1>
-
-<p class="text-xl text-on-surface-variant max-w-xl leading-relaxed">
-
-                        Binance U 本位全自动量化终端：Gemini / DeepSeek / GPT 三教师探索与预测，开仓与持仓双顾问审查，模拟仓与实盘分轨同步，TOP50 与白名单盈利筛选。
-
-                    </p>
-
-<div class="flex flex-wrap gap-4 pt-4">
-
-<a href="/dashboard" class="px-8 py-4 bg-gradient-to-r from-primary to-primary-container text-on-primary rounded-xl font-bold text-lg neural-glow hover:translate-y-[-2px] transition-all">
-
-                            杩涘叆绯荤粺
-
-                        </a>
-
-<a href="#features" class="px-8 py-4 border border-outline-variant/30 text-on-surface rounded-xl font-bold text-lg hover:bg-surface-container transition-all inline-block">
-
-                            浜嗚В鏇村
-
-                        </a>
-
-</div>
-
-</div>
-
-<div class="relative h-[600px] hidden lg:block">
-
-<div class="absolute inset-0 bg-gradient-to-tr from-primary/5 to-secondary/5 rounded-3xl overflow-hidden border border-outline-variant/10">
-
-<img alt="AI Neural Network Pathing" class="w-full h-full object-cover mix-blend-overlay opacity-60" data-alt="Abstract 3D digital visualization of dark glowing teal neural network nodes connected by crystalline paths in a high-tech synthetic space" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAd7g7Eh-YxfRee8_y8VF7PDQ-t-jcUIHl2LDgzXjXg3gHMNdhYUO7mVZwqdr52HirCxXUKtBN9ZSpwo5Sh_Iu-neRJmQAvxZ_DAAUX_Gf6xeq3DyqBp_w5Vw1eqzECqMo_m71IWkSndQiCy3ex5gT9FK2qYiy7zPq67AkAWv25JcUt481bCcUSh36zHDOT0KoZ1jY3KWvOjUUki0WE7aOMYu3QXEh8gg6ZTYjfzAIeZymmctMdiv7McxbHfVxdlW3tzh2OdyWPEZsi"/>
-
-<!-- Decorative UI overlays -->
-
-<div class="absolute top-12 left-12 p-4 bg-surface-container/60 backdrop-blur-md rounded-xl border border-primary/20">
-
-<div class="flex items-center gap-3 mb-2">
-
-<span class="material-symbols-outlined text-primary text-sm">trending_up</span>
-
-<span class="text-xs font-mono text-primary">BTC/USDT LONG</span>
-
-</div>
-
-<div class="h-2 w-32 bg-surface-container-highest rounded-full overflow-hidden">
-
-<div class="h-full bg-primary w-[75%]"></div>
-
-</div>
-
-</div>
-
-<div class="absolute bottom-12 right-12 p-6 bg-surface-container/80 backdrop-blur-xl rounded-2xl border border-secondary/20 shadow-2xl">
-
-<span class="text-[10px] font-mono text-secondary-dim uppercase block mb-1">Execution Speed</span>
-
-<span class="text-3xl font-headline font-bold text-on-surface">14.2ms</span>
-
-</div>
-
-</div>
-
-</div>
-
-</div>
-
-<!-- Background Ambient Glows -->
-
-<div class="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-primary/5 blur-[120px] rounded-full pointer-events-none"></div>
-
-<div class="absolute bottom-[-10%] left-[-5%] w-[400px] h-[400px] bg-secondary/5 blur-[100px] rounded-full pointer-events-none"></div>
-
-</section>
-
-<!-- Stats Section -->
-
-<section class="bg-surface-container-low py-16">
-
-<div class="max-w-[1440px] mx-auto px-8">
-
-<div class="flex flex-col md:flex-row justify-between items-center gap-12">
-
-<div class="text-center md:text-left">
-
-<span class="text-5xl md:text-7xl font-bold font-headline text-on-surface neural-glow">3</span>
-
-<p class="text-sm font-label uppercase tracking-widest text-on-surface-variant mt-2">AI 鏁欏笀妯″瀷</p>
-
-</div>
-
-<div class="h-px md:h-16 w-32 md:w-px bg-outline-variant/20"></div>
-
-<div class="text-center md:text-left">
-
-<span class="text-5xl md:text-7xl font-bold font-headline text-on-surface">15<span class="text-primary">+</span></span>
-
-<p class="text-sm font-label uppercase tracking-widest text-on-surface-variant mt-2">AI 绛栫暐妲戒綅</p>
-
-</div>
-
-<div class="h-px md:h-16 w-32 md:w-px bg-outline-variant/20"></div>
-
-<div class="text-center md:text-left">
-
-<span class="text-5xl md:text-7xl font-bold font-headline text-primary">24/7</span>
-
-<p class="text-sm font-label uppercase tracking-widest text-on-surface-variant mt-2">鍏ㄥぉ鍊欒繍琛?/p>
-
-</div>
-
-</div>
-
-</div>
-
-</section>
-
-<!-- Features Grid -->
-
-<section id="features" class="py-32 px-8 max-w-[1440px] mx-auto">
-
-<div class="mb-20 text-center lg:text-left">
-
-<h2 class="text-4xl md:text-5xl font-bold font-headline mb-6">鏍稿績鍔熻兘鐭╅樀</h2>
-
-<div class="w-20 h-1 bg-primary rounded-full hidden lg:block"></div>
-
-</div>
-
-<div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-
-<!-- Card 1 -->
-
-<div class="group bg-surface-container-low p-8 rounded-2xl hover:bg-surface-container transition-all duration-500 border border-transparent hover:border-primary/20">
-
-<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
-
-<span class="material-symbols-outlined text-primary">auto_awesome</span>
-
-</div>
-
-<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">涓夋暀甯?AI 鎺㈢储 / 棰勬祴</h3>
-
-<p class="text-on-surface-variant leading-relaxed">
-
-                        Gemini銆丏eepSeek銆丟PT 姣?4 灏忔椂鎺㈢储涓庨娴嬶紝鎶€鏈潰 TOP50 鍊欓€夋睜 + catalyst 纭棬妲涳紙conf 鈮?0.60锛夈€侴emini/DeepSeek 鎺㈢储涓庨娴嬪彲鍚屾 Binance 瀹炵洏锛汫PT 涓庡叾瀹冪瓥鐣ヤ粎妯℃嫙浠撱€?
-
-                    </p>
-
-</div>
-
-<!-- Card 2 -->
-
-<div class="group bg-surface-container p-8 rounded-2xl hover:bg-surface-container-high transition-all duration-500 border border-transparent hover:border-primary/20">
-
-<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
-
-<span class="material-symbols-outlined text-primary">bolt</span>
-
-</div>
-
-<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">三教师探索与预测</h3>`r`n`r`n<p class="text-on-surface-variant leading-relaxed">`r`n`r`n                        Gemini / DeepSeek / GPT 三教师保留主探索与预测，按 4h 节奏轮询，固定 SL 4% / TP 6%，仅保留有效策略链路。`r`n`r`n                    </p>
-
-</div>
-
-<!-- Card 3 -->
-
-<div class="group bg-surface-container-low p-8 rounded-2xl hover:bg-surface-container transition-all duration-500 border border-transparent hover:border-primary/20">
-
-<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
-
-<span class="material-symbols-outlined text-primary">fact_check</span>
-
-</div>
-
-<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">寮€浠?/ 鎸佷粨鍙岄【闂?/h3>
-
-<p class="text-on-surface-variant leading-relaxed">
-
-                        妯℃嫙寮€浠撳墠缁忎腑鏂?rubric 瀹℃煡锛氭寜 source 璺敱 Gemini / DeepSeek / GPT 椤鹃棶锛涢潪 AI 绛栫暐璧?Gemini+DeepSeek 鍙屽銆傛寔浠撴弧 30 鍒嗛挓鍚庢瘡 15 鍒嗛挓 AI 鐩戠锛宻ell 鍙悓姝ュ钩瀹炵洏锛堝彈 live_close 寮€鍏虫帶鍒讹級銆?
-
-                    </p>
-
-</div>
-
-<!-- Card 4 -->
-
-<div class="group bg-surface-container p-8 rounded-2xl hover:bg-surface-container-high transition-all duration-500 border border-transparent hover:border-primary/20">
-
-<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
-
-<span class="material-symbols-outlined text-primary">filter_alt</span>
-
-</div>
-
-<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">瀹炵洏涓庢柟鍚戦椄闂?/h3>
-
-<p class="text-on-surface-variant leading-relaxed">
-
-                        浠?gemini/deepseek 鎺㈢储涓庨娴嬪彲寮€/骞冲疄鐩橈紱寮€浠撻渶 TOP50 鎴栫櫧鍚嶅崟锛坮ating_level=0锛変笖閫氳繃 L3 榛戝悕鍗曢椄銆侭ig4 瓒嬪娍涓庣泩浜忕啍鏂彧鍙戦€氱煡锛屼笉鑷姩鏀圭郴缁熷紑鍏斥€斺€旀柟鍚戜笌鎬诲紑鍏崇敱鎮ㄦ墜鍔ㄦ帶鍒躲€?
-
-                    </p>
-
-</div>
-
-<!-- Card 5 -->
-
-<div class="group bg-surface-container-low p-8 rounded-2xl hover:bg-surface-container transition-all duration-500 border border-transparent hover:border-primary/20">
-
-<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
-
-<span class="material-symbols-outlined text-primary">hub</span>
-
-</div>
-
-<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">TOP50 鐩堜簭涓庣櫧鍚嶅崟</h3>
-
-<p class="text-on-surface-variant leading-relaxed">
-
-                        妯℃嫙浠?account_id=2 鏃ョ粓閲嶇畻 TOP50 楂樼泩鍒╂涓庣櫧鍚嶅崟鏅嬬骇锛沇eb 鐩堜簭鍒嗘瀽椤靛彲鎵嬪姩瑙﹀彂鍒锋柊銆備氦鏄撳涓夌骇榛戝悕鍗?+ 淇″彿榛戝悕鍗曪紝閰嶅悎寮€浠撻【闂繃婊ゅ姡璐ㄥ搧绉嶃€?
-
-                    </p>
-
-</div>
-
-<!-- Card 6 -->
-
-<div class="group bg-surface-container p-8 rounded-2xl hover:bg-surface-container-high transition-all duration-500 border border-transparent hover:border-primary/20">
-
-<div class="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center mb-8 group-hover:bg-primary/10 transition-colors">
-
-<span class="material-symbols-outlined text-primary">database</span>
-
-</div>
-
-<h3 class="text-xl font-bold font-headline mb-4 text-on-surface">缁熶竴璋冨害涓庢暟鎹紦瀛?/h3>
-
-<p class="text-on-surface-variant leading-relaxed">
-
-                        crypto-scheduler 缁熶竴璋冨害锛歝andidate_pool 6 鍒嗛挓銆乪xplore_prepared 15 鍒嗛挓銆佹帰绱?4h+杞銆佹垬鏈?15min 璁ら銆佹儏缁?8h銆俉S+REST 琛屾儏銆佸鐩樺垎鏋愩€乀elegram 閫氱煡涓?AI 鑳滅巼鏃ユ鑴氭湰闂幆杩愮淮銆?
-
-                    </p>
-
-</div>
-
-</div>
-
-</section>
-
-<!-- Docs Section -->
-<section id="docs" class="py-32 px-8 max-w-[1440px] mx-auto">
-<div class="mb-16 text-center lg:text-left">
-<div class="inline-flex items-center gap-2 px-3 py-1 bg-secondary/10 border border-secondary/20 rounded-full mb-6">
-<span class="material-symbols-outlined text-secondary text-sm">menu_book</span>
-<span class="text-xs font-bold tracking-widest text-secondary uppercase font-headline">Documentation</span>
-</div>
-<h2 class="text-4xl md:text-5xl font-bold font-headline mb-6">绯荤粺浣跨敤鏂囨。</h2>
-<div class="w-20 h-1 bg-secondary rounded-full hidden lg:block"></div>
-</div>
-<div class="grid md:grid-cols-2 gap-8">
-
-<div class="bg-surface-container-low p-8 rounded-2xl border border-outline-variant/10">
-<div class="flex items-center gap-3 mb-6">
-<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-<span class="material-symbols-outlined text-primary text-xl">psychology</span>
-</div>
-<h3 class="text-lg font-bold font-headline text-on-surface">AI 绛栫暐浣撶郴</h3>
-</div>
-<ul class="space-y-3 text-sm text-on-surface-variant">
-<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span><span><b class="text-on-surface">涓绘帰绱?/ 棰勬祴</b>锛氫笁鏁欏笀 4h + 杞锛孲L 4% / TP 6%锛宑onf 鈮?0.60 + catalyst</span></li>
-<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span><span><b class="text-on-surface">smart_trader</b>锛歎 鏈綅涓荤瓥鐣?+ 鎶€鏈俊鍙疯瘎鍒嗗紑浠擄紙妯℃嫙/瀹炵洏鐢遍椄闂ㄦ帶鍒讹級</span></li>
-<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span><span><b class="text-on-surface">AI Shadow</b>锛歍eacher vs 瑙勫垯寮曟搸瀵圭収锛屼笉寮€浠?/span></li>
-</ul>
-</div>
-
-<div class="bg-surface-container-low p-8 rounded-2xl border border-outline-variant/10">
-<div class="flex items-center gap-3 mb-6">
-<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-<span class="material-symbols-outlined text-primary text-xl">account_tree</span>
-</div>
-<h3 class="text-lg font-bold font-headline text-on-surface">瀹炵洏涓庨鎺?/h3>
-</div>
-<ul class="space-y-3 text-sm text-on-surface-variant">
-<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span><span><b class="text-on-surface">瀹炵洏鐧藉悕鍗?source</b>锛歡emini/deepseek 鎺㈢储涓庨娴嬶紱鍏朵綑绛栫暐浠呮ā鎷熶粨</span></li>
-<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>寮€浠擄細live_trading_enabled + TOP50 鎴栫櫧鍚嶅崟锛涘钩浠擄細live_close_enabled 鎸?paper_position_id 鏄犲皠</li>
-<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>榛戝悕鍗?L3 榛樿鎷︽埅寮€浠擄紱Big4 / 鐩堜簭鐔旀柇浠?Telegram 閫氱煡</li>
-<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>姣忚处鍙?OPEN 涓婇檺 20 浠擄紱妯℃嫙涓庡疄鐩樺垎杞紝鍏虫ā鎷熶笉浼氳嚜鍔ㄥ钩浜ゆ槗鎵€</li>
-</ul>
-</div>
-
-<div class="bg-surface-container-low p-8 rounded-2xl border border-outline-variant/10">
-<div class="flex items-center gap-3 mb-6">
-<div class="w-10 h-10 rounded-xl bg-error/10 flex items-center justify-center">
-<span class="material-symbols-outlined text-error text-xl">shield</span>
-</div>
-<h3 class="text-lg font-bold font-headline text-on-surface">骞冲彴鍔熻兘瀵艰</h3>
-</div>
-<ul class="space-y-3 text-sm text-on-surface-variant">
-<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span><span><a href="/dashboard" class="text-on-surface hover:text-primary"><b>Dashboard</b></a> 路 琛屾儏姒傝涓庣郴缁熺姸鎬?/span></li>
-<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span><span><a href="/futures_trading" class="text-on-surface hover:text-primary"><b>鍚堢害浜ゆ槗</b></a> 路 妯℃嫙鎸佷粨 路 <a href="/live_trading" class="hover:text-primary">Live Trading</a> 瀹炵洏</span></li>
-<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span><span><a href="/gemini_explore" class="hover:text-primary">Gemini</a> / <a href="/deepseek_explore" class="hover:text-primary">DeepSeek</a> / <a href="/gpt_explore" class="hover:text-primary">GPT</a> 鎺㈢储涓庨娴?/span></li>
-<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span><span><a href="/top50" class="hover:text-primary">鐩堜簭鍒嗘瀽</a> 路 <a href="/futures_review" class="hover:text-primary">澶嶇洏</a> 路 <a href="/gemini_advisor_reviews" class="hover:text-primary">椤鹃棶瀹℃牳</a></span></li>
-<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span><span><a href="/system-settings" class="hover:text-primary">绯荤粺璁剧疆</a> 路 鎬诲紑鍏?/ 瀹炵洏闂?/ 绛栫暐 kill switch</span></li>
-</ul>
-</div>
-
-<div class="bg-surface-container-low p-8 rounded-2xl border border-outline-variant/10">
-<div class="flex items-center gap-3 mb-6">
-<div class="w-10 h-10 rounded-xl bg-secondary/10 flex items-center justify-center">
-<span class="material-symbols-outlined text-secondary text-xl">dashboard</span>
-</div>
-<h3 class="text-lg font-bold font-headline text-on-surface">璋冨害涓庤繍缁?/h3>
-</div>
-<ul class="space-y-3 text-sm text-on-surface-variant">
-<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span><span><b class="text-on-surface">crypto-scheduler</b>锛氱粺涓€ AI / 缂撳瓨 / 琛屾儏璋冨害锛坰cheduler 搴旂敤鏃ュ織锛?/span></li>
-<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span><span><b class="text-on-surface">smart_trader</b>锛歎 鏈綅涓荤瓥鐣?+ 鎸佷粨椤鹃棶 tick</span></li>
-<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span>TOP50 鏃ユ洿 02:05 + Web 鎵嬪姩鍒锋柊锛汚I 鑳滅巼鏃ユ鑴氭湰 ai_win_rate_report.py</li>
-<li class="flex items-start gap-2"><span class="text-secondary mt-0.5">&#8250;</span>瀹屾暣璇存槑锛?a href="/trading-manual" class="text-primary hover:underline">鎿嶄綔鎵嬪唽</a> 路 椤圭洰鍐?AI 绛栫暐鏂囨。锛堜腑鑻辨枃锛?/li>
-</ul>
-</div>
-
-</div>
-</section>
-
-<!-- About Section -->
-<section id="about" class="py-32 px-8 max-w-[1440px] mx-auto">
-<div class="mb-16 text-center lg:text-left">
-<div class="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 border border-primary/20 rounded-full mb-6">
-<span class="material-symbols-outlined text-primary text-sm">info</span>
-<span class="text-xs font-bold tracking-widest text-primary uppercase font-headline">About</span>
-</div>
-<h2 class="text-4xl md:text-5xl font-bold font-headline mb-6">鍏充簬 NEURAL OBSIDIAN</h2>
-<div class="w-20 h-1 bg-primary rounded-full hidden lg:block"></div>
-</div>
-<div class="grid lg:grid-cols-3 gap-8">
-<div class="lg:col-span-2 bg-surface-container-low p-10 rounded-2xl border border-outline-variant/10 space-y-6">
-<p class="text-on-surface-variant leading-relaxed text-base">NEURAL OBSIDIAN锛圦uant Terminal锛夋槸闈㈠悜 Binance U 鏈綅鍚堢害鐨勫叏鑷姩閲忓寲骞冲彴锛欶astAPI Web + crypto-scheduler 缁熶竴璋冨害 + smart_trader 涓讳氦鏄撹繘绋嬨€傛牳蹇冭兘鍔涗负涓夋暀甯?LLM 鎺㈢储/棰勬祴/鎴樻湳/鍙嶈浆銆佹妧鏈俊鍙蜂富绛栫暐銆佸紑浠撲笌鎸佷粨 AI 椤鹃棶锛屼互鍙婃寜 source 鐧藉悕鍗曟帶鍒剁殑瀹炵洏鍚屾銆?/p>
-<p class="text-on-surface-variant leading-relaxed text-base">鍏ㄥ競鍦?candidate_pool 姣?6 鍒嗛挓鍒锋柊锛宔xplore_prepared 姣?15 鍒嗛挓棰勮绠楋紱妯℃嫙浠?account_id=2 涓庡疄鐩樺垎杞紝TOP50 涓庣櫧鍚嶅崟鏃ョ粓閲嶇畻椹卞姩瀹炵洏寮€浠撻椄銆俉eb 绔粺涓€ NEURAL OBSIDIAN 瀵艰埅锛岀郴缁熻缃彲瀹炴椂鍒囨崲鎬诲紑鍏炽€佹柟鍚戙€佸疄鐩橀椄涓庡悇 AI kill switch锛汿elegram 鎺ㄩ€佸紑骞充粨涓庨鎺у憡璀︺€?/p>
-<div class="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4">
-<div class="bg-surface-container rounded-xl p-4 text-center">
-<p class="text-2xl font-bold font-headline text-primary">3</p>
-<p class="text-xs text-on-surface-variant uppercase tracking-widest mt-1">AI 鏁欏笀</p>
-</div>
-<div class="bg-surface-container rounded-xl p-4 text-center">
-<p class="text-2xl font-bold font-headline text-on-surface">4</p>
-<p class="text-xs text-on-surface-variant uppercase tracking-widest mt-1">瀹炵洏鍚屾 source</p>
-</div>
-<div class="bg-surface-container rounded-xl p-4 text-center">
-<p class="text-2xl font-bold font-headline text-secondary">15</p>
-<p class="text-xs text-on-surface-variant uppercase tracking-widest mt-1">鎴樻湳妲戒綅</p>
-</div>
-<div class="bg-surface-container rounded-xl p-4 text-center">
-<p class="text-2xl font-bold font-headline text-primary">24/7</p>
-<p class="text-xs text-on-surface-variant uppercase tracking-widest mt-1">鍏ㄥぉ鍊欒繍琛?/p>
-</div>
-</div>
-</div>
-<div class="bg-surface-container-low p-10 rounded-2xl border border-outline-variant/10">
-<h3 class="text-lg font-bold font-headline text-on-surface mb-6">鎶€鏈灦鏋?/h3>
-<ul class="space-y-4">
-<li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span><div><p class="text-sm font-bold text-on-surface">鍚庣妗嗘灦</p><p class="text-xs text-on-surface-variant">Python 路 FastAPI 路 schedule 路 loguru</p></div></li>
-<li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span><div><p class="text-sm font-bold text-on-surface">鏁版嵁瀛樺偍</p><p class="text-xs text-on-surface-variant">MariaDB锛坆inance-data + data_cache 缂撳瓨搴擄級</p></div></li>
-<li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-secondary flex-shrink-0"></span><div><p class="text-sm font-bold text-on-surface">AI 妯″瀷</p><p class="text-xs text-on-surface-variant">Google Gemini 路 DeepSeek 路 OpenAI GPT</p></div></li>
-<li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-secondary flex-shrink-0"></span><div><p class="text-sm font-bold text-on-surface">琛屾儏鏁版嵁</p><p class="text-xs text-on-surface-variant">Binance WS + REST 路 澶氬懆鏈?K 绾跨紦瀛?/p></div></li>
-<li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span><div><p class="text-sm font-bold text-on-surface">閫氱煡鎺ㄩ€?/p><p class="text-xs text-on-surface-variant">Telegram Bot 路 寮€骞充粨 / 鐔旀柇 / 鍏憡鐩戞帶</p></div></li>
-<li class="flex items-center gap-3"><span class="w-2 h-2 rounded-full bg-on-surface-variant flex-shrink-0"></span><div><p class="text-sm font-bold text-on-surface">鍓嶇鐣岄潰</p><p class="text-xs text-on-surface-variant">Tailwind 路 Jinja2 缁熶竴渚ф爮 路 鎵嬫満绔嫭绔嬮〉</p></div></li>
-</ul>
-</div>
-</div>
-</section>
-
-<!-- Final CTA Section -->
-
-<section class="py-24 px-8 max-w-[1440px] mx-auto">
-
-<div class="bg-gradient-to-br from-surface-container to-surface-container-low rounded-3xl p-12 md:p-24 border border-outline-variant/10 text-center relative overflow-hidden">
-
-<div class="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none">
-
-<img alt="Tech Background" class="w-full h-full object-cover" data-alt="Vibrant tech concept background with glowing blue and green particles forming a digital world map on a dark surface" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD3PO8dAjtQBnilhglBm0wmCv82nTLS8PjrRiqqRoBsZimekeoo-EaZNAwPUkaljipEDP9G_iUKSDHoHE_J0o0aesz2E2aDGLqPazRemrBA9zl42K5XzDiC-UKC5XNm67Z8bOrjbKA4sL1fd5U1Lk4prJhL7--o0F7zeDMOPE94JgdGLFcWMZIeLclPdJdBqMmBchqzkdNBA9YlYuMHoHIX3TMrc8nBjAIpPSoISJsgnePOzYoaCxaxBMEohI0c5e_8AoPdoTqt3NRP"/>
-
-</div>
-
-<h2 class="text-4xl md:text-6xl font-bold font-headline mb-8 relative z-10">杩涘叆 Quant Terminal</h2>
-
-<p class="text-xl text-on-surface-variant mb-12 max-w-2xl mx-auto relative z-10">
-
-                    Dashboard 鐩戞帶銆佷笁鏁欏笀 AI 鎺㈢储銆佹ā鎷?瀹炵洏鍚堢害銆佺泩浜忓垎鏋愪笌椤鹃棶瀹℃牳鈥斺€旂粺涓€瀵艰埅锛屼竴閿洿杈俱€?
-
-                </p>
-
-<div class="flex flex-col md:flex-row justify-center gap-4 relative z-10">
-
-<a href="/dashboard" class="px-10 py-5 bg-primary text-on-primary rounded-xl font-bold text-xl neural-glow hover:opacity-90 transition-all inline-block text-center">
-
-                        绔嬪嵆寮€濮嬩娇鐢?
-
-                    </a>
-
-<a href="/trading-manual" class="px-10 py-5 border border-outline-variant text-on-surface rounded-xl font-bold text-xl hover:bg-surface-container transition-all inline-block text-center">
-
-                        鏌ョ湅鎿嶄綔鎵嬪唽
-
-                    </a>
-
-</div>
-
-</div>
-
-</section>
-
-</main>
-
-<!-- Footer -->
-
-<footer class="bg-[#0a0f14] w-full border-t border-[#44484e]/20">
-
-<div class="flex flex-col md:flex-row justify-between items-center max-w-[1440px] mx-auto px-8 py-12 gap-6">
-
-<div class="flex items-center gap-2">
-
-<span class="font-['Space_Grotesk'] font-bold text-[#49f4c8] text-xl">NEURAL OBSIDIAN</span>
-
-<span class="font-['Manrope'] text-xs text-[#a8abb2] hidden md:inline ml-4">Quant Terminal 路 Binance U 鏈綅</span>
-
-</div>
-
-<div class="flex gap-8">
-
-<a class="font-['Manrope'] text-xs text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#">闅愮鏀跨瓥</a>
-
-<a class="font-['Manrope'] text-xs text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#">鏈嶅姟鏉℃</a>
-
-<a class="font-['Manrope'] text-xs text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#">椋庨櫓鎻愮ず</a>
-
-<a class="font-['Manrope'] text-xs text-[#a8abb2] hover:text-[#49f4c8] transition-colors transition-all duration-300" href="#">鑱旂郴鎴戜滑</a>
-
-</div>
-
-<div class="font-['Manrope'] text-xs text-[#a8abb2]">
-
-                漏 2026 NEURAL OBSIDIAN. All rights reserved.
-
+  <nav class="fixed top-0 z-50 w-full border-b border-outline/60 bg-background/85 backdrop-blur-xl">
+    <div class="mx-auto flex h-20 max-w-[1440px] items-center justify-between px-5 md:px-8">
+      <a href="/" class="flex items-center gap-3">
+        <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-on-primary neural-glow">
+          <span class="material-symbols-outlined" style="font-variation-settings:'FILL' 1;">psychology</span>
+        </span>
+        <span class="font-headline text-xl font-bold tracking-tight text-primary md:text-2xl">NEURAL OBSIDIAN</span>
+      </a>
+
+      <div class="hidden items-center gap-8 md:flex">
+        <a href="#features" class="text-sm font-bold uppercase tracking-wider text-on-muted transition hover:text-primary" data-i18n="nav.features">功能</a>
+        <a href="#docs" class="text-sm font-bold uppercase tracking-wider text-on-muted transition hover:text-primary" data-i18n="nav.docs">文档</a>
+        <a href="#ops" class="text-sm font-bold uppercase tracking-wider text-on-muted transition hover:text-primary" data-i18n="nav.ops">运维</a>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button id="languageToggle" type="button" class="inline-flex h-10 items-center gap-2 rounded-lg border border-outline bg-surface px-3 text-sm font-bold text-on-surface transition hover:border-primary hover:text-primary" aria-label="Switch language">
+          <span class="material-symbols-outlined text-base">language</span>
+          <span id="languageLabel">中文</span>
+        </button>
+        <a href="/login" class="hidden text-sm font-bold uppercase tracking-wider text-on-muted transition hover:text-primary sm:inline" data-i18n="nav.login">登录</a>
+        <a href="/dashboard" class="rounded-lg bg-primary px-4 py-2.5 text-sm font-bold uppercase tracking-wider text-on-primary transition hover:bg-primary-dim md:px-6" data-i18n="nav.enter">进入系统</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="pt-20">
+    <section class="relative mx-auto min-h-[calc(100vh-80px)] max-w-[1440px] overflow-hidden px-5 py-16 md:px-8 lg:py-20">
+      <div class="absolute inset-0 grid-field opacity-80"></div>
+      <div class="relative grid min-h-[720px] items-center gap-12 lg:grid-cols-[1.02fr_0.98fr]">
+        <div class="max-w-3xl">
+          <div class="mb-7 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1">
+            <span class="h-2 w-2 rounded-full bg-primary"></span>
+            <span class="font-headline text-xs font-bold uppercase tracking-[0.28em] text-primary" data-i18n="hero.badge">Quant Terminal / 2026</span>
+          </div>
+          <h1 class="font-headline text-6xl font-bold leading-[0.92] tracking-tight text-on-surface md:text-8xl">
+            NEURAL<br />
+            <span class="bg-gradient-to-r from-primary via-secondary to-tertiary bg-clip-text text-transparent">OBSIDIAN</span>
+          </h1>
+          <p class="mt-8 max-w-2xl text-lg leading-8 text-on-muted md:text-xl" data-i18n="hero.subtitle">
+            Binance U 本位量化终端：三教师 AI 探索与预测、Big4 综合行情、开仓与持仓顾问、模拟仓与实盘分轨同步。
+          </p>
+          <div class="mt-9 flex flex-wrap gap-4">
+            <a href="/dashboard" class="inline-flex items-center gap-2 rounded-xl bg-primary px-7 py-4 font-bold text-on-primary transition hover:bg-primary-dim">
+              <span data-i18n="hero.primary">打开 Dashboard</span>
+              <span class="material-symbols-outlined text-lg">arrow_forward</span>
+            </a>
+            <a href="/gemini_explore" class="inline-flex items-center gap-2 rounded-xl border border-outline bg-surface px-7 py-4 font-bold text-on-surface transition hover:border-primary hover:text-primary">
+              <span data-i18n="hero.secondary">查看 AI 探索</span>
+              <span class="material-symbols-outlined text-lg">travel_explore</span>
+            </a>
+          </div>
+        </div>
+
+        <div class="relative min-h-[560px]">
+          <div class="absolute inset-0 rounded-xl border border-primary/20 bg-surface/70 p-5 shadow-2xl shadow-primary/5 backdrop-blur">
+            <div class="mb-5 flex items-center justify-between border-b border-outline/60 pb-4">
+              <div>
+                <p class="font-headline text-xs font-bold uppercase tracking-[0.3em] text-primary" data-i18n="terminal.eyebrow">Live Control Surface</p>
+                <h2 class="mt-2 text-2xl font-bold" data-i18n="terminal.title">AI 交易控制面板</h2>
+              </div>
+              <div class="flex gap-2">
+                <span class="h-3 w-3 rounded-full bg-tertiary"></span>
+                <span class="h-3 w-3 rounded-full bg-secondary"></span>
+                <span class="h-3 w-3 rounded-full bg-primary"></span>
+              </div>
             </div>
 
+            <div class="grid gap-3 sm:grid-cols-2">
+              <div class="rounded-lg border border-outline/70 bg-background/70 p-4">
+                <p class="text-xs uppercase tracking-widest text-on-muted" data-i18n="metric.sync">Live Sync Sources</p>
+                <p class="mt-3 text-2xl font-bold text-primary">4</p>
+                <p class="mt-2 text-sm text-on-muted">Gemini / DeepSeek</p>
+              </div>
+              <div class="rounded-lg border border-outline/70 bg-background/70 p-4">
+                <p class="text-xs uppercase tracking-widest text-on-muted" data-i18n="metric.interval">AI Cycle</p>
+                <p class="mt-3 text-2xl font-bold text-secondary">4h</p>
+                <p class="mt-2 text-sm text-on-muted" data-i18n="metric.polling">with due polling</p>
+              </div>
+              <div class="rounded-lg border border-outline/70 bg-background/70 p-4">
+                <p class="text-xs uppercase tracking-widest text-on-muted" data-i18n="metric.risk">Risk Gates</p>
+                <p class="mt-3 text-2xl font-bold text-tertiary">TOP50</p>
+                <p class="mt-2 text-sm text-on-muted" data-i18n="metric.whitelist">or whitelist</p>
+              </div>
+              <div class="rounded-lg border border-outline/70 bg-background/70 p-4">
+                <p class="text-xs uppercase tracking-widest text-on-muted" data-i18n="metric.big4">Big4 Analysis</p>
+                <p class="mt-3 text-2xl font-bold text-primary">BTC ETH</p>
+                <p class="mt-2 text-sm text-on-muted">BNB SOL</p>
+              </div>
+            </div>
 
-</body></html>
+            <div class="relative mt-5 overflow-hidden rounded-lg border border-outline/70 bg-background/80 p-5">
+              <div class="scanline absolute inset-x-0 top-0 h-28"></div>
+              <div class="relative space-y-4">
+                <div>
+                  <div class="mb-2 flex justify-between text-xs text-on-muted">
+                    <span>Gemini Explore</span><span>4h</span>
+                  </div>
+                  <div class="h-2 rounded-full bg-surface-3"><div class="metric-line h-2 w-[88%] rounded-full"></div></div>
+                </div>
+                <div>
+                  <div class="mb-2 flex justify-between text-xs text-on-muted">
+                    <span>DeepSeek Predict</span><span>4h</span>
+                  </div>
+                  <div class="h-2 rounded-full bg-surface-3"><div class="metric-line h-2 w-[74%] rounded-full"></div></div>
+                </div>
+                <div>
+                  <div class="mb-2 flex justify-between text-xs text-on-muted">
+                    <span>Big4 Regime</span><span>BTC / ETH / BNB / SOL</span>
+                  </div>
+                  <div class="h-2 rounded-full bg-surface-3"><div class="metric-line h-2 w-[62%] rounded-full"></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
+    <section id="features" class="border-y border-outline/60 bg-surface py-20">
+      <div class="mx-auto max-w-[1180px] px-5 md:px-8">
+        <div class="mb-12 max-w-3xl">
+          <p class="font-headline text-sm font-bold uppercase tracking-[0.3em] text-primary" data-i18n="features.eyebrow">Current System</p>
+          <h2 class="mt-4 font-headline text-4xl font-bold tracking-tight md:text-5xl" data-i18n="features.title">保留真正活跃的交易链路</h2>
+          <p class="mt-5 text-lg leading-8 text-on-muted" data-i18n="features.subtitle">旧战术、反转和 S 系列策略已经下线，首页只展示当前仍在运行和维护的模块。</p>
+        </div>
+
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <article class="rounded-lg border border-outline bg-background p-6">
+            <span class="material-symbols-outlined text-primary">travel_explore</span>
+            <h3 class="mt-5 text-xl font-bold" data-i18n="card.explore.title">三教师探索与预测</h3>
+            <p class="mt-3 leading-7 text-on-muted" data-i18n="card.explore.body">Gemini、DeepSeek、GPT 保留主探索与预测，按 4 小时节奏运行，结合 catalyst 和多周期 K 线过滤。</p>
+          </article>
+          <article class="rounded-lg border border-outline bg-background p-6">
+            <span class="material-symbols-outlined text-secondary">query_stats</span>
+            <h3 class="mt-5 text-xl font-bold" data-i18n="card.big4.title">Big4 综合行情</h3>
+            <p class="mt-3 leading-7 text-on-muted" data-i18n="card.big4.body">Gemini 与 DeepSeek 每 4 小时分析 BTC、ETH、BNB、SOL，提供宏观方向参考但不直接下单。</p>
+          </article>
+          <article class="rounded-lg border border-outline bg-background p-6">
+            <span class="material-symbols-outlined text-tertiary">verified_user</span>
+            <h3 class="mt-5 text-xl font-bold" data-i18n="card.gates.title">实盘闸门</h3>
+            <p class="mt-3 leading-7 text-on-muted" data-i18n="card.gates.body">只有 Gemini / DeepSeek 探索与预测可同步实盘，并受总开关、TOP50、白名单和 L3 黑名单约束。</p>
+          </article>
+          <article class="rounded-lg border border-outline bg-background p-6">
+            <span class="material-symbols-outlined text-primary">rule</span>
+            <h3 class="mt-5 text-xl font-bold" data-i18n="card.advisor.title">开仓与持仓顾问</h3>
+            <p class="mt-3 leading-7 text-on-muted" data-i18n="card.advisor.body">按 source 路由 Gemini 或 DeepSeek 顾问，审核开仓 catalyst，并在持仓过程中持续复核风险。</p>
+          </article>
+          <article class="rounded-lg border border-outline bg-background p-6">
+            <span class="material-symbols-outlined text-secondary">sentiment_satisfied</span>
+            <h3 class="mt-5 text-xl font-bold" data-i18n="card.sentiment.title">Gemini 市场情绪</h3>
+            <p class="mt-3 leading-7 text-on-muted" data-i18n="card.sentiment.body">每 8 小时生成市场情绪和事件影响分析，写入 gemini_sentiment_runs，不直接触发交易。</p>
+          </article>
+          <article class="rounded-lg border border-outline bg-background p-6">
+            <span class="material-symbols-outlined text-tertiary">compare_arrows</span>
+            <h3 class="mt-5 text-xl font-bold" data-i18n="card.shadow.title">AI Shadow</h3>
+            <p class="mt-3 leading-7 text-on-muted" data-i18n="card.shadow.body">影子对比不同模型输出与规则引擎表现，用于复盘和策略调参，不作为直接开仓入口。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="docs" class="bg-background py-20">
+      <div class="mx-auto grid max-w-[1180px] gap-8 px-5 md:px-8 lg:grid-cols-[0.9fr_1.1fr]">
+        <div>
+          <p class="font-headline text-sm font-bold uppercase tracking-[0.3em] text-primary" data-i18n="docs.eyebrow">Documentation</p>
+          <h2 class="mt-4 font-headline text-4xl font-bold tracking-tight md:text-5xl" data-i18n="docs.title">新的系统文档已经合并</h2>
+          <p class="mt-5 text-lg leading-8 text-on-muted" data-i18n="docs.body">旧 docs 文件已清理，当前系统说明集中在一份文档中，避免被已下线策略误导。</p>
+          <a href="/trading-manual" class="mt-8 inline-flex items-center gap-2 rounded-xl border border-outline bg-surface px-6 py-3 font-bold text-on-surface transition hover:border-primary hover:text-primary">
+            <span data-i18n="docs.manual">打开操作手册</span>
+            <span class="material-symbols-outlined text-lg">menu_book</span>
+          </a>
+        </div>
+        <div class="rounded-lg border border-outline bg-surface p-6">
+          <div class="flex items-center gap-3 border-b border-outline pb-4">
+            <span class="material-symbols-outlined text-primary">description</span>
+            <div>
+              <h3 class="font-bold">docs/SYSTEM_DOCUMENTATION.md</h3>
+              <p class="text-sm text-on-muted" data-i18n="docs.updated">按当前代码状态维护</p>
+            </div>
+          </div>
+          <ul class="mt-5 space-y-3 text-on-muted">
+            <li class="flex gap-3"><span class="text-primary">›</span><span data-i18n="docs.item1">活跃 AI 模块、调度频率和数据表边界。</span></li>
+            <li class="flex gap-3"><span class="text-primary">›</span><span data-i18n="docs.item2">实盘同步白名单、TOP50、白名单和 L3 黑名单闸门。</span></li>
+            <li class="flex gap-3"><span class="text-primary">›</span><span data-i18n="docs.item3">已下线策略与可清理旧表。</span></li>
+            <li class="flex gap-3"><span class="text-primary">›</span><span data-i18n="docs.item4">开仓顾问、持仓顾问和 AI Shadow 说明。</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="ops" class="border-t border-outline bg-surface py-20">
+      <div class="mx-auto max-w-[1180px] px-5 md:px-8">
+        <div class="mb-10 flex flex-col justify-between gap-6 md:flex-row md:items-end">
+          <div>
+            <p class="font-headline text-sm font-bold uppercase tracking-[0.3em] text-primary" data-i18n="ops.eyebrow">Operations</p>
+            <h2 class="mt-4 font-headline text-4xl font-bold tracking-tight md:text-5xl" data-i18n="ops.title">常用入口</h2>
+          </div>
+          <p class="max-w-2xl text-on-muted" data-i18n="ops.subtitle">从首页可以直接进入当前仍有效的系统页面。</p>
+        </div>
+
+        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <a href="/dashboard" class="rounded-lg border border-outline bg-background p-5 transition hover:border-primary">
+            <span class="material-symbols-outlined text-primary">dashboard</span>
+            <p class="mt-4 font-bold">Dashboard</p>
+            <p class="mt-2 text-sm text-on-muted" data-i18n="ops.dashboard">行情与系统状态</p>
+          </a>
+          <a href="/futures_trading" class="rounded-lg border border-outline bg-background p-5 transition hover:border-primary">
+            <span class="material-symbols-outlined text-secondary">candlestick_chart</span>
+            <p class="mt-4 font-bold" data-i18n="ops.futures">合约交易</p>
+            <p class="mt-2 text-sm text-on-muted" data-i18n="ops.futuresBody">模拟仓与持仓管理</p>
+          </a>
+          <a href="/live_trading" class="rounded-lg border border-outline bg-background p-5 transition hover:border-primary">
+            <span class="material-symbols-outlined text-tertiary">account_balance</span>
+            <p class="mt-4 font-bold">Live Trading</p>
+            <p class="mt-2 text-sm text-on-muted" data-i18n="ops.live">Binance 实盘同步</p>
+          </a>
+          <a href="/system-settings" class="rounded-lg border border-outline bg-background p-5 transition hover:border-primary">
+            <span class="material-symbols-outlined text-primary">tune</span>
+            <p class="mt-4 font-bold" data-i18n="ops.settings">系统设置</p>
+            <p class="mt-2 text-sm text-on-muted" data-i18n="ops.settingsBody">开关、方向和风控</p>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-outline bg-background px-5 py-10 md:px-8">
+    <div class="mx-auto flex max-w-[1180px] flex-col justify-between gap-4 text-sm text-on-muted md:flex-row">
+      <p>NEURAL OBSIDIAN</p>
+      <p data-i18n="footer.note">AI 辅助量化系统，实盘动作始终受用户开关和风控闸门约束。</p>
+    </div>
+  </footer>
+
+  <script>
+    const translations = {
+      zh: {
+        "nav.features": "功能",
+        "nav.docs": "文档",
+        "nav.ops": "运维",
+        "nav.login": "登录",
+        "nav.enter": "进入系统",
+        "hero.badge": "Quant Terminal / 2026",
+        "hero.subtitle": "Binance U 本位量化终端：三教师 AI 探索与预测、Big4 综合行情、开仓与持仓顾问、模拟仓与实盘分轨同步。",
+        "hero.primary": "打开 Dashboard",
+        "hero.secondary": "查看 AI 探索",
+        "terminal.eyebrow": "Live Control Surface",
+        "terminal.title": "AI 交易控制面板",
+        "metric.sync": "实盘同步 Source",
+        "metric.interval": "AI 周期",
+        "metric.polling": "到期轮询防重",
+        "metric.risk": "风控闸门",
+        "metric.whitelist": "或白名单",
+        "metric.big4": "Big4 分析",
+        "features.eyebrow": "Current System",
+        "features.title": "保留真正活跃的交易链路",
+        "features.subtitle": "旧战术、反转和 S 系列策略已经下线，首页只展示当前仍在运行和维护的模块。",
+        "card.explore.title": "三教师探索与预测",
+        "card.explore.body": "Gemini、DeepSeek、GPT 保留主探索与预测，按 4 小时节奏运行，结合 catalyst 和多周期 K 线过滤。",
+        "card.big4.title": "Big4 综合行情",
+        "card.big4.body": "Gemini 与 DeepSeek 每 4 小时分析 BTC、ETH、BNB、SOL，提供宏观方向参考但不直接下单。",
+        "card.gates.title": "实盘闸门",
+        "card.gates.body": "只有 Gemini / DeepSeek 探索与预测可同步实盘，并受总开关、TOP50、白名单和 L3 黑名单约束。",
+        "card.advisor.title": "开仓与持仓顾问",
+        "card.advisor.body": "按 source 路由 Gemini 或 DeepSeek 顾问，审核开仓 catalyst，并在持仓过程中持续复核风险。",
+        "card.sentiment.title": "Gemini 市场情绪",
+        "card.sentiment.body": "每 8 小时生成市场情绪和事件影响分析，写入 gemini_sentiment_runs，不直接触发交易。",
+        "card.shadow.title": "AI Shadow",
+        "card.shadow.body": "影子对比不同模型输出与规则引擎表现，用于复盘和策略调参，不作为直接开仓入口。",
+        "docs.eyebrow": "Documentation",
+        "docs.title": "新的系统文档已经合并",
+        "docs.body": "旧 docs 文件已清理，当前系统说明集中在一份文档中，避免被已下线策略误导。",
+        "docs.manual": "打开操作手册",
+        "docs.updated": "按当前代码状态维护",
+        "docs.item1": "活跃 AI 模块、调度频率和数据表边界。",
+        "docs.item2": "实盘同步白名单、TOP50、白名单和 L3 黑名单闸门。",
+        "docs.item3": "已下线策略与可清理旧表。",
+        "docs.item4": "开仓顾问、持仓顾问和 AI Shadow 说明。",
+        "ops.eyebrow": "Operations",
+        "ops.title": "常用入口",
+        "ops.subtitle": "从首页可以直接进入当前仍有效的系统页面。",
+        "ops.dashboard": "行情与系统状态",
+        "ops.futures": "合约交易",
+        "ops.futuresBody": "模拟仓与持仓管理",
+        "ops.live": "Binance 实盘同步",
+        "ops.settings": "系统设置",
+        "ops.settingsBody": "开关、方向和风控",
+        "footer.note": "AI 辅助量化系统，实盘动作始终受用户开关和风控闸门约束。"
+      },
+      en: {
+        "nav.features": "Features",
+        "nav.docs": "Docs",
+        "nav.ops": "Ops",
+        "nav.login": "Login",
+        "nav.enter": "Enter App",
+        "hero.badge": "Quant Terminal / 2026",
+        "hero.subtitle": "A Binance USD-M quant terminal with three AI teachers, Big4 market analysis, open and hold advisors, and separated paper/live execution.",
+        "hero.primary": "Open Dashboard",
+        "hero.secondary": "View AI Explore",
+        "terminal.eyebrow": "Live Control Surface",
+        "terminal.title": "AI Trading Console",
+        "metric.sync": "Live Sync Sources",
+        "metric.interval": "AI Cycle",
+        "metric.polling": "due polling guard",
+        "metric.risk": "Risk Gates",
+        "metric.whitelist": "or whitelist",
+        "metric.big4": "Big4 Analysis",
+        "features.eyebrow": "Current System",
+        "features.title": "Only active trading paths remain",
+        "features.subtitle": "Legacy tactical, reversal, and S-series strategies are offline. The homepage now reflects only maintained modules.",
+        "card.explore.title": "Three-Teacher Explore and Predict",
+        "card.explore.body": "Gemini, DeepSeek, and GPT keep the main explore and predict flows on a 4-hour cadence with catalyst and multi-timeframe filters.",
+        "card.big4.title": "Big4 Market Analysis",
+        "card.big4.body": "Gemini and DeepSeek analyze BTC, ETH, BNB, and SOL every 4 hours for macro context, not direct trade execution.",
+        "card.gates.title": "Live Trading Gates",
+        "card.gates.body": "Only Gemini and DeepSeek explore/predict sources can sync live, gated by master switch, TOP50, whitelist, and L3 blacklist checks.",
+        "card.advisor.title": "Open and Hold Advisors",
+        "card.advisor.body": "Orders route to Gemini or DeepSeek advisors by source, reviewing catalysts before entry and risk while positions are open.",
+        "card.sentiment.title": "Gemini Market Sentiment",
+        "card.sentiment.body": "Runs every 8 hours, records market and event impact in gemini_sentiment_runs, and does not trigger trades directly.",
+        "card.shadow.title": "AI Shadow",
+        "card.shadow.body": "Compares model outputs and rule behavior for review and tuning without acting as a direct entry path.",
+        "docs.eyebrow": "Documentation",
+        "docs.title": "System documentation is consolidated",
+        "docs.body": "Old docs were cleaned up. The current system is described in one source of truth to avoid legacy strategy drift.",
+        "docs.manual": "Open Manual",
+        "docs.updated": "Maintained against current code",
+        "docs.item1": "Active AI modules, schedules, and table boundaries.",
+        "docs.item2": "Live source whitelist, TOP50, whitelist, and L3 blacklist gates.",
+        "docs.item3": "Offline strategies and old tables that can be cleaned.",
+        "docs.item4": "Open advisors, hold advisors, and AI Shadow.",
+        "ops.eyebrow": "Operations",
+        "ops.title": "Common Entrypoints",
+        "ops.subtitle": "Jump directly into the pages that are still part of the active system.",
+        "ops.dashboard": "Market and system status",
+        "ops.futures": "Futures Trading",
+        "ops.futuresBody": "Paper positions and management",
+        "ops.live": "Binance live sync",
+        "ops.settings": "System Settings",
+        "ops.settingsBody": "Switches, direction, and risk",
+        "footer.note": "AI-assisted quant system. Live actions always remain gated by user switches and risk controls."
+      }
+    };
+
+    function applyLanguage(lang) {
+      const dict = translations[lang] || translations.zh;
+      document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
+      document.querySelectorAll("[data-i18n]").forEach((node) => {
+        const key = node.getAttribute("data-i18n");
+        if (dict[key]) node.textContent = dict[key];
+      });
+      document.getElementById("languageLabel").textContent = lang === "en" ? "EN" : "中文";
+      localStorage.setItem("system_language", lang);
+      localStorage.removeItem("home_language");
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const saved = localStorage.getItem("system_language") || localStorage.getItem("home_language") || "zh";
+      applyLanguage(saved);
+      document.getElementById("languageToggle").addEventListener("click", () => {
+        const current = localStorage.getItem("system_language") || "zh";
+        applyLanguage(current === "zh" ? "en" : "zh");
+      });
+    });
+  </script>
+  <script src="/static/js/system_i18n.js"></script>
+</body>
+</html>
 
