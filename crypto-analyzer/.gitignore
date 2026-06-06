@@ -19,6 +19,7 @@ build/
 # 日志文件
 *.log
 logs/*.log
+logs/*.json
 
 # 环境变量
 .env

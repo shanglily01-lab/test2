@@ -123,9 +123,8 @@
 - 每 **4h** + 5min 轮询 + `*_predict_next_due_utc`；kill switch（Gemini 预测默认 1）
 - 同主探索持仓/SL/TP/门槛；**实盘**：`gemini_predict`、`deepseek_predict`；GPT 预测仅模拟
 
-### 开仓 / 持仓顾问
-- **开仓**: `paper_open_gate` — `gemini_*`→Gemini；`deepseek_*`→DeepSeek；`gpt_*`→GPT；**其它→Gemini+DeepSeek 双审**
-- **持仓**: Gemini 管非 deepseek/gpt；DeepSeek 管 `deepseek_*`；GPT 管 `gpt_*`；`smart_trader` 每 15min tick
+### 开仓 / 持仓顾问（2026-06-06 统一 DeepSeek）
+- **所有 source 开仓/持仓均由 DeepSeek 统一监管**
 - Prompt/rubric/**reason 生产环境为中文**；开关 `*_open_advisor_enabled` / `*_position_advisor_enabled`
 - 表 `gemini/deepseek/gpt_advisor_reviews`；Web `/gemini-advisor-reviews`
 

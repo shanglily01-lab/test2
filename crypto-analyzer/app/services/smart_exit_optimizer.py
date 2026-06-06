@@ -85,7 +85,7 @@ class SmartExitOptimizer:
             self.gemini_advisor = GeminiPositionAdvisor(db_config)
             self.deepseek_advisor = DeepSeekPositionAdvisor(db_config)
             self.gpt_advisor = None
-            logger.info("[SmartExit] Gemini/DeepSeek 持仓顾问已初始化 (gpt_* 由 Gemini 监管)")
+            logger.info("[SmartExit] DeepSeek 持仓顾问已初始化 (Gemini 已停止监管)")
         except Exception as e:
             self.gemini_advisor = None
             self.deepseek_advisor = None

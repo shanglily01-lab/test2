@@ -1,4 +1,4 @@
-"""DeepSeek 模拟仓顾问 — 开仓审核 + deepseek_* 持仓监管."""
+"""DeepSeek 模拟仓顾问 — 开仓审核 + 全部持仓监管."""
 from __future__ import annotations
 
 import os
@@ -20,7 +20,7 @@ from app.services.gemini_position_advisor import (
     HOLD_MIN_MINUTES,
     OPEN_ADVISOR_JSON_SYSTEM_ZH,
 )
-from app.services.open_advisor_routing import is_deepseek_order_source, should_use_deepseek_hold_advisor
+from app.services.open_advisor_routing import should_use_deepseek_hold_advisor
 from app.services.open_advisor_strategy_rubrics import (
     check_direction_gates,
     check_expected_side,
@@ -152,7 +152,7 @@ class DeepSeekPositionAdvisor:
             return None
 
     def get_eligible_positions(self):
-        """deepseek_* 模拟仓，持仓 ≥30min."""
+        """全部模拟仓，持仓 ≥30min."""
         try:
             conn = self._get_conn()
             cur = conn.cursor()
@@ -165,7 +165,6 @@ class DeepSeekPositionAdvisor:
                 WHERE status='open'
                   AND account_id = 2
                   AND TIMESTAMPDIFF(MINUTE, open_time, NOW()) >= %s
-                  AND LOWER(source) LIKE 'deepseek_%%'
                 ORDER BY open_time ASC
                 """,
                 (HOLD_MIN_MINUTES,),
@@ -192,8 +191,6 @@ class DeepSeekPositionAdvisor:
         conn=None,
     ) -> Tuple[bool, str]:
         """返回 (允许开仓, 原因). reject 时禁止开仓."""
-        if not is_deepseek_order_source(source):
-            return True, "non_deepseek_source_skip"
         if not self._is_open_advisor_enabled():
             return True, "DeepSeek 开仓顾问已关闭"
 
