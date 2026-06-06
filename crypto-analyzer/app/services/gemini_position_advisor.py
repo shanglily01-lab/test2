@@ -928,11 +928,10 @@ Output ONLY JSON:
 
                 if any_live_closed:
                     close_price_f = float(close_price) if close_price else float(position['entry_price'])
-                    self._close_paper_only(
+                    return self._close_paper_only(
                         position, reason, close_price_f,
                         advisor_tag=advisor_tag,
                     )
-                    return True
             except Exception as e:
                 logger.error(f"[Gemini顾问] 批量平实盘异常 id={position['id']}: {e}")
 
@@ -940,8 +939,7 @@ Output ONLY JSON:
         if not close_price:
             current_price = self._get_current_price(position['symbol'])
             close_price = current_price or float(position['entry_price'])
-        self._close_paper_only(position, reason, close_price, advisor_tag=advisor_tag)
-        return True
+        return self._close_paper_only(position, reason, close_price, advisor_tag=advisor_tag)
 
     # ────────────────────────────────────────────────────────
     # 主入口
@@ -1053,6 +1051,9 @@ Output ONLY JSON:
                     )
                     if closed:
                         stats['closed'] += 1
+                    else:
+                        stats['errors'] += 1
+                        self._last_check_ts.pop(pid, None)
 
                 if GEMINI_PER_CALL_DELAY_S > 0:
                     time.sleep(GEMINI_PER_CALL_DELAY_S)

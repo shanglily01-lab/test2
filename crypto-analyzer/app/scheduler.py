@@ -113,8 +113,12 @@ class UnifiedDataScheduler:
             'binance_news': {'count': 0, 'last_run': None, 'last_error': None},
             'correct_live_trades': {'count': 0, 'last_run': None, 'last_error': None},
             'deepseek_explore': {'count': 0, 'last_run': None, 'last_error': None},
-            'deepseek_predict': {'count': 0, 'last_run': None, 'last_error': None}
+            'deepseek_predict': {'count': 0, 'last_run': None, 'last_error': None},
+            'deepseek_position_advisor': {'count': 0, 'last_run': None, 'last_error': None},
+            'paper_closed_live_sync': {'count': 0, 'last_run': None, 'last_error': None}
         }
+        self._deepseek_position_advisor_running = False
+        self._paper_closed_live_sync_running = False
 
         logger.info(f"调度器初始化完成 - 监控币种: {len(self.symbols)} 个")
 
@@ -1398,6 +1402,38 @@ class UnifiedDataScheduler:
         schedule.every(5).minutes.do(_run_gpt_predict)
         logger.info("  ✓ gpt_predict - 每 4h 周期 + 5 分钟到期轮询 (DB next_due 防重)")
 
+        # DeepSeek 持仓顾问 - 统一监管 account_id=2 模拟仓，满 30min 后每 15min 复查
+        def _run_deepseek_position_advisor():
+            if self._deepseek_position_advisor_running:
+                logger.info("[DeepSeek持仓顾问] 上一轮仍在运行，跳过本轮")
+                return
+
+            def wrapper():
+                task_name = 'deepseek_position_advisor'
+                self._deepseek_position_advisor_running = True
+                try:
+                    from app.services.deepseek_position_advisor import get_deepseek_advisor
+                    stats = get_deepseek_advisor().tick()
+                    self.task_stats[task_name]['count'] += 1
+                    self.task_stats[task_name]['last_run'] = datetime.now()
+                    self.task_stats[task_name]['last_error'] = None
+                    logger.info(f"[DeepSeek持仓顾问] 调度完成: {stats}")
+                except Exception as e:
+                    logger.error(f"[DeepSeek持仓顾问] 调度异常: {e}", exc_info=True)
+                    self.task_stats[task_name]['last_error'] = str(e)
+                finally:
+                    self._deepseek_position_advisor_running = False
+
+            threading.Thread(
+                target=wrapper,
+                daemon=True,
+                name="DeepSeekPositionAdvisor",
+            ).start()
+
+        schedule.every(15).minutes.do(_run_deepseek_position_advisor)
+        _run_deepseek_position_advisor()
+        logger.info("  ✓ deepseek_position_advisor - 每 15 分钟 (后台线程)")
+
         # Big4 综合行情 LLM 分析 — 每 4h (Gemini + DeepSeek)
         def _run_gemini_big4_analysis():
             def wrapper():
@@ -1452,6 +1488,41 @@ class UnifiedDataScheduler:
 
         schedule.every(15).minutes.do(_run_correct_live_trades)
         logger.info("  ✓ correct_live_trades - 每 15 分钟 (后台线程)")
+
+        # Paper 已平但关联 live 仍 OPEN 的兜底补平。
+        # 只处理 paper_position_id 明确绑定的 live 单，避免误平手工同币种仓位。
+        def _run_paper_closed_live_sync():
+            if self._paper_closed_live_sync_running:
+                logger.info("[PaperClosedLiveSync] 上一轮仍在运行，跳过本轮")
+                return
+
+            def wrapper():
+                task_name = 'paper_closed_live_sync'
+                self._paper_closed_live_sync_running = True
+                try:
+                    from app.services.paper_closed_live_sync import run_paper_closed_live_sync
+                    _mysql_cfg = self.config.get("database", {}).get("mysql", {})
+                    stats = run_paper_closed_live_sync(_mysql_cfg, limit=50)
+                    self.task_stats[task_name]['count'] += 1
+                    self.task_stats[task_name]['last_run'] = datetime.now()
+                    self.task_stats[task_name]['last_error'] = None
+                    if stats.get("checked") or stats.get("errors"):
+                        logger.info(f"[PaperClosedLiveSync] 调度完成: {stats}")
+                except Exception as e:
+                    logger.error(f"[PaperClosedLiveSync] 调度异常: {e}", exc_info=True)
+                    self.task_stats[task_name]['last_error'] = str(e)
+                finally:
+                    self._paper_closed_live_sync_running = False
+
+            threading.Thread(
+                target=wrapper,
+                daemon=True,
+                name="PaperClosedLiveSync",
+            ).start()
+
+        schedule.every(1).minutes.do(_run_paper_closed_live_sync)
+        _run_paper_closed_live_sync()
+        logger.info("  ✓ paper_closed_live_sync - 每 1 分钟 (后台线程)")
 
     async def run_initial_collection(self):
         """首次启动时执行一次缓存更新.

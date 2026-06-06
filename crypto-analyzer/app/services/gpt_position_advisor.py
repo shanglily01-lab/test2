@@ -369,6 +369,9 @@ class GPTPositionAdvisor:
                     )
                     if closed:
                         stats["closed"] += 1
+                    else:
+                        stats["errors"] += 1
+                        self._last_check_ts.pop(pid, None)
                 if GPT_PER_CALL_DELAY_S > 0:
                     time.sleep(GPT_PER_CALL_DELAY_S)
             except Exception as e:
