@@ -26,7 +26,7 @@ smart_trader_service (每 900s)
 | 主预测 | 是 | `*_predict` | 仅 **`gemini_predict`、`deepseek_predict`**（GPT 仅模拟） |
 | 顶空底多 | 是 | `*_reversal` | 否 |
 | 战术四策略 | 是 | `*_pullback` 等 | 否 |
-| 开仓/持仓顾问 | 是 | 按 source 路由 | 持仓 sell：仅上述四 source + `live_close_enabled=1` 时平交易所 |
+| 开仓/持仓顾问 | 是 | 按 source 路由 | 持仓 sell：`live_close_enabled=1` 且有 `paper_position_id` 绑定时平交易所 |
 | 情绪分析 | 是 | 不下单 | — |
 
 ---
@@ -295,7 +295,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 ### 8.4 sell 后果
 
 - **始终**关闭模拟仓。
-- 仅当 `live_close_enabled=1` 且 `should_sync_live_for_source(position.source)`（四策略白名单）时，按 `paper_position_id` 平映射实盘；其它 source 只关模拟。
+- 仅当 `live_close_enabled=1` 且存在 `paper_position_id` 绑定的 OPEN 实盘仓时，按绑定关系平映射实盘；平仓不再按 source/TOP50/白名单过滤。
 
 ### 8.5 Kill Switch
 
@@ -327,11 +327,11 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | `live_whitelist_enabled` | 开仓：`rating_level=0` 可开实仓 |
 | `blacklist_level3_enabled` | L3 禁止开仓（多在开模拟前检查） |
 
-**按 source 白名单（开/平）**：`gemini_explore`、`deepseek_explore`、`gemini_predict`、`deepseek_predict`。其它策略即使 `live_trading_enabled=1` 也只写模拟仓。
+**开仓按 source 白名单**：`gemini_explore`、`deepseek_explore`、`gemini_predict`、`deepseek_predict`。其它策略即使 `live_trading_enabled=1` 也只写模拟仓。
 
 **开仓检查链**（`check_live_open_allowed`）：`live_trading_enabled` → source ∈ `LIVE_SYNC_SOURCES` → `check_live_symbol_allowed`（TOP50 **或** 白名单；两闸门都关则拒绝）。不满足时日志如「不在 TOP 50 也非白名单」「策略 xxx 仅模拟盘」。
 
-**平仓**：只认 `live_close_enabled` + source 白名单；**不**再查 TOP50/白名单。
+**平仓**：只认 `live_close_enabled` + `live_futures_positions.paper_position_id` 绑定；**不**再查 source/TOP50/白名单。
 
 每账号 OPEN 上限 **20** 仓。
 
@@ -382,4 +382,3 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | `smart_trader_service.py` | 顾问 tick + 部分 gate 调用 |
 
 英文对照文档：[AI_STRATEGIES_AND_ADVISORS_EN.md](./AI_STRATEGIES_AND_ADVISORS_EN.md)
-

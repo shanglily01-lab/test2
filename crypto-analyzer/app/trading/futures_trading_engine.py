@@ -1225,116 +1225,108 @@ class FuturesTradingEngine:
                         f"(paper_position_id={position_id}, reason={reason})"
                     )
                 else:
-                    from app.services.trading_gates import should_sync_live_for_source
-
                     paper_source = position.get("source") or ""
-                    should_sync = should_sync_live_for_source(paper_source)
-                    if not should_sync:
-                        logger.info(
-                            f"[同步实盘] source={paper_source} 仅模拟盘,跳过 {symbol} "
-                            f"{position_side} 实盘平仓"
+                    # 平仓不再按 source/TOP50/白名单过滤；只平 paper_position_id 明确绑定的实盘仓。
+                    # 关键改动: 按 paper_position_id 查 live_futures_positions,
+                    # 用每条记录对应账号 (user_api_keys) 的密钥平仓
+                    from app.services.api_key_service import get_api_key_service
+                    from app.trading.binance_futures_engine import BinanceFuturesEngine
+                    from decimal import Decimal as _Dec
+
+                    live_cur = connection.cursor()
+                    live_cur.execute(
+                        "SELECT id, account_id, quantity, entry_price "
+                        "FROM live_futures_positions "
+                        "WHERE paper_position_id=%s AND status='OPEN'",
+                        (position_id,)
+                    )
+                    live_rows = live_cur.fetchall()
+                    live_cur.close()
+
+                    if not live_rows:
+                        # 诊断日志: 看看为啥没匹配上
+                        # (1) 同 symbol+side 的 OPEN 实盘单是否存在 (paper_position_id 是否为 NULL/不一致)
+                        diag_cur = connection.cursor()
+                        diag_cur.execute(
+                            "SELECT id, account_id, paper_position_id, source, open_time "
+                            "FROM live_futures_positions "
+                            "WHERE symbol=%s AND position_side=%s AND status='OPEN' "
+                            "ORDER BY open_time DESC LIMIT 5",
+                            (symbol, position_side)
+                        )
+                        diag_rows = diag_cur.fetchall()
+                        diag_cur.close()
+                        logger.warning(
+                            f"[同步实盘] {symbol} {position_side} 无 paper_position_id={position_id} 关联的 OPEN 实盘单,"
+                            f"跳过实盘平仓 (reason={reason}). "
+                            f"同 symbol+side 下其它 OPEN 实盘单 (最多 5 条): {diag_rows or '无'}"
                         )
                     else:
-                        # 关键改动: 按 paper_position_id 查 live_futures_positions,
-                        # 用每条记录对应账号 (user_api_keys) 的密钥平仓
-                        from app.services.api_key_service import get_api_key_service
-                        from app.trading.binance_futures_engine import BinanceFuturesEngine
-                        from decimal import Decimal as _Dec
-
-                        live_cur = connection.cursor()
-                        live_cur.execute(
-                            "SELECT id, account_id, quantity, entry_price "
-                            "FROM live_futures_positions "
-                            "WHERE paper_position_id=%s AND status='OPEN'",
-                            (position_id,)
-                        )
-                        live_rows = live_cur.fetchall()
-                        live_cur.close()
-
-                        if not live_rows:
-                            # 诊断日志: 看看为啥没匹配上
-                            # (1) 同 symbol+side 的 OPEN 实盘单是否存在 (paper_position_id 是否为 NULL/不一致)
-                            diag_cur = connection.cursor()
-                            diag_cur.execute(
-                                "SELECT id, account_id, paper_position_id, source, open_time "
-                                "FROM live_futures_positions "
-                                "WHERE symbol=%s AND position_side=%s AND status='OPEN' "
-                                "ORDER BY open_time DESC LIMIT 5",
-                                (symbol, position_side)
-                            )
-                            diag_rows = diag_cur.fetchall()
-                            diag_cur.close()
-                            logger.warning(
-                                f"[同步实盘] {symbol} {position_side} 无 paper_position_id={position_id} 关联的 OPEN 实盘单,"
-                                f"跳过实盘平仓 (reason={reason}). "
-                                f"同 symbol+side 下其它 OPEN 实盘单 (最多 5 条): {diag_rows or '无'}"
-                            )
+                        api_service = get_api_key_service()
+                        if not api_service:
+                            logger.warning("[同步实盘] api_key_service 未初始化,跳过")
                         else:
-                            api_service = get_api_key_service()
-                            if not api_service:
-                                logger.warning("[同步实盘] api_key_service 未初始化,跳过")
-                            else:
-                                all_keys_list = api_service.get_all_active_api_keys()
-                                all_keys = {ak['id']: ak for ak in all_keys_list}
-                                logger.info(
-                                    f"[同步实盘] {symbol} {position_side} 找到 {len(live_rows)} 条 OPEN 实盘单,"
-                                    f"reason={reason}, paper_position_id={position_id}"
-                                )
-                                for row in live_rows:
-                                    acc_id = row['account_id']
-                                    key_info = all_keys.get(acc_id)
-                                    if not key_info:
-                                        logger.warning(
-                                            f"[同步实盘] account_id={acc_id} 无有效API密钥 "
-                                            f"(user_api_keys.status='active'),跳过该单 id={row['id']}"
+                            all_keys_list = api_service.get_all_active_api_keys()
+                            all_keys = {ak['id']: ak for ak in all_keys_list}
+                            logger.info(
+                                f"[同步实盘] {symbol} {position_side} 找到 {len(live_rows)} 条 OPEN 实盘单,"
+                                f"reason={reason}, paper_position_id={position_id}"
+                            )
+                            for row in live_rows:
+                                acc_id = row['account_id']
+                                key_info = all_keys.get(acc_id)
+                                if not key_info:
+                                    logger.warning(
+                                        f"[同步实盘] account_id={acc_id} 无有效API密钥 "
+                                        f"(user_api_keys.status='active'),跳过该单 id={row['id']}"
+                                    )
+                                    continue
+                                try:
+                                    live_engine = BinanceFuturesEngine(
+                                        self.db_config,
+                                        key_info['api_key'],
+                                        key_info['api_secret']
+                                    )
+                                    live_result = live_engine.close_position_direct(
+                                        symbol=symbol,
+                                        position_side=position_side,
+                                        quantity=_Dec(str(row['quantity'])),
+                                        entry_price=_Dec(str(row['entry_price'])),
+                                        reason=f'paper_sync_{reason}',
+                                        strategy_name=paper_source or None,
+                                        open_time=position.get('open_time'),
+                                    )
+                                    if live_result.get('success'):
+                                        logger.info(
+                                            f"[同步实盘] ✅ {key_info.get('account_name', acc_id)} "
+                                            f"{symbol} {position_side} 平仓成功"
                                         )
-                                        continue
-                                    try:
-                                        live_engine = BinanceFuturesEngine(
-                                            self.db_config,
-                                            key_info['api_key'],
-                                            key_info['api_secret']
+                                        upd_cur = connection.cursor()
+                                        upd_cur.execute(
+                                            "UPDATE live_futures_positions "
+                                            "SET status='CLOSED', close_time=%s, close_price=%s, "
+                                            "realized_pnl=%s, close_reason=%s, updated_at=%s "
+                                            "WHERE id=%s",
+                                            (
+                                                datetime.now(),
+                                                live_result.get('close_price'),
+                                                live_result.get('realized_pnl'),
+                                                f'paper_sync_{reason}',
+                                                datetime.now(),
+                                                row['id'],
+                                            ),
                                         )
-                                        live_result = live_engine.close_position_direct(
-                                            symbol=symbol,
-                                            position_side=position_side,
-                                            quantity=_Dec(str(row['quantity'])),
-                                            entry_price=_Dec(str(row['entry_price'])),
-                                            reason=f'paper_sync_{reason}',
-                                            strategy_name=paper_source or None,
-                                            open_time=position.get('open_time'),
-                                        )
-                                        if live_result.get('success'):
-                                            logger.info(
-                                                f"[同步实盘] ✅ {key_info.get('account_name', acc_id)} "
-                                                f"{symbol} {position_side} 平仓成功"
-                                            )
-                                            upd_cur = connection.cursor()
-                                            upd_cur.execute(
-                                                "UPDATE live_futures_positions "
-                                                "SET status='CLOSED', close_time=%s, close_price=%s, "
-                                                "realized_pnl=%s, close_reason=%s, updated_at=%s "
-                                                "WHERE id=%s",
-                                                (
-                                                    datetime.now(),
-                                                    live_result.get('close_price'),
-                                                    live_result.get('realized_pnl'),
-                                                    f'paper_sync_{reason}',
-                                                    datetime.now(),
-                                                    row['id'],
-                                                ),
-                                            )
-                                            upd_cur.close()
-                                        else:
-                                            err = live_result.get('error', '未知错误')
-                                            logger.error(
-                                                f"[同步实盘] ❌ {key_info.get('account_name', acc_id)} "
-                                                f"{symbol} {position_side} 平仓失败: {err}"
-                                            )
-                                    except Exception as eng_ex:
+                                        upd_cur.close()
+                                    else:
+                                        err = live_result.get('error', '未知错误')
                                         logger.error(
-                                            f"[同步实盘] account_id={acc_id} 平仓异常: {eng_ex}"
+                                            f"[同步实盘] ❌ {key_info.get('account_name', acc_id)} "
+                                            f"{symbol} {position_side} 平仓失败: {err}"
                                         )
+                                except Exception as eng_ex:
+                                    logger.error(
+                                        f"[同步实盘] account_id={acc_id} 平仓异常: {eng_ex}"
+                                    )
             except Exception as live_ex:
                 logger.error(f"[同步实盘] ❌ {symbol} {position_side} 平仓异常: {live_ex}")
             # ========== 同步实盘平仓结束 ==========

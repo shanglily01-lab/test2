@@ -26,7 +26,7 @@ Any simulated open
 | Main predict | Yes | `*_predict` | **`gemini_predict`, `deepseek_predict` only** (GPT paper only) |
 | Reversal | Yes | `*_reversal` | No |
 | Tactical four | Yes | `*_pullback`, etc. | No |
-| Open / hold advisors | Yes | Routed by `source` | `sell` closes exchange only for the four allowlisted sources + `live_close_enabled` |
+| Open / hold advisors | Yes | Routed by `source` | `sell` closes exchange when `live_close_enabled=1` and a `paper_position_id` link exists |
 | Sentiment | Yes | No orders | — |
 
 ---
@@ -289,7 +289,7 @@ For OPEN paper positions held **≥30 minutes**, poll every **15 minutes/positio
 ### 8.4 On `sell`
 
 - Always close paper.
-- Close exchange only if `live_close_enabled=1` and `should_sync_live_for_source(position.source)` (four-source allowlist); map via `paper_position_id`.
+- Close exchange only if `live_close_enabled=1` and an OPEN live position is linked by `paper_position_id`; close sync no longer checks source/TOP50/whitelist.
 
 ### 8.5 Kill switches
 
@@ -320,11 +320,11 @@ For OPEN paper positions held **≥30 minutes**, poll every **15 minutes/positio
 | `live_whitelist_enabled` | Open: `rating_level=0` whitelist |
 | `blacklist_level3_enabled` | Block L3 symbols (often checked before paper open) |
 
-**Source allowlist (open & close):** `gemini_explore`, `deepseek_explore`, `gemini_predict`, `deepseek_predict`. All other strategies stay paper-only even if `live_trading_enabled=1`.
+**Source allowlist (open only):** `gemini_explore`, `deepseek_explore`, `gemini_predict`, `deepseek_predict`. All other strategies stay paper-only for live opens even if `live_trading_enabled=1`.
 
 **Open chain** (`check_live_open_allowed`): `live_trading_enabled` → source ∈ allowlist → `check_live_symbol_allowed` (TOP50 **OR** whitelist; if both gates off, no live open). Reject reasons include “not in TOP 50 nor whitelist”, “strategy X paper only”.
 
-**Close:** `live_close_enabled` + source allowlist only; **no** TOP50/whitelist re-check.
+**Close:** `live_close_enabled` + `live_futures_positions.paper_position_id` link only; **no** source/TOP50/whitelist re-check.
 
 Max **20** OPEN positions per live account.
 
@@ -371,4 +371,3 @@ Logs: `logs/scheduler_YYYY-MM-DD.log`. After Python deploy: `sudo systemctl rest
 | `smart_trader_service.py` | Hold advisor orchestration |
 
 Chinese reference: [AI_STRATEGIES_AND_ADVISORS_ZH.md](./AI_STRATEGIES_AND_ADVISORS_ZH.md)
-

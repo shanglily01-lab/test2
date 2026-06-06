@@ -2,7 +2,7 @@
 实盘开仓闸门 & 黑名单3级 — 统一读取 system_settings，避免各模块硬编码。
 
 按 source 控制实盘（其余策略仅模拟）:
-  - gemini_explore, deepseek_explore, gemini_predict, deepseek_predict → 可开/平实盘
+  - gemini_explore, deepseek_explore, gemini_predict, deepseek_predict → 可开实盘
   - 总开关: live_trading_enabled（开仓）, live_close_enabled（平仓）
 """
 from __future__ import annotations
@@ -71,7 +71,7 @@ def is_live_close_enabled() -> bool:
 
 
 def should_sync_live_for_source(source: str) -> bool:
-    """该订单 source 是否允许参与实盘开/平同步."""
+    """该订单 source 是否允许参与实盘开仓同步."""
     return _normalize_source(source) in LIVE_SYNC_SOURCES
 
 

@@ -1007,8 +1007,6 @@ class SmartExitOptimizer:
                 )
                 return
 
-            from app.services.trading_gates import should_sync_live_for_source
-
             conn = pymysql.connect(
                 **self.db_config, charset='utf8mb4',
                 cursorclass=pymysql.cursors.DictCursor, autocommit=True
@@ -1020,14 +1018,7 @@ class SmartExitOptimizer:
             )
             src_row = cur.fetchone()
             paper_source = (src_row.get("source") if src_row else "") or ""
-            if not should_sync_live_for_source(paper_source):
-                logger.info(
-                    f"[实盘平仓] source={paper_source} 仅模拟盘,跳过 {symbol} {direction} "
-                    f"(paper_position_id={paper_position_id})"
-                )
-                cur.close()
-                conn.close()
-                return
+            # 平仓不再按 source/TOP50/白名单过滤；只平 paper_position_id 明确绑定的实盘仓。
             cur.execute(
                 "SELECT lp.id, lp.account_id, lp.quantity, lp.entry_price "
                 "FROM live_futures_positions lp "
