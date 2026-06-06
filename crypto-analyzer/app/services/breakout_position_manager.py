@@ -241,6 +241,46 @@ class BreakoutPositionManager:
             dict: 订单信息
         """
         try:
+            position_id = position.get('id') or position.get('position_id')
+            db_config = getattr(self.exchange, 'db_config', None)
+            if not position_id and db_config:
+                try:
+                    import pymysql
+
+                    conn = pymysql.connect(
+                        **db_config,
+                        charset='utf8mb4',
+                        cursorclass=pymysql.cursors.DictCursor,
+                        autocommit=True,
+                    )
+                    cur = conn.cursor()
+                    cur.execute(
+                        "SELECT id FROM futures_positions "
+                        "WHERE symbol=%s AND position_side=%s AND status='open' "
+                        "ORDER BY open_time DESC LIMIT 1",
+                        (symbol, position.get('side')),
+                    )
+                    row = cur.fetchone()
+                    cur.close(); conn.close()
+                    if row:
+                        position_id = row.get('id')
+                except Exception as lookup_e:
+                    logger.warning(f"[强制平仓] 查找模拟仓ID失败 {symbol}: {lookup_e}")
+
+            if position_id and db_config:
+                from app.trading.futures_trading_engine import FuturesTradingEngine
+
+                result = FuturesTradingEngine(db_config).close_position(
+                    int(position_id),
+                    reason=reason,
+                )
+                if not result.get('success'):
+                    raise RuntimeError(result.get('message') or result.get('error') or result)
+
+                if symbol in self.positions:
+                    del self.positions[symbol]
+                return result
+
             # 创建平仓订单
             side = 'SELL' if position['side'] == 'LONG' else 'BUY'
 
