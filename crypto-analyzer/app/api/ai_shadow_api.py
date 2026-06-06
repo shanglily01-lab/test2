@@ -12,6 +12,15 @@ from loguru import logger
 router = APIRouter(prefix="/api/ai-shadow", tags=["AI Shadow对比"])
 
 
+ACTIVE_TEACHER_SOURCES = (
+    "gemini_explore",
+    "gemini_predict",
+    "deepseek_explore",
+    "deepseek_predict",
+    "gpt_predict",
+)
+
+
 def _connect():
     from app.database.connection_pool import get_api_connection
     return get_api_connection()
@@ -20,6 +29,11 @@ def _connect():
 def _table_exists(cur, table: str) -> bool:
     cur.execute("SHOW TABLES LIKE %s", (table,))
     return cur.fetchone() is not None
+
+
+def _table_columns(cur, table: str) -> set[str]:
+    cur.execute(f"SHOW COLUMNS FROM {table}")
+    return {str(row.get("Field") or row.get("field") or "") for row in cur.fetchall() or []}
 
 
 def _parse_json(val) -> Any:
@@ -33,8 +47,13 @@ def _parse_json(val) -> Any:
         return val
 
 
+def _active_source_clause() -> tuple[str, list[str]]:
+    placeholders = ",".join(["%s"] * len(ACTIVE_TEACHER_SOURCES))
+    return f"teacher_source IN ({placeholders})", list(ACTIVE_TEACHER_SOURCES)
+
+
 @router.get("/summary")
-def get_summary():
+def get_summary(include_removed: bool = Query(False)):
     """汇总: 总轮数、平均一致率、按 teacher_source 分组."""
     try:
         conn = _connect()
@@ -48,6 +67,13 @@ def get_summary():
                     "by_source": [],
                 }
 
+            active_where = ""
+            active_params: list = []
+            if not include_removed:
+                clause, values = _active_source_clause()
+                active_where = f"WHERE {clause}"
+                active_params.extend(values)
+
             cur.execute(
                 """
                 SELECT COUNT(*) AS total_runs,
@@ -55,7 +81,9 @@ def get_summary():
                        COALESCE(SUM(compared_count), 0) AS total_compared,
                        COALESCE(SUM(category_match), 0) AS total_match
                 FROM ai_shadow_compare_runs
-                """
+                {active_where}
+                """.format(active_where=active_where),
+                active_params,
             )
             overall = cur.fetchone() or {}
 
@@ -67,9 +95,11 @@ def get_summary():
                        SUM(compared_count) AS compared,
                        SUM(category_match) AS matched
                 FROM ai_shadow_compare_runs
+                {active_where}
                 GROUP BY teacher_source
                 ORDER BY teacher_source
-                """
+                """.format(active_where=active_where),
+                active_params,
             )
             by_source = cur.fetchall() or []
 
@@ -82,6 +112,8 @@ def get_summary():
             "total_match": int(overall.get("total_match") or 0),
             "by_source": by_source,
             "rules_version": "v1",
+            "active_sources": list(ACTIVE_TEACHER_SOURCES),
+            "include_removed": include_removed,
         }
     except Exception as e:
         logger.error(f"[AI Shadow API] summary 失败: {e}")
@@ -92,6 +124,7 @@ def get_summary():
 def list_runs(
     limit: int = Query(30, ge=1, le=100),
     teacher_source: Optional[str] = Query(None),
+    include_removed: bool = Query(False),
 ):
     try:
         conn = _connect()
@@ -99,18 +132,32 @@ def list_runs(
             if not _table_exists(cur, "ai_shadow_compare_runs"):
                 return {"runs": [], "ready": False}
 
+            cols = _table_columns(cur, "ai_shadow_compare_runs")
+            has_input_expr = (
+                "(universe_json IS NOT NULL AND universe_json != '' "
+                "AND global_ctx_json IS NOT NULL AND global_ctx_json != '')"
+                if "universe_json" in cols and "global_ctx_json" in cols else "0"
+            )
             sql = """
                 SELECT id, teacher_source, teacher_run_id, rules_version,
                        universe_size, compared_count, category_match,
                        teacher_tradeable, shadow_tradeable, tradeable_agree,
                        disagree_samples, elapsed_ms, created_at,
-                       ROUND(category_match / NULLIF(compared_count, 0) * 100, 1) AS agree_pct
+                       ROUND(category_match / NULLIF(compared_count, 0) * 100, 1) AS agree_pct,
+                       {has_input_expr} AS has_input
                 FROM ai_shadow_compare_runs
-            """
+            """.format(has_input_expr=has_input_expr)
             params: list = []
+            filters = []
+            if not include_removed:
+                clause, values = _active_source_clause()
+                filters.append(clause)
+                params.extend(values)
             if teacher_source:
-                sql += " WHERE teacher_source = %s"
+                filters.append("teacher_source = %s")
                 params.append(teacher_source)
+            if filters:
+                sql += " WHERE " + " AND ".join(filters)
             sql += " ORDER BY id DESC LIMIT %s"
             params.append(limit)
             cur.execute(sql, params)
@@ -123,6 +170,46 @@ def list_runs(
         return {"runs": rows, "ready": True}
     except Exception as e:
         logger.error(f"[AI Shadow API] runs 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/runs/{shadow_run_id}")
+def get_run_detail(shadow_run_id: int):
+    try:
+        conn = _connect()
+        with conn.cursor() as cur:
+            if not _table_exists(cur, "ai_shadow_compare_runs"):
+                return {"ready": False}
+            cols = _table_columns(cur, "ai_shadow_compare_runs")
+            wanted = [
+                "id", "teacher_source", "teacher_run_id", "rules_version",
+                "universe_size", "compared_count", "category_match", "direction_match",
+                "teacher_tradeable", "shadow_tradeable", "tradeable_agree",
+                "disagree_samples", "elapsed_ms", "universe_json", "global_ctx_json",
+                "teacher_verdicts_json", "shadow_verdicts_json", "created_at",
+            ]
+            select_cols = [c for c in wanted if c in cols]
+            cur.execute(
+                f"SELECT {','.join(select_cols)} FROM ai_shadow_compare_runs WHERE id=%s LIMIT 1",
+                (shadow_run_id,),
+            )
+            row = cur.fetchone()
+        conn.close()
+        if not row:
+            raise HTTPException(status_code=404, detail="shadow run not found")
+        for key in (
+            "disagree_samples", "universe_json", "global_ctx_json",
+            "teacher_verdicts_json", "shadow_verdicts_json",
+        ):
+            if key in row:
+                row[key] = _parse_json(row.get(key))
+        if row.get("created_at"):
+            row["created_at"] = row["created_at"].isoformat(sep=" ", timespec="seconds")
+        return {"ready": True, "run": row}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[AI Shadow API] run detail 澶辫触: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

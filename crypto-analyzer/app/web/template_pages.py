@@ -43,7 +43,7 @@ def render_desktop_page(request: Request, template_name: str) -> HTMLResponse:
     path = project_root / "templates" / template_name
     if not path.exists():
         raise FileNotFoundError(template_name)
-    return templates.TemplateResponse(template_name, {"request": request})
+    return templates.TemplateResponse(request, template_name, {"request": request})
 
 
 def render_desktop_html(request: Request, template_name: str) -> str:

@@ -215,12 +215,11 @@ def get_live_margin_ratio(symbol: str, cursor=None) -> float:
     if rating_level is not None and rating_level >= 2:
         return 0.0
 
-    if in_top50:
-        return 1.0
-    if rating_level == 0:
-        return 1.0
+    # L1 黑名单1级 — 优先级高于 TOP50, 确保 L1 不被 TOP50 覆盖
     if rating_level == 1:
         return 0.5
+    if in_top50 or rating_level == 0:
+        return 1.0
     # 无评级 (None)
     return 0.8
 
@@ -261,18 +260,20 @@ def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
     if rating_level is not None and rating_level >= 2:
         return False, f'黑名单{rating_level}级禁止实盘'
 
-    # TOP50 或 L0 白名单
+    # L1 允许, 但保证金按 50% 计算
+    if rating_level == 1:
+        pct = live_margin_ratio_str(0.5)
+        return True, f'允许实盘(保证金{pct})'
+
+    # TOP50 或 L0 白名单 — 100% 保证金
     if top50_gate and in_top50:
         return True, ''
     if whitelist_gate and rating_level == 0:
         return True, ''
 
-    # L1 或 无评级 — 允许 (受开关控制: 至少一个闸门开启)
+    # 无评级 — 允许 80%
     if top50_gate or whitelist_gate:
-        ratio = get_live_margin_ratio(symbol, cursor)
-        if ratio > 0:
-            pct = live_margin_ratio_str(ratio)
-            return True, f'允许实盘(保证金{pct})'
+        return True, '允许实盘(保证金80%)'
 
     return False, '不满足任何实盘条件'
 

@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import pymysql
 from loguru import logger
 
+from app.services.advisor_review_payloads import dumps_json, table_columns
 from app.utils.config_loader import get_db_config
 
 SHADOW_RULES_VERSION = "v1"
@@ -303,6 +304,7 @@ def run_shadow_after_teacher_explore(
         symbols = sorted(set(universe.keys()) | set(tmap.keys()))
 
         verdict_rows: List[Tuple] = []
+        shadow_verdicts_snapshot: List[dict] = []
         category_match = 0
         teacher_tradeable = 0
         shadow_tradeable = 0
@@ -370,6 +372,17 @@ def run_shadow_after_teacher_explore(
                 (diff_reason or "")[:500] or None,
                 json.dumps(shadow.get("signals") or [], ensure_ascii=False),
             ))
+            shadow_verdicts_snapshot.append({
+                "symbol": sym,
+                "teacher_category": t_cat,
+                "teacher_confidence": t_conf,
+                "shadow_category": s_cat,
+                "shadow_confidence": s_conf,
+                "category_match": matched,
+                "diff_reason": diff_reason,
+                "shadow_signals": shadow.get("signals") or [],
+                "shadow_reason": shadow.get("reason"),
+            })
 
         compared = len(verdict_rows)
         if compared == 0:
@@ -380,29 +393,30 @@ def run_shadow_after_teacher_explore(
         agree_pct = category_match / compared * 100 if compared else 0.0
 
         with conn.cursor() as cur:
+            cols = table_columns(cur, "ai_shadow_compare_runs")
+            data = {
+                "teacher_source": teacher_source,
+                "teacher_run_id": teacher_run_id,
+                "rules_version": SHADOW_RULES_VERSION,
+                "universe_size": len(universe),
+                "compared_count": compared,
+                "category_match": category_match,
+                "direction_match": category_match,
+                "teacher_tradeable": teacher_tradeable,
+                "shadow_tradeable": shadow_tradeable,
+                "tradeable_agree": tradeable_agree,
+                "disagree_samples": dumps_json(disagree_samples),
+                "elapsed_ms": elapsed_ms,
+                "universe_json": dumps_json(universe),
+                "global_ctx_json": dumps_json(global_ctx),
+                "teacher_verdicts_json": dumps_json(teacher_verdicts),
+                "shadow_verdicts_json": dumps_json(shadow_verdicts_snapshot),
+            }
+            keys = [k for k in data if k in cols]
+            placeholders = ",".join(["%s"] * len(keys))
             cur.execute(
-                """
-                INSERT INTO ai_shadow_compare_runs
-                  (teacher_source, teacher_run_id, rules_version, universe_size,
-                   compared_count, category_match, direction_match,
-                   teacher_tradeable, shadow_tradeable, tradeable_agree,
-                   disagree_samples, elapsed_ms)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    teacher_source,
-                    teacher_run_id,
-                    SHADOW_RULES_VERSION,
-                    len(universe),
-                    compared,
-                    category_match,
-                    category_match,
-                    teacher_tradeable,
-                    shadow_tradeable,
-                    tradeable_agree,
-                    json.dumps(disagree_samples, ensure_ascii=False),
-                    elapsed_ms,
-                ),
+                f"INSERT INTO ai_shadow_compare_runs ({','.join(keys)}) VALUES ({placeholders})",
+                tuple(data[k] for k in keys),
             )
             shadow_run_id = cur.lastrowid
 

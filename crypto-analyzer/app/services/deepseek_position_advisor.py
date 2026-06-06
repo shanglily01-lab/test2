@@ -138,6 +138,8 @@ class DeepSeekPositionAdvisor:
                 return {
                     "action": action,
                     "reason": str(parsed.get("reason", ""))[:500],
+                    "_raw_response": text,
+                    "_system_prompt": system_msg,
                 }
             decision = str(parsed.get("decision", "")).strip().lower()
             if decision not in ("approve", "reject"):
@@ -146,6 +148,8 @@ class DeepSeekPositionAdvisor:
             return {
                 "decision": decision,
                 "reason": str(parsed.get("reason", ""))[:500],
+                "_raw_response": text,
+                "_system_prompt": system_msg,
             }
         except Exception as e:
             logger.warning(f"[DeepSeek顾问] API 异常: {e}")
@@ -247,12 +251,25 @@ class DeepSeekPositionAdvisor:
             sl_pct, tp_pct, hold_hours, ctx,
         )
         result = self._call_deepseek_json(prompt, hold_mode=False)
+        input_payload = {
+            "symbol": symbol,
+            "side": side,
+            "price": price,
+            "source": source,
+            "catalyst": catalyst,
+            "leverage": leverage,
+            "sl_pct": sl_pct,
+            "tp_pct": tp_pct,
+            "hold_hours": hold_hours,
+            "market_context": ctx,
+        }
         if not result:
             log_deepseek_advisor_review(
                 "open", "approve", symbol,
                 position_side=side, source=source, entry_price=price,
                 leverage=leverage, reason="DeepSeek API 异常，默认放行",
-                catalyst=catalyst, conn=conn,
+                catalyst=catalyst, conn=conn, prompt_text=prompt,
+                input_json=input_payload, system_prompt=OPEN_ADVISOR_JSON_SYSTEM_ZH,
             )
             return True, "DeepSeek API 异常，默认放行"
 
@@ -270,6 +287,10 @@ class DeepSeekPositionAdvisor:
             reason=reason,
             catalyst=catalyst,
             conn=conn,
+            prompt_text=prompt,
+            input_json=input_payload,
+            raw_response=result.get("_raw_response"),
+            system_prompt=result.get("_system_prompt"),
         )
         if not approved:
             logger.info(
@@ -365,6 +386,16 @@ class DeepSeekPositionAdvisor:
                     hold_hours=hold_h,
                     roi_pct=round(roi, 2),
                     reason=reason,
+                    prompt_text=prompt,
+                    input_json={
+                        "position": pos,
+                        "current_price": current_price,
+                        "market_context": ctx,
+                        "roi_pct": round(roi, 2),
+                        "kline_scores": {"15m": s15, "1h": s1h},
+                    },
+                    raw_response=decision.get("_raw_response"),
+                    system_prompt=decision.get("_system_prompt"),
                 )
 
                 if action == "sell":

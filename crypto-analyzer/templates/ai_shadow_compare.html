@@ -55,23 +55,16 @@
 <header class="flex items-center justify-between mb-6 pb-4 border-b border-[#44484e]/40">
   <div>
     <h1 class="text-2xl font-bold">AI Shadow 对比</h1>
-    <p class="text-xs text-[#a8abb2] mt-1">Teacher (Gemini/DeepSeek) vs 本地规则引擎 · 不开仓 · 规则 <span class="mono text-primary">v1</span></p>
+    <p class="text-xs text-[#a8abb2] mt-1">Teacher (Gemini/DeepSeek/GPT) vs 本地规则引擎 · 不开仓 · 规则 <span class="mono text-primary">v1</span></p>
   </div>
   <div class="flex items-center gap-3">
     <select id="filterSource" onchange="loadRuns()" class="text-xs bg-[#151a20] border border-[#44484e] rounded-lg px-3 py-2 text-[#ebeef5] max-w-[200px]">
-      <option value="">全部来源</option>
-      <optgroup label="Gemini">
-        <option value="gemini_explore">gemini_explore</option>
-        <option value="gemini_predict">gemini_predict</option>
-      </optgroup>
-      <optgroup label="DeepSeek">
-        <option value="deepseek_explore">deepseek_explore</option>
-        <option value="deepseek_predict">deepseek_predict</option>
-      </optgroup>
-      <optgroup label="GPT">
-        <option value="gpt_predict">gpt_predict</option>
-      </optgroup>
+      <option value="">全部当前来源</option>
     </select>
+    <label class="flex items-center gap-2 text-[11px] text-[#a8abb2] select-none">
+      <input id="includeRemoved" type="checkbox" onchange="loadAll(true)" class="rounded bg-[#151a20] border-[#44484e] text-primary focus:ring-primary/30">
+      历史来源
+    </label>
     <button onclick="loadAll()" class="flex items-center gap-1 px-3 py-2 rounded-lg bg-[#151a20] hover:bg-[#1a2027] text-xs">
       <span class="material-symbols-outlined text-[16px]">refresh</span>刷新
     </button>
@@ -158,6 +151,8 @@
 
 <script>
 var selectedRunId = null;
+var availableSources = [];
+var activeSources = [];
 
 function catChip(cat) {
   var c = (cat || 'skip').toLowerCase();
@@ -170,21 +165,105 @@ function fmtConf(v) {
   return Number(v).toFixed(2);
 }
 
-var STRATEGY_ZH = {
-  explore: '探索', predict: '预测'
+var SOURCE_LABELS = {
+  gemini_explore: 'Gemini 探索',
+  gemini_predict: 'Gemini 预测',
+  deepseek_explore: 'DeepSeek 探索',
+  deepseek_predict: 'DeepSeek 预测',
+  gpt_predict: 'GPT 预测'
 };
+var REMOVED_STRATEGIES = {
+  chase: true,
+  dump: true,
+  pullback: true,
+  rebound: true,
+  reversal: true
+};
+var STRATEGY_ZH = {
+  explore: '探索',
+  predict: '预测'
+};
+var SOURCE_ORDER = ['gemini_explore', 'gemini_predict', 'deepseek_explore', 'deepseek_predict', 'gpt_predict'];
 var STRATEGY_ORDER = ['explore', 'predict'];
 var PROVIDER_META = {
   gemini: { label: 'Gemini', cls: 'provider-gemini' },
   deepseek: { label: 'DeepSeek', cls: 'provider-deepseek' },
-  gpt: { label: 'GPT', cls: 'provider-gpt' }
+  gpt: { label: 'GPT', cls: 'provider-gpt' },
+  other: { label: '历史/其他', cls: '' }
 };
+
+function includeRemoved() {
+  return !!document.getElementById('includeRemoved')?.checked;
+}
 
 function parseSourceKey(src) {
   var parts = (src || '').split('_');
   var provider = parts[0] || 'other';
   var strategy = parts.slice(1).join('_') || 'other';
   return { provider: provider, strategy: strategy, raw: src };
+}
+
+function isCurrentSource(src) {
+  var p = parseSourceKey(src);
+  if (REMOVED_STRATEGIES[p.strategy]) return false;
+  if (activeSources && activeSources.length) return activeSources.indexOf(src) >= 0;
+  return SOURCE_ORDER.indexOf(src) >= 0;
+}
+
+function filterCurrentSources(items) {
+  if (includeRemoved()) return items || [];
+  return (items || []).filter(function(item) {
+    return isCurrentSource(item.teacher_source);
+  });
+}
+
+function sourceLabel(src) {
+  if (SOURCE_LABELS[src]) return SOURCE_LABELS[src];
+  var p = parseSourceKey(src);
+  var meta = PROVIDER_META[p.provider] || { label: p.provider || 'Other' };
+  var stratZh = STRATEGY_ZH[p.strategy] || p.strategy || '其他';
+  return meta.label + ' ' + stratZh;
+}
+
+function sourceOrder(src) {
+  var idx = SOURCE_ORDER.indexOf(src);
+  return idx >= 0 ? idx : 999;
+}
+
+function updateSourceFilter(items, active) {
+  var sel = document.getElementById('filterSource');
+  var previous = sel.value;
+  var sources = [];
+  (items || []).forEach(function(s) {
+    if (s.teacher_source && sources.indexOf(s.teacher_source) < 0) sources.push(s.teacher_source);
+  });
+  if (active && active.length) {
+    active.forEach(function(src) {
+      if (sources.indexOf(src) < 0) sources.push(src);
+    });
+  }
+  sources.sort(function(a, b) { return sourceOrder(a) - sourceOrder(b) || a.localeCompare(b); });
+  availableSources = sources;
+  var label = includeRemoved() ? '全部来源（含历史）' : '全部当前来源';
+  var html = '<option value="">' + label + '</option>';
+  var groups = {};
+  sources.forEach(function(src) {
+    var p = parseSourceKey(src);
+    var provider = PROVIDER_META[p.provider] ? p.provider : 'other';
+    if (!groups[provider]) groups[provider] = [];
+    groups[provider].push(src);
+  });
+  ['gemini', 'deepseek', 'gpt', 'other'].forEach(function(provider) {
+    var list = groups[provider] || [];
+    if (!list.length) return;
+    html += '<optgroup label="' + PROVIDER_META[provider].label + '">';
+    list.forEach(function(src) {
+      html += '<option value="' + src + '">' + sourceLabel(src) + '</option>';
+    });
+    html += '</optgroup>';
+  });
+  sel.innerHTML = html;
+  sel.value = sources.indexOf(previous) >= 0 ? previous : '';
 }
 
 function rateTier(pct) {
@@ -196,6 +275,7 @@ function rateTier(pct) {
 
 function renderBySource(items) {
   var box = document.getElementById('statBySource');
+  items = filterCurrentSources(items);
   if (!items || !items.length) {
     box.innerHTML = '<div class="text-xs text-[#a8abb2] text-center py-8">暂无按来源数据</div>';
     return;
@@ -208,15 +288,12 @@ function renderBySource(items) {
   });
   ['gemini', 'deepseek', 'gpt'].forEach(function(k) {
     grouped[k].sort(function(a, b) {
-      var ia = STRATEGY_ORDER.indexOf(a._strategy);
-      var ib = STRATEGY_ORDER.indexOf(b._strategy);
-      if (ia < 0) ia = 99;
-      if (ib < 0) ib = 99;
-      return ia - ib || String(a.teacher_source).localeCompare(b.teacher_source);
+      return sourceOrder(a.teacher_source) - sourceOrder(b.teacher_source)
+        || String(a.teacher_source).localeCompare(b.teacher_source);
     });
   });
   var html = '<div class="source-grid">';
-  ['gemini', 'deepseek', 'gpt'].forEach(function(prov) {
+  ['gemini', 'deepseek', 'gpt', 'other'].forEach(function(prov) {
     var list = grouped[prov];
     if (!list.length) return;
     var meta = PROVIDER_META[prov];
@@ -236,7 +313,7 @@ function renderBySource(items) {
     list.forEach(function(s) {
       var pct = Number(s.avg_agree_pct) || 0;
       var tier = rateTier(pct);
-      var stratZh = STRATEGY_ZH[s._strategy] || s._strategy;
+      var stratZh = sourceLabel(s.teacher_source);
       var barW = Math.min(100, Math.max(0, pct));
       html += '<div class="source-item cursor-pointer" data-source="' + s.teacher_source + '" title="点击筛选 ' + s.teacher_source + '">';
       html += '<div class="flex items-center justify-between gap-2">';
@@ -266,7 +343,7 @@ function renderBySource(items) {
 }
 
 async function loadSummary() {
-  var res = await fetch('/api/ai-shadow/summary');
+  var res = await fetch('/api/ai-shadow/summary?include_removed=' + (includeRemoved() ? 'true' : 'false'));
   var data = await res.json();
   var box = document.getElementById('notReady');
   if (!data.ready) {
@@ -278,21 +355,27 @@ async function loadSummary() {
   document.getElementById('statRuns').textContent = data.total_runs;
   document.getElementById('statAgree').textContent = data.avg_agree_pct + '%';
   document.getElementById('statCompared').textContent = data.total_compared;
-  renderBySource(data.by_source || []);
+  activeSources = data.active_sources || [];
+  var sourceItems = filterCurrentSources(data.by_source || []);
+  updateSourceFilter(sourceItems, activeSources);
+  renderBySource(sourceItems);
 }
 
 async function loadRuns() {
   var src = document.getElementById('filterSource').value;
-  var url = '/api/ai-shadow/runs?limit=40' + (src ? '&teacher_source=' + encodeURIComponent(src) : '');
+  var url = '/api/ai-shadow/runs?limit=40&include_removed=' + (includeRemoved() ? 'true' : 'false') + (src ? '&teacher_source=' + encodeURIComponent(src) : '');
   var res = await fetch(url);
   var data = await res.json();
   var tbody = document.getElementById('runsBody');
   tbody.innerHTML = '';
-  if (!data.runs || !data.runs.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-[#a8abb2]">暂无对比数据 (需 explore 跑完且 migration 005 已执行)</td></tr>';
+  var runs = filterCurrentSources(data.runs || []);
+  if (!runs.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-[#a8abb2]">暂无当前来源对比数据</td></tr>';
     return;
   }
-  data.runs.forEach(function(r) {
+  var sawSelected = false;
+  runs.forEach(function(r) {
+    if (selectedRunId === r.id) sawSelected = true;
     var tr = document.createElement('tr');
     tr.className = 'row-click border-t border-[#44484e]/20' + (selectedRunId === r.id ? ' row-active' : '');
     tr.onclick = function() { selectRun(r.id, r.teacher_source, r.teacher_run_id); };
@@ -300,15 +383,15 @@ async function loadRuns() {
     var trade = (r.tradeable_agree || 0) + ' / T' + (r.teacher_tradeable||0) + ' S' + (r.shadow_tradeable||0);
     tr.innerHTML =
       '<td class="px-3 py-2 mono">' + r.id + '</td>' +
-      '<td class="px-3 py-2">' + r.teacher_source + '</td>' +
+      '<td class="px-3 py-2" title="' + r.teacher_source + '">' + sourceLabel(r.teacher_source) + '</td>' +
       '<td class="px-3 py-2 mono">' + r.teacher_run_id + '</td>' +
       '<td class="px-3 py-2 text-right mono text-primary">' + agree + '</td>' +
       '<td class="px-3 py-2 text-right mono text-[#a8abb2]">' + trade + '</td>' +
       '<td class="px-3 py-2 text-[#a8abb2]">' + (r.created_at || '') + '</td>';
     tbody.appendChild(tr);
   });
-  if (!selectedRunId && data.runs[0]) {
-    selectRun(data.runs[0].id, data.runs[0].teacher_source, data.runs[0].teacher_run_id);
+  if ((!selectedRunId || !sawSelected) && runs[0]) {
+    selectRun(runs[0].id, runs[0].teacher_source, runs[0].teacher_run_id);
   }
 }
 
@@ -343,7 +426,8 @@ async function selectRun(id, source, teacherRunId) {
   });
 }
 
-function loadAll() {
+function loadAll(resetSelection) {
+  if (resetSelection) selectedRunId = null;
   loadSummary();
   loadRuns();
 }
@@ -352,5 +436,3 @@ loadAll();
 setInterval(loadAll, 120000);
 </script>
 </body></html>
-
-

@@ -686,12 +686,25 @@ Output ONLY JSON:
             sl_pct, tp_pct, hold_hours, ctx,
         )
         result = self._call_gemini(prompt, open_mode=True)
+        input_payload = {
+            "symbol": symbol,
+            "side": side,
+            "price": price,
+            "source": source,
+            "catalyst": catalyst,
+            "leverage": leverage,
+            "sl_pct": sl_pct,
+            "tp_pct": tp_pct,
+            "hold_hours": hold_hours,
+            "market_context": ctx,
+        }
         if not result:
             log_advisor_review(
                 "open", "approve", symbol,
                 position_side=side, source=source, entry_price=price,
                 leverage=leverage, reason="Gemini API 异常，默认放行",
-                catalyst=catalyst, conn=conn,
+                catalyst=catalyst, conn=conn, prompt_text=prompt,
+                input_json=input_payload, system_prompt=OPEN_ADVISOR_JSON_SYSTEM_ZH,
             )
             return True, "Gemini API 异常，默认放行"
 
@@ -709,6 +722,10 @@ Output ONLY JSON:
             reason=reason,
             catalyst=catalyst,
             conn=conn,
+            prompt_text=prompt,
+            input_json=input_payload,
+            raw_response=result.get("_raw_response"),
+            system_prompt=result.get("_system_prompt"),
         )
         if not approved:
             logger.info(
@@ -749,6 +766,8 @@ Output ONLY JSON:
                 return {
                     'decision': decision,
                     'reason': str(sig.get('reason', ''))[:500],
+                    '_raw_response': text,
+                    '_system_prompt': OPEN_ADVISOR_JSON_SYSTEM_ZH,
                 }
             action = str(sig.get('action', '')).strip().lower()
             if action not in ('hold', 'observe', 'sell'):
@@ -757,6 +776,8 @@ Output ONLY JSON:
             return {
                 'action': action,
                 'reason': str(sig.get('reason', ''))[:500],
+                '_raw_response': text,
+                '_system_prompt': HOLD_ADVISOR_JSON_SYSTEM_ZH,
             }
         except json.JSONDecodeError:
             logger.warning(f"[Gemini顾问] 返回非 JSON: {text[:200]}")
@@ -1014,6 +1035,16 @@ Output ONLY JSON:
                     hold_hours=hold_h,
                     roi_pct=round(roi, 2),
                     reason=reason,
+                    prompt_text=prompt,
+                    input_json={
+                        "position": pos,
+                        "current_price": current_price,
+                        "market_context": ctx,
+                        "roi_pct": round(roi, 2),
+                        "kline_scores": {"15m": s15, "1h": s1h},
+                    },
+                    raw_response=decision.get("_raw_response"),
+                    system_prompt=decision.get("_system_prompt"),
                 )
 
                 if action == 'sell':
