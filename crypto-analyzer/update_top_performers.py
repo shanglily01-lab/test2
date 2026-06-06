@@ -69,7 +69,7 @@ def compute_rating_level(pnl: float, win_rate_pct: float, total_trades: int) -> 
             parts.append(f"胜率{win_rate_pct:.1f}%")
         return 2, "黑名单2级: " + ", ".join(parts)
 
-    return 0, "未触发限制，默认白名单"
+    return 1, "黑名单1级: 未达白名单条件（需盈利>200U且胜率>55%）"
 
 
 # ── SQL ───────────────────────────────────────────────────
