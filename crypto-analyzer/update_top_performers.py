@@ -153,6 +153,36 @@ def _apply_rating(symbol_stats: list, opt: OptimizationConfig):
     return results
 
 
+def _clean_stale_ratings(cursor, active_symbols: set):
+    """清理交易不足5笔的旧自动评级记录，避免历史垃圾数据残留。"""
+    try:
+        cursor.execute(
+            """
+            SELECT symbol, rating_level, level_change_reason, total_trades
+            FROM trading_symbol_rating
+            """
+        )
+        stale = []
+        for r in cursor.fetchall():
+            sym = r["symbol"]
+            if sym in active_symbols:
+                continue
+            reason = (r.get("level_change_reason") or "")
+            total_trades = int(r.get("total_trades") or 0)
+            if total_trades == 0 and "白名单" in reason:
+                stale.append(sym)
+
+        if stale:
+            placeholders = ",".join("%s" for _ in stale)
+            cursor.execute(
+                f"DELETE FROM trading_symbol_rating WHERE symbol IN ({placeholders})",
+                stale,
+            )
+            logger.info(f"[评级清理] 移除 {len(stale)} 个交易不足5笔的旧自动白名单: {', '.join(stale[:10])}{'...' if len(stale) > 10 else ''}")
+    except Exception as e:
+        logger.warning(f"[评级清理] 出错(不影响主流程): {e}")
+
+
 # ── 主入口 ────────────────────────────────────────────────
 
 def update_top_performing_symbols(
@@ -262,8 +292,6 @@ def update_top_performing_symbols(
             logger.info(f"   平均胜率: {summary['avg_win_rate']:.1f}%")
             logger.info(f"   盈利范围: {summary['min_pnl']:+.2f} ~ {summary['max_pnl']:+.2f} USDT")
 
-        cursor.close()
-
         # ── 评级更新 ──
         if not skip_rating:
             logger.info("=" * 80)
@@ -278,6 +306,12 @@ def update_top_performing_symbols(
                 f"L2={rating_result['detail']['L2']} "
                 f"L3={rating_result['detail']['L3']}"
             )
+
+            # 清理过期自动评级（交易不足5笔的旧白名单记录）
+            processed_symbols = {r["symbol"] for r in all_stats}
+            _clean_stale_ratings(cursor, processed_symbols)
+
+        cursor.close()
 
     except Exception as e:
         logger.error(f"日终维护失败: {e}")
