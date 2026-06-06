@@ -154,6 +154,25 @@
 - **市场预测器** (`PREDICTOR` / `market_predictor.py`) — 旧版 6h 预测神器
 - 历史持仓 `source` 仍可在复盘页显示；不再新开仓
 
+## 交易对评级系统（统一核心机制，2026-06-06）
+
+此处 `update_top_performers.py` 统一管理，全仓累计（account_id=2 模拟仓已平仓，至少5笔）:
+
+| 等级 | 条件 | 保证金倍数 |
+|------|------|----------|
+| L0 (白名单) | 盈利 > 200U **且** 胜率 > 55% | 1.0x |
+| L1 (黑名单1级) | 盈利 > 50U **或** 胜率 > 50% | 0.25x |
+| L2 (黑名单2级) | -100 < 盈利 < 0 **或** 胜率 > 44% | 0.125x |
+| L3 (黑名单3级) | 盈利 < -100U **且** 胜率 < 44% | 0 (禁止) |
+
+优先级判断逻辑: L3(双条件最严重)→L0(双条件最优)→L1→L2→默认0。
+
+TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_performing_symbols` 表。
+
+**日终维护**: `scheduler.py` 每天 02:05 统一执行 TOP50 更新 + 全量评级。
+
+**评级更新入口**: `POST /api/rating/update` / `POST /api/top50/refresh`
+
 ## 实盘控制
 
 - **按 source 白名单**（`app/services/trading_gates.py`）：`gemini_explore`、`deepseek_explore`、`gemini_predict`、`deepseek_predict` 可开/平实盘；其余策略（战术、反转、GPT、smart_trader 等）只写模拟仓

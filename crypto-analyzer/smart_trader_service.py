@@ -22,7 +22,6 @@ from app.services.binance_ws_price import get_ws_price_service, BinanceWSPriceSe
 from app.services.adaptive_optimizer import AdaptiveOptimizer
 from app.services.optimization_config import OptimizationConfig
 from app.utils.futures_symbol import futures_symbol_rating_canonical
-from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.smart_entry_executor import SmartEntryExecutor
@@ -1218,9 +1217,6 @@ class SmartTraderService:
 
         # 优化配置管理器 (支持自我优化的参数配置)
         self.opt_config = OptimizationConfig(self.db_config)
-
-        # 交易对评级管理器 (3级黑名单制度)
-        self.rating_manager = SymbolRatingManager(self.db_config)
 
         # 波动率配置更新器 (15M K线动态止盈)
         self.volatility_updater = VolatilityProfileUpdater(self.db_config)
@@ -3334,12 +3330,12 @@ class SmartTraderService:
                 # 1. 运行原有的自适应优化 (参数调整)
                 self.run_adaptive_optimization()
 
-                # 2. 问题2优化: 更新交易对评级
+                # 2. 更新交易对评级 + TOP50（统一核心机制，update_top_performers 一步完成）
                 logger.info("=" * 80)
-                logger.info("🏆 开始更新交易对评级 (3级黑名单制度)")
+                logger.info("🏆 开始更新 TOP50 + 交易对评级 (统一核心机制)")
                 logger.info("=" * 80)
-                rating_results = self.rating_manager.update_all_symbol_ratings()
-                self.rating_manager.print_rating_report(rating_results)
+                from update_top_performers import update_top_performing_symbols
+                update_top_performing_symbols(account_id=2, top_n=50, skip_rating=False)
 
                 # 3. 问题4优化: 更新波动率配置 (15M K线动态止盈)
                 logger.info("=" * 80)

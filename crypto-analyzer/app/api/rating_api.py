@@ -16,7 +16,6 @@ import math
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from app.services.symbol_rating_manager import SymbolRatingManager
 from app.services.optimization_config import OptimizationConfig
 from app.utils.futures_symbol import futures_symbol_clean, futures_symbol_rating_canonical
 from app.utils.config_loader import load_config
@@ -40,8 +39,8 @@ DB_CONFIG = load_config().get('database', {}).get('mysql', {})
 
 
 class RatingUpdateRequest(BaseModel):
-    """评级更新请求"""
-    observation_days: Optional[int] = None  # 观察天数,默认从配置读取
+    """评级更新请求 — 统一核心机制不再需要 observation_days"""
+    pass  # 全仓累计，无需参数
 
 
 class ManualRatingRequest(BaseModel):
@@ -53,39 +52,28 @@ class ManualRatingRequest(BaseModel):
 
 @router.get("/api/rating/config")
 async def get_rating_config():
-    """获取评级配置"""
+    """获取评级配置（统一核心机制）"""
     try:
         opt_config = OptimizationConfig(DB_CONFIG)
 
-        # 升级配置
-        upgrade_config = opt_config.get_blacklist_upgrade_config()
-
-        # 触发配置
-        trigger_configs = {}
-        for level in [1, 2, 3]:
-            trigger = opt_config.get_blacklist_trigger_config(level)
-            blacklist_cfg = opt_config.get_blacklist_config(level)
-
-            # Level 3的reversal_threshold是inf,需要特殊处理
-            reversal_threshold = blacklist_cfg['reversal_threshold']
-            if level == 3:
-                reversal_threshold = 999999  # 用一个大数字代替inf
-
-            trigger_configs[f"level{level}"] = {
-                "trigger_stop_loss_count": trigger['stop_loss_count'],
-                "trigger_loss_amount": trigger['loss_amount'],
-                "margin_multiplier": safe_float(blacklist_cfg['margin_multiplier']),
-                "reversal_threshold": safe_float(reversal_threshold)
-            }
+        # 评级规则（与 update_top_performers.compute_rating_level 一致）
+        rules = {
+            "min_trades": 5,
+            "白名单 L0": "盈利 > 200U 且 胜率 > 55%（双条件同时满足）",
+            "黑名单1级 L1": "盈利 > 50U 或 胜率 > 50%",
+            "黑名单2级 L2": "-100 < 盈利 < 0 或 胜率 > 44%",
+            "黑名单3级 L3": "盈利 < -100U 且 胜率 < 44%（双条件同时满足）",
+        }
 
         return {
             "success": True,
-            "upgrade_config": {
-                "profit_amount": upgrade_config['profit_amount'],
-                "win_rate": upgrade_config['win_rate'],
-                "observation_days": upgrade_config['observation_days']
+            "rules": rules,
+            "margin_multipliers": {
+                "level0": opt_config.get_blacklist_config(0)["margin_multiplier"],
+                "level1": opt_config.get_blacklist_config(1)["margin_multiplier"],
+                "level2": opt_config.get_blacklist_config(2)["margin_multiplier"],
+                "level3": 0.0,
             },
-            "trigger_configs": trigger_configs
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -150,62 +138,13 @@ async def get_current_ratings(trading_type: Optional[str] = None):
 
 @router.post("/api/rating/update")
 async def trigger_rating_update(request: RatingUpdateRequest):
-    """手动触发评级更新"""
+    """手动触发评级更新（全仓累计统一核心机制）"""
+    import asyncio
     try:
-        rating_manager = SymbolRatingManager(DB_CONFIG)
-
-        # 执行评级更新
-        results = rating_manager.update_all_symbol_ratings(
-            observation_days=request.observation_days
-        )
-
-        # 格式化结果
-        formatted_results = {
-            "total_symbols": results['total_symbols'],
-            "upgraded": [
-                {
-                    "symbol": item['symbol'],
-                    "old_level": item['old_level'],
-                    "new_level": item['new_level'],
-                    "reason": item['reason'],
-                    "stats": item['stats']
-                }
-                for item in results['upgraded']
-            ],
-            "downgraded": [
-                {
-                    "symbol": item['symbol'],
-                    "old_level": item['old_level'],
-                    "new_level": item['new_level'],
-                    "reason": item['reason'],
-                    "stats": item['stats']
-                }
-                for item in results['downgraded']
-            ],
-            "unchanged": [
-                {
-                    "symbol": item['symbol'],
-                    "level": item['level'],
-                    "reason": item['reason']
-                }
-                for item in results['unchanged']
-            ],
-            "new_rated": [
-                {
-                    "symbol": item['symbol'],
-                    "new_level": item['new_level'],
-                    "reason": item['reason'],
-                    "stats": item['stats']
-                }
-                for item in results['new_rated']
-            ]
-        }
-
-        return {
-            "success": True,
-            "message": "评级更新完成",
-            "results": formatted_results
-        }
+        from update_top_performers import update_top_performing_symbols
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, update_top_performing_symbols, 2, 50, False)
+        return {"success": True, "message": "评级更新完成"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -586,49 +525,77 @@ async def get_top50():
 
 @router.post("/api/top50/refresh")
 async def refresh_top50():
-    """手动触发盈亏日终：重算 Top50 榜单 + 白名单/L3 评级联动"""
+    """手动触发日终维护：重算 Top50 榜单 + 统一评级"""
     import asyncio
     try:
         from update_top_performers import update_top_performing_symbols
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, update_top_performing_symbols, 2, 50)
-        return {'success': True, 'message': 'Top50 与白名单评级已更新'}
+        await loop.run_in_executor(None, update_top_performing_symbols, 2, 50, False)
+        return {'success': True, 'message': 'Top50 与统一评级已更新'}
     except Exception as e:
-        logger.error(f"手动盈亏日终失败: {e}")
+        logger.error(f"手动日终维护失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/api/rating/symbol/{symbol}")
-async def get_symbol_rating(symbol: str, days: int = 7):
-    """获取单个交易对的评级和表现分析"""
+async def get_symbol_rating(symbol: str):
+    """获取单个交易对的评级和全仓累计表现分析"""
     try:
-        rating_manager = SymbolRatingManager(DB_CONFIG)
-        opt_config = OptimizationConfig(DB_CONFIG)
+        from update_top_performers import compute_rating_level, MIN_TRADES
+        import pymysql
 
-        # 获取当前评级
+        opt_config = OptimizationConfig(DB_CONFIG)
         current_rating = opt_config.get_symbol_rating(symbol)
 
-        # 分析表现
-        stats = rating_manager.analyze_symbol_performance(symbol, days)
+        conn = pymysql.connect(**DB_CONFIG, cursorclass=pymysql.cursors.DictCursor)
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT
+                COUNT(*) AS total_trades,
+                COALESCE(SUM(realized_pnl), 0) AS net_pnl,
+                CASE
+                    WHEN COUNT(*) > 0
+                    THEN SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) * 100.0 / COUNT(*)
+                    ELSE 0
+                END AS win_rate_pct
+            FROM futures_positions
+            WHERE symbol = %s
+              AND account_id = 2
+              AND status = 'closed'
+              AND realized_pnl IS NOT NULL
+            """,
+            (futures_symbol_rating_canonical(symbol),),
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
 
-        # 计算潜在新评级
-        current_level = current_rating['rating_level'] if current_rating else 0
-        potential_level, reason = rating_manager.calculate_new_rating_level(stats, current_level)
+        total_trades = int(row["total_trades"] or 0) if row else 0
+        net_pnl = float(row["net_pnl"] or 0) if row else 0
+        win_rate_pct = float(row["win_rate_pct"] or 0) if row else 0
+
+        current_level = current_rating["rating_level"] if current_rating else 0
+        potential_level, reason = compute_rating_level(net_pnl, win_rate_pct, total_trades)
 
         return {
             "success": True,
             "symbol": symbol,
             "current_rating": {
                 "level": current_level,
-                "reason": current_rating.get('level_change_reason', '无评级') if current_rating else "无评级",
-                "updated_at": current_rating['updated_at'].isoformat() if current_rating and current_rating.get('updated_at') else None
+                "reason": current_rating.get("level_change_reason", "无评级") if current_rating else "无评级",
+                "updated_at": current_rating["updated_at"].isoformat() if current_rating and current_rating.get("updated_at") else None,
             },
-            "performance_stats": stats,
+            "performance_stats": {
+                "total_trades": total_trades,
+                "net_pnl": net_pnl,
+                "win_rate_pct": win_rate_pct,
+            },
             "potential_change": {
                 "would_change": potential_level != current_level,
                 "new_level": potential_level,
-                "reason": reason
-            }
+                "reason": reason,
+            },
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

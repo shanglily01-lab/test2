@@ -415,7 +415,7 @@ async def lifespan(app: FastAPI):
             live_order_monitor = None
 
     # 信号分析后台服务已从 main 移除 (2026-05-19)
-        # 改为每天 02:00 本地调度 update_top_performing_symbols 更新 TOP 100, 见下方 schedule.every().day.at("02:00")
+        # 日终维护已移至 scheduler.py (每天 02:05 TOP50 + 统一评级)
     signal_analysis_service = None
 
     # 启动每日优化服务（每天凌晨1点执行）
@@ -585,22 +585,8 @@ async def lifespan(app: FastAPI):
 
         schedule.every().day.at("00:00").do(run_daily_review)
 
-        # 盈亏日终：Top50 + 评级 (每天 02:00) — update_top_performers.py
-        # 白名单 L0: 盈利>200U 或 胜率>55% | L3: 亏损>200U 且 胜率<40%
-        # live_top50_required=1 时实盘同步须在 top_performing_symbols 内 (见 trading_gates.py)
-        def run_top50_update():
-            """每天 update_top_performing_symbols：Top50 榜 + 白名单/L3 日终规则."""
-            try:
-                logger.info("[盈亏日终] 开始更新 Top50 盈利榜 + 评级联动...")
-                from update_top_performers import update_top_performing_symbols
-                update_top_performing_symbols(account_id=2, top_n=50)
-                logger.info("[盈亏日终] 完成")
-            except Exception as e:
-                logger.error(f"[盈亏日终] 更新失败: {type(e).__name__}: {e}")
-                import traceback
-                traceback.print_exc()
-        schedule.every().day.at("02:00").do(run_top50_update)
-        logger.info("[OK] TOP 100 更新任务已注册 (每天 02:00 本地)")
+        # 盈亏日终任务已移至 scheduler.py (每天 02:05 统一执行 TOP50 + 评级)
+        # 本文件不再重复注册，避免双重触发
 
         # ── AI 任务已移至 scheduler.py（统一调度引擎），每任务用独立后台线程运行 ──
         # 不在 main.py 重复注册，避免双重触发 + 阻塞 schedule_runner 主循环
