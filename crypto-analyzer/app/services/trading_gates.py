@@ -143,25 +143,17 @@ def load_blacklist_level3_symbols(conn=None) -> Set[str]:
         return set()
 
 
-def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
+def get_symbol_rating_info(
+    symbol: str, cursor=None,
+) -> Tuple[Optional[int], bool]:
     """
-    检查 symbol 是否满足实盘 TOP50/白名单闸门 (不含 live_trading_enabled 总开关).
+    统一查询 symbol 的评级等级与 TOP50 状态.
 
-    TOP50 开关与白名单开关为「或」关系：
-    - TOP50 开 → TOP50 内可同步实盘
-    - 白名单开 → rating_level=0 可同步实盘
-    - 两者都关 → 一律不同步实盘
-
-    Returns: (allowed, reject_reason)
+    Returns:
+        (rating_level, in_top50):
+          rating_level: None=无评级(未在评级表中), 0/1/2/3=评级等级
+          in_top50: 是否在 top_performing_symbols 中
     """
-    top50_gate = is_live_top50_required()
-    whitelist_gate = is_live_whitelist_enabled()
-
-    if not top50_gate and not whitelist_gate:
-        return False, '实盘TOP50与白名单闸门均未开启'
-
-    in_top50 = False
-    is_whitelist = False
     clean = futures_symbol_clean(symbol)
     try:
         if cursor is not None:
@@ -194,21 +186,95 @@ def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
         if row:
             in_top50 = (row.get('in_top100') if isinstance(row, dict) else row[0]) == 1
             rl = row.get('rating_level') if isinstance(row, dict) else row[1]
-            is_whitelist = rl is not None and int(rl) == 0
+            return (int(rl) if rl is not None else None, in_top50)
     except Exception as e:
-        logger.warning(f"[trading_gates] TOP50/白名单查询失败 {symbol}: {e}, 默认拒绝实盘")
-        return False, 'TOP50/白名单查询失败'
+        logger.warning(f"[trading_gates] 评级查询失败 {symbol}: {e}")
+    return (None, False)
 
+
+def get_live_margin_ratio(symbol: str, cursor=None) -> float:
+    """
+    根据 symbol 评级等级获取实盘保证金比例.
+
+    规则 (2026-06-06):
+      - L0 (白名单) 或 TOP50 → 1.0 (100%)
+      - 无评级 (未在评级表中) → 0.8 (80%)
+      - L1 (黑名单1级) → 0.5 (50%)
+      - L2 (黑名单2级) → 0.0 (禁止实盘)
+      - L3 (黑名单3级) → 0.0 (禁止实盘)
+
+    Args:
+        symbol: 交易对
+        cursor: 可选数据库游标
+
+    Returns:
+        float: 保证金比例 (0.0 = 禁止实盘)
+    """
+    rating_level, in_top50 = get_symbol_rating_info(symbol, cursor)
+
+    if rating_level is not None and rating_level >= 2:
+        return 0.0
+
+    if in_top50:
+        return 1.0
+    if rating_level == 0:
+        return 1.0
+    if rating_level == 1:
+        return 0.5
+    # 无评级 (None)
+    return 0.8
+
+
+def live_margin_ratio_str(ratio: float) -> str:
+    """保证金比例的友好显示."""
+    if ratio >= 1.0:
+        return "100%"
+    if ratio >= 0.8:
+        return "80%"
+    if ratio >= 0.5:
+        return "50%"
+    return "禁止"
+
+
+def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
+    """
+    检查 symbol 是否允许实盘开仓 (不含 live_trading_enabled 总开关).
+
+    新规则 (2026-06-06):
+      - L0 (白名单), TOP50, L1 (黑名单1级), 无评级 → 允许 (按不同保证金比例)
+      - L2 (黑名单2级), L3 (黑名单3级) → 拒绝
+
+    保留 TOP50/白名单 开关作为主闸门:
+      - 两者都关 → 一律拒绝
+
+    Returns: (allowed, reject_reason)
+    """
+    top50_gate = is_live_top50_required()
+    whitelist_gate = is_live_whitelist_enabled()
+
+    if not top50_gate and not whitelist_gate:
+        return False, '实盘TOP50与白名单闸门均未开启'
+
+    rating_level, in_top50 = get_symbol_rating_info(symbol, cursor)
+
+    # L2 / L3 直接拒绝
+    if rating_level is not None and rating_level >= 2:
+        return False, f'黑名单{rating_level}级禁止实盘'
+
+    # TOP50 或 L0 白名单
     if top50_gate and in_top50:
         return True, ''
-    if whitelist_gate and is_whitelist:
+    if whitelist_gate and rating_level == 0:
         return True, ''
 
-    if top50_gate and whitelist_gate:
-        return False, '不在 TOP 50 也非白名单'
-    if top50_gate:
-        return False, '不在 TOP 50'
-    return False, '不在白名单'
+    # L1 或 无评级 — 允许 (受开关控制: 至少一个闸门开启)
+    if top50_gate or whitelist_gate:
+        ratio = get_live_margin_ratio(symbol, cursor)
+        if ratio > 0:
+            pct = live_margin_ratio_str(ratio)
+            return True, f'允许实盘(保证金{pct})'
+
+    return False, '不满足任何实盘条件'
 
 
 def has_open_futures_position(conn, source: str, symbol: str, account_id: Optional[int] = None) -> bool:

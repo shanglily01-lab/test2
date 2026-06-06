@@ -409,10 +409,15 @@ class SmartEntryExecutor:
             if not _allowed:
                 logger.info(f"[同步实盘] {symbol} {_reason}，跳过实盘同步")
             else:
-                    try:
-                        from app.services.api_key_service import APIKeyService
-                        from app.trading.binance_futures_engine import BinanceFuturesEngine
-                        from decimal import Decimal as _D
+                try:
+                    from app.services.api_key_service import APIKeyService
+                    from app.trading.binance_futures_engine import BinanceFuturesEngine
+                    from decimal import Decimal as _D
+                    from app.services.trading_gates import get_live_margin_ratio
+                    _margin_ratio = get_live_margin_ratio(symbol)
+                    if _margin_ratio <= 0:
+                        logger.info(f"[同步实盘] {symbol} 保证金比例={_margin_ratio}, 跳过实盘同步")
+                    else:
                         svc = APIKeyService(self.db_config)
                         active_keys = svc.get_all_active_api_keys('binance')
                         if not active_keys:
@@ -425,7 +430,7 @@ class SmartEntryExecutor:
                                     logger.warning(f"[同步实盘] 账号{ak['account_name']} 获取余额失败，跳过")
                                     continue
                                 _available = float(_bal.get('available', 0))
-                                _max_margin = float(ak['max_position_value'])
+                                _max_margin = float(ak['max_position_value']) * _margin_ratio
                                 _lev = int(ak['max_leverage'])
                                 _margin = min(_max_margin, _available * 0.9)
                                 if _margin < 5:
@@ -466,8 +471,8 @@ class SmartEntryExecutor:
                                     logger.error(f"[同步实盘] ❌ {symbol} {direction} 账号[{ak['account_name']}] 失败: {_result.get('error', _result.get('message', ''))}")
                             except Exception as _ex:
                                 logger.error(f"[同步实盘] ❌ 账号[{ak.get('account_name','')}] 异常: {_ex}")
-                    except Exception as sync_ex:
-                        logger.error(f"[同步实盘] 整体异常: {sync_ex}")
+                except Exception as sync_ex:
+                    logger.error(f"[同步实盘] 整体异常: {sync_ex}")
             # ========== 同步实盘开仓结束 ==========
 
             # 启动智能平仓监控

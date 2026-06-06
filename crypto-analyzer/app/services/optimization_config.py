@@ -232,17 +232,17 @@ class OptimizationConfig:
             }
         elif level == 1:
             return {
-                'margin_multiplier': self.get_param('blacklist_level1_margin_multiplier', 0.25),
+                'margin_multiplier': self.get_param('blacklist_level1_margin_multiplier', 0.5),
                 'reversal_threshold': self.get_param('blacklist_level1_reversal_threshold', 30)
             }
         elif level == 2:
             return {
-                'margin_multiplier': self.get_param('blacklist_level2_margin_multiplier', 0.125),
+                'margin_multiplier': self.get_param('blacklist_level2_margin_multiplier', 0.0),
                 'reversal_threshold': self.get_param('blacklist_level2_reversal_threshold', 30)
             }
         else:  # level 3
             return {
-                'margin_multiplier': 0,  # 永久禁止
+                'margin_multiplier': 0.0,  # 永久禁止
                 'reversal_threshold': float('inf')
             }
 
@@ -531,18 +531,18 @@ class OptimizationConfig:
             end_date = datetime.now().date()
             start_date = end_date - timedelta(days=observation_days)
 
-            # 计算margin_multiplier和score_bonus
+            # 计算margin_multiplier和score_bonus (2026-06-06 新规)
             if new_level == 3:
-                margin_multiplier = 0.0
+                margin_multiplier = 0.0   # L3 禁止实盘
                 score_bonus = 999
             elif new_level == 2:
-                margin_multiplier = 0.125  # 50/400
+                margin_multiplier = 0.0   # L2 禁止实盘
                 score_bonus = 10
             elif new_level == 1:
-                margin_multiplier = 0.25  # 100/400
+                margin_multiplier = 0.5   # L1 50% 保证金
                 score_bonus = 5
             else:
-                margin_multiplier = 1.0
+                margin_multiplier = 1.0   # L0/白名单/默认 100%
                 score_bonus = 0
 
             # 更新或插入

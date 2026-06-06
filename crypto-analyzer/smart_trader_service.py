@@ -1639,24 +1639,13 @@ class SmartTraderService:
 
     def _get_margin_per_batch(self, symbol: str) -> float:
         """
-        根据评级等级获取每批固定保证金
-
-        Args:
-            symbol: 交易对
+        模拟盘: 所有交易对统一 500U 保证金, 5X 杠杆.
 
         Returns:
             每批保证金金额（USDT）
         """
-        rating_level = self.opt_config.get_symbol_rating_level(symbol)
-
-        if rating_level == 0:
-            return 400.0  # 白名单/默认
-        elif rating_level == 1:
-            return 100.0  # 黑名单1级
-        elif rating_level == 2:
-            return 50.0   # 黑名单2级
-        else:
-            return 0.0    # 黑名单3级 - 禁止交易
+        _ = symbol  # 所有交易对统一
+        return 500.0
 
     def validate_signal_timeframe(self, signal_components: dict, side: str, symbol: str) -> tuple:
         """

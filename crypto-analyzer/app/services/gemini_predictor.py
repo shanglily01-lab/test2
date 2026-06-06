@@ -558,11 +558,27 @@ def _sync_to_live(
         return
 
     # 3. 对每个账号下单
-    db_config = _get_local_db_config()
+    try:
+        conn = _connect()
+        with conn.cursor() as cur:
+            from app.services.trading_gates import get_live_margin_ratio
+            margin_ratio = get_live_margin_ratio(symbol, cursor=cur)
+        conn.close()
+    except Exception:
+        margin_ratio = 1.0
+
+    if margin_ratio <= 0:
+        logger.info(f"[Gemini预测] {symbol} 保证金比例={margin_ratio}, 跳过实盘同步")
+        return
+
     for ak in active_keys:
         try:
-            act_margin = float(ak.get('max_position_value') or PREDICT_MARGIN_USD)
+            base_margin = float(ak.get('max_position_value') or PREDICT_MARGIN_USD)
+            act_margin = base_margin * margin_ratio
             act_lev = int(ak.get('max_leverage') or PREDICT_LEVERAGE)
+            if act_margin < 5:
+                logger.info(f"[Gemini预测] {symbol} 账号{ak.get('account_name','')} margin={act_margin:.1f}U < 5, 跳过")
+                continue
             notional = act_margin * act_lev
             live_qty = Decimal(str(round(notional / entry_price, 6)))
             if live_qty <= 0:
