@@ -174,10 +174,18 @@
 </div>
 </div>
 <!-- Quick Stats -->
-<div class="grid grid-cols-3 gap-4">
+<div class="grid grid-cols-2 2xl:grid-cols-5 gap-4">
 <div class="bg-surface-container rounded-xl p-4 text-center border border-white/5">
 <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-bold">持仓数</p>
 <p class="text-xl font-bold text-gold font-mono tracking-tight" id="positions-count">--</p>
+</div>
+<div class="bg-surface-container rounded-xl p-4 text-center border border-white/5">
+<p class="text-[10px] text-on-surface-variant mb-1 uppercase font-bold">LONG</p>
+<p class="text-xl font-bold text-[#49f4c8] font-mono tracking-tight" id="positions-long-count">--</p>
+</div>
+<div class="bg-surface-container rounded-xl p-4 text-center border border-white/5">
+<p class="text-[10px] text-on-surface-variant mb-1 uppercase font-bold">SHORT</p>
+<p class="text-xl font-bold text-[#ff716c] font-mono tracking-tight" id="positions-short-count">--</p>
 </div>
 <div class="bg-surface-container rounded-xl p-4 text-center border border-white/5">
 <p class="text-[10px] text-on-surface-variant mb-1 uppercase font-bold">今日盈亏</p>
@@ -222,10 +230,12 @@
     <div class="flex items-center gap-2">
       <span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">多头</span>
       <span id="pos-long-upnl" class="font-mono text-sm text-on-surface-variant">--</span>
+      <span class="text-[10px] font-mono text-[#49f4c8]">(<span id="pos-long-count">--</span>)</span>
     </div>
     <div class="flex items-center gap-2">
       <span class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">空头</span>
       <span id="pos-short-upnl" class="font-mono text-sm text-on-surface-variant">--</span>
+      <span class="text-[10px] font-mono text-[#ff716c]">(<span id="pos-short-count">--</span>)</span>
     </div>
   </div>
   <button onclick="closeAllPositions()" class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#ff716c]/10 border border-[#ff716c]/30 text-[#ff716c] text-xs font-bold hover:bg-[#ff716c]/20 transition-colors active:scale-95">
@@ -631,13 +641,24 @@ function _rowKey(pos) {
     return (pos.symbol || '') + '|' + (pos.side || pos.position_side || '');
 }
 
+function _positionSide(pos) {
+    return String(pos.side || pos.position_side || '').toUpperCase();
+}
+
 function _updatePnlHeader(list) {
     var totalUpnl = 0, longUpnl = 0, shortUpnl = 0;
+    var longCount = 0, shortCount = 0;
     list.forEach(function(p) {
         var v = parseFloat(p.unrealized_pnl || 0);
+        var side = _positionSide(p);
         totalUpnl += v;
-        if ((p.side || p.position_side || '').toUpperCase() === 'LONG') longUpnl += v;
-        else shortUpnl += v;
+        if (side === 'LONG' || side === 'BUY') {
+            longUpnl += v;
+            longCount += 1;
+        } else if (side === 'SHORT' || side === 'SELL') {
+            shortUpnl += v;
+            shortCount += 1;
+        }
     });
     var set = function(id, val) {
         var el = document.getElementById(id);
@@ -645,9 +666,17 @@ function _updatePnlHeader(list) {
         el.textContent = (val >= 0 ? '+' : '') + val.toFixed(2) + ' U';
         el.className = 'font-mono text-sm font-bold ' + pnlClass(val);
     };
+    var setCount = function(id, val) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = val;
+    };
     set('pos-total-upnl', totalUpnl);
     set('pos-long-upnl', longUpnl);
     set('pos-short-upnl', shortUpnl);
+    setCount('positions-long-count', longCount);
+    setCount('positions-short-count', shortCount);
+    setCount('pos-long-count', longCount);
+    setCount('pos-short-count', shortCount);
 }
 
 function _buildRow(pos) {

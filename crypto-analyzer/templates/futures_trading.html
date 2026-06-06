@@ -133,10 +133,18 @@
 </div>
 </div>
 <!-- Stats Row -->
-<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
 <div class="bg-surface-container p-5 rounded-xl border-l-2 border-primary/30">
 <p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">持仓数</p>
 <p id="stat-position-count" class="text-2xl font-headline font-bold monospace">--</p>
+</div>
+<div class="bg-surface-container p-5 rounded-xl border-l-2 border-primary/30">
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">LONG</p>
+<p id="stat-long-count" class="text-2xl font-headline font-bold monospace text-primary">--</p>
+</div>
+<div class="bg-surface-container p-5 rounded-xl border-l-2 border-error/30">
+<p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">SHORT</p>
+<p id="stat-short-count" class="text-2xl font-headline font-bold monospace text-error">--</p>
 </div>
 <div class="bg-surface-container p-5 rounded-xl">
 <p class="text-xs text-on-surface-variant uppercase tracking-widest mb-2">账户余额</p>
@@ -171,6 +179,8 @@
 <span class="w-1 h-4 bg-primary rounded-full"></span>
   当前持仓
   <span id="pos-count-badge" class="text-[10px] font-mono text-on-surface-variant ml-1">-- 笔</span>
+  <span class="text-[10px] font-mono text-primary ml-2">L <span id="pos-long-count">--</span></span>
+  <span class="text-[10px] font-mono text-error">S <span id="pos-short-count">--</span></span>
 </h4>
 <div class="flex flex-wrap items-center gap-2 flex-1 justify-end min-w-[280px]">
   <input id="pos-search-input" type="text" placeholder="交易对 / 来源 / 信号..."
@@ -378,12 +388,34 @@ function resetPositionSearch() {
     }
 }
 
+function countPositionSides(positions) {
+    return positions.reduce(function(acc, pos) {
+        var side = String(pos.position_side || pos.side || '').toUpperCase();
+        if (side === 'LONG' || side === 'BUY') acc.long += 1;
+        else if (side === 'SHORT' || side === 'SELL') acc.short += 1;
+        return acc;
+    }, {long: 0, short: 0});
+}
+
+function updatePositionSideCounts(positions) {
+    var counts = countPositionSides(Array.isArray(positions) ? positions : []);
+    var set = function(id, value) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = value;
+    };
+    set('stat-long-count', counts.long);
+    set('stat-short-count', counts.short);
+    set('pos-long-count', counts.long);
+    set('pos-short-count', counts.short);
+}
+
 async function renderPositions(allPositions) {
     var tbody = document.getElementById('positions-tbody');
     if (!tbody) return null;
 
     _allPositions = allPositions;
     _lastPositions = allPositions;
+    updatePositionSideCounts(allPositions);
     var positions = filterPositions(allPositions);
     var filterEl = document.getElementById('pos-filter-count');
     var hasFilter = ((document.getElementById('pos-search-input') || {}).value || '').trim()
