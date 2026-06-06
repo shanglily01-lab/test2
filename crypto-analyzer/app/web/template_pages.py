@@ -1,6 +1,7 @@
 """Jinja2 rendering for desktop HTML pages with shared sidebar partial."""
 
 from pathlib import Path
+import inspect
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse
@@ -43,7 +44,10 @@ def render_desktop_page(request: Request, template_name: str) -> HTMLResponse:
     path = project_root / "templates" / template_name
     if not path.exists():
         raise FileNotFoundError(template_name)
-    return templates.TemplateResponse(request, template_name, {"request": request})
+    params = list(inspect.signature(templates.TemplateResponse).parameters)
+    if params and params[0] == "request":
+        return templates.TemplateResponse(request, template_name, {"request": request})
+    return templates.TemplateResponse(template_name, {"request": request})
 
 
 def render_desktop_html(request: Request, template_name: str) -> str:
