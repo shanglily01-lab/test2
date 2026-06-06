@@ -898,7 +898,7 @@ async function closePosition(symbol, side) {
     var confirmed = await showConfirm('确认平仓 ' + symbol + ' ' + side + '？这将执行实盘平仓操作。', {title: '确认平仓', confirmText: '确认平仓', type: 'warning'});
     if (!confirmed) return;
     try {
-        var body = { symbol: symbol, side: side };
+        var body = { symbol: symbol, position_side: side };
         if (_activeApiKeyId > 0) body.api_key_id = _activeApiKeyId;
         var resp = await apiFetch(API_BASE + '/close-by-symbol', {
             method: 'POST',
