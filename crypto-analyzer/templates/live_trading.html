@@ -240,6 +240,8 @@
 <th class="py-5 px-8 font-bold">交易对</th>
 <th class="py-5 px-4 font-bold">方向</th>
 <th class="py-5 px-4 font-bold text-right">数量</th>
+<th class="py-5 px-4 font-bold text-right">保证金</th>
+<th class="py-5 px-4 font-bold text-right">杠杆</th>
 <th class="py-5 px-4 font-bold text-right">开仓价</th>
 <th class="py-5 px-4 font-bold text-right">当前价</th>
 <th class="py-5 px-4 font-bold text-right">浮盈</th>
@@ -247,7 +249,7 @@
 </tr>
 </thead>
 <tbody id="positions-tbody" class="divide-y divide-white/5">
-<tr><td colspan="7" class="py-12 text-center text-on-surface-variant text-sm">加载中...</td></tr>
+<tr><td colspan="9" class="py-12 text-center text-on-surface-variant text-sm">加载中...</td></tr>
 </tbody>
 </table>
 </div>
@@ -653,11 +655,15 @@ function _buildRow(pos) {
     var pnl  = parseFloat(pos.unrealized_pnl || 0);
     var pct  = parseFloat(pos.percentage || 0);
     var key  = _rowKey(pos);
+    var leverage = _positionLeverage(pos);
+    var margin = _positionMargin(pos, leverage);
     return '<tr data-key="' + key + '" class="hover:bg-white/[0.02] transition-colors group">' +
         '<td class="py-4 px-8"><div class="flex items-center gap-3">' + symbolIcon(pos.symbol) +
         '<div><p class="text-sm font-bold font-headline">' + pos.symbol + '</p></div></div></td>' +
         '<td class="py-4 px-4">' + sideHtml(side) + '</td>' +
         '<td class="py-4 px-4 font-mono text-sm text-right">' + fmtNumber(pos.size || pos.quantity, 4) + '</td>' +
+        '<td data-cell="margin" class="py-4 px-4 font-mono text-sm text-right text-on-surface-variant">' + fmtMargin(margin) + '</td>' +
+        '<td data-cell="leverage" class="py-4 px-4 font-mono text-sm text-right text-on-surface-variant">' + fmtLeverage(leverage) + '</td>' +
         '<td class="py-4 px-4 font-mono text-sm text-right text-on-surface-variant">' + fmtPrice(pos.entry_price) + '</td>' +
         '<td data-cell="price" class="py-4 px-4 font-mono text-sm text-right">' + fmtPrice(pos.mark_price) + '</td>' +
         '<td data-cell="pnl" class="py-4 px-4 text-right">' +
@@ -670,13 +676,36 @@ function _buildRow(pos) {
         '</td></tr>';
 }
 
+function _positionLeverage(pos) {
+    var leverage = parseFloat(pos.leverage || pos.leverage_level || 0);
+    return Number.isFinite(leverage) && leverage > 0 ? leverage : 0;
+}
+
+function _positionMargin(pos, leverage) {
+    var margin = parseFloat(pos.margin || pos.initial_margin || pos.initialMargin || pos.position_initial_margin || 0);
+    if (Number.isFinite(margin) && margin > 0) return margin;
+
+    var qty = Math.abs(parseFloat(pos.size || pos.quantity || 0));
+    var price = parseFloat(pos.mark_price || pos.entry_price || 0);
+    if (leverage > 0 && qty > 0 && price > 0) return qty * price / leverage;
+    return 0;
+}
+
+function fmtMargin(value) {
+    return value > 0 ? fmtNumber(value, 2) + ' U' : '--';
+}
+
+function fmtLeverage(value) {
+    return value > 0 ? fmtNumber(value, 0) + 'x' : '--';
+}
+
 async function loadPositions() {
     var tbody = document.getElementById('positions-tbody');
     if (!tbody) return;
     try {
         var resp = await apiFetch(apiUrl('/positions'));
         if (!resp.ok) {
-            tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-[#ff716c] text-sm">加载失败 (HTTP ' + resp.status + ')</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="py-12 text-center text-[#ff716c] text-sm">加载失败 (HTTP ' + resp.status + ')</td></tr>';
             return;
         }
         var data = await resp.json();
@@ -692,7 +721,7 @@ async function loadPositions() {
 
         if (list.length === 0) {
             _positionsCache = [];
-            tbody.innerHTML = '<tr><td colspan="7" class="py-16 text-center text-on-surface-variant text-sm">暂无持仓</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="py-16 text-center text-on-surface-variant text-sm">暂无持仓</td></tr>';
             return;
         }
 
@@ -702,15 +731,21 @@ async function loadPositions() {
         if (newKeys !== oldKeys) {
             tbody.innerHTML = list.map(_buildRow).join('');
         } else {
-            // In-place update: only price + pnl cells
+            // In-place update: keep row order stable while refreshing live fields.
             list.forEach(function(pos) {
                 var key = _rowKey(pos);
                 var row = tbody.querySelector('tr[data-key="' + key + '"]');
                 if (!row) return;
+                var marginCell = row.querySelector('[data-cell="margin"]');
+                var leverageCell = row.querySelector('[data-cell="leverage"]');
                 var priceCell = row.querySelector('[data-cell="price"]');
                 var pnlCell   = row.querySelector('[data-cell="pnl"]');
+                var leverage = _positionLeverage(pos);
+                var margin = _positionMargin(pos, leverage);
                 var pnl = parseFloat(pos.unrealized_pnl || 0);
                 var pct = parseFloat(pos.percentage || 0);
+                if (marginCell) marginCell.textContent = fmtMargin(margin);
+                if (leverageCell) leverageCell.textContent = fmtLeverage(leverage);
                 if (priceCell) priceCell.textContent = fmtPrice(pos.mark_price);
                 if (pnlCell) pnlCell.innerHTML =
                     '<p class="text-sm font-bold font-mono ' + pnlClass(pnl) + '">' + fmtPnl(pnl) + '</p>' +
@@ -720,7 +755,7 @@ async function loadPositions() {
         _positionsCache = list;
     } catch (e) {
         console.error('loadPositions failed:', e);
-        tbody.innerHTML = '<tr><td colspan="7" class="py-12 text-center text-[#ff716c] text-sm">加载失败: ' + e.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="py-12 text-center text-[#ff716c] text-sm">加载失败: ' + e.message + '</td></tr>';
     }
 }
 
