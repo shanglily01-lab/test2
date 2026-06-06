@@ -1309,7 +1309,22 @@ class FuturesTradingEngine:
                                                 f"[同步实盘] ✅ {key_info.get('account_name', acc_id)} "
                                                 f"{symbol} {position_side} 平仓成功"
                                             )
-                                            # 实盘记录由定时任务每15M从币安全量同步
+                                            upd_cur = connection.cursor()
+                                            upd_cur.execute(
+                                                "UPDATE live_futures_positions "
+                                                "SET status='CLOSED', close_time=%s, close_price=%s, "
+                                                "realized_pnl=%s, close_reason=%s, updated_at=%s "
+                                                "WHERE id=%s",
+                                                (
+                                                    datetime.now(),
+                                                    live_result.get('close_price'),
+                                                    live_result.get('realized_pnl'),
+                                                    f'paper_sync_{reason}',
+                                                    datetime.now(),
+                                                    row['id'],
+                                                ),
+                                            )
+                                            upd_cur.close()
                                         else:
                                             err = live_result.get('error', '未知错误')
                                             logger.error(

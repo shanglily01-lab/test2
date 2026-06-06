@@ -213,7 +213,6 @@ class PositionSLTPMonitor:
                 age_s = 0.0
                 open_time = pos.get("open_time")
                 if open_time:
-                    import datetime as _dt
                     if isinstance(open_time, _dt.datetime):
                         age_s = time.time() - open_time.timestamp()
                         in_tp_grace = age_s < _AI_TP_GRACE_MIN * 60
@@ -243,7 +242,6 @@ class PositionSLTPMonitor:
                 open_time = pos.get("open_time")
                 in_grace = False
                 if open_time:
-                    import datetime as _dt
                     if isinstance(open_time, _dt.datetime):
                         age_s = time.time() - open_time.timestamp()
                         in_grace = age_s < ENTRY_GRACE_MIN * 60
