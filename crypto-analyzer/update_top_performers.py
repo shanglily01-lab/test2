@@ -115,7 +115,11 @@ def _fetch_all_symbol_stats(cursor, account_id: int, min_trades: int = MIN_TRADE
 
 
 def _apply_rating(symbol_stats: list, opt: OptimizationConfig):
-    """遍历所有有交易过的币，按全仓累计规则更新评级。"""
+    """遍历所有有交易过的币，按全仓累计规则更新评级。
+
+    每次运行时都强制刷新所有币的评级字段（等级、原因、胜率、交易数等），
+    确保白名单能根据最新数据自动更新和剔除。
+    """
     results = {
         "updated": 0,
         "detail": {"L0": 0, "L1": 0, "L2": 0, "L3": 0},
@@ -134,21 +138,19 @@ def _apply_rating(symbol_stats: list, opt: OptimizationConfig):
         cur = opt.get_symbol_rating(symbol)
         old_level = cur["rating_level"] if cur else 0
 
+        opt.update_symbol_rating(
+            symbol=futures_symbol_rating_canonical(symbol),
+            new_level=new_level,
+            reason=reason,
+            total_loss_amount=gross_loss,
+            total_profit_amount=gross_profit,
+            win_rate=wr / 100.0,
+            total_trades=trades,
+        )
         if new_level != old_level:
-            opt.update_symbol_rating(
-                symbol=futures_symbol_rating_canonical(symbol),
-                new_level=new_level,
-                reason=reason,
-                total_loss_amount=gross_loss,
-                total_profit_amount=gross_profit,
-                win_rate=wr / 100.0,
-                total_trades=trades,
-            )
             results["updated"] += 1
-            results["detail"][f"L{new_level}"] = results["detail"].get(f"L{new_level}", 0) + 1
             logger.info(f"[评级] {symbol} L{old_level}→L{new_level} | {reason}")
-        else:
-            results["detail"][f"L{new_level}"] = results["detail"].get(f"L{new_level}", 0) + 1
+        results["detail"][f"L{new_level}"] = results["detail"].get(f"L{new_level}", 0) + 1
 
     return results
 
