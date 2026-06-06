@@ -598,20 +598,6 @@ def _sync_to_live(
                     f"margin={act_margin}U lev={act_lev}x "
                     f"paper_id={paper_position_id}"
                 )
-                try:
-                    from app.services.trade_notifier import get_trade_notifier
-                    notifier = get_trade_notifier()
-                    if notifier:
-                        notifier.notify_open_position(
-                            symbol=symbol, direction=side,
-                            quantity=float(live_qty), entry_price=entry_price,
-                            leverage=act_lev, stop_loss_price=sl_price,
-                            take_profit_price=tp_price,
-                            margin=act_margin,
-                            strategy_name=f'GPT预测[{ak["account_name"]}]'
-                        )
-                except Exception:
-                    pass
             else:
                 logger.error(
                     f"[GPT预测] 实盘下单失败 {ak['account_name']} {symbol}: "

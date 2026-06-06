@@ -855,6 +855,7 @@ class BinanceFuturesEngine:
                         stop_loss_price=float(stop_loss_price) if stop_loss_price else None,
                         take_profit_price=float(take_profit_price) if take_profit_price else None,
                         margin=margin,
+                        strategy_name=source,
                         order_type=order_type_str
                     )
                 else:
