@@ -35,8 +35,8 @@
   ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 2px; }
   ::-webkit-scrollbar-thumb:hover { background: #49f4c8; }
   .nav-active { color: #49f4c8 !important; background: rgba(73,244,200,0.1); border-right: 2px solid #49f4c8; }
-  th.sortable, th.sortable-wl, th.sortable-ls { cursor: pointer; user-select: none; }
-  th.sortable:hover, th.sortable-wl:hover, th.sortable-ls:hover { color: #49f4c8; }
+  th.sortable, th.sortable-wl, th.sortable-ls, th.sortable-rt { cursor: pointer; user-select: none; }
+  th.sortable:hover, th.sortable-wl:hover, th.sortable-ls:hover, th.sortable-rt:hover { color: #49f4c8; }
   th.sort-asc::after { content: ' \25B2'; color: #49f4c8; }
   th.sort-desc::after { content: ' \25BC'; color: #49f4c8; }
   .rank-gold   { background: rgba(251,191,36,0.15); color: #fbbf24; border: 1px solid rgba(251,191,36,0.3); }
@@ -66,7 +66,7 @@
           <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">search</span>
           <input id="search-input" type="text" placeholder="搜索交易对..." oninput="filterTable()" class="w-full bg-[#0d1117] border border-gray-800 rounded-lg pl-10 pr-4 py-1.5 text-sm focus:outline-none focus:border-[#49f4c8] text-gray-200"/>
         </div>
-        <button onclick="refreshDaily()" class="p-2 text-gray-400 hover:text-[#49f4c8] transition-all" title="日终重算 Top50 + 白名单"><span class="material-symbols-outlined">sync</span></button>
+      <button onclick="refreshDaily()" class="p-2 text-gray-400 hover:text-[#49f4c8] transition-all" title="按规则重算 Top50 + 白名单/黑名单"><span class="material-symbols-outlined">sync</span></button>
         <button onclick="loadData()" class="p-2 text-gray-400 hover:text-[#49f4c8] transition-all" title="刷新页面数据"><span class="material-symbols-outlined">refresh</span></button>
       </div>
     </div>
@@ -78,8 +78,10 @@
     <!-- Tab Bar -->
     <div class="border-b border-gray-800 mb-6 flex items-center gap-6 px-1 font-mono text-sm">
       <button id="tab-top50" onclick="setPageTab('top50')" class="page-tab pb-3 text-[#49f4c8] border-b-2 border-[#49f4c8] font-bold">TOP 50盈利 <span id="tab-cnt-top50">50</span></button>
-      <button id="tab-whitelist" onclick="setPageTab('whitelist')" class="page-tab pb-3 text-gray-400 hover:text-gray-200 transition-colors">白名单盈利 <span id="tab-cnt-whitelist">--</span></button>
-      <button id="tab-losers" onclick="setPageTab('losers')" class="page-tab pb-3 text-gray-400 hover:text-gray-200 transition-colors">亏损 <span id="tab-cnt-losers">--</span></button>
+      <button id="tab-whitelist" onclick="setPageTab('whitelist')" class="page-tab pb-3 text-gray-400 hover:text-gray-200 transition-colors">白名单 <span id="tab-cnt-whitelist">--</span></button>
+      <button id="tab-level1" onclick="setPageTab('level1')" class="page-tab pb-3 text-gray-400 hover:text-gray-200 transition-colors">黑名单1级 <span id="tab-cnt-level1">--</span></button>
+      <button id="tab-level2" onclick="setPageTab('level2')" class="page-tab pb-3 text-gray-400 hover:text-gray-200 transition-colors">黑名单2级 <span id="tab-cnt-level2">--</span></button>
+      <button id="tab-level3" onclick="setPageTab('level3')" class="page-tab pb-3 text-gray-400 hover:text-gray-200 transition-colors">黑名单3级 <span id="tab-cnt-level3">--</span></button>
     </div>
 
     <!-- TOP50 Panel -->
@@ -201,25 +203,25 @@
     </div>
     </div><!-- /panel-whitelist -->
 
-    <!-- Losers Panel -->
+    <!-- Rating Level Panel -->
     <div id="panel-losers" class="hidden">
-    <p class="text-[10px] uppercase tracking-widest text-gray-500 mb-2 font-mono">亏损交易对统计 <span class="text-gray-600 normal-case">累计盈亏&lt;0 · 至少 5 笔平仓</span></p>
+    <p id="rt-subtitle" class="text-[10px] uppercase tracking-widest text-gray-500 mb-2 font-mono">黑名单规则统计 <span class="text-gray-600 normal-case">由自动/手动刷新按规则动态增减</span></p>
     <div class="grid grid-cols-4 gap-5 mb-8">
       <div class="bg-[#0f1520] p-5 rounded-xl border border-red-500/20 relative overflow-hidden">
-        <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-red-400">trending_down</span></div>
-        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">亏损币数</p>
+        <div class="absolute right-2 bottom-2 opacity-8"><span id="rt-icon-count" class="material-symbols-outlined text-5xl text-red-400">warning</span></div>
+        <p id="rt-label-count" class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">黑名单币数</p>
         <h4 id="ls-count" class="text-3xl font-mono font-bold text-red-400">--</h4>
         <p id="ls-trades" class="text-[10px] text-gray-500 mt-1 font-mono">平仓 -- 笔</p>
       </div>
       <div class="bg-[#0f1520] p-5 rounded-xl border border-red-500/20 relative overflow-hidden">
         <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-red-400">percent</span></div>
-        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">平均胜率</p>
+        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">规则胜率</p>
         <h4 id="ls-winrate" class="text-3xl font-mono font-bold text-white">--</h4>
         <p id="ls-wl" class="text-[10px] text-gray-500 mt-1 font-mono">--W / --L</p>
       </div>
       <div class="bg-[#0f1520] p-5 rounded-xl border border-red-500/20 relative overflow-hidden">
         <div class="absolute right-2 bottom-2 opacity-8"><span class="material-symbols-outlined text-5xl text-red-400">account_balance_wallet</span></div>
-        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">累计亏损合计</p>
+        <p class="text-gray-500 text-xs font-medium mb-1 uppercase tracking-widest">累计净盈亏</p>
         <h4 id="ls-pnl" class="text-3xl font-mono font-bold text-red-400">--</h4>
         <p id="ls-pf" class="text-[10px] text-gray-500 mt-1 font-mono">盈亏比 --</p>
       </div>
@@ -233,7 +235,7 @@
 
     <div class="bg-[#0f1520] rounded-xl border border-red-500/20 overflow-hidden">
       <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
-        <h3 class="font-headline font-semibold text-white">亏损交易对排行（由亏到少亏）</h3>
+        <h3 id="rt-table-title" class="font-headline font-semibold text-white">黑名单交易对明细</h3>
         <span id="ls-table-count" class="text-xs text-gray-500 font-mono">-- 条</span>
       </div>
       <div class="overflow-x-auto">
@@ -248,11 +250,12 @@
               <th class="sortable-ls px-4 py-3 text-right" onclick="sortLsBy('total_realized_pnl')">累计盈亏</th>
               <th class="sortable-ls px-4 py-3 text-right" onclick="sortLsBy('avg_pnl_per_trade')">均盈/均亏</th>
               <th class="sortable-ls px-4 py-3 text-right" onclick="sortLsBy('profit_factor')">盈亏比</th>
+              <th class="sortable-ls px-4 py-3 text-left" onclick="sortLsBy('reason')">触发规则</th>
               <th class="px-4 py-3 text-right">操作</th>
             </tr>
           </thead>
           <tbody id="losers-tbody">
-            <tr><td colspan="9" class="px-6 py-12 text-center text-gray-500">加载中...</td></tr>
+            <tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">加载中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -266,6 +269,7 @@
 var _data = [];
 var _wlData = [];
 var _lsData = [];
+var _ratingLevels = { level1: { stats: {}, symbols: [] }, level2: { stats: {}, symbols: [] }, level3: { stats: {}, symbols: [] } };
 var _currentTab = 'top50';
 var _sortKey = 'rank_score';
 var _sortAsc = true;
@@ -277,8 +281,16 @@ var _searchVal = '';
 
 var _tabTitles = {
   top50: '盈亏分析 · TOP 50盈利',
-  whitelist: '盈亏分析 · 白名单盈利',
-  losers: '盈亏分析 · 亏损'
+  whitelist: '盈亏分析 · 白名单',
+  level1: '盈亏分析 · 黑名单1级',
+  level2: '盈亏分析 · 黑名单2级',
+  level3: '盈亏分析 · 黑名单3级'
+};
+
+var _levelMeta = {
+  level1: { level: 1, label: '黑名单1级', icon: 'warning', color: '#facc15', empty: '暂无黑名单1级数据' },
+  level2: { level: 2, label: '黑名单2级', icon: 'report_problem', color: '#f97316', empty: '暂无黑名单2级数据' },
+  level3: { level: 3, label: '黑名单3级', icon: 'cancel', color: '#ef4444', empty: '暂无黑名单3级数据' }
 };
 
 function authHeaders() {
@@ -299,11 +311,15 @@ function setPageTab(tab) {
   }
   document.getElementById('panel-top50').classList.toggle('hidden', tab !== 'top50');
   document.getElementById('panel-whitelist').classList.toggle('hidden', tab !== 'whitelist');
-  document.getElementById('panel-losers').classList.toggle('hidden', tab !== 'losers');
+  document.getElementById('panel-losers').classList.toggle('hidden', !/^level[123]$/.test(tab));
   var hdr = document.querySelector('header h2');
   if (hdr) hdr.textContent = _tabTitles[tab] || '盈亏分析';
   if (tab === 'whitelist') renderWhitelist();
-  if (tab === 'losers') renderLosers();
+  if (/^level[123]$/.test(tab)) {
+    updateRatingPanelChrome(tab);
+    updateLosersStats((_ratingLevels[tab] || {}).stats || {});
+    renderLosers();
+  }
 }
 
 async function refreshDaily() {
@@ -314,7 +330,7 @@ async function refreshDaily() {
   });
   if (!ok) return;
   try {
-    showToast('正在更新 Top50 与白名单…', 'info');
+    showToast('正在按规则更新 Top50 与白名单/黑名单…', 'info');
     var resp = await fetch('/api/top50/refresh', { method: 'POST', headers: authHeaders() });
     var json = await resp.json();
     if (!json.success) throw new Error(json.detail || json.error || '更新失败');
@@ -328,29 +344,36 @@ async function refreshDaily() {
 async function loadData() {
   document.getElementById('top50-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">加载中...</td></tr>';
   document.getElementById('whitelist-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">加载中...</td></tr>';
-  document.getElementById('losers-tbody').innerHTML = '<tr><td colspan="9" class="px-6 py-12 text-center text-gray-500">加载中...</td></tr>';
+  document.getElementById('losers-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">加载中...</td></tr>';
   try {
     var resp = await fetch('/api/top50', { headers: authHeaders() });
     var json = await resp.json();
     if (!json.success) throw new Error(json.detail || json.error || 'API error');
     _data = json.data || [];
     _wlData = json.whitelist_data || [];
-    _lsData = json.losers_data || [];
+    _ratingLevels = json.rating_levels || _ratingLevels;
+    _lsData = ((_ratingLevels[_currentTab] || {}).symbols) || [];
     document.getElementById('tab-cnt-top50').textContent = _data.length;
     document.getElementById('tab-cnt-whitelist').textContent = (json.whitelist_stats && json.whitelist_stats.symbol_count != null)
       ? json.whitelist_stats.symbol_count : _wlData.length;
-    document.getElementById('tab-cnt-losers').textContent = (json.losers_stats && json.losers_stats.symbol_count != null)
-      ? json.losers_stats.symbol_count : _lsData.length;
+    ['level1','level2','level3'].forEach(function(levelKey) {
+      var bundle = _ratingLevels[levelKey] || { stats: {}, symbols: [] };
+      var cnt = bundle.stats && bundle.stats.symbol_count != null ? bundle.stats.symbol_count : (bundle.symbols || []).length;
+      document.getElementById('tab-cnt-' + levelKey).textContent = cnt;
+    });
     updateStats(json.stats || {});
     updateWhitelistStats(json.whitelist_stats || {});
-    updateLosersStats(json.losers_stats || {});
+    if (/^level[123]$/.test(_currentTab)) {
+      updateRatingPanelChrome(_currentTab);
+      updateLosersStats((_ratingLevels[_currentTab] || {}).stats || {});
+    }
     render();
     renderWhitelist();
-    renderLosers();
+    if (/^level[123]$/.test(_currentTab)) renderLosers();
   } catch(e) {
     document.getElementById('top50-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-red-400">' + e.message + '</td></tr>';
     document.getElementById('whitelist-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-red-400">' + e.message + '</td></tr>';
-    document.getElementById('losers-tbody').innerHTML = '<tr><td colspan="9" class="px-6 py-12 text-center text-red-400">' + e.message + '</td></tr>';
+    document.getElementById('losers-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-red-400">' + e.message + '</td></tr>';
   }
 }
 
@@ -429,10 +452,21 @@ function updateLosersStats(w) {
     '<span class="text-[#49f4c8]">' + gp + '</span> <span class="text-gray-600">/</span> <span class="text-red-400">' + gl + '</span> U';
 }
 
+function updateRatingPanelChrome(levelKey) {
+  var meta = _levelMeta[levelKey] || _levelMeta.level1;
+  document.getElementById('rt-subtitle').innerHTML =
+    meta.label + '规则统计 <span class="text-gray-600 normal-case">自动运行或手动刷新后按规则动态增减，不固定数量</span>';
+  document.getElementById('rt-label-count').textContent = meta.label + '币数';
+  document.getElementById('rt-icon-count').textContent = meta.icon;
+  document.getElementById('rt-icon-count').style.color = meta.color;
+  document.getElementById('ls-count').style.color = meta.color;
+  document.getElementById('rt-table-title').textContent = meta.label + '交易对明细';
+}
+
 function filterTable() {
   _searchVal = (document.getElementById('search-input').value || '').trim().toUpperCase();
   if (_currentTab === 'whitelist') renderWhitelist();
-  else if (_currentTab === 'losers') renderLosers();
+  else if (/^level[123]$/.test(_currentTab)) renderLosers();
   else render();
 }
 
@@ -519,7 +553,7 @@ function sortLsBy(key) {
     th.classList.remove('sort-asc', 'sort-desc');
   });
   var ths = document.querySelectorAll('th.sortable-ls');
-  var keys = ['symbol','total_trades','winning_trades','win_rate','total_realized_pnl','avg_pnl_per_trade','profit_factor'];
+  var keys = ['symbol','total_trades','winning_trades','win_rate','total_realized_pnl','avg_pnl_per_trade','profit_factor','reason'];
   var idx = keys.indexOf(key);
   if (idx >= 0 && ths[idx]) {
     ths[idx].classList.add(_lsSortAsc ? 'sort-asc' : 'sort-desc');
@@ -528,6 +562,9 @@ function sortLsBy(key) {
 }
 
 function renderLosers() {
+  var meta = _levelMeta[_currentTab] || _levelMeta.level1;
+  var bundle = _ratingLevels[_currentTab] || { stats: {}, symbols: [] };
+  _lsData = bundle.symbols || [];
   var rows = _lsData.slice();
   if (_searchVal) {
     rows = rows.filter(function(r) { return r.symbol.toUpperCase().indexOf(_searchVal) >= 0; });
@@ -544,7 +581,7 @@ function renderLosers() {
   document.getElementById('ls-table-count').textContent = rows.length + ' / ' + _lsData.length + ' 条';
 
   if (rows.length === 0) {
-    document.getElementById('losers-tbody').innerHTML = '<tr><td colspan="9" class="px-6 py-12 text-center text-gray-500">暂无亏损交易对</td></tr>';
+    document.getElementById('losers-tbody').innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">' + meta.empty + '</td></tr>';
     return;
   }
 
@@ -552,7 +589,7 @@ function renderLosers() {
     var rankPos = idx + 1;
     var rankBadge = '<span class="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold rank-normal">' + rankPos + '</span>';
     var wr = parseFloat(r.win_rate) || 0;
-    var wrBar = '<div class="flex items-center gap-2"><div class="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden"><div class="h-full rounded-full bg-red-400" style="width:' + Math.min(wr, 100) + '%"></div></div><span class="font-mono text-xs ' + (wr >= 50 ? 'text-yellow-400' : 'text-red-400') + '">' + wr.toFixed(1) + '%</span></div>';
+    var wrBar = '<div class="flex items-center gap-2"><div class="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden"><div class="h-full rounded-full" style="width:' + Math.min(wr, 100) + '%; background:' + meta.color + '"></div></div><span class="font-mono text-xs ' + (wr >= 50 ? 'text-yellow-400' : 'text-red-400') + '">' + wr.toFixed(1) + '%</span></div>';
     var pnl = parseFloat(r.total_realized_pnl) || 0;
     var pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + ' U';
     var avg = parseFloat(r.avg_pnl_per_trade) || 0;
@@ -560,6 +597,8 @@ function renderLosers() {
     var pf = r.profit_factor != null ? parseFloat(r.profit_factor) : 0;
     var pfStr = pf > 0 ? pf.toFixed(2) + 'x' : '--';
     var symShort = r.symbol.replace('/USDT', '').replace('/USD', '');
+    var reason = (r.reason || '').slice(0, 48);
+    if ((r.reason || '').length > 48) reason += '…';
     return [
       '<tr class="border-t border-gray-800/50 hover:bg-[#151a20] transition-colors">',
       '  <td class="px-4 py-3">' + rankBadge + '</td>',
@@ -570,7 +609,8 @@ function renderLosers() {
       '  <td class="px-4 py-3 text-right font-mono font-bold text-red-400">' + pnlStr + '</td>',
       '  <td class="px-4 py-3 text-right font-mono text-xs text-red-400">' + avgStr + '</td>',
       '  <td class="px-4 py-3 text-right font-mono text-xs text-gray-400">' + pfStr + '</td>',
-      '  <td class="px-4 py-3 text-right"><button onclick="addToBlacklistL3(\'' + r.symbol.replace(/'/g, "\\'") + '\')" class="text-[10px] px-2 py-1 rounded border border-red-800 text-red-400 hover:bg-red-500/10 transition-all font-mono">黑名单3级</button></td>',
+      '  <td class="px-4 py-3 text-left text-xs text-gray-500 max-w-[180px] truncate" title="' + (r.reason || '').replace(/"/g, '&quot;') + '">' + (reason || '—') + '</td>',
+      '  <td class="px-4 py-3 text-right"><button onclick="setRatingLevel(\'' + r.symbol.replace(/'/g, "\\'") + '\', 0)" class="text-[10px] px-2 py-1 rounded border border-gray-700 text-gray-500 hover:border-[#49f4c8] hover:text-[#49f4c8] transition-all font-mono">设白名单</button></td>',
       '</tr>'
     ].join('\n');
   }).join('\n');
@@ -656,22 +696,24 @@ var wr = parseFloat(r.win_rate) || 0;
   document.getElementById('top50-tbody').innerHTML = html;
 }
 
-async function addToBlacklistL3(symbol) {
-  var ok = await showConfirm('将 ' + symbol + ' 设为黑名单 3 级（永久禁止交易）？', {
-    title: '黑名单3级',
+async function setRatingLevel(symbol, level) {
+  var labels = ['白名单', '黑名单1级', '黑名单2级', '黑名单3级'];
+  var ok = await showConfirm('将 ' + symbol + ' 手动设为' + labels[level] + '？', {
+    title: '手动评级',
     confirmText: '确认',
-    type: 'danger'
+    type: level >= 3 ? 'danger' : (level >= 1 ? 'warning' : 'info')
   });
   if (!ok) return;
   try {
-    var resp = await fetch('/api/rating/update', {
+    var resp = await fetch('/api/rating/set', {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify({ symbol: symbol, rating_level: 3, reason: 'manual from pnl analysis page' })
+      body: JSON.stringify({ symbol: symbol, rating_level: level, reason: 'manual from pnl analysis page' })
     });
     var res = await resp.json();
     if (res.success) {
-      showToast(symbol + ' 已设为黑名单 3 级', 'success');
+      showToast(symbol + ' 已设为' + labels[level], 'success');
+      await loadData();
     } else {
       showToast((res.detail || res.error || '操作失败'), 'error');
     }
@@ -680,28 +722,12 @@ async function addToBlacklistL3(symbol) {
   }
 }
 
+async function addToBlacklistL3(symbol) {
+  return setRatingLevel(symbol, 3);
+}
+
 async function addToBlacklist(symbol) {
-  var ok = await showConfirm('将 ' + symbol + ' 加入黑名单 1 级（限制保证金）？', {
-    title: '加入黑名单',
-    confirmText: '确认',
-    type: 'warning'
-  });
-  if (!ok) return;
-  try {
-    var resp = await fetch('/api/rating/update', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify({ symbol: symbol, rating_level: 1, reason: 'manual from pnl analysis page' })
-    });
-    var res = await resp.json();
-    if (res.success) {
-      showToast(symbol + ' 已加入黑名单 1 级', 'success');
-    } else {
-      showToast((res.detail || res.error || '操作失败'), 'error');
-    }
-  } catch(e) {
-    showToast('请求失败: ' + e.message, 'error');
-  }
+  return setRatingLevel(symbol, 1);
 }
 
 document.addEventListener('DOMContentLoaded', function() {

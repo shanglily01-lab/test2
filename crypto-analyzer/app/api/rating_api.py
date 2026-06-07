@@ -365,6 +365,137 @@ def _fetch_whitelist_pnl_stats(cur, account_id: int = 2) -> dict:
     return _fetch_whitelist_bundle(cur, account_id)["stats"]
 
 
+def _empty_rating_stats(level: int, account_id: int = 2) -> dict:
+    return {
+        "level": level,
+        "symbol_count": 0,
+        "total_trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "breakeven": 0,
+        "win_rate": 0,
+        "net_pnl": 0,
+        "gross_profit": 0,
+        "gross_loss": 0,
+        "profit_factor": None,
+        "account_id": account_id,
+    }
+
+
+def _fetch_rating_level_bundle(cur, level: int, account_id: int = 2) -> dict:
+    """Dynamic rating-level list sourced from the unified auto/manual rating table."""
+    cur.execute(
+        """
+        SELECT
+            symbol,
+            rating_level,
+            level_change_reason,
+            updated_at
+        FROM trading_symbol_rating
+        WHERE rating_level = %s
+        ORDER BY updated_at DESC, symbol
+        """,
+        (level,),
+    )
+    rows = cur.fetchall()
+    meta_by_key = {}
+    for r in rows:
+        sym = (r.get("symbol") or "").strip()
+        if not sym:
+            continue
+        meta_by_key[_normalize_symbol_key(sym)] = r
+
+    per_symbol = {
+        key: {"wins": 0, "losses": 0, "breakeven": 0, "net_pnl": 0.0, "gross_profit": 0.0, "gross_loss": 0.0}
+        for key in meta_by_key
+    }
+
+    if meta_by_key:
+        cur.execute(
+            """
+            SELECT symbol, realized_pnl
+            FROM futures_positions
+            WHERE account_id = %s
+              AND status = 'closed'
+              AND realized_pnl IS NOT NULL
+            """,
+            (account_id,),
+        )
+        for fp in cur.fetchall():
+            key = _normalize_symbol_key(fp.get("symbol") or "")
+            if key not in per_symbol:
+                continue
+            agg = per_symbol[key]
+            pnl = float(fp.get("realized_pnl") or 0)
+            agg["net_pnl"] += pnl
+            if pnl > 0:
+                agg["wins"] += 1
+                agg["gross_profit"] += pnl
+            elif pnl < 0:
+                agg["losses"] += 1
+                agg["gross_loss"] += abs(pnl)
+            else:
+                agg["breakeven"] += 1
+
+    symbols = []
+    for key, r in meta_by_key.items():
+        agg = per_symbol[key]
+        total_trades = agg["wins"] + agg["losses"] + agg["breakeven"]
+        pnl_row = _symbol_pnl_row(
+            total_trades,
+            agg["wins"],
+            agg["losses"],
+            agg["breakeven"],
+            agg["net_pnl"],
+            agg["gross_profit"],
+            agg["gross_loss"],
+        )
+        symbols.append({
+            "symbol": r["symbol"],
+            "rating_level": int(r.get("rating_level") or level),
+            "reason": (r.get("level_change_reason") or "").strip(),
+            "updated_at": r.get("updated_at").isoformat() if r.get("updated_at") else None,
+            **pnl_row,
+        })
+
+    symbols.sort(key=lambda x: (-x["total_trades"], x["total_realized_pnl"], x["symbol"]))
+
+    if not symbols:
+        return {"stats": _empty_rating_stats(level, account_id), "symbols": []}
+
+    total_wins = sum(s["winning_trades"] for s in symbols)
+    total_losses = sum(s["losing_trades"] for s in symbols)
+    total_breakeven = sum(s["breakeven"] for s in symbols)
+    total_trades = total_wins + total_losses + total_breakeven
+    gross_profit = sum(s["gross_profit"] for s in symbols)
+    gross_loss = sum(s["gross_loss"] for s in symbols)
+    net_pnl = sum(s["total_realized_pnl"] for s in symbols)
+    counts = parse_pnl_counts({
+        "total_trades": total_trades,
+        "wins": total_wins,
+        "losses": total_losses,
+        "breakeven": total_breakeven,
+        "net_pnl": net_pnl,
+        "gross_profit": gross_profit,
+        "gross_loss": gross_loss,
+    })
+    stats = {
+        "level": level,
+        "symbol_count": len(symbols),
+        "total_trades": total_trades,
+        "wins": counts["wins"],
+        "losses": counts["losses"],
+        "breakeven": counts["breakeven"],
+        "win_rate": counts["win_rate"],
+        "net_pnl": round(net_pnl, 2),
+        "gross_profit": round(gross_profit, 2),
+        "gross_loss": round(gross_loss, 2),
+        "profit_factor": round(gross_profit / gross_loss, 2) if gross_loss > 0 else None,
+        "account_id": account_id,
+    }
+    return {"stats": stats, "symbols": symbols}
+
+
 def _fetch_losers_bundle(cur, account_id: int = 2, limit: int = 50, min_trades: int = 5) -> dict:
     """累计亏损交易对（模拟仓已平仓，至少 min_trades 笔）."""
     cur.execute(
@@ -480,6 +611,10 @@ async def get_top50():
         losers_bundle = _fetch_losers_bundle(cur, account_id=2)
         losers_stats = losers_bundle["stats"]
         losers_data = losers_bundle["symbols"]
+        rating_bundles = {
+            f"level{level}": _fetch_rating_level_bundle(cur, level, account_id=2)
+            for level in (1, 2, 3)
+        }
         cur.close()
         conn.close()
 
@@ -517,6 +652,7 @@ async def get_top50():
             'whitelist_data': whitelist_data,
             'losers_stats': losers_stats,
             'losers_data': losers_data,
+            'rating_levels': rating_bundles,
         }
     except Exception as e:
         logger.error(f"获取盈亏分析失败: {e}")
