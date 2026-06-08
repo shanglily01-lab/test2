@@ -169,7 +169,7 @@
 
 TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_performing_symbols` 表。
 
-**日终维护**: `scheduler.py` 每天 02:05 统一执行 TOP50 更新 + 全量评级。
+**定时维护**: `scheduler.py` 每 4 小时统一执行 TOP50 更新 + 全量评级；`smart_trader_service.py` 也有每 4 小时兜底刷新。
 
 **评级更新入口**: `POST /api/rating/update` / `POST /api/top50/refresh`
 

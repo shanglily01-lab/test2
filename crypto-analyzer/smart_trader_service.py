@@ -4162,46 +4162,29 @@ async def async_main():
     asyncio.create_task(update_account_stats_task())
     logger.info("✅ 账户统计定时更新任务已启动（每5分钟）")
 
-    # 🔥 启动盈利Top 30交易对定时更新任务（每天凌晨2点）
+    # 🔥 启动 TOP50 + 交易对评级定时更新任务（每4小时）
     async def update_top_performers_task():
-        """每天凌晨2点更新盈利Top 30交易对"""
+        """每4小时更新 TOP50 + 白名单/黑名单评级"""
         from update_top_performers import update_top_performing_symbols
-        import time as time_module
-        from datetime import datetime, time
 
         while True:
             try:
-                # 计算距离下次凌晨2点的秒数
-                now = datetime.now()
-                target_time = datetime.combine(now.date(), time(2, 0))  # 今天凌晨2点
-                if now >= target_time:
-                    # 如果已经过了今天凌晨2点，目标改为明天凌晨2点
-                    target_time = datetime.combine(now.date() + timedelta(days=1), time(2, 0))
-
-                seconds_until_target = (target_time - now).total_seconds()
-                logger.info(f"⏰ Top 30更新任务将在 {seconds_until_target/3600:.1f} 小时后执行（{target_time}）")
-
-                # 等待到凌晨2点
-                await asyncio.sleep(seconds_until_target)
-
-                # 执行更新
-                logger.info("🔄 开始更新盈利Top 30交易对...")
+                logger.info("🔄 开始更新 TOP50 + 交易对评级...")
                 await asyncio.get_event_loop().run_in_executor(
                     None,
-                    update_top_performing_symbols,
-                    2,  # account_id=2 (U本位)
-                    top_n=50
+                    lambda: update_top_performing_symbols(account_id=2, top_n=50)
                 )
-                logger.info("Top 100更新完成")
+                logger.info("TOP50 + 交易对评级更新完成")
+                await asyncio.sleep(4 * 3600)
 
             except Exception as e:
-                logger.error(f"❌ Top 30更新失败: {e}")
+                logger.error(f"❌ TOP50 + 交易对评级更新失败: {e}")
                 # 失败后等待1小时再重试
                 await asyncio.sleep(3600)
 
     # 创建后台任务
     asyncio.create_task(update_top_performers_task())
-    logger.info("✅ Top 30定时更新任务已启动（每天凌晨2点）")
+    logger.info("✅ TOP50 + 交易对评级定时更新任务已启动（每4小时）")
 
     # 在事件循环中运行同步的主循环
     loop = asyncio.get_event_loop()

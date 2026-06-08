@@ -314,7 +314,7 @@ For OPEN paper positions held **≥15 minutes**, poll every **15 minutes/positio
 |---------|---------|
 | `live_trading_enabled` | Master switch for **opening** live positions |
 | `live_close_enabled` | Master switch for **closing** live (paper close, advisor sell, engine) |
-| `live_top50_required` | Open: symbol in `top_performing_symbols` (daily TOP50) |
+| `live_top50_required` | Open: symbol in `top_performing_symbols` (TOP50 refreshed every 4 hours) |
 | `live_whitelist_enabled` | Open: `rating_level=0` whitelist |
 | `blacklist_level3_enabled` | Block L3 symbols (often checked before paper open) |
 

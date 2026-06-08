@@ -321,7 +321,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 |------|------|
 | `live_trading_enabled` | **开仓**同步总开关 |
 | `live_close_enabled` | **平仓**同步总开关（模拟平仓、持仓顾问 sell、引擎关仓） |
-| `live_top50_required` | 开仓：在 `top_performing_symbols`（日终 TOP50）可开实仓 |
+| `live_top50_required` | 开仓：在 `top_performing_symbols`（每 4 小时刷新 TOP50）可开实仓 |
 | `live_whitelist_enabled` | 开仓：`rating_level=0` 可开实仓 |
 | `blacklist_level3_enabled` | L3 禁止开仓（多在开模拟前检查） |
 

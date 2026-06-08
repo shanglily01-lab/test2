@@ -1,5 +1,5 @@
 """
-每日更新 U 本位模拟仓盈利 TOP50 榜单 + 交易对评级（统一核心机制）
+定时更新 U 本位模拟仓盈利 TOP50 榜单 + 交易对评级（统一核心机制）
 
 1. top_performing_symbols: 累计盈利前 50（至少 5 笔平仓）
 2. trading_symbol_rating: 按全仓累计规则评定 L0/L1/L2/L3
@@ -193,7 +193,7 @@ def update_top_performing_symbols(
     skip_rating: bool = False,
 ):
     """
-    日终维护：更新 TOP50 榜单 + 交易对评级。
+    定时维护：更新 TOP50 榜单 + 交易对评级。
 
     参数:
         account_id: 模拟仓 account_id
@@ -201,6 +201,7 @@ def update_top_performing_symbols(
         skip_rating: True 则跳过评级更新（仅刷新榜单时用）
     """
     conn = None
+    lock_acquired = False
     try:
         conn = pymysql.connect(
             **MYSQL_CONFIG,
@@ -210,6 +211,14 @@ def update_top_performing_symbols(
             write_timeout=30,
         )
         cursor = conn.cursor(pymysql.cursors.DictCursor)
+
+        cursor.execute("SELECT GET_LOCK('update_top_performers_refresh', 0) AS got_lock")
+        lock_row = cursor.fetchone()
+        lock_acquired = bool(lock_row and int(lock_row.get("got_lock") or 0) == 1)
+        if not lock_acquired:
+            logger.info("TOP50 + 评级刷新已有进程在运行，本轮跳过")
+            cursor.close()
+            return
 
         logger.info("=" * 80)
         logger.info(f"开始更新盈利 Top {top_n} 榜单 (账户ID: {account_id})")
@@ -316,16 +325,22 @@ def update_top_performing_symbols(
         cursor.close()
 
     except Exception as e:
-        logger.error(f"日终维护失败: {e}")
+        logger.error(f"定时维护失败: {e}")
         import traceback
         logger.error(traceback.format_exc())
 
     finally:
+        if conn and lock_acquired:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT RELEASE_LOCK('update_top_performers_refresh')")
+            except Exception as e:
+                logger.warning(f"释放 TOP50 + 评级刷新锁失败: {e}")
         if conn:
             conn.close()
 
 
 if __name__ == "__main__":
-    logger.info("开始日终维护: TOP50 + 统一评级...")
+    logger.info("开始定时维护: TOP50 + 统一评级...")
     update_top_performing_symbols(account_id=2, top_n=50)
     logger.info("更新完成！")

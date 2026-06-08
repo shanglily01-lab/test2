@@ -185,7 +185,7 @@ class UnifiedDataScheduler:
 
         # 注意: 自动合约交易和评级更新已移至 smart_trader_service.py
         # 6. 自动合约交易服务 - 已移至 smart_trader_service.py
-        # 7. 交易对评级管理器 - 已移至 smart_trader_service.py (每天凌晨2点自动运行)
+        # 7. 交易对评级管理器 - scheduler/smart_trader_service 每4小时刷新
 
 
 
@@ -700,7 +700,7 @@ class UnifiedDataScheduler:
             self.task_stats[task_name]['last_error'] = str(e)
 
     # ==================== 交易对评级更新任务 ====================
-    # 注意: 评级更新已移至 smart_trader_service.py (每天凌晨2点自动运行)
+    # 注意: TOP50 + 评级更新由 scheduler/smart_trader_service 每4小时刷新
 
     # ==================== 自动合约交易任务 ====================
     # 注意: 自动合约交易已移至 smart_trader_service.py
@@ -1215,21 +1215,23 @@ class UnifiedDataScheduler:
             logger.info("  ℹ️  Hyperliquid 钱包监控已移至独立调度器 (app/hyperliquid_scheduler.py)")
             logger.info("     请单独运行: python app/hyperliquid_scheduler.py")
 
-        # 6.5 日终维护：TOP50 榜单 + 统一评级（每天 02:05）
+        # 6.5 TOP50 榜单 + 统一评级（每 4 小时）
         # update_top_performers.py 内部已包含评级逻辑，一步调用完成
-        def _run_eod_maintenance():
+        def _run_rating_refresh():
             try:
                 from update_top_performers import update_top_performing_symbols
                 update_top_performing_symbols(account_id=2, top_n=50)
             except Exception as e:
-                logger.error(f"[日终维护] 失败: {e}")
+                logger.error(f"[TOP50评级刷新] 失败: {e}")
                 import traceback
                 logger.error(traceback.format_exc())
 
-        schedule.every().day.at("02:05").do(
-            lambda: self._run_sync_in_thread(_run_eod_maintenance)
-        )
-        logger.info("  ✓ 日终维护 TOP50 + 统一评级 - 每天 02:05 (后台线程)")
+        def _schedule_rating_refresh():
+            self._run_sync_in_thread(_run_rating_refresh)
+
+        schedule.every(4).hours.do(_schedule_rating_refresh)
+        _schedule_rating_refresh()
+        logger.info("  ✓ TOP50 + 统一评级 - 每 4 小时 (后台线程, 启动即跑)")
 
         # 7. 缓存更新任务
         logger.info("\n  🚀 性能优化: 缓存自动更新")
