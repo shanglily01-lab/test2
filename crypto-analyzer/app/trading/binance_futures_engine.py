@@ -628,6 +628,13 @@ class BinanceFuturesEngine:
         Returns:
             开仓结果
         """
+        from app.services.trading_gates import get_beijing_open_window_status
+
+        time_allowed, time_reason = get_beijing_open_window_status()
+        if not time_allowed:
+            logger.info(f"[实盘开仓时间闸门] {symbol} {position_side} source={source}: {time_reason}")
+            return {"success": False, "error": time_reason}
+
         binance_symbol = self._convert_symbol(symbol)
         position_side = position_side.upper()
 

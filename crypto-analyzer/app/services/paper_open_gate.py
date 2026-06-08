@@ -11,6 +11,7 @@ from app.services.gemini_position_advisor import GEMINI_PER_CALL_DELAY_S
 from app.services.deepseek_position_advisor import DEEPSEEK_PER_CALL_DELAY_S
 from app.services.open_advisor_routing import resolve_open_advisors
 from app.services.securities_filter import is_security
+from app.services.trading_gates import get_beijing_open_window_status
 
 _open_gate_lock = threading.Lock()
 _open_gate_waiting = 0
@@ -39,6 +40,13 @@ def gate_simulated_open(
     顾问关闭 / API 异常时放行 (降级), 仅明确 reject 时拦截。
     """
     global _open_gate_waiting
+    time_allowed, time_reason = get_beijing_open_window_status()
+    if not time_allowed:
+        logger.info(
+            f"[开仓时间闸门] 拒绝开仓 {symbol} {side} source={source}: {time_reason}"
+        )
+        return False, time_reason
+
     if is_security(symbol):
         reason = f"non_crypto_symbol_blocked:{symbol}"
         logger.info(

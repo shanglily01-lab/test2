@@ -178,6 +178,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 - **按 source 白名单**（`app/services/trading_gates.py`）：`gemini_explore`、`deepseek_explore`、`gemini_predict`、`deepseek_predict` 可开/平实盘；其余策略（战术、反转、GPT、smart_trader 等）只写模拟仓
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)
 - **平仓总开关**: `system_settings.live_close_enabled` (1=开启；模拟平仓时同步交易所；持仓顾问 sell 亦受此规则)
+- **北京时间开仓时段**: 仅 10:00-16:00、22:00-次日04:00 允许开仓；服务器 UTC 对应 02:00-08:00、14:00-20:00。统一由 `trading_gates.get_beijing_open_window_status` 控制，模拟/实盘开仓都走该闸门。
 - **TOP50 实仓闸门**: `system_settings.live_top50_required` (默认 1，TOP50 内可开实仓)
 - **白名单实仓闸门**: `system_settings.live_whitelist_enabled` (默认 1，rating_level=0 可开实仓)
 - 两者为 **或** 关系；**都关** 则即使 `live_trading_enabled=1` 也不同步实盘

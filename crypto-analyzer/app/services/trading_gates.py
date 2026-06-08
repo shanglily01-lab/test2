@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Set, Tuple
 
 import pymysql
@@ -70,6 +71,36 @@ def is_live_close_enabled() -> bool:
     return _bool_setting("live_close_enabled", False)
 
 
+def get_beijing_open_window_status(now_utc: Optional[datetime] = None) -> Tuple[bool, str]:
+    """
+    北京时间开仓时段闸门.
+
+    允许开仓:
+      - 10:00 <= 北京时间 < 16:00
+      - 22:00 <= 北京时间 或 北京时间 < 04:00
+
+    服务器按 UTC 跑,这里显式转换到 UTC+8.
+    """
+    if now_utc is None:
+        now_utc = datetime.now(timezone.utc)
+    elif now_utc.tzinfo is None:
+        now_utc = now_utc.replace(tzinfo=timezone.utc)
+    bj_now = now_utc.astimezone(timezone(timedelta(hours=8)))
+    minute_of_day = bj_now.hour * 60 + bj_now.minute
+    allowed = (
+        10 * 60 <= minute_of_day < 16 * 60
+        or minute_of_day >= 22 * 60
+        or minute_of_day < 4 * 60
+    )
+    bj_text = bj_now.strftime("%Y-%m-%d %H:%M")
+    if allowed:
+        return True, f"北京时间{bj_text}在开仓时段"
+    return False, (
+        f"北京时间{bj_text}不在开仓时段"
+        "(允许10:00-16:00、22:00-次日04:00)"
+    )
+
+
 def should_sync_live_for_source(source: str) -> bool:
     """该订单 source 是否允许参与实盘开仓同步."""
     return _normalize_source(source) in LIVE_SYNC_SOURCES
@@ -83,6 +114,9 @@ def check_live_open_allowed(
 
     Returns: (allowed, reject_reason)
     """
+    time_allowed, time_reason = get_beijing_open_window_status()
+    if not time_allowed:
+        return False, time_reason
     if not is_live_trading_enabled():
         return False, "live_trading_enabled=0"
     if not should_sync_live_for_source(source):

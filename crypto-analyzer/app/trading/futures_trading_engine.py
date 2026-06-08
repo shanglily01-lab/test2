@@ -364,6 +364,13 @@ class FuturesTradingEngine:
         Returns:
             开仓结果
         """
+        from app.services.trading_gates import get_beijing_open_window_status
+
+        time_allowed, time_reason = get_beijing_open_window_status()
+        if not time_allowed:
+            logger.info(f"[模拟开仓时间闸门] {symbol} {position_side} source={source}: {time_reason}")
+            return {'success': False, 'message': time_reason}
+
         symbol = futures_symbol_rating_canonical(symbol)
         try:
             cursor = self._get_cursor()

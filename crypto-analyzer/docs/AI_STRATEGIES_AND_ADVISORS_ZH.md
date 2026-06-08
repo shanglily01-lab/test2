@@ -327,6 +327,8 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 
 **开仓按 source 白名单**：`gemini_explore`、`deepseek_explore`、`gemini_predict`、`deepseek_predict`。其它策略即使 `live_trading_enabled=1` 也只写模拟仓。
 
+**北京时间开仓时段**：仅 **10:00-16:00**、**22:00-次日04:00** 允许开仓；服务器 UTC 对应 **02:00-08:00**、**14:00-20:00**。模拟开仓和实盘开仓都由 `trading_gates.get_beijing_open_window_status` 统一拦截。
+
 **开仓检查链**（`check_live_open_allowed`）：`live_trading_enabled` → source ∈ `LIVE_SYNC_SOURCES` → `check_live_symbol_allowed`（L1/L2/L3 黑名单拒绝；TOP50 **或** 白名单；两闸门都关则拒绝）。不满足时日志如「黑名单1级禁止实盘」「不在 TOP 50 也非白名单」「策略 xxx 仅模拟盘」。
 
 **平仓**：只认 `live_close_enabled` + `live_futures_positions.paper_position_id` 绑定；**不**再查 source/TOP50/白名单。
