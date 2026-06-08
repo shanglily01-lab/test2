@@ -1404,7 +1404,7 @@ class UnifiedDataScheduler:
         schedule.every(5).minutes.do(_run_gpt_predict)
         logger.info("  ✓ gpt_predict - 每 4h 周期 + 5 分钟到期轮询 (DB next_due 防重)")
 
-        # Gemini 持仓顾问 - 监管 gemini_explore/gemini_predict 模拟仓，满 30min 后每 15min 复查
+        # Gemini 持仓顾问 - 监管 gemini_explore/gemini_predict 模拟仓，满 15min 后每 15min 复查
         def _run_gemini_position_advisor():
             if self._gemini_position_advisor_running:
                 logger.info("[Gemini持仓顾问] 上一轮仍在运行，跳过本轮")
@@ -1436,7 +1436,7 @@ class UnifiedDataScheduler:
         _run_gemini_position_advisor()
         logger.info("  ✓ gemini_position_advisor - 每 15 分钟 (后台线程)")
 
-        # DeepSeek 持仓顾问 - 监管非 Gemini 主探索/预测模拟仓，满 30min 后每 15min 复查
+        # DeepSeek 持仓顾问 - 监管非 Gemini 主探索/预测模拟仓，满 15min 后每 15min 复查
         def _run_deepseek_position_advisor():
             if self._deepseek_position_advisor_running:
                 logger.info("[DeepSeek持仓顾问] 上一轮仍在运行，跳过本轮")

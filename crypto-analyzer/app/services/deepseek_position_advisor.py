@@ -156,7 +156,7 @@ class DeepSeekPositionAdvisor:
             return None
 
     def get_eligible_positions(self):
-        """全部模拟仓，持仓 ≥30min."""
+        """全部模拟仓，持仓 ≥15min."""
         try:
             conn = self._get_conn()
             cur = conn.cursor()

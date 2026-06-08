@@ -146,7 +146,7 @@ class GPTPositionAdvisor:
             return None
 
     def get_eligible_positions(self):
-        """gpt_* 模拟仓，持仓 >= 30min."""
+        """gpt_* 模拟仓，持仓 >= 15min."""
         try:
             conn = self._get_conn()
             cur = conn.cursor()

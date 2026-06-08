@@ -41,13 +41,13 @@ def _set_open_advisor_pair(cursor, enabled: bool) -> None:
 
 def _set_position_advisor_pair(cursor, enabled: bool) -> None:
     desc_gemini = (
-        'Gemini 模拟持仓顾问 (1=启用). 非 deepseek 仓 ≥30min 每15min hold/observe/sell'
+        'Gemini 模拟持仓顾问 (1=启用). Gemini主单 ≥15min 每15min hold/observe/sell'
     )
     desc_deepseek = (
-        'DeepSeek 模拟持仓顾问: deepseek_* 仓 ≥30min 每15min hold/observe/sell'
+        'DeepSeek 模拟持仓顾问: 非Gemini主单 ≥15min 每15min hold/observe/sell'
     )
     desc_gpt = (
-        'GPT 模拟持仓顾问: gpt_* 仓 ≥30min 每15min hold/observe/sell'
+        'GPT 模拟持仓顾问: gpt_* 仓 ≥15min 每15min hold/observe/sell'
     )
     _upsert_bool_setting(cursor, 'gemini_position_advisor_enabled', enabled, desc_gemini)
     _upsert_bool_setting(cursor, 'deepseek_position_advisor_enabled', enabled, desc_deepseek)
@@ -739,7 +739,7 @@ async def update_trading_services(data: TradingServicesUpdate):
             value = '1' if data.gpt_position_advisor_enabled else '0'
             cursor.execute("""
                 INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('gpt_position_advisor_enabled', %s, 'GPT 模拟持仓顾问: gpt_* 仓 ≥30min 每15min hold/observe/sell', 'web_ui', NOW())
+                VALUES ('gpt_position_advisor_enabled', %s, 'GPT 模拟持仓顾问: gpt_* 仓 ≥15min 每15min hold/observe/sell', 'web_ui', NOW())
                 ON DUPLICATE KEY UPDATE
                     setting_value = VALUES(setting_value),
                     updated_by = 'web_ui',

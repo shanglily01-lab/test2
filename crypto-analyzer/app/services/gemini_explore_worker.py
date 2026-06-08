@@ -2,7 +2,7 @@
 Gemini 探索 worker (v3 — 2026-05-21 长持仓版)
 
 每 4h 调用 Google Gemini 检测加密货币短时方向异动, 根据 verdict 直接开模拟单。
-持仓 4 小时, SL=4%, TP=6%; 满 30min 后 Gemini 持仓顾问每 15min 问询是否持有。
+持仓 4 小时, SL=4%, TP=6%; 满 15min 后 Gemini 持仓顾问每 15min 问询是否持有。
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)

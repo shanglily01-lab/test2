@@ -4,7 +4,7 @@
 
 ## 1. Overview
 
-The platform runs multiple **AI trading strategies** on three **teacher models** (Gemini, DeepSeek, GPT). All AI trades default to **paper** (`futures_positions.account_id=2`). **Open advisors** review before entry; **hold advisors** supervise positions after 30 minutes.
+The platform runs multiple **AI trading strategies** on three **teacher models** (Gemini, DeepSeek, GPT). All AI trades default to **paper** (`futures_positions.account_id=2`). **Open advisors** review before entry; **hold advisors** supervise positions after 15 minutes.
 
 ```text
 crypto-scheduler (app/scheduler.py)
@@ -267,7 +267,7 @@ Web: `/gemini-advisor-reviews`
 
 ### 8.1 Role
 
-For OPEN paper positions held **≥30 minutes**, poll every **15 minutes/position**: `hold` | `observe` | `sell`.
+For OPEN paper positions held **≥15 minutes**, poll every **15 minutes/position**: `hold` | `observe` | `sell`.
 
 ### 8.2 Code
 

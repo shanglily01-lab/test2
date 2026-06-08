@@ -4,7 +4,7 @@
 
 ## 1. 总览
 
-系统在三套 **教师模型**（Gemini、DeepSeek、GPT）上运行多类 **AI 策略**，统一走 **模拟仓**（`futures_positions.account_id=2`）。开仓前经 **开仓顾问** 审查；持仓满 30 分钟后由 **持仓顾问** 每 15 分钟监管。
+系统在三套 **教师模型**（Gemini、DeepSeek、GPT）上运行多类 **AI 策略**，统一走 **模拟仓**（`futures_positions.account_id=2`）。开仓前经 **开仓顾问** 审查；持仓满 15 分钟后由 **持仓顾问** 每 15 分钟监管。
 
 ```text
 crypto-scheduler (app/scheduler.py)
@@ -273,7 +273,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 
 ### 8.1 职责
 
-模拟仓 OPEN 且持仓 **≥30 分钟** 后，每 **15 分钟/仓** 请求 LLM：`hold` | `observe` | `sell`。
+模拟仓 OPEN 且持仓 **≥15 分钟** 后，每 **15 分钟/仓** 请求 LLM：`hold` | `observe` | `sell`。
 
 ### 8.2 代码入口
 
