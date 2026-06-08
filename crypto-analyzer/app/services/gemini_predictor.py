@@ -1,7 +1,7 @@
 """
 Gemini 预测 worker (v2 — 2026-05-29)
 
-每 4h 对 TOP 50 交易对调用 Google Gemini 预测未来 4h 方向,
+每 4h 对候选池交易对调用 Google Gemini 预测未来 4h 方向,
 根据预测结果直接开模拟单.
 
 仓位参数:
@@ -124,7 +124,8 @@ PREDICT_SL_PCT = AI_POSITION_SL_PCT
 PREDICT_TP_PCT = AI_POSITION_TP_PCT
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'gemini_predict'
-PREDICT_TOP_N = 50
+PREDICT_CANDIDATE_LIMIT = 500
+PREDICT_TOP_N_FALLBACK = 50
 
 # 数据新鲜度门槛
 PREDICT_PRICE_FRESH_MIN = 20
@@ -150,10 +151,35 @@ def _connect():
 
 
 # ============================================================
-# 数据查询 — TOP 50
+# 数据查询 — 候选池
 # ============================================================
-def _get_top50_symbols(conn) -> List[str]:
-    """从 top_performing_symbols 获取 TOP 50 交易对, 可配置排除黑名单3级."""
+def _get_predict_symbols(conn) -> List[str]:
+    """优先从全市场候选池获取预测 symbol；缓存不可用时回退盈利 TOP50."""
+    banned = set()
+    try:
+        from app.services.trading_gates import load_blacklist_level3_symbols
+        banned = load_blacklist_level3_symbols(conn)
+    except Exception:
+        banned = set()
+
+    rows = _get_candidate_pool_cached()
+    if rows:
+        symbols = []
+        seen = set()
+        for row in rows[:PREDICT_CANDIDATE_LIMIT]:
+            sym = (row.get("symbol") or "").strip()
+            if not sym:
+                continue
+            from app.utils.futures_symbol import futures_symbol_clean
+            clean = futures_symbol_clean(sym)
+            if clean in banned or clean in seen:
+                continue
+            seen.add(clean)
+            symbols.append(sym)
+        if symbols:
+            logger.info(f"[Gemini预测] 从 candidate_pool_snapshot 获取 {len(symbols)} 个 symbol")
+            return symbols
+
     from app.services.trading_gates import is_blacklist_level3_enforced, sql_exclude_level3_filter
     _l3 = sql_exclude_level3_filter("symbol")
     with conn.cursor() as cur:
@@ -161,16 +187,18 @@ def _get_top50_symbols(conn) -> List[str]:
             cur.execute(
                 f"SELECT symbol FROM top_performing_symbols "
                 f"WHERE 1=1 {_l3} "
-                f"ORDER BY rank_score DESC LIMIT %s",
-                (PREDICT_TOP_N,),
+                f"ORDER BY rank_score ASC LIMIT %s",
+                (PREDICT_TOP_N_FALLBACK,),
             )
         else:
             cur.execute(
                 "SELECT symbol FROM top_performing_symbols "
-                "ORDER BY rank_score DESC LIMIT %s",
-                (PREDICT_TOP_N,),
+                "ORDER BY rank_score ASC LIMIT %s",
+                (PREDICT_TOP_N_FALLBACK,),
             )
-        return [r['symbol'] for r in cur.fetchall()]
+        symbols = [r['symbol'] for r in cur.fetchall()]
+        logger.warning(f"[Gemini预测] candidate_pool 不可用, 回退 top_performing_symbols {len(symbols)} 个")
+        return symbols
 
 
 def _get_current_price(conn, symbol: str) -> Optional[float]:
@@ -849,20 +877,20 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         return None
 
     try:
-        # 2. 获取 TOP50
-        top100 = _get_top50_symbols(conn)
-        if not top100:
-            logger.warning("[Gemini预测] TOP50 为空, 跳过")
+        # 2. 获取预测候选池
+        predict_symbols = _get_predict_symbols(conn)
+        if not predict_symbols:
+            logger.warning("[Gemini预测] 预测候选池为空, 跳过")
             elapsed = time.time() - t0
-            _insert_run(conn, asof_utc, 0, '', elapsed, 'skipped', 'TOP50为空', triggered_by)
+            _insert_run(conn, asof_utc, 0, '', elapsed, 'skipped', '预测候选池为空', triggered_by)
             return None
 
-        logger.info(f"[Gemini预测] TOP50 获取到 {len(top100)} 个 symbol")
+        logger.info(f"[Gemini预测] 预测候选池获取到 {len(predict_symbols)} 个 symbol")
 
         # 3. 构建每个 symbol 的数据
         symbols_data = []
         failed_symbols = []
-        for sym in top100:
+        for sym in predict_symbols:
             data = _build_symbol_data(conn, sym)
             if data and data['current_price']:
                 symbols_data.append(data)
@@ -875,7 +903,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         if not symbols_data:
             logger.warning("[Gemini预测] 所有 symbol 数据获取失败, 跳过")
             elapsed = time.time() - t0
-            _insert_run(conn, asof_utc, len(top100), '', elapsed, 'skipped', '所有symbol数据获取失败', triggered_by)
+            _insert_run(conn, asof_utc, len(predict_symbols), '', elapsed, 'skipped', '所有symbol数据获取失败', triggered_by)
             return None
 
         # 4. 全局上下文
