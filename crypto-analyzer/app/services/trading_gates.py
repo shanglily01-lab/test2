@@ -2,7 +2,7 @@
 实盘开仓闸门 & 黑名单等级 — 统一读取 system_settings，避免各模块硬编码。
 
 按 source 控制实盘（其余策略仅模拟）:
-  - deepseek_explore, deepseek_predict → 可开实盘
+  - gemini_predict, deepseek_explore, deepseek_predict → 可开实盘
   - 总开关: live_trading_enabled（开仓）, live_close_enabled（平仓）
 """
 from __future__ import annotations
@@ -17,6 +17,7 @@ from app.utils.config_loader import get_db_config
 
 # 仅此三类策略同步 Binance 实盘；其它 source 只走模拟仓
 LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
+    "gemini_predict",
     "deepseek_explore",
     "deepseek_predict",
 })
