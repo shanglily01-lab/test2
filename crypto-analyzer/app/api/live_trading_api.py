@@ -32,6 +32,35 @@ _db_config = None
 _engine_cache: dict = {}   # key: (user_id, api_key_id) -> BinanceFuturesEngine
 
 
+def _price_based_pnl(row: dict) -> Optional[float]:
+    """Return PnL implied by entry/close/quantity, or None when insufficient."""
+    try:
+        entry_price = float(row.get("entry_price") or 0)
+        close_price = float(row.get("close_price") or 0)
+        quantity = float(row.get("quantity") or 0)
+        side = (row.get("position_side") or "").upper()
+    except (TypeError, ValueError):
+        return None
+
+    if entry_price <= 0 or close_price <= 0 or quantity <= 0:
+        return None
+    if side == "LONG":
+        return round((close_price - entry_price) * quantity, 4)
+    if side == "SHORT":
+        return round((entry_price - close_price) * quantity, 4)
+    return None
+
+
+def _should_use_price_pnl(db_pnl: float, price_pnl: float) -> bool:
+    """Use price-implied PnL when stored PnL is missing or inconsistent."""
+    if db_pnl == 0:
+        return True
+    if (db_pnl > 0 > price_pnl) or (db_pnl < 0 < price_pnl):
+        return True
+    tolerance = max(0.01, abs(price_pnl) * 0.02)
+    return abs(db_pnl - price_pnl) > tolerance
+
+
 def get_db_config():
     """获取数据库配置"""
     global _db_config
@@ -1289,7 +1318,7 @@ async def get_position_history(
         )
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT symbol, position_side, quantity, entry_price, close_price,
+            SELECT symbol, position_side, quantity, margin, entry_price, close_price,
                    realized_pnl, leverage, source, notes,
                    open_time, close_time, close_reason, status
             FROM live_futures_positions
@@ -1313,18 +1342,14 @@ async def get_position_history(
             elif isinstance(v, datetime):
                 row[k] = v.isoformat()
 
-        # realized_pnl 为 0 时（币安侧止损/止盈，未回写 DB），用价差 * 数量估算
-        ep = row.get('entry_price') or 0
-        cp = row.get('close_price') or 0
-        qty = row.get('quantity') or 0
-        rpnl = row.get('realized_pnl') or 0
+        # DB PnL can be polluted by broad Binance trade aggregation; trust
+        # position price/quantity when the stored value is missing or inconsistent.
+        price_pnl = _price_based_pnl(row)
+        db_pnl = float(row.get('realized_pnl') or 0)
         row['pnl_estimated'] = False
-        if rpnl == 0 and ep > 0 and cp > 0 and qty > 0:
-            side = (row.get('position_side') or '').upper()
-            if side == 'LONG':
-                row['realized_pnl'] = round((float(cp) - float(ep)) * float(qty), 4)
-            elif side == 'SHORT':
-                row['realized_pnl'] = round((float(ep) - float(cp)) * float(qty), 4)
+        row['db_realized_pnl'] = db_pnl
+        if price_pnl is not None and _should_use_price_pnl(db_pnl, price_pnl):
+            row['realized_pnl'] = price_pnl
             row['pnl_estimated'] = True
 
     return {"success": True, "data": rows, "count": len(rows)}

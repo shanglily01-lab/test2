@@ -1770,7 +1770,7 @@ class BinanceFuturesEngine:
 
             # 2. 获取本地数据库中状态为 OPEN 的持仓
             cursor.execute("""
-                SELECT id, symbol, position_side, quantity, entry_price, binance_order_id
+                SELECT id, symbol, position_side, quantity, entry_price, binance_order_id, open_time
                 FROM live_futures_positions
                 WHERE status = 'OPEN' AND account_id = %s
             """, (account_id,))
@@ -1785,6 +1785,9 @@ class BinanceFuturesEngine:
                     # 获取最近的成交记录来确定平仓价格
                     binance_symbol = self._convert_symbol(local_pos['symbol'])
                     trades = self._get_recent_trades(binance_symbol, limit=50)
+                    open_ms = self._datetime_to_ms(local_pos.get('open_time'))
+                    if open_ms is not None:
+                        trades = [t for t in trades if int(t.get('time') or 0) >= open_ms]
 
                     close_price = Decimal('0')
                     realized_pnl = Decimal('0')
@@ -1986,6 +1989,52 @@ class BinanceFuturesEngine:
 
     # ==================== 获取成交记录 ====================
 
+    def _datetime_to_ms(self, value, default_ms: Optional[int] = None) -> Optional[int]:
+        if value is None:
+            return default_ms
+        if isinstance(value, datetime):
+            return int(value.timestamp() * 1000)
+        try:
+            return int(datetime.fromisoformat(str(value)).timestamp() * 1000)
+        except Exception:
+            return default_ms
+
+    def _summarize_closing_trades(
+        self,
+        trades: List[Dict],
+        position_side: str,
+        open_time=None,
+        close_time=None,
+    ) -> Tuple[Decimal, Decimal, Decimal]:
+        """Summarize Binance userTrades that close this position."""
+        start_ms = self._datetime_to_ms(open_time)
+        end_ms = self._datetime_to_ms(close_time)
+        close_side = 'SELL' if position_side == 'LONG' else 'BUY'
+
+        total_qty = Decimal('0')
+        total_quote = Decimal('0')
+        realized_pnl = Decimal('0')
+
+        for trade in trades:
+            trade_ms = int(trade.get('time') or 0)
+            if start_ms is not None and trade_ms and trade_ms < start_ms:
+                continue
+            if end_ms is not None and trade_ms and trade_ms > end_ms + 5 * 60 * 1000:
+                continue
+            if trade.get('side', '') != close_side:
+                continue
+            if trade.get('positionSide', 'BOTH') not in (position_side, 'BOTH'):
+                continue
+
+            qty = Decimal(str(trade.get('qty', trade.get('quantity', '0')) or '0'))
+            price = Decimal(str(trade.get('price', '0') or '0'))
+            total_qty += qty
+            total_quote += price * qty
+            realized_pnl += Decimal(str(trade.get('realizedPnl', '0') or '0'))
+
+        close_price = (total_quote / total_qty) if total_qty > 0 else Decimal('0')
+        return close_price, realized_pnl, total_qty
+
     def get_trade_history(self, symbol: str, start_time: int = None, end_time: int = None, limit: int = 200) -> List[Dict]:
         """
         获取币安合约成交历史记录（公开方法）
@@ -2131,7 +2180,7 @@ class BinanceFuturesEngine:
             # 错误的估算值（缺少 positionSide 过滤），需要覆盖修正。
 
             cursor.execute("""
-                SELECT id, symbol, position_side, close_price, realized_pnl, close_time
+                SELECT id, symbol, position_side, close_price, realized_pnl, open_time, close_time
                 FROM live_futures_positions
                 WHERE status = 'CLOSED' AND account_id = %s
                   AND close_time IS NOT NULL
@@ -2158,6 +2207,12 @@ class BinanceFuturesEngine:
                     trades = symbol_trades_cache.get(local_pos['symbol'], [])
                     if not trades:
                         continue
+                    start_ms = self._datetime_to_ms(local_pos.get('open_time'))
+                    end_ms = self._datetime_to_ms(local_pos.get('close_time'))
+                    if start_ms is not None:
+                        trades = [t for t in trades if int(t.get('time') or 0) >= start_ms]
+                    if end_ms is not None:
+                        trades = [t for t in trades if int(t.get('time') or 0) <= end_ms + 5 * 60 * 1000]
 
                     close_price = Decimal('0')
                     realized_pnl = Decimal('0')

@@ -291,14 +291,16 @@
 <tr class="text-[10px] uppercase tracking-widest text-on-surface-variant border-b border-white/5">
 <th class="py-5 px-8 font-bold">交易对</th>
 <th class="py-5 px-4 font-bold">方向</th>
+<th class="py-5 px-4 font-bold text-right">保证金</th>
 <th class="py-5 px-4 font-bold text-right">开仓价</th>
 <th class="py-5 px-4 font-bold text-right">平仓价</th>
 <th class="py-5 px-4 font-bold text-right">已实现盈亏</th>
+<th class="py-5 px-4 font-bold">开仓时间</th>
 <th class="py-5 px-4 font-bold">平仓时间</th>
 </tr>
 </thead>
 <tbody id="history-tbody" class="divide-y divide-white/5">
-<tr><td colspan="6" class="py-12 text-center text-on-surface-variant text-sm">加载中...</td></tr>
+<tr><td colspan="8" class="py-12 text-center text-on-surface-variant text-sm">加载中...</td></tr>
 </tbody>
 </table>
 </div>
@@ -884,11 +886,13 @@ function renderHistoryPage() {
     var slice = _historyAllRows.slice(start, start + _historyPageSize);
 
     if (slice.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="py-16 text-center text-on-surface-variant text-sm">暂无历史记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="py-16 text-center text-on-surface-variant text-sm">暂无历史记录</td></tr>';
     } else {
         tbody.innerHTML = slice.map(function(h) {
             var pnl = parseFloat(h.realized_pnl || 0);
             var side = h.side || h.position_side || '';
+            var leverage = parseFloat(h.leverage || 0);
+            var margin = _positionMargin(h, leverage);
             var pnlTxt = fmtPnl(pnl);
             if (h.pnl_estimated) pnlTxt += '<span class="text-[9px] text-on-surface-variant ml-1 opacity-60" title="币安侧止损，按价差估算">~</span>';
             var lev = h.leverage ? '<span class="text-[9px] text-on-surface-variant ml-1">' + h.leverage + 'x</span>' : '';
@@ -896,9 +900,11 @@ function renderHistoryPage() {
                 '<td class="py-4 px-8"><div class="flex items-center gap-3">' + symbolIcon(h.symbol) +
                 '<p class="text-sm font-bold font-headline">' + h.symbol + '</p></div></td>' +
                 '<td class="py-4 px-4">' + sideHtml(side) + lev + '</td>' +
+                '<td class="py-4 px-4 font-mono text-sm text-right text-on-surface-variant">' + fmtMargin(margin) + '</td>' +
                 '<td class="py-4 px-4 font-mono text-sm text-right text-on-surface-variant">' + fmtPrice(h.entry_price) + '</td>' +
                 '<td class="py-4 px-4 font-mono text-sm text-right">' + fmtPrice(h.exit_price || h.close_price) + '</td>' +
                 '<td class="py-4 px-4 font-mono text-sm text-right font-bold ' + pnlClass(pnl) + '">' + pnlTxt + '</td>' +
+                '<td class="py-4 px-4 text-xs text-on-surface-variant">' + fmtTime(h.open_time) + '</td>' +
                 '<td class="py-4 px-8 text-xs text-on-surface-variant">' + fmtTime(h.close_time) + '</td>' +
                 '</tr>';
         }).join('');
@@ -937,11 +943,11 @@ async function loadHistory(days) {
     _currentHistoryDays = days;
     var tbody = document.getElementById('history-tbody');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-on-surface-variant text-sm">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="py-12 text-center text-on-surface-variant text-sm">加载中...</td></tr>';
     try {
         var resp = await apiFetch(apiUrl('/history?days=' + days));
         if (!resp.ok) {
-            tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-[#ff716c] text-sm">加载失败 (HTTP ' + resp.status + ')</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="py-12 text-center text-[#ff716c] text-sm">加载失败 (HTTP ' + resp.status + ')</td></tr>';
             return;
         }
         var data = await resp.json();
@@ -952,7 +958,7 @@ async function loadHistory(days) {
         renderHistoryPage();
     } catch (e) {
         console.error('loadHistory failed:', e);
-        tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-[#ff716c] text-sm">加载失败: ' + e.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="py-12 text-center text-[#ff716c] text-sm">加载失败: ' + e.message + '</td></tr>';
     }
 }
 
