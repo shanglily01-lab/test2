@@ -23,7 +23,7 @@ crypto-scheduler (每 15min)
 | 类别 | 是否 LLM | 典型 source 前缀 | 实盘同步 |
 |------|----------|------------------|----------|
 | 主探索 | 是 | `gemini_explore` / `deepseek_explore` / `gpt_explore` | 仅 **`deepseek_explore`**（+ 开仓 TOP50/白名单）；Gemini/GPT 仅模拟 |
-| 主预测 | 是 | `*_predict` | **`gemini_predict`、`deepseek_predict`**（GPT 仅模拟） |
+| 主预测 | 是 | `*_predict` | 仅 **`deepseek_predict`**；Gemini/GPT 仅模拟 |
 | 顶空底多 | 是 | `*_reversal` | 否 |
 | 战术四策略 | 是 | `*_pullback` 等 | 否 |
 | 开仓/持仓顾问 | 是 | 按 source 路由 | 持仓 sell：`live_close_enabled=1` 且有 `paper_position_id` 绑定时平交易所 |
@@ -152,8 +152,8 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 4.5 实盘
 
-- **`gemini_predict`、`deepseek_predict`**：`_sync_to_live()` + `check_live_open_allowed`（TOP50/白名单）。
-- **GPT 预测**：仅模拟。
+- **`deepseek_predict`**：`_sync_to_live()` + `check_live_open_allowed`（TOP50/白名单）。
+- **Gemini / GPT 预测**：仅模拟。
 
 ### 4.6 数据表
 
@@ -325,7 +325,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | `live_whitelist_enabled` | 开仓：`rating_level=0` 可开实仓 |
 | `blacklist_level3_enabled` | L3 禁止开仓（多在开模拟前检查） |
 
-**开仓按 source 白名单**：`gemini_predict`、`deepseek_explore`、`deepseek_predict`。`gemini_explore`、GPT/其它策略即使 `live_trading_enabled=1` 也只写模拟仓。
+**开仓按 source 白名单**：`deepseek_explore`、`deepseek_predict`。`gemini_explore`、`gemini_predict`、GPT/其它策略即使 `live_trading_enabled=1` 也只写模拟仓。
 
 **北京时间实盘开仓时段**：仅 **10:00-16:00**、**22:00-次日04:00** 允许同步/直接开实盘；服务器 UTC 对应 **02:00-08:00**、**14:00-20:00**。模拟开仓不受该时段限制，用于对比禁开时段表现。
 

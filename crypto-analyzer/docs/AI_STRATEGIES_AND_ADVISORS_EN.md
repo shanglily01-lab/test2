@@ -23,7 +23,7 @@ Any simulated open
 | Category | LLM? | Typical `source` prefix | Live sync |
 |----------|------|-------------------------|-----------|
 | Main explore | Yes | `gemini_explore` / `deepseek_explore` / `gpt_explore` | **`deepseek_explore` only** (+ TOP50/whitelist on open); Gemini/GPT paper only |
-| Main predict | Yes | `*_predict` | **`gemini_predict`, `deepseek_predict`** (GPT paper only) |
+| Main predict | Yes | `*_predict` | **`deepseek_predict` only**; Gemini/GPT paper only |
 | Reversal | Yes | `*_reversal` | No |
 | Tactical four | Yes | `*_pullback`, etc. | No |
 | Open / hold advisors | Yes | Routed by `source` | `sell` closes exchange when `live_close_enabled=1` and a `paper_position_id` link exists |
@@ -151,8 +151,8 @@ Same as main explore: **4h hold, SL 4%, TP 6%, 5x, conf≥0.60, catalyst gate**.
 
 ### 4.5 Live
 
-- **`gemini_predict`, `deepseek_predict`**: `_sync_to_live()` + `check_live_open_allowed` (TOP50/whitelist).
-- **GPT predict**: paper only.
+- **`deepseek_predict`**: `_sync_to_live()` + `check_live_open_allowed` (TOP50/whitelist).
+- **Gemini / GPT predict**: paper only.
 
 ### 4.6 Tables
 
@@ -318,7 +318,7 @@ For OPEN paper positions held **≥15 minutes**, poll every **15 minutes/positio
 | `live_whitelist_enabled` | Open: `rating_level=0` whitelist |
 | `blacklist_level3_enabled` | Block L3 symbols (often checked before paper open) |
 
-**Source allowlist (open only):** `gemini_predict`, `deepseek_explore`, `deepseek_predict`. `gemini_explore`, GPT, and all other strategies stay paper-only for live opens even if `live_trading_enabled=1`.
+**Source allowlist (open only):** `deepseek_explore`, `deepseek_predict`. `gemini_explore`, `gemini_predict`, GPT, and all other strategies stay paper-only for live opens even if `live_trading_enabled=1`.
 
 **Beijing-time live-open windows:** live opens/syncs are allowed only during **10:00-16:00** and **22:00-next day 04:00** Beijing time; on the UTC server these are **02:00-08:00** and **14:00-20:00**. Paper opens are not time-gated, so forbidden-window paper trades remain available for comparison.
 

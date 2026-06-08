@@ -121,7 +121,7 @@
 
 ### 主预测 (`*_predict`)
 - 每 **4h** + 5min 轮询 + `*_predict_next_due_utc`；kill switch（Gemini 预测默认 1）
-- 同主探索持仓/SL/TP/门槛；**实盘**：`gemini_predict`、`deepseek_predict`；GPT 预测仅模拟
+- 同主探索持仓/SL/TP/门槛；**实盘**：仅 `deepseek_predict`；Gemini/GPT 预测仅模拟
 
 ### 开仓 / 持仓顾问（2026-06-08 Gemini 主单回归 Gemini）
 - `gemini_explore` / `gemini_predict` 开仓和持仓由 Gemini 顾问审核；其余 source 由 DeepSeek 顾问监管
@@ -175,7 +175,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 
 ## 实盘控制
 
-- **按 source 白名单**（`app/services/trading_gates.py`）：`gemini_predict`、`deepseek_explore`、`deepseek_predict` 可开实盘；`gemini_explore`、GPT、战术、反转、smart_trader 等只写模拟仓
+- **按 source 白名单**（`app/services/trading_gates.py`）：`deepseek_explore`、`deepseek_predict` 可开实盘；`gemini_explore`、`gemini_predict`、GPT、战术、反转、smart_trader 等只写模拟仓
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)
 - **平仓总开关**: `system_settings.live_close_enabled` (1=开启；模拟平仓时同步交易所；持仓顾问 sell 亦受此规则)
 - **北京时间实盘开仓时段**: 仅 10:00-16:00、22:00-次日04:00 允许同步/直接开实盘；服务器 UTC 对应 02:00-08:00、14:00-20:00。模拟开仓不受该时段限制，用于对比禁开时段表现。
