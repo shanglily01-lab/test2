@@ -320,7 +320,7 @@ For OPEN paper positions held **≥15 minutes**, poll every **15 minutes/positio
 
 **Source allowlist (open only):** `gemini_predict`, `deepseek_explore`, `deepseek_predict`. `gemini_explore`, GPT, and all other strategies stay paper-only for live opens even if `live_trading_enabled=1`.
 
-**Beijing-time open windows:** opens are allowed only during **10:00-16:00** and **22:00-next day 04:00** Beijing time; on the UTC server these are **02:00-08:00** and **14:00-20:00**. Both paper and live opens are gated by `trading_gates.get_beijing_open_window_status`.
+**Beijing-time live-open windows:** live opens/syncs are allowed only during **10:00-16:00** and **22:00-next day 04:00** Beijing time; on the UTC server these are **02:00-08:00** and **14:00-20:00**. Paper opens are not time-gated, so forbidden-window paper trades remain available for comparison.
 
 **Open chain** (`check_live_open_allowed`): `live_trading_enabled` → source ∈ allowlist → `check_live_symbol_allowed` (L1/L2/L3 blacklist rejects; TOP50 **OR** whitelist; if both gates off, no live open). Reject reasons include “blacklist level 1 blocks live”, “not in TOP 50 nor whitelist”, “strategy X paper only”.
 
