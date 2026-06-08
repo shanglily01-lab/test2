@@ -5,8 +5,8 @@
 2. trading_symbol_rating: 按全仓累计规则评定 L0/L1/L2/L3
 
 评级规则（全仓累计，至少5笔交易）:
-  L0 白名单:    盈利 > 200U 且 胜率 > 55%（双条件）
-  L1 黑名单1级: 盈利 > 50U 或 胜率 > 50%
+  L0 白名单:    盈利 > 200U 且 胜率 > 50%（双条件）
+  L1 黑名单1级: 盈利 > 50U 或 胜率 > 46%
   L2 黑名单2级: -100 < 盈利 < 0 或 胜率 > 44%
   L3 黑名单3级: 盈利 < -100U 且 胜率 < 44%（双条件）
 
@@ -47,16 +47,16 @@ def compute_rating_level(pnl: float, win_rate_pct: float, total_trades: int) -> 
     if pnl < -100.0 and win_rate_pct < 44.0:
         return 3, f"黑名单3级: 累计盈利{pnl:.0f}U, 胜率{win_rate_pct:.1f}%"
 
-    # L0: 盈利 > 200U 且 胜率 > 55%（双条件最优）
-    if pnl > 200.0 and win_rate_pct > 55.0:
+    # L0: 盈利 > 200U 且 胜率 > 50%（双条件最优）
+    if pnl > 200.0 and win_rate_pct > 50.0:
         return 0, f"白名单: 累计盈利{pnl:.0f}U, 胜率{win_rate_pct:.1f}%"
 
-    # L1: 盈利 > 50U 或 胜率 > 50%
-    if pnl > 50.0 or win_rate_pct > 50.0:
+    # L1: 盈利 > 50U 或 胜率 > 46%
+    if pnl > 50.0 or win_rate_pct > 46.0:
         parts = []
         if pnl > 50.0:
             parts.append(f"累计盈利{pnl:.0f}U")
-        if win_rate_pct > 50.0:
+        if win_rate_pct > 46.0:
             parts.append(f"胜率{win_rate_pct:.1f}%")
         return 1, "黑名单1级: " + ", ".join(parts)
 
@@ -69,7 +69,7 @@ def compute_rating_level(pnl: float, win_rate_pct: float, total_trades: int) -> 
             parts.append(f"胜率{win_rate_pct:.1f}%")
         return 2, "黑名单2级: " + ", ".join(parts)
 
-    return 1, "黑名单1级: 未达白名单条件（需盈利>200U且胜率>55%）"
+    return 1, "黑名单1级: 未达白名单条件（需盈利>200U且胜率>50%）"
 
 
 # ── SQL ───────────────────────────────────────────────────
