@@ -114,9 +114,11 @@ class UnifiedDataScheduler:
             'correct_live_trades': {'count': 0, 'last_run': None, 'last_error': None},
             'deepseek_explore': {'count': 0, 'last_run': None, 'last_error': None},
             'deepseek_predict': {'count': 0, 'last_run': None, 'last_error': None},
+            'gemini_position_advisor': {'count': 0, 'last_run': None, 'last_error': None},
             'deepseek_position_advisor': {'count': 0, 'last_run': None, 'last_error': None},
             'paper_closed_live_sync': {'count': 0, 'last_run': None, 'last_error': None}
         }
+        self._gemini_position_advisor_running = False
         self._deepseek_position_advisor_running = False
         self._paper_closed_live_sync_running = False
 
@@ -1402,7 +1404,39 @@ class UnifiedDataScheduler:
         schedule.every(5).minutes.do(_run_gpt_predict)
         logger.info("  ✓ gpt_predict - 每 4h 周期 + 5 分钟到期轮询 (DB next_due 防重)")
 
-        # DeepSeek 持仓顾问 - 统一监管 account_id=2 模拟仓，满 30min 后每 15min 复查
+        # Gemini 持仓顾问 - 监管 gemini_explore/gemini_predict 模拟仓，满 30min 后每 15min 复查
+        def _run_gemini_position_advisor():
+            if self._gemini_position_advisor_running:
+                logger.info("[Gemini持仓顾问] 上一轮仍在运行，跳过本轮")
+                return
+
+            def wrapper():
+                task_name = 'gemini_position_advisor'
+                self._gemini_position_advisor_running = True
+                try:
+                    from app.services.gemini_position_advisor import get_open_advisor
+                    stats = get_open_advisor().tick()
+                    self.task_stats[task_name]['count'] += 1
+                    self.task_stats[task_name]['last_run'] = datetime.now()
+                    self.task_stats[task_name]['last_error'] = None
+                    logger.info(f"[Gemini持仓顾问] 调度完成: {stats}")
+                except Exception as e:
+                    logger.error(f"[Gemini持仓顾问] 调度异常: {e}", exc_info=True)
+                    self.task_stats[task_name]['last_error'] = str(e)
+                finally:
+                    self._gemini_position_advisor_running = False
+
+            threading.Thread(
+                target=wrapper,
+                daemon=True,
+                name="GeminiPositionAdvisor",
+            ).start()
+
+        schedule.every(15).minutes.do(_run_gemini_position_advisor)
+        _run_gemini_position_advisor()
+        logger.info("  ✓ gemini_position_advisor - 每 15 分钟 (后台线程)")
+
+        # DeepSeek 持仓顾问 - 监管非 Gemini 主探索/预测模拟仓，满 30min 后每 15min 复查
         def _run_deepseek_position_advisor():
             if self._deepseek_position_advisor_running:
                 logger.info("[DeepSeek持仓顾问] 上一轮仍在运行，跳过本轮")

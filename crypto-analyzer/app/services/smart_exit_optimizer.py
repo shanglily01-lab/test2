@@ -75,17 +75,16 @@ class SmartExitOptimizer:
         # key: "position_id:hour_checkpoint"，value: 首次触发该档位亏损的时间
         self._loss_onset_times: Dict[str, datetime] = {}
 
-        # === Gemini 实盘持仓顾问 (2026-05-17) ===
-        # 实盘 OPEN >= 4h 的单,每 1h 调 Gemini 决策 hold/observe/sell
-        # 外部 (smart_trader 主循环) 每 15 min 调 gemini_advisor_tick()
-        # 默认 OFF (system_settings.gemini_position_advisor_enabled)
+        # === 模拟仓持仓顾问 ===
+        # 外部 (smart_trader 主循环) 每 15 min 调 Gemini / DeepSeek tick。
+        # gemini_explore/gemini_predict 由 Gemini 监管，其余 source 由 DeepSeek 监管。
         try:
             from app.services.gemini_position_advisor import GeminiPositionAdvisor
             from app.services.deepseek_position_advisor import DeepSeekPositionAdvisor
             self.gemini_advisor = GeminiPositionAdvisor(db_config)
             self.deepseek_advisor = DeepSeekPositionAdvisor(db_config)
             self.gpt_advisor = None
-            logger.info("[SmartExit] DeepSeek 持仓顾问已初始化 (Gemini 已停止监管)")
+            logger.info("[SmartExit] Gemini / DeepSeek 持仓顾问已初始化")
         except Exception as e:
             self.gemini_advisor = None
             self.deepseek_advisor = None
@@ -1877,9 +1876,9 @@ class SmartExitOptimizer:
             return None
 
     # ════════════════════════════════════════════════════════════════
-    # Gemini 实盘持仓顾问 入口 (2026-05-17)
-    # 外部 (smart_trader_service 主循环) 每 15 min 调一次
-    # 内部 GeminiPositionAdvisor.tick(): AI 单 4h+ 每 15min, 非 AI 3h+ 每 1h
+    # 持仓顾问入口
+    # 外部 (smart_trader_service 主循环) 每 15 min 调一次。
+    # source 路由见 open_advisor_routing.py。
     # ════════════════════════════════════════════════════════════════
 
     def gemini_advisor_tick(self) -> dict:

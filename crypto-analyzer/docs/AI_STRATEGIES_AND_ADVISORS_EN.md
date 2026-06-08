@@ -239,9 +239,8 @@ gate_simulated_open (paper_open_gate.py)
 
 | `source` pattern | Reviewers |
 |------------------|-----------|
-| `gemini_*` | Gemini only |
-| `deepseek_*` | DeepSeek only |
-| `gpt_*` | GPT only |
+| `gemini_explore` / `gemini_predict` | Gemini only |
+| Other sources | DeepSeek only |
 
 ### 7.3 Steps (`open_advisor_strategy_rubrics.py`)
 
@@ -274,11 +273,10 @@ For OPEN paper positions held **≥30 minutes**, poll every **15 minutes/positio
 
 | Teacher | Class | Sources |
 |---------|-------|---------|
-| Gemini | `GeminiPositionAdvisor.tick` | Not `deepseek_*` / `gpt_*` |
-| DeepSeek | `deepseek_position_advisor` | `deepseek_*` |
-| GPT | `gpt_position_advisor` | `gpt_*` |
+| Gemini | `GeminiPositionAdvisor.tick` | `gemini_explore` / `gemini_predict` |
+| DeepSeek | `deepseek_position_advisor` | Other sources |
 
-`smart_trader_service` calls all three every **900s** via `smart_exit_optimizer`.
+`crypto-scheduler` calls Gemini and DeepSeek every **15 minutes**.
 
 ### 8.3 Decision basis (English prompt)
 

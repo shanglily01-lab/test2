@@ -1,4 +1,7 @@
-"""开仓/持仓顾问路由 — 全部由 DeepSeek 统一监管."""
+"""开仓/持仓顾问路由."""
+
+
+GEMINI_PRIMARY_ORDER_SOURCES = {"gemini_explore", "gemini_predict"}
 
 
 def is_gemini_order_source(source: str) -> bool:
@@ -17,23 +20,25 @@ def is_gpt_order_source(source: str) -> bool:
 
 
 def uses_gemini_open_advisor(source: str) -> bool:
-    """已废弃: 全部走 DeepSeek 开仓顾问."""
-    return False
+    """Gemini 主探索/预测订单由 Gemini 开仓顾问审核."""
+    return (source or "").strip().lower() in GEMINI_PRIMARY_ORDER_SOURCES
 
 
 def resolve_open_advisors(source: str) -> tuple[str, ...]:
-    """全部策略均由 DeepSeek 开仓顾问统一监管."""
+    """按订单 source 选择开仓顾问."""
+    if uses_gemini_open_advisor(source):
+        return ("gemini",)
     return ("deepseek",)
 
 
 def should_use_gemini_hold_advisor(source: str) -> bool:
-    """已废弃: 全部由 DeepSeek 持仓顾问监管."""
-    return False
+    """Gemini 主探索/预测持仓由 Gemini 持仓顾问监管."""
+    return (source or "").strip().lower() in GEMINI_PRIMARY_ORDER_SOURCES
 
 
 def should_use_deepseek_hold_advisor(source: str) -> bool:
-    """全部模拟仓由 DeepSeek 持仓顾问统一监管."""
-    return True
+    """其余模拟仓仍由 DeepSeek 持仓顾问监管."""
+    return not should_use_gemini_hold_advisor(source)
 
 
 def should_use_gpt_hold_advisor(source: str) -> bool:

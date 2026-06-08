@@ -123,8 +123,8 @@
 - 每 **4h** + 5min 轮询 + `*_predict_next_due_utc`；kill switch（Gemini 预测默认 1）
 - 同主探索持仓/SL/TP/门槛；**实盘**：`gemini_predict`、`deepseek_predict`；GPT 预测仅模拟
 
-### 开仓 / 持仓顾问（2026-06-06 统一 DeepSeek）
-- **所有 source 开仓/持仓均由 DeepSeek 统一监管**
+### 开仓 / 持仓顾问（2026-06-08 Gemini 主单回归 Gemini）
+- `gemini_explore` / `gemini_predict` 开仓和持仓由 Gemini 顾问审核；其余 source 由 DeepSeek 顾问监管
 - Prompt/rubric/**reason 生产环境为中文**；开关 `*_open_advisor_enabled` / `*_position_advisor_enabled`
 - 表 `gemini/deepseek/gpt_advisor_reviews`；Web `/gemini-advisor-reviews`
 
@@ -201,5 +201,4 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 - `app/scheduler.py` (crypto-scheduler) 统一调度价格采集、Gemini 等
 - `app/main.py` (FastAPI) 提供 Web 界面
 - 核心进程需全部启动。某个挂了其他仍能运行，但对应功能会缺失
-
 

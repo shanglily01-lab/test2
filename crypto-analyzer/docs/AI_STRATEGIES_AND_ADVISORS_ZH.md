@@ -13,8 +13,8 @@ crypto-scheduler (app/scheduler.py)
   ├─ 战术探索 15 槽位 (5策略×3教师) + 15min 轮询
   └─ Gemini 情绪 (8h)
 
-smart_trader_service (每 900s)
-  └─ Gemini + DeepSeek + GPT 持仓顾问 tick
+crypto-scheduler (每 15min)
+  └─ Gemini + DeepSeek 持仓顾问 tick
 
 任意模拟开仓
   └─ paper_open_gate.gate_simulated_open()
@@ -240,9 +240,8 @@ gate_simulated_open (paper_open_gate.py)
 
 | source 模式 | 审查方 |
 |-------------|--------|
-| `gemini_*` | 仅 Gemini |
-| `deepseek_*` | 仅 DeepSeek |
-| `gpt_*` | 仅 GPT |
+| `gemini_explore` / `gemini_predict` | 仅 Gemini |
+| 其他 source | 仅 DeepSeek |
 
 ### 7.3 审查步骤（`open_advisor_strategy_rubrics.py`）
 
@@ -280,11 +279,10 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 
 | 教师 | 类 | 监管 source |
 |------|-----|-------------|
-| Gemini | `gemini_position_advisor.GeminiPositionAdvisor.tick` | 非 `deepseek_*` 且非 `gpt_*` |
-| DeepSeek | `deepseek_position_advisor` | `deepseek_*` |
-| GPT | `gpt_position_advisor` | `gpt_*` |
+| Gemini | `gemini_position_advisor.GeminiPositionAdvisor.tick` | `gemini_explore` / `gemini_predict` |
+| DeepSeek | `deepseek_position_advisor` | 其他 source |
 
-`smart_trader_service` 每 **900s** 调用 `smart_exit_optimizer` 中三个 tick。
+`crypto-scheduler` 每 **15 分钟** 调用 Gemini / DeepSeek 两个 tick。
 
 ### 8.3 决策依据（英文 prompt）
 
