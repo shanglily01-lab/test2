@@ -161,7 +161,7 @@
 | 等级 | 条件 | 保证金倍数 |
 |------|------|----------|
 | L0 (白名单) | 盈利 > 200U **且** 胜率 > 55% | 1.0x |
-| L1 (黑名单1级) | 盈利 > 50U **或** 胜率 > 50% | 0.25x |
+| L1 (黑名单1级) | 盈利 > 50U **或** 胜率 > 50% | 0 (禁止实盘) |
 | L2 (黑名单2级) | -100 < 盈利 < 0 **或** 胜率 > 44% | 0.125x |
 | L3 (黑名单3级) | 盈利 < -100U **且** 胜率 < 44% | 0 (禁止) |
 
@@ -181,7 +181,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 - **TOP50 实仓闸门**: `system_settings.live_top50_required` (默认 1，TOP50 内可开实仓)
 - **白名单实仓闸门**: `system_settings.live_whitelist_enabled` (默认 1，rating_level=0 可开实仓)
 - 两者为 **或** 关系；**都关** 则即使 `live_trading_enabled=1` 也不同步实盘
-- **黑名单3级**: `system_settings.blacklist_level3_enabled` (默认 1，关闭后 L3 可开仓)
+- **黑名单实盘限制**: L1/L2/L3 禁止实盘开仓；`blacklist_level3_enabled` 仍仅控制 L3 模拟开仓排除
 - 各闸门由 `trading_gates.check_live_open_allowed` / `should_sync_live_for_source` 统一读取，**不在 config.yaml**
 - 每账号 OPEN 上限 20 仓
 - 允许实盘的策略通过 `_sync_live()` / `_sync_to_live()` 同步到 BinanceFuturesEngine
@@ -201,4 +201,3 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 - `app/scheduler.py` (crypto-scheduler) 统一调度价格采集、Gemini 等
 - `app/main.py` (FastAPI) 提供 Web 界面
 - 核心进程需全部启动。某个挂了其他仍能运行，但对应功能会缺失
-

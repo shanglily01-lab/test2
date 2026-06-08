@@ -1,5 +1,5 @@
 """
-实盘开仓闸门 & 黑名单3级 — 统一读取 system_settings，避免各模块硬编码。
+实盘开仓闸门 & 黑名单等级 — 统一读取 system_settings，避免各模块硬编码。
 
 按 source 控制实盘（其余策略仅模拟）:
   - gemini_explore, deepseek_explore, gemini_predict, deepseek_predict → 可开实盘
@@ -199,7 +199,7 @@ def get_live_margin_ratio(symbol: str, cursor=None) -> float:
     规则 (2026-06-06):
       - L0 (白名单) 或 TOP50 → 1.0 (100%)
       - 无评级 (未在评级表中) → 0.8 (80%)
-      - L1 (黑名单1级) → 0.5 (50%)
+      - L1 (黑名单1级) → 0.0 (禁止实盘)
       - L2 (黑名单2级) → 0.0 (禁止实盘)
       - L3 (黑名单3级) → 0.0 (禁止实盘)
 
@@ -212,12 +212,9 @@ def get_live_margin_ratio(symbol: str, cursor=None) -> float:
     """
     rating_level, in_top50 = get_symbol_rating_info(symbol, cursor)
 
-    if rating_level is not None and rating_level >= 2:
+    if rating_level is not None and rating_level >= 1:
         return 0.0
 
-    # L1 黑名单1级 — 优先级高于 TOP50, 确保 L1 不被 TOP50 覆盖
-    if rating_level == 1:
-        return 0.5
     if in_top50 or rating_level == 0:
         return 1.0
     # 无评级 (None)
@@ -240,8 +237,8 @@ def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
     检查 symbol 是否允许实盘开仓 (不含 live_trading_enabled 总开关).
 
     新规则 (2026-06-06):
-      - L0 (白名单), TOP50, L1 (黑名单1级), 无评级 → 允许 (按不同保证金比例)
-      - L2 (黑名单2级), L3 (黑名单3级) → 拒绝
+      - L0 (白名单), TOP50, 无评级 → 允许 (按不同保证金比例)
+      - L1/L2/L3 (黑名单) → 拒绝实盘
 
     保留 TOP50/白名单 开关作为主闸门:
       - 两者都关 → 一律拒绝
@@ -256,14 +253,9 @@ def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
 
     rating_level, in_top50 = get_symbol_rating_info(symbol, cursor)
 
-    # L2 / L3 直接拒绝
-    if rating_level is not None and rating_level >= 2:
+    # L1 / L2 / L3 直接拒绝
+    if rating_level is not None and rating_level >= 1:
         return False, f'黑名单{rating_level}级禁止实盘'
-
-    # L1 允许, 但保证金按 50% 计算
-    if rating_level == 1:
-        pct = live_margin_ratio_str(0.5)
-        return True, f'允许实盘(保证金{pct})'
 
     # TOP50 或 L0 白名单 — 100% 保证金
     if top50_gate and in_top50:

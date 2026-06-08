@@ -320,7 +320,7 @@ For OPEN paper positions held **≥15 minutes**, poll every **15 minutes/positio
 
 **Source allowlist (open only):** `gemini_explore`, `deepseek_explore`, `gemini_predict`, `deepseek_predict`. All other strategies stay paper-only for live opens even if `live_trading_enabled=1`.
 
-**Open chain** (`check_live_open_allowed`): `live_trading_enabled` → source ∈ allowlist → `check_live_symbol_allowed` (TOP50 **OR** whitelist; if both gates off, no live open). Reject reasons include “not in TOP 50 nor whitelist”, “strategy X paper only”.
+**Open chain** (`check_live_open_allowed`): `live_trading_enabled` → source ∈ allowlist → `check_live_symbol_allowed` (L1/L2/L3 blacklist rejects; TOP50 **OR** whitelist; if both gates off, no live open). Reject reasons include “blacklist level 1 blocks live”, “not in TOP 50 nor whitelist”, “strategy X paper only”.
 
 **Close:** `live_close_enabled` + `live_futures_positions.paper_position_id` link only; **no** source/TOP50/whitelist re-check.
 
