@@ -151,10 +151,10 @@ def _connect():
 
 
 # ============================================================
-# 数据查询 — 候选池
+# 数据查询 — 候选池 (全量, 非 TOP50 截断)
 # ============================================================
 def _get_predict_symbols(conn) -> List[str]:
-    """优先从全市场候选池获取预测 symbol；缓存不可用时回退盈利 TOP50."""
+    """从 candidate_pool_snapshot 全量取 symbol；缓存不可用时回退盈利 TOP50."""
     banned = set()
     try:
         from app.services.trading_gates import load_blacklist_level3_symbols
@@ -164,15 +164,15 @@ def _get_predict_symbols(conn) -> List[str]:
 
     rows = _get_candidate_pool_cached()
     if rows:
-        from app.services.ai_explore_prompt import select_llm_symbols_from_pool
+        from app.services.ai_explore_prompt import select_all_symbols_from_pool
 
-        symbols = select_llm_symbols_from_pool(
+        symbols = select_all_symbols_from_pool(
             rows[:PREDICT_CANDIDATE_LIMIT],
             banned=banned,
         )
         if symbols:
             logger.info(
-                f"[Gemini预测] 从 candidate_pool_snapshot 技术面 TOP{len(symbols)} 送模"
+                f"[Gemini预测] 从 candidate_pool_snapshot 全量获取 {len(symbols)} 个 symbol"
             )
             return symbols
 
@@ -478,7 +478,7 @@ def _has_open_position(conn, symbol: str) -> bool:
 def _call_gemini_predict(
     symbols_data: List[Dict], global_ctx: dict,
 ) -> Tuple[Optional[dict], Optional[str]]:
-    """调用 Gemini — 批量预测 TOP50 方向. 返回 (parsed, error_msg)."""
+    """调用 Gemini — 批量预测 candidate_pool 全量方向. 返回 (parsed, error_msg)."""
     if not GEMINI_API_KEY:
         logger.error("[Gemini预测] GEMINI_API_KEY 未设置")
         return None, "GEMINI_API_KEY 未设置"
