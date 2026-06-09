@@ -840,6 +840,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
 
             due, due_reason = predict_round_is_due(
                 conn_chk,
+                strategy_key='gemini_predict',
                 runs_table='gemini_predict_runs',
                 next_due_key=GEMINI_PREDICT_NEXT_DUE_KEY,
                 now=asof_utc,
@@ -853,6 +854,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
             if not manual:
                 predict_claim_next_slot(
                     conn_chk,
+                    strategy_key='gemini_predict',
                     next_due_key=GEMINI_PREDICT_NEXT_DUE_KEY,
                     now=asof_utc,
                     log_tag='Gemini预测',

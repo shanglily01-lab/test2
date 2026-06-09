@@ -824,6 +824,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
 
             due, due_reason = predict_round_is_due(
                 conn_chk,
+                strategy_key='deepseek_predict',
                 runs_table='deepseek_predict_runs',
                 next_due_key=DEEPSEEK_PREDICT_NEXT_DUE_KEY,
                 now=asof_utc,
@@ -837,6 +838,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
             if not manual:
                 predict_claim_next_slot(
                     conn_chk,
+                    strategy_key='deepseek_predict',
                     next_due_key=DEEPSEEK_PREDICT_NEXT_DUE_KEY,
                     now=asof_utc,
                     log_tag='DeepSeek预测',

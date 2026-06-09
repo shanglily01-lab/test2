@@ -25,7 +25,11 @@ from app.services.ai_explore_prompt import (
     parse_explore_llm_json,
 )
 from app.services.ai_explore_prompt import EXPLORE_MIN_INTERVAL_HOURS
-from app.services.ai_predict_schedule import explore_round_is_due
+from app.services.ai_predict_schedule import (
+    GPT_EXPLORE_NEXT_DUE_KEY,
+    explore_claim_next_slot,
+    explore_round_is_due,
+)
 from app.services.gemini_explore_worker import _get_current_price, _would_instant_tp
 from app.services.gemini_swan_worker import _read_setting
 from app.utils.futures_symbol import futures_symbol_rating_canonical, resolve_futures_universe_item
@@ -228,7 +232,9 @@ def _run_explore_round_body(triggered_by: str = "scheduler") -> Optional[int]:
 
             due, due_reason = explore_round_is_due(
                 conn_chk,
+                strategy_key="gpt_explore",
                 runs_table="gpt_explore_runs",
+                next_due_key=GPT_EXPLORE_NEXT_DUE_KEY,
                 now=asof_utc,
                 manual=manual,
                 log_tag="GPT探索",
@@ -236,6 +242,14 @@ def _run_explore_round_body(triggered_by: str = "scheduler") -> Optional[int]:
             if not due:
                 logger.info(f"[GPT探索] {due_reason}, 跳过 (triggered_by={triggered_by})")
                 return None
+            if not manual:
+                explore_claim_next_slot(
+                    conn_chk,
+                    strategy_key="gpt_explore",
+                    next_due_key=GPT_EXPLORE_NEXT_DUE_KEY,
+                    now=asof_utc,
+                    log_tag="GPT探索",
+                )
     except Exception as e:
         logger.error(f"[GPT探索] 调度检查失败, 保守跳过: {e}")
         return None

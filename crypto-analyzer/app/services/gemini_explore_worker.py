@@ -48,6 +48,11 @@ from app.services.ai_explore_prompt import (
     explore_catalyst_technical_ok,
     parse_explore_llm_json,
 )
+from app.services.ai_predict_schedule import (
+    GEMINI_EXPLORE_NEXT_DUE_KEY,
+    explore_claim_next_slot,
+    explore_round_is_due,
+)
 from app.services.gemini_swan_worker import (
     GEMINI_MODEL,
     GEMINI_API_KEY,
@@ -1563,26 +1568,36 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         _explore_running_lock.release()
         return None
 
-    # 防重: 上次成功距今 >= EXPLORE_MIN_INTERVAL_HOURS 才执行 (仅 manual 不拦截)
-    if triggered_by != 'manual':
+    manual = triggered_by == 'manual'
+    if not manual:
         try:
             with _connect() as conn_chk:
-                with conn_chk.cursor() as cur:
-                    cur.execute(
-                        "SELECT MAX(asof_utc) AS last_run FROM gemini_explore_runs WHERE status='ok'"
+                due, due_reason = explore_round_is_due(
+                    conn_chk,
+                    strategy_key='gemini_explore',
+                    runs_table='gemini_explore_runs',
+                    next_due_key=GEMINI_EXPLORE_NEXT_DUE_KEY,
+                    now=asof_utc,
+                    manual=False,
+                    log_tag='Gemini探索',
+                )
+                if not due:
+                    logger.info(
+                        f"[Gemini探索] {due_reason}, 跳过 (triggered_by={triggered_by})"
                     )
-                    row = cur.fetchone()
-                    if row and row.get('last_run'):
-                        elapsed_h = (asof_utc - row['last_run']).total_seconds() / 3600
-                        if elapsed_h < EXPLORE_MIN_INTERVAL_HOURS:
-                            logger.info(
-                                f"[Gemini探索] 上次成功距今 {elapsed_h:.1f}h "
-                                f"< {EXPLORE_MIN_INTERVAL_HOURS:.0f}h, 跳过"
-                            )
-                            _explore_running_lock.release()
-                            return None
+                    _explore_running_lock.release()
+                    return None
+                explore_claim_next_slot(
+                    conn_chk,
+                    strategy_key='gemini_explore',
+                    next_due_key=GEMINI_EXPLORE_NEXT_DUE_KEY,
+                    now=asof_utc,
+                    log_tag='Gemini探索',
+                )
         except Exception as e:
-            logger.warning(f"[Gemini探索] 防重检查失败, 继续: {e}")
+            logger.warning(f"[Gemini探索] 调度检查失败, 保守跳过: {e}")
+            _explore_running_lock.release()
+            return None
 
     logger.info(f"[Gemini探索] === 一轮开始 (triggered_by={triggered_by}) ===")
 

@@ -1,14 +1,15 @@
-"""Gemini / DeepSeek / GPT 预测 — 统一 4h 调度防重 (保证每 4h 至少执行一轮).
+"""Gemini / DeepSeek / GPT 探索+预测 — 统一固定时刻 4h 调度.
 
-调度器每 5 分钟轮询 + worker 内秒级防重 + system_settings 认领下一窗口,
-避免 schedule.every(4).hours 在进程重启后计时清零导致长期不跑。
+锚点: 北京时间 21:30 (= UTC 13:30), 每 4h 一轮; 六策略各错开 5 分钟:
+  gemini_explore +0, deepseek_explore +5, gpt_explore +10,
+  gemini_predict +15, deepseek_predict +20, gpt_predict +25.
 
-主探索 (gemini/deepseek/gpt explore) 仅用「距上次 status=ok ≥4h」防重, 不用 next_due。
+调度器 5/10 分钟轮询 + worker 内 next_due 认领防重。
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from loguru import logger
 
@@ -18,10 +19,27 @@ PREDICT_ROUND_INTERVAL_HOURS = 4
 PREDICT_ROUND_INTERVAL_SECONDS = PREDICT_ROUND_INTERVAL_HOURS * 3600
 PREDICT_SCHEDULE_POLL_MINUTES = 5
 
+# 固定锚点 UTC 13:30 = 北京时间 21:30
+SCHEDULE_ANCHOR_HOUR_UTC = 13
+SCHEDULE_ANCHOR_MINUTE_UTC = 30
+SCHEDULE_STAGGER_MINUTES = 5
+_SCHEDULE_ANCHOR_BASE = datetime(2024, 1, 1, SCHEDULE_ANCHOR_HOUR_UTC, SCHEDULE_ANCHOR_MINUTE_UTC)
+
+GEMINI_EXPLORE_NEXT_DUE_KEY = "gemini_explore_next_due_utc"
+DEEPSEEK_EXPLORE_NEXT_DUE_KEY = "deepseek_explore_next_due_utc"
+GPT_EXPLORE_NEXT_DUE_KEY = "gpt_explore_next_due_utc"
 GEMINI_PREDICT_NEXT_DUE_KEY = "gemini_predict_next_due_utc"
 DEEPSEEK_PREDICT_NEXT_DUE_KEY = "deepseek_predict_next_due_utc"
 GPT_PREDICT_NEXT_DUE_KEY = "gpt_predict_next_due_utc"
-GPT_EXPLORE_NEXT_DUE_KEY = "gpt_explore_next_due_utc"
+
+STRATEGY_SCHEDULE_OFFSETS: Dict[str, int] = {
+    "gemini_explore": 0,
+    "deepseek_explore": SCHEDULE_STAGGER_MINUTES,
+    "gpt_explore": SCHEDULE_STAGGER_MINUTES * 2,
+    "gemini_predict": SCHEDULE_STAGGER_MINUTES * 3,
+    "deepseek_predict": SCHEDULE_STAGGER_MINUTES * 4,
+    "gpt_predict": SCHEDULE_STAGGER_MINUTES * 5,
+}
 
 
 def _parse_utc_naive(value: str) -> Optional[datetime]:
@@ -53,7 +71,7 @@ def _read_setting_dt(cur, key: str) -> Optional[datetime]:
 
 
 def _last_ok_run_at(cur, runs_table: str) -> Optional[datetime]:
-    """仅 status=ok 参与 4h 周期（error/skipped 不推迟下一轮）."""
+    """仅 status=ok 参与周期（error/skipped 不推迟下一轮）."""
     cur.execute(
         f"SELECT MAX(asof_utc) AS last_at FROM `{runs_table}` WHERE status='ok'"
     )
@@ -66,99 +84,151 @@ def _last_ok_run_at(cur, runs_table: str) -> Optional[datetime]:
     return last_at
 
 
-def _last_run_at(cur, runs_table: str) -> Optional[datetime]:
-    """任意 status 的最后一轮 asof_utc (战术探索初始化 next_due 用)."""
-    cur.execute(f"SELECT MAX(asof_utc) AS last_at FROM `{runs_table}`")
-    row = cur.fetchone()
-    last_at = (row or {}).get("last_at")
-    if last_at is None:
-        return None
-    if getattr(last_at, "tzinfo", None) is not None:
-        return last_at.astimezone(timezone.utc).replace(tzinfo=None)
-    return last_at
+def _strategy_anchor(strategy_key: str) -> datetime:
+    offset_min = STRATEGY_SCHEDULE_OFFSETS[strategy_key]
+    return _SCHEDULE_ANCHOR_BASE + timedelta(minutes=offset_min)
+
+
+def scheduled_slot_for_now(
+    strategy_key: str,
+    now: Optional[datetime] = None,
+) -> datetime:
+    """当前周期内该策略的固定槽位时刻 (UTC naive)."""
+    if strategy_key not in STRATEGY_SCHEDULE_OFFSETS:
+        raise KeyError(f"unknown strategy_key: {strategy_key}")
+
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    strat_anchor = _strategy_anchor(strategy_key)
+    if now < strat_anchor:
+        return strat_anchor
+
+    elapsed_s = (now - strat_anchor).total_seconds()
+    period_s = PREDICT_ROUND_INTERVAL_SECONDS
+    n = int(elapsed_s // period_s)
+    return strat_anchor + timedelta(seconds=period_s * n)
+
+
+def next_scheduled_slot(
+    strategy_key: str,
+    after: Optional[datetime] = None,
+) -> datetime:
+    """after 之后的下一个固定槽位."""
+    after = after or datetime.now(timezone.utc).replace(tzinfo=None)
+    current = scheduled_slot_for_now(strategy_key, after)
+    if after < current:
+        return current
+    return current + timedelta(seconds=PREDICT_ROUND_INTERVAL_SECONDS)
+
+
+def _ai_round_is_due(
+    conn,
+    *,
+    strategy_key: str,
+    runs_table: str,
+    next_due_key: str,
+    now: Optional[datetime] = None,
+    manual: bool = False,
+    log_tag: str = "AI",
+) -> Tuple[bool, str]:
+    if manual:
+        return True, "manual"
+
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    slot = scheduled_slot_for_now(strategy_key, now)
+
+    if now < slot:
+        remain_s = (slot - now).total_seconds()
+        return False, (
+            f"未到点 剩余 {remain_s / 60:.0f}min "
+            f"(slot={slot.isoformat()} UTC, 锚点21:30北京)"
+        )
+
+    with conn.cursor() as cur:
+        last_ok = _last_ok_run_at(cur, runs_table)
+        needs_run = (not last_ok) or (last_ok < slot)
+
+        next_due = _read_setting_dt(cur, next_due_key)
+        if next_due and now < next_due and not needs_run:
+            remain_s = (next_due - now).total_seconds()
+            return False, (
+                f"已认领 剩余 {remain_s / 3600:.2f}h "
+                f"(next_due={next_due.isoformat()})"
+            )
+
+        if last_ok and last_ok >= slot:
+            next_slot = slot + timedelta(seconds=PREDICT_ROUND_INTERVAL_SECONDS)
+            if now < next_slot:
+                remain_s = (next_slot - now).total_seconds()
+                return False, (
+                    f"本槽已完成 last_ok={last_ok.isoformat()} "
+                    f"下次 {next_slot.isoformat()} UTC "
+                    f"(剩余 {remain_s / 60:.0f}min)"
+                )
+
+    late_h = (now - slot).total_seconds() / 3600
+    if late_h >= 0.5:
+        return True, (
+            f"逾期补跑 slot={slot.isoformat()} UTC 迟到 {late_h:.1f}h"
+        )
+    return True, f"固定槽 due slot={slot.isoformat()} UTC (锚点21:30北京)"
 
 
 def explore_round_is_due(
     conn,
     *,
+    strategy_key: str,
     runs_table: str,
+    next_due_key: str,
     now: Optional[datetime] = None,
     manual: bool = False,
     log_tag: str = "Explore",
     interval_hours: float = EXPLORE_MIN_INTERVAL_HOURS,
 ) -> Tuple[bool, str]:
-    """主探索 4h 防重: 仅看上次 status=ok (与 Gemini/DeepSeek explore 一致)."""
-    if manual:
-        return True, "manual"
-
-    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
-    with conn.cursor() as cur:
-        cur.execute(
-            f"SELECT MAX(asof_utc) AS last_run FROM `{runs_table}` WHERE status='ok'"
-        )
-        row = cur.fetchone()
-        last_run = (row or {}).get("last_run")
-        if last_run is not None:
-            if getattr(last_run, "tzinfo", None) is not None:
-                last_run = last_run.astimezone(timezone.utc).replace(tzinfo=None)
-            elapsed_h = (now - last_run).total_seconds() / 3600
-            if elapsed_h < interval_hours:
-                return False, (
-                    f"上次成功距今 {elapsed_h:.1f}h < {interval_hours:.0f}h"
-                )
-    return True, "due"
+    """主探索固定时刻 4h 防重 (interval_hours 保留兼容, 实际以锚点槽位为准)."""
+    _ = interval_hours
+    return _ai_round_is_due(
+        conn,
+        strategy_key=strategy_key,
+        runs_table=runs_table,
+        next_due_key=next_due_key,
+        now=now,
+        manual=manual,
+        log_tag=log_tag,
+    )
 
 
 def predict_round_is_due(
     conn,
     *,
+    strategy_key: str,
     runs_table: str,
     next_due_key: str,
     now: Optional[datetime] = None,
     manual: bool = False,
     log_tag: str = "Predict",
 ) -> Tuple[bool, str]:
-    """是否到了该跑下一轮的时间 (manual 始终 True)."""
-    if manual:
-        return True, "manual"
-
-    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
-    with conn.cursor() as cur:
-        last_ok = _last_ok_run_at(cur, runs_table)
-        if last_ok:
-            elapsed_s = (now - last_ok).total_seconds()
-            if elapsed_s >= PREDICT_ROUND_INTERVAL_SECONDS:
-                return True, (
-                    f"逾期补跑 距上次成功 {elapsed_s / 3600:.2f}h >= {PREDICT_ROUND_INTERVAL_HOURS}h "
-                    f"(last_ok={last_ok.isoformat()})"
-                )
-
-        next_due = _read_setting_dt(cur, next_due_key)
-        if next_due and now < next_due:
-            remain_s = (next_due - now).total_seconds()
-            return False, f"未到点 剩余 {remain_s / 3600:.2f}h (next_due={next_due.isoformat()})"
-
-        if last_ok:
-            elapsed_s = (now - last_ok).total_seconds()
-            if elapsed_s < PREDICT_ROUND_INTERVAL_SECONDS:
-                return False, (
-                    f"距上次成功 {elapsed_s / 3600:.2f}h < {PREDICT_ROUND_INTERVAL_HOURS}h "
-                    f"(last_ok={last_ok.isoformat()})"
-                )
-
-    return True, "due"
+    """预测固定时刻 4h 防重."""
+    return _ai_round_is_due(
+        conn,
+        strategy_key=strategy_key,
+        runs_table=runs_table,
+        next_due_key=next_due_key,
+        now=now,
+        manual=manual,
+        log_tag=log_tag,
+    )
 
 
-def predict_claim_next_slot(
+def _claim_next_slot(
     conn,
     *,
+    strategy_key: str,
     next_due_key: str,
     now: Optional[datetime] = None,
-    log_tag: str = "Predict",
+    log_tag: str = "AI",
 ) -> datetime:
-    """认领下一 4h 窗口 (本轮开始后写入, 防止 5min 轮询重复触发)."""
-    now = now or datetime.now()
-    next_due = now + timedelta(seconds=PREDICT_ROUND_INTERVAL_SECONDS)
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    next_due = next_scheduled_slot(strategy_key, now)
     value = next_due.strftime("%Y-%m-%dT%H:%M:%S")
     with conn.cursor() as cur:
         cur.execute(
@@ -174,8 +244,48 @@ def predict_claim_next_slot(
             (
                 next_due_key,
                 value,
-                f"{log_tag} 下一轮最早执行 UTC ({PREDICT_ROUND_INTERVAL_HOURS}h 周期)",
+                (
+                    f"{log_tag} 下一轮固定槽 UTC "
+                    f"(锚点21:30北京 +{STRATEGY_SCHEDULE_OFFSETS[strategy_key]}min)"
+                ),
             ),
         )
-    logger.info(f"[{log_tag}] 已认领 {PREDICT_ROUND_INTERVAL_HOURS}h 窗口, next_due_utc={value}")
+    logger.info(
+        f"[{log_tag}] 已认领固定槽, next_due_utc={value} "
+        f"(offset=+{STRATEGY_SCHEDULE_OFFSETS[strategy_key]}min)"
+    )
     return next_due
+
+
+def explore_claim_next_slot(
+    conn,
+    *,
+    strategy_key: str,
+    next_due_key: str,
+    now: Optional[datetime] = None,
+    log_tag: str = "Explore",
+) -> datetime:
+    return _claim_next_slot(
+        conn,
+        strategy_key=strategy_key,
+        next_due_key=next_due_key,
+        now=now,
+        log_tag=log_tag,
+    )
+
+
+def predict_claim_next_slot(
+    conn,
+    *,
+    strategy_key: str,
+    next_due_key: str,
+    now: Optional[datetime] = None,
+    log_tag: str = "Predict",
+) -> datetime:
+    return _claim_next_slot(
+        conn,
+        strategy_key=strategy_key,
+        next_due_key=next_due_key,
+        now=now,
+        log_tag=log_tag,
+    )
