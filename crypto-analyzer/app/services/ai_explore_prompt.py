@@ -302,6 +302,30 @@ def select_llm_symbols_from_pool(
     return [item["symbol"] for item in selected if item.get("symbol")]
 
 
+def select_all_symbols_from_pool(
+    rows: List[dict],
+    *,
+    banned: Optional[Set[str]] = None,
+    limit: int = 500,
+) -> List[str]:
+    """GPT 预测等: candidate_pool 全量送模 (排除 L3), 不做技术面 TOP N 截断."""
+    from app.utils.futures_symbol import futures_symbol_clean
+
+    banned = banned or set()
+    symbols: List[str] = []
+    seen: Set[str] = set()
+    for row in rows[:limit]:
+        sym = (row.get("symbol") or "").strip()
+        if not sym:
+            continue
+        clean = futures_symbol_clean(sym)
+        if clean in banned or clean in seen:
+            continue
+        seen.add(clean)
+        symbols.append(sym)
+    return symbols
+
+
 def prepare_universe_for_llm(
     universe: dict,
     max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
