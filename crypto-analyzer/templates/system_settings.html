@@ -468,22 +468,10 @@
 </div>
 <div class="cfg-row mt-4">
 <div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-amber-400 text-xl shrink-0">leaderboard</span>
-<div>
-<div class="text-sm font-medium text-slate-200">实盘 TOP50 开实仓</div>
-<p class="text-[11px] text-slate-500">开启后 TOP50 内可同步实盘 · 与白名单为或关系 · 两者都关则不开实盘</p>
-</div>
-</div>
-<div id="liveTop50Toggle" data-enabled="true" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row mt-4">
-<div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-emerald-400 text-xl shrink-0">verified</span>
 <div>
 <div class="text-sm font-medium text-slate-200">白名单开实仓</div>
-<p class="text-[11px] text-slate-500">开启后 rating_level=0 可同步实盘 · 与 TOP50 为或关系</p>
+<p class="text-[11px] text-slate-500">实盘开仓仅允许 rating_level=0 白名单 · 不再使用 TOP50 条件</p>
 </div>
 </div>
 <div id="liveWhitelistToggle" data-enabled="true" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
@@ -680,7 +668,6 @@
                 setToggle('geminiOpenAdvisorToggle', svc.open_advisor_enabled !== false);
                 setToggle('smartExitToggle', !!svc.smart_exit_enabled);
                 setToggle('blacklistL3Toggle', svc.blacklist_level3_enabled !== false);
-                setToggle('liveTop50Toggle', svc.live_top50_required !== false);
                 setToggle('liveWhitelistToggle', svc.live_whitelist_enabled !== false);
                 setToggle('spotTradingToggle',  !!svc.spot_trading_enabled);
                 setToggle('big4Toggle',
@@ -902,16 +889,6 @@
             }
         });
 
-        bindToggle('liveTop50Toggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { live_top50_required: enabled });
-                showToast('实盘TOP50闸门' + (enabled ? '已开启' : '已关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
         bindToggle('liveWhitelistToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { live_whitelist_enabled: enabled });
@@ -1003,7 +980,6 @@
                             signal_confirmation_enabled: document.getElementById('signalConfirmCheckbox')?.checked ?? false,
                             smart_exit_enabled: getToggle('smartExitToggle'),
                             blacklist_level3_enabled: getToggle('blacklistL3Toggle'),
-                            live_top50_required: getToggle('liveTop50Toggle'),
                             live_whitelist_enabled: getToggle('liveWhitelistToggle'),
                             stop_loss_pct: slVal,
                             take_profit_pct: tpVal

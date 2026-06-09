@@ -529,7 +529,7 @@ def _sync_to_live(
                 return
         conn.close()
     except Exception as e:
-        logger.warning(f"[GPT预测] 检查实盘开关/TOP50失败, 跳过实盘同步: {e}")
+        logger.warning(f"[GPT预测] 检查实盘开关/白名单失败, 跳过实盘同步: {e}")
         return
 
     try:

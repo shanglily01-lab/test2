@@ -26,10 +26,6 @@ LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
     "deepseek_predict",
 })
 
-# 无评级（不在 trading_symbol_rating）且不在 TOP50 时的实盘保证金比例
-LIVE_MARGIN_UNRATED = 0.6
-
-
 def _bool_setting(key: str, default: bool = True) -> bool:
     try:
         from app.services.system_settings_loader import get_setting
@@ -49,8 +45,8 @@ def is_blacklist_level3_enforced() -> bool:
 
 
 def is_live_top50_required() -> bool:
-    """实盘同步是否允许 TOP50 内交易对开实仓 (默认开启)."""
-    return _bool_setting('live_top50_required', True)
+    """已废弃：实盘开仓不再使用 TOP50 条件，保留设置项仅为兼容旧配置."""
+    return False
 
 
 def is_live_whitelist_enabled() -> bool:
@@ -86,7 +82,7 @@ def check_live_open_allowed(
     symbol: str, source: str, cursor=None,
 ) -> Tuple[bool, str]:
     """
-    开仓同步实盘前的完整检查: 总开关 + source 白名单 + TOP50/评级白名单.
+    开仓同步实盘前的完整检查: 总开关 + source 白名单 + L0 白名单评级.
 
     Returns: (allowed, reject_reason)
     """
@@ -207,26 +203,17 @@ def get_live_margin_ratio(symbol: str, cursor=None) -> float:
     根据 symbol 评级等级获取实盘保证金比例.
 
     规则:
-      - L0 (白名单) 或 TOP50 → 1.0 (100%)
-      - 无评级且不在 TOP50 → LIVE_MARGIN_UNRATED (默认 60%)
-      - L1/L2/L3 (黑名单) → 0.0 (禁止实盘)
-
-    Args:
-        symbol: 交易对
-        cursor: 可选数据库游标
-
-    Returns:
-        float: 保证金比例 (0.0 = 禁止实盘)
+      - L0 (白名单) → 1.0 (100%)
+      - 其它 (无评级 / TOP50 / L1/L2/L3) → 0.0 (禁止实盘)
     """
-    rating_level, in_top50 = get_symbol_rating_info(symbol, cursor)
+    rating_level, _ = get_symbol_rating_info(symbol, cursor)
 
     if rating_level is not None and rating_level >= 1:
         return 0.0
 
-    if in_top50 or rating_level == 0:
+    if rating_level == 0:
         return 1.0
-    # 无评级 (None) 且不在 TOP50
-    return LIVE_MARGIN_UNRATED
+    return 0.0
 
 
 def live_margin_ratio_str(ratio: float) -> str:
@@ -246,40 +233,25 @@ def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
     """
     检查 symbol 是否允许实盘开仓 (不含 live_trading_enabled 总开关).
 
-    新规则 (2026-06-06):
-      - L0 (白名单), TOP50, 无评级 → 允许 (按不同保证金比例)
-      - L1/L2/L3 (黑名单) → 拒绝实盘
-
-    保留 TOP50/白名单 开关作为主闸门:
-      - 两者都关 → 一律拒绝
+    规则:
+      - 仅 L0 白名单 (rating_level=0) 允许实盘
+      - L1/L2/L3 黑名单 → 拒绝
+      - 无评级 / 仅在 TOP50 → 拒绝
 
     Returns: (allowed, reject_reason)
     """
-    top50_gate = is_live_top50_required()
-    whitelist_gate = is_live_whitelist_enabled()
+    if not is_live_whitelist_enabled():
+        return False, '实盘白名单闸门未开启'
 
-    if not top50_gate and not whitelist_gate:
-        return False, '实盘TOP50与白名单闸门均未开启'
+    rating_level, _ = get_symbol_rating_info(symbol, cursor)
 
-    rating_level, in_top50 = get_symbol_rating_info(symbol, cursor)
-
-    # L1 / L2 / L3 直接拒绝
     if rating_level is not None and rating_level >= 1:
         return False, f'黑名单{rating_level}级禁止实盘'
 
-    # TOP50 或 L0 白名单 — 100% 保证金
-    if top50_gate and in_top50:
-        return True, ''
-    if whitelist_gate and rating_level == 0:
+    if rating_level == 0:
         return True, ''
 
-    # 无评级且不在 TOP50：允许实盘，保证金 60%
-    if rating_level is None:
-        if top50_gate or whitelist_gate:
-            return True, f'无评级默认{int(LIVE_MARGIN_UNRATED * 100)}%保证金'
-        return False, '不满足任何实盘条件'
-
-    return False, '不在TOP名单且不是rating_level=0白名单，禁止实盘'
+    return False, '非白名单(rating_level=0)，禁止实盘'
 
 
 def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:

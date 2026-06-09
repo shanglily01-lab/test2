@@ -2837,7 +2837,7 @@ class SmartTraderService:
             return {'long_max': 0.1, 'short_min': -0.1}
 
     def is_symbol_in_top_performers(self, symbol: str) -> bool:
-        """检查交易对是否满足实盘 TOP50/白名单闸门 (委托 trading_gates)."""
+        """检查交易对是否满足实盘白名单闸门 (委托 trading_gates)."""
         from app.services.trading_gates import check_live_symbol_allowed
         allowed, _ = check_live_symbol_allowed(symbol)
         return allowed

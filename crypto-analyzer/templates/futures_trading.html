@@ -653,9 +653,9 @@ async function loadAccountInfo() {
             var wins = parseInt(acc.winning_trades, 10) || 0;
             var losses = parseInt(acc.losing_trades, 10) || 0;
             elWL.innerHTML =
-                '<span class="text-[#49f4c8]">' + wins + '盈</span>' +
+                '<span class="text-[#49f4c8]">' + wins + '</span>' +
                 '<span class="text-on-surface-variant mx-1">/</span>' +
-                '<span class="text-[#ff716c]">' + losses + '亏</span>';
+                '<span class="text-[#ff716c]">' + losses + '</span>';
         }
         if (elWin && acc.win_rate != null) {
             elWin.textContent = '胜率 ' + parseFloat(acc.win_rate).toFixed(1) + '%';

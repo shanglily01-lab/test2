@@ -286,15 +286,8 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
             </div>
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <div class="flex flex-col py-3 pr-4">
-                    <span class="text-sm font-medium">实盘 TOP50 开实仓</span>
-                    <span class="text-[10px] text-on-surface-variant mt-0.5">TOP50 内可同步实盘（或关系）</span>
-                </div>
-                <div class="toggle-wrap"><div id="liveTop50Toggle" data-enabled="true" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
-            </div>
-            <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
-                <div class="flex flex-col py-3 pr-4">
                     <span class="text-sm font-medium">白名单开实仓</span>
-                    <span class="text-[10px] text-on-surface-variant mt-0.5">rating_level=0 可同步实盘</span>
+                    <span class="text-[10px] text-on-surface-variant mt-0.5">实盘仅 rating_level=0 白名单 · 不用 TOP50</span>
                 </div>
                 <div class="toggle-wrap"><div id="liveWhitelistToggle" data-enabled="true" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
@@ -538,7 +531,6 @@ async function loadAll() {
             setToggle('geminiAdvisorToggle', d.position_advisor_enabled !== false);
             setToggle('smartExitToggle', d.smart_exit_enabled);
             setToggle('blacklistL3Toggle', d.blacklist_level3_enabled !== false);
-            setToggle('liveTop50Toggle', d.live_top50_required !== false);
             setToggle('liveWhitelistToggle', d.live_whitelist_enabled !== false);
             setToggle('spotTradingToggle', d.spot_trading_enabled !== false);
             const scCb = document.getElementById('signalConfirmCheckbox');
@@ -585,7 +577,6 @@ async function save(type) {
             position_advisor_enabled: getToggle('geminiAdvisorToggle'),
             smart_exit_enabled: getToggle('smartExitToggle'),
             blacklist_level3_enabled: getToggle('blacklistL3Toggle'),
-            live_top50_required: getToggle('liveTop50Toggle'),
             live_whitelist_enabled: getToggle('liveWhitelistToggle'),
             spot_trading_enabled: getToggle('spotTradingToggle'),
             signal_confirmation_enabled: document.getElementById('signalConfirmCheckbox')?.checked ?? false,
@@ -650,7 +641,7 @@ async function initLock() {
 }
 
 // 绑定所有 toggle 点击事件
-['usdtToggle','liveToggle','liveCloseToggle','btcMomentumToggle','trendFollowingToggle','geminiExploreToggle','geminiPredictToggle','deepseekExploreToggle','deepseekPredictToggle','uCoinStyleToggle','geminiAdvisorToggle','smartExitToggle','blacklistL3Toggle','liveTop50Toggle','liveWhitelistToggle','spotTradingToggle'].forEach(id => bindToggle(id, 'services'));
+['usdtToggle','liveToggle','liveCloseToggle','btcMomentumToggle','trendFollowingToggle','geminiExploreToggle','geminiPredictToggle','deepseekExploreToggle','deepseekPredictToggle','uCoinStyleToggle','geminiAdvisorToggle','smartExitToggle','blacklistL3Toggle','liveWhitelistToggle','spotTradingToggle'].forEach(id => bindToggle(id, 'services'));
 ['longToggle','shortToggle'].forEach(id => bindToggle(id, 'direction', updateDirectionSummary));
 bindToggle('big4Toggle', 'big4');
 
