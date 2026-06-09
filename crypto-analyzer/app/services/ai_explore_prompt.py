@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from loguru import logger
 
@@ -200,9 +200,10 @@ def explore_catalyst_technical_ok(
     weak_only = any(p in text for p in _WEAK_ONLY_PHRASES) and not any(
         m in text for m in _STRUCTURE_MARKERS
     )
-    funding_only = ("资金费" in text or "funding" in low) and not any(
+    has_kline_structure = any(
         m in text for m in ("背离", "拐点", "连阳", "连阴", "突破", "形态")
-    )
+    ) or bool(_KBAR_COUNT_RE.search(text))
+    funding_only = ("资金费" in text or "funding" in low) and not has_kline_structure
     if weak_only:
         return False, "主因仅为 24h 涨跌幅, 缺少 K 线结构"
     if funding_only:
@@ -249,6 +250,56 @@ def _explore_universe_score(item: dict) -> float:
     except (TypeError, ValueError):
         pass
     return chg_score * 0.45 + rsi_score + vol_score * 0.25 + ext_score
+
+
+def pool_rows_to_universe(rows: List[dict]) -> dict:
+    """candidate_pool_snapshot 行 → 与探索同构的 universe (供技术面 TOP N 选币)."""
+    from app.utils.futures_symbol import futures_symbol_clean
+
+    universe: dict = {}
+    for row in rows:
+        sym = (row.get("symbol") or "").strip()
+        if not sym:
+            continue
+        sym_data: dict = {
+            "symbol": sym,
+            "change_24h": float(row.get("change_24h") or 0),
+            "quote_volume_24h": float(row.get("quote_volume_24h") or 0),
+            "tech": {},
+        }
+        if row.get("rsi_14") is not None:
+            sym_data["tech"]["rsi_14_1h"] = float(row["rsi_14"])
+        if row.get("below_7d_high_pct") is not None:
+            sym_data["tech"]["below_7d_high_pct"] = float(row["below_7d_high_pct"])
+        if row.get("above_7d_low_pct") is not None:
+            sym_data["tech"]["above_7d_low_pct"] = float(row["above_7d_low_pct"])
+        universe[sym] = sym_data
+    return universe
+
+
+def select_llm_symbols_from_pool(
+    rows: List[dict],
+    *,
+    banned: Optional[Set[str]] = None,
+    max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
+) -> List[str]:
+    """预测/探索共用: 从 candidate_pool 按技术面评分取 TOP N symbol."""
+    from app.utils.futures_symbol import futures_symbol_clean
+
+    banned = banned or set()
+    universe = pool_rows_to_universe(rows)
+    filtered = {
+        sym: data
+        for sym, data in universe.items()
+        if futures_symbol_clean(sym) not in banned
+    }
+    selected, meta = prepare_universe_for_llm(filtered, max_symbols=max_symbols)
+    if meta.get("llm_symbols_truncated"):
+        logger.info(
+            f"[Predict] LLM 候选截断: 全池 {meta['universe_total']} → "
+            f"送模 {meta['llm_symbol_count']} (技术面 TOP{max_symbols})"
+        )
+    return [item["symbol"] for item in selected if item.get("symbol")]
 
 
 def prepare_universe_for_llm(

@@ -9,7 +9,7 @@ from app.services.ai_big4_prompt import (
     BIG4_PROMPT_BLOCK_PREDICT_EN,
     CONFIDENCE_ROW_BIG4_OK,
 )
-from app.services.ai_explore_prompt import KLINE_1H_READING_BLOCK
+from app.services.ai_explore_prompt import CATALYST_EVIDENCE_BLOCK, KLINE_1H_READING_BLOCK
 
 KLINE_1H_READING_BLOCK_EN = """
 ## 1h K-line reading
@@ -37,8 +37,9 @@ PREDICT_PROMPT_TEMPLATE_ZH = """你是超级交易大师. 预测每个币种在�
 
 {symbols_data_json}
 
+""" + CATALYST_EVIDENCE_BLOCK + """
 # 任务
-为**每个** symbol 标注:
+为**每个** symbol 各输出**恰好一条** verdict (verdicts 条数必须等于上方 symbol 数量):
 - category: 'bullish' / 'bearish' / 'skip'
 - confidence: 0.0-1.0
 - catalyst: 判断依据, 必须引用具体数据, 至少 2 句
@@ -90,7 +91,8 @@ Hold 4h, SL=4%, TP=6%, 5x. Pick names that can reach ~6% move or hold through 4h
 
 {symbols_data_json}
 
-# Task — every symbol
+""" + CATALYST_EVIDENCE_BLOCK + """
+# Task — exactly one verdict per input symbol (len(verdicts) == input count)
 - category: bullish | bearish | skip
 - confidence: 0.0-1.0
 - catalyst: cite data (Chinese OK), ≥2 sentences worth of structure

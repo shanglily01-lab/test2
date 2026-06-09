@@ -46,7 +46,7 @@ from app.services.ai_explore_prompt import (
     parse_explore_llm_json,
     sym_data_for_catalyst_gate,
 )
-from app.services.ai_predict_prompt import build_predict_prompt, build_predict_prompt_en
+from app.services.ai_predict_prompt import build_predict_prompt
 from app.services.gemini_swan_worker import (
     _is_excluded,
     _read_setting,
@@ -167,20 +167,16 @@ def _get_predict_symbols(conn) -> List[str]:
 
     rows = _get_candidate_pool_cached()
     if rows:
-        symbols = []
-        seen = set()
-        for row in rows[:PREDICT_CANDIDATE_LIMIT]:
-            sym = (row.get("symbol") or "").strip()
-            if not sym:
-                continue
-            from app.utils.futures_symbol import futures_symbol_clean
-            clean = futures_symbol_clean(sym)
-            if clean in banned or clean in seen:
-                continue
-            seen.add(clean)
-            symbols.append(sym)
+        from app.services.ai_explore_prompt import select_llm_symbols_from_pool
+
+        symbols = select_llm_symbols_from_pool(
+            rows[:PREDICT_CANDIDATE_LIMIT],
+            banned=banned,
+        )
         if symbols:
-            logger.info(f"[DeepSeek预测] 从 candidate_pool_snapshot 获取 {len(symbols)} 个 symbol")
+            logger.info(
+                f"[DeepSeek预测] 从 candidate_pool_snapshot 技术面 TOP{len(symbols)} 送模"
+            )
             return symbols
 
     from app.services.trading_gates import is_blacklist_level3_enforced, sql_exclude_level3_filter
@@ -488,7 +484,7 @@ def _call_deepseek_predict(symbols_data: List[Dict], global_ctx: dict) -> Option
         logger.error("[DeepSeek预测] 缺依赖, 请 pip install openai")
         return None
 
-    prompt = build_predict_prompt_en(symbols_data, global_ctx)
+    prompt = build_predict_prompt(symbols_data, global_ctx)
 
     logger.info(f"[DeepSeek预测] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens)")
 
