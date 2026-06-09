@@ -231,7 +231,7 @@ def get_live_margin_ratio(symbol: str, cursor=None) -> float:
 
     规则 (2026-06-06):
       - L0 (白名单) 或 TOP50 → 1.0 (100%)
-      - 无评级 (未在评级表中) → 0.8 (80%)
+      - 无评级且不在 TOP50 → 0.0 (禁止实盘)
       - L1 (黑名单1级) → 0.0 (禁止实盘)
       - L2 (黑名单2级) → 0.0 (禁止实盘)
       - L3 (黑名单3级) → 0.0 (禁止实盘)
@@ -250,8 +250,8 @@ def get_live_margin_ratio(symbol: str, cursor=None) -> float:
 
     if in_top50 or rating_level == 0:
         return 1.0
-    # 无评级 (None)
-    return 0.8
+    # 无评级 (None) 且不在 TOP
+    return 0.0
 
 
 def live_margin_ratio_str(ratio: float) -> str:
@@ -296,11 +296,29 @@ def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
     if whitelist_gate and rating_level == 0:
         return True, ''
 
-    # 无评级 — 允许 80%
+    # 无评级且不在 TOP：拒绝，避免未知币种绕过黑白名单。
     if top50_gate or whitelist_gate:
-        return True, '允许实盘(保证金80%)'
+        return False, '不在TOP名单且不是rating_level=0白名单，禁止实盘'
 
     return False, '不满足任何实盘条件'
+
+
+def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
+    """
+    模拟盘开仓基础币种闸门。
+
+    允许 TOP 名单内币种，或 trading_symbol_rating 中已有评级且不是 L3 的币种。
+    拒绝 L3，以及既不在 TOP、也不在黑白名单评级表中的未知币种。
+    """
+    rating_level, in_top50 = get_symbol_rating_info(symbol, cursor)
+
+    if rating_level is not None and rating_level >= 3:
+        return False, f'黑名单{rating_level}级禁止模拟盘'
+
+    if in_top50 or rating_level is not None:
+        return True, ''
+
+    return False, '不在TOP名单且未在黑白名单评级表中，禁止模拟盘'
 
 
 def has_open_futures_position(conn, source: str, symbol: str, account_id: Optional[int] = None) -> bool:

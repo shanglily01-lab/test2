@@ -46,6 +46,18 @@ def gate_simulated_open(
         )
         return False, reason
 
+    try:
+        from app.services.trading_gates import check_simulated_symbol_allowed
+        allowed, reason = check_simulated_symbol_allowed(symbol, conn)
+        if not allowed:
+            logger.info(
+                f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {reason}"
+            )
+            return False, reason
+    except Exception as e:
+        logger.warning(f"[开仓闸门] {symbol} 基础币种闸门异常，拒绝开仓: {e}")
+        return False, "symbol_gate_error"
+
     providers = resolve_open_advisors(source)
     with _open_gate_lock:
         _open_gate_waiting += 1

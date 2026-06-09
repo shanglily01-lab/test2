@@ -726,6 +726,7 @@ Per symbol in list:
 - risk_note: one line (Big4/BTC allowed here only)
 
 # Confidence
+Validator rule: for bullish/bearish verdicts, `catalyst` must literally mention at least two timeframe labels among `1h`, `15m`, and `1d` with their K-line structure. If only one timeframe is cited, mark skip.
 | 0.80-1.00 | 1h+15m aligned + volume + RSI supports side + ≥3% room to 7d extreme |
 | 0.65-0.79 | 24h trend + last 4-6 bars aligned + quant in catalyst |
 | 0.60-0.64 | OK but max 1-2 names |

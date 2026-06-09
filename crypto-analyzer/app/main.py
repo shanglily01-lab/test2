@@ -4771,6 +4771,7 @@ async def get_latest_retrospective_analysis():
             # 转换为北京时间
             dt_cst = datetime.utcfromtimestamp(k['open_time'] / 1000) + timedelta(hours=8)
             hourly_trend.append({
+                "hour_ts": int(k['open_time']),
                 "hour_cst": dt_cst.strftime("%m-%d %H:%M"),
                 "open":  round(open_p, 1),
                 "close": round(close_p, 1),
@@ -4810,7 +4811,7 @@ async def get_latest_retrospective_analysis():
                 SUM(realized_pnl) AS pnl,
                 SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins
             FROM futures_positions
-            WHERE open_time >= %s AND status = 'closed' AND account_id = 2
+            WHERE open_time >= %s AND status = 'closed' AND account_id IN (1, 2)
             GROUP BY d, h
             ORDER BY d, h
         """, (since_ts,))
@@ -4818,9 +4819,8 @@ async def get_latest_retrospective_analysis():
 
         # 将盈亏数据合并到 hourly_trend
         for row in hourly_trend:
-            dt = datetime.strptime(row['hour_cst'], "%m-%d %H:%M")
-            year = now_utc.year
-            d_key = f"{year}-{dt.month:02d}-{dt.day:02d}"
+            dt = datetime.utcfromtimestamp(row["hour_ts"] / 1000) + timedelta(hours=8)
+            d_key = dt.strftime("%Y-%m-%d")
             h_key = dt.hour
             pnl_row = pnl_by_hour.get((d_key, h_key))
             if pnl_row:
@@ -4842,7 +4842,7 @@ async def get_latest_retrospective_analysis():
                 SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
                 SUM(CASE WHEN realized_pnl <= 0 THEN 1 ELSE 0 END) AS losses
             FROM futures_positions
-            WHERE open_time >= %s AND status = 'closed' AND account_id = 2
+            WHERE open_time >= %s AND status = 'closed' AND account_id IN (1, 2)
         """, (since_ts,))
         perf = cursor.fetchone()
         total  = int(perf['total'] or 0)
@@ -4850,6 +4850,8 @@ async def get_latest_retrospective_analysis():
         wins   = int(perf['wins'] or 0)
         losses = int(perf['losses'] or 0)
         win_rate = round(wins / total * 100, 1) if total else 0
+
+        hourly_trend.sort(key=lambda row: row.get("hour_ts", 0), reverse=True)
 
         cursor.close()
         conn.close()
