@@ -456,18 +456,6 @@
 </div>
 <div class="cfg-row mt-4">
 <div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-red-400 text-xl shrink-0">block</span>
-<div>
-<div class="text-sm font-medium text-slate-200">黑名单3级禁止开仓</div>
-<p class="text-[11px] text-slate-500">rating_level=3 永久禁止 · 关闭后 L3 交易对可开仓</p>
-</div>
-</div>
-<div id="blacklistL3Toggle" data-enabled="true" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row mt-4">
-<div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-emerald-400 text-xl shrink-0">verified</span>
 <div>
 <div class="text-sm font-medium text-slate-200">白名单开实仓</div>
@@ -667,7 +655,6 @@
                 setToggle('geminiAdvisorToggle', svc.position_advisor_enabled !== false);
                 setToggle('geminiOpenAdvisorToggle', svc.open_advisor_enabled !== false);
                 setToggle('smartExitToggle', !!svc.smart_exit_enabled);
-                setToggle('blacklistL3Toggle', svc.blacklist_level3_enabled !== false);
                 setToggle('liveWhitelistToggle', svc.live_whitelist_enabled !== false);
                 setToggle('spotTradingToggle',  !!svc.spot_trading_enabled);
                 setToggle('big4Toggle',
@@ -879,16 +866,6 @@
             }
         });
 
-        bindToggle('blacklistL3Toggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { blacklist_level3_enabled: enabled });
-                showToast('黑名单3级' + (enabled ? '已启用' : '已关闭 (L3可开仓)'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
         bindToggle('liveWhitelistToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { live_whitelist_enabled: enabled });
@@ -979,7 +956,6 @@
                             gpt_explore_enabled: getToggle('gptExploreToggle'),
                             signal_confirmation_enabled: document.getElementById('signalConfirmCheckbox')?.checked ?? false,
                             smart_exit_enabled: getToggle('smartExitToggle'),
-                            blacklist_level3_enabled: getToggle('blacklistL3Toggle'),
                             live_whitelist_enabled: getToggle('liveWhitelistToggle'),
                             stop_loss_pct: slVal,
                             take_profit_pct: tpVal

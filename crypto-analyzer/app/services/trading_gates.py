@@ -40,8 +40,8 @@ def _bool_setting(key: str, default: bool = True) -> bool:
 
 
 def is_blacklist_level3_enforced() -> bool:
-    """黑名单3级禁止开仓 (默认开启)."""
-    return _bool_setting('blacklist_level3_enabled', True)
+    """L3 禁止开仓 — 固定开启，不再提供设置开关."""
+    return True
 
 
 def is_live_top50_required() -> bool:
