@@ -2,9 +2,9 @@
 定时更新 U 本位模拟仓盈利 TOP50 榜单 + 交易对评级（统一核心机制）
 
 1. top_performing_symbols: 累计盈利前 50（至少 5 笔平仓）
-2. trading_symbol_rating: 按全仓累计规则评定 L0/L1/L2/L3
+2. trading_symbol_rating: 按全仓累计规则评定 L0/L1/L2/L3（有平仓即可）
 
-评级规则（全仓累计，至少5笔交易）:
+评级规则（全仓累计，有交易即评）:
   L0 白名单:    盈利 > 200U 且 胜率 > 50%（双条件）
   L1 黑名单1级: 盈利 > 50U 或 胜率 > 46%
   L2 黑名单2级: -100 < 盈利 < 0 或 胜率 > 44%
@@ -29,7 +29,9 @@ load_dotenv()
 
 MYSQL_CONFIG = {**get_db_config()}
 
-MIN_TRADES = 5
+MIN_TRADES_TOP50 = 5   # TOP50 榜单：至少 5 笔平仓才纳入
+MIN_TRADES_RATING = 1  # 评级：有 1 笔平仓即按规则评定
+MIN_TRADES = MIN_TRADES_TOP50  # 兼容旧引用（TOP50）
 TOP_N_DEFAULT = 50
 
 
@@ -40,8 +42,8 @@ def compute_rating_level(pnl: float, win_rate_pct: float, total_trades: int) -> 
     根据全仓累计 PnL 和胜率计算评级等级。
     优先级：最严重/最具体的条件优先。
     """
-    if total_trades < MIN_TRADES:
-        return 0, "交易不足5笔，默认白名单"
+    if total_trades < 1:
+        return 0, "无已平仓交易"
 
     # L3: 亏损 > 100U 且 胜率 < 44%（双条件最严重，优先拦截）
     if pnl < -100.0 and win_rate_pct < 44.0:
@@ -109,7 +111,7 @@ _SYMBOL_STATS_SQL = """
 
 # ── 工具函数 ──────────────────────────────────────────────
 
-def _fetch_all_symbol_stats(cursor, account_id: int, min_trades: int = MIN_TRADES) -> List[Dict[str, Any]]:
+def _fetch_all_symbol_stats(cursor, account_id: int, min_trades: int = MIN_TRADES_RATING) -> List[Dict[str, Any]]:
     cursor.execute(_SYMBOL_STATS_SQL, (account_id, min_trades))
     return cursor.fetchall()
 
@@ -156,7 +158,7 @@ def _apply_rating(symbol_stats: list, opt: OptimizationConfig):
 
 
 def _clean_stale_ratings(cursor, active_symbols: set):
-    """清理交易不足5笔的旧自动评级记录，避免历史垃圾数据残留。"""
+    """清理已无模拟仓平仓记录的旧评级，避免残留。"""
     try:
         cursor.execute(
             """
@@ -171,7 +173,7 @@ def _clean_stale_ratings(cursor, active_symbols: set):
                 continue
             reason = (r.get("level_change_reason") or "")
             total_trades = int(r.get("total_trades") or 0)
-            if total_trades == 0 and "白名单" in reason:
+            if total_trades == 0 or "交易不足" in reason:
                 stale.append(sym)
 
         if stale:
@@ -180,7 +182,7 @@ def _clean_stale_ratings(cursor, active_symbols: set):
                 f"DELETE FROM trading_symbol_rating WHERE symbol IN ({placeholders})",
                 stale,
             )
-            logger.info(f"[评级清理] 移除 {len(stale)} 个交易不足5笔的旧自动白名单: {', '.join(stale[:10])}{'...' if len(stale) > 10 else ''}")
+            logger.info(f"[评级清理] 移除 {len(stale)} 个无有效平仓记录的旧评级: {', '.join(stale[:10])}{'...' if len(stale) > 10 else ''}")
     except Exception as e:
         logger.warning(f"[评级清理] 出错(不影响主流程): {e}")
 
@@ -225,19 +227,24 @@ def update_top_performing_symbols(
         logger.info("=" * 80)
 
         logger.info("统计所有交易对历史表现...")
-        all_stats = _fetch_all_symbol_stats(cursor, account_id, MIN_TRADES)
-        if not all_stats:
-            logger.warning("没有找到符合条件的交易对")
+        rating_stats = _fetch_all_symbol_stats(cursor, account_id, MIN_TRADES_RATING)
+        if not rating_stats:
+            logger.warning("没有找到已平仓交易对")
             return
 
+        top_pool = _fetch_all_symbol_stats(cursor, account_id, MIN_TRADES_TOP50)
+
         # ── TOP50 榜单 ──
-        all_stats_sorted = sorted(
-            all_stats,
+        top_pool_sorted = sorted(
+            top_pool,
             key=lambda r: float(r["total_realized_pnl"] or 0),
             reverse=True,
         )
-        top_symbols = all_stats_sorted[:top_n]
-        logger.info(f"找到 {len(all_stats)} 个达标交易对，写入 Top {len(top_symbols)}")
+        top_symbols = top_pool_sorted[:top_n]
+        logger.info(
+            f"评级候选 {len(rating_stats)} 个, TOP50 候选 {len(top_pool)} 个, "
+            f"写入 Top {len(top_symbols)}"
+        )
 
         logger.info("清空 top_performing_symbols 旧数据...")
         cursor.execute("TRUNCATE TABLE top_performing_symbols")
@@ -309,7 +316,7 @@ def update_top_performing_symbols(
             logger.info("🏆 开始更新交易对评级 (统一核心机制)")
             logger.info("=" * 80)
             opt = OptimizationConfig(MYSQL_CONFIG)
-            rating_result = _apply_rating(all_stats, opt)
+            rating_result = _apply_rating(rating_stats, opt)
             logger.info(
                 f"评级完成: 更新 {rating_result['updated']} 个, "
                 f"分布 L0={rating_result['detail']['L0']} "
@@ -318,8 +325,9 @@ def update_top_performing_symbols(
                 f"L3={rating_result['detail']['L3']}"
             )
 
-            # 清理过期自动评级（交易不足5笔的旧白名单记录）
-            processed_symbols = {r["symbol"] for r in all_stats}
+            processed_symbols = {
+                futures_symbol_rating_canonical(r["symbol"]) for r in rating_stats
+            }
             _clean_stale_ratings(cursor, processed_symbols)
 
         cursor.close()

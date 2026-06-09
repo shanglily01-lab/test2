@@ -14,6 +14,11 @@ import pymysql
 from loguru import logger
 
 from app.utils.config_loader import get_db_config
+from app.utils.futures_symbol import (
+    futures_symbol_clean,
+    sql_rating_l3_clean_subquery,
+    sql_rating_symbol_clean,
+)
 
 # 仅以下策略同步 Binance 实盘；其它 source 只走模拟仓
 LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
@@ -21,11 +26,9 @@ LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
     "deepseek_explore",
     "deepseek_predict",
 })
-from app.utils.futures_symbol import (
-    futures_symbol_clean,
-    sql_rating_l3_clean_subquery,
-    sql_rating_symbol_clean,
-)
+
+# 无评级（不在 trading_symbol_rating）且不在 TOP50 时的实盘保证金比例
+LIVE_MARGIN_UNRATED = 0.6
 
 
 def _bool_setting(key: str, default: bool = True) -> bool:
@@ -229,12 +232,10 @@ def get_live_margin_ratio(symbol: str, cursor=None) -> float:
     """
     根据 symbol 评级等级获取实盘保证金比例.
 
-    规则 (2026-06-06):
+    规则:
       - L0 (白名单) 或 TOP50 → 1.0 (100%)
-      - 无评级且不在 TOP50 → 0.0 (禁止实盘)
-      - L1 (黑名单1级) → 0.0 (禁止实盘)
-      - L2 (黑名单2级) → 0.0 (禁止实盘)
-      - L3 (黑名单3级) → 0.0 (禁止实盘)
+      - 无评级且不在 TOP50 → LIVE_MARGIN_UNRATED (默认 60%)
+      - L1/L2/L3 (黑名单) → 0.0 (禁止实盘)
 
     Args:
         symbol: 交易对
@@ -250,8 +251,8 @@ def get_live_margin_ratio(symbol: str, cursor=None) -> float:
 
     if in_top50 or rating_level == 0:
         return 1.0
-    # 无评级 (None) 且不在 TOP
-    return 0.0
+    # 无评级 (None) 且不在 TOP50
+    return LIVE_MARGIN_UNRATED
 
 
 def live_margin_ratio_str(ratio: float) -> str:
@@ -260,6 +261,8 @@ def live_margin_ratio_str(ratio: float) -> str:
         return "100%"
     if ratio >= 0.8:
         return "80%"
+    if ratio >= 0.6:
+        return "60%"
     if ratio >= 0.5:
         return "50%"
     return "禁止"
@@ -296,11 +299,13 @@ def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
     if whitelist_gate and rating_level == 0:
         return True, ''
 
-    # 无评级且不在 TOP：拒绝，避免未知币种绕过黑白名单。
-    if top50_gate or whitelist_gate:
-        return False, '不在TOP名单且不是rating_level=0白名单，禁止实盘'
+    # 无评级且不在 TOP50：允许实盘，保证金 60%
+    if rating_level is None:
+        if top50_gate or whitelist_gate:
+            return True, f'无评级默认{int(LIVE_MARGIN_UNRATED * 100)}%保证金'
+        return False, '不满足任何实盘条件'
 
-    return False, '不满足任何实盘条件'
+    return False, '不在TOP名单且不是rating_level=0白名单，禁止实盘'
 
 
 def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:

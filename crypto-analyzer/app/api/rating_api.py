@@ -58,7 +58,8 @@ async def get_rating_config():
 
         # 评级规则（与 update_top_performers.compute_rating_level 一致）
         rules = {
-            "min_trades": 5,
+            "min_trades": 1,
+            "min_trades_top50": 5,
             "白名单 L0": "盈利 > 200U 且 胜率 > 50%（双条件同时满足）",
             "黑名单1级 L1": "盈利 > 50U 或 胜率 > 46%",
             "黑名单2级 L2": "-100 < 盈利 < 0 或 胜率 > 44%",
@@ -677,7 +678,7 @@ async def refresh_top50():
 async def get_symbol_rating(symbol: str):
     """获取单个交易对的评级和全仓累计表现分析"""
     try:
-        from update_top_performers import compute_rating_level, MIN_TRADES
+        from update_top_performers import compute_rating_level
         import pymysql
 
         opt_config = OptimizationConfig(DB_CONFIG)

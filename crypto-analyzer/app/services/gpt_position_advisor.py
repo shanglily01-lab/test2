@@ -9,6 +9,7 @@ import pymysql.cursors
 from loguru import logger
 
 from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_MODEL, GPT_TIMEOUT_S
+from app.services.gpt_llm_client import _completion_token_param
 from app.services.gemini_position_advisor import (
     GeminiPositionAdvisor,
     HOLD_15M_BARS,
@@ -105,17 +106,19 @@ class GPTPositionAdvisor:
             system_msg = HOLD_ADVISOR_JSON_SYSTEM_ZH
         try:
             client = OpenAI(api_key=GPT_API_KEY, base_url=GPT_BASE_URL)
-            resp = client.chat.completions.create(
-                model=GPT_MODEL,
-                messages=[
+            params = {
+                "model": GPT_MODEL,
+                "messages": [
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=0.2,
-                max_tokens=1024,
-                timeout=GPT_TIMEOUT_S,
-                response_format={"type": "json_object"},
-            )
+                "timeout": GPT_TIMEOUT_S,
+                "response_format": {"type": "json_object"},
+            }
+            if not GPT_MODEL.startswith("gpt-5"):
+                params["temperature"] = 0.2
+            params.update(_completion_token_param(1024))
+            resp = client.chat.completions.create(**params)
             text = (resp.choices[0].message.content or "").strip()
             from app.services.ai_explore_prompt import _extract_llm_json_text, _try_parse_json
             parsed, _ = _try_parse_json(_extract_llm_json_text(text))
