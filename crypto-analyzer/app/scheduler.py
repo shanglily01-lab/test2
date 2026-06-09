@@ -1338,7 +1338,7 @@ class UnifiedDataScheduler:
         schedule.every(4).hours.do(_run_gemini_explore)
         # 兜底: every(N).hours 在 restart 后从 0 计时, 易错过周期; 10min 轮询由 worker 4h 防重
         schedule.every(10).minutes.do(_run_gemini_explore)
-        logger.info("  ✓ gemini_explore - 固定槽 21:30北京 +0min, 每4h + 10min轮询")
+        logger.info("  ✓ gemini_explore - 固定槽 21:30北京 +0, 每4h + 10min轮询")
 
         # DeepSeek 探索 - 每 4h 调一轮 DeepSeek 检测短时方向异动, 模拟开仓
         # kill switch = system_settings.deepseek_explore_enabled
@@ -1353,7 +1353,7 @@ class UnifiedDataScheduler:
 
         schedule.every(4).hours.do(_run_deepseek_explore)
         schedule.every(10).minutes.do(_run_deepseek_explore)
-        logger.info("  ✓ deepseek_explore - 固定槽 21:30北京 +5min, 每4h + 10min轮询")
+        logger.info("  ✓ deepseek_explore - 固定槽 23:30北京 +2h, 每4h + 10min轮询")
 
         # GPT 探索 - 每 4h 调一轮 GPT 检测短时方向异动, 模拟开仓
         # kill switch = system_settings.gpt_explore_enabled
@@ -1368,7 +1368,7 @@ class UnifiedDataScheduler:
 
         schedule.every(4).hours.do(_run_gpt_explore)
         schedule.every(10).minutes.do(_run_gpt_explore)
-        logger.info("  ✓ gpt_explore - 固定槽 21:30北京 +10min, 每4h + 10min轮询")
+        logger.info("  ✓ gpt_explore - 固定槽 22:30北京 +1h, 每4h + 10min轮询")
 
         # DeepSeek 预测 - 每 4h 调一次 DeepSeek 预测 TOP50 方向
         def _run_deepseek_predict():
@@ -1382,7 +1382,7 @@ class UnifiedDataScheduler:
 
         schedule.every(4).hours.do(_run_deepseek_predict)
         schedule.every(5).minutes.do(_run_deepseek_predict)
-        logger.info("  ✓ deepseek_predict - 固定槽 21:30北京 +20min, 每4h + 5min轮询")
+        logger.info("  ✓ deepseek_predict - 固定槽 23:45北京 +2h15, 每4h + 5min轮询")
 
         # Gemini 预测 - 每 4h 调一次 Gemini 预测 TOP50 方向
         def _run_gemini_predict():
@@ -1396,7 +1396,7 @@ class UnifiedDataScheduler:
 
         schedule.every(4).hours.do(_run_gemini_predict)
         schedule.every(5).minutes.do(_run_gemini_predict)
-        logger.info("  ✓ gemini_predict - 固定槽 21:30北京 +15min, 每4h + 5min轮询")
+        logger.info("  ✓ gemini_predict - 固定槽 21:45北京 +15min, 每4h + 5min轮询")
 
         # GPT 预测 - 每 4h 调一次 GPT 预测 TOP50 方向
         def _run_gpt_predict():
@@ -1410,7 +1410,7 @@ class UnifiedDataScheduler:
 
         schedule.every(4).hours.do(_run_gpt_predict)
         schedule.every(5).minutes.do(_run_gpt_predict)
-        logger.info("  ✓ gpt_predict - 固定槽 21:30北京 +25min, 每4h + 5min轮询")
+        logger.info("  ✓ gpt_predict - 固定槽 22:45北京 +1h15, 每4h + 5min轮询")
 
         # Gemini 持仓顾问 - 监管 gemini_explore/gemini_predict 模拟仓，满 15min 后每 15min 复查
         def _run_gemini_position_advisor():

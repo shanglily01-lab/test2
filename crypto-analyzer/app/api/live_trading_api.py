@@ -5,7 +5,7 @@
 
 from fastapi import APIRouter, HTTPException, Query, Depends, Request
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from decimal import Decimal
 from loguru import logger
 import pymysql
@@ -88,6 +88,77 @@ def get_live_engine():
             logger.error(f"初始化实盘交易引擎失败: {e}")
             raise HTTPException(status_code=500, detail=f"初始化实盘交易引擎失败: {e}")
     return _live_engine
+
+
+def _dt_to_iso(value) -> Optional[str]:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat(sep=" ", timespec="seconds")
+    return str(value)
+
+
+def _enrich_positions_with_schedule(
+    positions: List[Dict[str, Any]],
+    account_id: int,
+) -> None:
+    """从 live_futures_positions + 关联模拟仓补充开仓/计划平仓时间."""
+    for pos in positions:
+        pos.setdefault("open_time", None)
+        pos.setdefault("planned_close_time", None)
+
+    if not positions or not account_id:
+        return
+
+    db_config = get_db_config()
+    if not db_config:
+        return
+
+    try:
+        conn = pymysql.connect(
+            **db_config,
+            charset="utf8mb4",
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=True,
+        )
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT l.symbol, l.position_side, l.open_time, l.source,
+                       CASE
+                         WHEN fp.close_extended = 1 AND fp.extended_close_time IS NOT NULL
+                           THEN fp.extended_close_time
+                         ELSE fp.planned_close_time
+                       END AS planned_close_time
+                FROM live_futures_positions l
+                LEFT JOIN futures_positions fp ON fp.id = l.paper_position_id
+                WHERE l.account_id = %s AND l.status = 'OPEN'
+                ORDER BY l.open_time DESC
+                """,
+                (account_id,),
+            )
+            rows = cur.fetchall()
+        conn.close()
+    except Exception as e:
+        logger.warning(f"[实盘API] 补充持仓时间失败 account_id={account_id}: {e}")
+        return
+
+    meta_map: Dict[str, dict] = {}
+    for row in rows:
+        key = f"{row['symbol']}_{row['position_side']}"
+        if key not in meta_map:
+            meta_map[key] = row
+
+    for pos in positions:
+        side = (pos.get("position_side") or "").upper()
+        key = f"{pos.get('symbol')}_{side}"
+        meta = meta_map.get(key)
+        if not meta:
+            continue
+        pos["open_time"] = _dt_to_iso(meta.get("open_time"))
+        pos["planned_close_time"] = _dt_to_iso(meta.get("planned_close_time"))
+        if meta.get("source"):
+            pos["source"] = meta["source"]
 
 
 def get_user_engine(user_id: int, api_key_id: int):
@@ -418,8 +489,18 @@ async def get_positions(
     返回所有活跃持仓
     """
     try:
-        engine = get_user_engine(current_user['user_id'], api_key_id)
+        user_id = current_user['user_id']
+        engine = get_user_engine(user_id, api_key_id)
         positions = engine.get_open_positions()
+
+        resolved_key_id = api_key_id
+        if resolved_key_id == 0:
+            service = get_api_key_service()
+            if service:
+                key_info = service.get_api_key(user_id, exchange='binance')
+                if key_info:
+                    resolved_key_id = key_info['id']
+        _enrich_positions_with_schedule(positions, resolved_key_id)
 
         # 转换Decimal为float
         for pos in positions:

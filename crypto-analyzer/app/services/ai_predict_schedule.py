@@ -1,8 +1,10 @@
 """Gemini / DeepSeek / GPT 探索+预测 — 统一固定时刻 4h 调度.
 
-锚点: 北京时间 21:30 (= UTC 13:30), 每 4h 一轮; 六策略各错开 5 分钟:
-  gemini_explore +0, deepseek_explore +5, gpt_explore +10,
-  gemini_predict +15, deepseek_predict +20, gpt_predict +25.
+锚点: 北京时间 21:30 (= UTC 13:30), 每 4h 一轮.
+Gemini 与 DeepSeek 错开 2 小时; 同教师探索/预测再错开 15 分钟; GPT 居中 +1h:
+  gemini_explore +0,   gemini_predict +15,
+  gpt_explore +60,     gpt_predict +75,
+  deepseek_explore +120, deepseek_predict +135  (北京 23:30 / 23:45)
 
 调度器 5/10 分钟轮询 + worker 内 next_due 认领防重。
 """
@@ -22,7 +24,8 @@ PREDICT_SCHEDULE_POLL_MINUTES = 5
 # 固定锚点 UTC 13:30 = 北京时间 21:30
 SCHEDULE_ANCHOR_HOUR_UTC = 13
 SCHEDULE_ANCHOR_MINUTE_UTC = 30
-SCHEDULE_STAGGER_MINUTES = 5
+GEMINI_DEEPSEEK_STAGGER_HOURS = 2
+SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN = 15
 _SCHEDULE_ANCHOR_BASE = datetime(2024, 1, 1, SCHEDULE_ANCHOR_HOUR_UTC, SCHEDULE_ANCHOR_MINUTE_UTC)
 
 GEMINI_EXPLORE_NEXT_DUE_KEY = "gemini_explore_next_due_utc"
@@ -32,14 +35,30 @@ GEMINI_PREDICT_NEXT_DUE_KEY = "gemini_predict_next_due_utc"
 DEEPSEEK_PREDICT_NEXT_DUE_KEY = "deepseek_predict_next_due_utc"
 GPT_PREDICT_NEXT_DUE_KEY = "gpt_predict_next_due_utc"
 
+_GEMINI_OFFSET = 0
+_DEEPSEEK_OFFSET = GEMINI_DEEPSEEK_STAGGER_HOURS * 60
+_GPT_OFFSET = GEMINI_DEEPSEEK_STAGGER_HOURS * 30  # 1h after Gemini, 1h before DeepSeek
+
 STRATEGY_SCHEDULE_OFFSETS: Dict[str, int] = {
-    "gemini_explore": 0,
-    "deepseek_explore": SCHEDULE_STAGGER_MINUTES,
-    "gpt_explore": SCHEDULE_STAGGER_MINUTES * 2,
-    "gemini_predict": SCHEDULE_STAGGER_MINUTES * 3,
-    "deepseek_predict": SCHEDULE_STAGGER_MINUTES * 4,
-    "gpt_predict": SCHEDULE_STAGGER_MINUTES * 5,
+    "gemini_explore": _GEMINI_OFFSET,
+    "gemini_predict": _GEMINI_OFFSET + SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN,
+    "gpt_explore": _GPT_OFFSET,
+    "gpt_predict": _GPT_OFFSET + SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN,
+    "deepseek_explore": _DEEPSEEK_OFFSET,
+    "deepseek_predict": _DEEPSEEK_OFFSET + SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN,
 }
+
+
+def _offset_label(offset_min: int) -> str:
+    if offset_min <= 0:
+        return "+0min"
+    if offset_min % 60 == 0:
+        h = offset_min // 60
+        return f"+{h}h"
+    h, m = divmod(offset_min, 60)
+    if h:
+        return f"+{h}h{m}min"
+    return f"+{offset_min}min"
 
 
 def _parse_utc_naive(value: str) -> Optional[datetime]:
@@ -84,28 +103,31 @@ def _last_ok_run_at(cur, runs_table: str) -> Optional[datetime]:
     return last_at
 
 
-def _strategy_anchor(strategy_key: str) -> datetime:
+def _period_base_for_now(now: datetime) -> datetime:
+    """当前 4h 周期起点 (共享锚点 13:30 UTC, 不含策略 offset)."""
+    if now < _SCHEDULE_ANCHOR_BASE:
+        return _SCHEDULE_ANCHOR_BASE
+    elapsed_s = (now - _SCHEDULE_ANCHOR_BASE).total_seconds()
+    period_s = PREDICT_ROUND_INTERVAL_SECONDS
+    n = int(elapsed_s // period_s)
+    return _SCHEDULE_ANCHOR_BASE + timedelta(seconds=period_s * n)
+
+
+def _slot_in_period(period_base: datetime, strategy_key: str) -> datetime:
     offset_min = STRATEGY_SCHEDULE_OFFSETS[strategy_key]
-    return _SCHEDULE_ANCHOR_BASE + timedelta(minutes=offset_min)
+    return period_base + timedelta(minutes=offset_min)
 
 
 def scheduled_slot_for_now(
     strategy_key: str,
     now: Optional[datetime] = None,
 ) -> datetime:
-    """当前周期内该策略的固定槽位时刻 (UTC naive)."""
+    """当前 4h 周期内该策略的固定槽位时刻 (UTC naive)."""
     if strategy_key not in STRATEGY_SCHEDULE_OFFSETS:
         raise KeyError(f"unknown strategy_key: {strategy_key}")
 
     now = now or datetime.now(timezone.utc).replace(tzinfo=None)
-    strat_anchor = _strategy_anchor(strategy_key)
-    if now < strat_anchor:
-        return strat_anchor
-
-    elapsed_s = (now - strat_anchor).total_seconds()
-    period_s = PREDICT_ROUND_INTERVAL_SECONDS
-    n = int(elapsed_s // period_s)
-    return strat_anchor + timedelta(seconds=period_s * n)
+    return _slot_in_period(_period_base_for_now(now), strategy_key)
 
 
 def next_scheduled_slot(
@@ -114,10 +136,12 @@ def next_scheduled_slot(
 ) -> datetime:
     """after 之后的下一个固定槽位."""
     after = after or datetime.now(timezone.utc).replace(tzinfo=None)
-    current = scheduled_slot_for_now(strategy_key, after)
-    if after < current:
-        return current
-    return current + timedelta(seconds=PREDICT_ROUND_INTERVAL_SECONDS)
+    period_base = _period_base_for_now(after)
+    slot_this_period = _slot_in_period(period_base, strategy_key)
+    if after < slot_this_period:
+        return slot_this_period
+    next_base = period_base + timedelta(seconds=PREDICT_ROUND_INTERVAL_SECONDS)
+    return _slot_in_period(next_base, strategy_key)
 
 
 def _ai_round_is_due(
@@ -246,13 +270,13 @@ def _claim_next_slot(
                 value,
                 (
                     f"{log_tag} 下一轮固定槽 UTC "
-                    f"(锚点21:30北京 +{STRATEGY_SCHEDULE_OFFSETS[strategy_key]}min)"
+                    f"(锚点21:30北京 {_offset_label(STRATEGY_SCHEDULE_OFFSETS[strategy_key])})"
                 ),
             ),
         )
     logger.info(
         f"[{log_tag}] 已认领固定槽, next_due_utc={value} "
-        f"(offset=+{STRATEGY_SCHEDULE_OFFSETS[strategy_key]}min)"
+        f"(offset={_offset_label(STRATEGY_SCHEDULE_OFFSETS[strategy_key])})"
     )
     return next_due
 

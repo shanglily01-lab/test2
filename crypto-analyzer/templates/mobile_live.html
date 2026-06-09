@@ -210,6 +210,11 @@ function toast(msg, type='ok') {
 }
 function fmt(n, d=2) { if (n == null || isNaN(n)) return '--'; return parseFloat(n).toFixed(d); }
 function fmtPnl(n) { const v = parseFloat(n) || 0; return (v >= 0 ? '+' : '') + v.toFixed(2) + 'U'; }
+function fmtDateTime(ts) {
+    if (!ts) return '--';
+    const s = String(ts).replace('T', ' ').replace('Z', '').trim();
+    return s.length >= 16 ? s.slice(5, 16) : s.slice(0, 16);
+}
 
 function makeHeaders() {
     const h = { 'Content-Type': 'application/json' };
@@ -378,6 +383,8 @@ async function loadPositions() {
                         <div><p class="text-[10px] text-on-surface-variant uppercase">标记价</p><p class="mono text-xs font-medium">${fmt(mp,4)}</p></div>
                         <div><p class="text-[10px] text-on-surface-variant uppercase">数量</p><p class="mono text-xs font-medium">${fmt(qty,4)}</p></div>
                         <div><p class="text-[10px] text-on-surface-variant uppercase">保证金</p><p class="mono text-xs font-medium">${margin ? fmt(margin,2) : '--'}</p></div>
+                        <div><p class="text-[10px] text-on-surface-variant uppercase">开仓时间</p><p class="mono text-xs font-medium">${fmtDateTime(pos.open_time)}</p></div>
+                        <div><p class="text-[10px] text-on-surface-variant uppercase">计划平仓</p><p class="mono text-xs font-medium">${fmtDateTime(pos.planned_close_time)}</p></div>
                         ${liq ? `<div><p class="text-[10px] text-on-surface-variant uppercase">爆仓价</p><p class="mono text-xs font-bold text-error">${fmt(liq,4)}</p></div>` : ''}
                     </div>
                     <button class="w-full min-h-[40px] mt-1 py-2 rounded-xl border border-error/30 text-error text-[11px] font-bold uppercase active:bg-error/10 transition-colors"
