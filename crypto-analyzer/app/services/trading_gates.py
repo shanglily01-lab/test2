@@ -123,6 +123,39 @@ def is_symbol_blocked_level3(symbol: str, rating_level: Optional[int] = None) ->
     return False
 
 
+def _as_cursor(conn_or_cursor):
+    """paper_open_gate 等传入 pymysql Connection；部分调用方传入 Cursor."""
+    if conn_or_cursor is None:
+        return None
+    if hasattr(conn_or_cursor, "execute"):
+        return conn_or_cursor
+    if hasattr(conn_or_cursor, "cursor"):
+        return conn_or_cursor.cursor()
+    return conn_or_cursor
+
+
+def _symbol_in_candidate_pool(symbol: str) -> bool:
+    """AI 探索/预测候选池内的币种允许模拟开仓."""
+    clean = futures_symbol_clean(symbol)
+    try:
+        from app.services.data_cache_service import DATA_CACHE_DB, _get_conn
+
+        conn = _get_conn(DATA_CACHE_DB)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"SELECT 1 FROM candidate_pool_snapshot "
+                    f"WHERE {sql_rating_symbol_clean('symbol')} = %s LIMIT 1",
+                    (clean,),
+                )
+                return cur.fetchone() is not None
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.warning(f"[trading_gates] candidate_pool 查询失败 {symbol}: {e}")
+        return False
+
+
 def load_blacklist_level3_symbols(conn=None) -> Set[str]:
     """返回 L3 禁止交易 symbol 集合；开关关闭时返回空集."""
     if not is_blacklist_level3_enforced():
@@ -155,15 +188,18 @@ def get_symbol_rating_info(
     """
     统一查询 symbol 的评级等级与 TOP50 状态.
 
+    cursor 可为 pymysql Cursor 或 Connection（与 gate_simulated_open 一致）.
+
     Returns:
         (rating_level, in_top50):
           rating_level: None=无评级(未在评级表中), 0/1/2/3=评级等级
           in_top50: 是否在 top_performing_symbols 中
     """
     clean = futures_symbol_clean(symbol)
+    cur = _as_cursor(cursor)
     try:
-        if cursor is not None:
-            cursor.execute(
+        if cur is not None:
+            cur.execute(
                 f"SELECT "
                 f"  (SELECT 1 FROM top_performing_symbols "
                 f"   WHERE {sql_rating_symbol_clean('symbol')} = %s LIMIT 1) AS in_top100,"
@@ -172,7 +208,7 @@ def get_symbol_rating_info(
                 f"   ORDER BY rating_level DESC LIMIT 1) AS rating_level",
                 (clean, clean),
             )
-            row = cursor.fetchone()
+            row = cur.fetchone()
         else:
             db_config = get_db_config()
             conn = pymysql.connect(**db_config, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
@@ -258,8 +294,8 @@ def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]
     """
     模拟盘开仓基础币种闸门。
 
-    允许 TOP 名单内币种，或 trading_symbol_rating 中已有评级且不是 L3 的币种。
-    拒绝 L3，以及既不在 TOP、也不在黑白名单评级表中的未知币种。
+    允许: TOP50 / 已有评级(非 L3) / candidate_pool_snapshot 候选池内币种。
+    拒绝 L3 及完全未知的币种。
     """
     rating_level, in_top50 = get_symbol_rating_info(symbol, cursor)
 
@@ -267,6 +303,9 @@ def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]
         return False, f'黑名单{rating_level}级禁止模拟盘'
 
     if in_top50 or rating_level is not None:
+        return True, ''
+
+    if _symbol_in_candidate_pool(symbol):
         return True, ''
 
     return False, '不在TOP名单且未在黑白名单评级表中，禁止模拟盘'
