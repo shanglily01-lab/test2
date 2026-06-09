@@ -204,29 +204,26 @@ class GeminiPositionAdvisor:
             return []
 
     def _get_current_price(self, symbol: str) -> Optional[float]:
-        """取当前价: 优先 5m K 线 (最近 15 分钟内有数据)"""
+        """取当前价: 与探索/开仓一致，走 DataHub（WS mark → 缓存 → K线 → REST）。"""
         symbol = _normalize_symbol_for_db(symbol)
         try:
-            conn = self._get_conn()
-            cur = conn.cursor()
-            cur.execute(
-                "SELECT close_price, open_time FROM kline_data "
-                "WHERE symbol=%s AND timeframe='5m' AND exchange='binance_futures' "
-                "ORDER BY open_time DESC LIMIT 1",
-                (symbol,)
+            from app.services.binance_data_hub import get_global_data_hub
+
+            hub = get_global_data_hub()
+            price = hub.get_trade_price_sync(
+                symbol,
+                max_age_seconds=120,
+                allow_db_fallback=True,
             )
-            row = cur.fetchone()
-            cur.close(); conn.close()
-            if not row:
-                return None
-            age_min = (datetime.datetime.now().timestamp() - row['open_time'] / 1000) / 60
-            if age_min > 15:
-                logger.warning(f"[Gemini顾问] {symbol} 5m K线 {age_min:.0f}min 旧,跳过")
-                return None
-            return float(row['close_price'])
+            if price is not None and price > 0:
+                return float(price)
         except Exception as e:
-            logger.warning(f"[Gemini顾问] {symbol} 取价失败: {e}")
-            return None
+            logger.warning(f"[Gemini顾问] {symbol} DataHub 取价失败: {e}")
+
+        logger.warning(
+            f"[Gemini顾问] {symbol} DataHub 无有效价，跳过本轮持仓审核"
+        )
+        return None
 
     def _fetch_market_context(self, symbol: str) -> dict:
         """近 4h 15m K 线 + 近 24 根 1h + candidate_pool 叙事 + Big4 + 方向闸门."""

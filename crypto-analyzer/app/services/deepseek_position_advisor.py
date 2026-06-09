@@ -338,6 +338,9 @@ class DeepSeekPositionAdvisor:
                 current_price = helper._get_current_price(pos["symbol"])
                 if not current_price:
                     stats["errors"] += 1
+                    logger.warning(
+                        f"[DeepSeek顾问] 取价失败，跳过 id={pos['id']} {pos['symbol']}"
+                    )
                     continue
                 pos["current_price"] = current_price
 
