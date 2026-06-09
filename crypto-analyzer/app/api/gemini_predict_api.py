@@ -198,7 +198,7 @@ async def status():
                     "leverage": 3,
                     "hold_hours": 4,
                     "sl_pct": 3,
-                    "tp_pct": 6,
+                    "tp_pct": 5,
                     "confidence_threshold": 0.6,
                     "top_n": 100,
                 },

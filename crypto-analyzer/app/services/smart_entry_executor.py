@@ -92,12 +92,12 @@ class SmartEntryExecutor:
         """从 system_settings 缓存读取止损/止盈比例，失败时返回默认值 2%/5%"""
         try:
             from app.services.system_settings_loader import get_setting as _get_cached_setting
-            sl = float(_get_cached_setting('stop_loss_pct', '0.02'))
+            sl = float(_get_cached_setting('stop_loss_pct', '0.03'))
             tp = float(_get_cached_setting('take_profit_pct', '0.05'))
             return sl, tp
         except Exception as e:
             logger.warning(f"[SL/TP] 读取system_settings失败，使用默认值: {e}")
-            return 0.02, 0.05
+            return 0.03, 0.05
 
     def _calculate_volatility_adjusted_stop_loss(self, signal_components: dict, base_stop_loss_pct: float) -> float:
         """波动率自适应止损"""

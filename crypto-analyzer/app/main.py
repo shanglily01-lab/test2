@@ -4382,19 +4382,16 @@ def _analyze_futures_signal(
         if signal_score > 0:
             # 做多信号
             # 止损：当前价格下方，根据波动率调整
-            stop_loss_pct = 0.02 if not volatility else min(volatility * 0.8, 0.05)  # 2%-5%
+            stop_loss_pct = 0.03
+            take_profit_pct = 0.05
             stop_loss = current_price * (1 - stop_loss_pct)
-            
-            # 止盈：根据盈亏比计算
-            take_profit = current_price * (1 + stop_loss_pct * profit_loss_ratio)
+            take_profit = current_price * (1 + take_profit_pct)
         else:
             # 做空信号
-            # 止损：当前价格上方
-            stop_loss_pct = 0.02 if not volatility else min(volatility * 0.8, 0.05)  # 2%-5%
+            stop_loss_pct = 0.03
+            take_profit_pct = 0.05
             stop_loss = current_price * (1 + stop_loss_pct)
-            
-            # 止盈：根据盈亏比计算
-            take_profit = current_price * (1 - stop_loss_pct * profit_loss_ratio)
+            take_profit = current_price * (1 - take_profit_pct)
         
         # 5. 计算建议仓位比例（基于凯利分数，但更保守）
         # 使用凯利分数的50%作为实际建议（更保守）

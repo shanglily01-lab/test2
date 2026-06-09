@@ -36,8 +36,8 @@ class SignalGenerator:
 
         # 风险管理
         risk_config = self.config.get('signals', {}).get('risk', {})
-        self.stop_loss_pct = risk_config.get('stop_loss_pct', 0.02)
-        self.take_profit_pct = risk_config.get('take_profit_pct', 0.06)
+        self.stop_loss_pct = risk_config.get('stop_loss_pct', 0.03)
+        self.take_profit_pct = risk_config.get('take_profit_pct', 0.05)
         self.max_position = risk_config.get('max_position', 0.5)
 
     def generate_signal(
@@ -454,8 +454,8 @@ def main():
                 'strong_short': 0.75
             },
             'risk': {
-                'stop_loss_pct': 0.02,
-                'take_profit_pct': 0.06,
+                'stop_loss_pct': 0.03,
+                'take_profit_pct': 0.05,
                 'max_position': 0.5
             }
         }

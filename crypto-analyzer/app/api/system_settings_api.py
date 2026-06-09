@@ -493,7 +493,7 @@ async def get_trading_services():
             'blacklist_level3_enabled': True,
             'live_top50_required': True,
             'live_whitelist_enabled': True,
-            'stop_loss_pct': 0.02,
+            'stop_loss_pct': 0.03,
             'take_profit_pct': 0.05,
         }
 

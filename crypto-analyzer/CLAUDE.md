@@ -111,12 +111,12 @@
 
 ### 战术四策略 + 三教师 (`*_pullback|rebound|chase|dump`)
 - **15 任务**（5 策略 × 3 教师），`tactical_explore_scheduler` 4h + **15min** 轮询；共用 `explore_prepared_snapshot`
-- 固定方向：pullback/chase→LONG，rebound/dump→SHORT；SL **4%** / TP **6%**；conf≥**0.55**
+- 固定方向：pullback/chase→LONG，rebound/dump→SHORT；SL **3%** / TP **5%**；conf≥**0.55**
 - 仅模拟仓；migration 009 / 017
 
 ### 主探索 (`*_explore`)
 - 每 **4h** + 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
-- SL **4%** / TP **6%** / **4h** / 5x / 500U；conf≥**0.60** + `explore_catalyst_technical_ok`
+- SL **3%** / TP **5%** / **4h** / 5x / 500U；conf≥**0.60** + `explore_catalyst_technical_ok`
 - **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：仅 `deepseek_explore`；Gemini/GPT 探索仅模拟
 
 ### 主预测 (`*_predict`)

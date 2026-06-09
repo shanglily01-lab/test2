@@ -20,6 +20,10 @@ from app.services.gemini_position_advisor import (
     HOLD_MIN_MINUTES,
     OPEN_ADVISOR_JSON_SYSTEM_ZH,
 )
+from app.services.hold_advisor_query import (
+    DEEPSEEK_HOLD_SOURCE_SQL,
+    fetch_due_hold_positions,
+)
 from app.services.open_advisor_routing import should_use_deepseek_hold_advisor
 from app.services.open_advisor_strategy_rubrics import (
     check_direction_gates,
@@ -155,30 +159,19 @@ class DeepSeekPositionAdvisor:
             logger.warning(f"[DeepSeek顾问] API 异常: {e}")
             return None
 
-    def get_eligible_positions(self):
-        """全部模拟仓，持仓 ≥15min."""
+    def get_due_positions(self):
+        """到期模拟仓：满 15min 且距上次 hold 审核 ≥15min（或首审）."""
         try:
             conn = self._get_conn()
-            cur = conn.cursor()
-            cur.execute(
-                """
-                SELECT id, account_id, symbol, position_side, entry_price,
-                       quantity, leverage, margin, open_time, source,
-                       TIMESTAMPDIFF(MINUTE, open_time, NOW())/60.0 AS hold_hours
-                FROM futures_positions
-                WHERE status='open'
-                  AND account_id = 2
-                  AND TIMESTAMPDIFF(MINUTE, open_time, NOW()) >= %s
-                ORDER BY open_time ASC
-                """,
-                (HOLD_MIN_MINUTES,),
+            rows = fetch_due_hold_positions(
+                conn,
+                reviews_table="deepseek_advisor_reviews",
+                source_sql=DEEPSEEK_HOLD_SOURCE_SQL,
             )
-            rows = cur.fetchall()
-            cur.close()
             conn.close()
             return rows
         except Exception as e:
-            logger.error(f"[DeepSeek顾问] 查模拟仓失败: {e}")
+            logger.error(f"[DeepSeek顾问] 查到期仓位失败: {e}")
             return []
 
     def review_open(
@@ -300,7 +293,7 @@ class DeepSeekPositionAdvisor:
         return approved, reason
 
     def tick(self) -> dict:
-        """deepseek_* 模拟仓持仓监管；外部每 15min 调一次."""
+        """非 Gemini 主单模拟仓持仓监管；仅到期仓位，外部每 15min 调一次."""
         stats = {
             "evaluated": 0, "hold": 0, "observe": 0, "sell": 0,
             "skipped": 0, "errors": 0, "closed": 0,
@@ -309,13 +302,12 @@ class DeepSeekPositionAdvisor:
             stats["note"] = "deepseek_position_advisor_disabled"
             return stats
 
-        positions = self.get_eligible_positions()
+        positions = self.get_due_positions()
         if not positions:
             return stats
 
-        logger.info(f"[DeepSeek顾问] tick 开始,候选 {len(positions)} 模拟单")
+        logger.info(f"[DeepSeek顾问] tick 开始,到期 {len(positions)} 模拟单")
         helper = self._prompt_helper
-        now = time.time()
 
         for pos in positions:
             if not should_use_deepseek_hold_advisor(pos.get("source") or ""):
@@ -323,16 +315,7 @@ class DeepSeekPositionAdvisor:
                 continue
 
             hold_h = float(pos.get("hold_hours") or 0)
-            if hold_h < HOLD_MIN_HOURS:
-                stats["skipped"] += 1
-                continue
-
             pid = int(pos["id"])
-            last = self._last_check_ts.get(pid)
-            if last and (now - last) < HOLD_CHECK_INTERVAL_S:
-                stats["skipped"] += 1
-                continue
-            self._last_check_ts[pid] = now
 
             try:
                 current_price = helper._get_current_price(pos["symbol"])
@@ -370,6 +353,7 @@ class DeepSeekPositionAdvisor:
                 )
                 stats[action] += 1
                 stats["evaluated"] += 1
+                self._last_check_ts[pid] = time.time()
 
                 logger.info(
                     f"[DeepSeek顾问] {action.upper():8s} id={pos['id']} {pos['symbol']:15s} "

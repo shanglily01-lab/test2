@@ -2,15 +2,15 @@
 Gemini 探索 worker (v3 — 2026-05-21 长持仓版)
 
 每 4h 调用 Google Gemini 检测加密货币短时方向异动, 根据 verdict 直接开模拟单。
-持仓 4 小时, SL=4%, TP=6%; 满 15min 后 Gemini 持仓顾问每 15min 问询是否持有。
+持仓 4 小时, SL=3%, TP=5%; 满 15min 后 Gemini 持仓顾问每 15min 问询是否持有。
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
   - margin    = 500U
   - leverage  = 5x
   - hold     = 4 小时
-  - SL       = 4%
-  - TP       = 6%
+  - SL       = 3%
+  - TP       = 5%
 
 闸门:
   - system_settings.gemini_explore_enabled (默认 0, 关时早返回)
@@ -1536,12 +1536,12 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
     """跑一轮 Gemini 探索 (v2 优化版). 成功返回 run_id, 失败/跳过返回 None.
 
     新增/修改:
-      1. SL 4%, TP 6%, 杠杆 5x
+      1. SL 3%, TP 5%, 杠杆 5x
       2. 候选池加入中等波动币 (NORMAL_MOVER)
       3. K 线用自然语言描述替代纯数组
       4. 新 prompt: 去天鹅化 + Few-shot + 置信度校准 + 鼓励空 verdicts
       5+6. 传递历史表现数据给 Gemini
-      7. SL 缓冲: 硬 SL 4% + 入场保护 30min
+      7. SL 缓冲: 硬 SL 3% + 入场保护 30min
       8. 置信度判定沿用 EXPLORE_CONFIDENCE_THRESHOLD=0.6
       9+10. 新增 _get_historical_stats 并注入 prompt
     """
@@ -1836,7 +1836,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            # 5i. 开仓 (SL 4%, 杠杆 5x)
+            # 5i. 开仓 (SL 3%, 杠杆 5x)
             position_id = _open_simulated_position(conn, symbol, side, price, catalyst)
             if position_id is None:
                 verdict_rows.append((

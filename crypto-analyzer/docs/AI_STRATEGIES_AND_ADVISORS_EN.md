@@ -94,7 +94,7 @@ Init stagger: Gemini +15s, DeepSeek +90s, GPT +120s.
 | Margin | 500 USDT |
 | Leverage | 5x |
 | Hold | **4h** (`AI_POSITION_HOLD_HOURS`) |
-| SL / TP | **4% / 6%** |
+| SL / TP | **3% / 5%** |
 | `source` | `gemini_explore` / `deepseek_explore` / `gpt_explore` |
 
 ### 3.5 Kill switches (`system_settings`)
@@ -139,7 +139,7 @@ Startup catch-up: +45s / +50s / +55s (**do not run predict from `scheduler_init`
 
 ### 4.3 Params & gates
 
-Same as main explore: **4h hold, SL 4%, TP 6%, 5x, conf≥0.60, catalyst gate**. Weak catalyst → `skipped_weak_catalyst`.
+Same as main explore: **4h hold, SL 3%, TP 5%, 5x, conf≥0.60, catalyst gate**. Weak catalyst → `skipped_weak_catalyst`.
 
 ### 4.4 Kill switches
 
@@ -212,7 +212,7 @@ Part of `tactical_explore_scheduler` (**15 jobs**); 4h cycle + 15min poll on `ta
 | Field | Value |
 |-------|-------|
 | Confidence | ≥ **0.55** |
-| SL / TP | Default **4% / 6%** (`ReversalExploreConfig` defaults) |
+| SL / TP | Default **3% / 5%** (`ReversalExploreConfig` defaults) |
 | Hold | 4h |
 | GPT entries per round | 2–3 |
 

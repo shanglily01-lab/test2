@@ -95,7 +95,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 | 保证金 | 500 U |
 | 杠杆 | 5x |
 | 计划持仓 | **4h**（`AI_POSITION_HOLD_HOURS`） |
-| SL / TP | **4% / 6%** |
+| SL / TP | **3% / 5%** |
 | source | `gemini_explore` / `deepseek_explore` / `gpt_explore` |
 
 ### 3.5 Kill Switch（`system_settings`）
@@ -140,7 +140,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 4.3 参数与门槛
 
-与主探索相同：**4h 持仓、SL 4%、TP 6%、5x、conf≥0.60、catalyst gate**。弱 catalyst → `skipped_weak_catalyst`。
+与主探索相同：**4h 持仓、SL 3%、TP 5%、5x、conf≥0.60、catalyst gate**。弱 catalyst → `skipped_weak_catalyst`。
 
 ### 4.4 Kill Switch
 
@@ -213,7 +213,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 | 项 | 值 |
 |----|-----|
 | 置信度 | ≥ **0.55** |
-| SL / TP | 默认 **4% / 6%**（`ReversalExploreConfig` 默认，与主探索一致） |
+| SL / TP | 默认 **3% / 5%**（`ReversalExploreConfig` 默认，与主探索一致） |
 | 持仓 | 4h |
 | GPT 每轮 entry 数 | 2–3（`GPT_TACTICAL_MIN/MAX_ENTRIES`） |
 

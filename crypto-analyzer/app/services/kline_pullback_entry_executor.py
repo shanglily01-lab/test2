@@ -121,12 +121,12 @@ class KlinePullbackEntryExecutor:
             cur.execute("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('stop_loss_pct','take_profit_pct')")
             rows = {r[0]: r[1] for r in cur.fetchall()}
             cur.close(); conn.close()
-            sl = float(rows.get('stop_loss_pct', 0.02))
+            sl = float(rows.get('stop_loss_pct', 0.03))
             tp = float(rows.get('take_profit_pct', 0.05))
             return sl, tp
         except Exception as e:
             logger.warning(f"[SL/TP] 读取system_settings失败，使用默认值: {e}")
-            return 0.02, 0.05
+            return 0.03, 0.05
 
     def _calculate_volatility_adjusted_stop_loss(self, signal_components: dict, base_stop_loss_pct: float) -> float:
         """波动率自适应止损"""

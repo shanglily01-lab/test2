@@ -9,8 +9,8 @@ DeepSeek 探索 worker (v1 — 2026-05-28)
   - margin    = 500U
   - leverage  = 5x
   - hold     = 4 小时
-  - SL       = 4%
-  - TP       = 6%
+  - SL       = 3%
+  - TP       = 5%
 
 闸门:
   - system_settings.deepseek_explore_enabled (默认 0, 关时早返回)

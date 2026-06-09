@@ -23,7 +23,7 @@ class BTCMomentumTrader:
     WINDOWS_MIN = [15, 30, 45, 60]  # 检测窗口（分钟）
     PAPER_MARGIN = 400         # 模拟盘每单保证金(U)
     LEVERAGE = 5
-    STOP_LOSS_PCT = 0.02       # 默认2%，运行时从system_settings读取
+    STOP_LOSS_PCT = 0.03       # 默认3%，运行时从system_settings读取
     TAKE_PROFIT_PCT = 0.05     # 默认5%，运行时从system_settings读取
     PAPER_ACCOUNT_ID = 2
 
@@ -41,18 +41,18 @@ class BTCMomentumTrader:
         )
 
     def _get_sl_tp_from_settings(self):
-        """从 system_settings 读取止损止盈比例，默认 2%/5%"""
+        """从 system_settings 读取止损止盈比例，默认 3%/5%"""
         try:
             conn = self._get_conn()
             cur = conn.cursor()
             cur.execute("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('stop_loss_pct','take_profit_pct')")
             rows = {r['setting_key']: r['setting_value'] for r in cur.fetchall()}
             cur.close(); conn.close()
-            return float(rows.get('stop_loss_pct', 0.02)), float(rows.get('take_profit_pct', 0.05))
+            return float(rows.get('stop_loss_pct', 0.03)), float(rows.get('take_profit_pct', 0.05))
         except Exception as e:
             from loguru import logger
             logger.warning(f"[BTC动量] 读取SL/TP配置失败，使用默认值: {e}")
-            return 0.02, 0.05
+            return 0.03, 0.05
 
     # ──────────────────────────────────────────
     # 价格跟踪
