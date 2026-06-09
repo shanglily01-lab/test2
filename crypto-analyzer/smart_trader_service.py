@@ -3323,8 +3323,8 @@ class SmartTraderService:
                 logger.info("=" * 80)
                 logger.info("🏆 开始更新 TOP50 + 交易对评级 (统一核心机制)")
                 logger.info("=" * 80)
-                from update_top_performers import update_top_performing_symbols
-                update_top_performing_symbols(account_id=2, top_n=50, skip_rating=False)
+                from app.services.rating_refresh_schedule import run_rating_refresh_if_due
+                run_rating_refresh_if_due(manual=True, triggered_by="smart_trader_daily_2am")
 
                 # 3. 问题4优化: 更新波动率配置 (15M K线动态止盈)
                 logger.info("=" * 80)
@@ -4162,29 +4162,28 @@ async def async_main():
     asyncio.create_task(update_account_stats_task())
     logger.info("✅ 账户统计定时更新任务已启动（每5分钟）")
 
-    # 🔥 启动 TOP50 + 交易对评级定时更新任务（每4小时）
-    async def update_top_performers_task():
-        """每4小时更新 TOP50 + 白名单/黑名单评级"""
-        from update_top_performers import update_top_performing_symbols
+    # TOP50 + 评级：与 crypto-scheduler 共用 next_due（15min 轮询，4h 周期）
+    from app.services.rating_refresh_schedule import (
+        RATING_REFRESH_POLL_MINUTES,
+        run_rating_refresh_if_due,
+    )
 
+    async def update_top_performers_task():
+        poll_s = RATING_REFRESH_POLL_MINUTES * 60
         while True:
             try:
-                logger.info("🔄 开始更新 TOP50 + 交易对评级...")
                 await asyncio.get_event_loop().run_in_executor(
                     None,
-                    lambda: update_top_performing_symbols(account_id=2, top_n=50)
+                    lambda: run_rating_refresh_if_due(triggered_by="smart_trader_poll"),
                 )
-                logger.info("TOP50 + 交易对评级更新完成")
-                await asyncio.sleep(4 * 3600)
-
             except Exception as e:
                 logger.error(f"❌ TOP50 + 交易对评级更新失败: {e}")
-                # 失败后等待1小时再重试
-                await asyncio.sleep(3600)
+            await asyncio.sleep(poll_s)
 
-    # 创建后台任务
     asyncio.create_task(update_top_performers_task())
-    logger.info("✅ TOP50 + 交易对评级定时更新任务已启动（每4小时）")
+    logger.info(
+        f"✅ TOP50 + 交易对评级轮询已启动（每{RATING_REFRESH_POLL_MINUTES}分钟检查，4h 周期）"
+    )
 
     # 在事件循环中运行同步的主循环
     loop = asyncio.get_event_loop()

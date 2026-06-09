@@ -142,9 +142,14 @@ async def trigger_rating_update(request: RatingUpdateRequest):
     """手动触发评级更新（全仓累计统一核心机制）"""
     import asyncio
     try:
-        from update_top_performers import update_top_performing_symbols
+        from app.services.rating_refresh_schedule import run_rating_refresh_if_due
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, update_top_performing_symbols, 2, 50, False)
+        ran = await loop.run_in_executor(
+            None,
+            lambda: run_rating_refresh_if_due(manual=True, triggered_by="api_rating_update"),
+        )
+        if not ran:
+            return {"success": True, "message": "评级刷新已跳过（可能已有进程在跑或无数据）"}
         return {"success": True, "message": "评级更新完成"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -662,12 +667,20 @@ async def get_top50():
 
 @router.post("/api/top50/refresh")
 async def refresh_top50():
-    """手动触发日终维护：重算 Top50 榜单 + 统一评级"""
+    """手动触发：重算 Top50 榜单 + 白名单/黑名单评级"""
     import asyncio
     try:
-        from update_top_performers import update_top_performing_symbols
+        from app.services.rating_refresh_schedule import run_rating_refresh_if_due
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, update_top_performing_symbols, 2, 50, False)
+        ran = await loop.run_in_executor(
+            None,
+            lambda: run_rating_refresh_if_due(manual=True, triggered_by="api_top50_refresh"),
+        )
+        if not ran:
+            return {
+                'success': True,
+                'message': '刷新已跳过（可能已有进程在跑或无平仓数据）',
+            }
         return {'success': True, 'message': 'Top50 与统一评级已更新'}
     except Exception as e:
         logger.error(f"手动日终维护失败: {e}")

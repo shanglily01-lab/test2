@@ -1215,23 +1215,29 @@ class UnifiedDataScheduler:
             logger.info("  ℹ️  Hyperliquid 钱包监控已移至独立调度器 (app/hyperliquid_scheduler.py)")
             logger.info("     请单独运行: python app/hyperliquid_scheduler.py")
 
-        # 6.5 TOP50 榜单 + 统一评级（每 4 小时）
-        # update_top_performers.py 内部已包含评级逻辑，一步调用完成
-        def _run_rating_refresh():
+        # 6.5 TOP50 榜单 + 白名单/黑名单评级（每 4 小时 + 15min 轮询 next_due）
+        def _run_rating_refresh(triggered_by: str = "scheduler"):
             try:
-                from update_top_performers import update_top_performing_symbols
-                update_top_performing_symbols(account_id=2, top_n=50)
+                from app.services.rating_refresh_schedule import run_rating_refresh_if_due
+                run_rating_refresh_if_due(triggered_by=triggered_by)
             except Exception as e:
                 logger.error(f"[TOP50评级刷新] 失败: {e}")
                 import traceback
                 logger.error(traceback.format_exc())
 
-        def _schedule_rating_refresh():
-            self._run_sync_in_thread(_run_rating_refresh)
+        def _schedule_rating_refresh(triggered_by: str = "scheduler"):
+            self._run_sync_in_thread(lambda: _run_rating_refresh(triggered_by))
 
-        schedule.every(4).hours.do(_schedule_rating_refresh)
-        _schedule_rating_refresh()
-        logger.info("  ✓ TOP50 + 统一评级 - 每 4 小时 (后台线程, 启动即跑)")
+        schedule.every(4).hours.do(
+            lambda: _schedule_rating_refresh("schedule_4h")
+        )
+        schedule.every(15).minutes.do(
+            lambda: _schedule_rating_refresh("schedule_poll")
+        )
+        logger.info(
+            "  ✓ TOP50 + 白名单/黑名单评级 - 每 4 小时 + 15min 轮询 "
+            "(rating_refresh_next_due_utc, 启动后 +60s 补跑)"
+        )
 
         # 7. 缓存更新任务
         logger.info("\n  🚀 性能优化: 缓存自动更新")
@@ -1706,6 +1712,19 @@ class UnifiedDataScheduler:
         _launch_predict_catchup("Gemini预测", "app.services.gemini_predictor", "run_predict_round", 45)
         _launch_predict_catchup("DeepSeek预测", "app.services.deepseek_predictor", "run_predict_round", 50)
         _launch_predict_catchup("GPT预测", "app.services.gpt_predictor", "run_predict_round", 55)
+
+        def _launch_rating_catchup(delay_s: int = 60):
+            def _run():
+                import time
+                time.sleep(delay_s)
+                try:
+                    from app.services.rating_refresh_schedule import run_rating_refresh_if_due
+                    run_rating_refresh_if_due(triggered_by="scheduler_init")
+                except Exception as e:
+                    logger.error(f"[评级刷新] 启动补跑检查失败: {e}", exc_info=True)
+            threading.Thread(target=_run, daemon=True, name="RatingCatchup").start()
+
+        _launch_rating_catchup(60)
 
         # 定期打印状态 (每小时)
         schedule.every(1).hours.do(self.print_status)

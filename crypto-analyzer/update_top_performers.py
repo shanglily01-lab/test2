@@ -197,7 +197,7 @@ def update_top_performing_symbols(
     account_id: int = 2,
     top_n: int = TOP_N_DEFAULT,
     skip_rating: bool = False,
-):
+) -> str:
     """
     定时维护：更新 TOP50 榜单 + 交易对评级。
 
@@ -224,7 +224,7 @@ def update_top_performing_symbols(
         if not lock_acquired:
             logger.info("TOP50 + 评级刷新已有进程在运行，本轮跳过")
             cursor.close()
-            return
+            return "skipped_lock"
 
         logger.info("=" * 80)
         logger.info(f"开始更新盈利 Top {top_n} 榜单 (账户ID: {account_id})")
@@ -234,7 +234,7 @@ def update_top_performing_symbols(
         rating_stats = _fetch_all_symbol_stats(cursor, account_id, MIN_TRADES_RATING)
         if not rating_stats:
             logger.warning("没有找到已平仓交易对")
-            return
+            return "skipped_empty"
 
         top_pool = _fetch_all_symbol_stats(cursor, account_id, MIN_TRADES_TOP50)
 
@@ -335,11 +335,13 @@ def update_top_performing_symbols(
             _clean_stale_ratings(cursor, processed_symbols)
 
         cursor.close()
+        return "ok"
 
     except Exception as e:
         logger.error(f"定时维护失败: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        return "error"
 
     finally:
         if conn and lock_acquired:
