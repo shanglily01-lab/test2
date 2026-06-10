@@ -364,14 +364,14 @@ class SmartFuturesCollector:
             logger.warning(f"[symbols 同步] 拉币安 exchangeInfo 失败 (跳过过滤,用 config 原始列表): {e}")
             return None
 
-    def get_trading_symbols(self) -> List[str]:
+    def get_trading_symbols(self, apply_rating_filter: bool = True) -> List[str]:
         """
         获取需要监控的 U 本位合约交易对.
 
         来源:
           1. config.yaml 的 symbols 列表 (硬编码基线)
           2. 实际币安在交易的 symbols (动态过滤, 防止 config 里有已下架的 ARIA/USDT 等)
-          3. trading_symbol_rating 高风险剔除 (rating_level >= 2)
+          3. trading_symbol_rating 高风险剔除 (rating_level >= 2, WS 采集可关闭)
 
         Returns:
             交易对列表 (币安格式, 如 ['BTCUSDT', 'ETHUSDT'])
@@ -403,13 +403,16 @@ class SmartFuturesCollector:
                 )
             symbols_list = usdt_only
 
-            # 剔除 rating_level >= 2 的 symbol
-            high_risk = self._get_high_risk_symbols()
-            before = len(symbols_list)
-            symbols_list = [s for s in symbols_list if futures_symbol_clean(s) not in high_risk]
-            after = len(symbols_list)
-            if before > after:
-                logger.info(f"按 rating_level >= 2 过滤: {before} -> {after} symbols (剔除 {before - after} 个高风险)")
+            if apply_rating_filter:
+                high_risk = self._get_high_risk_symbols()
+                before = len(symbols_list)
+                symbols_list = [s for s in symbols_list if futures_symbol_clean(s) not in high_risk]
+                after = len(symbols_list)
+                if before > after:
+                    logger.info(
+                        f"按 rating_level >= 2 过滤: {before} -> {after} symbols "
+                        f"(剔除 {before - after} 个高风险)"
+                    )
 
             # 转换为币安格式: BTC/USDT -> BTCUSDT
             binance_format = [s.replace('/', '') for s in symbols_list]

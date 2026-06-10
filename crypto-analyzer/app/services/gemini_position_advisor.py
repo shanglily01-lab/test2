@@ -196,26 +196,63 @@ class GeminiPositionAdvisor:
             return []
 
     def _get_current_price(self, symbol: str) -> Optional[float]:
-        """取当前价: 与探索/开仓一致，走 DataHub（WS mark → 缓存 → K线 → REST）。"""
+        """取当前价: 与限价/探索一致，统一 Hub（禁止 kline_data 旁路）。"""
+        symbol = _normalize_symbol_for_db(symbol)
+        try:
+            from app.utils.futures_price import get_futures_trade_price
+
+            price = get_futures_trade_price(
+                None, symbol, max_age_seconds=120, log_tag="Gemini顾问",
+            )
+            if price is not None and price > 0:
+                return float(price)
+        except Exception as e:
+            logger.warning(f"[Gemini顾问] {symbol} 取价失败: {e}")
+
+        logger.warning(f"[Gemini顾问] {symbol} 无有效市价，跳过本轮审核")
+        return None
+
+    @staticmethod
+    def _hub_klines_to_ctx(rows: list) -> list:
+        """DataHub K 线行 → 顾问 prompt 表格格式。"""
+        klines = []
+        for r in rows or []:
+            ot = r.get("open_time")
+            if isinstance(ot, datetime.datetime):
+                t = ot
+            elif ot:
+                t = datetime.datetime.utcfromtimestamp(float(ot) / 1000)
+            else:
+                continue
+            klines.append({
+                't': t.strftime('%m-%d %H:%M'),
+                'o': round(float(r['open']), 8),
+                'h': round(float(r['high']), 8),
+                'l': round(float(r['low']), 8),
+                'c': round(float(r['close']), 8),
+                'v': round(float(r.get('volume') or 0), 2),
+            })
+        return klines
+
+    def _fetch_klines_via_hub(self, symbol: str, interval: str, limit: int) -> list:
+        """K 线统一走 DataHub：DB 新鲜则命中，否则 REST（不用顾问旁路查 kline_data）。"""
         symbol = _normalize_symbol_for_db(symbol)
         try:
             from app.services.binance_data_hub import get_global_data_hub
 
             hub = get_global_data_hub()
-            price = hub.get_trade_price_sync(
-                symbol,
-                max_age_seconds=120,
-                allow_db_fallback=True,
+            if hub is None:
+                return []
+            rows = hub.get_klines_sync(
+                symbol, interval=interval, limit=limit, allow_rest_fallback=True,
             )
-            if price is not None and price > 0:
-                return float(price)
+            if not rows:
+                from app.services.binance_data_hub import BinanceDataHub
+                rows = BinanceDataHub.rest_klines_emergency(symbol, interval, limit)
+            return self._hub_klines_to_ctx(rows)
         except Exception as e:
-            logger.warning(f"[Gemini顾问] {symbol} DataHub 取价失败: {e}")
-
-        logger.warning(
-            f"[Gemini顾问] {symbol} DataHub 无有效价，跳过本轮持仓审核"
-        )
-        return None
+            logger.warning(f"[Gemini顾问] {symbol} Hub {interval} K 线失败: {e}")
+            return []
 
     def _fetch_market_context(self, symbol: str) -> dict:
         """近 4h 15m K 线 + 近 24 根 1h + candidate_pool 叙事 + Big4 + 方向闸门."""
@@ -235,51 +272,14 @@ class GeminiPositionAdvisor:
             'allow_long': True,
             'allow_short': True,
         }
+        ctx['klines_15m'] = self._fetch_klines_via_hub(symbol, '15m', 16)
+        ctx['klines_1h'] = self._fetch_klines_via_hub(symbol, '1h', 24)
+        if not ctx['klines_15m'] and not ctx['klines_1h']:
+            logger.warning(f"[Gemini顾问] {symbol} K 线全空（DB 过期且 REST 失败）")
+
         try:
             conn = self._get_conn()
             cur = conn.cursor()
-            cur.execute(
-                "SELECT open_time, open_price, high_price, low_price, close_price, volume "
-                "FROM kline_data "
-                "WHERE symbol=%s AND timeframe='15m' AND exchange='binance_futures' "
-                "ORDER BY open_time DESC LIMIT 16",
-                (symbol,)
-            )
-            rows = cur.fetchall()
-            klines = []
-            for r in reversed(rows):
-                t = datetime.datetime.utcfromtimestamp(r['open_time'] / 1000)
-                klines.append({
-                    't': t.strftime('%m-%d %H:%M'),
-                    'o': round(float(r['open_price']), 8),
-                    'h': round(float(r['high_price']), 8),
-                    'l': round(float(r['low_price']), 8),
-                    'c': round(float(r['close_price']), 8),
-                    'v': round(float(r['volume'] or 0), 2),
-                })
-            ctx['klines_15m'] = klines
-
-            cur.execute(
-                "SELECT open_time, open_price, high_price, low_price, close_price, volume "
-                "FROM kline_data "
-                "WHERE symbol=%s AND timeframe='1h' AND exchange='binance_futures' "
-                "ORDER BY open_time DESC LIMIT 24",
-                (symbol,)
-            )
-            rows_1h = cur.fetchall()
-            klines_1h = []
-            for r in reversed(rows_1h):
-                t = datetime.datetime.utcfromtimestamp(r['open_time'] / 1000)
-                klines_1h.append({
-                    't': t.strftime('%m-%d %H:%M'),
-                    'o': round(float(r['open_price']), 8),
-                    'h': round(float(r['high_price']), 8),
-                    'l': round(float(r['low_price']), 8),
-                    'c': round(float(r['close_price']), 8),
-                    'v': round(float(r['volume'] or 0), 2),
-                })
-            ctx['klines_1h'] = klines_1h
-
             cur.execute(
                 "SELECT narrative_1h, narrative_15m, rsi_14, "
                 "below_7d_high_pct, above_7d_low_pct "

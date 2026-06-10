@@ -320,6 +320,47 @@ class BinanceDataHub:
             return mark_rest
         return self._rest_single_price_sync(symbol, symbol_clean)
 
+    @classmethod
+    def rest_klines_emergency(
+        cls, symbol: str, interval: str, limit: int,
+    ) -> List[Dict[str, Any]]:
+        """Hub/代理均不可达时的紧急 REST K 线（仍走 rate_guard + 令牌桶）。"""
+        sym_clean = symbol.replace("/", "").upper()
+        return cls(db_config=None)._rest_klines_sync(symbol, sym_clean, interval, limit)
+
+    def get_klines_sync(
+        self,
+        symbol: str,
+        interval: str = "5m",
+        limit: int = 1,
+        allow_rest_fallback: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """同步 K 线 — 与 async get_klines 同优先级，供顾问/scheduler 使用。"""
+        is_coin = symbol.endswith("/USD") and not symbol.endswith("/USDT")
+        if is_coin:
+            return []
+
+        symbol_clean = symbol.replace("/", "").upper()
+
+        db_rows = self._db_klines_fallback(symbol, interval, limit)
+        if db_rows:
+            return db_rows
+
+        key = (symbol_clean, interval, limit)
+        ttl = self.KLINE_CACHE_TTL.get(interval, 300)
+        with self._cache_lock:
+            entry = self._kline_cache.get(key)
+            if entry and (time.time() - entry["ts"]) < ttl:
+                return entry["rows"]
+
+        if not allow_rest_fallback:
+            return []
+        rows = self._rest_klines_sync(symbol, symbol_clean, interval, limit)
+        if rows:
+            with self._cache_lock:
+                self._kline_cache[key] = {"rows": rows, "ts": time.time()}
+        return rows
+
     async def get_prices_batch(
         self, symbols: List[str], max_age_seconds: int = 90
     ) -> Dict[str, Decimal]:
@@ -712,10 +753,12 @@ class BinanceDataHub:
         return None
 
     def _db_klines_fallback(self, symbol: str, interval: str, limit: int) -> List[Dict[str, Any]]:
-        """从 kline_data 表批量读 K 线."""
+        """从 kline_data 表批量读 K 线（新鲜度校验失败则返回空，上层走 REST）。"""
         if not self.db_config:
             return []
         try:
+            from app.utils.futures_symbol import futures_symbol_kline_keys
+
             import pymysql
             conn = pymysql.connect(
                 **self.db_config,
@@ -724,17 +767,21 @@ class BinanceDataHub:
                 autocommit=True,
                 connect_timeout=5,
             )
+            rows = []
             try:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT open_price, high_price, low_price, close_price, "
-                        "       volume, open_time "
-                        "FROM kline_data "
-                        "WHERE symbol=%s AND timeframe=%s "
-                        "ORDER BY open_time DESC LIMIT %s",
-                        (symbol, interval, limit),
-                    )
-                    rows = cur.fetchall() or []
+                    for sym_key in futures_symbol_kline_keys(symbol):
+                        cur.execute(
+                            "SELECT open_price, high_price, low_price, close_price, "
+                            "       volume, open_time "
+                            "FROM kline_data "
+                            "WHERE symbol=%s AND timeframe=%s AND exchange='binance_futures' "
+                            "ORDER BY open_time DESC LIMIT %s",
+                            (sym_key, interval, limit),
+                        )
+                        rows = cur.fetchall() or []
+                        if rows:
+                            break
             finally:
                 conn.close()
             if not rows:
@@ -923,6 +970,51 @@ class BinanceDataHub:
         except Exception:
             return None
         return None
+
+    def _rest_klines_sync(
+        self, symbol: str, symbol_clean: str, interval: str, limit: int
+    ) -> List[Dict[str, Any]]:
+        if rate_guard.is_banned():
+            self._stat_rest_rejected_by_ban += 1
+            return []
+        if not self._rate_limiter.try_acquire(1):
+            self._stat_rest_rejected_by_bucket += 1
+            return []
+
+        sess = self._get_sync_session()
+        try:
+            self._stat_rest_calls += 1
+            r = sess.get(
+                self.FAPI_KLINES,
+                params={"symbol": symbol_clean, "interval": interval, "limit": limit},
+                timeout=8,
+            )
+            if r.status_code != 200:
+                self._maybe_record_ban(r.status_code, r.text, src="hub:klines:sync")
+                return []
+            data = r.json()
+        except Exception as e:
+            logger.warning(f"[DataHub] {symbol} 同步 REST K 线异常: {type(e).__name__}: {e}")
+            return []
+
+        if not isinstance(data, list) or not data:
+            return []
+
+        out: List[Dict[str, Any]] = []
+        for k in data:
+            try:
+                out.append({
+                    "open": float(k[1]),
+                    "high": float(k[2]),
+                    "low": float(k[3]),
+                    "close": float(k[4]),
+                    "volume": float(k[5]) if len(k) > 5 else 0.0,
+                    "open_time": datetime.utcfromtimestamp(k[0] / 1000),
+                    "close_time": datetime.utcfromtimestamp((k[0] + self._interval_to_ms(interval) - 1) / 1000),
+                })
+            except Exception:
+                continue
+        return out
 
     async def _rest_klines(
         self, symbol: str, symbol_clean: str, interval: str, limit: int
@@ -1161,6 +1253,41 @@ class HubHttpProxy:
             return None
         p = data.get("price")
         return Decimal(p) if p else None
+
+    def get_klines_sync(
+        self,
+        symbol: str,
+        interval: str = "5m",
+        limit: int = 1,
+        allow_rest_fallback: bool = True,
+    ) -> List[Dict[str, Any]]:
+        sym = symbol.replace("/", "%2F")
+        data = self._sget(
+            f"/api/datahub/klines/{sym}",
+            {
+                "interval": interval,
+                "limit": limit,
+                "allow_rest": "true" if allow_rest_fallback else "false",
+            },
+        )
+        if not data:
+            return []
+        rows = data.get("klines") or []
+        out: List[Dict[str, Any]] = []
+        for r in rows:
+            try:
+                out.append({
+                    "open": float(r["open"]),
+                    "high": float(r["high"]),
+                    "low": float(r["low"]),
+                    "close": float(r["close"]),
+                    "volume": float(r.get("volume", 0)),
+                    "open_time": datetime.fromisoformat(r["open_time"]) if r.get("open_time") else None,
+                    "close_time": datetime.fromisoformat(r["close_time"]) if r.get("close_time") else None,
+                })
+            except Exception as e:
+                logger.debug(f"[HubProxy] K 线行解析失败: {e}")
+        return out
 
     async def get_prices_batch(
         self, symbols: List[str], max_age_seconds: int = 90

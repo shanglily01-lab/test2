@@ -119,6 +119,42 @@ class FuturesLimitOrderExecutor:
                         )
                         continue
 
+                    ref_px = meta.get('ref_price')
+                    if ref_px and float(ref_px) > 0:
+                        ref_dev = abs(float(current_price) - float(ref_px)) / float(ref_px)
+                        if ref_dev > 0.15:
+                            self._cancel_order(
+                                conn, order_id,
+                                f'stale_price_feed ref={ref_px} market={current_price}',
+                            )
+                            logger.warning(
+                                f"[限价执行器] 取消陈旧限价单 {symbol} {side} "
+                                f"挂单参考={ref_px} 现价={current_price} 偏离={ref_dev * 100:.1f}%"
+                            )
+                            continue
+
+                    # 做多限价应低于市价；限价明显高于现价说明按过期行情挂单
+                    if side == 'OPEN_LONG' and limit_price > current_price * Decimal('1.03'):
+                        self._cancel_order(
+                            conn, order_id,
+                            f'stale_limit_above_market limit={limit_price} market={current_price}',
+                        )
+                        logger.warning(
+                            f"[限价执行器] 取消失真做多限价 {symbol} "
+                            f"限价={limit_price} 现价={current_price}"
+                        )
+                        continue
+                    if side == 'OPEN_SHORT' and limit_price < current_price * Decimal('0.97'):
+                        self._cancel_order(
+                            conn, order_id,
+                            f'stale_limit_below_market limit={limit_price} market={current_price}',
+                        )
+                        logger.warning(
+                            f"[限价执行器] 取消失真做空限价 {symbol} "
+                            f"限价={limit_price} 现价={current_price}"
+                        )
+                        continue
+
                     should_fill = False
                     if side == 'OPEN_LONG' and current_price <= limit_price:
                         should_fill = True

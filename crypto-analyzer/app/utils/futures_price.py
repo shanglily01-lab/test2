@@ -1,4 +1,4 @@
-"""U 本位模拟开仓/展示用价格 — mark 优先 + 5m 合约 K 线交叉校验."""
+"""U 本位模拟开仓/展示用价格 — 统一走 DataHub，禁止旁路读 kline_data。"""
 from __future__ import annotations
 
 from typing import Optional
@@ -7,31 +7,31 @@ from loguru import logger
 
 from app.utils.futures_symbol import (
     futures_symbol_clean,
-    futures_symbol_kline_keys,
     futures_symbol_rating_canonical,
 )
 
-# 与 5m 收盘偏离超过此比例时, 以 5m 为准 (避免脏 ticker / 非合约 K 线)
-_MAX_DEVIATION_FROM_5M = 0.12
 
-
-def kline5m_futures_close(conn, symbol: str) -> Optional[float]:
-    """最新一根 binance_futures 5m 收盘价."""
-    sym = futures_symbol_rating_canonical(symbol)
+def _rest_futures_mark_price(symbol: str) -> Optional[float]:
+    """Hub 不可达时的紧急 REST mark（scheduler 进程无 9020 时）。"""
+    sym_clean = futures_symbol_clean(symbol)
+    if not sym_clean:
+        return None
     try:
-        with conn.cursor() as cur:
-            for sym_key in futures_symbol_kline_keys(sym):
-                cur.execute(
-                    "SELECT close_price FROM kline_data "
-                    "WHERE symbol=%s AND timeframe='5m' AND exchange='binance_futures' "
-                    "ORDER BY open_time DESC LIMIT 1",
-                    (sym_key,),
-                )
-                row = cur.fetchone()
-                if row and row.get("close_price"):
-                    return float(row["close_price"])
-    except Exception:
-        pass
+        import requests
+
+        r = requests.get(
+            "https://fapi.binance.com/fapi/v1/premiumIndex",
+            params={"symbol": sym_clean},
+            timeout=5,
+        )
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        mp = data.get("markPrice")
+        if mp is not None and float(mp) > 0:
+            return float(mp)
+    except Exception as e:
+        logger.debug(f"[futures_price] {symbol} REST mark 失败: {e}")
     return None
 
 
@@ -43,10 +43,11 @@ def get_futures_trade_price(
     require_fresh: bool = False,
 ) -> Optional[float]:
     """
-    开仓/浮盈计算用价: DataHub mark 优先; 若与 5m 合约收盘偏离过大则采用 5m。
+    开仓/浮盈/限价执行用价：仅 DataHub（WS → mark 缓存 → ticker → REST），
+    不读 kline_data。conn 保留以兼容调用方签名。
     """
+    del conn  # 定价不查库，统一 Hub
     sym = futures_symbol_rating_canonical(symbol)
-    ref = None if require_fresh else kline5m_futures_close(conn, sym)
 
     live: Optional[float] = None
     try:
@@ -57,30 +58,20 @@ def get_futures_trade_price(
             p = hub.get_trade_price_sync(
                 sym,
                 max_age_seconds=max_age_seconds,
-                allow_db_fallback=not require_fresh,
+                allow_rest_fallback=True,
+                allow_db_fallback=False,
             )
             if p is not None and p > 0:
                 live = float(p)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"[{log_tag}] {sym} Hub 取价异常: {e}")
 
     if live is None or live <= 0:
-        if require_fresh:
-            logger.warning(
-                f"[{log_tag}] {sym} no fresh DataHub trade price "
-                f"(max_age={max_age_seconds}s); skip DB/kline fallback for open"
-            )
-            return None
-        return ref
+        live = _rest_futures_mark_price(sym)
 
-    if ref and ref > 0:
-        dev = abs(live - ref) / ref
-        if dev > _MAX_DEVIATION_FROM_5M:
-            logger.warning(
-                f"[{log_tag}] {sym} 取价偏离5m合约收盘 {dev * 100:.1f}%: "
-                f"live={live} ref5m={ref}, 采用5m收盘"
-            )
-            return ref
+    if live is None or live <= 0:
+        logger.warning(f"[{log_tag}] {sym} Hub/REST 均无有效市价")
+        return None
     return live
 
 

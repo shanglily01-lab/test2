@@ -68,7 +68,8 @@ async def main_async() -> None:
 
     # 用 SmartFuturesCollector 提供的方法读 symbols, 保持一致性
     helper = SmartFuturesCollector(db_config)
-    usdt_symbols = helper.get_trading_symbols()
+    # WS K 线需覆盖 config 全量 U 本位列表，不按评级剔除（否则小币停更）
+    usdt_symbols = helper.get_trading_symbols(apply_rating_filter=False)
 
     if not usdt_symbols:
         logger.error("config.yaml 中没有 U本位 symbols, 退出")

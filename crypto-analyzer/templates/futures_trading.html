@@ -556,6 +556,18 @@ function fmtLimitFillGap(isLong, curPx, limitPx, order) {
             return {text: '满60s后可成交 (剩' + waitSec + 's)', cls: 'text-on-surface-variant'};
         }
     }
+    // 做多限价应低于市价；倒挂 = 过期参考价挂单，执行器不会按限价成交
+    if (isLong && limitPx > curPx * 1.03) {
+        return {text: '参考价过期·请转市价', cls: 'text-amber-400'};
+    }
+    if (!isLong && limitPx < curPx * 0.97) {
+        return {text: '参考价过期·请转市价', cls: 'text-amber-400'};
+    }
+    var meta = order ? parseOrderNotes(order.notes) : {};
+    var refPx = parseFloat(meta.ref_price) || 0;
+    if (refPx > 0 && Math.abs(curPx - refPx) / refPx > 0.15) {
+        return {text: '参考价过期·请转市价', cls: 'text-amber-400'};
+    }
     if (isLong) {
         if (curPx <= limitPx) return {text: '可成交', cls: 'text-[#49f4c8]'};
         var gap = (curPx - limitPx) / curPx * 100;

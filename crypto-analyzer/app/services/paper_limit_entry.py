@@ -189,12 +189,25 @@ def create_paper_limit_order(
     try:
         from app.utils.futures_price import get_futures_trade_price
         fresh = get_futures_trade_price(
-            conn, symbol, max_age_seconds=30, log_tag="paper_limit_entry", require_fresh=False,
+            conn, symbol, max_age_seconds=30, log_tag="paper_limit_entry", require_fresh=True,
         )
         if fresh and fresh > 0:
             market_ref = float(fresh)
+        else:
+            logger.warning(
+                f"[限价开仓] {symbol} {side} 无新鲜市价，跳过限价单 source={source}"
+            )
+            return None
     except Exception as e:
-        logger.debug(f"[限价开仓] {symbol} 刷新市价失败，用调用方参考价: {e}")
+        logger.warning(f"[限价开仓] {symbol} 刷新市价失败，跳过限价单: {e}")
+        return None
+
+    caller_ref = float(ref_price)
+    if caller_ref > 0 and abs(market_ref - caller_ref) / caller_ref > 0.15:
+        logger.warning(
+            f"[限价开仓] {symbol} 调用方参考价={caller_ref} 与市价={market_ref} "
+            f"偏离>15%，以市价为准"
+        )
 
     limit_price = calc_paper_limit_price(side, market_ref)
     if side == "LONG" and limit_price >= market_ref:
