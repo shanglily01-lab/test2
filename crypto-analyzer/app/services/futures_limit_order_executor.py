@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""模拟盘限价单执行器 — 价格触发成交，30 分钟超时取消。"""
+"""模拟盘限价单执行器 — 价格触发成交；超时按 system_settings 放弃或转市价。"""
 
 from __future__ import annotations
 
@@ -12,7 +12,9 @@ from loguru import logger
 
 from app.services.paper_limit_entry import (
     PAPER_LIMIT_MIN_FILL_AGE_SEC,
+    PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET,
     PAPER_LIMIT_TIMEOUT_MINUTES,
+    get_paper_limit_timeout_action,
     parse_order_notes,
 )
 from app.utils.futures_price import get_futures_trade_price
@@ -104,11 +106,30 @@ class FuturesLimitOrderExecutor:
                         continue
 
                     if elapsed >= timeout_minutes * 60:
-                        self._cancel_order(conn, order_id, 'timeout')
-                        logger.info(
-                            f"[限价执行器] 超时取消 {symbol} {side} "
-                            f"限价={limit_price} 等待={elapsed // 60}min"
-                        )
+                        if get_paper_limit_timeout_action() == PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET:
+                            result = self.trading_engine.fill_paper_limit_order(
+                                order, at_market=True,
+                            )
+                            if result.get('success'):
+                                logger.info(
+                                    f"[限价执行器] 超时转市价 {symbol} {side} "
+                                    f"限价={limit_price} 等待={elapsed // 60}min"
+                                )
+                            else:
+                                self._cancel_order(
+                                    conn, order_id,
+                                    f"timeout_market_failed:{result.get('message', '')}",
+                                )
+                                logger.warning(
+                                    f"[限价执行器] 超时转市价失败，已放弃 {symbol} {side}: "
+                                    f"{result.get('message')}"
+                                )
+                        else:
+                            self._cancel_order(conn, order_id, 'timeout')
+                            logger.info(
+                                f"[限价执行器] 超时放弃 {symbol} {side} "
+                                f"限价={limit_price} 等待={elapsed // 60}min"
+                            )
                         continue
 
                     current_price = self._get_price(conn, symbol)

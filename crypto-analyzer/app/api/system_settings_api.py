@@ -105,6 +105,7 @@ class TradingServicesUpdate(BaseModel):
     paper_limit_entry_enabled: Optional[bool] = None
     paper_limit_long_offset_pct: Optional[float] = None   # 0.1~1.0 表示 0.1%~1%
     paper_limit_short_offset_pct: Optional[float] = None
+    paper_limit_timeout_action: Optional[str] = None      # expire | convert_market
 
 
 @router.get("/settings")
@@ -389,6 +390,7 @@ async def update_setting(key: str, data: SystemSetting):
             'paper_limit_entry_enabled',
             'paper_limit_long_offset_pct',
             'paper_limit_short_offset_pct',
+            'paper_limit_timeout_action',
         ):
             try:
                 from app.services.data_cache_service import invalidate_setting_cache
@@ -449,7 +451,8 @@ async def get_trading_services():
                                   'stop_loss_pct', 'take_profit_pct',
                                   'paper_limit_entry_enabled',
                                   'paper_limit_long_offset_pct',
-                                  'paper_limit_short_offset_pct')
+                                  'paper_limit_short_offset_pct',
+                                  'paper_limit_timeout_action')
         """)
 
         settings = cursor.fetchall()
@@ -516,6 +519,7 @@ async def get_trading_services():
             'paper_limit_entry_enabled': True,
             'paper_limit_long_offset_pct': 0.5,
             'paper_limit_short_offset_pct': 0.5,
+            'paper_limit_timeout_action': 'expire',
         }
 
         for setting in settings:
@@ -526,6 +530,8 @@ async def get_trading_services():
                 result[db_key] = float(setting['setting_value'])
             elif db_key in ('paper_limit_long_offset_pct', 'paper_limit_short_offset_pct'):
                 result[db_key] = float(setting['setting_value'])
+            elif db_key == 'paper_limit_timeout_action':
+                result[db_key] = str(setting['setting_value']).strip().lower()
 
         # DB 无 smart_exit_enabled 行时与 smart_trader 运行时一致 (回退 config.yaml)
         if not any(s['setting_key'] == 'smart_exit_enabled' for s in settings):
@@ -923,6 +929,24 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (str(pct),))
             updates.append(f"做空限价偏移: {pct:g}%")
+
+        if data.paper_limit_timeout_action is not None:
+            action = str(data.paper_limit_timeout_action).strip().lower()
+            if action in ('convert_market', 'market', 'convert'):
+                action = 'convert_market'
+            else:
+                action = 'expire'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('paper_limit_timeout_action', %s,
+                        '模拟盘限价单超时: expire=放弃, convert_market=转市价', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (action,))
+            label = '转市价' if action == 'convert_market' else '放弃'
+            updates.append(f"限价超时: {label}")
 
         conn.commit()
         cursor.close()

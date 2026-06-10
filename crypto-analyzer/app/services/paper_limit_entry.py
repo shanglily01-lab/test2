@@ -30,6 +30,11 @@ PAPER_LIMIT_TIMEOUT_MINUTES = 30
 # 挂单创建后至少等待 N 秒才允许成交（避免秒成交看起来像市价单）
 PAPER_LIMIT_MIN_FILL_AGE_SEC = 60
 
+# 超时处理：expire=放弃(取消) | convert_market=转市价成交
+PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE = "expire"
+PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET = "convert_market"
+DEFAULT_PAPER_LIMIT_TIMEOUT_ACTION = PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE
+
 
 def _clamp_offset_pct(pct: float) -> float:
     return max(PAPER_LIMIT_OFFSET_MIN_PCT, min(PAPER_LIMIT_OFFSET_MAX_PCT, pct))
@@ -68,6 +73,18 @@ def get_paper_limit_long_offset() -> Decimal:
 
 def get_paper_limit_short_offset() -> Decimal:
     return Decimal(str(get_paper_limit_short_offset_pct() / 100))
+
+
+def get_paper_limit_timeout_action() -> str:
+    """限价单超时：expire=放弃 | convert_market=转市价 (system_settings.paper_limit_timeout_action)。"""
+    from app.services.data_cache_service import get_setting
+
+    raw = str(
+        get_setting("paper_limit_timeout_action", DEFAULT_PAPER_LIMIT_TIMEOUT_ACTION)
+    ).strip().lower()
+    if raw in ("convert_market", "market", "convert"):
+        return PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET
+    return PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE
 
 
 def calc_paper_limit_price(side: str, ref_price: float) -> float:

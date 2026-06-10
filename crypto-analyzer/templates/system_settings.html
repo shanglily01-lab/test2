@@ -469,6 +469,17 @@
 <p class="text-[10px] text-slate-600 mt-1">高于市价，0.1~1.0</p>
 </div>
 </div>
+<div class="mt-4" id="paperLimitTimeoutRow">
+<label class="block text-xs text-slate-500 mb-2">限价单超时（默认 30 分钟）</label>
+<div class="relative">
+<select id="paperLimitTimeoutSelect" class="w-full bg-[#151a20] border border-slate-800 rounded-xl py-3 px-3 pr-10 text-slate-200 text-sm font-mono appearance-none focus:ring-1 focus:ring-[#49f4c8]/40 focus:border-[#49f4c8]/30">
+<option value="expire" selected="">放弃（取消挂单）</option>
+<option value="convert_market">转市价单成交</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-2.5 text-slate-500 pointer-events-none text-lg">expand_more</span>
+</div>
+<p class="text-[10px] text-slate-600 mt-1">超时未触及限价时的处理方式</p>
+</div>
 <div class="cfg-row mt-4">
 <div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#49f4c8] text-xl shrink-0">exit_to_app</span>
@@ -712,6 +723,11 @@
                 if (plShortEl && svc.paper_limit_short_offset_pct != null) {
                     plShortEl.value = parseFloat(svc.paper_limit_short_offset_pct).toFixed(1);
                 }
+                const plTimeoutEl = document.getElementById('paperLimitTimeoutSelect');
+                if (plTimeoutEl) {
+                    plTimeoutEl.value = svc.paper_limit_timeout_action === 'convert_market'
+                        ? 'convert_market' : 'expire';
+                }
                 updatePaperLimitOffsetUi();
 
                 // 最大持仓数量
@@ -761,7 +777,9 @@
             var row = document.getElementById('paperLimitOffsetRow');
             if (!row) return;
             row.style.opacity = enabled ? '1' : '0.45';
-            ['paperLimitLongOffsetInput', 'paperLimitShortOffsetInput'].forEach(function (id) {
+            var timeoutRow = document.getElementById('paperLimitTimeoutRow');
+            if (timeoutRow) timeoutRow.style.opacity = enabled ? '1' : '0.45';
+            ['paperLimitLongOffsetInput', 'paperLimitShortOffsetInput', 'paperLimitTimeoutSelect'].forEach(function (id) {
                 var el = document.getElementById(id);
                 if (el) el.disabled = !enabled;
             });
@@ -802,6 +820,22 @@
                 }
             });
         });
+
+        var plTimeoutSel = document.getElementById('paperLimitTimeoutSelect');
+        if (plTimeoutSel) {
+            plTimeoutSel.addEventListener('change', async function () {
+                if (!getToggle('paperLimitToggle')) return;
+                try {
+                    await apiPut('/trading-services', {
+                        paper_limit_timeout_action: plTimeoutSel.value
+                    });
+                    var label = plTimeoutSel.value === 'convert_market' ? '转市价' : '放弃';
+                    showToast('限价超时已设为: ' + label, false);
+                } catch (err) {
+                    showToast('保存失败: ' + err.message, true);
+                }
+            });
+        }
 
         // U本位模拟交易
         bindToggle('usdtToggle', async function (enabled) {
@@ -1054,7 +1088,8 @@
                             take_profit_pct: tpVal,
                             paper_limit_entry_enabled: getToggle('paperLimitToggle'),
                             paper_limit_long_offset_pct: plLongVal,
-                            paper_limit_short_offset_pct: plShortVal
+                            paper_limit_short_offset_pct: plShortVal,
+                            paper_limit_timeout_action: document.getElementById('paperLimitTimeoutSelect')?.value || 'expire'
                         }),
                         apiPut('/big4-filter', { enabled: getToggle('big4Toggle') }),
                         apiPut('/max-hold-hours', { hours: hours }),
