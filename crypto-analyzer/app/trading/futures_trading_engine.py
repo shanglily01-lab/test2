@@ -903,6 +903,67 @@ class FuturesTradingEngine:
             (order_id,),
         )
 
+    def _recalc_sl_tp_for_market_fill(
+        self,
+        entry_price: Decimal,
+        position_side: str,
+        limit_price: Decimal,
+        stop_loss_price: Optional[Decimal],
+        take_profit_price: Optional[Decimal],
+    ) -> Tuple[Optional[Decimal], Optional[Decimal]]:
+        """超时转市价：按限价单隐含 SL/TP 百分比，用实际入场价重算。"""
+        side = (position_side or '').upper()
+        lp = limit_price
+        ep = entry_price
+        new_sl = stop_loss_price
+        new_tp = take_profit_price
+
+        if lp and lp > 0:
+            if stop_loss_price and float(stop_loss_price) > 0:
+                sl = Decimal(str(stop_loss_price))
+                if side == 'LONG':
+                    sl_pct = (lp - sl) / lp * Decimal('100')
+                    new_sl = ep * (Decimal('1') - sl_pct / Decimal('100'))
+                else:
+                    sl_pct = (sl - lp) / lp * Decimal('100')
+                    new_sl = ep * (Decimal('1') + sl_pct / Decimal('100'))
+            if take_profit_price and float(take_profit_price) > 0:
+                tp = Decimal(str(take_profit_price))
+                if side == 'LONG':
+                    tp_pct = (tp - lp) / lp * Decimal('100')
+                    new_tp = ep * (Decimal('1') + tp_pct / Decimal('100'))
+                else:
+                    tp_pct = (lp - tp) / lp * Decimal('100')
+                    new_tp = ep * (Decimal('1') - tp_pct / Decimal('100'))
+
+        def _sane(sl: Optional[Decimal], tp: Optional[Decimal]) -> bool:
+            if side == 'LONG':
+                if tp is not None and tp <= ep:
+                    return False
+                if sl is not None and sl >= ep:
+                    return False
+            else:
+                if tp is not None and tp >= ep:
+                    return False
+                if sl is not None and sl <= ep:
+                    return False
+            return True
+
+        if _sane(new_sl, new_tp):
+            return new_sl, new_tp
+
+        from app.services.system_settings_loader import get_sl_tp_pct_points
+        sl_pct_pts, tp_pct_pts = get_sl_tp_pct_points()
+        sl_pct = Decimal(str(sl_pct_pts))
+        tp_pct = Decimal(str(tp_pct_pts))
+        if side == 'LONG':
+            new_sl = ep * (Decimal('1') - sl_pct / Decimal('100'))
+            new_tp = ep * (Decimal('1') + tp_pct / Decimal('100'))
+        else:
+            new_sl = ep * (Decimal('1') + sl_pct / Decimal('100'))
+            new_tp = ep * (Decimal('1') - tp_pct / Decimal('100'))
+        return new_sl, new_tp
+
     def fill_paper_limit_order(self, order: Dict, at_market: bool = False) -> Dict:
         """将模拟盘 PENDING 限价单成交为持仓（默认入场价=限价；at_market=True 用当前市价）。"""
         from app.services.paper_limit_entry import parse_order_notes
@@ -941,6 +1002,16 @@ class FuturesTradingEngine:
                 entry_price = market_px
             stop_loss_price = Decimal(str(order['stop_loss_price'])) if order.get('stop_loss_price') else None
             take_profit_price = Decimal(str(order['take_profit_price'])) if order.get('take_profit_price') else None
+            if at_market:
+                limit_px = Decimal(str(order['price']))
+                stop_loss_price, take_profit_price = self._recalc_sl_tp_for_market_fill(
+                    entry_price, position_side, limit_px, stop_loss_price, take_profit_price,
+                )
+                logger.info(
+                    f"[市价转单] {symbol} {position_side} 入场={float(entry_price):.8f} "
+                    f"限价={float(limit_px):.8f} SL={float(stop_loss_price) if stop_loss_price else None} "
+                    f"TP={float(take_profit_price) if take_profit_price else None}"
+                )
             source = order.get('order_source') or 'manual'
             entry_signal_type = order.get('entry_signal_type')
             signal_id = order.get('signal_id')

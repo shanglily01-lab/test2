@@ -142,6 +142,20 @@ def test_api_and_ui() -> None:
         _ok("设置页 UI 已添加")
 
 
+def test_market_fill_recalc_sl_tp() -> None:
+    """超时转市价须按实际入场价重算 SL/TP，且 monitor 校验方向。"""
+    engine_src = (ROOT / "app/trading/futures_trading_engine.py").read_text(encoding="utf-8")
+    exit_src = (ROOT / "app/services/smart_exit_optimizer.py").read_text(encoding="utf-8")
+    if "_recalc_sl_tp_for_market_fill" not in engine_src:
+        _fail("futures_trading_engine 缺少市价成交 SL/TP 重算")
+    elif "at_market" not in engine_src or "limit_px" not in engine_src:
+        _fail("fill_paper_limit_order 未在 at_market 路径重算 SL/TP")
+    elif "take_profit_price > entry_price" not in exit_src:
+        _fail("smart_exit_optimizer 未校验 LONG 止盈价须高于入场价")
+    else:
+        _ok("市价转单重算 SL/TP + monitor 方向校验")
+
+
 def test_fill_claim_prevents_double_open() -> None:
     """fill_paper_limit_order 必须先 PENDING→FILLING 原子认领（防双执行器重复开仓）。"""
     src = (ROOT / "app/trading/futures_trading_engine.py").read_text(encoding="utf-8")
@@ -163,6 +177,7 @@ def test_syntax() -> None:
         "app/services/paper_limit_entry.py",
         "app/services/futures_limit_order_executor.py",
         "app/trading/futures_trading_engine.py",
+        "app/services/smart_exit_optimizer.py",
         "app/api/system_settings_api.py",
         "scripts/validate_paper_limit_timeout_action.py",
     ]
@@ -178,6 +193,7 @@ def main() -> int:
     print("=== validate_paper_limit_timeout_action ===\n")
     test_timeout_action_getter()
     test_executor_timeout_branches()
+    test_market_fill_recalc_sl_tp()
     test_fill_claim_prevents_double_open()
     test_api_and_ui()
     test_syntax()

@@ -557,34 +557,34 @@ class SmartExitOptimizer:
 
         # ========== 优先级最高：止损止盈检查（任何时候都检查） ==========
 
-        # 检查止损价格
+        # 检查止损价格（须相对入场价方向正确）
         stop_loss_price = position.get('stop_loss_price')
-        if stop_loss_price and float(stop_loss_price) > 0:
+        entry_for_sl = position.get('entry_price')
+        if stop_loss_price and float(stop_loss_price) > 0 and entry_for_sl:
             stop_loss_price = Decimal(str(stop_loss_price))
+            entry_price = Decimal(str(entry_for_sl))
             direction = position['direction']
 
             if direction == 'LONG':
-                # 多头：当前价格 <= 止损价
-                if current_price <= stop_loss_price:
+                if stop_loss_price < entry_price and current_price <= stop_loss_price:
                     return True, f"止损(价格{current_price:.8f} <= 止损价{stop_loss_price:.8f}, 价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
             else:  # SHORT
-                # 空头：当前价格 >= 止损价
-                if current_price >= stop_loss_price:
+                if stop_loss_price > entry_price and current_price >= stop_loss_price:
                     return True, f"止损(价格{current_price:.8f} >= 止损价{stop_loss_price:.8f}, 价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
-        # 检查止盈价格
+        # 检查止盈价格（须相对入场价方向正确，避免限价转市价遗留的失真 TP）
         take_profit_price = position.get('take_profit_price')
-        if take_profit_price and float(take_profit_price) > 0:
+        entry_price_val = position.get('entry_price')
+        if take_profit_price and float(take_profit_price) > 0 and entry_price_val:
             take_profit_price = Decimal(str(take_profit_price))
+            entry_price = Decimal(str(entry_price_val))
             direction = position['direction']
 
             if direction == 'LONG':
-                # 多头：当前价格 >= 止盈价
-                if current_price >= take_profit_price:
+                if take_profit_price > entry_price and current_price >= take_profit_price:
                     return True, f"止盈(价格{current_price:.8f} >= 止盈价{take_profit_price:.8f}, 价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
             else:  # SHORT
-                # 空头：当前价格 <= 止盈价
-                if current_price <= take_profit_price:
+                if take_profit_price < entry_price and current_price <= take_profit_price:
                     return True, f"止盈(价格{current_price:.8f} <= 止盈价{take_profit_price:.8f}, 价格变化{profit_pct:.2f}%, ROI {roi_pct:.2f}%)"
 
         if not self._is_smart_exit_enabled():
