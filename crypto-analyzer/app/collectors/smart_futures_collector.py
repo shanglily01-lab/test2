@@ -24,7 +24,6 @@ import pymysql
 from decimal import Decimal
 from app.database.connection_pool import get_global_pool
 from app.utils.binance_rate_guard import rate_guard, parse_ban_msg
-from app.utils.futures_symbol import futures_symbol_clean
 
 
 class SmartFuturesCollector:
@@ -297,31 +296,6 @@ class SmartFuturesCollector:
 
         return total_inserted
 
-    def _get_high_risk_symbols(self) -> set:
-        """
-        从 trading_symbol_rating 表查 rating_level >= 2 的交易对 (严格限制 + 永久禁止)
-        这些交易对系统基本不会开新仓 (level 2 仅 50U/笔, level 3 完全禁), 不必采 K 线浪费 weight.
-
-        Returns:
-            高风险 symbol 集合, symbol 格式跟 DB 里一致 (一般是 'BTC/USDT')
-        """
-        try:
-            with self.db_pool.get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        "SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 2"
-                    )
-                    rows = cursor.fetchall()
-                    return {
-                        futures_symbol_clean(
-                            row[0] if not isinstance(row, dict) else row['symbol']
-                        )
-                        for row in rows
-                    }
-        except Exception as e:
-            logger.warning(f"查询高风险 symbol 失败 (跳过过滤): {e}")
-            return set()
-
     # 币安在交易 symbol 列表的内存缓存
     _active_symbols_cache: Dict[str, tuple] = {}  # {market_type: (symbols_set, ts)}
     _active_symbols_ttl_sec = 3600  # 缓存 1 小时
@@ -364,14 +338,13 @@ class SmartFuturesCollector:
             logger.warning(f"[symbols 同步] 拉币安 exchangeInfo 失败 (跳过过滤,用 config 原始列表): {e}")
             return None
 
-    def get_trading_symbols(self, apply_rating_filter: bool = True) -> List[str]:
+    def get_trading_symbols(self) -> List[str]:
         """
         获取需要监控的 U 本位合约交易对.
 
         来源:
           1. config.yaml 的 symbols 列表 (硬编码基线)
           2. 实际币安在交易的 symbols (动态过滤, 防止 config 里有已下架的 ARIA/USDT 等)
-          3. trading_symbol_rating 高风险剔除 (rating_level >= 2, WS 采集可关闭)
 
         Returns:
             交易对列表 (币安格式, 如 ['BTCUSDT', 'ETHUSDT'])
@@ -402,17 +375,6 @@ class SmartFuturesCollector:
                     f"config.yaml symbols 中非 /USDT 条目 {dropped_fmt} 个已跳过 (不采集币本位)"
                 )
             symbols_list = usdt_only
-
-            if apply_rating_filter:
-                high_risk = self._get_high_risk_symbols()
-                before = len(symbols_list)
-                symbols_list = [s for s in symbols_list if futures_symbol_clean(s) not in high_risk]
-                after = len(symbols_list)
-                if before > after:
-                    logger.info(
-                        f"按 rating_level >= 2 过滤: {before} -> {after} symbols "
-                        f"(剔除 {before - after} 个高风险)"
-                    )
 
             # 转换为币安格式: BTC/USDT -> BTCUSDT
             binance_format = [s.replace('/', '') for s in symbols_list]
