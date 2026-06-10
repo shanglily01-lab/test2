@@ -1754,7 +1754,7 @@ class UnifiedDataScheduler:
 
         _launch_rating_catchup(60)
 
-        # 模拟盘限价单执行器（做多-1%/做空+1%，30分钟超时取消）
+        # 模拟盘限价单执行器（做多-0.5%/做空+0.5%，30分钟超时取消）
         def _run_paper_limit_executor():
             import time
             try:

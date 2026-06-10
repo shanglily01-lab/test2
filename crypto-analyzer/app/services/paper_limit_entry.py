@@ -1,4 +1,4 @@
-"""模拟盘限价开仓 — 做多 -1%、做空 +1%，30 分钟有效。"""
+"""模拟盘限价开仓 — 做多 -0.5%、做空 +0.5%，30 分钟有效。"""
 from __future__ import annotations
 
 import json
@@ -14,9 +14,9 @@ from app.utils.futures_symbol import futures_symbol_rating_canonical
 # 模拟盘默认账户
 PAPER_ACCOUNT_ID = 2
 
-# 限价偏移：做多低于市价 1%，做空高于市价 1%
-PAPER_LIMIT_LONG_OFFSET = Decimal("0.01")
-PAPER_LIMIT_SHORT_OFFSET = Decimal("0.01")
+# 限价偏移：做多低于市价 0.5%，做空高于市价 0.5%
+PAPER_LIMIT_LONG_OFFSET = Decimal("0.005")
+PAPER_LIMIT_SHORT_OFFSET = Decimal("0.005")
 
 # 挂单有效期（分钟）
 PAPER_LIMIT_TIMEOUT_MINUTES = 30

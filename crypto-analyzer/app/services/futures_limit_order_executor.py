@@ -15,6 +15,8 @@ from app.services.paper_limit_entry import (
     PAPER_LIMIT_TIMEOUT_MINUTES,
     parse_order_notes,
 )
+from app.utils.futures_price import get_futures_trade_price
+from app.utils.futures_symbol import futures_symbol_rating_canonical
 
 
 class FuturesLimitOrderExecutor:
@@ -38,12 +40,22 @@ class FuturesLimitOrderExecutor:
             autocommit=True,
         )
 
-    def _get_price(self, symbol: str) -> Decimal:
+    def _get_price(self, conn, symbol: str) -> Decimal:
+        """与挂单创建/UI 一致：优先 mark/ticker 实时价，失败再回退引擎取价。"""
+        sym = futures_symbol_rating_canonical(symbol)
         try:
-            px = self.trading_engine.get_current_price(symbol, use_realtime=True)
+            fresh = get_futures_trade_price(
+                conn, sym, max_age_seconds=30, log_tag="limit_executor", require_fresh=False,
+            )
+            if fresh and fresh > 0:
+                return Decimal(str(fresh))
+        except Exception as e:
+            logger.debug(f"[限价执行器] {sym} get_futures_trade_price 失败: {e}")
+        try:
+            px = self.trading_engine.get_current_price(sym, use_realtime=True)
             return Decimal(str(px)) if px else Decimal('0')
         except Exception as e:
-            logger.warning(f"[限价执行器] 获取价格失败 {symbol}: {e}")
+            logger.warning(f"[限价执行器] 获取价格失败 {sym}: {e}")
             return Decimal('0')
 
     def _cancel_order(self, conn, order_id: str, reason: str) -> None:
@@ -99,8 +111,12 @@ class FuturesLimitOrderExecutor:
                         )
                         continue
 
-                    current_price = self._get_price(symbol)
+                    current_price = self._get_price(conn, symbol)
                     if current_price <= 0:
+                        logger.debug(
+                            f"[限价执行器] {symbol} {side} 无有效市价 "
+                            f"限价={limit_price} elapsed={elapsed}s"
+                        )
                         continue
 
                     should_fill = False

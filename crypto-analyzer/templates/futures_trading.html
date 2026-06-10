@@ -271,7 +271,7 @@
   <button type="button" onclick="resetLimitOrderSearch()"
     class="px-3 py-1.5 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-xs text-on-surface-variant hover:text-on-surface transition-colors">重置</button>
 </div>
-<p class="text-[10px] text-on-surface-variant w-full sm:w-auto">做多限价 −1% · 做空限价 +1% · 30 分钟未成交自动取消 · 实时价每 5s 刷新</p>
+<p class="text-[10px] text-on-surface-variant w-full sm:w-auto">做多限价 −0.5% · 做空限价 +0.5% · 30 分钟未成交自动取消 · 实时价每 5s 刷新</p>
 </div>
 <div class="overflow-x-auto overflow-y-auto flex-1 min-h-0">
 <table class="w-full text-left border-collapse">
@@ -532,8 +532,16 @@ function resolvePriceFromMap(symbol, priceMap) {
     return pv > 0 ? pv : null;
 }
 
-function fmtLimitFillGap(isLong, curPx, limitPx) {
+function fmtLimitFillGap(isLong, curPx, limitPx, order) {
     if (!curPx || !limitPx) return {text: '--', cls: 'text-on-surface-variant'};
+    var created = order ? parseUtcTime(order.created_at) : null;
+    if (created) {
+        var ageSec = (Date.now() - created.getTime()) / 1000;
+        if (ageSec < 60) {
+            var waitSec = Math.max(1, Math.ceil(60 - ageSec));
+            return {text: '满60s后可成交 (剩' + waitSec + 's)', cls: 'text-on-surface-variant'};
+        }
+    }
     if (isLong) {
         if (curPx <= limitPx) return {text: '可成交', cls: 'text-[#49f4c8]'};
         var gap = (curPx - limitPx) / curPx * 100;
@@ -596,7 +604,7 @@ async function renderLimitOrders(allOrders) {
         var limitPx = parseFloat(ord.price) || 0;
         var refPx = parseFloat(meta.ref_price) || 0;
         var curPx = resolvePriceFromMap(sym, priceMap) || refPx || 0;
-        var fillGap = fmtLimitFillGap(isLong, curPx, limitPx);
+        var fillGap = fmtLimitFillGap(isLong, curPx, limitPx, ord);
         var curPxClass = 'text-on-surface';
         if (curPx > 0 && limitPx > 0) {
             if (isLong) curPxClass = curPx <= limitPx ? 'text-[#49f4c8]' : 'text-[#ff716c]';

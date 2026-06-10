@@ -214,7 +214,8 @@ async def lifespan(app: FastAPI):
 
         # 初始化价格缓存服务
         try:
-            db_config = config.get('database', {})
+            from app.utils.config_loader import get_db_config
+            db_config = get_db_config()
             price_cache_service = init_global_price_cache(db_config, update_interval=3)
             logger.info("[OK] 价格缓存服务初始化成功（每3秒更新）")
         except Exception as e:
@@ -225,13 +226,8 @@ async def lifespan(app: FastAPI):
         # 所有业务代码必须通过 hub 取价/K线/资金费率, 禁止直连 binance REST
         try:
             from app.services.binance_data_hub import init_global_data_hub
-            db_cfg_for_hub = {
-                'host':     db_config.get('host', 'localhost'),
-                'port':     int(db_config.get('port', 3306)),
-                'user':     db_config.get('user', 'root'),
-                'password': db_config.get('password', ''),
-                'database': db_config.get('database', 'binance-data'),
-            }
+            from app.utils.config_loader import get_db_config
+            db_cfg_for_hub = get_db_config()
             data_hub = init_global_data_hub(db_config=db_cfg_for_hub)
             await data_hub.start()
             logger.info("[OK] BinanceDataHub 已启动 (60s 拉一次全市场, 200 req/min 令牌桶)")
@@ -278,13 +274,15 @@ async def lifespan(app: FastAPI):
         # 影响 web 进程稳定性. Web API 的实时价格走 futures_api 直调 Binance, 失败
         # fallback 5m K 线 (由 ws_kline_collector_service 写入).
 
-        # 模拟盘限价单执行器（做多-1% / 做空+1%，30分钟超时）
+        # 模拟盘限价单执行器（做多-0.5% / 做空+0.5%，30分钟超时）
         futures_limit_order_executor = None
         try:
             from app.trading.futures_trading_engine import FuturesTradingEngine
             from app.services.futures_limit_order_executor import init_futures_limit_order_executor
-            _futures_engine = FuturesTradingEngine(db_config, trade_notifier=None, live_engine=live_engine)
-            futures_limit_order_executor = init_futures_limit_order_executor(db_config, _futures_engine)
+            from app.utils.config_loader import get_db_config
+            _futures_db_cfg = get_db_config()
+            _futures_engine = FuturesTradingEngine(_futures_db_cfg, trade_notifier=None, live_engine=live_engine)
+            futures_limit_order_executor = init_futures_limit_order_executor(_futures_db_cfg, _futures_engine)
             logger.info("✅ 模拟盘限价单执行器初始化成功")
         except Exception as e:
             logger.warning(f"⚠️  模拟盘限价单执行器初始化失败: {e}")
