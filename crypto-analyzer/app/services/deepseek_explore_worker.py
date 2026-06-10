@@ -1,16 +1,16 @@
 """
 DeepSeek 探索 worker (v1 — 2026-05-28)
 
-每 4h 调用 DeepSeek (OpenAI-compatible API) 检测加密货币短时方向异动,
+每 2h 调用 DeepSeek (OpenAI-compatible API) 检测加密货币短时方向异动,
 根据 verdict 直接开模拟单。(功能与 gemini_explore_worker 完全对齐)
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
   - margin    = 500U
   - leverage  = 5x
-  - hold     = 4 小时
-  - SL       = 3%
-  - TP       = 5%
+  - hold     = 2 小时
+  - SL       = 2%
+  - TP       = 3%
 
 闸门:
   - system_settings.deepseek_explore_enabled (默认 0, 关时早返回)

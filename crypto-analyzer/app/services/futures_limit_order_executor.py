@@ -10,7 +10,11 @@ from typing import Dict, Optional
 import pymysql
 from loguru import logger
 
-from app.services.paper_limit_entry import PAPER_LIMIT_TIMEOUT_MINUTES, parse_order_notes
+from app.services.paper_limit_entry import (
+    PAPER_LIMIT_MIN_FILL_AGE_SEC,
+    PAPER_LIMIT_TIMEOUT_MINUTES,
+    parse_order_notes,
+)
 
 
 class FuturesLimitOrderExecutor:
@@ -81,7 +85,11 @@ class FuturesLimitOrderExecutor:
                     limit_price = Decimal(str(order['price']))
                     meta = parse_order_notes(order.get('notes'))
                     timeout_minutes = int(meta.get('timeout_minutes') or PAPER_LIMIT_TIMEOUT_MINUTES)
+                    min_fill_age = int(meta.get('min_fill_age_sec') or PAPER_LIMIT_MIN_FILL_AGE_SEC)
                     elapsed = int(order.get('elapsed_seconds') or 0)
+
+                    if elapsed < min_fill_age:
+                        continue
 
                     if elapsed >= timeout_minutes * 60:
                         self._cancel_order(conn, order_id, 'timeout')

@@ -21,6 +21,9 @@ PAPER_LIMIT_SHORT_OFFSET = Decimal("0.01")
 # 挂单有效期（分钟）
 PAPER_LIMIT_TIMEOUT_MINUTES = 30
 
+# 挂单创建后至少等待 N 秒才允许成交（避免秒成交看起来像市价单）
+PAPER_LIMIT_MIN_FILL_AGE_SEC = 60
+
 
 def calc_paper_limit_price(side: str, ref_price: float) -> float:
     """根据参考价计算模拟盘限价。"""
@@ -109,7 +112,23 @@ def create_paper_limit_order(
         logger.info(f"[限价开仓] 跳过 {symbol} {side} source={source}: 已有挂单")
         return None
 
-    limit_price = calc_paper_limit_price(side, ref_price)
+    # 用最新市价重算限价，确保做多限价低于市价、做空限价高于市价
+    market_ref = float(ref_price)
+    try:
+        from app.utils.futures_price import get_futures_trade_price
+        fresh = get_futures_trade_price(
+            conn, symbol, max_age_seconds=30, log_tag="paper_limit_entry", require_fresh=False,
+        )
+        if fresh and fresh > 0:
+            market_ref = float(fresh)
+    except Exception as e:
+        logger.debug(f"[限价开仓] {symbol} 刷新市价失败，用调用方参考价: {e}")
+
+    limit_price = calc_paper_limit_price(side, market_ref)
+    if side == "LONG" and limit_price >= market_ref:
+        limit_price = float(Decimal(str(market_ref)) * (Decimal("1") - PAPER_LIMIT_LONG_OFFSET))
+    elif side == "SHORT" and limit_price <= market_ref:
+        limit_price = float(Decimal(str(market_ref)) * (Decimal("1") + PAPER_LIMIT_SHORT_OFFSET))
     sl_price, tp_price = _calc_sl_tp(
         side, limit_price, stop_loss_pct, take_profit_pct, stop_loss_price, take_profit_price,
     )
@@ -131,7 +150,8 @@ def create_paper_limit_order(
 
     meta: Dict[str, Any] = {
         "timeout_minutes": timeout_minutes,
-        "ref_price": ref_price,
+        "ref_price": market_ref,
+        "min_fill_age_sec": PAPER_LIMIT_MIN_FILL_AGE_SEC,
         "margin": margin_required,
         "max_hold_minutes": max_hold_minutes,
         "entry_score": entry_score,
@@ -182,8 +202,9 @@ def create_paper_limit_order(
 
         logger.info(
             f"[限价开仓] 挂单 {symbol} {side} @ {limit_price:.6g} "
-            f"(参考价 {ref_price:.6g}, 有效期 {timeout_minutes}min) "
-            f"SL={sl_price} TP={tp_price} qty={quantity} source={source} id={db_id}"
+            f"(市价 {market_ref:.6g}, 有效期 {timeout_minutes}min, "
+            f"最早成交 {PAPER_LIMIT_MIN_FILL_AGE_SEC}s 后) "
+            f"SL={sl_price} TP={tp_price} qty={quantity} source={source} order_db_id={db_id}"
         )
         return db_id
     except Exception as e:

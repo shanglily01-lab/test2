@@ -1,16 +1,16 @@
 """
 Gemini 预测 worker (v2 — 2026-05-29)
 
-每 4h 对候选池交易对调用 Google Gemini 预测未来 4h 方向,
-根据预测结果直接开模拟单.
+每 2h 对候选池交易对调用 Google Gemini 预测未来 2h 方向,
+根据预测结果挂模拟限价单.
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
   - margin    = 500U
   - leverage  = 5x
-  - hold     = 4 小时
-  - SL       = 4%
-  - TP       = 6%
+  - hold     = 2 小时
+  - SL       = 2%
+  - TP       = 3%
 
 闸门:
   - system_settings.gemini_predict_enabled (默认 1, 关时早返回)
@@ -1012,6 +1012,10 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
 
             orders_opened += 1
             predictions_made += 1
+            logger.info(
+                f"[Gemini预测] 限价挂单已创建 {symbol} {side} order_db_id={position_id} "
+                f"(待成交，非即时持仓)"
+            )
             verdict_rows.append((
                 run_id, symbol, category, confidence,
                 catalyst, data_signal, risk_note,

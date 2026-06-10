@@ -120,7 +120,7 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
     ),
     "predict": OpenAdvisorStrategyProfile(
         key="predict",
-        title_zh="AI 预测（4h 方向）",
+        title_zh="AI 预测（2h 方向）",
         expected_side=None,
         rubric=(
             "【预测专属，与预测 prompt 一致；勿用战术/探索混审】\n"
@@ -304,7 +304,7 @@ def build_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
             "存疑且 catalyst 已写清多周期结构时 → approve。"
         )
     elif key == "predict":
-        lines.append("3. 审 4h 预测逻辑与多周期依据，**勿**用战术 checklist。")
+        lines.append("3. 审 2h 预测逻辑与多周期依据，**勿**用战术 checklist。")
         lines.append(
             "4. catalyst 与 side 自洽即可 approve；勿因 RSI 高低单独否决。"
         )
@@ -500,7 +500,7 @@ _GPT_PROFILE_TITLE_EN: dict[str, str] = {
     "chase": "Momentum chase long",
     "dump": "Breakdown short",
     "explore": "AI main explore (event/structure)",
-    "predict": "AI predict (4h direction)",
+    "predict": "AI predict (2h direction)",
     "btc_momentum": "BTC momentum",
     "smart_trader": "Main strategy / smart_trader",
     "mean_reversion": "Bollinger mean reversion",
@@ -669,7 +669,7 @@ def build_gpt_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
     elif key == "explore":
         lines.append("3. Event/structure catalyst; no tactical four-way checklist.")
     elif key == "predict":
-        lines.append("3. 4h predict logic; no tactical/explore checklist mix.")
+        lines.append("3. 2h predict logic; no tactical/explore checklist mix.")
     else:
         lines.append("3. entry_reason/catalyst vs side and K-lines; vague → reject.")
     return "\n".join(lines)

@@ -573,6 +573,16 @@ class FuturesTradingEngine:
                     }
                 # 如果限价单可以立即成交，继续执行下面的市价单逻辑
 
+            if paper_limit_mode:
+                logger.error(
+                    f"[开仓] 模拟盘 {symbol} {position_side} 不应走市价成交路径 "
+                    f"(limit_price={limit_price})"
+                )
+                return {
+                    'success': False,
+                    'message': '模拟盘仅支持限价挂单，请使用 paper_limit_entry.create_paper_limit_order',
+                }
+
             # 2. 确定开仓价格
             # 限价单立即成交时使用市价，因为实际是按市价成交的
             # 只有PENDING限价单成交时才用限价（由futures_limit_order_executor处理）

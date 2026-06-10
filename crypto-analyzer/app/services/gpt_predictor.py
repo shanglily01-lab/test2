@@ -1,16 +1,16 @@
 """
 GPT 预测 worker (v1 — 2026-05-29)
 
-每 4h 对 candidate_pool 全量候选 (至多 500) 调用 GPT 预测未来 4h 方向,
-根据预测结果直接开模拟单.
+每 2h 对 candidate_pool 全量候选 (至多 500) 调用 GPT 预测未来 2h 方向,
+根据预测结果挂模拟限价单.
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
   - margin    = 500U
   - leverage  = 5x
-  - hold     = 4 小时
-  - SL       = 4%
-  - TP       = 6%
+  - hold     = 2 小时
+  - SL       = 2%
+  - TP       = 3%
 
 闸门:
   - system_settings.gpt_predict_enabled (默认 0, 关时早返回)

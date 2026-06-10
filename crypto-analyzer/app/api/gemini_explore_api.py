@@ -302,7 +302,7 @@ async def list_verdicts(run_id: int = Query(..., ge=1)):
                     "       catalyst, data_signal, risk_note, "
                     "       action_taken, position_id, skip_reason, created_at "
                     "FROM gemini_explore_verdicts "
-                    "WHERE run_id=%s AND action_taken='opened' "
+                    "WHERE run_id=%s AND action_taken IN ('opened', 'limit_pending') "
                     "ORDER BY confidence DESC, id ASC",
                     (run_id,),
                 )

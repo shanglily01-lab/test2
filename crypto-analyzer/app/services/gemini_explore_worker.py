@@ -1,16 +1,16 @@
 """
 Gemini 探索 worker (v3 — 2026-05-21 长持仓版)
 
-每 4h 调用 Google Gemini 检测加密货币短时方向异动, 根据 verdict 直接开模拟单。
-持仓 4 小时, SL=3%, TP=5%; 满 15min 后 Gemini 持仓顾问每 15min 问询是否持有。
+每 2h 调用 Google Gemini 检测加密货币短时方向异动, 根据 verdict 挂模拟限价单。
+持仓 2 小时, SL=2%, TP=3%; 满 15min 后 Gemini 持仓顾问每 15min 问询是否持有。
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
   - margin    = 500U
   - leverage  = 5x
-  - hold     = 4 小时
-  - SL       = 3%
-  - TP       = 5%
+  - hold     = 2 小时
+  - SL       = 2%
+  - TP       = 3%
 
 闸门:
   - system_settings.gemini_explore_enabled (默认 0, 关时早返回)
@@ -930,7 +930,7 @@ def _describe_market_regime(conn) -> str:
 def _call_gemini_explore(
     universe: dict, global_ctx: dict, historical_stats: dict,
 ) -> Tuple[Optional[dict], Optional[str]]:
-    """调用 Gemini — 按 4 小时持仓趋势判断, 多周期 K 线叙事 + Big4 + 技术指标 + 历史表现."""
+    """调用 Gemini — 按 2 小时持仓趋势判断, 多周期 K 线叙事 + Big4 + 技术指标 + 历史表现."""
     if not GEMINI_API_KEY:
         logger.error("[Gemini探索] GEMINI_API_KEY 未设置")
         return None, "GEMINI_API_KEY 未设置"
@@ -1797,6 +1797,10 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 continue
 
             trades_opened += 1
+            logger.info(
+                f"[Gemini探索] 限价挂单已创建 {symbol} {side} order_db_id={position_id} "
+                f"(待成交，非即时持仓)"
+            )
             verdict_rows.append((
                 run_id, symbol, db_category, confidence,
                 catalyst, data_signal, risk_note,

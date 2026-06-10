@@ -1,10 +1,10 @@
-"""Gemini / DeepSeek / GPT 探索+预测 — 统一固定时刻 4h 调度.
+"""Gemini / DeepSeek / GPT 探索+预测 — 统一固定时刻 2h 调度.
 
-锚点: 北京时间 21:30 (= UTC 13:30), 每 4h 一轮.
-Gemini 与 DeepSeek 错开 2 小时; 同教师探索/预测再错开 15 分钟; GPT 居中 +1h:
+锚点: 北京时间 21:30 (= UTC 13:30), 每 2h 一轮.
+Gemini / GPT / DeepSeek 错开 30 分钟; 同教师探索/预测再错开 15 分钟:
   gemini_explore +0,   gemini_predict +15,
-  gpt_explore +60,     gpt_predict +75,
-  deepseek_explore +120, deepseek_predict +135  (北京 23:30 / 23:45)
+  gpt_explore +30,     gpt_predict +45,
+  deepseek_explore +60, deepseek_predict +75  (北京 22:30 / 22:45)
 
 调度器 5/10 分钟轮询 + worker 内 next_due 认领防重。
 """
@@ -17,14 +17,14 @@ from loguru import logger
 
 from app.services.ai_explore_prompt import EXPLORE_MIN_INTERVAL_HOURS
 
-PREDICT_ROUND_INTERVAL_HOURS = 4
+PREDICT_ROUND_INTERVAL_HOURS = 2
 PREDICT_ROUND_INTERVAL_SECONDS = PREDICT_ROUND_INTERVAL_HOURS * 3600
 PREDICT_SCHEDULE_POLL_MINUTES = 5
 
 # 固定锚点 UTC 13:30 = 北京时间 21:30
 SCHEDULE_ANCHOR_HOUR_UTC = 13
 SCHEDULE_ANCHOR_MINUTE_UTC = 30
-GEMINI_DEEPSEEK_STAGGER_HOURS = 2
+GEMINI_DEEPSEEK_STAGGER_HOURS = 1
 SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN = 15
 _SCHEDULE_ANCHOR_BASE = datetime(2024, 1, 1, SCHEDULE_ANCHOR_HOUR_UTC, SCHEDULE_ANCHOR_MINUTE_UTC)
 
@@ -37,7 +37,7 @@ GPT_PREDICT_NEXT_DUE_KEY = "gpt_predict_next_due_utc"
 
 _GEMINI_OFFSET = 0
 _DEEPSEEK_OFFSET = GEMINI_DEEPSEEK_STAGGER_HOURS * 60
-_GPT_OFFSET = GEMINI_DEEPSEEK_STAGGER_HOURS * 30  # 1h after Gemini, 1h before DeepSeek
+_GPT_OFFSET = GEMINI_DEEPSEEK_STAGGER_HOURS * 30  # 30min after Gemini, 30min before DeepSeek
 
 STRATEGY_SCHEDULE_OFFSETS: Dict[str, int] = {
     "gemini_explore": _GEMINI_OFFSET,
@@ -104,7 +104,7 @@ def _last_ok_run_at(cur, runs_table: str) -> Optional[datetime]:
 
 
 def _period_base_for_now(now: datetime) -> datetime:
-    """当前 4h 周期起点 (共享锚点 13:30 UTC, 不含策略 offset)."""
+    """当前 2h 周期起点 (共享锚点 13:30 UTC, 不含策略 offset)."""
     if now < _SCHEDULE_ANCHOR_BASE:
         return _SCHEDULE_ANCHOR_BASE
     elapsed_s = (now - _SCHEDULE_ANCHOR_BASE).total_seconds()
@@ -122,7 +122,7 @@ def scheduled_slot_for_now(
     strategy_key: str,
     now: Optional[datetime] = None,
 ) -> datetime:
-    """当前 4h 周期内该策略的固定槽位时刻 (UTC naive)."""
+    """当前 2h 周期内该策略的固定槽位时刻 (UTC naive)."""
     if strategy_key not in STRATEGY_SCHEDULE_OFFSETS:
         raise KeyError(f"unknown strategy_key: {strategy_key}")
 
@@ -208,7 +208,7 @@ def explore_round_is_due(
     log_tag: str = "Explore",
     interval_hours: float = EXPLORE_MIN_INTERVAL_HOURS,
 ) -> Tuple[bool, str]:
-    """主探索固定时刻 4h 防重 (interval_hours 保留兼容, 实际以锚点槽位为准)."""
+    """主探索固定时刻 2h 防重 (interval_hours 保留兼容, 实际以锚点槽位为准)."""
     _ = interval_hours
     return _ai_round_is_due(
         conn,
@@ -231,7 +231,7 @@ def predict_round_is_due(
     manual: bool = False,
     log_tag: str = "Predict",
 ) -> Tuple[bool, str]:
-    """预测固定时刻 4h 防重."""
+    """预测固定时刻 2h 防重."""
     return _ai_round_is_due(
         conn,
         strategy_key=strategy_key,

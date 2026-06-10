@@ -1,4 +1,4 @@
-"""
+﻿"""
 统一数据采集调度器
 整合所有数据源的采集任务，按照不同频率定时执行
 
@@ -1324,7 +1324,7 @@ class UnifiedDataScheduler:
         # ============================================================
         logger.info("\n  🤖 Gemini 系列: AI 交易任务")
 
-        # Gemini 探索 - 每 4h 调一轮 Gemini 检测方向异动, 模拟开仓
+        # Gemini 探索 - 每 2h 调一轮 Gemini 检测方向异动, 模拟开仓
         # kill switch = system_settings.gemini_explore_enabled
         def _run_gemini_explore():
             def wrapper():
@@ -1335,12 +1335,12 @@ class UnifiedDataScheduler:
                     logger.error(f"[Gemini探索] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="GeminiExplore").start()
 
-        schedule.every(4).hours.do(_run_gemini_explore)
-        # 兜底: every(N).hours 在 restart 后从 0 计时, 易错过周期; 10min 轮询由 worker 4h 防重
+        schedule.every(2).hours.do(_run_gemini_explore)
+        # 兜底: every(N).hours 在 restart 后从 0 计时, 易错过周期; 10min 轮询由 worker 2h 防重
         schedule.every(10).minutes.do(_run_gemini_explore)
-        logger.info("  ✓ gemini_explore - 固定槽 21:30北京 +0, 每4h + 10min轮询")
+        logger.info("  ✓ gemini_explore - 固定槽 21:30北京 +0, 每2h + 10min轮询")
 
-        # DeepSeek 探索 - 每 4h 调一轮 DeepSeek 检测短时方向异动, 模拟开仓
+        # DeepSeek 探索 - 每 2h 调一轮 DeepSeek 检测短时方向异动, 模拟开仓
         # kill switch = system_settings.deepseek_explore_enabled
         def _run_deepseek_explore():
             def wrapper():
@@ -1351,11 +1351,11 @@ class UnifiedDataScheduler:
                     logger.error(f"[DeepSeek探索] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="DeepSeekExplore").start()
 
-        schedule.every(4).hours.do(_run_deepseek_explore)
+        schedule.every(2).hours.do(_run_deepseek_explore)
         schedule.every(10).minutes.do(_run_deepseek_explore)
-        logger.info("  ✓ deepseek_explore - 固定槽 23:30北京 +2h, 每4h + 10min轮询")
+        logger.info("  ✓ deepseek_explore - 固定槽 22:30北京 +1h, 每2h + 10min轮询")
 
-        # GPT 探索 - 每 4h 调一轮 GPT 检测短时方向异动, 模拟开仓
+        # GPT 探索 - 每 2h 调一轮 GPT 检测短时方向异动, 模拟开仓
         # kill switch = system_settings.gpt_explore_enabled
         def _run_gpt_explore():
             def wrapper():
@@ -1366,11 +1366,11 @@ class UnifiedDataScheduler:
                     logger.error(f"[GPT探索] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="GPTExplore").start()
 
-        schedule.every(4).hours.do(_run_gpt_explore)
+        schedule.every(2).hours.do(_run_gpt_explore)
         schedule.every(10).minutes.do(_run_gpt_explore)
-        logger.info("  ✓ gpt_explore - 固定槽 22:30北京 +1h, 每4h + 10min轮询")
+        logger.info("  ✓ gpt_explore - 固定槽 22:00北京 +30min, 每2h + 10min轮询")
 
-        # DeepSeek 预测 - 每 4h 调一次 DeepSeek 预测 TOP50 方向
+        # DeepSeek 预测 - 每 2h 调一次 DeepSeek 预测 TOP50 方向
         def _run_deepseek_predict():
             def wrapper():
                 try:
@@ -1380,11 +1380,11 @@ class UnifiedDataScheduler:
                     logger.error(f"[DeepSeek预测] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="DeepSeekPredict").start()
 
-        schedule.every(4).hours.do(_run_deepseek_predict)
+        schedule.every(2).hours.do(_run_deepseek_predict)
         schedule.every(5).minutes.do(_run_deepseek_predict)
-        logger.info("  ✓ deepseek_predict - 固定槽 23:45北京 +2h15, 每4h + 5min轮询")
+        logger.info("  ✓ deepseek_predict - 固定槽 22:45北京 +1h15, 每2h + 5min轮询")
 
-        # Gemini 预测 - 每 4h 调一次 Gemini 预测 TOP50 方向
+        # Gemini 预测 - 每 2h 调一次 Gemini 预测 TOP50 方向
         def _run_gemini_predict():
             def wrapper():
                 try:
@@ -1394,11 +1394,11 @@ class UnifiedDataScheduler:
                     logger.error(f"[Gemini预测] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="GeminiPredict").start()
 
-        schedule.every(4).hours.do(_run_gemini_predict)
+        schedule.every(2).hours.do(_run_gemini_predict)
         schedule.every(5).minutes.do(_run_gemini_predict)
-        logger.info("  ✓ gemini_predict - 固定槽 21:45北京 +15min, 每4h + 5min轮询")
+        logger.info("  ✓ gemini_predict - 固定槽 21:45北京 +15min, 每2h + 5min轮询")
 
-        # GPT 预测 - 每 4h 调一次 GPT 预测 TOP50 方向
+        # GPT 预测 - 每 2h 调一次 GPT 预测 TOP50 方向
         def _run_gpt_predict():
             def wrapper():
                 try:
@@ -1408,9 +1408,9 @@ class UnifiedDataScheduler:
                     logger.error(f"[GPT预测] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="GPTPredict").start()
 
-        schedule.every(4).hours.do(_run_gpt_predict)
+        schedule.every(2).hours.do(_run_gpt_predict)
         schedule.every(5).minutes.do(_run_gpt_predict)
-        logger.info("  ✓ gpt_predict - 固定槽 22:45北京 +1h15, 每4h + 5min轮询")
+        logger.info("  ✓ gpt_predict - 固定槽 22:15北京 +45min, 每2h + 5min轮询")
 
         # Gemini 持仓顾问 - 监管 gemini_explore/gemini_predict 模拟仓，满 15min 后每 15min 复查
         def _run_gemini_position_advisor():
@@ -1476,7 +1476,7 @@ class UnifiedDataScheduler:
         _run_deepseek_position_advisor()
         logger.info("  ✓ deepseek_position_advisor - 每 15 分钟 (后台线程)")
 
-        # Big4 综合行情 LLM 分析 — 每 4h (Gemini + DeepSeek)
+        # Big4 综合行情 LLM 分析 — 每 2h (Gemini + DeepSeek)
         def _run_gemini_big4_analysis():
             def wrapper():
                 try:
@@ -1495,11 +1495,11 @@ class UnifiedDataScheduler:
                     logger.error(f"[DeepSeek Big4分析] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="DeepSeekBig4Analysis").start()
 
-        schedule.every(4).hours.do(_run_gemini_big4_analysis)
+        schedule.every(2).hours.do(_run_gemini_big4_analysis)
         schedule.every(10).minutes.do(_run_gemini_big4_analysis)
-        schedule.every(4).hours.do(_run_deepseek_big4_analysis)
+        schedule.every(2).hours.do(_run_deepseek_big4_analysis)
         schedule.every(10).minutes.do(_run_deepseek_big4_analysis)
-        logger.info("  ✓ big4_analysis - Gemini/DeepSeek 每 4h + 10min 轮询 (worker 内 4h 防重)")
+        logger.info("  ✓ big4_analysis - Gemini/DeepSeek 每 2h + 10min 轮询 (worker 内 2h 防重)")
 
         # Gemini 市场情绪 + 川普分析 - 每 8h 调一次
         def _run_gemini_sentiment():
@@ -1691,7 +1691,7 @@ class UnifiedDataScheduler:
             threading.Thread(target=_run, daemon=True, name=f"AIInit_{name}").start()
 
         _launch_ai_init_task("Gemini探索",   "app.services.gemini_explore_worker",   "run_explore_round", 15)
-        # 预测不走 scheduler_init；由 5min 轮询 + next_due 保证每 4h 至少一轮 (triggered_by=scheduler)
+        # 预测不走 scheduler_init；由 5min 轮询 + next_due 保证每 2h 至少一轮 (triggered_by=scheduler)
         def _launch_predict_catchup(name: str, module_path: str, func_name: str, delay_s: int):
             def _run():
                 import time
@@ -1730,7 +1730,8 @@ class UnifiedDataScheduler:
         def _run_paper_limit_executor():
             import time
             try:
-                db_cfg = self.config.get('database', {}).get('mysql', {})
+                from app.utils.config_loader import get_db_config
+                db_cfg = get_db_config()
                 from app.trading.futures_trading_engine import FuturesTradingEngine
                 from app.services.futures_limit_order_executor import FuturesLimitOrderExecutor
                 engine = FuturesTradingEngine(db_cfg)

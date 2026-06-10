@@ -348,7 +348,12 @@ class GPTPositionAdvisor:
                 k1h = helper._recent_klines(ctx.get("klines_1h", []), HOLD_1H_BARS)
                 s15 = helper._score_klines_for_side(k15, pos["position_side"])
                 s1h = helper._score_klines_for_side(k1h, pos["position_side"])
-                action, reason = helper._temper_losing_hold(roi, decision["action"], decision["reason"], pos["position_side"], s15, s1h)
+                action, reason = helper._temper_losing_hold(
+                    roi, decision["action"], decision["reason"], pos["position_side"], s15, s1h,
+                )
+                action, reason = helper._temper_profitable_hold(
+                    roi, action, reason, pos["position_side"], s15, s1h,
+                )
                 stats[action] += 1
                 stats["evaluated"] += 1
                 log_gpt_advisor_review(

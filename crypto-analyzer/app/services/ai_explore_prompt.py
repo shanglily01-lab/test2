@@ -17,11 +17,11 @@ from app.services.ai_big4_prompt import BIG4_PROMPT_BLOCK_EXPLORE, BIG4_PROMPT_B
 EXPLORE_LLM_MAX_SYMBOLS = 50
 EXPLORE_LLM_MAX_OUTPUT_TOKENS = 8192
 # 主探索 (gemini/deepseek_explore) scheduler + worker 防重间隔
-EXPLORE_MIN_INTERVAL_HOURS = 4.0
+EXPLORE_MIN_INTERVAL_HOURS = 2.0
 # AI 模拟仓 (探索/预测/战术) 计划持仓时长
-AI_POSITION_HOLD_HOURS = 4
-AI_POSITION_SL_PCT = 3.0
-AI_POSITION_TP_PCT = 5.0
+AI_POSITION_HOLD_HOURS = 2
+AI_POSITION_SL_PCT = 2.0
+AI_POSITION_TP_PCT = 3.0
 # 模拟仓持仓顾问: 满 15min 后每 15min 轮询 (见 gemini_position_advisor.HOLD_MIN_MINUTES)
 AI_ADVISOR_MIN_HOLD_HOURS = 0.25  # 15min, 与 gemini_position_advisor.HOLD_MIN_MINUTES 一致
 AI_ADVISOR_CHECK_INTERVAL_S = 900
@@ -621,7 +621,7 @@ CATALYST_EVIDENCE_BLOCK = """
    - 例: 「突破时量放大、回踩缩量」「近几根量萎缩」
 
 4. **结构位置** — `tech.above_7d_low_pct` / `below_7d_high_pct`:
-   - 例: 「距 7d 高点还有 3% 空间够 TP=5%」
+   - 例: 「距 7d 高点还有 2% 空间够 TP=3%」
 
 5. **多周期共振** — 至少 2 个周期 (1h+15m 或 1d+1h) 方向一致才给 confidence≥0.65
 
@@ -643,13 +643,13 @@ CATALYST_EVIDENCE_BLOCK = """
 - 若删掉 change_24h 和 funding_rate 后, 理由还成立吗? 不成立 → skip
 """
 
-EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 4 小时 (4h), SL=3%, TP=5%, 杠杆 5x; 满 15min 后 Gemini 持仓顾问每 15min 可建议平仓.
+EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 2 小时 (2h), SL=2%, TP=3%, 杠杆 5x; 满 15min 后 Gemini 持仓顾问每 15min 可建议平仓.
 
-你的任务是: 基于**个股技术面**判断未来 4 小时内是否值得持有; 不是复述行情、不是宏观押注.
+你的任务是: 基于**个股技术面**判断未来 2 小时内是否值得持有; 不是复述行情、不是宏观押注.
 
 # 仓位设置 (供你理解容错空间)
-- 杠杆 5x, 名义本金 ~2500U, SL=3% 价格跌幅, TP=5% 涨幅
-- 4 小时到期强制平仓 — 方向须能在 4h 内尽量走向 5% TP 或至少不触发 3% SL
+- 杠杆 5x, 名义本金 ~2500U, SL=2% 价格跌幅, TP=3% 涨幅
+- 2 小时到期强制平仓 — 方向须能在 2h 内尽量走向 3% TP 或至少不触发 2% SL
 - 不要选「只会小幅波动 1-2%」的标的
 
 # 全局市场环境 (宏观仅背景, 见 big4_trading_hint)
@@ -687,7 +687,7 @@ EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. 持仓期 4 小时 (4h), 
 | 0.60-0.64 | 结构尚可但单周期偏弱 — **最多开 1-2 个** |
 | 0.00-0.59 | 无清晰 K 线结构 / 仅涨跌幅或费率 / 震荡 — **必须 skip** |
 
-# 判定原则 — 4 小时持仓
+# 判定原则 — 2 小时持仓
 
 ## ✅ 可给 bullish/bearish (须技术面)
 
@@ -730,7 +730,7 @@ GOOD — skip:
   "symbol": "XRP/USDT",
   "category": "skip",
   "confidence": 0.30,
-  "catalyst": "1h/15m narrative 均为震荡, 量持平; RSI=52 中性. 虽 24h+3% 但无 4h 可交易结构",
+  "catalyst": "1h/15m narrative 均为震荡, 量持平; RSI=52 中性. 虽 24h+3% 但无 2h 可交易结构",
   "data_signal": "双周期震荡, RSI=52",
   "risk_note": ""
 }}
@@ -772,12 +772,12 @@ CATALYST_EVIDENCE_BLOCK_EN = """
 - data_signal: one quantitative line only.
 """
 
-EXPLORE_PROMPT_TEMPLATE_EN = """You are a senior crypto futures analyst. Hold 4h, SL=3%, TP=5%, 5x leverage.
+EXPLORE_PROMPT_TEMPLATE_EN = """You are a senior crypto futures analyst. Hold 2h, SL=2%, TP=3%, 5x leverage.
 
-Task: per-symbol **technical** 4h tradeability — not macro-only bets.
+Task: per-symbol **technical** 2h tradeability — not macro-only bets.
 
 # Position context
-- Need room toward 5% TP or survive 3% SL within 4h; skip 1-2% chop names.
+- Need room toward 3% TP or survive 2% SL within 2h; skip 1-2% chop names.
 
 # Global context (macro background only)
 {global_context_json}
