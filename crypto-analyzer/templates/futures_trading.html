@@ -271,7 +271,7 @@
   <button type="button" onclick="resetLimitOrderSearch()"
     class="px-3 py-1.5 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-xs text-on-surface-variant hover:text-on-surface transition-colors">重置</button>
 </div>
-<p class="text-[10px] text-on-surface-variant w-full sm:w-auto">做多限价 −1% · 做空限价 +1% · 30 分钟未成交自动取消</p>
+<p class="text-[10px] text-on-surface-variant w-full sm:w-auto">做多限价 −1% · 做空限价 +1% · 30 分钟未成交自动取消 · 实时价每 5s 刷新</p>
 </div>
 <div class="overflow-x-auto overflow-y-auto flex-1 min-h-0">
 <table class="w-full text-left border-collapse">
@@ -280,6 +280,7 @@
 <th class="px-6 py-4 font-semibold whitespace-nowrap">交易对</th>
 <th class="px-6 py-4 font-semibold text-center whitespace-nowrap">方向</th>
 <th class="px-6 py-4 font-semibold whitespace-nowrap">限价 / 参考价</th>
+<th class="px-6 py-4 font-semibold whitespace-nowrap">实时价</th>
 <th class="px-6 py-4 font-semibold whitespace-nowrap">保证金</th>
 <th class="px-6 py-4 font-semibold whitespace-nowrap">止损 / 止盈</th>
 <th class="px-6 py-4 font-semibold whitespace-nowrap">来源</th>
@@ -288,7 +289,7 @@
 </tr>
 </thead>
 <tbody id="limit-orders-tbody" class="text-sm">
-<tr><td colspan="8" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>
+<tr><td colspan="9" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>
 </tbody>
 </table>
 </div>
@@ -499,21 +500,51 @@ function updateLimitOrderCounts(allOrders) {
     set('limit-count-badge', allOrders.length + ' 笔');
 }
 
-function searchLimitOrders() {
-    if (_allLimitOrders.length) renderLimitOrders(_allLimitOrders);
-    else loadLimitOrders();
+async function searchLimitOrders() {
+    if (_allLimitOrders.length) await renderLimitOrders(_allLimitOrders);
+    else await loadLimitOrders();
 }
 
-function resetLimitOrderSearch() {
+async function resetLimitOrderSearch() {
     var inp = document.getElementById('limit-search-input');
     var sel = document.getElementById('limit-side-filter');
     if (inp) inp.value = '';
     if (sel) sel.value = '';
-    if (_allLimitOrders.length) renderLimitOrders(_allLimitOrders);
-    else loadLimitOrders();
+    if (_allLimitOrders.length) await renderLimitOrders(_allLimitOrders);
+    else await loadLimitOrders();
 }
 
-function renderLimitOrders(allOrders) {
+function resolvePriceFromMap(symbol, priceMap) {
+    var pm = priceMap[symbol];
+    if (!pm && symbol) {
+        var clean = String(symbol).replace(/\//g, '').toUpperCase();
+        for (var k in priceMap) {
+            if (Object.prototype.hasOwnProperty.call(priceMap, k)
+                && String(k).replace(/\//g, '').toUpperCase() === clean) {
+                pm = priceMap[k];
+                break;
+            }
+        }
+    }
+    if (!pm) return null;
+    var pp = (typeof pm === 'object' && pm !== null) ? (pm.price || pm) : pm;
+    var pv = parseFloat(pp);
+    return pv > 0 ? pv : null;
+}
+
+function fmtLimitFillGap(isLong, curPx, limitPx) {
+    if (!curPx || !limitPx) return {text: '--', cls: 'text-on-surface-variant'};
+    if (isLong) {
+        if (curPx <= limitPx) return {text: '可成交', cls: 'text-[#49f4c8]'};
+        var gap = (curPx - limitPx) / curPx * 100;
+        return {text: '高 ' + gap.toFixed(2) + '%', cls: 'text-[#ff716c]'};
+    }
+    if (curPx >= limitPx) return {text: '可成交', cls: 'text-[#49f4c8]'};
+    var gapShort = (limitPx - curPx) / curPx * 100;
+    return {text: '低 ' + gapShort.toFixed(2) + '%', cls: 'text-[#ff716c]'};
+}
+
+async function renderLimitOrders(allOrders) {
     var tbody = document.getElementById('limit-orders-tbody');
     if (!tbody) return;
     _allLimitOrders = allOrders;
@@ -521,13 +552,27 @@ function renderLimitOrders(allOrders) {
     var orders = filterLimitOrders(allOrders);
 
     if (allOrders.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无限价挂单</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无限价挂单</td></tr>';
         return;
     }
     if (orders.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-on-surface-variant text-xs">无匹配限价单</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-on-surface-variant text-xs">无匹配限价单</td></tr>';
         return;
     }
+
+    var symbols = [...new Set(orders.map(function(o) { return o.symbol; }).filter(Boolean))];
+    var priceMap = {};
+    try {
+        var pr = await fetch('/api/futures/prices/batch', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({symbols: symbols})
+        });
+        if (pr.ok) {
+            var pd = await pr.json();
+            priceMap = pd.prices || pd || {};
+        }
+    } catch (e) { /* 无实时价时仍展示限价 */ }
 
     var sourceLabels = {
         'signal_confirm': '信号确认', 'trend_follow': '趋势跟随',
@@ -547,10 +592,17 @@ function renderLimitOrders(allOrders) {
         var dirBg = isLong ? 'bg-[#49f4c8]/20 text-[#49f4c8]' : 'bg-[#ff716c]/20 text-[#ff716c]';
         var dirLabel = isLong ? 'Long' : 'Short';
         var meta = parseOrderNotes(ord.notes);
+        var sym = ord.symbol || '--';
         var limitPx = parseFloat(ord.price) || 0;
         var refPx = parseFloat(meta.ref_price) || 0;
+        var curPx = resolvePriceFromMap(sym, priceMap) || refPx || 0;
+        var fillGap = fmtLimitFillGap(isLong, curPx, limitPx);
+        var curPxClass = 'text-on-surface';
+        if (curPx > 0 && limitPx > 0) {
+            if (isLong) curPxClass = curPx <= limitPx ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+            else curPxClass = curPx >= limitPx ? 'text-[#49f4c8]' : 'text-[#ff716c]';
+        }
         var margin = parseFloat(ord.margin) || parseFloat(meta.margin) || 0;
-        var sym = ord.symbol || '--';
         var abbr = sym.replace('USDT', '').replace('USD', '').substring(0, 4);
         var lvg = ord.leverage || 1;
         var src = ord.order_source || '--';
@@ -578,6 +630,10 @@ function renderLimitOrders(allOrders) {
                 '<div class="font-medium text-on-surface">' + fmtPrice(limitPx) + '</div>' +
                 (refPx > 0 ? '<div class="text-on-surface-variant">参考 ' + fmtPrice(refPx) + '</div>' : '') +
             '</td>' +
+            '<td class="px-6 py-4 monospace text-xs">' +
+                '<div class="font-medium ' + curPxClass + '">' + (curPx > 0 ? fmtPrice(curPx) : '--') + '</div>' +
+                '<div class="text-[10px] ' + fillGap.cls + '">' + fillGap.text + '</div>' +
+            '</td>' +
             '<td class="px-6 py-4 monospace">' + (margin > 0 ? margin.toFixed(2) + ' U' : '--') + '</td>' +
             '<td class="px-6 py-4 text-xs font-mono">' +
                 '<div class="text-[#ff716c]">SL ' + sl + '</div>' +
@@ -603,9 +659,9 @@ async function loadLimitOrders() {
         var res = await fetch('/api/futures/orders?account_id=' + ACCOUNT_ID + '&status=pending&order_type=LIMIT&open_only=true');
         var data = await res.json();
         var list = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
-        renderLimitOrders(list);
+        await renderLimitOrders(list);
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败: ' + e.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败: ' + e.message + '</td></tr>';
     }
 }
 
