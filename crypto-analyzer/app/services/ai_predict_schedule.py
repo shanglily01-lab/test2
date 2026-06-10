@@ -313,3 +313,62 @@ def predict_claim_next_slot(
         now=now,
         log_tag=log_tag,
     )
+
+
+_AI_NEXT_DUE_KEYS: Dict[str, str] = {
+    "gemini_explore": GEMINI_EXPLORE_NEXT_DUE_KEY,
+    "gemini_predict": GEMINI_PREDICT_NEXT_DUE_KEY,
+    "gpt_explore": GPT_EXPLORE_NEXT_DUE_KEY,
+    "gpt_predict": GPT_PREDICT_NEXT_DUE_KEY,
+    "deepseek_explore": DEEPSEEK_EXPLORE_NEXT_DUE_KEY,
+    "deepseek_predict": DEEPSEEK_PREDICT_NEXT_DUE_KEY,
+}
+
+
+def realign_stale_next_due_slots(
+    conn,
+    *,
+    now: Optional[datetime] = None,
+    grace_seconds: int = 90,
+) -> int:
+    """4h→2h 部署后修正偏远的 next_due，避免设置页/日志仍显示 4h 间隔。"""
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    period_s = PREDICT_ROUND_INTERVAL_SECONDS
+    threshold = period_s / 2 + grace_seconds
+    fixed = 0
+
+    with conn.cursor() as cur:
+        for strategy_key, next_due_key in _AI_NEXT_DUE_KEYS.items():
+            stored = _read_setting_dt(cur, next_due_key)
+            if stored is None:
+                continue
+            canonical = next_scheduled_slot(strategy_key, now)
+            drift_s = abs((stored - canonical).total_seconds())
+            if drift_s <= threshold:
+                continue
+            value = canonical.strftime("%Y-%m-%dT%H:%M:%S")
+            cur.execute(
+                """
+                INSERT INTO system_settings
+                  (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES (%s, %s, %s, 'ai_predict_schedule_realign', NOW())
+                ON DUPLICATE KEY UPDATE
+                  setting_value = VALUES(setting_value),
+                  updated_by = 'ai_predict_schedule_realign',
+                  updated_at = NOW()
+                """,
+                (
+                    next_due_key,
+                    value,
+                    (
+                        f"{strategy_key} 下一轮固定槽 UTC "
+                        f"(锚点21:30北京 {_offset_label(STRATEGY_SCHEDULE_OFFSETS[strategy_key])})"
+                    ),
+                ),
+            )
+            logger.info(
+                f"[AI调度校正] {strategy_key}: {stored.isoformat()} → {value} "
+                f"(drift={drift_s / 60:.0f}min)"
+            )
+            fixed += 1
+    return fixed

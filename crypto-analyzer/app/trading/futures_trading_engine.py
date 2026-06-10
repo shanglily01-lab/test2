@@ -1257,7 +1257,7 @@ class FuturesTradingEngine:
                 'manual': '手动平仓',
                 'strategy': '策略平仓',
                 'liquidation': '强制平仓',
-                'MAX_HOLD_TIME': '超时平仓(4小时)',
+                'MAX_HOLD_TIME': '超时平仓(计划持仓到期)',
                 'SCORE_DROPPED': '评分下降平仓',
                 'REVERSE_SIGNAL': '反向信号平仓'
             }

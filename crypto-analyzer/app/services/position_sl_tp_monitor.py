@@ -163,7 +163,7 @@ class PositionSLTPMonitor:
             if entry_price <= 0:
                 continue
 
-            # 计划持仓到期（AI 探索/预测等为 4h）— 与 SmartExitOptimizer 互补；
+            # 计划持仓到期（AI 探索/预测等为 2h）— 与 SmartExitOptimizer 互补；
             # 本服务随 FastAPI 常驻，避免仅 smart_trader 在跑时才到期平仓。
             pct = pos.get("planned_close_time")
             if pct is not None:

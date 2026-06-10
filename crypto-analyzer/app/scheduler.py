@@ -1672,6 +1672,34 @@ class UnifiedDataScheduler:
         # 设置定时任务
         self.schedule_tasks()
 
+        def _realign_ai_next_due():
+            try:
+                from app.utils.config_loader import get_db_config
+                from app.services.ai_predict_schedule import realign_stale_next_due_slots
+                import pymysql
+
+                db_cfg = get_db_config()
+                conn = pymysql.connect(
+                    host=db_cfg["host"],
+                    port=int(db_cfg.get("port", 3306)),
+                    user=db_cfg["user"],
+                    password=db_cfg["password"],
+                    database=db_cfg["database"],
+                    charset="utf8mb4",
+                    cursorclass=pymysql.cursors.DictCursor,
+                )
+                try:
+                    n = realign_stale_next_due_slots(conn)
+                    if n:
+                        conn.commit()
+                        logger.info(f"[AI调度校正] 已修正 {n} 个 stale next_due (4h→2h)")
+                finally:
+                    conn.close()
+            except Exception as e:
+                logger.warning(f"[AI调度校正] 跳过: {e}")
+
+        _realign_ai_next_due()
+
         # 首次采集 — 后台线程执行, 不阻塞 schedule 主循环
         self._run_async_in_thread(self.run_initial_collection)
 
