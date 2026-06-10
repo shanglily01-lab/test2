@@ -115,6 +115,10 @@ class FuturesLimitOrderExecutor:
                                     f"[限价执行器] 超时转市价 {symbol} {side} "
                                     f"限价={limit_price} 等待={elapsed // 60}min"
                                 )
+                            elif result.get('message') == '订单已处理或不存在':
+                                logger.debug(
+                                    f"[限价执行器] 超时转市价跳过 {symbol} {side}（已被其他进程成交）"
+                                )
                             else:
                                 self._cancel_order(
                                     conn, order_id,

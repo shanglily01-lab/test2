@@ -892,12 +892,39 @@ class FuturesTradingEngine:
             logger.warning(f"[市价转单] {sym} 获取市价失败: {e}")
         return None
 
+    def _release_paper_limit_fill_claim(self, cursor, order_id: str) -> None:
+        """认领失败时把 FILLING 还原为 PENDING，便于下次重试。"""
+        cursor.execute(
+            """
+            UPDATE futures_orders
+            SET status='PENDING', updated_at=NOW()
+            WHERE order_id=%s AND status='FILLING'
+            """,
+            (order_id,),
+        )
+
     def fill_paper_limit_order(self, order: Dict, at_market: bool = False) -> Dict:
         """将模拟盘 PENDING 限价单成交为持仓（默认入场价=限价；at_market=True 用当前市价）。"""
         from app.services.paper_limit_entry import parse_order_notes
 
+        pending_order_id = order.get('order_id')
         try:
             cursor = self._get_cursor()
+            if not pending_order_id:
+                return {'success': False, 'message': '订单缺少 order_id'}
+
+            # autocommit=True：必须先原子认领，避免 scheduler + Web 双执行器重复开仓
+            cursor.execute(
+                """
+                UPDATE futures_orders
+                SET status='FILLING', updated_at=NOW()
+                WHERE order_id=%s AND status='PENDING' AND order_type='LIMIT'
+                """,
+                (pending_order_id,),
+            )
+            if cursor.rowcount == 0:
+                return {'success': False, 'message': '订单已处理或不存在'}
+
             account_id = int(order['account_id'])
             symbol = futures_symbol_rating_canonical(order['symbol'])
             side_raw = order['side']
@@ -909,6 +936,7 @@ class FuturesTradingEngine:
             if at_market:
                 market_px = self._resolve_market_entry_price(symbol)
                 if not market_px or market_px <= 0:
+                    self._release_paper_limit_fill_claim(cursor, pending_order_id)
                     return {'success': False, 'message': '无法获取市价，转市价单失败'}
                 entry_price = market_px
             stop_loss_price = Decimal(str(order['stop_loss_price'])) if order.get('stop_loss_price') else None
@@ -937,6 +965,7 @@ class FuturesTradingEngine:
             )
             account = cursor.fetchone()
             if not account:
+                self._release_paper_limit_fill_claim(cursor, pending_order_id)
                 return {'success': False, 'message': f'账户 {account_id} 不存在'}
 
             current_balance = Decimal(str(account['current_balance']))
@@ -948,6 +977,7 @@ class FuturesTradingEngine:
             available_balance = current_balance - frozen_balance
 
             if available_balance < (margin_required + fee):
+                self._release_paper_limit_fill_claim(cursor, pending_order_id)
                 return {'success': False, 'message': '余额不足，无法成交限价单'}
 
             liquidation_price = self.calculate_liquidation_price(
@@ -990,21 +1020,30 @@ class FuturesTradingEngine:
             ))
             position_id = cursor.lastrowid
 
-            pending_order_id = order['order_id']
             cursor.execute(
                 """
                 UPDATE futures_orders
                 SET status='FILLED', position_id=%s,
                     executed_quantity=%s, executed_value=%s,
                     avg_fill_price=%s, fill_time=NOW(), updated_at=NOW()
-                WHERE order_id=%s AND status='PENDING'
+                WHERE order_id=%s AND status='FILLING'
                 """,
                 (position_id, float(quantity), float(notional_value),
                  float(entry_price), pending_order_id),
             )
             if cursor.rowcount == 0:
-                self.connection.rollback()
-                return {'success': False, 'message': '订单已处理或不存在'}
+                # 持仓已插入但状态未更新时，强制标记 FILLED，避免释放 PENDING 后重复开仓
+                cursor.execute(
+                    """
+                    UPDATE futures_orders
+                    SET status='FILLED', position_id=%s,
+                        executed_quantity=%s, executed_value=%s,
+                        avg_fill_price=%s, fill_time=NOW(), updated_at=NOW()
+                    WHERE order_id=%s
+                    """,
+                    (position_id, float(quantity), float(notional_value),
+                     float(entry_price), pending_order_id),
+                )
 
             trade_id = f"T-{uuid.uuid4().hex[:16].upper()}"
             cursor.execute(
@@ -1062,9 +1101,10 @@ class FuturesTradingEngine:
                 'at_market': at_market,
             }
         except Exception as e:
-            if self.connection:
+            if self.connection and pending_order_id:
                 try:
-                    self.connection.rollback()
+                    cur = self._get_cursor()
+                    self._release_paper_limit_fill_claim(cur, pending_order_id)
                 except Exception:
                     pass
             tag = '市价转单' if at_market else '限价成交'

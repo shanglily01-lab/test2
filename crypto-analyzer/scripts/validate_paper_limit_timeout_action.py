@@ -142,10 +142,27 @@ def test_api_and_ui() -> None:
         _ok("设置页 UI 已添加")
 
 
+def test_fill_claim_prevents_double_open() -> None:
+    """fill_paper_limit_order 必须先 PENDING→FILLING 原子认领（防双执行器重复开仓）。"""
+    src = (ROOT / "app/trading/futures_trading_engine.py").read_text(encoding="utf-8")
+    need = [
+        "status='FILLING'",
+        "status='PENDING' AND order_type='LIMIT'",
+        "_release_paper_limit_fill_claim",
+        "WHERE order_id=%s AND status='FILLING'",
+    ]
+    missing = [s for s in need if s not in src]
+    if missing:
+        _fail(f"fill_paper_limit_order 缺少认领逻辑: {missing}")
+    else:
+        _ok("fill_paper_limit_order 含 PENDING→FILLING 原子认领")
+
+
 def test_syntax() -> None:
     paths = [
         "app/services/paper_limit_entry.py",
         "app/services/futures_limit_order_executor.py",
+        "app/trading/futures_trading_engine.py",
         "app/api/system_settings_api.py",
         "scripts/validate_paper_limit_timeout_action.py",
     ]
@@ -161,6 +178,7 @@ def main() -> int:
     print("=== validate_paper_limit_timeout_action ===\n")
     test_timeout_action_getter()
     test_executor_timeout_branches()
+    test_fill_claim_prevents_double_open()
     test_api_and_ui()
     test_syntax()
     print()
