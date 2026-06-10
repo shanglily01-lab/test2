@@ -102,6 +102,9 @@ class TradingServicesUpdate(BaseModel):
     live_whitelist_enabled: Optional[bool] = None        # 白名单可开实仓 (与 TOP50 为或关系)
     stop_loss_pct: Optional[float] = None
     take_profit_pct: Optional[float] = None
+    paper_limit_entry_enabled: Optional[bool] = None
+    paper_limit_long_offset_pct: Optional[float] = None   # 0.1~1.0 表示 0.1%~1%
+    paper_limit_short_offset_pct: Optional[float] = None
 
 
 @router.get("/settings")
@@ -382,6 +385,17 @@ async def update_setting(key: str, data: SystemSetting):
         cursor.close()
         conn.close()
 
+        if key in (
+            'paper_limit_entry_enabled',
+            'paper_limit_long_offset_pct',
+            'paper_limit_short_offset_pct',
+        ):
+            try:
+                from app.services.data_cache_service import invalidate_setting_cache
+                invalidate_setting_cache()
+            except Exception:
+                pass
+
         logger.info(f"[OK] 配置项 {key} 已更新为: {data.setting_value}")
 
         return {
@@ -432,7 +446,10 @@ async def get_trading_services():
                                   'blacklist_level3_enabled',
                                   'live_top50_required',
                                   'live_whitelist_enabled',
-                                  'stop_loss_pct', 'take_profit_pct')
+                                  'stop_loss_pct', 'take_profit_pct',
+                                  'paper_limit_entry_enabled',
+                                  'paper_limit_long_offset_pct',
+                                  'paper_limit_short_offset_pct')
         """)
 
         settings = cursor.fetchall()
@@ -465,6 +482,7 @@ async def get_trading_services():
             'blacklist_level3_enabled': 'blacklist_level3_enabled',
             'live_top50_required': 'live_top50_required',
             'live_whitelist_enabled': 'live_whitelist_enabled',
+            'paper_limit_entry_enabled': 'paper_limit_entry_enabled',
         }
 
         result = {
@@ -495,6 +513,9 @@ async def get_trading_services():
             'live_whitelist_enabled': True,
             'stop_loss_pct': 0.03,
             'take_profit_pct': 0.05,
+            'paper_limit_entry_enabled': True,
+            'paper_limit_long_offset_pct': 0.5,
+            'paper_limit_short_offset_pct': 0.5,
         }
 
         for setting in settings:
@@ -502,6 +523,8 @@ async def get_trading_services():
             if db_key in bool_keys:
                 result[bool_keys[db_key]] = int(float(setting['setting_value'])) == 1
             elif db_key in ('stop_loss_pct', 'take_profit_pct'):
+                result[db_key] = float(setting['setting_value'])
+            elif db_key in ('paper_limit_long_offset_pct', 'paper_limit_short_offset_pct'):
                 result[db_key] = float(setting['setting_value'])
 
         # DB 无 smart_exit_enabled 行时与 smart_trader 运行时一致 (回退 config.yaml)
@@ -858,6 +881,48 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (str(data.take_profit_pct),))
             updates.append(f"止盈: {data.take_profit_pct*100:.1f}%")
+
+        if data.paper_limit_entry_enabled is not None:
+            value = '1' if data.paper_limit_entry_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('paper_limit_entry_enabled', %s,
+                        '模拟盘限价开仓 (1=挂限价单, 0=市价立即成交)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"模拟盘限价开仓: {'启用' if data.paper_limit_entry_enabled else '关闭(市价)'}")
+
+        def _clamp_paper_limit_offset(pct: float) -> float:
+            return max(0.1, min(1.0, float(pct)))
+
+        if data.paper_limit_long_offset_pct is not None:
+            pct = _clamp_paper_limit_offset(data.paper_limit_long_offset_pct)
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('paper_limit_long_offset_pct', %s,
+                        '模拟盘做多限价偏移%% (0.1~1.0，低于市价)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (str(pct),))
+            updates.append(f"做多限价偏移: {pct:g}%")
+
+        if data.paper_limit_short_offset_pct is not None:
+            pct = _clamp_paper_limit_offset(data.paper_limit_short_offset_pct)
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('paper_limit_short_offset_pct', %s,
+                        '模拟盘做空限价偏移%% (0.1~1.0，高于市价)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (str(pct),))
+            updates.append(f"做空限价偏移: {pct:g}%")
 
         conn.commit()
         cursor.close()

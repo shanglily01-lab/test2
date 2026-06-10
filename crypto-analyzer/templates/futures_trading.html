@@ -271,7 +271,7 @@
   <button type="button" onclick="resetLimitOrderSearch()"
     class="px-3 py-1.5 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-xs text-on-surface-variant hover:text-on-surface transition-colors">重置</button>
 </div>
-<p class="text-[10px] text-on-surface-variant w-full sm:w-auto">做多限价 −0.5% · 做空限价 +0.5% · 30 分钟未成交自动取消 · 实时价每 5s 刷新</p>
+<p id="limit-order-hint" class="text-[10px] text-on-surface-variant w-full sm:w-auto">做多限价 −0.5% · 做空限价 +0.5% · 30 分钟未成交自动取消 · 实时价每 5s 刷新</p>
 </div>
 <div class="overflow-x-auto overflow-y-auto flex-1 min-h-0">
 <table class="w-full text-left border-collapse">
@@ -1126,9 +1126,30 @@ async function closePosition(id, symbol) {
 
 // ---- 主加载函数 ----
 
+async function loadPaperLimitSettingsHint() {
+    var el = document.getElementById('limit-order-hint');
+    if (!el) return;
+    try {
+        var res = await fetch('/api/system/trading-services');
+        if (!res.ok) return;
+        var json = await res.json();
+        var svc = json.data || json;
+        if (svc.paper_limit_entry_enabled === false) {
+            el.textContent = '限价开仓已关闭（系统设置）· 新单将市价成交 · 已有挂单仍按原价等待';
+            return;
+        }
+        var longPct = parseFloat(svc.paper_limit_long_offset_pct);
+        var shortPct = parseFloat(svc.paper_limit_short_offset_pct);
+        if (isNaN(longPct)) longPct = 0.5;
+        if (isNaN(shortPct)) shortPct = 0.5;
+        el.textContent = '做多限价 −' + longPct + '% · 做空限价 +' + shortPct + '% · 30 分钟未成交自动取消 · 实时价每 5s 刷新';
+    } catch (e) { /* 保留默认文案 */ }
+}
+
 async function loadAll() {
     var posResult = await loadPositions();
     loadStats(posResult);
+    loadPaperLimitSettingsHint();
     loadLimitOrders();
     await loadAccountInfo();
     await loadTradingStatus();

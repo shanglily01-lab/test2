@@ -1,4 +1,4 @@
-"""模拟盘限价开仓 — 做多 -0.5%、做空 +0.5%，30 分钟有效。"""
+"""模拟盘限价开仓 — 偏移与开关由 system_settings 控制，30 分钟有效。"""
 from __future__ import annotations
 
 import json
@@ -14,9 +14,15 @@ from app.utils.futures_symbol import futures_symbol_rating_canonical
 # 模拟盘默认账户
 PAPER_ACCOUNT_ID = 2
 
-# 限价偏移：做多低于市价 0.5%，做空高于市价 0.5%
-PAPER_LIMIT_LONG_OFFSET = Decimal("0.005")
-PAPER_LIMIT_SHORT_OFFSET = Decimal("0.005")
+# 默认限价偏移（百分比点数，0.5 = 0.5%）
+DEFAULT_PAPER_LIMIT_LONG_OFFSET_PCT = 0.5
+DEFAULT_PAPER_LIMIT_SHORT_OFFSET_PCT = 0.5
+PAPER_LIMIT_OFFSET_MIN_PCT = 0.1
+PAPER_LIMIT_OFFSET_MAX_PCT = 1.0
+
+# 向后兼容：模块级常量回退默认值
+PAPER_LIMIT_LONG_OFFSET = Decimal(str(DEFAULT_PAPER_LIMIT_LONG_OFFSET_PCT / 100))
+PAPER_LIMIT_SHORT_OFFSET = Decimal(str(DEFAULT_PAPER_LIMIT_SHORT_OFFSET_PCT / 100))
 
 # 挂单有效期（分钟）
 PAPER_LIMIT_TIMEOUT_MINUTES = 30
@@ -25,12 +31,53 @@ PAPER_LIMIT_TIMEOUT_MINUTES = 30
 PAPER_LIMIT_MIN_FILL_AGE_SEC = 60
 
 
+def _clamp_offset_pct(pct: float) -> float:
+    return max(PAPER_LIMIT_OFFSET_MIN_PCT, min(PAPER_LIMIT_OFFSET_MAX_PCT, pct))
+
+
+def is_paper_limit_entry_enabled() -> bool:
+    """模拟盘限价开仓总开关 (system_settings.paper_limit_entry_enabled，默认开)。"""
+    from app.services.data_cache_service import get_setting
+    val = get_setting("paper_limit_entry_enabled", "1")
+    return str(val).strip().lower() in ("1", "true", "yes")
+
+
+def get_paper_limit_long_offset_pct() -> float:
+    """做多限价偏移百分比点数 (0.1~1.0)。"""
+    from app.services.data_cache_service import get_setting
+    raw = get_setting("paper_limit_long_offset_pct", str(DEFAULT_PAPER_LIMIT_LONG_OFFSET_PCT))
+    try:
+        return _clamp_offset_pct(float(raw))
+    except (TypeError, ValueError):
+        return DEFAULT_PAPER_LIMIT_LONG_OFFSET_PCT
+
+
+def get_paper_limit_short_offset_pct() -> float:
+    """做空限价偏移百分比点数 (0.1~1.0)。"""
+    from app.services.data_cache_service import get_setting
+    raw = get_setting("paper_limit_short_offset_pct", str(DEFAULT_PAPER_LIMIT_SHORT_OFFSET_PCT))
+    try:
+        return _clamp_offset_pct(float(raw))
+    except (TypeError, ValueError):
+        return DEFAULT_PAPER_LIMIT_SHORT_OFFSET_PCT
+
+
+def get_paper_limit_long_offset() -> Decimal:
+    return Decimal(str(get_paper_limit_long_offset_pct() / 100))
+
+
+def get_paper_limit_short_offset() -> Decimal:
+    return Decimal(str(get_paper_limit_short_offset_pct() / 100))
+
+
 def calc_paper_limit_price(side: str, ref_price: float) -> float:
-    """根据参考价计算模拟盘限价。"""
+    """根据参考价与系统设置计算模拟盘限价。"""
     px = Decimal(str(ref_price))
     if side.upper() == "LONG":
-        return float((px * (Decimal("1") - PAPER_LIMIT_LONG_OFFSET)).quantize(Decimal("0.00000001")))
-    return float((px * (Decimal("1") + PAPER_LIMIT_SHORT_OFFSET)).quantize(Decimal("0.00000001")))
+        off = get_paper_limit_long_offset()
+        return float((px * (Decimal("1") - off)).quantize(Decimal("0.00000001")))
+    off = get_paper_limit_short_offset()
+    return float((px * (Decimal("1") + off)).quantize(Decimal("0.00000001")))
 
 
 def _calc_sl_tp(side: str, limit_price: float, sl_pct: Optional[float], tp_pct: Optional[float],
@@ -108,9 +155,34 @@ def create_paper_limit_order(
         logger.error(f"[限价开仓] 无效方向 {side}")
         return None
 
+    if not is_paper_limit_entry_enabled():
+        return _open_paper_market_position(
+            conn,
+            symbol=symbol,
+            side=side,
+            ref_price=ref_price,
+            source=source,
+            leverage=leverage,
+            margin=margin,
+            quantity=quantity,
+            stop_loss_pct=stop_loss_pct,
+            take_profit_pct=take_profit_pct,
+            stop_loss_price=stop_loss_price,
+            take_profit_price=take_profit_price,
+            entry_signal_type=entry_signal_type,
+            entry_reason=entry_reason,
+            entry_score=entry_score,
+            signal_id=signal_id,
+            strategy_id=strategy_id,
+            account_id=account_id,
+        )
+
     if has_pending_paper_limit_order(conn, symbol, side, source, account_id):
         logger.info(f"[限价开仓] 跳过 {symbol} {side} source={source}: 已有挂单")
         return None
+
+    long_off = get_paper_limit_long_offset()
+    short_off = get_paper_limit_short_offset()
 
     # 用最新市价重算限价，确保做多限价低于市价、做空限价高于市价
     market_ref = float(ref_price)
@@ -126,9 +198,9 @@ def create_paper_limit_order(
 
     limit_price = calc_paper_limit_price(side, market_ref)
     if side == "LONG" and limit_price >= market_ref:
-        limit_price = float(Decimal(str(market_ref)) * (Decimal("1") - PAPER_LIMIT_LONG_OFFSET))
+        limit_price = float(Decimal(str(market_ref)) * (Decimal("1") - long_off))
     elif side == "SHORT" and limit_price <= market_ref:
-        limit_price = float(Decimal(str(market_ref)) * (Decimal("1") + PAPER_LIMIT_SHORT_OFFSET))
+        limit_price = float(Decimal(str(market_ref)) * (Decimal("1") + short_off))
     sl_price, tp_price = _calc_sl_tp(
         side, limit_price, stop_loss_pct, take_profit_pct, stop_loss_price, take_profit_price,
     )
@@ -202,13 +274,93 @@ def create_paper_limit_order(
 
         logger.info(
             f"[限价开仓] 挂单 {symbol} {side} @ {limit_price:.6g} "
-            f"(市价 {market_ref:.6g}, 有效期 {timeout_minutes}min, "
-            f"最早成交 {PAPER_LIMIT_MIN_FILL_AGE_SEC}s 后) "
+            f"(市价 {market_ref:.6g}, 多−{get_paper_limit_long_offset_pct():g}%/空+{get_paper_limit_short_offset_pct():g}%, "
+            f"有效期 {timeout_minutes}min, 最早成交 {PAPER_LIMIT_MIN_FILL_AGE_SEC}s 后) "
             f"SL={sl_price} TP={tp_price} qty={quantity} source={source} order_db_id={db_id}"
         )
         return db_id
     except Exception as e:
         logger.error(f"[限价开仓] 创建失败 {symbol} {side}: {e}")
+        return None
+
+
+def _open_paper_market_position(
+    conn,
+    *,
+    symbol: str,
+    side: str,
+    ref_price: float,
+    source: str,
+    leverage: int,
+    margin: float,
+    quantity: Optional[float],
+    stop_loss_pct: Optional[float],
+    take_profit_pct: Optional[float],
+    stop_loss_price: Optional[float],
+    take_profit_price: Optional[float],
+    entry_signal_type: str,
+    entry_reason: str,
+    entry_score: Optional[float],
+    signal_id: Optional[int],
+    strategy_id: Optional[int],
+    account_id: int,
+) -> Optional[int]:
+    """限价开关关闭时，模拟盘改市价立即开仓。"""
+    side = side.upper()
+    market_ref = float(ref_price)
+    try:
+        from app.utils.futures_price import get_futures_trade_price
+        fresh = get_futures_trade_price(
+            conn, symbol, max_age_seconds=30, log_tag="paper_market_entry", require_fresh=False,
+        )
+        if fresh and fresh > 0:
+            market_ref = float(fresh)
+    except Exception as e:
+        logger.debug(f"[市价开仓] {symbol} 刷新市价失败，用参考价: {e}")
+
+    if quantity is None or quantity <= 0:
+        notional = margin * leverage
+        quantity = round(notional / market_ref, 6) if market_ref > 0 else 0
+    if quantity <= 0:
+        logger.error(f"[市价开仓] {symbol} {side} 数量非正")
+        return None
+
+    try:
+        from app.utils.config_loader import get_db_config
+        from app.trading.futures_trading_engine import FuturesTradingEngine
+
+        engine = FuturesTradingEngine(get_db_config())
+        result = engine.open_position(
+            account_id=account_id,
+            symbol=symbol,
+            position_side=side,
+            quantity=Decimal(str(quantity)),
+            leverage=leverage,
+            limit_price=None,
+            stop_loss_pct=Decimal(str(stop_loss_pct)) if stop_loss_pct is not None else None,
+            take_profit_pct=Decimal(str(take_profit_pct)) if take_profit_pct is not None else None,
+            stop_loss_price=Decimal(str(stop_loss_price)) if stop_loss_price is not None else None,
+            take_profit_price=Decimal(str(take_profit_price)) if take_profit_price is not None else None,
+            source=source,
+            signal_id=signal_id,
+            strategy_id=strategy_id,
+            entry_signal_type=entry_signal_type or source,
+            entry_reason=entry_reason,
+            entry_score=entry_score,
+        )
+        if not result.get("success"):
+            logger.warning(
+                f"[市价开仓] {symbol} {side} source={source} 失败: {result.get('message')}"
+            )
+            return None
+        pos_id = result.get("position_id")
+        logger.info(
+            f"[市价开仓] {symbol} {side} @ {market_ref:.6g} "
+            f"qty={quantity} source={source} position_id={pos_id} (限价开关已关)"
+        )
+        return int(pos_id) if pos_id else None
+    except Exception as e:
+        logger.error(f"[市价开仓] {symbol} {side} 异常: {e}")
         return None
 
 

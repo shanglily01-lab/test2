@@ -398,8 +398,9 @@ class FuturesTradingEngine:
                 PAPER_ACCOUNT_ID,
                 PAPER_LIMIT_TIMEOUT_MINUTES,
                 calc_paper_limit_price,
+                is_paper_limit_entry_enabled,
             )
-            paper_limit_mode = account_id == PAPER_ACCOUNT_ID
+            paper_limit_mode = account_id == PAPER_ACCOUNT_ID and is_paper_limit_entry_enabled()
             if paper_limit_mode and (not limit_price or limit_price <= 0):
                 limit_price = Decimal(str(calc_paper_limit_price(position_side, float(current_price))))
 
