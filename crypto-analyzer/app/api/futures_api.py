@@ -880,6 +880,113 @@ async def cancel_order(order_id: str, account_id: int = 2, reason: str = 'manual
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _fetch_pending_limit_open_order(cursor, order_id: str, account_id: int) -> Dict:
+    """加载可转市价的 PENDING 限价开仓单。"""
+    cursor.execute(
+        """
+        SELECT * FROM futures_orders
+        WHERE order_id = %s AND account_id = %s
+          AND status = 'PENDING' AND order_type = 'LIMIT'
+          AND side IN ('OPEN_LONG', 'OPEN_SHORT')
+        LIMIT 1
+        """,
+        (order_id, account_id),
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="限价单不存在或不可转市价")
+    return row
+
+
+@router.post('/orders/{order_id}/convert-market')
+async def convert_limit_order_to_market(order_id: str, account_id: int = 2):
+    """
+    将单笔 PENDING 限价开仓单按当前市价立即成交（手动转市价单）。
+    """
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        order = _fetch_pending_limit_open_order(cursor, order_id, account_id)
+        cursor.close()
+
+        result = engine.fill_paper_limit_order(order, at_market=True)
+        if not result.get('success'):
+            raise HTTPException(status_code=400, detail=result.get('message') or '转市价单失败')
+
+        return {
+            'success': True,
+            'message': f"{order['symbol']} 已按市价成交",
+            'data': result,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"转市价单失败 {order_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post('/orders/convert-all-market')
+async def convert_all_limit_orders_to_market(account_id: int = 2):
+    """
+    一键将账户下所有 PENDING 限价开仓单按当前市价成交。
+    """
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor(pymysql.cursors.DictCursor)
+        cursor.execute(
+            """
+            SELECT * FROM futures_orders
+            WHERE account_id = %s AND status = 'PENDING'
+              AND order_type = 'LIMIT'
+              AND side IN ('OPEN_LONG', 'OPEN_SHORT')
+            ORDER BY created_at ASC
+            LIMIT 100
+            """,
+            (account_id,),
+        )
+        orders = cursor.fetchall()
+        cursor.close()
+
+        converted = []
+        failed = []
+        for order in orders:
+            oid = order.get('order_id')
+            sym = order.get('symbol')
+            try:
+                result = engine.fill_paper_limit_order(order, at_market=True)
+                if result.get('success'):
+                    converted.append({
+                        'order_id': oid,
+                        'symbol': sym,
+                        'fill_price': result.get('fill_price'),
+                        'position_id': result.get('position_id'),
+                    })
+                else:
+                    failed.append({
+                        'order_id': oid,
+                        'symbol': sym,
+                        'message': result.get('message') or '转市价失败',
+                    })
+            except Exception as e:
+                failed.append({'order_id': oid, 'symbol': sym, 'message': str(e)})
+
+        return {
+            'success': len(failed) == 0,
+            'message': f"已转市价 {len(converted)} 笔" + (f"，失败 {len(failed)} 笔" if failed else ''),
+            'converted_count': len(converted),
+            'failed_count': len(failed),
+            'converted': converted,
+            'failed': failed,
+        }
+    except Exception as e:
+        logger.error(f"一键转市价失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== 平仓 ====================
 
 @router.post('/close/{position_id}')

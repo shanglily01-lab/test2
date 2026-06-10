@@ -871,8 +871,29 @@ class FuturesTradingEngine:
                 'message': f"开仓失败: {str(e)}"
             }
 
-    def fill_paper_limit_order(self, order: Dict) -> Dict:
-        """将模拟盘 PENDING 限价单成交为持仓（入场价=限价）。"""
+    def _resolve_market_entry_price(self, symbol: str) -> Optional[Decimal]:
+        """获取模拟盘市价成交价（转市价单 / 立即成交用）。"""
+        sym = futures_symbol_rating_canonical(symbol)
+        try:
+            from app.utils.futures_price import get_futures_trade_price
+            fresh = get_futures_trade_price(
+                self.connection, sym, max_age_seconds=30,
+                log_tag="limit_to_market", require_fresh=False,
+            )
+            if fresh and fresh > 0:
+                return Decimal(str(fresh))
+        except Exception as e:
+            logger.debug(f"[市价转单] {sym} get_futures_trade_price 失败: {e}")
+        try:
+            px = self.get_current_price(sym, use_realtime=True)
+            if px and px > 0:
+                return Decimal(str(px))
+        except Exception as e:
+            logger.warning(f"[市价转单] {sym} 获取市价失败: {e}")
+        return None
+
+    def fill_paper_limit_order(self, order: Dict, at_market: bool = False) -> Dict:
+        """将模拟盘 PENDING 限价单成交为持仓（默认入场价=限价；at_market=True 用当前市价）。"""
         from app.services.paper_limit_entry import parse_order_notes
 
         try:
@@ -883,7 +904,13 @@ class FuturesTradingEngine:
             position_side = 'LONG' if side_raw == 'OPEN_LONG' else 'SHORT'
             quantity = round_quantity(Decimal(str(order['quantity'])), symbol)
             leverage = int(order.get('leverage') or 1)
-            entry_price = Decimal(str(order['price']))
+            limit_price = Decimal(str(order['price']))
+            entry_price = limit_price
+            if at_market:
+                market_px = self._resolve_market_entry_price(symbol)
+                if not market_px or market_px <= 0:
+                    return {'success': False, 'message': '无法获取市价，转市价单失败'}
+                entry_price = market_px
             stop_loss_price = Decimal(str(order['stop_loss_price'])) if order.get('stop_loss_price') else None
             take_profit_price = Decimal(str(order['take_profit_price'])) if order.get('take_profit_price') else None
             source = order.get('order_source') or 'manual'
@@ -891,7 +918,10 @@ class FuturesTradingEngine:
             signal_id = order.get('signal_id')
             strategy_id = order.get('strategy_id')
             meta = parse_order_notes(order.get('notes'))
-            entry_reason = meta.get('entry_reason') or order.get('notes') or '限价单成交'
+            if at_market:
+                entry_reason = meta.get('entry_reason') or '手动转市价单'
+            else:
+                entry_reason = meta.get('entry_reason') or order.get('notes') or '限价单成交'
             entry_score = meta.get('entry_score')
             max_hold_minutes = meta.get('max_hold_minutes')
             planned_close_time = meta.get('planned_close_time')
@@ -920,7 +950,7 @@ class FuturesTradingEngine:
             if available_balance < (margin_required + fee):
                 return {'success': False, 'message': '余额不足，无法成交限价单'}
 
-            liquidation_price = self._calculate_liquidation_price(
+            liquidation_price = self.calculate_liquidation_price(
                 entry_price, position_side, leverage,
             )
             entry_ema_diff = self.get_ema_diff(symbol, '15m')
@@ -1018,18 +1048,29 @@ class FuturesTradingEngine:
             )
             self.connection.commit()
 
+            tag = '市价转单' if at_market else '限价成交'
+            extra = f" 限价={limit_price}" if at_market else ''
             logger.info(
-                f"[限价成交] {symbol} {position_side} {float(quantity)} @ {entry_price} "
-                f"position_id={position_id} order={pending_order_id}"
+                f"[{tag}] {symbol} {position_side} {float(quantity)} @ {entry_price}"
+                f"{extra} position_id={position_id} order={pending_order_id}"
             )
-            return {'success': True, 'position_id': position_id, 'order_id': pending_order_id}
+            return {
+                'success': True,
+                'position_id': position_id,
+                'order_id': pending_order_id,
+                'fill_price': float(entry_price),
+                'at_market': at_market,
+            }
         except Exception as e:
             if self.connection:
                 try:
                     self.connection.rollback()
                 except Exception:
                     pass
-            logger.error(f"[限价成交] 失败: {e}")
+            tag = '市价转单' if at_market else '限价成交'
+            logger.error(f"[{tag}] 失败 {order.get('symbol')}: {e}")
+            import traceback
+            logger.debug(traceback.format_exc())
             return {'success': False, 'message': str(e)}
 
     def close_position(

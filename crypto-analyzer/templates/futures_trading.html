@@ -270,6 +270,10 @@
   </button>
   <button type="button" onclick="resetLimitOrderSearch()"
     class="px-3 py-1.5 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-xs text-on-surface-variant hover:text-on-surface transition-colors">重置</button>
+  <button type="button" onclick="convertAllLimitOrdersToMarket()"
+    class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-secondary/20 text-secondary border border-secondary/30 text-xs font-bold hover:bg-secondary/30 transition-colors">
+    <span class="material-symbols-outlined text-[16px]">bolt</span>一键转市价
+  </button>
 </div>
 <p id="limit-order-hint" class="text-[10px] text-on-surface-variant w-full sm:w-auto">做多限价 −0.5% · 做空限价 +0.5% · 30 分钟未成交自动取消 · 实时价每 5s 刷新</p>
 </div>
@@ -398,6 +402,16 @@ function fmtDuration(openT, closeT) {
         if (h > 0) return h + 'H' + m + 'M';
         return m + 'M';
     } catch(e) { return '--'; }
+}
+
+function apiErrorMessage(data, fallback) {
+    if (!data) return fallback || '请求失败';
+    var d = data.detail;
+    if (typeof d === 'string') return d;
+    if (Array.isArray(d) && d.length) {
+        return d.map(function(x) { return x.msg || x.message || JSON.stringify(x); }).join('; ');
+    }
+    return data.message || fallback || '请求失败';
 }
 
 function showToast(msg, type) {
@@ -653,8 +667,12 @@ async function renderLimitOrders(allOrders) {
                 '<div class="text-[10px] text-secondary">' + remain + '</div>' +
             '</td>' +
             '<td class="px-6 py-4">' +
-                '<button onclick="cancelLimitOrder(\'' + oid.replace(/'/g, "\\'") + '\', \'' + sym.replace(/'/g, "\\'") + '\')" ' +
-                    'class="px-3 py-1.5 bg-surface-container-highest hover:bg-error/10 text-error border border-error/20 rounded-lg text-xs font-bold transition-all">撤单</button>' +
+                '<div class="flex flex-wrap items-center gap-1.5">' +
+                    '<button onclick="convertLimitOrderToMarket(\'' + oid.replace(/'/g, "\\'") + '\', \'' + sym.replace(/'/g, "\\'") + '\')" ' +
+                        'class="px-2.5 py-1.5 bg-secondary/15 hover:bg-secondary/25 text-secondary border border-secondary/25 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap">转市价</button>' +
+                    '<button onclick="cancelLimitOrder(\'' + oid.replace(/'/g, "\\'") + '\', \'' + sym.replace(/'/g, "\\'") + '\')" ' +
+                        'class="px-2.5 py-1.5 bg-surface-container-highest hover:bg-error/10 text-error border border-error/20 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap">撤单</button>' +
+                '</div>' +
             '</td>' +
         '</tr>';
     }).join('');
@@ -690,6 +708,60 @@ async function cancelLimitOrder(orderId, symbol) {
         }
     } catch (e) {
         showToast('撤单失败: ' + e.message, 'error');
+    }
+}
+
+async function convertLimitOrderToMarket(orderId, symbol) {
+    if (!orderId) { showToast('订单ID无效', 'error'); return; }
+    var ok = await showConfirm(
+        '将 ' + symbol + ' 限价单按当前市价立即成交？\n限价单将被取消并转为持仓。',
+        {title: '确认转市价', confirmText: '转市价', type: 'warning'}
+    );
+    if (!ok) return;
+    try {
+        var res = await fetch(
+            '/api/futures/orders/' + encodeURIComponent(orderId) + '/convert-market?account_id=' + ACCOUNT_ID,
+            {method: 'POST'}
+        );
+        var data = await res.json();
+        if (res.ok && data.success !== false) {
+            var fp = data.data && data.data.fill_price;
+            showToast(symbol + ' 已转市价' + (fp ? ' @ ' + fp : ''), 'success');
+            setTimeout(function() { loadLimitOrders(); loadPositions(); }, 400);
+        } else {
+            throw new Error(apiErrorMessage(data, '转市价失败'));
+        }
+    } catch (e) {
+        showToast('转市价失败: ' + e.message, 'error');
+    }
+}
+
+async function convertAllLimitOrdersToMarket() {
+    var cnt = (_allLimitOrders && _allLimitOrders.length) ? _allLimitOrders.length : 0;
+    if (cnt === 0) {
+        showToast('当前没有可转的限价单', 'error');
+        return;
+    }
+    var ok = await showConfirm(
+        '将 ' + cnt + ' 笔限价单全部按当前市价成交？\n此操作不可撤销。',
+        {title: '确认一键转市价', confirmText: '全部转市价', type: 'warning'}
+    );
+    if (!ok) return;
+    try {
+        var res = await fetch('/api/futures/orders/convert-all-market?account_id=' + ACCOUNT_ID, {
+            method: 'POST'
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(apiErrorMessage(data, '一键转市价失败'));
+        var msg = data.message || ('已转 ' + (data.converted_count || 0) + ' 笔');
+        if (data.failed_count > 0) {
+            showToast(msg, 'error');
+        } else {
+            showToast(msg, 'success');
+        }
+        setTimeout(function() { loadLimitOrders(); loadPositions(); }, 400);
+    } catch (e) {
+        showToast('一键转市价失败: ' + e.message, 'error');
     }
 }
 
