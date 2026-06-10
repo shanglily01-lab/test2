@@ -394,11 +394,23 @@ class FuturesTradingEngine:
                 }
 
             # 1.5. 检查限价单逻辑
+            from app.services.paper_limit_entry import (
+                PAPER_ACCOUNT_ID,
+                PAPER_LIMIT_TIMEOUT_MINUTES,
+                calc_paper_limit_price,
+            )
+            paper_limit_mode = account_id == PAPER_ACCOUNT_ID
+            if paper_limit_mode and (not limit_price or limit_price <= 0):
+                limit_price = Decimal(str(calc_paper_limit_price(position_side, float(current_price))))
+
             logger.info(f"[开仓] {symbol} {position_side} 收到 limit_price={limit_price}, current_price={current_price}")
             # 如果设置了限价，检查是否需要创建未成交订单
             if limit_price and limit_price > 0:
                 should_create_pending_order = False
-                if position_side == 'LONG':
+                if paper_limit_mode:
+                    # 模拟盘：始终挂限价单，不直接成交
+                    should_create_pending_order = True
+                elif position_side == 'LONG':
                     # 做多：当前价格高于限价，则创建未成交订单
                     if current_price > limit_price:
                         should_create_pending_order = True
@@ -478,6 +490,15 @@ class FuturesTradingEngine:
 
                     # 限价单不冻结保证金，只在成交时扣除
                     # 只记录订单，不修改账户余额
+                    import json as _json
+                    order_notes = None
+                    if paper_limit_mode:
+                        order_notes = _json.dumps({
+                            "timeout_minutes": PAPER_LIMIT_TIMEOUT_MINUTES,
+                            "ref_price": float(current_price),
+                            "margin": float(limit_margin_required),
+                            "entry_reason": entry_reason,
+                        }, ensure_ascii=False)
                     
                     # 创建订单记录（包含止盈止损、策略ID和开仓原因）
                     order_sql = """
@@ -488,7 +509,8 @@ class FuturesTradingEngine:
                             margin, total_value, executed_value,
                             fee, fee_rate, status,
                             stop_loss_price, take_profit_price,
-                            order_source, entry_signal_type, signal_id, strategy_id, created_at
+                            order_source, entry_signal_type, signal_id, strategy_id,
+                            notes, created_at
                         ) VALUES (
                             %s, %s, %s,
                             %s, 'LIMIT', %s,
@@ -496,7 +518,8 @@ class FuturesTradingEngine:
                             %s, %s, 0,
                             %s, %s, 'PENDING',
                             %s, %s,
-                            %s, %s, %s, %s, %s
+                            %s, %s, %s, %s,
+                            %s, %s
                         )
                     """
 
@@ -508,7 +531,8 @@ class FuturesTradingEngine:
                         float(limit_fee), float(Decimal('0.0004')),
                         float(limit_stop_loss_price) if limit_stop_loss_price else None,
                         float(limit_take_profit_price) if limit_take_profit_price else None,
-                        source, entry_signal_type, signal_id, strategy_id, datetime.now()
+                        source, entry_signal_type, signal_id, strategy_id,
+                        order_notes, datetime.now()
                     ))
                     
                     # 更新总权益（限价单时还没有持仓，未实现盈亏为0）
@@ -835,6 +859,167 @@ class FuturesTradingEngine:
                 'error': str(e),
                 'message': f"开仓失败: {str(e)}"
             }
+
+    def fill_paper_limit_order(self, order: Dict) -> Dict:
+        """将模拟盘 PENDING 限价单成交为持仓（入场价=限价）。"""
+        from app.services.paper_limit_entry import parse_order_notes
+
+        try:
+            cursor = self._get_cursor()
+            account_id = int(order['account_id'])
+            symbol = futures_symbol_rating_canonical(order['symbol'])
+            side_raw = order['side']
+            position_side = 'LONG' if side_raw == 'OPEN_LONG' else 'SHORT'
+            quantity = round_quantity(Decimal(str(order['quantity'])), symbol)
+            leverage = int(order.get('leverage') or 1)
+            entry_price = Decimal(str(order['price']))
+            stop_loss_price = Decimal(str(order['stop_loss_price'])) if order.get('stop_loss_price') else None
+            take_profit_price = Decimal(str(order['take_profit_price'])) if order.get('take_profit_price') else None
+            source = order.get('order_source') or 'manual'
+            entry_signal_type = order.get('entry_signal_type')
+            signal_id = order.get('signal_id')
+            strategy_id = order.get('strategy_id')
+            meta = parse_order_notes(order.get('notes'))
+            entry_reason = meta.get('entry_reason') or order.get('notes') or '限价单成交'
+            entry_score = meta.get('entry_score')
+            max_hold_minutes = meta.get('max_hold_minutes')
+            planned_close_time = meta.get('planned_close_time')
+            if planned_close_time and isinstance(planned_close_time, str):
+                try:
+                    planned_close_time = datetime.strptime(planned_close_time, '%Y-%m-%d %H:%M:%S')
+                except Exception:
+                    planned_close_time = None
+
+            cursor.execute(
+                "SELECT current_balance, frozen_balance FROM futures_trading_accounts WHERE id = %s",
+                (account_id,),
+            )
+            account = cursor.fetchone()
+            if not account:
+                return {'success': False, 'message': f'账户 {account_id} 不存在'}
+
+            current_balance = Decimal(str(account['current_balance']))
+            frozen_balance = Decimal(str(account.get('frozen_balance', 0) or 0))
+            notional_value = entry_price * quantity
+            margin_required = notional_value / Decimal(leverage)
+            fee_rate = Decimal('0.0004')
+            fee = notional_value * fee_rate
+            available_balance = current_balance - frozen_balance
+
+            if available_balance < (margin_required + fee):
+                return {'success': False, 'message': '余额不足，无法成交限价单'}
+
+            liquidation_price = self._calculate_liquidation_price(
+                entry_price, position_side, leverage,
+            )
+            entry_ema_diff = self.get_ema_diff(symbol, '15m')
+
+            timeout_at = None
+            if max_hold_minutes:
+                timeout_at = datetime.now() + timedelta(minutes=int(max_hold_minutes))
+
+            position_sql = """
+                INSERT INTO futures_positions (
+                    account_id, symbol, position_side, leverage,
+                    quantity, notional_value, margin,
+                    entry_price, mark_price, liquidation_price,
+                    stop_loss_price, take_profit_price,
+                    entry_ema_diff, entry_signal_type, entry_score, entry_reason,
+                    max_hold_minutes, timeout_at, planned_close_time,
+                    open_time, source, signal_id, strategy_id, status
+                ) VALUES (
+                    %s, %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s, %s,
+                    %s, %s, %s, %s, 'open'
+                )
+            """
+            cursor.execute(position_sql, (
+                account_id, symbol, position_side, leverage,
+                float(quantity), float(notional_value), float(margin_required),
+                float(entry_price), float(entry_price), float(liquidation_price),
+                float(stop_loss_price) if stop_loss_price else None,
+                float(take_profit_price) if take_profit_price else None,
+                entry_ema_diff, entry_signal_type, entry_score, entry_reason,
+                max_hold_minutes, timeout_at, planned_close_time,
+                datetime.now(), source, signal_id, strategy_id,
+            ))
+            position_id = cursor.lastrowid
+
+            pending_order_id = order['order_id']
+            cursor.execute(
+                """
+                UPDATE futures_orders
+                SET status='FILLED', position_id=%s,
+                    executed_quantity=%s, executed_value=%s,
+                    avg_fill_price=%s, fill_time=NOW(), updated_at=NOW()
+                WHERE order_id=%s AND status='PENDING'
+                """,
+                (position_id, float(quantity), float(notional_value),
+                 float(entry_price), pending_order_id),
+            )
+            if cursor.rowcount == 0:
+                self.connection.rollback()
+                return {'success': False, 'message': '订单已处理或不存在'}
+
+            trade_id = f"T-{uuid.uuid4().hex[:16].upper()}"
+            cursor.execute(
+                """
+                INSERT INTO futures_trades (
+                    account_id, order_id, position_id, trade_id,
+                    symbol, side, price, quantity, notional_value,
+                    leverage, margin, fee, fee_rate,
+                    entry_price, trade_time
+                ) VALUES (
+                    %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s,
+                    %s, %s
+                )
+                """,
+                (
+                    account_id, pending_order_id, position_id, trade_id,
+                    symbol, side_raw, float(entry_price), float(quantity), float(notional_value),
+                    leverage, float(margin_required), float(fee), float(fee_rate),
+                    float(entry_price), datetime.now(),
+                ),
+            )
+
+            new_balance = current_balance - margin_required - fee
+            cursor.execute(
+                """UPDATE futures_trading_accounts
+                SET current_balance=%s, frozen_balance=frozen_balance+%s
+                WHERE id=%s""",
+                (float(new_balance), float(margin_required), account_id),
+            )
+            cursor.execute(
+                """UPDATE futures_trading_accounts a
+                SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
+                    SELECT SUM(p.unrealized_pnl)
+                    FROM futures_positions p
+                    WHERE p.account_id = a.id AND p.status = 'open'
+                ), 0)
+                WHERE a.id = %s""",
+                (account_id,),
+            )
+            self.connection.commit()
+
+            logger.info(
+                f"[限价成交] {symbol} {position_side} {float(quantity)} @ {entry_price} "
+                f"position_id={position_id} order={pending_order_id}"
+            )
+            return {'success': True, 'position_id': position_id, 'order_id': pending_order_id}
+        except Exception as e:
+            if self.connection:
+                try:
+                    self.connection.rollback()
+                except Exception:
+                    pass
+            logger.error(f"[限价成交] 失败: {e}")
+            return {'success': False, 'message': str(e)}
 
     def close_position(
         self,

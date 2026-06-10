@@ -168,35 +168,26 @@ def _open_simulated_position(
     if not allowed:
         return None, (gate_reason or "open advisor rejected")[:255]
 
-    notional = EXPLORE_MARGIN_USD * EXPLORE_LEVERAGE
-    qty = round(notional / price, 6)
-    if qty <= 0:
-        return None, "数量计算为0"
-    if side == "LONG":
-        sl_price = round(price * (1 - EXPLORE_SL_PCT / 100), 8)
-        tp_price = round(price * (1 + EXPLORE_TP_PCT / 100), 8)
-    else:
-        sl_price = round(price * (1 + EXPLORE_SL_PCT / 100), 8)
-        tp_price = round(price * (1 - EXPLORE_TP_PCT / 100), 8)
-
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            INSERT INTO futures_positions
-              (account_id, symbol, position_side, leverage, quantity, notional_value,
-               margin, entry_price, mark_price, stop_loss_price, take_profit_price,
-               stop_loss_pct, take_profit_pct, max_hold_minutes, planned_close_time,
-               status, source, entry_signal_type, entry_reason, open_time, unrealized_pnl, unrealized_pnl_pct)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'open',%s,%s,%s,%s,0,0)
-            """,
-            (
-                EXPLORE_ACCOUNT_ID, symbol, side, EXPLORE_LEVERAGE, qty, round(notional, 2),
-                EXPLORE_MARGIN_USD, price, price, sl_price, tp_price, EXPLORE_SL_PCT, EXPLORE_TP_PCT,
-                EXPLORE_HOLD_HOURS * 60, datetime.now() + timedelta(hours=EXPLORE_HOLD_HOURS),
-                GPT_SOURCE, "gpt_explore", (catalyst or "gpt_explore")[:180], datetime.now(),
-            ),
-        )
-        return cur.lastrowid, ""
+    from app.services.paper_limit_entry import create_paper_limit_order
+    order_id = create_paper_limit_order(
+        conn,
+        symbol=symbol,
+        side=side,
+        ref_price=price,
+        source=GPT_SOURCE,
+        leverage=EXPLORE_LEVERAGE,
+        margin=EXPLORE_MARGIN_USD,
+        stop_loss_pct=EXPLORE_SL_PCT,
+        take_profit_pct=EXPLORE_TP_PCT,
+        entry_signal_type="gpt_explore",
+        entry_reason=(catalyst or "gpt_explore")[:180],
+        max_hold_minutes=EXPLORE_HOLD_HOURS * 60,
+        planned_close_time=datetime.now() + timedelta(hours=EXPLORE_HOLD_HOURS),
+        account_id=EXPLORE_ACCOUNT_ID,
+    )
+    if order_id is None:
+        return None, "限价单创建失败"
+    return order_id, ""
 
 
 def run_explore_round(triggered_by: str = "scheduler") -> Optional[int]:

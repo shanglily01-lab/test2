@@ -312,7 +312,7 @@ def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]
 
 
 def has_open_futures_position(conn, source: str, symbol: str, account_id: Optional[int] = None) -> bool:
-    """按 clean key 检查是否已有 OPEN 仓（跨 XXX/USDT 与 XXXUSDT）。"""
+    """按 clean key 检查是否已有 OPEN 仓或同 source 挂单（跨 XXX/USDT 与 XXXUSDT）。"""
     clean = futures_symbol_clean(symbol)
     try:
         cur = conn.cursor()
@@ -326,6 +326,21 @@ def has_open_futures_position(conn, source: str, symbol: str, account_id: Option
             params.append(account_id)
         sql += " LIMIT 1"
         cur.execute(sql, params)
+        if cur.fetchone() is not None:
+            cur.close()
+            return True
+
+        pending_sql = (
+            f"SELECT 1 FROM futures_orders WHERE order_source=%s AND status='PENDING' "
+            f"AND order_type='LIMIT' AND side IN ('OPEN_LONG','OPEN_SHORT') "
+            f"AND {sql_rating_symbol_clean('symbol')} = %s"
+        )
+        pending_params: list = [source, clean]
+        if account_id is not None:
+            pending_sql += " AND account_id=%s"
+            pending_params.append(account_id)
+        pending_sql += " LIMIT 1"
+        cur.execute(pending_sql, pending_params)
         found = cur.fetchone() is not None
         cur.close()
         return found

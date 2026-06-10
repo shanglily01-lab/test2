@@ -2231,30 +2231,40 @@ class SmartTraderService:
                 )
                 return False
 
-            # 插入持仓记录 (包含动态超时字段和计划平仓时间)
-            cursor.execute("""
-                INSERT INTO futures_positions
-                (account_id, symbol, position_side, quantity, entry_price,
-                 leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
-                 entry_signal_type, entry_reason, entry_score, signal_components, max_hold_minutes, timeout_at,
-                 planned_close_time, source, status, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s,
-                        DATE_ADD(NOW(), INTERVAL %s MINUTE), %s, 'open', NOW(), NOW())
-            """, (
-                self.account_id, symbol, side, quantity, current_price, used_leverage,
-                notional_value, margin, stop_loss, take_profit,
-                signal_combination_key, entry_reason, entry_score, signal_components_json,
-                base_timeout_minutes, timeout_at,
-                base_timeout_minutes,  # planned_close_time = NOW() + max_hold_minutes
-                position_source
-            ))
+            from app.services.paper_limit_entry import create_paper_limit_order
+            import json as _json
+            _signal_components = None
+            if signal_components_json:
+                try:
+                    _signal_components = _json.loads(signal_components_json)
+                except Exception:
+                    _signal_components = None
 
-            # 获取持仓ID
-            position_id = cursor.lastrowid
-
-            # 🔥 账户余额改为定时计算，避免并发更新死锁
-
+            order_id = create_paper_limit_order(
+                conn,
+                symbol=symbol,
+                side=side,
+                ref_price=current_price,
+                source=position_source,
+                leverage=used_leverage,
+                margin=margin,
+                quantity=quantity,
+                stop_loss_price=stop_loss,
+                take_profit_price=take_profit,
+                entry_signal_type=signal_combination_key,
+                entry_reason=entry_reason,
+                entry_score=entry_score,
+                signal_components=_signal_components,
+                max_hold_minutes=base_timeout_minutes,
+                planned_close_time=timeout_at,
+                account_id=self.account_id,
+            )
+            conn.commit()
             cursor.close()
+
+            if order_id is None:
+                logger.warning(f"[SKIP] {symbol} {side} 限价单创建失败或已有挂单")
+                return False
 
             # 显示实际使用的止损止盈百分比
             sl_pct = f"-{stop_loss_pct*100:.1f}%" if side == 'LONG' else f"+{stop_loss_pct*100:.1f}%"
@@ -2279,23 +2289,12 @@ class SmartTraderService:
                 signal_details = "无"
 
             logger.info(
-                f"[SUCCESS] {symbol} {side}开仓成功{rating_tag}{hedge_tag} | "
-                f"信号: [{signal_combination_key}] | "
+                f"[SUCCESS] {symbol} {side}限价挂单已提交{rating_tag}{hedge_tag} | "
+                f"订单ID:{order_id} | 信号: [{signal_combination_key}] | "
                 f"止损: ${stop_loss:.4f} ({sl_pct}) | 止盈: ${take_profit:.4f} ({tp_pct}) | "
                 f"仓位: ${margin:.0f} | 超时: {base_timeout_minutes}分钟"
             )
             logger.info(f"[SIGNAL_DETAIL] {symbol} 信号详情: {signal_details}")
-
-            # 启动智能平仓监控（统一平仓入口）
-            if self.smart_exit_optimizer and self.event_loop:
-                try:
-                    asyncio.run_coroutine_threadsafe(
-                        self.smart_exit_optimizer.start_monitoring_position(position_id),
-                        self.event_loop
-                    )
-                    logger.info(f"✅ 持仓{position_id}已加入智能平仓监控")
-                except Exception as e:
-                    logger.error(f"❌ 持仓{position_id}启动监控失败: {e}")
 
             return True
 

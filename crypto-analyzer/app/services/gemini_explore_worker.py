@@ -1315,12 +1315,8 @@ def _open_simulated_position(
     price: float,
     catalyst: str,
 ) -> Optional[int]:
-    """直接 INSERT 到 futures_positions 表, 模拟单, 返回 position_id 或 None.
-
-    硬 SL 由 PositionSLTPMonitor 兜底检查, 此处写入 DB.
-    """
+    """创建模拟盘限价开仓单, 返回 futures_orders.id 或 None."""
     symbol = futures_symbol_rating_canonical(symbol)
-    # 黑名单3级防御性检查
     from app.services.trading_gates import is_symbol_blocked_level3
     if is_symbol_blocked_level3(symbol):
         logger.warning(f"[Gemini探索] {symbol} 黑名单3级, 禁止开仓模拟单")
@@ -1336,73 +1332,26 @@ def _open_simulated_position(
     if not allowed:
         return None
 
-    try:
-        notional = EXPLORE_MARGIN_USD * EXPLORE_LEVERAGE
-        qty = round(notional / price, 6)
-        if qty <= 0:
-            logger.error(f"[Gemini探索] {symbol} {side} 数量计算非正,跳过")
-            return None
+    entry_reason = (catalyst or 'gemini_explore')[:180]
+    entry_reason += f" | SL={EXPLORE_SL_PCT}% TP={EXPLORE_TP_PCT}% lev={EXPLORE_LEVERAGE}x hold={EXPLORE_HOLD_HOURS}h"
 
-        if side == 'LONG':
-            sl_price = round(price * (1 - EXPLORE_SL_PCT / 100), 8)
-            tp_price = round(price * (1 + EXPLORE_TP_PCT / 100), 8)
-        else:
-            sl_price = round(price * (1 + EXPLORE_SL_PCT / 100), 8)
-            tp_price = round(price * (1 - EXPLORE_TP_PCT / 100), 8)
-
-        planned_close = datetime.now() + timedelta(hours=EXPLORE_HOLD_HOURS)
-        max_hold_minutes = EXPLORE_HOLD_HOURS * 60
-        open_ts = datetime.now()
-
-        # 在 entry_reason 中标记入场保护期, 方便后续排查
-        entry_reason = (catalyst or 'gemini_explore')[:180]
-        entry_reason += f" | SL={EXPLORE_SL_PCT}% TP={EXPLORE_TP_PCT}% lev={EXPLORE_LEVERAGE}x hold={EXPLORE_HOLD_HOURS}h"
-
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO futures_positions
-                  (account_id, symbol, position_side, leverage, quantity, notional_value,
-                   margin, entry_price, mark_price,
-                   stop_loss_price, take_profit_price,
-                   stop_loss_pct, take_profit_pct,
-                   max_hold_minutes, planned_close_time,
-                   status, source, entry_signal_type, entry_reason, open_time,
-                   unrealized_pnl, unrealized_pnl_pct)
-                VALUES (%s,%s,%s,%s,%s,%s,
-                        %s,%s,%s,
-                        %s,%s,
-                        %s,%s,
-                        %s,%s,
-                        'open', %s, %s, %s, %s,
-                        0, 0)
-                """,
-                (
-                    EXPLORE_ACCOUNT_ID, symbol, side, EXPLORE_LEVERAGE, qty, round(notional, 2),
-                    EXPLORE_MARGIN_USD, price, price,
-                    sl_price, tp_price,
-                    EXPLORE_SL_PCT, EXPLORE_TP_PCT,
-                    max_hold_minutes, planned_close,
-                    EXPLORE_SOURCE, 'gemini_explore', entry_reason,
-                    open_ts,
-                ),
-            )
-            position_id = cur.lastrowid
-
-        logger.info(
-            f"[Gemini探索] 开仓 {symbol} {side} @ {price:.6g} "
-            f"SL={sl_price:.6g}({EXPLORE_SL_PCT}%) TP={tp_price:.6g}({EXPLORE_TP_PCT}%) "
-            f"qty={qty} lev={EXPLORE_LEVERAGE}x hold={EXPLORE_HOLD_HOURS}h "
-            f"id={position_id}"
-        )
-
-        # 同步实盘: 模拟单创建后立即在各实盘账号开真实仓位
-        _sync_to_live(position_id, symbol, side, price, sl_price, tp_price, qty, catalyst)
-
-        return position_id
-    except Exception as e:
-        logger.error(f"[Gemini探索] 开仓失败 {symbol} {side}: {e}")
-        return None
+    from app.services.paper_limit_entry import create_paper_limit_order
+    return create_paper_limit_order(
+        conn,
+        symbol=symbol,
+        side=side,
+        ref_price=price,
+        source=EXPLORE_SOURCE,
+        leverage=EXPLORE_LEVERAGE,
+        margin=EXPLORE_MARGIN_USD,
+        stop_loss_pct=EXPLORE_SL_PCT,
+        take_profit_pct=EXPLORE_TP_PCT,
+        entry_signal_type='gemini_explore',
+        entry_reason=entry_reason,
+        max_hold_minutes=EXPLORE_HOLD_HOURS * 60,
+        planned_close_time=datetime.now() + timedelta(hours=EXPLORE_HOLD_HOURS),
+        account_id=EXPLORE_ACCOUNT_ID,
+    )
 
 
 # ============================================================

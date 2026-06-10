@@ -474,120 +474,44 @@ class KlinePullbackEntryExecutor:
                     if not allowed:
                         return {'success': False, 'reason': f'open advisor rejected: {_gate_reason}'}
 
-                # 插入持仓记录
-                cursor.execute("""
-                    INSERT INTO futures_positions
-                    (account_id, symbol, position_side, quantity, entry_price,
-                     leverage, notional_value, margin, open_time, stop_loss_price, take_profit_price,
-                     entry_signal_type, entry_reason, entry_score, signal_components, max_hold_minutes, timeout_at,
-                     planned_close_time, source, status, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                            'smart_trader', 'open', NOW(), NOW())
-                """, (
-                    self.account_id, symbol, direction, quantity, current_price, leverage,
-                    notional_value, margin, stop_loss_price, take_profit_price,
-                    signal_combination_key, entry_reason, entry_score,
-                    json.dumps(signal_components) if signal_components else None,
-                    max_hold_minutes, timeout_at, planned_close_time
-                ))
-
-                position_id = cursor.lastrowid
-
-                # 冻结资金
-                cursor.execute("""
-                    UPDATE futures_trading_accounts
-                    SET current_balance = current_balance - %s,
-                        frozen_balance = frozen_balance + %s,
-                        updated_at = NOW()
-                    WHERE id = %s
-                """, (margin, margin, self.account_id))
-
+                from app.services.paper_limit_entry import create_paper_limit_order
+                order_id = create_paper_limit_order(
+                    conn,
+                    symbol=symbol,
+                    side=direction,
+                    ref_price=float(current_price),
+                    source='smart_trader',
+                    leverage=leverage,
+                    margin=margin,
+                    quantity=quantity,
+                    stop_loss_price=stop_loss_price,
+                    take_profit_price=take_profit_price,
+                    entry_signal_type=signal_combination_key,
+                    entry_reason=entry_reason,
+                    entry_score=entry_score,
+                    signal_components=signal_components,
+                    max_hold_minutes=max_hold_minutes,
+                    planned_close_time=planned_close_time,
+                    account_id=self.account_id,
+                )
                 conn.commit()
             finally:
                 conn.close()
 
-            logger.info(f"✅ {symbol} 一次性开仓完成 | 持仓ID:{position_id} | 价格:${current_price:.4f} | 保证金:{margin}U")
+            if order_id is None:
+                return {'success': False, 'reason': '限价单创建失败'}
 
-            # ========== 同步实盘开仓 ==========
-            from app.services.trading_gates import check_live_open_allowed
-            _allowed, _reason = check_live_open_allowed(symbol, "smart_trader_sync")
-            if not _allowed:
-                logger.info(f"[同步实盘] {symbol} {_reason}，跳过实盘同步")
-            else:
-                try:
-                    from app.services.api_key_service import APIKeyService
-                    from app.trading.binance_futures_engine import BinanceFuturesEngine
-                    svc = APIKeyService(self.db_config)
-                    active_keys = svc.get_all_active_api_keys('binance')
-                    for ak in active_keys:
-                        try:
-                            _engine = BinanceFuturesEngine(
-                                self.db_config,
-                                api_key=ak['api_key'],
-                                api_secret=ak['api_secret']
-                            )
-                            _bal = _engine.get_account_balance()
-                            if not _bal or not _bal.get('success'):
-                                logger.warning(f"[同步实盘] 账号{ak['account_name']} 获取余额失败，跳过")
-                                continue
-                            _available = float(_bal.get('available', 0))
-                            _max_margin = float(ak['max_position_value'])
-                            _lev = int(ak['max_leverage'])
-                            _margin = min(_max_margin, _available * 0.9)
-                            if _margin < 5:
-                                logger.warning(f"[同步实盘] 账号{ak['account_name']} 可用余额不足(margin={_margin:.2f}U)，跳过")
-                                continue
-                            # 实盘持仓数量上限（每账号最多5单，加锁防并发竞态）
-                            _ak_id = ak['id']
-                            if _ak_id not in _live_sync_locks:
-                                _live_sync_locks[_ak_id] = asyncio.Lock()
-                            async with _live_sync_locks[_ak_id]:
-                                _cnt_c = pymysql.connect(**self.db_config, autocommit=True)
-                                _cnt_cur = _cnt_c.cursor()
-                                _cnt_cur.execute("SELECT COUNT(*) FROM live_futures_positions WHERE account_id=%s AND status='OPEN'", (_ak_id,))
-                                _live_count = (_cnt_cur.fetchone() or [0])[0]
-                                _cnt_cur.close(); _cnt_c.close()
-                                if _live_count >= 5:
-                                    logger.info(f"[同步实盘] 账号{ak['account_name']} 已有{_live_count}个实盘持仓，达上限(5)，跳过")
-                                    continue
-                                _qty = Decimal(str(_margin * _lev / current_price))
-                            _result = _engine.open_position(
-                                account_id=ak['id'],
-                                symbol=symbol,
-                                position_side=direction,
-                                quantity=_qty,
-                                leverage=_lev,
-                                stop_loss_price=Decimal(str(stop_loss_price)) if stop_loss_price else None,
-                                take_profit_price=Decimal(str(take_profit_price)) if take_profit_price else None,
-                                source='smart_trader_sync',
-                                paper_position_id=position_id
-                            )
-                            if _result.get('success'):
-                                logger.info(f"[同步实盘] ✅ {symbol} {direction} 账号[{ak['account_name']}] 同步开仓成功 保证金={_margin:.2f}U 杠杆={_lev}x")
-                            else:
-                                logger.error(f"[同步实盘] ❌ {symbol} {direction} 账号[{ak['account_name']}] 失败: {_result.get('error', _result.get('message', ''))}")
-                        except Exception as _ex:
-                            logger.error(f"[同步实盘] ❌ 账号[{ak.get('account_name','')}] 异常: {_ex}")
-                except Exception as sync_ex:
-                    logger.error(f"[同步实盘] 整体异常: {sync_ex}")
-            # ========== 同步实盘开仓结束 ==========
-
-            # 启动智能平仓监控
-            if self.live_engine.smart_exit_optimizer:
-                try:
-                    asyncio.create_task(
-                        self.live_engine.smart_exit_optimizer.start_monitoring_position(position_id)
-                    )
-                    logger.info(f"✅ 持仓{position_id}已加入智能平仓监控")
-                except Exception as e:
-                    logger.error(f"❌ 持仓{position_id}启动监控失败: {e}")
+            logger.info(
+                f"✅ {symbol} 限价挂单已提交 | 订单ID:{order_id} | 参考价:${current_price:.4f} | 保证金:{margin}U"
+            )
 
             return {
                 'success': True,
-                'position_id': position_id,
+                'order_id': order_id,
                 'price': current_price,
                 'margin': margin,
-                'quantity': quantity
+                'quantity': quantity,
+                'status': 'PENDING',
             }
 
         except Exception as e:

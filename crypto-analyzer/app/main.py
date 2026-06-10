@@ -278,8 +278,17 @@ async def lifespan(app: FastAPI):
         # 影响 web 进程稳定性. Web API 的实时价格走 futures_api 直调 Binance, 失败
         # fallback 5m K 线 (由 ws_kline_collector_service 写入).
 
-        # 合约限价单自动执行器已移除（archived）
+        # 模拟盘限价单执行器（做多-1% / 做空+1%，30分钟超时）
         futures_limit_order_executor = None
+        try:
+            from app.trading.futures_trading_engine import FuturesTradingEngine
+            from app.services.futures_limit_order_executor import init_futures_limit_order_executor
+            _futures_engine = FuturesTradingEngine(db_config, trade_notifier=None, live_engine=live_engine)
+            futures_limit_order_executor = init_futures_limit_order_executor(db_config, _futures_engine)
+            logger.info("✅ 模拟盘限价单执行器初始化成功")
+        except Exception as e:
+            logger.warning(f"⚠️  模拟盘限价单执行器初始化失败: {e}")
+            futures_limit_order_executor = None
 
         # 合约止盈止损监控服务已停用 — 改用独立 PositionSLTPMonitor
         # SmartExitOptimizer 只对非多策略持仓有效 (AI 策略等被跳过 SL/TP),
@@ -376,25 +385,24 @@ async def lifespan(app: FastAPI):
 
     logger.info("🚀 FastAPI 启动完成")
     
-    # 限价单自动执行服务已停用（系统使用合约市价单交易）
-    # 当前系统通过 smart_trader_service.py 使用市价单进行合约交易，不需要限价单服务
-    # if pending_order_executor:
-    #     try:
-    #         import asyncio
-    #         pending_order_executor.task = asyncio.create_task(pending_order_executor.run_loop(interval=5))
-    #         logger.info("✅ 待成交订单自动执行服务已启动（每5秒检查，现货交易）")
-    #     except Exception as e:
-    #         logger.warning(f"⚠️  启动待成交订单自动执行任务失败: {e}")
-    #         pending_order_executor = None
-    #
-    # if futures_limit_order_executor:
-    #     try:
-    #         import asyncio
-    #         futures_limit_order_executor.task = asyncio.create_task(futures_limit_order_executor.run_loop(interval=5))
-    #         logger.info("✅ 合约限价单自动执行服务已启动（每5秒检查）")
-    #     except Exception as e:
-    #         logger.warning(f"⚠️  启动合约限价单自动执行任务失败: {e}")
-    #         futures_limit_order_executor = None
+    if futures_limit_order_executor:
+        try:
+            import asyncio
+            futures_limit_order_executor.task = asyncio.create_task(
+                futures_limit_order_executor.run_loop(interval=5)
+            )
+            logger.info("✅ 模拟盘限价单执行服务已启动（每5秒检查）")
+        except Exception as e:
+            logger.warning(f"⚠️  启动模拟盘限价单执行服务失败: {e}")
+            futures_limit_order_executor = None
+
+    try:
+        from app.services.paper_limit_sync_service import init_paper_limit_sync_service
+        _paper_sync = init_paper_limit_sync_service(interval_seconds=10.0)
+        _paper_sync.start()
+        logger.info("✅ 模拟盘限价成交实盘同步服务已启动（每10秒）")
+    except Exception as e:
+        logger.warning(f"⚠️  启动模拟盘实盘同步服务失败: {e}")
 
     # 启动止盈止损监控服务（每5秒检查模拟盘硬SL/TP）
     if sl_tp_monitor:

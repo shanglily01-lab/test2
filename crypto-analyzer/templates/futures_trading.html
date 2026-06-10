@@ -173,8 +173,22 @@
 </div>
 <!-- Middle Section -->
 <div class="mb-8">
-<!-- Current Positions Table -->
 <div class="bg-surface-container-low rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+<!-- Tab bar -->
+<div class="flex items-center gap-1 px-6 pt-4 bg-surface-container shrink-0 border-b border-outline-variant/15">
+<button type="button" id="tab-btn-positions" onclick="switchFuturesTab('positions')"
+  class="futures-tab-btn relative px-4 py-2.5 text-sm font-bold font-headline text-primary border-b-2 border-primary flex items-center gap-2">
+  当前持仓
+  <span id="tab-badge-positions" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-primary/15 text-primary">--</span>
+</button>
+<button type="button" id="tab-btn-limit-orders" onclick="switchFuturesTab('limit-orders')"
+  class="futures-tab-btn relative px-4 py-2.5 text-sm font-headline text-on-surface-variant hover:text-on-surface border-b-2 border-transparent flex items-center gap-2 transition-colors">
+  限价单
+  <span id="tab-badge-limit-orders" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant">--</span>
+</button>
+</div>
+<!-- Positions panel -->
+<div id="panel-positions" class="futures-tab-panel flex flex-col min-h-0">
 <div class="p-6 flex flex-wrap justify-between items-center gap-3 bg-surface-container shrink-0">
 <h4 class="font-headline font-bold flex items-center gap-2">
 <span class="w-1 h-4 bg-primary rounded-full"></span>
@@ -230,6 +244,54 @@
 <tr id="positions-loading-row"><td colspan="9" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>
 </tbody>
 </table>
+</div>
+</div>
+<!-- Limit orders panel -->
+<div id="panel-limit-orders" class="futures-tab-panel hidden flex flex-col min-h-0">
+<div class="p-6 flex flex-wrap justify-between items-center gap-3 bg-surface-container shrink-0">
+<h4 class="font-headline font-bold flex items-center gap-2">
+<span class="w-1 h-4 bg-secondary rounded-full"></span>
+  限价挂单
+  <span id="limit-count-badge" class="text-[10px] font-mono text-on-surface-variant ml-1">-- 笔</span>
+  <span class="text-[10px] font-mono text-primary ml-2">多 <span id="limit-long-count">--</span></span>
+  <span class="text-[10px] font-mono text-error">空 <span id="limit-short-count">--</span></span>
+</h4>
+<div class="flex flex-wrap items-center gap-2 flex-1 justify-end min-w-[200px]">
+  <input id="limit-search-input" type="text" placeholder="交易对 / 来源..."
+    class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface placeholder:text-on-surface-variant/50 focus:outline-none focus:border-primary/50 w-44 min-w-[140px]"/>
+  <select id="limit-side-filter" class="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface focus:outline-none focus:border-primary/50">
+    <option value="">全部方向</option>
+    <option value="LONG">做多</option>
+    <option value="SHORT">做空</option>
+  </select>
+  <button type="button" onclick="searchLimitOrders()"
+    class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-background text-xs font-bold hover:opacity-90 transition-opacity">
+    <span class="material-symbols-outlined text-[16px]">search</span>搜索
+  </button>
+  <button type="button" onclick="resetLimitOrderSearch()"
+    class="px-3 py-1.5 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-xs text-on-surface-variant hover:text-on-surface transition-colors">重置</button>
+</div>
+<p class="text-[10px] text-on-surface-variant w-full sm:w-auto">做多限价 −1% · 做空限价 +1% · 30 分钟未成交自动取消</p>
+</div>
+<div class="overflow-x-auto overflow-y-auto flex-1 min-h-0">
+<table class="w-full text-left border-collapse">
+<thead class="sticky top-0 z-10">
+<tr class="text-[10px] uppercase tracking-widest text-on-surface-variant bg-surface-container-low">
+<th class="px-6 py-4 font-semibold whitespace-nowrap">交易对</th>
+<th class="px-6 py-4 font-semibold text-center whitespace-nowrap">方向</th>
+<th class="px-6 py-4 font-semibold whitespace-nowrap">限价 / 参考价</th>
+<th class="px-6 py-4 font-semibold whitespace-nowrap">保证金</th>
+<th class="px-6 py-4 font-semibold whitespace-nowrap">止损 / 止盈</th>
+<th class="px-6 py-4 font-semibold whitespace-nowrap">来源</th>
+<th class="px-6 py-4 font-semibold whitespace-nowrap">挂单 / 剩余</th>
+<th class="px-6 py-4 font-semibold whitespace-nowrap">操作</th>
+</tr>
+</thead>
+<tbody id="limit-orders-tbody" class="text-sm">
+<tr><td colspan="8" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>
+</tbody>
+</table>
+</div>
 </div>
 </div>
 </div>
@@ -347,6 +409,226 @@ function showToast(msg, type) {
     setTimeout(function() { el.remove(); }, 4000);
 }
 
+// ---- Tab 切换 ----
+
+var _activeFuturesTab = 'positions';
+var _allLimitOrders = [];
+
+function switchFuturesTab(tab) {
+    _activeFuturesTab = tab;
+    ['positions', 'limit-orders'].forEach(function(t) {
+        var panel = document.getElementById('panel-' + t);
+        var btn = document.getElementById('tab-btn-' + t);
+        if (!panel || !btn) return;
+        var active = t === tab;
+        panel.classList.toggle('hidden', !active);
+        if (active) {
+            btn.classList.add('text-primary', 'border-primary');
+            btn.classList.remove('text-on-surface-variant', 'border-transparent');
+        } else {
+            btn.classList.remove('text-primary', 'border-primary');
+            btn.classList.add('text-on-surface-variant', 'border-transparent');
+        }
+    });
+    if (tab === 'limit-orders') loadLimitOrders();
+}
+
+function parseOrderSide(side) {
+    var s = String(side || '').toUpperCase();
+    if (s === 'OPEN_LONG' || s === 'LONG' || s === 'BUY') return 'LONG';
+    if (s === 'OPEN_SHORT' || s === 'SHORT' || s === 'SELL') return 'SHORT';
+    return s;
+}
+
+function parseOrderNotes(notes) {
+    if (!notes) return {};
+    try {
+        var d = typeof notes === 'string' ? JSON.parse(notes) : notes;
+        return (d && typeof d === 'object') ? d : {};
+    } catch (e) { return {}; }
+}
+
+function orderExpireAt(order) {
+    var meta = parseOrderNotes(order.notes);
+    var mins = parseInt(meta.timeout_minutes, 10) || 30;
+    var created = parseUtcTime(order.created_at);
+    if (!created) return null;
+    return new Date(created.getTime() + mins * 60000);
+}
+
+function fmtOrderRemain(order) {
+    var exp = orderExpireAt(order);
+    if (!exp) return '--';
+    var ms = exp.getTime() - Date.now();
+    if (ms <= 0) return '即将过期';
+    var totalMin = Math.floor(ms / 60000);
+    var h = Math.floor(totalMin / 60);
+    var m = totalMin % 60;
+    if (h > 0) return '剩 ' + h + 'h' + m + 'm';
+    return '剩 ' + m + 'm';
+}
+
+function countLimitSides(orders) {
+    return orders.reduce(function(acc, ord) {
+        var side = parseOrderSide(ord.side);
+        if (side === 'LONG') acc.long += 1;
+        else if (side === 'SHORT') acc.short += 1;
+        return acc;
+    }, {long: 0, short: 0});
+}
+
+function filterLimitOrders(orders) {
+    var search = ((document.getElementById('limit-search-input') || {}).value || '').trim().toLowerCase();
+    var side = (document.getElementById('limit-side-filter') || {}).value || '';
+    return orders.filter(function(ord) {
+        var ps = parseOrderSide(ord.side);
+        if (side && ps !== side) return false;
+        if (!search) return true;
+        var sym = (ord.symbol || '').toLowerCase();
+        var src = (ord.order_source || '').toLowerCase();
+        return sym.indexOf(search) >= 0 || src.indexOf(search) >= 0;
+    });
+}
+
+function updateLimitOrderCounts(allOrders) {
+    var counts = countLimitSides(allOrders);
+    var set = function(id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+    set('limit-long-count', counts.long);
+    set('limit-short-count', counts.short);
+    set('tab-badge-limit-orders', allOrders.length);
+    set('limit-count-badge', allOrders.length + ' 笔');
+}
+
+function searchLimitOrders() {
+    if (_allLimitOrders.length) renderLimitOrders(_allLimitOrders);
+    else loadLimitOrders();
+}
+
+function resetLimitOrderSearch() {
+    var inp = document.getElementById('limit-search-input');
+    var sel = document.getElementById('limit-side-filter');
+    if (inp) inp.value = '';
+    if (sel) sel.value = '';
+    if (_allLimitOrders.length) renderLimitOrders(_allLimitOrders);
+    else loadLimitOrders();
+}
+
+function renderLimitOrders(allOrders) {
+    var tbody = document.getElementById('limit-orders-tbody');
+    if (!tbody) return;
+    _allLimitOrders = allOrders;
+    updateLimitOrderCounts(allOrders);
+    var orders = filterLimitOrders(allOrders);
+
+    if (allOrders.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-on-surface-variant text-xs">暂无限价挂单</td></tr>';
+        return;
+    }
+    if (orders.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-on-surface-variant text-xs">无匹配限价单</td></tr>';
+        return;
+    }
+
+    var sourceLabels = {
+        'signal_confirm': '信号确认', 'trend_follow': '趋势跟随',
+        'smart_trader': '趋势跟随', 'smart_trader_batch': '趋势跟随',
+        'BTC_MOMENTUM': 'BTC动量', 'PREDICTOR': '预测神器',
+        'u_coin_style': 'U本位破位', 'manual': '手动',
+        'gemini_explore': 'Gemini 探索', 'deepseek_explore': 'DeepSeek 探索',
+        'gpt_explore': 'GPT 探索',
+        'gemini_predict': 'Gemini 预测', 'deepseek_predict': 'DeepSeek 预测',
+        'gpt_predict': 'GPT 预测'
+    };
+
+    tbody.innerHTML = orders.map(function(ord) {
+        var side = parseOrderSide(ord.side);
+        var isLong = side === 'LONG';
+        var rowBg = isLong ? 'bg-[#49f4c8]/5 hover:bg-[#49f4c8]/10' : 'bg-[#ff716c]/5 hover:bg-[#ff716c]/10';
+        var dirBg = isLong ? 'bg-[#49f4c8]/20 text-[#49f4c8]' : 'bg-[#ff716c]/20 text-[#ff716c]';
+        var dirLabel = isLong ? 'Long' : 'Short';
+        var meta = parseOrderNotes(ord.notes);
+        var limitPx = parseFloat(ord.price) || 0;
+        var refPx = parseFloat(meta.ref_price) || 0;
+        var margin = parseFloat(ord.margin) || parseFloat(meta.margin) || 0;
+        var sym = ord.symbol || '--';
+        var abbr = sym.replace('USDT', '').replace('USD', '').substring(0, 4);
+        var lvg = ord.leverage || 1;
+        var src = ord.order_source || '--';
+        var srcLabel = sourceLabels[src] || src;
+        var sl = ord.stop_loss_price ? fmtPrice(ord.stop_loss_price) : '--';
+        var tp = ord.take_profit_price ? fmtPrice(ord.take_profit_price) : '--';
+        var oid = ord.order_id || '';
+        var created = fmtTime(ord.created_at);
+        var remain = fmtOrderRemain(ord);
+
+        return '<tr class="' + rowBg + ' transition-colors">' +
+            '<td class="px-6 py-4">' +
+                '<div class="flex items-center gap-3">' +
+                    '<div class="w-8 h-8 rounded-full bg-surface-bright flex items-center justify-center text-[10px] font-bold text-on-surface-variant">' + abbr + '</div>' +
+                    '<div>' +
+                        '<p class="font-bold font-headline">' + sym + '</p>' +
+                        '<p class="text-[10px] text-on-surface-variant monospace">' + lvg + 'x · ' + (parseFloat(ord.quantity) || 0).toFixed(4) + '</p>' +
+                    '</div>' +
+                '</div>' +
+            '</td>' +
+            '<td class="px-6 py-4 text-center">' +
+                '<span class="px-2 py-1 ' + dirBg + ' rounded-md text-[10px] font-bold uppercase tracking-wider">' + dirLabel + '</span>' +
+            '</td>' +
+            '<td class="px-6 py-4 monospace text-xs">' +
+                '<div class="font-medium text-on-surface">' + fmtPrice(limitPx) + '</div>' +
+                (refPx > 0 ? '<div class="text-on-surface-variant">参考 ' + fmtPrice(refPx) + '</div>' : '') +
+            '</td>' +
+            '<td class="px-6 py-4 monospace">' + (margin > 0 ? margin.toFixed(2) + ' U' : '--') + '</td>' +
+            '<td class="px-6 py-4 text-xs font-mono">' +
+                '<div class="text-[#ff716c]">SL ' + sl + '</div>' +
+                '<div class="text-[#49f4c8]">TP ' + tp + '</div>' +
+            '</td>' +
+            '<td class="px-6 py-4 text-[11px] text-on-surface-variant max-w-[120px] truncate" title="' + src + '">' + srcLabel + '</td>' +
+            '<td class="px-6 py-4 monospace text-xs">' +
+                '<div class="text-on-surface-variant">' + created + '</div>' +
+                '<div class="text-[10px] text-secondary">' + remain + '</div>' +
+            '</td>' +
+            '<td class="px-6 py-4">' +
+                '<button onclick="cancelLimitOrder(\'' + oid.replace(/'/g, "\\'") + '\', \'' + sym.replace(/'/g, "\\'") + '\')" ' +
+                    'class="px-3 py-1.5 bg-surface-container-highest hover:bg-error/10 text-error border border-error/20 rounded-lg text-xs font-bold transition-all">撤单</button>' +
+            '</td>' +
+        '</tr>';
+    }).join('');
+}
+
+async function loadLimitOrders() {
+    var tbody = document.getElementById('limit-orders-tbody');
+    if (!tbody) return;
+    try {
+        var res = await fetch('/api/futures/orders?account_id=' + ACCOUNT_ID + '&status=pending&order_type=LIMIT&open_only=true');
+        var data = await res.json();
+        var list = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+        renderLimitOrders(list);
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败: ' + e.message + '</td></tr>';
+    }
+}
+
+async function cancelLimitOrder(orderId, symbol) {
+    if (!orderId) { showToast('订单ID无效', 'error'); return; }
+    var ok = await showConfirm('确定撤销 ' + symbol + ' 限价单？', {title: '确认撤单', confirmText: '撤单', type: 'warning'});
+    if (!ok) return;
+    try {
+        var res = await fetch('/api/futures/orders/' + encodeURIComponent(orderId) + '?account_id=' + ACCOUNT_ID, {
+            method: 'DELETE'
+        });
+        var data = await res.json();
+        if (res.ok && (data.success !== false)) {
+            showToast(symbol + ' 已撤单', 'success');
+            setTimeout(loadLimitOrders, 400);
+        } else {
+            throw new Error(data.detail || data.message || '撤单失败');
+        }
+    } catch (e) {
+        showToast('撤单失败: ' + e.message, 'error');
+    }
+}
+
 // ---- 加载持仓 ----
 
 var _lastPositions = [];
@@ -408,6 +690,8 @@ function updatePositionSideCounts(positions) {
     set('stat-short-count', counts.short);
     set('pos-long-count', counts.long);
     set('pos-short-count', counts.short);
+    var posBadge = document.getElementById('tab-badge-positions');
+    if (posBadge) posBadge.textContent = counts.long + counts.short;
 }
 
 async function renderPositions(allPositions) {
@@ -781,6 +1065,7 @@ async function closePosition(id, symbol) {
 async function loadAll() {
     var posResult = await loadPositions();
     loadStats(posResult);
+    loadLimitOrders();
     await loadAccountInfo();
     await loadTradingStatus();
 }
@@ -791,12 +1076,21 @@ var _posRefreshTimer = null;
 
 document.addEventListener('DOMContentLoaded', function() {
     loadAll();
-    _posRefreshTimer = setInterval(loadPositions, 5000);
+    _posRefreshTimer = setInterval(function() {
+        loadPositions();
+        loadLimitOrders();
+    }, 5000);
     _refreshTimer = setInterval(loadAccountInfo, 300000);
     var posSearch = document.getElementById('pos-search-input');
     if (posSearch) {
         posSearch.addEventListener('keydown', function(e) {
             if (e.key === 'Enter') searchPositions();
+        });
+    }
+    var limitSearch = document.getElementById('limit-search-input');
+    if (limitSearch) {
+        limitSearch.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') searchLimitOrders();
         });
     }
 });

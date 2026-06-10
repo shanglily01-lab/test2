@@ -1,4 +1,4 @@
-﻿"""
+"""
 统一数据采集调度器
 整合所有数据源的采集任务，按照不同频率定时执行
 
@@ -1725,6 +1725,27 @@ class UnifiedDataScheduler:
             threading.Thread(target=_run, daemon=True, name="RatingCatchup").start()
 
         _launch_rating_catchup(60)
+
+        # 模拟盘限价单执行器（做多-1%/做空+1%，30分钟超时取消）
+        def _run_paper_limit_executor():
+            import time
+            try:
+                db_cfg = self.config.get('database', {}).get('mysql', {})
+                from app.trading.futures_trading_engine import FuturesTradingEngine
+                from app.services.futures_limit_order_executor import FuturesLimitOrderExecutor
+                engine = FuturesTradingEngine(db_cfg)
+                executor = FuturesLimitOrderExecutor(db_cfg, engine)
+                logger.info("[限价执行器] scheduler 后台线程已启动 (5s)")
+                while True:
+                    try:
+                        executor.check_and_execute_limit_orders()
+                    except Exception as ex:
+                        logger.error(f"[限价执行器] tick 异常: {ex}")
+                    time.sleep(5)
+            except Exception as e:
+                logger.error(f"[限价执行器] 启动失败: {e}")
+
+        threading.Thread(target=_run_paper_limit_executor, daemon=True, name="PaperLimitExecutor").start()
 
         # 定期打印状态 (每小时)
         schedule.every(1).hours.do(self.print_status)

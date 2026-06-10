@@ -659,70 +659,24 @@ def _open_simulated_position(
     if not allowed:
         return None
 
-    try:
-        notional = PREDICT_MARGIN_USD * PREDICT_LEVERAGE
-        qty = round(notional / price, 6)
-        if qty <= 0:
-            logger.error(f"[GPT预测] {symbol} {side} 数量计算非正,跳过")
-            return None
-
-        if side == 'LONG':
-            sl_price = round(price * (1 - PREDICT_SL_PCT / 100), 8)
-            tp_price = round(price * (1 + PREDICT_TP_PCT / 100), 8)
-        else:
-            sl_price = round(price * (1 + PREDICT_SL_PCT / 100), 8)
-            tp_price = round(price * (1 - PREDICT_TP_PCT / 100), 8)
-
-        planned_close = datetime.now() + timedelta(hours=PREDICT_HOLD_HOURS)
-        max_hold_minutes = PREDICT_HOLD_HOURS * 60
-
-        entry_reason = (catalyst or 'gpt_predict')[:180]
-
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                INSERT INTO futures_positions
-                  (account_id, symbol, position_side, leverage, quantity, notional_value,
-                   margin, entry_price, mark_price,
-                   stop_loss_price, take_profit_price,
-                   stop_loss_pct, take_profit_pct,
-                   max_hold_minutes, planned_close_time,
-                   status, source, entry_signal_type, entry_reason, open_time,
-                   unrealized_pnl, unrealized_pnl_pct)
-                VALUES (%s,%s,%s,%s,%s,%s,
-                        %s,%s,%s,
-                        %s,%s,
-                        %s,%s,
-                        %s,%s,
-                        'open', %s, %s, %s, NOW(),
-                        0, 0)
-                """,
-                (
-                    PREDICT_ACCOUNT_ID, symbol, side, PREDICT_LEVERAGE, qty, round(notional, 2),
-                    PREDICT_MARGIN_USD, price, price,
-                    sl_price, tp_price,
-                    PREDICT_SL_PCT, PREDICT_TP_PCT,
-                    max_hold_minutes, planned_close,
-                    PREDICT_SOURCE, 'gpt_predict', entry_reason,
-                ),
-            )
-            position_id = cur.lastrowid
-
-        logger.info(
-            f"[GPT预测] 开仓 {symbol} {side} @ {price:.6g} "
-            f"SL={sl_price:.6g}({PREDICT_SL_PCT}%) TP={tp_price:.6g}({PREDICT_TP_PCT}%) "
-            f"qty={qty} lev={PREDICT_LEVERAGE}x hold={PREDICT_HOLD_HOURS}h "
-            f"id={position_id}"
-        )
-
-        # GPT 暂时不同步实盘
-        # _sync_to_live(position_id, symbol, side, price, sl_price, tp_price, qty, catalyst)
-        logger.info(f"[GPT预测] 模拟仓 #{position_id} {symbol} {side} 已开, 暂不同步实盘")
-
-        return position_id
-    except Exception as e:
-        logger.error(f"[GPT预测] 开仓失败 {symbol} {side}: {e}")
-        return None
+    entry_reason = (catalyst or 'gpt_predict')[:180]
+    from app.services.paper_limit_entry import create_paper_limit_order
+    return create_paper_limit_order(
+        conn,
+        symbol=symbol,
+        side=side,
+        ref_price=price,
+        source=PREDICT_SOURCE,
+        leverage=PREDICT_LEVERAGE,
+        margin=PREDICT_MARGIN_USD,
+        stop_loss_pct=PREDICT_SL_PCT,
+        take_profit_pct=PREDICT_TP_PCT,
+        entry_signal_type='gpt_predict',
+        entry_reason=entry_reason,
+        max_hold_minutes=PREDICT_HOLD_HOURS * 60,
+        planned_close_time=datetime.now() + timedelta(hours=PREDICT_HOLD_HOURS),
+        account_id=PREDICT_ACCOUNT_ID,
+    )
 
 
 # ============================================================

@@ -518,13 +518,20 @@ async def open_position(request: OpenPositionRequest):
 # ==================== 订单管理 ====================
 
 @router.get('/orders')
-async def get_orders(account_id: int = 2, status: str = 'PENDING'):
+async def get_orders(
+    account_id: int = 2,
+    status: str = 'PENDING',
+    order_type: Optional[str] = None,
+    open_only: bool = False,
+):
     """
     获取订单列表
 
     - **account_id**: 账户ID（默认2）
     - **status**: 订单状态（PENDING, FILLED, PARTIALLY_FILLED, CANCELLED, REJECTED, all, pending）
         - pending: 获取所有未成交订单（PENDING 和 PARTIALLY_FILLED）
+    - **order_type**: 可选，如 LIMIT / MARKET
+    - **open_only**: 仅返回 OPEN_LONG / OPEN_SHORT 开仓挂单
     """
     try:
         connection = get_db_connection()
@@ -574,6 +581,13 @@ async def get_orders(account_id: int = 2, status: str = 'PENDING'):
             sql += " AND status = %s"
             params.append(status)
 
+        if order_type:
+            sql += " AND order_type = %s"
+            params.append(order_type.upper())
+
+        if open_only:
+            sql += " AND side IN ('OPEN_LONG', 'OPEN_SHORT')"
+
         sql += " ORDER BY created_at DESC LIMIT 100"
 
         cursor.execute(sql, params)
@@ -588,11 +602,24 @@ async def get_orders(account_id: int = 2, status: str = 'PENDING'):
                     order[key] = float(value)
                 elif isinstance(value, datetime):
                     order[key] = value.strftime('%Y-%m-%d %H:%M:%S')
+
+        long_count = short_count = 0
+        for order in orders:
+            side = str(order.get('side') or '').upper()
+            if side in ('OPEN_LONG', 'LONG', 'BUY'):
+                long_count += 1
+            elif side in ('OPEN_SHORT', 'SHORT', 'SELL'):
+                short_count += 1
         
         return {
             'success': True,
             'data': orders,
-            'count': len(orders)
+            'count': len(orders),
+            'summary': {
+                'long': long_count,
+                'short': short_count,
+                'total': len(orders),
+            },
         }
         
     except Exception as e:

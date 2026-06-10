@@ -276,22 +276,31 @@ class BTCMomentumTrader:
             if not allowed:
                 return False
 
+            from app.services.paper_limit_entry import create_paper_limit_order
             conn = self._get_conn()
-            cur = conn.cursor()
             planned_close_time = datetime.now() + timedelta(hours=self._get_max_hold_hours())
-            cur.execute("""
-                INSERT INTO futures_positions
-                    (account_id, symbol, position_side, leverage, quantity, notional_value,
-                     margin, entry_price, mark_price, stop_loss_price, take_profit_price,
-                     stop_loss_pct, take_profit_pct, status, source, entry_reason, open_time,
-                     planned_close_time, unrealized_pnl, unrealized_pnl_pct)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'open','BTC_MOMENTUM',%s,NOW(),%s,0,0)
-            """, (self.PAPER_ACCOUNT_ID, symbol, direction, self.LEVERAGE, qty,
-                  round(notional, 2), margin, entry_price, entry_price,
-                  sl, tp, sl_pct * 100, tp_pct * 100,
-                  trigger_info, planned_close_time))
-            cur.close(); conn.close()
-            logger.info(f"[BTC动量] 开仓 {symbol} {direction} @ {entry_price:.6g}  SL={sl:.6g}  TP={tp:.6g}")
+            order_id = create_paper_limit_order(
+                conn,
+                symbol=symbol,
+                side=direction,
+                ref_price=entry_price,
+                source='BTC_MOMENTUM',
+                leverage=self.LEVERAGE,
+                margin=margin,
+                quantity=qty,
+                stop_loss_price=sl,
+                take_profit_price=tp,
+                stop_loss_pct=sl_pct * 100,
+                take_profit_pct=tp_pct * 100,
+                entry_reason=trigger_info,
+                max_hold_minutes=int(self._get_max_hold_hours() * 60),
+                planned_close_time=planned_close_time,
+                account_id=self.PAPER_ACCOUNT_ID,
+            )
+            conn.close()
+            if order_id is None:
+                return False
+            logger.info(f"[BTC动量] 限价挂单 {symbol} {direction} 参考价={entry_price:.6g} 订单={order_id}")
             return True
         except Exception as e:
             logger.error(f"[BTC动量] 开仓失败 {symbol}: {e}")
