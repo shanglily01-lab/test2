@@ -114,19 +114,9 @@ class KlinePullbackEntryExecutor:
         return stop_loss_price, take_profit_price, SL_PCT, TP_PCT
 
     def _get_sl_tp_from_settings(self):
-        """从 system_settings 读取止损止盈比例，默认 2%/5%"""
-        try:
-            conn = pymysql.connect(**self.db_config, autocommit=True)
-            cur = conn.cursor()
-            cur.execute("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('stop_loss_pct','take_profit_pct')")
-            rows = {r[0]: r[1] for r in cur.fetchall()}
-            cur.close(); conn.close()
-            sl = float(rows.get('stop_loss_pct', 0.03))
-            tp = float(rows.get('take_profit_pct', 0.05))
-            return sl, tp
-        except Exception as e:
-            logger.warning(f"[SL/TP] 读取system_settings失败，使用默认值: {e}")
-            return 0.03, 0.05
+        """从 system_settings 读取止损止盈比例（小数，0.03=3%）。"""
+        from app.services.system_settings_loader import get_sl_tp_decimal
+        return get_sl_tp_decimal()
 
     def _calculate_volatility_adjusted_stop_loss(self, signal_components: dict, base_stop_loss_pct: float) -> float:
         """波动率自适应止损"""
@@ -430,10 +420,8 @@ class KlinePullbackEntryExecutor:
             else:
                 signal_combination_key = "TREND_unknown"
 
-            # 计算超时和计划平仓时间（实时从DB读取 max_hold_hours，无需重启）
-            _mh_val = self.opt_config._read_system_setting('max_hold_hours') if self.opt_config else None
-            _mh_hours = max(3, min(8, int(_mh_val or self.max_hold_minutes // 60)))
-            max_hold_minutes = _mh_hours * 60
+            from app.services.system_settings_loader import get_max_hold_hours
+            max_hold_minutes = get_max_hold_hours() * 60
             timeout_at = datetime.now() + timedelta(minutes=max_hold_minutes)
             planned_close_time = datetime.now() + timedelta(hours=4)
 

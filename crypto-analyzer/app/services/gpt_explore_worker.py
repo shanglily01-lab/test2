@@ -15,16 +15,16 @@ from app.services.gpt_config import GPT_API_KEY, GPT_BASE_URL, GPT_MODEL, GPT_TI
 from app.services.gpt_llm_client import GPT_JSON_SYSTEM_EN, GPT_JSON_SYSTEM_ZH, gpt_chat_json
 from app.services.ai_big4_prompt import big4_conflict_risk_note
 from app.services.ai_explore_prompt import (
-    AI_POSITION_HOLD_HOURS,
-    AI_POSITION_SL_PCT,
-    AI_POSITION_TP_PCT,
+    get_ai_position_hold_hours,
+    get_ai_position_sl_pct,
+    get_ai_position_tp_pct,
     EXPLORE_CONFIDENCE_THRESHOLD,
     build_explore_prompt,
     build_explore_prompt_en,
     explore_catalyst_technical_ok,
     parse_explore_llm_json,
 )
-from app.services.ai_explore_prompt import EXPLORE_MIN_INTERVAL_HOURS
+from app.services.ai_explore_prompt import get_ai_schedule_interval_hours
 from app.services.ai_predict_schedule import (
     GPT_EXPLORE_NEXT_DUE_KEY,
     explore_claim_next_slot,
@@ -37,9 +37,6 @@ from app.utils.futures_symbol import futures_symbol_rating_canonical, resolve_fu
 GPT_SOURCE = "gpt_explore"
 EXPLORE_MARGIN_USD = 500.0
 EXPLORE_LEVERAGE = 5
-EXPLORE_HOLD_HOURS = AI_POSITION_HOLD_HOURS
-EXPLORE_SL_PCT = AI_POSITION_SL_PCT
-EXPLORE_TP_PCT = AI_POSITION_TP_PCT
 EXPLORE_ACCOUNT_ID = 2
 
 _explore_running_lock = threading.Lock()
@@ -162,8 +159,8 @@ def _open_simulated_position(
     from app.services.paper_open_gate import gate_simulated_open
     allowed, gate_reason = gate_simulated_open(
         symbol, side, price, GPT_SOURCE, catalyst,
-        leverage=EXPLORE_LEVERAGE, sl_pct=EXPLORE_SL_PCT, tp_pct=EXPLORE_TP_PCT,
-        hold_hours=EXPLORE_HOLD_HOURS, conn=conn,
+        leverage=EXPLORE_LEVERAGE, sl_pct=get_ai_position_sl_pct(), tp_pct=get_ai_position_tp_pct(),
+        hold_hours=get_ai_position_hold_hours(), conn=conn,
     )
     if not allowed:
         return None, (gate_reason or "open advisor rejected")[:255]
@@ -177,12 +174,12 @@ def _open_simulated_position(
         source=GPT_SOURCE,
         leverage=EXPLORE_LEVERAGE,
         margin=EXPLORE_MARGIN_USD,
-        stop_loss_pct=EXPLORE_SL_PCT,
-        take_profit_pct=EXPLORE_TP_PCT,
+        stop_loss_pct=get_ai_position_sl_pct(),
+        take_profit_pct=get_ai_position_tp_pct(),
         entry_signal_type="gpt_explore",
         entry_reason=(catalyst or "gpt_explore")[:180],
-        max_hold_minutes=EXPLORE_HOLD_HOURS * 60,
-        planned_close_time=datetime.now() + timedelta(hours=EXPLORE_HOLD_HOURS),
+        max_hold_minutes=get_ai_position_hold_hours() * 60,
+        planned_close_time=datetime.now() + timedelta(hours=get_ai_position_hold_hours()),
         account_id=EXPLORE_ACCOUNT_ID,
     )
     if order_id is None:
@@ -247,7 +244,7 @@ def _run_explore_round_body(triggered_by: str = "scheduler") -> Optional[int]:
 
     logger.info(
         f"[GPT探索] === 一轮开始 (triggered_by={triggered_by}, "
-        f"周期={EXPLORE_MIN_INTERVAL_HOURS:.0f}h) ==="
+        f"周期={get_ai_schedule_interval_hours()}h) ==="
     )
 
     try:
@@ -307,11 +304,16 @@ def _run_explore_round_body(triggered_by: str = "scheduler") -> Optional[int]:
             if _has_open_position(conn, symbol):
                 verdict_rows.append((run_id, symbol, category, confidence, catalyst, data_signal, risk_note, "skipped_dedup", None, "已有OPEN仓位"))
                 continue
+            from app.services.trading_gates import check_max_positions_allowed
+            mp_ok, mp_reason = check_max_positions_allowed(conn, EXPLORE_ACCOUNT_ID)
+            if not mp_ok:
+                verdict_rows.append((run_id, symbol, category, confidence, catalyst, data_signal, risk_note, "skipped_max_positions", None, mp_reason))
+                continue
             price = _get_current_price(conn, symbol, resolve_futures_universe_item(universe, symbol))
             if not price or price <= 0:
                 verdict_rows.append((run_id, symbol, category, confidence, catalyst, data_signal, risk_note, "skipped_other", None, "无有效开仓价"))
                 continue
-            tp_check = round(price * (1 + EXPLORE_TP_PCT / 100), 8) if side == "LONG" else round(price * (1 - EXPLORE_TP_PCT / 100), 8)
+            tp_check = round(price * (1 + get_ai_position_tp_pct() / 100), 8) if side == "LONG" else round(price * (1 - get_ai_position_tp_pct() / 100), 8)
             instant, ref_px = _would_instant_tp(conn, symbol, side, tp_check)
             if instant:
                 verdict_rows.append((run_id, symbol, category, confidence, catalyst, data_signal, risk_note, "skipped_other", None, f"市价{ref_px:.6g}已越过TP"))

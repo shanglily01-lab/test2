@@ -131,3 +131,60 @@ def get_live_whitelist_enabled() -> bool:
     """白名单是否允许开实仓 (默认 True)."""
     from app.services.trading_gates import is_live_whitelist_enabled
     return is_live_whitelist_enabled()
+
+
+_DEFAULT_SL_DECIMAL = 0.03
+_DEFAULT_TP_DECIMAL = 0.05
+
+
+def get_sl_tp_decimal() -> tuple[float, float]:
+    """从 system_settings 读取止损/止盈比例（小数，0.03=3%）。"""
+    try:
+        sl = float(get_setting('stop_loss_pct', str(_DEFAULT_SL_DECIMAL)))
+        tp = float(get_setting('take_profit_pct', str(_DEFAULT_TP_DECIMAL)))
+        return sl, tp
+    except Exception as e:
+        logger.warning(f"[settings_loader] 读取 SL/TP 失败，使用默认 3%/5%: {e}")
+        return _DEFAULT_SL_DECIMAL, _DEFAULT_TP_DECIMAL
+
+
+def get_sl_tp_pct_points() -> tuple[float, float]:
+    """开仓用百分点（3.0=3%），与 paper_limit_entry / futures_trading_engine 一致。"""
+    sl, tp = get_sl_tp_decimal()
+    return sl * 100.0, tp * 100.0
+
+
+_DEFAULT_MAX_HOLD_HOURS = 4
+_DEFAULT_MAX_POSITIONS = 50
+_MIN_HOLD_HOURS = 2
+_MAX_HOLD_HOURS = 8
+
+
+def get_max_hold_hours() -> int:
+    """最大持仓时间 + AI 探索/预测调度周期（小时），读 max_hold_hours，范围 2~8。"""
+    try:
+        hours = int(float(get_setting('max_hold_hours', str(_DEFAULT_MAX_HOLD_HOURS))))
+        return max(_MIN_HOLD_HOURS, min(_MAX_HOLD_HOURS, hours))
+    except Exception as e:
+        logger.warning(f"[settings_loader] 读取 max_hold_hours 失败，使用默认 {_DEFAULT_MAX_HOLD_HOURS}h: {e}")
+        return _DEFAULT_MAX_HOLD_HOURS
+
+
+def get_max_positions() -> int:
+    """模拟盘最大持仓数量（account 级总槽位）。"""
+    try:
+        return max(1, int(float(get_setting('max_positions', str(_DEFAULT_MAX_POSITIONS)))))
+    except Exception as e:
+        logger.warning(f"[settings_loader] 读取 max_positions 失败，使用默认 {_DEFAULT_MAX_POSITIONS}: {e}")
+        return _DEFAULT_MAX_POSITIONS
+
+
+def get_strategy_open_params() -> dict:
+    """Web/AI 状态页展示用：SL/TP/持仓时长/最大持仓数。"""
+    sl_d, tp_d = get_sl_tp_decimal()
+    return {
+        "max_positions": get_max_positions(),
+        "hold_hours": get_max_hold_hours(),
+        "sl_pct": round(sl_d * 100, 2),
+        "tp_pct": round(tp_d * 100, 2),
+    }

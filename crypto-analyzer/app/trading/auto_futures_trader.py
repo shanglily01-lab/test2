@@ -86,22 +86,6 @@ class AutoFuturesTrader:
             'BNB/USDT': Decimal('0.5')     # 0.5 BNB
         }
 
-        # 止盈止损配置（根据置信度调整）
-        self.stop_loss_take_profit_map = {
-            'high_confidence': {  # >= 85%
-                'stop_loss_pct': Decimal('5'),
-                'take_profit_pct': Decimal('20')
-            },
-            'medium_confidence': {  # >= 75%
-                'stop_loss_pct': Decimal('5'),
-                'take_profit_pct': Decimal('15')
-            },
-            'low_confidence': {  # < 75% (不会开仓)
-                'stop_loss_pct': Decimal('5'),
-                'take_profit_pct': Decimal('10')
-            }
-        }
-
         logger.info("AutoFuturesTrader initialized")
         logger.info(f"Target symbols: {self.target_symbols}")
         logger.info(f"Min confidence: {self.min_confidence}%")
@@ -191,14 +175,9 @@ class AutoFuturesTrader:
         Returns:
             (止损百分比, 止盈百分比)
         """
-        if confidence >= 85:
-            config = self.stop_loss_take_profit_map['high_confidence']
-        elif confidence >= 75:
-            config = self.stop_loss_take_profit_map['medium_confidence']
-        else:
-            config = self.stop_loss_take_profit_map['low_confidence']
-
-        return config['stop_loss_pct'], config['take_profit_pct']
+        from app.services.system_settings_loader import get_sl_tp_pct_points
+        sl, tp = get_sl_tp_pct_points()
+        return Decimal(str(sl)), Decimal(str(tp))
 
     def open_position_from_recommendation(self, recommendation: Dict) -> Dict:
         """

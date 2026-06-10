@@ -953,22 +953,16 @@ async def update_trading_services(data: TradingServicesUpdate):
 
 
 class MaxHoldHoursUpdate(BaseModel):
-    """最大持仓时间更新"""
-    hours: int  # 3~8
+    """最大持仓时间 + AI 调度周期更新"""
+    hours: int  # 2~8
 
 
 @router.get("/max-hold-hours")
 async def get_max_hold_hours():
-    """获取最大持仓时间（小时）"""
+    """获取最大持仓时间 / AI 调度周期（小时，2~8）"""
     try:
-        db_config = get_db_config()
-        conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor, autocommit=True)
-        cursor = conn.cursor()
-        cursor.execute("SELECT setting_value FROM system_settings WHERE setting_key = 'max_hold_hours'")
-        row = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        hours = int(row['setting_value']) if row else 3
+        from app.services.system_settings_loader import get_max_hold_hours as _load_hours
+        hours = _load_hours()
         return {'success': True, 'data': {'hours': hours}}
     except Exception as e:
         logger.error(f"获取max_hold_hours失败: {e}")
@@ -977,15 +971,15 @@ async def get_max_hold_hours():
 
 @router.put("/max-hold-hours")
 async def update_max_hold_hours(data: MaxHoldHoursUpdate):
-    """更新最大持仓时间（3~8小时，实时生效，下次开仓时读取）"""
-    hours = max(3, min(8, data.hours))
+    """更新最大持仓时间 + AI 探索/预测调度周期（2~8小时，实时生效）"""
+    hours = max(2, min(8, data.hours))
     try:
         db_config = get_db_config()
         conn = pymysql.connect(**db_config, cursorclass=pymysql.cursors.DictCursor, autocommit=True)
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-            VALUES ('max_hold_hours', %s, '最大持仓时间（小时），范围3~8', 'web_ui', NOW())
+            VALUES ('max_hold_hours', %s, '持仓时长与AI调度周期（小时），范围2~8', 'web_ui', NOW())
             ON DUPLICATE KEY UPDATE setting_value = %s, updated_by = 'web_ui', updated_at = NOW()
         """, (str(hours), str(hours)))
         cursor.close()
@@ -994,7 +988,7 @@ async def update_max_hold_hours(data: MaxHoldHoursUpdate):
         return {
             'success': True,
             'message': f'最大持仓时间已更新为 {hours} 小时',
-            'data': {'hours': hours, 'note': '下次开仓时生效，无需重启'}
+            'data': {'hours': hours, 'note': '持仓时长与 AI 探索/预测调度周期即时生效，无需重启'}
         }
     except Exception as e:
         logger.error(f"更新max_hold_hours失败: {e}")

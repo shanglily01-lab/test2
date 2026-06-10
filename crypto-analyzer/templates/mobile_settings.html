@@ -237,21 +237,18 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
         <div class="settings-card rounded-2xl overflow-hidden">
             <div class="setting-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 border-b border-outline-variant/10 py-1">
                 <div class="flex flex-col py-2 min-w-0 pr-2">
-                    <span class="text-sm font-medium">Smart Trader 持仓时长</span>
-                    <span class="text-[10px] text-on-surface-variant mt-0.5 leading-snug">范围 3～12 小时</span>
+                    <span class="text-sm font-medium">持仓时长 / AI 调度</span>
+                    <span class="text-[10px] text-on-surface-variant mt-0.5 leading-snug">范围 2～8 小时</span>
                 </div>
                 <select id="holdHours" onchange="autoSave('holdHours')" aria-label="Smart Trader持仓小时数"
                     class="bg-surface-container-highest text-on-surface text-sm rounded-xl border-none focus:ring-2 focus:ring-primary/50 h-11 min-h-[44px] px-4 font-body mono-data w-full sm:w-auto sm:min-w-[100px] sm:ml-4 flex-shrink-0 touch-manipulation">
+                    <option value="2">2H</option>
                     <option value="3">3H</option>
                     <option value="4">4H</option>
                     <option value="5">5H</option>
                     <option value="6">6H</option>
                     <option value="7">7H</option>
                     <option value="8">8H</option>
-                    <option value="9">9H</option>
-                    <option value="10">10H</option>
-                    <option value="11">11H</option>
-                    <option value="12">12H</option>
                 </select>
             </div>
             <div class="setting-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 py-1">
@@ -536,7 +533,7 @@ async function loadAll() {
             if (tpEl && d.take_profit_pct != null) tpEl.value = (parseFloat(d.take_profit_pct) * 100).toFixed(1);
         }
         if (holdR.success) {
-            const h = Math.max(3, Math.min(12, parseInt(holdR.data.hours, 10) || 6));
+            const h = Math.max(2, Math.min(8, parseInt(holdR.data.hours, 10) || 4));
             document.getElementById('holdHours').value = String(h);
         }
         if (maxPosR.success) {
@@ -591,11 +588,11 @@ async function save(type) {
         if (r.success) toast('Big4设置已保存');
         else toast('保存失败', 'err');
     } else if (type === 'holdHours') {
-        const hours = Math.max(3, Math.min(12, parseInt(document.getElementById('holdHours').value, 10) || 6));
+        const hours = Math.max(2, Math.min(8, parseInt(document.getElementById('holdHours').value, 10) || 4));
         const r = await fetch(`${SYS}/max-hold-hours`, {
             method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ hours })
         }).then(r => r.json());
-        if (r.success) toast(`Smart Trader 持仓时间已设为 ${hours} 小时`);
+        if (r.success) toast(`持仓/AI 调度已设为 ${hours} 小时`);
         else toast('保存失败', 'err');
     } else if (type === 'maxPositions') {
         const val = parseInt(document.getElementById('maxPositionsInput').value, 10) || 50;

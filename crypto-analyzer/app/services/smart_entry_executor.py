@@ -89,15 +89,9 @@ class SmartEntryExecutor:
         return stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct
 
     def _get_sl_tp_from_settings(self):
-        """从 system_settings 缓存读取止损/止盈比例，失败时返回默认值 2%/5%"""
-        try:
-            from app.services.system_settings_loader import get_setting as _get_cached_setting
-            sl = float(_get_cached_setting('stop_loss_pct', '0.03'))
-            tp = float(_get_cached_setting('take_profit_pct', '0.05'))
-            return sl, tp
-        except Exception as e:
-            logger.warning(f"[SL/TP] 读取system_settings失败，使用默认值: {e}")
-            return 0.03, 0.05
+        """从 system_settings 读取止损/止盈比例（小数，0.03=3%）。"""
+        from app.services.system_settings_loader import get_sl_tp_decimal
+        return get_sl_tp_decimal()
 
     def _calculate_volatility_adjusted_stop_loss(self, signal_components: dict, base_stop_loss_pct: float) -> float:
         """波动率自适应止损"""
@@ -334,10 +328,8 @@ class SmartEntryExecutor:
             else:
                 signal_combination_key = "TREND_unknown"
 
-            # 计算超时和计划平仓时间（实时从DB读取 max_hold_hours，无需重启）
-            _mh_val = self.opt_config._read_system_setting('max_hold_hours') if self.opt_config else None
-            _mh_hours = max(3, min(8, int(_mh_val or 3)))
-            max_hold_minutes = _mh_hours * 60
+            from app.services.system_settings_loader import get_max_hold_hours
+            max_hold_minutes = get_max_hold_hours() * 60
             timeout_at = datetime.now() + timedelta(minutes=max_hold_minutes)
             planned_close_time = datetime.now() + timedelta(minutes=max_hold_minutes)
 

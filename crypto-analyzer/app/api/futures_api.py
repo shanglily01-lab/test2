@@ -1189,16 +1189,10 @@ async def auto_open_from_signals(request: AutoOpenRequest):
             # 获取仓位大小
             quantity = position_size_map.get(symbol, Decimal('0.01'))
 
-            # 计算止盈止损（基于置信度调整）
-            if confidence >= 85:
-                stop_loss_pct = Decimal('5')
-                take_profit_pct = Decimal('20')
-            elif confidence >= 75:
-                stop_loss_pct = Decimal('5')
-                take_profit_pct = Decimal('15')
-            else:
-                stop_loss_pct = Decimal('5')
-                take_profit_pct = Decimal('10')
+            from app.services.system_settings_loader import get_sl_tp_pct_points
+            _sl, _tp = get_sl_tp_pct_points()
+            stop_loss_pct = Decimal(str(_sl))
+            take_profit_pct = Decimal(str(_tp))
 
             detail['position_side'] = position_side
             detail['leverage'] = leverage

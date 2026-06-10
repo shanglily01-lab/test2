@@ -185,6 +185,8 @@ async def status():
         finally:
             conn.close()
 
+        from app.services.system_settings_loader import get_strategy_open_params
+        _params = get_strategy_open_params()
         return {
             "success": True,
             "data": {
@@ -192,13 +194,13 @@ async def status():
                 "last_run": last_run,
                 "open_positions": open_count,
                 "closed_positions_30d": closed_30d,
-                "max_positions": None,
+                "max_positions": _params["max_positions"],
                 "params": {
                     "margin_usd": 500,
                     "leverage": 3,
-                    "hold_hours": 4,
-                    "sl_pct": 3,
-                    "tp_pct": 5,
+                    "hold_hours": _params["hold_hours"],
+                    "sl_pct": _params["sl_pct"],
+                    "tp_pct": _params["tp_pct"],
                     "confidence_threshold": 0.6,
                     "entry_grace_min": 30,
                 },

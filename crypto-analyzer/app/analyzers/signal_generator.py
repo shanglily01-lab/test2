@@ -34,11 +34,13 @@ class SignalGenerator:
         self.short_threshold = confidence_config.get('short', 0.60)
         self.strong_short_threshold = confidence_config.get('strong_short', 0.75)
 
-        # 风险管理
+        # 风险管理（SL/TP 运行时从 system_settings 读取）
         risk_config = self.config.get('signals', {}).get('risk', {})
-        self.stop_loss_pct = risk_config.get('stop_loss_pct', 0.03)
-        self.take_profit_pct = risk_config.get('take_profit_pct', 0.05)
         self.max_position = risk_config.get('max_position', 0.5)
+
+    def _get_sl_tp(self) -> tuple[float, float]:
+        from app.services.system_settings_loader import get_sl_tp_decimal
+        return get_sl_tp_decimal()
 
     def generate_signal(
         self,
@@ -91,6 +93,7 @@ class SignalGenerator:
             current_price,
             action
         )
+        sl_pct, tp_pct = self._get_sl_tp()
 
         # 7. 生成原因列表
         reasons = self._generate_reasons(
@@ -122,8 +125,8 @@ class SignalGenerator:
             },
             'position': {
                 'recommended_size': self._calculate_position_size(confidence),
-                'max_loss_pct': self.stop_loss_pct * 100,
-                'max_profit_pct': self.take_profit_pct * 100
+                'max_loss_pct': sl_pct * 100,
+                'max_profit_pct': tp_pct * 100
             },
             'reasons': reasons,
             'risks': risks,
@@ -234,14 +237,15 @@ class SignalGenerator:
         Returns:
             (entry_price, stop_loss, take_profit)
         """
+        sl_pct, tp_pct = self._get_sl_tp()
         if action in ['LONG', 'STRONG_LONG']:
             entry = current_price
-            stop_loss = entry * (1 - self.stop_loss_pct)
-            take_profit = entry * (1 + self.take_profit_pct)
+            stop_loss = entry * (1 - sl_pct)
+            take_profit = entry * (1 + tp_pct)
         elif action in ['SHORT', 'STRONG_SHORT']:
             entry = current_price
-            stop_loss = entry * (1 + self.stop_loss_pct)
-            take_profit = entry * (1 - self.take_profit_pct)
+            stop_loss = entry * (1 + sl_pct)
+            take_profit = entry * (1 - tp_pct)
         else:
             # HOLD
             entry = current_price

@@ -41,18 +41,9 @@ class BTCMomentumTrader:
         )
 
     def _get_sl_tp_from_settings(self):
-        """从 system_settings 读取止损止盈比例，默认 3%/5%"""
-        try:
-            conn = self._get_conn()
-            cur = conn.cursor()
-            cur.execute("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('stop_loss_pct','take_profit_pct')")
-            rows = {r['setting_key']: r['setting_value'] for r in cur.fetchall()}
-            cur.close(); conn.close()
-            return float(rows.get('stop_loss_pct', 0.03)), float(rows.get('take_profit_pct', 0.05))
-        except Exception as e:
-            from loguru import logger
-            logger.warning(f"[BTC动量] 读取SL/TP配置失败，使用默认值: {e}")
-            return 0.03, 0.05
+        """从 system_settings 读取止损止盈比例（小数，0.03=3%）。"""
+        from app.services.system_settings_loader import get_sl_tp_decimal
+        return get_sl_tp_decimal()
 
     # ──────────────────────────────────────────
     # 价格跟踪
@@ -422,18 +413,9 @@ class BTCMomentumTrader:
         logger.info(f"[BTC动量] 完成，共开仓 {opened}/{len(top100)} 个交易对，4小时内不再触发")
 
     def _get_max_hold_hours(self) -> int:
-        """从 system_settings 读取最大持仓时间（小时），默认4小时"""
-        try:
-            conn = self._get_conn()
-            cur = conn.cursor()
-            cur.execute("SELECT setting_value FROM system_settings WHERE setting_key='max_hold_hours'")
-            row = cur.fetchone()
-            cur.close(); conn.close()
-            if row:
-                return max(1, int(row['setting_value']))
-            return 4
-        except Exception:
-            return 4
+        """从 system_settings 读取最大持仓时间（小时）。"""
+        from app.services.system_settings_loader import get_max_hold_hours
+        return get_max_hold_hours()
 
     def _is_momentum_enabled(self) -> bool:
         """从 system_settings 读取 btc_momentum_enabled + u_futures_trading_enabled + trend_following_enabled，任一关闭则停止"""

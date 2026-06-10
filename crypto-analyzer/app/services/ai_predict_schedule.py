@@ -1,6 +1,7 @@
-"""Gemini / DeepSeek / GPT 探索+预测 — 统一固定时刻 2h 调度.
+"""Gemini / DeepSeek / GPT 探索+预测 — 统一固定时刻调度.
 
-锚点: 北京时间 21:30 (= UTC 13:30), 每 2h 一轮.
+调度周期: system_settings.max_hold_hours（2~8h，与持仓时长共用）。
+锚点: 北京时间 21:30 (= UTC 13:30), 每 N 小时一轮.
 Gemini / GPT / DeepSeek 错开 30 分钟; 同教师探索/预测再错开 15 分钟:
   gemini_explore +0,   gemini_predict +15,
   gpt_explore +30,     gpt_predict +45,
@@ -15,10 +16,8 @@ from typing import Dict, Optional, Tuple
 
 from loguru import logger
 
-from app.services.ai_explore_prompt import EXPLORE_MIN_INTERVAL_HOURS
+from app.services.system_settings_loader import get_max_hold_hours
 
-PREDICT_ROUND_INTERVAL_HOURS = 2
-PREDICT_ROUND_INTERVAL_SECONDS = PREDICT_ROUND_INTERVAL_HOURS * 3600
 PREDICT_SCHEDULE_POLL_MINUTES = 5
 
 # 固定锚点 UTC 13:30 = 北京时间 21:30
@@ -47,6 +46,15 @@ STRATEGY_SCHEDULE_OFFSETS: Dict[str, int] = {
     "deepseek_explore": _DEEPSEEK_OFFSET,
     "deepseek_predict": _DEEPSEEK_OFFSET + SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN,
 }
+
+
+def get_ai_round_interval_hours() -> int:
+    """AI 探索/预测固定槽位周期（小时），读 max_hold_hours。"""
+    return get_max_hold_hours()
+
+
+def get_ai_round_interval_seconds() -> int:
+    return get_ai_round_interval_hours() * 3600
 
 
 def _offset_label(offset_min: int) -> str:
@@ -104,11 +112,11 @@ def _last_ok_run_at(cur, runs_table: str) -> Optional[datetime]:
 
 
 def _period_base_for_now(now: datetime) -> datetime:
-    """当前 2h 周期起点 (共享锚点 13:30 UTC, 不含策略 offset)."""
+    """当前调度周期起点 (共享锚点 13:30 UTC, 不含策略 offset)."""
     if now < _SCHEDULE_ANCHOR_BASE:
         return _SCHEDULE_ANCHOR_BASE
     elapsed_s = (now - _SCHEDULE_ANCHOR_BASE).total_seconds()
-    period_s = PREDICT_ROUND_INTERVAL_SECONDS
+    period_s = get_ai_round_interval_seconds()
     n = int(elapsed_s // period_s)
     return _SCHEDULE_ANCHOR_BASE + timedelta(seconds=period_s * n)
 
@@ -122,7 +130,7 @@ def scheduled_slot_for_now(
     strategy_key: str,
     now: Optional[datetime] = None,
 ) -> datetime:
-    """当前 2h 周期内该策略的固定槽位时刻 (UTC naive)."""
+    """当前周期内该策略的固定槽位时刻 (UTC naive)."""
     if strategy_key not in STRATEGY_SCHEDULE_OFFSETS:
         raise KeyError(f"unknown strategy_key: {strategy_key}")
 
@@ -140,7 +148,7 @@ def next_scheduled_slot(
     slot_this_period = _slot_in_period(period_base, strategy_key)
     if after < slot_this_period:
         return slot_this_period
-    next_base = period_base + timedelta(seconds=PREDICT_ROUND_INTERVAL_SECONDS)
+    next_base = period_base + timedelta(seconds=get_ai_round_interval_seconds())
     return _slot_in_period(next_base, strategy_key)
 
 
@@ -159,12 +167,13 @@ def _ai_round_is_due(
 
     now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     slot = scheduled_slot_for_now(strategy_key, now)
+    period_s = get_ai_round_interval_seconds()
 
     if now < slot:
         remain_s = (slot - now).total_seconds()
         return False, (
             f"未到点 剩余 {remain_s / 60:.0f}min "
-            f"(slot={slot.isoformat()} UTC, 锚点21:30北京)"
+            f"(slot={slot.isoformat()} UTC, 锚点21:30北京, 周期{get_ai_round_interval_hours()}h)"
         )
 
     with conn.cursor() as cur:
@@ -180,7 +189,7 @@ def _ai_round_is_due(
             )
 
         if last_ok and last_ok >= slot:
-            next_slot = slot + timedelta(seconds=PREDICT_ROUND_INTERVAL_SECONDS)
+            next_slot = slot + timedelta(seconds=period_s)
             if now < next_slot:
                 remain_s = (next_slot - now).total_seconds()
                 return False, (
@@ -194,7 +203,10 @@ def _ai_round_is_due(
         return True, (
             f"逾期补跑 slot={slot.isoformat()} UTC 迟到 {late_h:.1f}h"
         )
-    return True, f"固定槽 due slot={slot.isoformat()} UTC (锚点21:30北京)"
+    return True, (
+        f"固定槽 due slot={slot.isoformat()} UTC "
+        f"(锚点21:30北京, 周期{get_ai_round_interval_hours()}h)"
+    )
 
 
 def explore_round_is_due(
@@ -206,9 +218,9 @@ def explore_round_is_due(
     now: Optional[datetime] = None,
     manual: bool = False,
     log_tag: str = "Explore",
-    interval_hours: float = EXPLORE_MIN_INTERVAL_HOURS,
+    interval_hours: Optional[float] = None,
 ) -> Tuple[bool, str]:
-    """主探索固定时刻 2h 防重 (interval_hours 保留兼容, 实际以锚点槽位为准)."""
+    """主探索固定时刻防重 (interval_hours 保留兼容, 实际以锚点槽位 + max_hold_hours 为准)."""
     _ = interval_hours
     return _ai_round_is_due(
         conn,
@@ -231,7 +243,7 @@ def predict_round_is_due(
     manual: bool = False,
     log_tag: str = "Predict",
 ) -> Tuple[bool, str]:
-    """预测固定时刻 2h 防重."""
+    """预测固定时刻防重."""
     return _ai_round_is_due(
         conn,
         strategy_key=strategy_key,
@@ -270,13 +282,15 @@ def _claim_next_slot(
                 value,
                 (
                     f"{log_tag} 下一轮固定槽 UTC "
-                    f"(锚点21:30北京 {_offset_label(STRATEGY_SCHEDULE_OFFSETS[strategy_key])})"
+                    f"(锚点21:30北京 {_offset_label(STRATEGY_SCHEDULE_OFFSETS[strategy_key])}, "
+                    f"周期{get_ai_round_interval_hours()}h)"
                 ),
             ),
         )
     logger.info(
         f"[{log_tag}] 已认领固定槽, next_due_utc={value} "
-        f"(offset={_offset_label(STRATEGY_SCHEDULE_OFFSETS[strategy_key])})"
+        f"(offset={_offset_label(STRATEGY_SCHEDULE_OFFSETS[strategy_key])}, "
+        f"周期={get_ai_round_interval_hours()}h)"
     )
     return next_due
 
@@ -331,9 +345,9 @@ def realign_stale_next_due_slots(
     now: Optional[datetime] = None,
     grace_seconds: int = 90,
 ) -> int:
-    """4h→2h 部署后修正偏远的 next_due，避免设置页/日志仍显示 4h 间隔。"""
+    """部署或 max_hold_hours 变更后修正偏远的 next_due。"""
     now = now or datetime.now(timezone.utc).replace(tzinfo=None)
-    period_s = PREDICT_ROUND_INTERVAL_SECONDS
+    period_s = get_ai_round_interval_seconds()
     threshold = period_s / 2 + grace_seconds
     fixed = 0
 
@@ -362,13 +376,14 @@ def realign_stale_next_due_slots(
                     value,
                     (
                         f"{strategy_key} 下一轮固定槽 UTC "
-                        f"(锚点21:30北京 {_offset_label(STRATEGY_SCHEDULE_OFFSETS[strategy_key])})"
+                        f"(锚点21:30北京 {_offset_label(STRATEGY_SCHEDULE_OFFSETS[strategy_key])}, "
+                        f"周期{get_ai_round_interval_hours()}h)"
                     ),
                 ),
             )
             logger.info(
                 f"[AI调度校正] {strategy_key}: {stored.isoformat()} → {value} "
-                f"(drift={drift_s / 60:.0f}min)"
+                f"(drift={drift_s / 60:.0f}min, 周期={get_ai_round_interval_hours()}h)"
             )
             fixed += 1
     return fixed

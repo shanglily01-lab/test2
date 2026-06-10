@@ -39,11 +39,10 @@ from app.utils.futures_symbol import (
     resolve_futures_universe_item,
 )
 from app.services.ai_explore_prompt import (
-    AI_POSITION_HOLD_HOURS,
-    AI_POSITION_SL_PCT,
-    AI_POSITION_TP_PCT,
+    get_ai_position_hold_hours,
+    get_ai_position_sl_pct,
+    get_ai_position_tp_pct,
     EXPLORE_LLM_MAX_OUTPUT_TOKENS,
-    EXPLORE_MIN_INTERVAL_HOURS,
     EXPLORE_CONFIDENCE_THRESHOLD,
     build_explore_prompt,
     build_explore_prompt_en,
@@ -135,9 +134,6 @@ def _try_position_stats(source: str, account_id: int = 2) -> Optional[Dict]:
 # ============================================================
 EXPLORE_MARGIN_USD = 500.0
 EXPLORE_LEVERAGE = 5
-EXPLORE_HOLD_HOURS = AI_POSITION_HOLD_HOURS
-EXPLORE_SL_PCT = AI_POSITION_SL_PCT
-EXPLORE_TP_PCT = AI_POSITION_TP_PCT
 EXPLORE_ACCOUNT_ID = 2
 EXPLORE_SOURCE = DEEPSEEK_SOURCE
 
@@ -1031,8 +1027,8 @@ def _sync_to_live(
                 leverage=act_lev,
                 stop_loss_price=Decimal(str(sl_price)),
                 take_profit_price=Decimal(str(tp_price)),
-                stop_loss_pct=Decimal(str(EXPLORE_SL_PCT)),
-                take_profit_pct=Decimal(str(EXPLORE_TP_PCT)),
+                stop_loss_pct=Decimal(str(get_ai_position_sl_pct())),
+                take_profit_pct=Decimal(str(get_ai_position_tp_pct())),
                 source='deepseek_explore',
                 paper_position_id=paper_position_id,
             )
@@ -1070,14 +1066,14 @@ def _open_simulated_position(
     allowed, _gate_reason = gate_simulated_open(
         symbol, side, price, EXPLORE_SOURCE, catalyst,
         leverage=EXPLORE_LEVERAGE,
-        sl_pct=EXPLORE_SL_PCT, tp_pct=EXPLORE_TP_PCT,
-        hold_hours=EXPLORE_HOLD_HOURS, conn=conn,
+        sl_pct=get_ai_position_sl_pct(), tp_pct=get_ai_position_tp_pct(),
+        hold_hours=get_ai_position_hold_hours(), conn=conn,
     )
     if not allowed:
         return None
 
     entry_reason = (catalyst or 'deepseek_explore')[:180]
-    entry_reason += f" | SL={EXPLORE_SL_PCT}% TP={EXPLORE_TP_PCT}% lev={EXPLORE_LEVERAGE}x hold={EXPLORE_HOLD_HOURS}h"
+    entry_reason += f" | SL={get_ai_position_sl_pct()}% TP={get_ai_position_tp_pct()}% lev={EXPLORE_LEVERAGE}x hold={get_ai_position_hold_hours()}h"
 
     from app.services.paper_limit_entry import create_paper_limit_order
     return create_paper_limit_order(
@@ -1088,12 +1084,12 @@ def _open_simulated_position(
         source=EXPLORE_SOURCE,
         leverage=EXPLORE_LEVERAGE,
         margin=EXPLORE_MARGIN_USD,
-        stop_loss_pct=EXPLORE_SL_PCT,
-        take_profit_pct=EXPLORE_TP_PCT,
+        stop_loss_pct=get_ai_position_sl_pct(),
+        take_profit_pct=get_ai_position_tp_pct(),
         entry_signal_type='deepseek_explore',
         entry_reason=entry_reason,
-        max_hold_minutes=EXPLORE_HOLD_HOURS * 60,
-        planned_close_time=datetime.now() + timedelta(hours=EXPLORE_HOLD_HOURS),
+        max_hold_minutes=get_ai_position_hold_hours() * 60,
+        planned_close_time=datetime.now() + timedelta(hours=get_ai_position_hold_hours()),
         account_id=EXPLORE_ACCOUNT_ID,
     )
 
@@ -1428,13 +1424,23 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            from app.services.trading_gates import is_symbol_blocked_level3
+            from app.services.trading_gates import is_symbol_blocked_level3, check_max_positions_allowed
             if is_symbol_blocked_level3(symbol):
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,
                     catalyst, data_signal, risk_note,
                     'skipped_blacklist', None,
                     "黑名单3级, 永久禁止交易",
+                ))
+                continue
+
+            mp_ok, mp_reason = check_max_positions_allowed(conn, EXPLORE_ACCOUNT_ID)
+            if not mp_ok:
+                verdict_rows.append((
+                    run_id, symbol, db_category, confidence,
+                    catalyst, data_signal, risk_note,
+                    'skipped_max_positions', None,
+                    mp_reason,
                 ))
                 continue
 
@@ -1448,9 +1454,9 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
             if side == 'LONG':
-                tp_check = round(price * (1 + EXPLORE_TP_PCT / 100), 8)
+                tp_check = round(price * (1 + get_ai_position_tp_pct() / 100), 8)
             else:
-                tp_check = round(price * (1 - EXPLORE_TP_PCT / 100), 8)
+                tp_check = round(price * (1 - get_ai_position_tp_pct() / 100), 8)
             instant, ref_px = _would_instant_tp(conn, symbol, side, tp_check)
             if instant:
                 verdict_rows.append((

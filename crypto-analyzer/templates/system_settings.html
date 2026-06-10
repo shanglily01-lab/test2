@@ -402,19 +402,16 @@
 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
 <div>
 <p class="cfg-l2-label">3.1 持仓限制</p>
-<label class="block text-xs text-slate-500 mb-2">Smart Trader 持仓时长</label>
+<label class="block text-xs text-slate-500 mb-2">持仓时长 / AI 调度周期</label>
 <div class="relative">
 <select id="maxHoldHoursSelect" class="w-full bg-[#151a20] border border-slate-800 rounded-xl py-3 px-3 pr-10 text-slate-200 text-sm font-mono appearance-none focus:ring-1 focus:ring-[#49f4c8]/40 focus:border-[#49f4c8]/30">
+<option value="2">2H</option>
 <option value="3">3H</option>
-<option value="4">4H</option>
+<option value="4" selected="">4H</option>
 <option value="5">5H</option>
-<option value="6" selected="">6H</option>
+<option value="6">6H</option>
 <option value="7">7H</option>
 <option value="8">8H</option>
-<option value="9">9H</option>
-<option value="10">10H</option>
-<option value="11">11H</option>
-<option value="12">12H</option>
 </select>
 <span class="material-symbols-outlined absolute right-2 top-2.5 text-slate-500 pointer-events-none text-lg">expand_more</span>
 </div>
@@ -697,7 +694,7 @@
                 // 最大持仓时长
                 const sel = document.getElementById('maxHoldHoursSelect');
                 if (sel) {
-                    sel.value = String(hold.hours ?? 6);
+                    sel.value = String(hold.hours ?? 4);
                 }
 
                 // 止损/止盈

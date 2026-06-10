@@ -1229,12 +1229,8 @@ class SmartTraderService:
         with open('config.yaml', 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
             self.smart_exit_config = config.get('signals', {}).get('smart_exit', {'enabled': False})
-            # 最大持仓时间：优先从数据库读取，不再参考config.yaml
-            try:
-                _db_mh = self.opt_config._read_system_setting('max_hold_hours')
-                _db_hours = max(3, min(8, int(_db_mh))) if _db_mh else 4
-            except Exception:
-                _db_hours = 4  # DB读取失败默认4小时
+            from app.services.system_settings_loader import get_max_hold_hours
+            _db_hours = get_max_hold_hours()
             self.max_hold_minutes = _db_hours * 60
             logger.info(f"最大持仓时间(DB): {self.max_hold_minutes}分钟 ({_db_hours}小时)")
 
@@ -1568,15 +1564,9 @@ class SmartTraderService:
 
     def get_open_positions_count(self):
         try:
+            from app.services.trading_gates import count_paper_open_slots
             conn = self._get_connection()
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT COUNT(*) FROM futures_positions
-                WHERE status = 'OPEN' AND account_id = %s
-            """, (self.account_id,))
-            result = cursor.fetchone()
-            cursor.close()
-            db_count = result[0] if result else 0
+            db_count = count_paper_open_slots(conn, self.account_id)
             # 加上后台采样中尚未写入DB的任务数，防止超限
             return db_count + self._pending_entry_count
         except:
@@ -1672,25 +1662,14 @@ class SmartTraderService:
         return True, "时间框架一致"
 
     def _load_max_positions(self) -> int:
-        """从 system_settings 缓存读取 max_positions，失败时返回默认值 50"""
-        try:
-            from app.services.system_settings_loader import get_setting as _get_cached_setting
-            val = _get_cached_setting('max_positions', '50')
-            return int(float(val))
-        except Exception as e:
-            logger.warning(f"[MAX-POS] 读取max_positions失败，使用默认值50: {e}")
-        return 50
+        """从 system_settings 读取 max_positions。"""
+        from app.services.system_settings_loader import get_max_positions
+        return get_max_positions()
 
     def _get_sl_tp_from_settings(self):
-        """从 system_settings 缓存读取止损/止盈比例，失败时返回默认值 2%/5%"""
-        try:
-            from app.services.system_settings_loader import get_setting as _get_cached_setting
-            sl = float(_get_cached_setting('stop_loss_pct', '0.03'))
-            tp = float(_get_cached_setting('take_profit_pct', '0.05'))
-            return sl, tp
-        except Exception as e:
-            logger.warning(f"[SL/TP] 读取system_settings失败，使用默认值: {e}")
-            return 0.03, 0.05
+        """从 system_settings 读取止损/止盈比例（小数，0.03=3%）。"""
+        from app.services.system_settings_loader import get_sl_tp_decimal
+        return get_sl_tp_decimal()
 
     def calculate_volatility_adjusted_stop_loss(self, signal_components: dict, base_stop_loss_pct: float) -> float:
         """
@@ -2198,10 +2177,8 @@ class SmartTraderService:
                 base_timeout_minutes = range_max_hold_hours * 60
                 logger.info(f"[RANGE_TIMEOUT] {symbol} 震荡市最大持仓时间: {base_timeout_minutes}分钟")
             else:
-                # 趋势模式: 实时从DB读取 max_hold_hours（无需重启即可生效，不参考config.yaml）
-                _mh_val = self.opt_config._read_system_setting('max_hold_hours')
-                _mh_hours = max(3, min(8, int(_mh_val))) if _mh_val else self.max_hold_minutes // 60
-                base_timeout_minutes = _mh_hours * 60
+                from app.services.system_settings_loader import get_max_hold_hours
+                base_timeout_minutes = get_max_hold_hours() * 60
 
             # 计算超时时间点 (UTC时间)
             timeout_at = datetime.now() + timedelta(minutes=base_timeout_minutes)
@@ -3648,9 +3625,9 @@ class SmartTraderService:
                         if new_tf != getattr(self, 'trend_following_enabled', True):
                             logger.info(f"[TRADING-MODE] 模式更新: 趋势策略={'ON' if new_tf else 'OFF'}")
                             self.trend_following_enabled = new_tf
-                        _tmp_mp = _get_cached_setting('max_positions', '50')
-                        if _tmp_mp is not None:
-                            new_mp = int(float(str(_tmp_mp)))
+                        from app.services.system_settings_loader import get_max_positions
+                        new_mp = get_max_positions()
+                        if new_mp > 0:
                             if new_mp != self.max_positions:
                                 logger.info(f"[CONFIG-RELOAD] 最大持仓数更新: {self.max_positions} -> {new_mp}")
                                 self.max_positions = new_mp
@@ -3842,8 +3819,6 @@ class SmartTraderService:
                                 'reason': f"🚀市场反弹: {trigger_symbol}触底{big4_bounce['lower_shadow_pct']:.1f}%, 窗口{remaining_minutes:.0f}分钟",
                                 'signal_type': 'EMERGENCY_BOUNCE',
                                 'position_size_pct': 70,  # 🔥 激进仓位70%
-                                'take_profit_pct': 8.0,   # 🔥 止盈8%（基于历史平均反弹12.6%）
-                                'stop_loss_pct': 3.0,     # 🔥 止损3%
                                 'trailing_stop_pct': 5.0, # 🔥 动态追踪：回撤5%平仓
                             }
 

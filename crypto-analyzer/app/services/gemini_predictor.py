@@ -37,9 +37,9 @@ from app.services.ai_big4_prompt import (
     market_regime_from_btc_change,
 )
 from app.services.ai_explore_prompt import (
-    AI_POSITION_HOLD_HOURS,
-    AI_POSITION_SL_PCT,
-    AI_POSITION_TP_PCT,
+    get_ai_position_hold_hours,
+    get_ai_position_sl_pct,
+    get_ai_position_tp_pct,
     EXPLORE_LLM_MAX_OUTPUT_TOKENS,
     PREDICT_CONFIDENCE_THRESHOLD,
     explore_catalyst_technical_ok,
@@ -49,7 +49,7 @@ from app.services.ai_explore_prompt import (
 from app.services.ai_predict_prompt import build_predict_prompt
 from app.services.ai_predict_schedule import (
     GEMINI_PREDICT_NEXT_DUE_KEY,
-    PREDICT_ROUND_INTERVAL_HOURS,
+    get_ai_round_interval_hours,
     predict_claim_next_slot,
     predict_round_is_due,
 )
@@ -119,9 +119,6 @@ def _try_snapshot() -> Optional[Dict]:
 # ============================================================
 PREDICT_MARGIN_USD = 500.0
 PREDICT_LEVERAGE = 5
-PREDICT_HOLD_HOURS = AI_POSITION_HOLD_HOURS
-PREDICT_SL_PCT = AI_POSITION_SL_PCT
-PREDICT_TP_PCT = AI_POSITION_TP_PCT
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'gemini_predict'
 PREDICT_CANDIDATE_LIMIT = 500
@@ -621,8 +618,8 @@ def _sync_to_live(
                 leverage=act_lev,
                 stop_loss_price=Decimal(str(sl_price)),
                 take_profit_price=Decimal(str(tp_price)),
-                stop_loss_pct=Decimal(str(PREDICT_SL_PCT)),
-                take_profit_pct=Decimal(str(PREDICT_TP_PCT)),
+                stop_loss_pct=Decimal(str(get_ai_position_sl_pct())),
+                take_profit_pct=Decimal(str(get_ai_position_tp_pct())),
                 source='gemini_predict',
                 paper_position_id=paper_position_id,
             )
@@ -662,8 +659,8 @@ def _open_simulated_position(
     allowed, _gate_reason = gate_simulated_open(
         symbol, side, price, PREDICT_SOURCE, catalyst,
         leverage=PREDICT_LEVERAGE,
-        sl_pct=PREDICT_SL_PCT, tp_pct=PREDICT_TP_PCT,
-        hold_hours=PREDICT_HOLD_HOURS, conn=conn,
+        sl_pct=get_ai_position_sl_pct(), tp_pct=get_ai_position_tp_pct(),
+        hold_hours=get_ai_position_hold_hours(), conn=conn,
     )
     if not allowed:
         return None
@@ -678,12 +675,12 @@ def _open_simulated_position(
         source=PREDICT_SOURCE,
         leverage=PREDICT_LEVERAGE,
         margin=PREDICT_MARGIN_USD,
-        stop_loss_pct=PREDICT_SL_PCT,
-        take_profit_pct=PREDICT_TP_PCT,
+        stop_loss_pct=get_ai_position_sl_pct(),
+        take_profit_pct=get_ai_position_tp_pct(),
         entry_signal_type='gemini_predict',
         entry_reason=entry_reason,
-        max_hold_minutes=PREDICT_HOLD_HOURS * 60,
-        planned_close_time=datetime.now() + timedelta(hours=PREDICT_HOLD_HOURS),
+        max_hold_minutes=get_ai_position_hold_hours() * 60,
+        planned_close_time=datetime.now() + timedelta(hours=get_ai_position_hold_hours()),
         account_id=PREDICT_ACCOUNT_ID,
     )
 
@@ -819,7 +816,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
 
     logger.info(
         f"[Gemini预测] === 一轮开始 (triggered_by={triggered_by}, "
-        f"周期={PREDICT_ROUND_INTERVAL_HOURS}h) ==="
+        f"周期={get_ai_round_interval_hours()}h) ==="
     )
 
     try:
@@ -968,13 +965,24 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                 continue
 
             # 7e. 黑名单3级检查 (system_settings.blacklist_level3_enabled)
-            from app.services.trading_gates import is_symbol_blocked_level3
+            from app.services.trading_gates import is_symbol_blocked_level3, check_max_positions_allowed
             if is_symbol_blocked_level3(symbol):
                 verdict_rows.append((
                     run_id, symbol, category, confidence,
                     catalyst, data_signal, risk_note,
                     price_at_pred, 'skipped_blacklist', None,
                     "黑名单3级, 永久禁止交易",
+                ))
+                predictions_made += 1
+                continue
+
+            mp_ok, mp_reason = check_max_positions_allowed(conn, PREDICT_ACCOUNT_ID)
+            if not mp_ok:
+                verdict_rows.append((
+                    run_id, symbol, category, confidence,
+                    catalyst, data_signal, risk_note,
+                    price_at_pred, 'skipped_max_positions', None,
+                    mp_reason,
                 ))
                 predictions_made += 1
                 continue

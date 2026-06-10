@@ -311,6 +311,40 @@ def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]
     return False, '不在TOP名单且未在黑白名单评级表中，禁止模拟盘'
 
 
+def count_paper_open_slots(conn, account_id: int = 2) -> int:
+    """模拟盘已占槽位：OPEN 持仓 + PENDING 限价开仓单。"""
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT COUNT(*) FROM futures_positions "
+            "WHERE account_id=%s AND LOWER(status)='open'",
+            (account_id,),
+        )
+        pos_cnt = int((cur.fetchone() or [0])[0] or 0)
+        cur.execute(
+            "SELECT COUNT(*) FROM futures_orders "
+            "WHERE account_id=%s AND status='PENDING' AND order_type='LIMIT' "
+            "AND side IN ('OPEN_LONG','OPEN_SHORT')",
+            (account_id,),
+        )
+        pending_cnt = int((cur.fetchone() or [0])[0] or 0)
+        cur.close()
+        return pos_cnt + pending_cnt
+    except Exception as e:
+        logger.warning(f"[trading_gates] 统计持仓槽位失败 account={account_id}: {e}")
+        return 0
+
+
+def check_max_positions_allowed(conn, account_id: int = 2) -> tuple[bool, str]:
+    """检查模拟盘是否未达 max_positions 上限。"""
+    from app.services.system_settings_loader import get_max_positions
+    max_pos = get_max_positions()
+    used = count_paper_open_slots(conn, account_id)
+    if used >= max_pos:
+        return False, f"已达最大持仓 {used}/{max_pos}"
+    return True, ""
+
+
 def has_open_futures_position(conn, source: str, symbol: str, account_id: Optional[int] = None) -> bool:
     """按 clean key 检查是否已有 OPEN 仓或同 source 挂单（跨 XXX/USDT 与 XXXUSDT）。"""
     clean = futures_symbol_clean(symbol)

@@ -1692,7 +1692,7 @@ class UnifiedDataScheduler:
                     n = realign_stale_next_due_slots(conn)
                     if n:
                         conn.commit()
-                        logger.info(f"[AI调度校正] 已修正 {n} 个 stale next_due (4h→2h)")
+                        logger.info(f"[AI调度校正] 已修正 {n} 个 stale next_due (对齐 max_hold_hours 周期)")
                 finally:
                     conn.close()
             except Exception as e:

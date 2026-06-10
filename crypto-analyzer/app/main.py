@@ -4385,17 +4385,12 @@ def _analyze_futures_signal(
         entry_price = current_price
         
         # 根据信号方向计算止损和止盈
+        from app.services.system_settings_loader import get_sl_tp_decimal
+        stop_loss_pct, take_profit_pct = get_sl_tp_decimal()
         if signal_score > 0:
-            # 做多信号
-            # 止损：当前价格下方，根据波动率调整
-            stop_loss_pct = 0.03
-            take_profit_pct = 0.05
             stop_loss = current_price * (1 - stop_loss_pct)
             take_profit = current_price * (1 + take_profit_pct)
         else:
-            # 做空信号
-            stop_loss_pct = 0.03
-            take_profit_pct = 0.05
             stop_loss = current_price * (1 + stop_loss_pct)
             take_profit = current_price * (1 - take_profit_pct)
         
