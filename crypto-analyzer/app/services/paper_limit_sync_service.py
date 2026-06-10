@@ -6,10 +6,10 @@
 - 每 10 秒扫描 futures_orders 中新成交的 OPEN_LONG/OPEN_SHORT 订单
   （live_sync_status IS NULL，LIMIT 或 MARKET 都同步；2026-04-24 从仅 LIMIT 扩展）
 - 检查 system_settings.live_trading_enabled
+- 与 AI 即时开仓相同：check_live_open_allowed(source 白名单 + symbol 评级闸门)
 - 用 user_api_keys.margin_per_trade / max_leverage 计算实盘数量
 - 通过 BinanceFuturesEngine 在实盘开相同仓位，TP/SL 价格与模拟盘一致
-- 成功：写 live_sync_status='SYNCED', live_position_id
-  失败：写 live_sync_status='FAILED'（不重试，防止重复下单）
+- 成功：live_sync_status='SYNCED'；闸门拒绝：'SKIPPED'；技术失败：'FAILED'（均不重试）
 """
 
 from __future__ import annotations
@@ -167,7 +167,23 @@ class PaperLimitSyncService:
                 self._mark(conn, order_id, "SYNCED", sibling.get("live_position_id"))
                 return
 
+        order_source = (order.get("order_source") or "manual").strip()
+
         try:
+            from app.services.trading_gates import check_live_open_allowed
+
+            with conn.cursor() as gate_cur:
+                allowed, reason = check_live_open_allowed(
+                    symbol, order_source, cursor=gate_cur,
+                )
+            if not allowed:
+                logger.info(
+                    "[PaperSync] order_id=%s %s source=%s 跳过实盘同步: %s",
+                    order_id, symbol, order_source, reason,
+                )
+                self._mark(conn, order_id, "SKIPPED", None)
+                return
+
             api_cfg = self._get_api_config(user_id)
             if api_cfg is None:
                 logger.warning(f"[PaperSync] user_id={user_id} 无活跃 API key，跳过 order_id={order_id}")
@@ -231,6 +247,8 @@ class PaperLimitSyncService:
                     "fill=%.6f sl=%.6f tp=%.6f sl_pct=%s tp_pct=%s",
                     order_id, symbol, paper_fill, paper_sl, paper_tp, sl_pct, tp_pct,
                 )
+                self._mark(conn, order_id, "FAILED", None)
+                return
 
             result = engine.open_position(
                 account_id=live_account_id,
@@ -240,7 +258,7 @@ class PaperLimitSyncService:
                 leverage=leverage,
                 stop_loss_pct=sl_pct,
                 take_profit_pct=tp_pct,
-                source=f"paper-limit-sync:{order.get('order_source', '')}",
+                source=order_source,
                 paper_position_id=order.get("position_id"),
             )
 
