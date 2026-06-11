@@ -88,8 +88,6 @@ class TradingServicesUpdate(BaseModel):
     gemini_predict_enabled: Optional[bool] = None   # 2026-05-27 Gemini 预测
     deepseek_explore_enabled: Optional[bool] = None   # DeepSeek 探索
     deepseek_predict_enabled: Optional[bool] = None   # DeepSeek 预测
-    gpt_predict_enabled: Optional[bool] = None        # GPT 预测
-    gpt_explore_enabled: Optional[bool] = None        # GPT 探索
     gemini_position_advisor_enabled: Optional[bool] = None  # 兼容；同步 DeepSeek
     gemini_open_advisor_enabled: Optional[bool] = None      # 兼容；同步 DeepSeek
     gpt_position_advisor_enabled: Optional[bool] = None
@@ -436,8 +434,7 @@ async def get_trading_services():
                                   'btc_momentum_enabled', 'u_coin_style_enabled',
                                   'signal_confirmation_enabled', 'trend_following_enabled',
                                   'gemini_explore_enabled', 'gemini_predict_enabled',
-                                  'deepseek_explore_enabled', 'gpt_predict_enabled', 'deepseek_predict_enabled',
-                                  'gpt_explore_enabled',
+                                  'deepseek_explore_enabled', 'deepseek_predict_enabled',
                                   'gemini_position_advisor_enabled',
                                   'gemini_open_advisor_enabled',
                                   'deepseek_position_advisor_enabled',
@@ -473,8 +470,6 @@ async def get_trading_services():
             'gemini_predict_enabled': 'gemini_predict_enabled',
             'deepseek_explore_enabled': 'deepseek_explore_enabled',
             'deepseek_predict_enabled': 'deepseek_predict_enabled',
-            'gpt_predict_enabled': 'gpt_predict_enabled',
-            'gpt_explore_enabled': 'gpt_explore_enabled',
             'gemini_position_advisor_enabled': 'gemini_position_advisor_enabled',
             'gemini_open_advisor_enabled': 'gemini_open_advisor_enabled',
             'deepseek_position_advisor_enabled': 'deepseek_position_advisor_enabled',
@@ -502,8 +497,6 @@ async def get_trading_services():
             'gemini_predict_enabled': True,
             'deepseek_explore_enabled': False,
             'deepseek_predict_enabled': False,
-            'gpt_predict_enabled': False,
-            'gpt_explore_enabled': False,
             'gemini_position_advisor_enabled': True,
             'gemini_open_advisor_enabled': True,
             'deepseek_position_advisor_enabled': True,
@@ -739,30 +732,6 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (value,))
             updates.append(f"DeepSeek预测: {'启用' if data.deepseek_predict_enabled else '禁用'}")
-
-        if data.gpt_predict_enabled is not None:
-            value = '1' if data.gpt_predict_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('gpt_predict_enabled', %s, 'GPT 预测开关 (1=启用, 0=禁用)', 'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            updates.append(f"GPT预测: {'启用' if data.gpt_predict_enabled else '禁用'}")
-
-        if data.gpt_explore_enabled is not None:
-            value = '1' if data.gpt_explore_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('gpt_explore_enabled', %s, 'GPT 探索开关 (1=启用, 0=禁用)', 'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            updates.append(f"GPT探索: {'启用' if data.gpt_explore_enabled else '禁用'}")
 
         if data.gpt_position_advisor_enabled is not None:
             value = '1' if data.gpt_position_advisor_enabled else '0'

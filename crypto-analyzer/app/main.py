@@ -1021,16 +1021,6 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
-# 注册 GPT 探索 API 路由
-try:
-    from app.api.gpt_explore_api import router as gpt_explore_router
-    app.include_router(gpt_explore_router)
-    logger.info("[GPT探索] API路由已注册")
-except Exception as e:
-    logger.warning(f"[GPT探索] API路由注册失败: {e}")
-    import traceback
-    traceback.print_exc()
-
 # 注册 DeepSeek 预测 API 路由
 try:
     from app.api.deepseek_predict_api import router as deepseek_predict_router
@@ -1048,16 +1038,6 @@ try:
     logger.info("[Gemini预测] API路由已注册")
 except Exception as e:
     logger.warning(f"[Gemini预测] API路由注册失败: {e}")
-    import traceback
-    traceback.print_exc()
-
-# 注册 GPT 预测 API 路由
-try:
-    from app.api.gpt_predict_api import router as gpt_predict_router
-    app.include_router(gpt_predict_router)
-    logger.info("[GPT预测] API路由已注册")
-except Exception as e:
-    logger.warning(f"[GPT预测] API路由注册失败: {e}")
     import traceback
     traceback.print_exc()
 
@@ -1724,12 +1704,6 @@ async def deepseek_explore_page(request: Request):
     DeepSeek 探索页面 (短时方向异动 + 模拟单)
     """
     return await _serve_desktop_template(request, "deepseek_explore.html", "DeepSeek explore page not found")
-
-
-@app.get("/gpt_explore")
-async def gpt_explore_page(request: Request):
-    """GPT 探索页面 (短时方向异动 + 模拟单)."""
-    return await _serve_desktop_template(request, "gpt_explore.html", "GPT explore page not found")
 
 
 @app.get("/ai_shadow_compare")

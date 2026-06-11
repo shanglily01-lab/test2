@@ -1355,21 +1355,6 @@ class UnifiedDataScheduler:
         schedule.every(10).minutes.do(_run_deepseek_explore)
         logger.info("  ✓ deepseek_explore - 固定槽 22:30北京 +1h, 每2h + 10min轮询")
 
-        # GPT 探索 - 每 2h 调一轮 GPT 检测短时方向异动, 模拟开仓
-        # kill switch = system_settings.gpt_explore_enabled
-        def _run_gpt_explore():
-            def wrapper():
-                try:
-                    from app.services.gpt_explore_worker import run_explore_round
-                    run_explore_round(triggered_by='scheduler')
-                except Exception as e:
-                    logger.error(f"[GPT探索] 调度异常: {e}", exc_info=True)
-            threading.Thread(target=wrapper, daemon=True, name="GPTExplore").start()
-
-        schedule.every(2).hours.do(_run_gpt_explore)
-        schedule.every(10).minutes.do(_run_gpt_explore)
-        logger.info("  ✓ gpt_explore - 固定槽 22:00北京 +30min, 每2h + 10min轮询")
-
         # DeepSeek 预测 - 每 2h 调一次 DeepSeek 预测 TOP50 方向
         def _run_deepseek_predict():
             def wrapper():
@@ -1397,20 +1382,6 @@ class UnifiedDataScheduler:
         schedule.every(2).hours.do(_run_gemini_predict)
         schedule.every(5).minutes.do(_run_gemini_predict)
         logger.info("  ✓ gemini_predict - 固定槽 21:45北京 +15min, 每2h + 5min轮询")
-
-        # GPT 预测 - 每 2h 调一次 GPT 预测 TOP50 方向
-        def _run_gpt_predict():
-            def wrapper():
-                try:
-                    from app.services.gpt_predictor import run_predict_round
-                    run_predict_round(triggered_by='scheduler')
-                except Exception as e:
-                    logger.error(f"[GPT预测] 调度异常: {e}", exc_info=True)
-            threading.Thread(target=wrapper, daemon=True, name="GPTPredict").start()
-
-        schedule.every(2).hours.do(_run_gpt_predict)
-        schedule.every(5).minutes.do(_run_gpt_predict)
-        logger.info("  ✓ gpt_predict - 固定槽 22:15北京 +45min, 每2h + 5min轮询")
 
         # Gemini 持仓顾问 - 监管 gemini_explore/gemini_predict 模拟仓，满 15min 后每 15min 复查
         def _run_gemini_position_advisor():
@@ -1736,10 +1707,8 @@ class UnifiedDataScheduler:
         _launch_ai_init_task("DeepSeekBig4", "app.services.big4_comprehensive_analyzer", "run_big4_analysis_round_deepseek", 95)
         _launch_ai_init_task("Gemini情绪",   "app.services.gemini_sentiment_analyzer","run_sentiment_round", 25)
         _launch_ai_init_task("DeepSeek探索","app.services.deepseek_explore_worker",  "run_explore_round", 90)
-        _launch_ai_init_task("GPT探索",      "app.services.gpt_explore_worker",       "run_explore_round", 120)
         _launch_predict_catchup("Gemini预测", "app.services.gemini_predictor", "run_predict_round", 45)
         _launch_predict_catchup("DeepSeek预测", "app.services.deepseek_predictor", "run_predict_round", 50)
-        _launch_predict_catchup("GPT预测", "app.services.gpt_predictor", "run_predict_round", 55)
 
         def _launch_rating_catchup(delay_s: int = 60):
             def _run():

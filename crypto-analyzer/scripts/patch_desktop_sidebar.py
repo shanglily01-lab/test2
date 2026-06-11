@@ -7,7 +7,7 @@ FILES = [
     "ai_shadow_compare.html", "api-keys.html", "binance_news.html", "blockchain_gas.html",
     "coin_futures_trading.html", "corporate_treasury.html", "dashboard.html", "data_management.html",
     "deepseek_explore.html", "etf_data.html", "futures_review.html", "futures_trading.html",
-    "gemini_advisor_reviews.html", "gemini_explore.html", "gpt_explore.html", "live_trading.html",
+    "gemini_advisor_reviews.html", "gemini_explore.html", "live_trading.html",
     "market_regime.html", "paper_trading.html", "signal_blacklist.html", "spot_trading.html",
     "symbol_blacklist.html", "system_settings.html", "technical_signals.html", "top50.html",
     "trading_manual.html",

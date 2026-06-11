@@ -140,7 +140,7 @@ def test_strategy_offsets_within_min_period() -> None:
             f"策略错峰最大 {max_offset_min}min >= 最小调度周期 {min_period_min}min"
         )
     else:
-        _ok(f"六策略错峰最大 {max_offset_min}min 落在 2h 周期内")
+        _ok(f"四策略错峰最大 {max_offset_min}min 落在 2h 周期内")
 
 
 def test_api_clamp_logic() -> None:
@@ -183,8 +183,6 @@ def test_worker_imports_dynamic_interval() -> None:
     files_imports = {
         "app/services/gemini_predictor.py": "get_ai_round_interval_hours",
         "app/services/deepseek_predictor.py": "get_ai_round_interval_hours",
-        "app/services/gpt_predictor.py": "get_ai_round_interval_hours",
-        "app/services/gpt_explore_worker.py": "get_ai_schedule_interval_hours",
     }
     for rel, sym in files_imports.items():
         text = (ROOT / rel).read_text(encoding="utf-8")
@@ -203,7 +201,6 @@ def test_syntax_parse() -> None:
         "app/services/system_settings_loader.py",
         "app/api/system_settings_api.py",
         "app/services/gemini_predictor.py",
-        "app/services/gpt_explore_worker.py",
         "scripts/validate_ai_schedule_hold_hours.py",
     ]
     for rel in paths:

@@ -1,10 +1,9 @@
-"""Gemini / DeepSeek / GPT 探索+预测 — 统一固定时刻调度.
+"""Gemini / DeepSeek 探索+预测 — 统一固定时刻调度.
 
 调度周期: system_settings.max_hold_hours（2~8h，与持仓时长共用）。
 锚点: 北京时间 21:30 (= UTC 13:30), 每 N 小时一轮.
-Gemini / GPT / DeepSeek 错开 30 分钟; 同教师探索/预测再错开 15 分钟:
+Gemini / DeepSeek 错开 1 小时; 同教师探索/预测再错开 15 分钟:
   gemini_explore +0,   gemini_predict +15,
-  gpt_explore +30,     gpt_predict +45,
   deepseek_explore +60, deepseek_predict +75  (北京 22:30 / 22:45)
 
 调度器 5/10 分钟轮询 + worker 内 next_due 认领防重。
@@ -29,20 +28,15 @@ _SCHEDULE_ANCHOR_BASE = datetime(2024, 1, 1, SCHEDULE_ANCHOR_HOUR_UTC, SCHEDULE_
 
 GEMINI_EXPLORE_NEXT_DUE_KEY = "gemini_explore_next_due_utc"
 DEEPSEEK_EXPLORE_NEXT_DUE_KEY = "deepseek_explore_next_due_utc"
-GPT_EXPLORE_NEXT_DUE_KEY = "gpt_explore_next_due_utc"
 GEMINI_PREDICT_NEXT_DUE_KEY = "gemini_predict_next_due_utc"
 DEEPSEEK_PREDICT_NEXT_DUE_KEY = "deepseek_predict_next_due_utc"
-GPT_PREDICT_NEXT_DUE_KEY = "gpt_predict_next_due_utc"
 
 _GEMINI_OFFSET = 0
 _DEEPSEEK_OFFSET = GEMINI_DEEPSEEK_STAGGER_HOURS * 60
-_GPT_OFFSET = GEMINI_DEEPSEEK_STAGGER_HOURS * 30  # 30min after Gemini, 30min before DeepSeek
 
 STRATEGY_SCHEDULE_OFFSETS: Dict[str, int] = {
     "gemini_explore": _GEMINI_OFFSET,
     "gemini_predict": _GEMINI_OFFSET + SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN,
-    "gpt_explore": _GPT_OFFSET,
-    "gpt_predict": _GPT_OFFSET + SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN,
     "deepseek_explore": _DEEPSEEK_OFFSET,
     "deepseek_predict": _DEEPSEEK_OFFSET + SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN,
 }
@@ -332,8 +326,6 @@ def predict_claim_next_slot(
 _AI_NEXT_DUE_KEYS: Dict[str, str] = {
     "gemini_explore": GEMINI_EXPLORE_NEXT_DUE_KEY,
     "gemini_predict": GEMINI_PREDICT_NEXT_DUE_KEY,
-    "gpt_explore": GPT_EXPLORE_NEXT_DUE_KEY,
-    "gpt_predict": GPT_PREDICT_NEXT_DUE_KEY,
     "deepseek_explore": DEEPSEEK_EXPLORE_NEXT_DUE_KEY,
     "deepseek_predict": DEEPSEEK_PREDICT_NEXT_DUE_KEY,
 }

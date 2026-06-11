@@ -17,7 +17,6 @@ ACTIVE_TEACHER_SOURCES = (
     "gemini_predict",
     "deepseek_explore",
     "deepseek_predict",
-    "gpt_predict",
 )
 
 

@@ -26,7 +26,6 @@ DESKTOP_SIDEBAR_TEMPLATES = frozenset({
     "futures_trading.html",
     "gemini_advisor_reviews.html",
     "gemini_explore.html",
-    "gpt_explore.html",
     "live_trading.html",
     "market_regime.html",
     "paper_trading.html",
