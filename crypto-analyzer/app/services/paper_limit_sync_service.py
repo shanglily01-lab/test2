@@ -7,7 +7,7 @@
   （live_sync_status IS NULL，LIMIT 或 MARKET 都同步；2026-04-24 从仅 LIMIT 扩展）
 - 检查 system_settings.live_trading_enabled
 - 与 AI 即时开仓相同：check_live_open_allowed(source 白名单 + symbol 评级闸门)
-- 用 user_api_keys.margin_per_trade / max_leverage 计算实盘数量
+- 用 user_api_keys.max_position_value / max_leverage 计算实盘数量
 - 通过 BinanceFuturesEngine 在实盘开相同仓位，TP/SL 价格与模拟盘一致
 - 成功：live_sync_status='SYNCED'；闸门拒绝：'SKIPPED'；技术失败：'FAILED'（均不重试）
 """
@@ -15,8 +15,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import time
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
@@ -24,17 +22,14 @@ import pymysql
 import requests
 from loguru import logger
 
+from app.utils.config_loader import get_db_config
+
 
 def _db_cfg() -> Dict[str, Any]:
-    return {
-        "host":        os.getenv("DB_HOST", "localhost"),
-        "port":        int(os.getenv("DB_PORT", "3306")),
-        "user":        os.getenv("DB_USER", ""),
-        "password":    os.getenv("DB_PASSWORD", ""),
-        "database":    os.getenv("DB_NAME", ""),
-        "charset":     "utf8mb4",
-        "cursorclass": pymysql.cursors.DictCursor,
-    }
+    cfg = dict(get_db_config())
+    cfg.setdefault("charset", "utf8mb4")
+    cfg["cursorclass"] = pymysql.cursors.DictCursor
+    return cfg
 
 
 class PaperLimitSyncService:
@@ -196,8 +191,19 @@ class PaperLimitSyncService:
                 self._mark(conn, order_id, "FAILED", None)
                 return
 
-            margin = float(api_cfg["margin_per_trade"])
+            from app.services.trading_gates import get_live_margin_ratio
+
+            with conn.cursor() as ratio_cur:
+                margin_ratio = get_live_margin_ratio(symbol, ratio_cur)
+            margin = float(api_cfg["base_margin"]) * margin_ratio
             leverage = int(api_cfg["max_leverage"])
+            if margin_ratio <= 0 or margin < 5:
+                logger.info(
+                    "[PaperSync] order_id=%s %s margin_ratio=%s margin=%.2fU, 跳过实盘同步",
+                    order_id, symbol, margin_ratio, margin,
+                )
+                self._mark(conn, order_id, "SKIPPED", None)
+                return
 
             price = self._get_price(symbol)
             if price is None or price <= 0:
@@ -286,7 +292,7 @@ class PaperLimitSyncService:
             try:
                 with conn.cursor() as cur:
                     cur.execute(
-                        """SELECT margin_per_trade, max_leverage
+                        """SELECT max_position_value, max_leverage
                         FROM user_api_keys
                         WHERE user_id=%s AND status='active'
                         ORDER BY id ASC LIMIT 1""",
@@ -296,8 +302,8 @@ class PaperLimitSyncService:
                     if not row:
                         return None
                     return {
-                        "margin_per_trade": float(row["margin_per_trade"] or 40.0),
-                        "max_leverage":     int(row["max_leverage"] or 5),
+                        "base_margin": float(row["max_position_value"] or 40.0),
+                        "max_leverage": int(row["max_leverage"] or 5),
                     }
             finally:
                 conn.close()
