@@ -354,6 +354,9 @@ class DeepSeekPositionAdvisor:
                 action, reason = helper._temper_profitable_hold(
                     roi, action, reason, pos["position_side"], s15, s1h,
                 )
+                action, reason = helper._temper_premature_sell(
+                    roi, action, reason, pos["position_side"], s15, s1h,
+                )
                 stats[action] += 1
                 stats["evaluated"] += 1
                 self._last_check_ts[pid] = time.time()

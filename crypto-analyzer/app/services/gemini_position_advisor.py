@@ -48,17 +48,16 @@ HOLD_CHECK_INTERVAL_S = 900     # 同仓 15min 内不重复问
 GEMINI_PER_CALL_DELAY_S = 1.0   # 防 Gemini rate limit
 HOLD_15M_BARS = 6               # 持仓顾问：近 4~6 根 15m
 HOLD_1H_BARS = 4                # 持仓顾问：近 4 根 1h
-HOLD_STRICT_LOSS_ROI = -1.0      # 保证金 ROI %，亏损 >1% 须严格审查
-HOLD_STRICT_PROFIT_ROI = 1.5    # 保证金 ROI %，盈利 >1.5% 须严格审查
+HOLD_PROFIT_TEMPER_ROI = 5.0    # 程序化复核：浮盈较高时才收紧 hold
 HOLD_LOSS_MILD_ROI = -5.0       # 保证金 ROI %，轻微亏损
 HOLD_LOSS_MODERATE_ROI = -12.0  # 中度亏损
 HOLD_LOSS_SEVERE_ROI = -15.0    # 严重亏损（近策略 SL）
 
 # DeepSeek/GPT 持仓顾问 system（与 user prompt 中文 reason 一致）
 HOLD_ADVISOR_JSON_SYSTEM_ZH = (
-    "你是模拟仓持仓监管顾问。"
+    "你是模拟仓持仓监管顾问，以趋势结构为主判据。"
     "仅输出合法 JSON：action 为 hold|observe|sell；"
-    "reason 为50字以内中文，必须引用 15m/1h K 线形态，不得空泛或只写 Big4。"
+    "reason 为50字以内中文，必须引用 1h/15m K 线趋势证据，不得情绪化平仓或只写 Big4。"
 )
 
 # DeepSeek/GPT 开仓顾问 system（与 build_open_advisor_prompt 中文 reason 一致）
@@ -378,14 +377,10 @@ class GeminiPositionAdvisor:
 
     @staticmethod
     def _loss_tier_label(roi_pct: float) -> str:
-        if roi_pct > HOLD_STRICT_PROFIT_ROI:
-            return "严格盈利审查"
-        if roi_pct >= 0:
-            return "盈利/保本"
-        if roi_pct > HOLD_STRICT_LOSS_ROI:
-            return "微利/保本"
+        if roi_pct > 0:
+            return "盈利"
         if roi_pct > HOLD_LOSS_MILD_ROI:
-            return "严格亏损审查"
+            return "微利/保本"
         if roi_pct > HOLD_LOSS_MODERATE_ROI:
             return "中度亏损"
         return "严重亏损"
@@ -393,45 +388,31 @@ class GeminiPositionAdvisor:
     @staticmethod
     def _loss_tier_rules(roi_pct: float, side: str) -> str:
         side_cn = "做多" if side == "LONG" else "做空"
-        if roi_pct > HOLD_STRICT_PROFIT_ROI:
+        if roi_pct > 0:
             return (
-                "## 盈亏档位：严格盈利审查 (ROI > +1.5%)\n"
-                "- **已浮盈 >1.5%**，须逐根审查 15m/1h；reason 必须引用具体 K 线形态。\n"
-                "- 15m 出现 2 根以上反向或连反向≥2 → 倾向 **sell** 锁利，勿空泛 hold。\n"
-                "- **hold** 仅当 15m 顺向≥反向且 1h 近 2 根仍支持方向；结构混杂 → **observe**。\n"
-                "- ROI ≥ +10% 且 15m 明确反转 → **sell**。"
-            )
-        if roi_pct >= 0:
-            return (
-                "## 盈亏档位：盈利/保本 (0% ≤ ROI ≤ +1.5%)\n"
-                "- **hold** 须 15m+1h 仍支持持仓方向；明确反转 → **sell**。\n"
-                "- 浮盈未超 1.5% 时按常规节奏，勿过早止盈。"
-            )
-        if roi_pct > HOLD_STRICT_LOSS_ROI:
-            return (
-                "## 盈亏档位：微利/保本 (-1% < ROI < 0%)\n"
-                "- 亏损未超 1%，按常规审查；K 线仍支持方向可 **hold**。\n"
-                "- 信号混杂 → **observe**；须 15m+1h 双重确认才 **sell**。"
+                "## 盈亏档位：盈利 (ROI > 0%)\n"
+                f"- **1h 趋势仍支持 {side_cn}** 时默认 **hold**，不因 15m 一两根回撤就止盈。\n"
+                "- **sell** 须 1h 结构转弱 + 15m 确认反转；仅浮盈回撤、震荡洗盘 → **hold** 或 **observe**。\n"
+                "- ROI ≥ +10% 且 1h+15m 双重反转 → **sell**。"
             )
         if roi_pct > HOLD_LOSS_MILD_ROI:
             return (
-                "## 盈亏档位：严格亏损审查 (-5% < ROI ≤ -1%)\n"
-                f"- **已亏损 >1%**，须严格审查；禁止空泛 hold。\n"
-                f"- 15m 反向≥顺向或连反向≥2 → 倾向 **sell**；1h 近 2 根不支持 {side_cn} → **observe** 或 **sell**。\n"
-                f"- **hold** 须 15m 顺向>反向且 1h 仍支持 {side_cn}，reason 引用表格 K 线。"
+                "## 盈亏档位：微利/保本 (-5% < ROI ≤ 0%)\n"
+                f"- 1h 仍支持 {side_cn} → **hold**；15m 回调视为正常波动，勿恐慌平仓。\n"
+                "- **sell** 须 1h 与 15m 同向转弱；仅 15m 杂音 → **observe**。"
             )
         if roi_pct > HOLD_LOSS_MODERATE_ROI:
             return (
                 "## 盈亏档位：中度亏损 (-12% < ROI ≤ -5%)\n"
-                f"- **hold 门槛更高**：15m 顺向≥反向，且近 2 根 1h 仍支持 {side_cn}（reason 须引用 K 线）。\n"
-                "- 15m 连反向≥3 或 1h 反向≥2 → 倾向 **sell**；结构不清 → **observe**（勿 hold）。\n"
-                "- Big4 不能替代 K 线证据。"
+                f"- **1h 趋势未破** 时优先 **hold/observe**，不因浮亏情绪化 **sell**。\n"
+                f"- **hold** 须近 2 根 1h 仍支持 {side_cn}；15m 逆势可视为震荡。\n"
+                "- **sell** 须 1h 近 2 根确认反向 **且** 15m 连反向≥3；结构不清 → **observe**。"
             )
         return (
             "## 盈亏档位：严重亏损 (ROI ≤ -12%)\n"
-            f"- **默认止损倾向**：除非 15m 明确企稳/反转（如 LONG 长下影+阳吞），优先 **sell** 或 **observe**，极少 **hold**。\n"
-            "- **hold** 须同时：(1) 15m 顺向≥反向且连反向≤1；(2) 近 2 根 1h 未延续亏损方向；(3) reason 引用表格 K 线。\n"
-            "- ROI ≤ -15% 且 15m 无企稳 → **必须 sell**。"
+            f"- 仍先看 **1h 趋势**：1h 未破方向且 15m 有企稳 → 可 **hold/observe**，勿单纯因亏损额 **sell**。\n"
+            f"- **sell** 须 1h 延续亏损方向 + 15m 无反转形态；仅 ROI 深亏但 1h 仍支持 {side_cn} → **observe**。\n"
+            "- ROI ≤ -15% **且** 1h+15m 双重走弱 → **sell**。"
         )
 
     @staticmethod
@@ -443,45 +424,31 @@ class GeminiPositionAdvisor:
         s15: dict,
         s1h: dict,
     ) -> Tuple[str, str]:
-        """亏损单：Gemini 若建议 hold，用客观 K 线统计复核，防止「死扛」."""
+        """亏损单 hold 复核：仅当 1h+15m 趋势同步转弱时才下调，避免情绪化平仓."""
         if action != 'hold' or roi_pct >= 0:
             return action, reason
 
         override = ""
         if roi_pct <= HOLD_LOSS_SEVERE_ROI:
-            if s15.get("trail_against", 0) >= 2 or s15.get("against", 0) >= 4:
+            if (
+                s1h.get("against", 0) >= 2
+                and s15.get("trail_against", 0) >= 3
+            ):
                 action = 'sell'
-                override = "严重亏损+15m连续反向"
-            elif s15.get("for", 0) < s15.get("against", 0):
+                override = "严重亏损+1h15m双弱"
+            elif s1h.get("against", 0) >= 2 and s15.get("against", 0) > s15.get("for", 0):
                 action = 'observe'
-                override = "严重亏损+15m无顺向支撑"
+                override = "严重亏损+1h转弱"
         elif roi_pct <= HOLD_LOSS_MODERATE_ROI:
             if (
-                s15.get("against", 0) > s15.get("for", 0)
-                and s15.get("trail_against", 0) >= 2
+                s1h.get("against", 0) >= 2
+                and s15.get("trail_against", 0) >= 3
             ):
                 action = 'sell'
-                override = "中度亏损+15m连反向"
-            elif s15.get("for", 0) < 2 and s1h.get("against", 0) >= 2:
+                override = "中度亏损+1h15m双弱"
+            elif s1h.get("against", 0) >= 2 and s15.get("against", 0) > s15.get("for", 0):
                 action = 'observe'
-                override = "中度亏损+1h/15m偏弱"
-        elif roi_pct <= HOLD_LOSS_MILD_ROI:
-            if (
-                s15.get("against", 0) >= s15.get("for", 0) + 2
-                and s1h.get("against", 0) >= 2
-            ):
-                action = 'observe'
-                override = "轻微亏损+K线反向"
-        elif roi_pct <= HOLD_STRICT_LOSS_ROI:
-            if s15.get("trail_against", 0) >= 2 or s15.get("against", 0) > s15.get("for", 0):
-                action = 'sell'
-                override = "严格亏损+15m走弱"
-            elif (
-                s15.get("against", 0) >= s15.get("for", 0)
-                or s1h.get("against", 0) >= 2
-            ):
-                action = 'observe'
-                override = "严格亏损+结构转弱"
+                override = "中度亏损+1h转弱"
 
         if override:
             reason = f"{reason[:80]}|复核:{override}"[:200]
@@ -497,24 +464,55 @@ class GeminiPositionAdvisor:
         s15: dict,
         s1h: dict,
     ) -> Tuple[str, str]:
-        """盈利 >1.5%：LLM 若建议 hold，用 K 线复核防止回吐."""
-        if action != 'hold' or roi_pct <= HOLD_STRICT_PROFIT_ROI:
+        """浮盈较高时 hold 复核：须 1h 趋势转弱才下调，避免过早止盈."""
+        if action != 'hold' or roi_pct <= HOLD_PROFIT_TEMPER_ROI:
             return action, reason
 
         override = ""
-        if s15.get("trail_against", 0) >= 2:
+        if s1h.get("against", 0) >= 2 and s15.get("trail_against", 0) >= 3:
             action = 'sell'
-            override = "严格盈利+15m连反向"
-        elif s15.get("against", 0) > s15.get("for", 0):
+            override = "高浮盈+1h15m双弱"
+        elif s1h.get("against", 0) >= 2 and s15.get("against", 0) > s15.get("for", 0):
             action = 'observe'
-            override = "严格盈利+15m转弱"
-        elif s15.get("trail_against", 0) >= 1 and s1h.get("against", 0) >= 2:
-            action = 'observe'
-            override = "严格盈利+1h转弱"
+            override = "高浮盈+1h转弱待确认"
 
         if override:
             reason = f"{reason[:80]}|复核:{override}"[:200]
             logger.info(f"[Gemini顾问] 盈利 hold 复核 → {action} ({override})")
+        return action, reason
+
+    @staticmethod
+    def _temper_premature_sell(
+        roi_pct: float,
+        action: str,
+        reason: str,
+        side: str,
+        s15: dict,
+        s1h: dict,
+    ) -> Tuple[str, str]:
+        """1h 趋势未破时，将情绪化 sell 降为 observe/hold."""
+        if action != 'sell':
+            return action, reason
+
+        if (
+            roi_pct <= HOLD_LOSS_SEVERE_ROI
+            and s1h.get("against", 0) >= 2
+            and s15.get("trail_against", 0) >= 2
+        ):
+            return action, reason
+
+        override = ""
+        if s1h.get("for", 0) >= s1h.get("against", 0):
+            if s15.get("trail_against", 0) < 3:
+                action = 'hold' if s1h.get("for", 0) > s1h.get("against", 0) else 'observe'
+                override = "1h趋势未破·抑制情绪化sell"
+        elif s1h.get("against", 0) < 2:
+            action = 'observe'
+            override = "1h未确认反转·sell→observe"
+
+        if override:
+            reason = f"{reason[:80]}|复核:{override}"[:200]
+            logger.info(f"[Gemini顾问] 过早 sell 复核 → {action} ({override})")
         return action, reason
 
     @staticmethod
@@ -559,12 +557,18 @@ class GeminiPositionAdvisor:
         eth_6h = ctx.get('eth_6h_change', 0)
 
         side_cn = "做多 LONG" if side == 'LONG' else "做空 SHORT"
-        return f"""你是模拟仓**持仓监管**顾问。根据**本币最近 K 线客观结构**决定 hold / observe / sell。
+        return f"""你是模拟仓**持仓监管**顾问。**以 1h 趋势为主、15m 为辅**，根据 K 线结构决定 hold / observe / sell。
+
+## 核心原则（趋势优先，忌情绪化平仓）
+- **先看 1h 趋势**是否仍支持 {side}；1h 未破方向时，15m 回调/震荡默认 **hold** 或 **observe**，勿因浮盈浮亏恐慌 **sell**
+- **不因**「怕回吐」「亏了一点」「大盘偏弱」等情绪平仓；须 1h 结构转弱 + 15m 确认
+- 震荡洗盘、单根反向 K 线、短时回撤 → **不足以 sell**；须近 2 根 1h 确认趋势反转
+- 盈亏数字仅作参考，**不能单独触发 sell**；无 K 线趋势证据则保持持仓观察
 
 ## 禁止（违反则 reason 无效）
-- **不得**主要因 Big4/BTC/ETH 宏观偏多偏空就 sell 或 hold
-- **不得**空泛主观（「感觉要跌」「大盘不好」）；reason 必须引用下方 15m/1h 表格中的具体形态
-- K 线与持仓方向不一致时优先看 K 线，Big4 不能单独触发 sell
+- **不得**主要因 Big4/BTC/ETH 宏观偏多偏空就 sell
+- **不得**空泛主观（「感觉要跌」「大盘不好」「先跑为敬」）；reason 必须引用 1h/15m 表格形态
+- **不得**仅因 ROI 正负或幅度就 sell；Big4 不能单独触发 sell
 
 ## 仓位
   Symbol:          {symbol}
@@ -584,13 +588,13 @@ class GeminiPositionAdvisor:
 
 {loss_rules}
 
-## K 线读法（主判据）
-1. **近 {HOLD_1H_BARS} 根 1h**（下表）：结构是否仍支持 {side}？
-   - LONG：高点/低点抬高，或最近 2 根 1h 仍偏多（阳线/下影支撑）
-   - SHORT：高点/低点降低，或最近 2 根 1h 仍偏空（阴线/上影承压）
-2. **近 {HOLD_15M_BARS} 根 15m**（下表）：短线是否**已反转**持仓方向？
-   - 数连阴/连阳、吞没、长上影/下影、是否放量反转
-3. reason 须写清形态，例如「近5根15m四连阴破前低 + 近2根1h末两根阴线」
+## K 线读法（1h 定趋势，15m 看确认）
+1. **近 {HOLD_1H_BARS} 根 1h**（主判据）：大趋势是否仍支持 {side}？
+   - LONG：高点/低点抬高；最近 2 根 1h 仍偏多 → 趋势未破，倾向 **hold**
+   - SHORT：高点/低点降低；最近 2 根 1h 仍偏空 → 趋势未破，倾向 **hold**
+2. **近 {HOLD_15M_BARS} 根 15m**（辅助）：是否**确认** 1h 反转？单根/两根 15m 反向不足以 sell
+   - 须与 1h 同向转弱：连阴/连阳、吞没、破前高/前低等
+3. reason 须写清 1h 趋势 + 15m 确认，例如「近2根1h仍抬高但近3根15m回调→震荡hold」
 
 ## 近 {HOLD_1H_BARS} 根 1h K 线 (oldest → newest)
 {klines_1h_str}
@@ -603,19 +607,16 @@ class GeminiPositionAdvisor:
   仅当 K 线已明确反向时，方可引用 Big4 加强 sell 理由；不得单独因 Big4 sell。
 
 ## 决策
-- **hold**: 近 {HOLD_1H_BARS} 根 1h + 近 {HOLD_15M_BARS} 根 15m **整体仍支持** {side}，无明确反转
-  （**ROI ≤ -1% 或 ROI > +1.5% 为严格审查档**，hold 门槛更高，见上「盈亏档位」）
-- **observe**: 15m 与 1h 信号混杂、震荡、或数据不足以判断
-  （严格亏损/严格盈利档结构不清 → **优先 observe**，勿弱 hold）
-- **sell**: 须同时满足：
-  (A) 近 {HOLD_15M_BARS} 根 15m **多数反向**持仓（连阴/连阳+放量等，写进 reason）
-  (B) 近 {HOLD_1H_BARS} 根 1h **至少最近 2 根确认**同向反转
-  或：**ROI ≤ -1%** 且 15m 走弱；**ROI > +1.5%** 且 15m 连反向≥2 锁利；
-  **严重亏损**且 15m 无企稳；ROI ≤ -15% 且 15m 无反转
+- **hold**（默认倾向）: 1h 趋势仍支持 {side}；或 1h 未破 + 15m 仅为回调/震荡
+- **observe**: 1h 与 15m 信号混杂、趋势待确认、数据不足；**不可**用 observe 代替情绪化 sell
+- **sell**（高门槛，须 1h+15m 双重确认）:
+  (A) 近 2 根 1h **确认**趋势反转（破结构/连反向）
+  (B) 近 {HOLD_15M_BARS} 根 15m **多数反向**且与 1h 同向（写进 reason）
+  例外：ROI ≤ -15% **且** 1h+15m 双重走弱 → **sell**
 
-亏损 >1% 或盈利 >1.5% 时须 **K 线逐根证据** 才能 hold；不得空泛 hold。
+1h 趋势未破时 **不得 sell**；reason 须引用 1h/15m 趋势证据。
 
-K 线方向不明时默认 **observe**；**严格亏损/严重亏损**默认 **sell**（除非 15m 明确反转）。
+趋势不明时默认 **observe**；仅 1h 明确反转时才 **sell**。
 
 Output ONLY JSON:
 {{
@@ -1052,6 +1053,9 @@ Output ONLY JSON:
                     roi, action, reason, pos['position_side'], s15, s1h,
                 )
                 action, reason = self._temper_profitable_hold(
+                    roi, action, reason, pos['position_side'], s15, s1h,
+                )
+                action, reason = self._temper_premature_sell(
                     roi, action, reason, pos['position_side'], s15, s1h,
                 )
                 stats[action] += 1
