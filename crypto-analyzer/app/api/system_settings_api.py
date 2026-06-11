@@ -33,10 +33,8 @@ def _upsert_bool_setting(cursor, key: str, enabled: bool, description: str) -> N
 def _set_open_advisor_pair(cursor, enabled: bool) -> None:
     desc_gemini = 'Gemini 模拟开仓顾问 (1=开仓前审核, reject 不开仓)'
     desc_deepseek = 'DeepSeek 模拟开仓顾问: 1=开仓前审核, 不通过则不开仓'
-    desc_gpt = 'GPT 模拟开仓顾问: 1=开仓前审核, 不通过则不开仓'
     _upsert_bool_setting(cursor, 'gemini_open_advisor_enabled', enabled, desc_gemini)
     _upsert_bool_setting(cursor, 'deepseek_open_advisor_enabled', enabled, desc_deepseek)
-    _upsert_bool_setting(cursor, 'gpt_open_advisor_enabled', enabled, desc_gpt)
 
 
 def _set_position_advisor_pair(cursor, enabled: bool) -> None:
@@ -86,8 +84,7 @@ class TradingServicesUpdate(BaseModel):
     deepseek_predict_enabled: Optional[bool] = None   # DeepSeek 预测
     gemini_position_advisor_enabled: Optional[bool] = None  # 兼容；同步 DeepSeek
     gemini_open_advisor_enabled: Optional[bool] = None      # 兼容；同步 DeepSeek
-    gpt_open_advisor_enabled: Optional[bool] = None
-    open_advisor_enabled: Optional[bool] = None             # 统一开仓顾问开关 (Gemini+DeepSeek+GPT)
+    open_advisor_enabled: Optional[bool] = None             # 统一开仓顾问开关 (Gemini+DeepSeek)
     position_advisor_enabled: Optional[bool] = None         # 统一持仓顾问开关 (Gemini+DeepSeek)
     smart_exit_enabled: Optional[bool] = None              # 智能平仓 (趋势反转/移动止盈/最优价等)
     blacklist_level3_enabled: Optional[bool] = None      # 黑名单3级禁止开仓
@@ -434,7 +431,6 @@ async def get_trading_services():
                                   'gemini_open_advisor_enabled',
                                   'deepseek_position_advisor_enabled',
                                   'deepseek_open_advisor_enabled',
-                                  'gpt_open_advisor_enabled',
                                   'smart_exit_enabled',
                                   'blacklist_level3_enabled',
                                   'live_top50_required',
@@ -468,7 +464,6 @@ async def get_trading_services():
             'gemini_open_advisor_enabled': 'gemini_open_advisor_enabled',
             'deepseek_position_advisor_enabled': 'deepseek_position_advisor_enabled',
             'deepseek_open_advisor_enabled': 'deepseek_open_advisor_enabled',
-            'gpt_open_advisor_enabled': 'gpt_open_advisor_enabled',
             'smart_exit_enabled': 'smart_exit_enabled',
             'blacklist_level3_enabled': 'blacklist_level3_enabled',
             'live_top50_required': 'live_top50_required',
@@ -494,7 +489,6 @@ async def get_trading_services():
             'gemini_open_advisor_enabled': True,
             'deepseek_position_advisor_enabled': True,
             'deepseek_open_advisor_enabled': True,
-            'gpt_open_advisor_enabled': True,
             'smart_exit_enabled': False,
             'blacklist_level3_enabled': True,
             'live_top50_required': True,
@@ -526,7 +520,6 @@ async def get_trading_services():
         result['open_advisor_enabled'] = (
             result['gemini_open_advisor_enabled']
             and result['deepseek_open_advisor_enabled']
-            and result['gpt_open_advisor_enabled']
         )
         result['position_advisor_enabled'] = (
             result['gemini_position_advisor_enabled']
@@ -723,18 +716,6 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (value,))
             updates.append(f"DeepSeek预测: {'启用' if data.deepseek_predict_enabled else '禁用'}")
-
-        if data.gpt_open_advisor_enabled is not None:
-            value = '1' if data.gpt_open_advisor_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('gpt_open_advisor_enabled', %s, 'GPT 模拟开仓顾问: 1=开仓前审核, 不通过则不开仓', 'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            updates.append(f"GPT开仓顾问: {'启用' if data.gpt_open_advisor_enabled else '禁用'}")
 
         if data.position_advisor_enabled is not None:
             _set_position_advisor_pair(cursor, data.position_advisor_enabled)

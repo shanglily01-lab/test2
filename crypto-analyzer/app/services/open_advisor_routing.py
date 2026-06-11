@@ -14,11 +14,6 @@ def is_deepseek_order_source(source: str) -> bool:
     return s.startswith("deepseek_")
 
 
-def is_gpt_order_source(source: str) -> bool:
-    s = (source or "").strip().lower()
-    return s.startswith("gpt_")
-
-
 def uses_gemini_open_advisor(source: str) -> bool:
     """Gemini 主探索/预测订单由 Gemini 开仓顾问审核."""
     return (source or "").strip().lower() in GEMINI_PRIMARY_ORDER_SOURCES
