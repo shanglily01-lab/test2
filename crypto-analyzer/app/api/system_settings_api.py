@@ -44,14 +44,10 @@ def _set_position_advisor_pair(cursor, enabled: bool) -> None:
         'Gemini 模拟持仓顾问 (1=启用). Gemini主单 ≥15min 每15min hold/observe/sell'
     )
     desc_deepseek = (
-        'DeepSeek 模拟持仓顾问: 非Gemini主单 ≥15min 每15min hold/observe/sell'
-    )
-    desc_gpt = (
-        'GPT 模拟持仓顾问: gpt_* 仓 ≥15min 每15min hold/observe/sell'
+        'DeepSeek 模拟持仓顾问: 非Gemini主单(含gpt_*) ≥15min 每15min hold/observe/sell'
     )
     _upsert_bool_setting(cursor, 'gemini_position_advisor_enabled', enabled, desc_gemini)
     _upsert_bool_setting(cursor, 'deepseek_position_advisor_enabled', enabled, desc_deepseek)
-    _upsert_bool_setting(cursor, 'gpt_position_advisor_enabled', enabled, desc_gpt)
 
 
 class SystemSetting(BaseModel):
@@ -90,10 +86,9 @@ class TradingServicesUpdate(BaseModel):
     deepseek_predict_enabled: Optional[bool] = None   # DeepSeek 预测
     gemini_position_advisor_enabled: Optional[bool] = None  # 兼容；同步 DeepSeek
     gemini_open_advisor_enabled: Optional[bool] = None      # 兼容；同步 DeepSeek
-    gpt_position_advisor_enabled: Optional[bool] = None
     gpt_open_advisor_enabled: Optional[bool] = None
     open_advisor_enabled: Optional[bool] = None             # 统一开仓顾问开关 (Gemini+DeepSeek+GPT)
-    position_advisor_enabled: Optional[bool] = None         # 统一持仓顾问开关 (Gemini+DeepSeek+GPT)
+    position_advisor_enabled: Optional[bool] = None         # 统一持仓顾问开关 (Gemini+DeepSeek)
     smart_exit_enabled: Optional[bool] = None              # 智能平仓 (趋势反转/移动止盈/最优价等)
     blacklist_level3_enabled: Optional[bool] = None      # 黑名单3级禁止开仓
     live_top50_required: Optional[bool] = None           # TOP50 内可开实仓
@@ -439,7 +434,6 @@ async def get_trading_services():
                                   'gemini_open_advisor_enabled',
                                   'deepseek_position_advisor_enabled',
                                   'deepseek_open_advisor_enabled',
-                                  'gpt_position_advisor_enabled',
                                   'gpt_open_advisor_enabled',
                                   'smart_exit_enabled',
                                   'blacklist_level3_enabled',
@@ -474,7 +468,6 @@ async def get_trading_services():
             'gemini_open_advisor_enabled': 'gemini_open_advisor_enabled',
             'deepseek_position_advisor_enabled': 'deepseek_position_advisor_enabled',
             'deepseek_open_advisor_enabled': 'deepseek_open_advisor_enabled',
-            'gpt_position_advisor_enabled': 'gpt_position_advisor_enabled',
             'gpt_open_advisor_enabled': 'gpt_open_advisor_enabled',
             'smart_exit_enabled': 'smart_exit_enabled',
             'blacklist_level3_enabled': 'blacklist_level3_enabled',
@@ -501,7 +494,6 @@ async def get_trading_services():
             'gemini_open_advisor_enabled': True,
             'deepseek_position_advisor_enabled': True,
             'deepseek_open_advisor_enabled': True,
-            'gpt_position_advisor_enabled': True,
             'gpt_open_advisor_enabled': True,
             'smart_exit_enabled': False,
             'blacklist_level3_enabled': True,
@@ -539,7 +531,6 @@ async def get_trading_services():
         result['position_advisor_enabled'] = (
             result['gemini_position_advisor_enabled']
             and result['deepseek_position_advisor_enabled']
-            and result['gpt_position_advisor_enabled']
         )
 
         return {
@@ -732,18 +723,6 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (value,))
             updates.append(f"DeepSeek预测: {'启用' if data.deepseek_predict_enabled else '禁用'}")
-
-        if data.gpt_position_advisor_enabled is not None:
-            value = '1' if data.gpt_position_advisor_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('gpt_position_advisor_enabled', %s, 'GPT 模拟持仓顾问: gpt_* 仓 ≥15min 每15min hold/observe/sell', 'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            updates.append(f"GPT持仓顾问: {'启用' if data.gpt_position_advisor_enabled else '禁用'}")
 
         if data.gpt_open_advisor_enabled is not None:
             value = '1' if data.gpt_open_advisor_enabled else '0'

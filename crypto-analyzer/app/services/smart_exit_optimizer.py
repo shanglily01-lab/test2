@@ -83,12 +83,10 @@ class SmartExitOptimizer:
             from app.services.deepseek_position_advisor import DeepSeekPositionAdvisor
             self.gemini_advisor = GeminiPositionAdvisor(db_config)
             self.deepseek_advisor = DeepSeekPositionAdvisor(db_config)
-            self.gpt_advisor = None
             logger.info("[SmartExit] Gemini / DeepSeek 持仓顾问已初始化")
         except Exception as e:
             self.gemini_advisor = None
             self.deepseek_advisor = None
-            self.gpt_advisor = None
             logger.warning(f"[SmartExit] 持仓顾问初始化失败: {e}")
 
     def _is_smart_exit_enabled(self) -> bool:
@@ -1900,8 +1898,4 @@ class SmartExitOptimizer:
         except Exception as e:
             logger.error(f"[SmartExit] deepseek_advisor_tick 异常: {e}")
             return {'evaluated': 0, 'errors': 1, 'note': str(e)}
-
-    def gpt_advisor_tick(self) -> dict:
-        """已废弃：gpt_* 由 gemini_advisor_tick 一并监管。"""
-        return {'evaluated': 0, 'skipped': 0, 'note': 'gpt_hold_via_gemini'}
 

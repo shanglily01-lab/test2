@@ -37,10 +37,5 @@ def should_use_gemini_hold_advisor(source: str) -> bool:
 
 
 def should_use_deepseek_hold_advisor(source: str) -> bool:
-    """其余模拟仓仍由 DeepSeek 持仓顾问监管."""
+    """其余模拟仓（含 gpt_*）由 DeepSeek 持仓顾问监管."""
     return not should_use_gemini_hold_advisor(source)
-
-
-def should_use_gpt_hold_advisor(source: str) -> bool:
-    """已废弃: 全部由 DeepSeek 持仓顾问监管."""
-    return False

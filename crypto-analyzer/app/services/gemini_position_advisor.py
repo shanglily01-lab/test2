@@ -55,9 +55,10 @@ HOLD_LOSS_SEVERE_ROI = -15.0    # 严重亏损（近策略 SL）
 
 # DeepSeek/GPT 持仓顾问 system（与 user prompt 中文 reason 一致）
 HOLD_ADVISOR_JSON_SYSTEM_ZH = (
-    "你是模拟仓持仓监管顾问，以趋势结构为主判据。"
+    "你是模拟仓持仓监管顾问，须综合 ROI 档位、1h 趋势、RSI、叙事与宏观后再决策。"
     "仅输出合法 JSON：action 为 hold|observe|sell；"
-    "reason 为50字以内中文，必须引用 1h/15m K 线趋势证据，不得情绪化平仓或只写 Big4。"
+    "reason 为50字以内中文，必须以 1h 趋势为主并引用多维度证据；"
+    "禁止仅凭 15m K 线、ROI 数字或 Big4 单独触发 sell。"
 )
 
 # DeepSeek/GPT 开仓顾问 system（与 build_open_advisor_prompt 中文 reason 一致）
@@ -399,7 +400,7 @@ class GeminiPositionAdvisor:
             return (
                 "## 盈亏档位：微利/保本 (-5% < ROI ≤ 0%)\n"
                 f"- 1h 仍支持 {side_cn} → **hold**；15m 回调视为正常波动，勿恐慌平仓。\n"
-                "- **sell** 须 1h 与 15m 同向转弱；仅 15m 杂音 → **observe**。"
+                "- **sell** 须 1h 与 15m 同向转弱；**仅 15m 杂音 → hold/observe，禁止 sell**。"
             )
         if roi_pct > HOLD_LOSS_MODERATE_ROI:
             return (
@@ -490,25 +491,37 @@ class GeminiPositionAdvisor:
         s15: dict,
         s1h: dict,
     ) -> Tuple[str, str]:
-        """1h 趋势未破时，将情绪化 sell 降为 observe/hold."""
+        """综合复核：禁止仅凭 15m 或 ROI 就 sell；须 1h 确认反转且 15m 同向确认."""
         if action != 'sell':
             return action, reason
 
+        s1h_for = s1h.get("for", 0)
+        s1h_against = s1h.get("against", 0)
+        s15_trail = s15.get("trail_against", 0)
+        s15_against = s15.get("against", 0)
+        s15_for = s15.get("for", 0)
+        s15_confirms = s15_trail >= 3 or s15_against > s15_for
+
         if (
             roi_pct <= HOLD_LOSS_SEVERE_ROI
-            and s1h.get("against", 0) >= 2
-            and s15.get("trail_against", 0) >= 2
+            and s1h_against >= 2
+            and s15_trail >= 2
         ):
             return action, reason
 
         override = ""
-        if s1h.get("for", 0) >= s1h.get("against", 0):
-            if s15.get("trail_against", 0) < 3:
-                action = 'hold' if s1h.get("for", 0) > s1h.get("against", 0) else 'observe'
-                override = "1h趋势未破·抑制情绪化sell"
-        elif s1h.get("against", 0) < 2:
+        if s1h_for > s1h_against:
+            action = 'hold'
+            override = "1h仍顺向·禁止仅凭15m平仓"
+        elif s1h_against < 2:
+            action = 'hold' if s1h_for >= s1h_against else 'observe'
+            override = "1h未确认反转·禁止仅凭15m平仓"
+        elif not s15_confirms:
             action = 'observe'
-            override = "1h未确认反转·sell→observe"
+            override = "1h转弱但15m未确认·暂缓平仓"
+        elif s1h_for == s1h_against and s15_trail < 4:
+            action = 'observe'
+            override = "1h中性·15m确认不足"
 
         if override:
             reason = f"{reason[:80]}|复核:{override}"[:200]
@@ -555,20 +568,29 @@ class GeminiPositionAdvisor:
         big4_strength = ctx.get('big4_strength', 0)
         btc_6h = ctx.get('btc_6h_change', 0)
         eth_6h = ctx.get('eth_6h_change', 0)
+        narr_1h = (ctx.get('narrative_1h') or '').strip() or '(无)'
+        narr_15m = (ctx.get('narrative_15m') or '').strip() or '(无)'
+        pct_high = ctx.get('below_7d_high_pct')
+        pct_low = ctx.get('above_7d_low_pct')
+        if pct_high is not None and pct_low is not None:
+            struct_line = f"距7日高 {pct_high:+.1f}% / 距7日低 {pct_low:+.1f}%"
+        else:
+            struct_line = "N/A"
 
         side_cn = "做多 LONG" if side == 'LONG' else "做空 SHORT"
-        return f"""你是模拟仓**持仓监管**顾问。**以 1h 趋势为主、15m 为辅**，根据 K 线结构决定 hold / observe / sell。
+        return f"""你是模拟仓**持仓监管**顾问。须**综合评估**后再给 hold / observe / sell，**禁止仅凭 15m K 线平仓**。
 
-## 核心原则（趋势优先，忌情绪化平仓）
-- **先看 1h 趋势**是否仍支持 {side}；1h 未破方向时，15m 回调/震荡默认 **hold** 或 **observe**，勿因浮盈浮亏恐慌 **sell**
-- **不因**「怕回吐」「亏了一点」「大盘偏弱」等情绪平仓；须 1h 结构转弱 + 15m 确认
-- 震荡洗盘、单根反向 K 线、短时回撤 → **不足以 sell**；须近 2 根 1h 确认趋势反转
-- 盈亏数字仅作参考，**不能单独触发 sell**；无 K 线趋势证据则保持持仓观察
+## 核心原则（综合评估，1h 定方向）
+- **决策顺序**：① ROI 档位 → ② **1h 趋势结构**（主判据）→ ③ RSI/7日位置 → ④ 15m 确认 → ⑤ 宏观辅证
+- **1h 未破方向**时，15m 回调/震荡/连阴连阳 → 默认 **hold** 或 **observe**，**不得 sell**
+- **sell 最低门槛**：近 2 根 1h 确认反转 **且** 15m 多数同向转弱；缺一维度 → **observe**
+- ROI、Big4、叙事单独变化 **均不足以 sell**；须 K 线结构 + 档位综合印证
 
 ## 禁止（违反则 reason 无效）
+- **严禁**仅凭 15m 反向、单根 15m、15m 连阴/连阳就 **sell**（无 1h 反转证据时一律 hold/observe）
 - **不得**主要因 Big4/BTC/ETH 宏观偏多偏空就 sell
-- **不得**空泛主观（「感觉要跌」「大盘不好」「先跑为敬」）；reason 必须引用 1h/15m 表格形态
-- **不得**仅因 ROI 正负或幅度就 sell；Big4 不能单独触发 sell
+- **不得**空泛主观（「感觉要跌」「大盘不好」「先跑为敬」）；reason 须引用 1h 为主的多维证据
+- **不得**仅因 ROI 正负或幅度就 sell
 
 ## 仓位
   Symbol:          {symbol}
@@ -583,18 +605,32 @@ class GeminiPositionAdvisor:
   {rsi_line}
 
 ## 客观统计（须与 reason 一致，勿矛盾）
-  15m({HOLD_15M_BARS}根): {s15['summary']}
-  1h({HOLD_1H_BARS}根):  {s1h['summary']}
+  1h({HOLD_1H_BARS}根):  {s1h['summary']}  ← **主判据**
+  15m({HOLD_15M_BARS}根): {s15['summary']}  ← 仅作确认，不可单独触发 sell
+  结构位: {struct_line}
 
 {loss_rules}
 
-## K 线读法（1h 定趋势，15m 看确认）
-1. **近 {HOLD_1H_BARS} 根 1h**（主判据）：大趋势是否仍支持 {side}？
-   - LONG：高点/低点抬高；最近 2 根 1h 仍偏多 → 趋势未破，倾向 **hold**
-   - SHORT：高点/低点降低；最近 2 根 1h 仍偏空 → 趋势未破，倾向 **hold**
-2. **近 {HOLD_15M_BARS} 根 15m**（辅助）：是否**确认** 1h 反转？单根/两根 15m 反向不足以 sell
-   - 须与 1h 同向转弱：连阴/连阳、吞没、破前高/前低等
-3. reason 须写清 1h 趋势 + 15m 确认，例如「近2根1h仍抬高但近3根15m回调→震荡hold」
+## 综合叙事（辅助，权重低于 1h K 线）
+### 1h 叙事
+{narr_1h[:800]}
+
+### 15m 叙事（勿单独据此平仓）
+{narr_15m[:500]}
+
+## 综合评估清单（给 sell 前必须逐项核对）
+1. **ROI 档位**（{loss_tier}）是否允许在当前趋势下平仓？
+2. **1h 趋势**是否已破 {side}？近 2 根 1h 是否确认反转？→ 未破则 **不得 sell**
+3. **RSI/结构位**是否支持继续持仓或仅观察？
+4. **15m**是否**确认** 1h 反转（连反向≥3 或多数反向）？→ 仅 15m 弱、1h 未破 → **hold/observe**
+5. **宏观**仅作辅证，不能单独触发 sell
+
+## K 线读法（1h 定趋势，15m 仅确认）
+1. **近 {HOLD_1H_BARS} 根 1h**（**主判据，权重最高**）：大趋势是否仍支持 {side}？
+   - LONG：高点/低点抬高；最近 2 根 1h 仍偏多 → 趋势未破，**必须 hold**
+   - SHORT：高点/低点降低；最近 2 根 1h 仍偏空 → 趋势未破，**必须 hold**
+2. **近 {HOLD_15M_BARS} 根 15m**（**辅助确认**）：仅在 1h 已转弱后用于确认；**禁止**仅凭 15m sell
+3. reason 须以 1h 为主写综合结论，例如「1h仍抬高+15m回调震荡→hold」或「1h连2阴破结构+15m连3阴→sell」
 
 ## 近 {HOLD_1H_BARS} 根 1h K 线 (oldest → newest)
 {klines_1h_str}
@@ -607,21 +643,23 @@ class GeminiPositionAdvisor:
   仅当 K 线已明确反向时，方可引用 Big4 加强 sell 理由；不得单独因 Big4 sell。
 
 ## 决策
-- **hold**（默认倾向）: 1h 趋势仍支持 {side}；或 1h 未破 + 15m 仅为回调/震荡
-- **observe**: 1h 与 15m 信号混杂、趋势待确认、数据不足；**不可**用 observe 代替情绪化 sell
-- **sell**（高门槛，须 1h+15m 双重确认）:
-  (A) 近 2 根 1h **确认**趋势反转（破结构/连反向）
-  (B) 近 {HOLD_15M_BARS} 根 15m **多数反向**且与 1h 同向（写进 reason）
+- **hold**（默认倾向）: 1h 仍支持 {side}；或 1h 未破 + 15m 仅为回调/震荡；或仅 15m 转弱
+- **observe**: 1h/15m/RSI 信号混杂、趋势待确认；**不可**用 observe 代替仅凭 15m 的 sell
+- **sell**（高门槛，须**综合**满足）:
+  (A) ROI 档位允许（见上）
+  (B) 近 2 根 1h **确认**趋势反转（破结构/连反向）
+  (C) 15m **多数反向**且与 1h 同向（写进 reason）
+  (D) 叙事/RSI 不强烈反对平仓
   例外：ROI ≤ -15% **且** 1h+15m 双重走弱 → **sell**
 
-1h 趋势未破时 **不得 sell**；reason 须引用 1h/15m 趋势证据。
+**1h 未破时不得 sell**；**仅 15m 弱不得 sell**；reason 须以 1h 为主引用综合证据。
 
-趋势不明时默认 **observe**；仅 1h 明确反转时才 **sell**。
+趋势不明时默认 **observe**；仅 1h 明确反转且 15m 确认时才 **sell**。
 
 Output ONLY JSON:
 {{
   "action": "hold" | "observe" | "sell",
-  "reason": "<50字中文，必须含15m/1h形态，勿只写Big4>"
+  "reason": "<50字中文，以1h为主写综合结论，勿仅凭15m或Big4>"
 }}
 """
 
