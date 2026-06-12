@@ -65,18 +65,18 @@ class SmartCollectorService:
         # 初始化智能采集器
         self.collector = SmartFuturesCollector(db_config)
 
-        # 2026-06-12: WS 覆盖 5m/15m; REST 降为 1h 长周期兜底, 降低 -1003 风险
-        self.interval = 3600  # 1 小时
+        # 2026-06-12: WS 覆盖 5m/15m; REST 长周期兜底。30min 轮询即可，实际采 1h 仍由整点门槛控制
+        self.interval = 1800  # 30 分钟
 
         logger.info("🧠 智能数据采集服务初始化完成 (仅 U 本位, 不采集币本位)")
-        logger.info(f"检查间隔: {self.interval}秒 (1小时 REST 兜底)")
+        logger.info(f"检查间隔: {self.interval}秒 (30分钟轮询, 1h/4h/1d 按整点触发)")
         logger.info("采集策略: 仅 1h/4h/1d (5m/15m 由 WS 采集)")
 
     async def run_forever(self):
         """持续运行智能采集服务"""
         logger.info("=" * 60)
         logger.info("🧠 智能数据采集服务启动")
-        logger.info("检查周期: 每1小时 (REST 长周期兜底)")
+        logger.info("检查周期: 每30分钟轮询 (1h/4h/1d 按 K 线整点决定是否 REST)")
         logger.info("采集策略: 1h/4h/1d (5m/15m 由 ws_kline_collector 负责)")
         logger.info("实时价格: 由 WebSocket 服务提供")
         logger.info("=" * 60)
