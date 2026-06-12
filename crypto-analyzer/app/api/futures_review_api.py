@@ -2417,3 +2417,173 @@ async def get_strategy_performance(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/whitelist-pnl")
+async def get_whitelist_pnl(
+    hours: int = Query(default=24, ge=1, le=720, description="统计时间范围（小时）"),
+    account_id: int = Query(default=2, description="账户ID"),
+):
+    """
+    白名单盈利分析（复盘页）
+
+    统计 rating_level=0 白名单币在指定时间窗口内的平仓盈亏；
+    并附带全量累计白名单统计供对照。
+    """
+    try:
+        from app.api.rating_api import (
+            _fetch_whitelist_bundle,
+            _normalize_symbol_key,
+            _symbol_pnl_row,
+        )
+        from app.utils.pnl_stats import parse_pnl_counts
+
+        conn = get_db_connection()
+        cursor = conn.cursor(pymysql.cursors.DictCursor)
+        time_threshold = datetime.now() - timedelta(hours=hours)
+
+        cumulative = _fetch_whitelist_bundle(cursor, account_id=account_id)
+        cum_stats = cumulative["stats"]
+
+        cursor.execute(
+            """
+            SELECT symbol, level_change_reason, updated_at
+            FROM trading_symbol_rating
+            WHERE rating_level = 0
+            ORDER BY symbol
+            """
+        )
+        wl_rows = cursor.fetchall()
+        wl_meta = {}
+        for r in wl_rows:
+            sym = (r.get("symbol") or "").strip()
+            if not sym:
+                continue
+            key = _normalize_symbol_key(sym)
+            wl_meta[key] = {
+                "symbol": sym,
+                "reason": (r.get("level_change_reason") or "").strip(),
+            }
+
+        cursor.execute("SELECT symbol FROM top_performing_symbols")
+        top50_keys = {
+            _normalize_symbol_key(r.get("symbol") or "")
+            for r in cursor.fetchall()
+            if r.get("symbol")
+        }
+
+        per_symbol = {
+            key: {
+                "wins": 0, "losses": 0, "breakeven": 0,
+                "net_pnl": 0.0, "gross_profit": 0.0, "gross_loss": 0.0,
+            }
+            for key in wl_meta
+        }
+
+        cursor.execute(
+            """
+            SELECT symbol, realized_pnl, source, position_side, close_time
+            FROM futures_positions
+            WHERE account_id = %s
+              AND status = 'CLOSED'
+              AND close_time >= %s
+              AND realized_pnl IS NOT NULL
+            """,
+            (account_id, time_threshold),
+        )
+        for fp in cursor.fetchall():
+            key = _normalize_symbol_key(fp.get("symbol") or "")
+            if key not in per_symbol:
+                continue
+            agg = per_symbol[key]
+            pnl = float(fp.get("realized_pnl") or 0)
+            agg["net_pnl"] += pnl
+            if pnl > 0:
+                agg["wins"] += 1
+                agg["gross_profit"] += pnl
+            elif pnl < 0:
+                agg["losses"] += 1
+                agg["gross_loss"] += abs(pnl)
+            else:
+                agg["breakeven"] += 1
+
+        symbols = []
+        active_count = 0
+        for key, meta in wl_meta.items():
+            agg = per_symbol[key]
+            total_trades = agg["wins"] + agg["losses"] + agg["breakeven"]
+            if total_trades > 0:
+                active_count += 1
+            pnl_row = _symbol_pnl_row(
+                total_trades,
+                agg["wins"],
+                agg["losses"],
+                agg["breakeven"],
+                agg["net_pnl"],
+                agg["gross_profit"],
+                agg["gross_loss"],
+            )
+            symbols.append({
+                "symbol": meta["symbol"],
+                "in_top50": key in top50_keys,
+                "reason": meta["reason"],
+                **pnl_row,
+            })
+
+        symbols.sort(
+            key=lambda x: (-x["total_realized_pnl"], -x["total_trades"], x["symbol"])
+        )
+        traded_symbols = [s for s in symbols if s["total_trades"] > 0]
+
+        total_wins = sum(s["winning_trades"] for s in traded_symbols)
+        total_losses = sum(s["losing_trades"] for s in traded_symbols)
+        total_breakeven = sum(s.get("breakeven", 0) for s in traded_symbols)
+        total_trades = total_wins + total_losses + total_breakeven
+        net_pnl = sum(s["total_realized_pnl"] for s in traded_symbols)
+        gross_profit = sum(s["gross_profit"] for s in traded_symbols)
+        gross_loss = sum(s["gross_loss"] for s in traded_symbols)
+        counts = parse_pnl_counts({
+            "total_trades": total_trades,
+            "wins": total_wins,
+            "losses": total_losses,
+            "breakeven": total_breakeven,
+            "net_pnl": net_pnl,
+            "gross_profit": gross_profit,
+            "gross_loss": gross_loss,
+        })
+
+        period_stats = {
+            "hours": hours,
+            "symbol_count": len(wl_meta),
+            "active_symbol_count": active_count,
+            "in_top50_count": sum(1 for s in symbols if s["in_top50"]),
+            "total_trades": total_trades,
+            "wins": counts["wins"],
+            "losses": counts["losses"],
+            "breakeven": counts["breakeven"],
+            "win_rate": counts["win_rate"],
+            "net_pnl": round(net_pnl, 2),
+            "gross_profit": round(gross_profit, 2),
+            "gross_loss": round(gross_loss, 2),
+            "profit_factor": round(gross_profit / gross_loss, 2) if gross_loss > 0 else None,
+            "account_id": account_id,
+        }
+
+        cursor.close()
+        conn.close()
+
+        return {
+            "success": True,
+            "data": {
+                "period": period_stats,
+                "cumulative": cum_stats,
+                "symbols": traded_symbols,
+                "all_whitelist_symbols": symbols,
+            },
+        }
+
+    except Exception as e:
+        logger.error(f"获取白名单盈利分析失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

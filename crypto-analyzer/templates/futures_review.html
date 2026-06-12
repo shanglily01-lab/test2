@@ -147,6 +147,7 @@
   <button id="tab-analysis"    onclick="switchTab('analysis')"    class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">原因分析</button>
   <button id="tab-suggestions" onclick="switchTab('suggestions')" class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">智能建议</button>
   <button id="tab-strategy"    onclick="switchTab('strategy')"    class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">策略胜率</button>
+  <button id="tab-whitelist"   onclick="switchTab('whitelist')"   class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">白名单盈利</button>
   <button id="tab-holding"     onclick="switchTab('holding')"     class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">持仓分析</button>
   <button id="tab-dailypnl"    onclick="switchTab('dailypnl')"    class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">每日盈亏</button>
   <button id="tab-retro"       onclick="switchTab('retro')"       class="tab-btn px-5 py-4 text-[10px] font-['Space_Grotesk'] font-bold uppercase tracking-widest border-b-2 border-transparent text-on-surface-variant hover:text-on-surface whitespace-nowrap transition-all">历史复盘</button>
@@ -362,6 +363,76 @@
           </thead>
           <tbody id="sp-table-body">
             <tr><td colspan="9" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ WHITELIST PNL ============ -->
+  <div id="pane-whitelist" class="tab-pane space-y-6">
+    <p class="text-[10px] uppercase text-on-surface-variant tracking-widest">
+      白名单 (L0 · rating_level=0) · 区间平仓盈亏 · 对照全量累计
+    </p>
+    <div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div class="bg-surface-container-low rounded-xl p-5 border border-primary/20">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">白名单币数</p>
+        <p class="mono text-2xl font-medium text-primary" id="wl-symbol-count">--</p>
+        <p class="text-[10px] text-on-surface-variant mt-1" id="wl-active-count">本区间成交 -- 个</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5 border border-primary/20">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">区间胜率</p>
+        <p class="mono text-2xl font-medium text-secondary" id="wl-win-rate">--</p>
+        <p class="text-[10px] text-on-surface-variant mt-1" id="wl-wl-count">--W / --L</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5 border border-primary/20">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">区间盈亏 (U)</p>
+        <p class="mono text-2xl font-medium" id="wl-period-pnl">--</p>
+        <p class="text-[10px] text-on-surface-variant mt-1" id="wl-period-pf">盈亏比 --</p>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-5 border border-outline-variant/30">
+        <p class="text-[10px] uppercase text-on-surface-variant tracking-wider mb-2">全量累计盈亏</p>
+        <p class="mono text-2xl font-medium" id="wl-cum-pnl">--</p>
+        <p class="text-[10px] text-on-surface-variant mt-1" id="wl-cum-wr">累计胜率 --</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      <div class="bg-surface-container-low rounded-xl p-6">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">区间盈亏排行</h3>
+        <div id="wl-pnl-rank" class="space-y-2 max-h-[320px] overflow-y-auto">
+          <p class="text-xs text-on-surface-variant">加载中...</p>
+        </div>
+      </div>
+      <div class="bg-surface-container-low rounded-xl p-6">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant mb-4">区间胜率排行</h3>
+        <div id="wl-wr-rank" class="space-y-2 max-h-[320px] overflow-y-auto">
+          <p class="text-xs text-on-surface-variant">加载中...</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="bg-surface-container-low rounded-xl overflow-hidden">
+      <div class="px-6 py-4 border-b border-outline-variant/20 flex items-center justify-between">
+        <h3 class="text-sm font-['Space_Grotesk'] font-bold uppercase tracking-widest text-on-surface-variant">白名单交易对明细（本区间有成交）</h3>
+        <span id="wl-table-count" class="text-[10px] text-on-surface-variant mono">-- 条</span>
+      </div>
+      <div class="overflow-x-auto max-h-[520px] overflow-y-auto">
+        <table class="w-full text-xs">
+          <thead class="bg-surface-container-low sticky top-0 z-10">
+            <tr class="border-b border-outline-variant/20">
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">交易对</th>
+              <th class="px-4 py-3 text-center text-[10px] uppercase text-on-surface-variant tracking-wider">TOP50</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">笔数</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">盈/亏</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">胜率</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">区间盈亏</th>
+              <th class="px-4 py-3 text-right text-[10px] uppercase text-on-surface-variant tracking-wider">均盈亏</th>
+              <th class="px-4 py-3 text-left text-[10px] uppercase text-on-surface-variant tracking-wider">备注</th>
+            </tr>
+          </thead>
+          <tbody id="wl-table-body">
+            <tr><td colspan="8" class="px-4 py-6 text-center text-on-surface-variant text-xs">加载中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -732,6 +803,7 @@ function loadTabData(name) {
   else if (name === 'analysis') { loadAnalysis(); }
   else if (name === 'suggestions') { loadSuggestions(); }
   else if (name === 'strategy') { loadStrategyPerformance(); }
+  else if (name === 'whitelist') { loadWhitelistPnl(); }
   else if (name === 'holding') { loadHoldingAnalysis(); }
   else if (name === 'dailypnl') { initMonthSelector(); loadDailyPnl(); }
   else if (name === 'retro') { loadRetro(); }
@@ -1277,6 +1349,96 @@ function loadStrategyPerformance() {
       }).join('');
     })
     .catch(function(e){ console.error('loadStrategyPerformance error:', e); });
+}
+
+// ============================================================
+// WHITELIST PNL
+// ============================================================
+function loadWhitelistPnl() {
+  fetch('/api/futures/review/whitelist-pnl?account_id=' + accountId() + '&hours=' + currentHours)
+    .then(function(r){ return r.json(); })
+    .then(function(resp) {
+      var d = (resp && resp.data) || {};
+      var period = d.period || {};
+      var cum = d.cumulative || {};
+      var symbols = d.symbols || [];
+
+      var setT = function(id, v) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = v !== undefined && v !== null ? v : '--';
+      };
+
+      setT('wl-symbol-count', period.symbol_count);
+      setT('wl-active-count', '本区间成交 ' + (period.active_symbol_count || 0) + ' 个 · TOP50内 ' + (period.in_top50_count || 0));
+      setT('wl-win-rate', period.win_rate !== undefined ? period.win_rate + '%' : '--');
+      setT('wl-wl-count', (period.wins || 0) + 'W / ' + (period.losses || 0) + 'L · ' + (period.total_trades || 0) + '笔');
+
+      var ppEl = document.getElementById('wl-period-pnl');
+      if (ppEl) {
+        ppEl.textContent = fmtPnl(period.net_pnl);
+        ppEl.className = 'mono text-2xl font-medium ' + pCls(period.net_pnl);
+      }
+      setT('wl-period-pf', period.profit_factor != null ? '盈亏比 ' + period.profit_factor : '盈亏比 --');
+
+      var cpEl = document.getElementById('wl-cum-pnl');
+      if (cpEl) {
+        cpEl.textContent = fmtPnl(cum.net_pnl);
+        cpEl.className = 'mono text-2xl font-medium ' + pCls(cum.net_pnl);
+      }
+      setT('wl-cum-wr', cum.win_rate !== undefined ? '累计胜率 ' + cum.win_rate + '% · ' + (cum.total_trades || 0) + '笔' : '累计胜率 --');
+
+      if (!symbols.length) {
+        document.getElementById('wl-pnl-rank').innerHTML = '<p class="text-xs text-on-surface-variant">本区间白名单无成交</p>';
+        document.getElementById('wl-wr-rank').innerHTML = '<p class="text-xs text-on-surface-variant">本区间白名单无成交</p>';
+        document.getElementById('wl-table-body').innerHTML =
+          '<tr><td colspan="8" class="px-4 py-6 text-center text-on-surface-variant text-xs">本区间白名单无平仓记录</td></tr>';
+        setT('wl-table-count', '0 条');
+        return;
+      }
+
+      var byPnl = symbols.slice().sort(function(a, b) { return b.total_realized_pnl - a.total_realized_pnl; });
+      document.getElementById('wl-pnl-rank').innerHTML = byPnl.slice(0, 12).map(function(s) {
+        return '<div class="flex items-center justify-between py-1.5 border-b border-outline-variant/10 text-xs">' +
+          '<span class="text-on-surface font-medium">' + shortSym(s.symbol) + (s.in_top50 ? ' <span class="text-primary text-[10px]">TOP50</span>' : '') + '</span>' +
+          '<span class="mono font-medium ' + pCls(s.total_realized_pnl) + '">' + fmtPnl(s.total_realized_pnl) + '</span>' +
+        '</div>';
+      }).join('');
+
+      var byWr = symbols.slice().filter(function(s){ return s.total_trades >= 2; })
+        .sort(function(a, b) { return b.win_rate - a.win_rate; });
+      document.getElementById('wl-wr-rank').innerHTML = byWr.length ? byWr.slice(0, 12).map(function(s) {
+        var barColor = s.win_rate >= 60 ? '#49f4c8' : s.win_rate >= 40 ? '#FFD700' : '#ff716c';
+        return '<div class="space-y-1">' +
+          '<div class="flex items-center justify-between text-xs">' +
+            '<span class="text-on-surface font-medium">' + shortSym(s.symbol) + '</span>' +
+            '<span class="mono text-[11px]" style="color:' + barColor + '">' + s.win_rate + '%</span>' +
+          '</div>' +
+          '<div class="flex items-center gap-2">' +
+            '<div class="bar-bg flex-1"><div class="bar-fill" style="width:' + Math.min(s.win_rate, 100) + '%;background:' + barColor + '"></div></div>' +
+            '<span class="mono text-[10px] text-on-surface-variant">' + s.total_trades + '笔</span>' +
+          '</div>' +
+        '</div>';
+      }).join('') : '<p class="text-xs text-on-surface-variant">至少 2 笔才显示胜率排行</p>';
+
+      setT('wl-table-count', symbols.length + ' 条');
+      document.getElementById('wl-table-body').innerHTML = symbols.map(function(s) {
+        return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
+          '<td class="px-4 py-3 text-on-surface font-medium">' + s.symbol + '</td>' +
+          '<td class="px-4 py-3 text-center">' + (s.in_top50 ? '<span class="text-[10px] px-2 py-0.5 rounded-full text-primary bg-primary/10">是</span>' : '<span class="text-on-surface-variant">—</span>') + '</td>' +
+          '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + s.total_trades + '</td>' +
+          '<td class="px-4 py-3 text-right mono"><span class="text-primary">' + s.winning_trades + '</span> / <span class="text-error">' + s.losing_trades + '</span></td>' +
+          '<td class="px-4 py-3 text-right mono ' + (s.win_rate >= 50 ? 'text-primary' : 'text-error') + '">' + s.win_rate + '%</td>' +
+          '<td class="px-4 py-3 text-right mono font-medium ' + pCls(s.total_realized_pnl) + '">' + fmtPnl(s.total_realized_pnl) + '</td>' +
+          '<td class="px-4 py-3 text-right mono ' + pCls(s.avg_pnl_per_trade) + '">' + fmtPnl(s.avg_pnl_per_trade) + '</td>' +
+          '<td class="px-4 py-3 text-on-surface-variant text-[11px] max-w-[200px] truncate" title="' + (s.reason || '') + '">' + (s.reason || '—') + '</td>' +
+        '</tr>';
+      }).join('');
+    })
+    .catch(function(e){
+      console.error('loadWhitelistPnl error:', e);
+      document.getElementById('wl-table-body').innerHTML =
+        '<tr><td colspan="8" class="px-4 py-6 text-center text-error text-xs">加载失败</td></tr>';
+    });
 }
 
 // ============================================================
