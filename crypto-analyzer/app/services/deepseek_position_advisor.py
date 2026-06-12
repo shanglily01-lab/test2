@@ -213,7 +213,7 @@ class DeepSeekPositionAdvisor:
             return False, side_reason
 
         ctx = self._prompt_helper._fetch_market_context(symbol)
-        ok_pre, pre_reason = precheck_open_advisor(profile, side, ctx)
+        ok_pre, pre_reason = precheck_open_advisor(profile, side, ctx, catalyst=catalyst)
         if not ok_pre:
             log_deepseek_advisor_review(
                 "open", "reject", symbol,

@@ -110,25 +110,30 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         title_zh="AI 主探索（事件/结构）",
         expected_side=None,
         rubric=(
-            "【探索专属，与探索 prompt 一致；勿用已移除战术标准】\n"
-            "上游已通过 catalyst 技术面门槛；你做**矛盾复核**，须综合 **1h 形态+15m 形态+RSI+成交量+入场价**。\n"
-            "- **允许趋势延续**：1h 整体+近6根与方向同向，15m 共振，量能不显著背离 → 可 approve。\n"
-            "- 亦允许：LONG=下跌后反转/利好结构；SHORT=上涨后衰竭/利空结构（须在 1h/15m 有形态依据）。\n"
-            "- **禁止**仅因单一 RSI 高低 reject；但 RSI 与 1h/15m 形态明显矛盾 → reject。\n"
-            "- **必须 reject**：catalyst 与 side 矛盾；1h/15m 形态均不支持 proposed side；"
-            "仅 24h 涨跌幅无 K 线；缩量假突破/放量反向；与用户方向闸门或 Big4 硬冲突。"
+            "【探索专属，与探索 prompt 一致；6~8h 持仓，1h 主审】\n"
+            "上游已通过 catalyst 技术面门槛；你做**矛盾复核**，核对 catalyst 四块与当前表是否仍一致。\n"
+            "**catalyst 四块**（缺一或矛盾 → reject）：\n"
+            "1. 1h 整体趋势（24根偏多/偏空/震荡）\n"
+            "2. 1h 近4~8根结构（连阳/连阴/回踩/突破等）\n"
+            "3. RSI(1h) 数字（若有 tech 值须写出）\n"
+            "4. 成交量（放量/缩量/量平及与方向关系）\n"
+            "- **approve**：四块与 proposed side、当前 1h 表、RSI、量能自洽；允许趋势延续或结构反转。\n"
+            "- **reject**：catalyst 与 side 矛盾；四块空洞或与 K 线表明显不符；仅 24h 涨跌幅；"
+            "缩量假突破/放量反向；与用户方向闸门或 Big4 硬冲突。\n"
+            "- 15m **仅辅证**，不得因 15m 单独逆势就 reject（1h 四维齐全且自洽可 approve）。"
         ),
     ),
     "predict": OpenAdvisorStrategyProfile(
         key="predict",
-        title_zh="AI 预测（2h 方向）",
+        title_zh="AI 预测（6~8h 方向）",
         expected_side=None,
         rubric=(
-            "【预测专属，与预测 prompt 一致；勿用战术/探索混审】\n"
-            "上游已通过 catalyst 门槛；须综合 **1h 形态+15m 形态+RSI+成交量+入场价** 后给结论。\n"
-            "catalyst 须与 1h/15m K 线表、RSI、量能自洽；允许延续或反转，只要多维印证。\n"
-            "1h 与 15m 形态均不支持 proposed side，或量能明显背离 catalyst → reject。\n"
-            "与 Big4 严重冲突且个股多维技术面不足 → reject。"
+            "【预测专属，与预测 prompt 一致；6~8h 持仓，1h 主审】\n"
+            "上游已通过 catalyst 门槛；核对 catalyst 四块与当前 1h 表、RSI、量能是否仍支持 proposed side。\n"
+            "四块要求同探索（1h整体+近结构+RSI数字+量能）；与表矛盾 → reject。\n"
+            "允许延续或反转，只要 1h 多维印证且 catalyst 自洽。\n"
+            "1h 形态与量能均不支持 proposed side → reject。\n"
+            "与 Big4 严重冲突且个股 1h 技术面不足 → reject；勿因单一 RSI 高低单独 reject。"
         ),
     ),
     "btc_momentum": OpenAdvisorStrategyProfile(
@@ -349,8 +354,19 @@ def _volume_summary(klines: list, n: int = 6) -> str:
     return f"近{n}均量={r_avg:.0f} 前段均量={p_avg:.0f} 最新={last_v:.0f} ({trend})"
 
 
-_KLINE_COMPREHENSIVE_READING = """
-## K 线综合读法（开仓必审：1h 定趋势 + 15m 定入场）
+_KLINE_COMPREHENSIVE_READING_EXPLORE_PREDICT = """
+## K 线综合读法（探索/预测：6~8h 持仓，**1h 主审**）
+- **禁止**仅凭单根 K 线、仅 24h 涨跌幅、或仅 catalyst 措辞下结论。
+- **核对 catalyst 四块**：1h整体趋势、1h近4~8根结构、RSI(1h)数字、成交量 — 与下方表交叉验证。
+- **1h 整体趋势**：近 **24 根 1h**（通道/高低点结构）。
+- **1h 近期形态**：近 **4~8 根 1h**（回调/反弹/连阳连阴/破结构）。
+- **成交量 + RSI**：对照 1h 表 volume 列 + 量能摘要 + RSI(1h)；与 catalyst 自洽。
+- **15m**：仅一句辅证，**不得**单独否决 1h 四维齐全的单。
+- **reason 须写明**：1h 形态结论 + 量能/RSI 要点 + catalyst 是否仍自洽，再写 approve/reject。
+"""
+
+_KLINE_COMPREHENSIVE_READING_TACTICAL = """
+## K 线综合读法（战术策略：1h 定趋势 + 15m 定入场）
 - **禁止**仅凭单根 K 线、仅 24h 涨跌幅、或仅 catalyst 措辞下结论。
 - **1h 整体趋势**：近 **24 根 1h**（通道/高低点结构）。
 - **1h 近期形态**：近 **4~6 根 1h**（回调/反弹/连阳连阴/破结构）。
@@ -359,6 +375,23 @@ _KLINE_COMPREHENSIVE_READING = """
 - **RSI + 价格位置**：RSI(1h) 与 below/above 7d 须与形态一致；入场价勿追在 7d 极端无结构处。
 - **reason 须写明**：1h 形态结论 + 15m 形态结论 + 量能/RSI 至少一项，再写 approve/reject。
 """
+
+_KLINE_COMPREHENSIVE_READING_GENERIC = """
+## K 线综合读法（通用：1h 主 + 15m 辅）
+- **禁止**仅凭单根 K 线、仅 24h 涨跌幅、或仅 catalyst 措辞下结论。
+- **1h**：近 24 根定趋势 + 近 6 根定局部结构。
+- **15m**：近 6 根是否与 proposed side 一致。
+- **成交量 + RSI**：与 catalyst/entry_reason 交叉验证。
+- **reason 须写明**：1h + 量能/RSI 要点，再写 approve/reject。
+"""
+
+
+def _kline_reading_block(profile: OpenAdvisorStrategyProfile) -> str:
+    if profile.key in ("explore", "predict"):
+        return _KLINE_COMPREHENSIVE_READING_EXPLORE_PREDICT
+    if profile.key in _TACTICAL_PROFILE_KEYS:
+        return _KLINE_COMPREHENSIVE_READING_TACTICAL
+    return _KLINE_COMPREHENSIVE_READING_GENERIC
 
 
 def build_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
@@ -390,16 +423,15 @@ def build_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
         lines.append("6. 完全符合反转定义才 approve。")
     elif key == "explore":
         lines.append(
-            "4. 以探索 catalyst 为主：延续/反转均可；**勿**用四战术互斥 checklist。"
+            "4. 核对 catalyst **四块**（1h整体+近结构+RSI+量能）与 K 线表；矛盾 → reject。"
         )
         lines.append(
-            "5. 1h+15m 形态与量能均不支持 side、或纯涨跌幅追价 → reject；"
-            "多维自洽时可 approve。"
+            "5. 1h 四维自洽可 approve；勿用四战术 checklist；15m 仅辅证。"
         )
     elif key == "predict":
-        lines.append("4. 审 2h 预测逻辑与 1h/15m/RSI/量能多周期依据，**勿**用战术 checklist。")
+        lines.append("4. 审 6~8h 预测逻辑与 1h/RSI/量能依据，**勿**用战术 checklist。")
         lines.append(
-            "5. catalyst 与 1h/15m 形态自洽可 approve；勿因单一 RSI 否决。"
+            "5. catalyst 四块与 1h 表自洽可 approve；勿因单一 RSI 否决。"
         )
     else:
         lines.append("4. entry_reason/catalyst 与 1h/15m 形态、量能、方向一致；含糊 → reject。")
@@ -449,14 +481,19 @@ def build_tech_metrics_block(
     elif profile.key == "dump":
         extra = f"\n- 杀跌硬线: RSI≤{DUMP_RSI_MAX}"
 
+    if profile.key in ("explore", "predict"):
+        extra += "\n- 探索/预测：以 1h 统计为主，15m 仅辅证"
+
     return (
         "## 综合量化指标（开仓必审，须与 rubric 交叉验证）\n"
         f"- 拟入场价: {price}\n"
         f"- RSI(1h): {rsi_s}\n"
         f"- below_7d_high_pct: {b7h_s} | above_7d_low_pct: {a7l_s}\n"
-        f"- 1h形态({OPEN_KLINE_1H_RECENT_BARS}根): {s1h['summary']}\n"
-        f"- 15m形态({OPEN_KLINE_15M_BARS}根): {s15['summary']}\n"
-        f"- 1h量能: {vol_1h}\n"
+        f"- 1h形态({OPEN_KLINE_1H_RECENT_BARS}根): {s1h['summary']}"
+        + (" ← **主判据**" if profile.key in ("explore", "predict") else "")
+        + f"\n- 15m形态({OPEN_KLINE_15M_BARS}根): {s15['summary']}"
+        + (" ← 辅证" if profile.key in ("explore", "predict") else "")
+        + f"\n- 1h量能: {vol_1h}\n"
         f"- 15m量能: {vol_15m}"
         f"{extra}"
     )
@@ -466,11 +503,34 @@ def precheck_open_advisor(
     profile: OpenAdvisorStrategyProfile,
     side: str,
     ctx: dict,
+    catalyst: str = "",
 ) -> Tuple[bool, str]:
     """代码层策略专属预检（LLM 之前），避免所有单用同一套模糊标准."""
     s = (side or "").upper()
     rsi = ctx.get("rsi_14_1h")
     b7h = ctx.get("below_7d_high_pct")
+
+    if profile.key in ("explore", "predict") and (catalyst or "").strip():
+        from app.services.ai_explore_prompt import (
+            explore_catalyst_technical_ok,
+            sym_data_for_catalyst_gate,
+        )
+        sym_item = {
+            "tech": {
+                "rsi_14_1h": ctx.get("rsi_14_1h"),
+                "below_7d_high_pct": ctx.get("below_7d_high_pct"),
+                "above_7d_low_pct": ctx.get("above_7d_low_pct"),
+            },
+            "kline_narrative": {
+                "1h": (ctx.get("narrative_1h") or "")[:500],
+            },
+        }
+        tech_ok, tech_reason = explore_catalyst_technical_ok(
+            catalyst,
+            sym_data=sym_data_for_catalyst_gate(sym_item),
+        )
+        if not tech_ok:
+            return False, f"[{profile.title_zh}] catalyst 预检: {tech_reason}"
 
     if profile.key == "chase" and s == "LONG":
         if rsi is not None and float(rsi) > CHASE_RSI_MAX:
@@ -550,26 +610,45 @@ def build_open_advisor_prompt(
     narr_15m = (ctx.get("narrative_15m") or "").strip() or "(无)"
     tech_block = build_tech_metrics_block(profile, ctx, side, price)
     review_steps = build_strategy_review_steps(profile)
+    kline_reading = _kline_reading_block(profile)
     sl_s = f"{sl_pct}%" if sl_pct is not None else "默认"
     tp_s = f"{tp_pct}%" if tp_pct is not None else "默认"
     hold_s = f"{hold_hours}h" if hold_hours is not None else "策略默认"
+    if profile.key in ("explore", "predict"):
+        review_focus = (
+            "**必须综合审查**：1h 形态（主）、RSI、成交量、catalyst 四块自洽；"
+            "15m 仅辅证。"
+        )
+        reason_tpl = (
+            f'"reason": "<50字中文，须含1h形态+量能/RSI+catalyst自洽要点，'
+            f'写明策略名「{profile.title_zh}」通过/驳回依据>"'
+        )
+    else:
+        review_focus = (
+            "**必须综合审查**：1h 形态、15m 形态、RSI、成交量、入场价位置；缺一不可。"
+        )
+        reason_tpl = (
+            f'"reason": "<50字中文，须含1h+15m形态与量能/RSI要点，'
+            f'写明策略名「{profile.title_zh}」通过/驳回依据>"'
+        )
     return f"""你是超级交易大师。系统在**开模拟仓之前**请你审核是否允许开仓。
 
 ## 重要
 - 本笔 **唯一** 审核标准：下方「{profile.title_zh}」专属 rubric（profile={profile.key}）。
 - **禁止**用其它策略的标准审本单（例如用「追涨」标准审「回调」单）。
-- **必须综合审查**：1h 形态、15m 形态、RSI、成交量、入场价位置；缺一不可。
+- {review_focus}
 
 ## 本笔策略
   策略名:     {profile.title_zh}
   profile:    {profile.key}
   source:     {source}
   固定方向:   {profile.expected_side or '按信号 LONG/SHORT'}
+  计划持仓:   {hold_s}（探索/预测为 6~8h）
 
 ### 「{profile.title_zh}」专属审核标准（仅此一节有效）
 {profile.rubric}
 
-{_KLINE_COMPREHENSIVE_READING}
+{kline_reading}
 
 {tech_block}
 
@@ -601,7 +680,7 @@ def build_open_advisor_prompt(
 Output ONLY JSON:
 {{
   "decision": "approve" | "reject",
-  "reason": "<50字中文，须含1h+15m形态与量能/RSI要点，写明策略名「{profile.title_zh}」通过/驳回依据>"
+  {reason_tpl}
 }}
 """
 
@@ -612,7 +691,7 @@ _GPT_PROFILE_TITLE_EN: dict[str, str] = {
     "chase": "Momentum chase long",
     "dump": "Breakdown short",
     "explore": "AI main explore (event/structure)",
-    "predict": "AI predict (2h direction)",
+    "predict": "AI predict (6~8h direction)",
     "btc_momentum": "BTC momentum",
     "smart_trader": "Main strategy / smart_trader",
     "mean_reversion": "Bollinger mean reversion",
@@ -652,15 +731,14 @@ _GPT_RUBRIC_EN: dict[str, str] = {
         "4. STRONG_BEARISH Big4 **aligns** with dump SHORT — bearish macro is NOT a reject reason."
     ),
     "explore": (
-        "Explore-only (aligned with explore worker prompt). Upstream catalyst gate already passed.\n"
-        "Approve trend continuation when catalyst cites 1h+recent bars aligned with side "
-        "(SHORT in downtrend / LONG in uptrend is OK).\n"
-        "Do NOT reject solely for low/high RSI or proximity to 7d low/high.\n"
-        "Reject only: catalyst contradicts side, 24h%-only narrative, vague structure, or hard gate conflict."
+        "Explore-only (6~8h hold, 1h-primary). Upstream catalyst gate passed.\n"
+        "Re-check catalyst four parts: 1h trend, 1h recent structure, RSI(1h) number, volume.\n"
+        "Approve if four parts align with side and current 1h table; 15m auxiliary only.\n"
+        "Reject: catalyst contradicts side, four-part gap vs tables, 24h%-only, or hard gate conflict."
     ),
     "predict": (
-        "Predict-only. Upstream catalyst gate passed.\n"
-        "Catalyst needs 1h/15m logic; continuation or reversal OK if self-consistent.\n"
+        "Predict-only (6~8h hold, 1h-primary). Upstream catalyst gate passed.\n"
+        "Same four-part catalyst check as explore; 1h + RSI + volume must support side.\n"
         "Do not reject on RSI alone; severe Big4 conflict without coin case → reject."
     ),
     "btc_momentum": "Side must align with BTC short-term momentum unless catalyst is exceptional.",

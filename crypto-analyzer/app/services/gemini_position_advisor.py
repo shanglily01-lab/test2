@@ -48,28 +48,29 @@ HOLD_CHECK_INTERVAL_S = 900     # 同仓 15min 内不重复问
 GEMINI_PER_CALL_DELAY_S = 1.0   # 防 Gemini rate limit
 HOLD_15M_BARS = 6               # 持仓顾问：近 6 根 15m
 HOLD_5M_BARS = 6                # 持仓顾问：近 6 根 5m（约 30min）
-HOLD_1H_BARS = 4                # 持仓顾问：近 4 根 1h
+HOLD_1H_BARS = 8                # 持仓顾问：近 8 根 1h（≈6~8h 持仓窗口）
 HOLD_PROFIT_TEMPER_ROI = 5.0    # 程序化复核：浮盈较高时才收紧 hold
-HOLD_LOSS_STRICT_ROI = -1.0     # 保证金 ROI ≤ -1%：严格审查（须看 15m+5m）
+HOLD_LOSS_STRICT_ROI = -1.0     # 保证金 ROI ≤ -1%：严格审查 1h+量价+RSI
 HOLD_LOSS_MILD_ROI = -5.0       # 保证金 ROI %，轻微亏损
 HOLD_LOSS_MODERATE_ROI = -12.0  # 中度亏损
 HOLD_LOSS_SEVERE_ROI = -15.0    # 严重亏损（近策略 SL）
 
 # DeepSeek/GPT 持仓顾问 system（与 user prompt 中文 reason 一致）
 HOLD_ADVISOR_JSON_SYSTEM_ZH = (
-    "你是模拟仓持仓监管顾问，每轮须认真综合 ROI、1h 趋势、15m/5m 短周期、RSI、叙事与宏观后给出明确结论。"
+    "你是模拟仓持仓监管顾问，本笔为 6~8 小时持仓逻辑，以 1h K 线为主，结合量价、RSI、价格位置与 ROI 后给结论。"
     "仅输出合法 JSON：action 为 hold|observe|sell；"
-    "reason 为50字以内中文，须引用 1h 为主、15m+5m 为辅的多维证据；"
-    "保证金 ROI≤-1% 须严格审查 15m+5m，不可敷衍 hold；"
-    "信号混杂时用 observe，1h+15m+5m 三周期确认转弱时才 sell；禁止仅凭单周期或 ROI 单独 sell。"
+    "reason 为50字以内中文，须引用 1h 形态 + 量能或 RSI 要点；"
+    "保证金 ROI≤-1% 须严格审查 1h 是否仍支持原方向，不可敷衍 hold；"
+    "15m/5m 仅作辅证；1h 未破方向时不得 sell；禁止仅凭 ROI 或短周期杂音单独 sell。"
 )
 
 # DeepSeek/GPT 开仓顾问 system（与 build_open_advisor_prompt 中文 reason 一致）
 OPEN_ADVISOR_JSON_SYSTEM_ZH = (
-    "你是模拟仓开仓审核顾问。"
+    "你是模拟仓开仓审核顾问，审核 6~8 小时持仓单是否允许入场。"
     "仅输出合法 JSON：decision 为 approve|reject；"
-    "reason 为50字以内中文，须综合 1h 形态、15m 形态、RSI、成交量、入场价后给结论；"
-    "必须写明本笔策略名及通过/驳回要点，引用 K 线表与量化指标，禁止仅凭 catalyst 措辞 approve。"
+    "reason 为50字以内中文，须写明 1h 形态 + 量能/RSI + 策略名要点；"
+    "探索/预测：核对上游 catalyst 与当前 1h 表是否矛盾，矛盾或空洞 → reject；"
+    "战术策略：1h 定趋势、15m 定入场；存疑一律 reject，禁止仅凭 catalyst 措辞 approve。"
 )
 
 
@@ -400,38 +401,38 @@ class GeminiPositionAdvisor:
         if roi_pct > 0:
             return (
                 "## 盈亏档位：盈利 (ROI > 0%)\n"
-                f"- **须先看近 15m + 5m**：评估回调是洗盘还是转弱，再给结论。\n"
+                f"- **以 1h 为主**：6~8h 持仓逻辑是否仍成立？对照量价、{side_cn} 方向。\n"
                 f"- **1h 趋势仍支持 {side_cn}** 时默认 **hold**，不因 15m/5m 一两根回撤就止盈。\n"
-                "- **sell** 须 1h 结构转弱 + 15m 确认 + 5m 同向转弱；仅短周期震荡 → **hold** 或 **observe**。\n"
-                "- ROI ≥ +10% 且 1h+15m+5m 三重反转 → **sell**。"
+                "- **sell** 须 1h 结构转弱 + 量价/RSI 不支持；仅短周期震荡 → **hold/observe**。\n"
+                "- ROI ≥ +10% 且 1h 确认反转 + 量价背离 → **sell**。"
             )
         if roi_pct > HOLD_LOSS_STRICT_ROI:
             return (
                 "## 盈亏档位：微利/保本 (-1% < ROI ≤ 0%)\n"
-                f"- **须综合近 15m + 5m** 判断：顺向回调 → **hold**；短周期转弱但 1h 未破 → **observe**。\n"
-                f"- 1h 仍支持 {side_cn} → 倾向 **hold**；勿因 5m/15m 单根杂音 panic sell。\n"
-                "- **sell** 须 1h 与 15m 同向转弱，且 5m 连反向≥2 确认；缺一 → **observe**。"
+                f"- **1h 仍支持 {side_cn}** → 倾向 **hold**；勿因 5m/15m 单根杂音 panic sell。\n"
+                "- 1h 模糊、RSI/量能中性 → **observe**。\n"
+                "- **sell** 须 1h 近 2 根确认反向且 RSI/量能不支持；缺一 → **observe**。"
             )
         if roi_pct > HOLD_LOSS_MILD_ROI:
             return (
                 "## 盈亏档位：小幅亏损·严格审查 (-5% < ROI ≤ -1%)\n"
-                f"- **亏损已超 1%**：必须严格审查 **1h + 15m + 5m** 三周期后再给结论，禁止敷衍一律 hold。\n"
-                f"- **hold** 须 1h 仍支持 {side_cn} **且** 15m/5m 未多数反向；任一短周期连弱 → **observe**。\n"
-                "- **sell** 须 1h 近 2 根确认反向 **且** 15m 连反向≥2 **且** 5m 连反向≥2；仅部分周期弱 → **observe**。\n"
-                "- reason 须写明 15m 与 5m 读法（例如「15m连3阴+5m连2阴破结构→sell」）。"
+                f"- **亏损已超 1%**：须严格审查 **1h 结构 + 量价 + RSI** 后再给结论，禁止敷衍一律 hold。\n"
+                f"- **hold** 须 1h 仍支持 {side_cn} 且量能/RSI 未明显转弱。\n"
+                "- **sell** 须 1h 近 2 根确认反向 + 量价/RSI 不支持；仅 15m/5m 弱而 1h 未破 → **observe**。\n"
+                "- reason 须写明 1h 与量能/RSI 读法。"
             )
         if roi_pct > HOLD_LOSS_MODERATE_ROI:
             return (
                 "## 盈亏档位：中度亏损 (-12% < ROI ≤ -5%)\n"
-                f"- **严格审查 15m+5m+1h**；1h 趋势未破时优先 **hold/observe**，不因浮亏情绪化 **sell**。\n"
-                f"- **hold** 须近 2 根 1h 仍支持 {side_cn}，且 15m/5m 无连弱；短周期逆势 → **observe**。\n"
-                "- **sell** 须 1h 近 2 根确认反向 **且** 15m 连反向≥3 **且** 5m 多数反向；结构不清 → **observe**。"
+                f"- **严格审查 1h+量价+RSI**；1h 趋势未破时优先 **hold/observe**，不因浮亏情绪化 **sell**。\n"
+                f"- **hold** 须近 2 根 1h 仍支持 {side_cn}，量能未放量反向。\n"
+                "- **sell** 须 1h 近 2 根确认反向且 RSI/量能不支持；结构不清 → **observe**。"
             )
         return (
             "## 盈亏档位：严重亏损 (ROI ≤ -12%)\n"
-            f"- **严格审查**：1h 未破方向且 15m/5m 有企稳 → 可 **hold/observe**，勿单纯因亏损额 **sell**。\n"
-            f"- **sell** 须 1h 延续亏损方向 + 15m/5m 无反转形态；仅 ROI 深亏但 1h 仍支持 {side_cn} → **observe**。\n"
-            "- ROI ≤ -15% **且** 1h+15m+5m 三重走弱 → **sell**。"
+            f"- **严格审查**：1h 未破方向且量价有企稳 → 可 **hold/observe**，勿单纯因亏损额 **sell**。\n"
+            f"- **sell** 须 1h 延续亏损方向且 RSI/量能无反转；仅 ROI 深亏但 1h 仍支持 {side_cn} → **observe**。\n"
+            "- ROI ≤ -15% **且** 1h 走弱 + 量价/RSI 不支持 → **sell**。"
         )
 
     @staticmethod
@@ -458,7 +459,7 @@ class GeminiPositionAdvisor:
         s1h: dict,
         s5: Optional[dict] = None,
     ) -> Tuple[str, str]:
-        """亏损单 hold 复核：ROI≤-1% 严格审查 15m+5m；深亏须三周期同步转弱才下调."""
+        """亏损单 hold 复核：ROI≤-1% 严格审查 1h；深亏须 1h 确认转弱才下调."""
         if action != 'hold' or roi_pct >= 0:
             return action, reason
 
@@ -466,36 +467,25 @@ class GeminiPositionAdvisor:
         override = ""
 
         if roi_pct <= HOLD_LOSS_STRICT_ROI:
-            s15_weak = GeminiPositionAdvisor._short_cycle_weak(s15)
-            s5_weak = GeminiPositionAdvisor._short_cycle_weak(s5)
-            if s1h.get("against", 0) >= 2 and s15_weak and s5_weak:
-                action = 'sell' if roi_pct <= HOLD_LOSS_MILD_ROI else 'observe'
-                override = "亏损>1%+1h15m5m三周期转弱"
-            elif s1h.get("against", 0) >= 1 and (s15_weak or s5_weak):
+            s1h_against = s1h.get("against", 0)
+            s1h_for = s1h.get("for", 0)
+            if s1h_against >= 2:
+                if roi_pct <= HOLD_LOSS_MILD_ROI:
+                    action = 'sell'
+                    override = "亏损>5%+1h确认转弱"
+                else:
+                    action = 'observe'
+                    override = "亏损>1%+1h转弱待确认"
+            elif s1h_against >= 1 and s1h_for <= s1h_against:
                 action = 'observe'
-                override = "亏损>1%+短周期转弱待确认"
-            elif s15_weak and s5_weak and s1h.get("for", 0) <= s1h.get("against", 0):
-                action = 'observe'
-                override = "亏损>1%+15m5m双弱·1h未确认"
+                override = "亏损>1%+1h结构模糊"
 
         if not override and roi_pct <= HOLD_LOSS_SEVERE_ROI:
-            if (
-                s1h.get("against", 0) >= 2
-                and s15.get("trail_against", 0) >= 3
-            ):
+            if s1h.get("against", 0) >= 2:
                 action = 'sell'
-                override = "严重亏损+1h15m双弱"
-            elif s1h.get("against", 0) >= 2 and s15.get("against", 0) > s15.get("for", 0):
-                action = 'observe'
                 override = "严重亏损+1h转弱"
-        elif roi_pct <= HOLD_LOSS_MODERATE_ROI:
-            if (
-                s1h.get("against", 0) >= 2
-                and s15.get("trail_against", 0) >= 3
-            ):
-                action = 'sell'
-                override = "中度亏损+1h15m双弱"
-            elif s1h.get("against", 0) >= 2 and s15.get("against", 0) > s15.get("for", 0):
+        elif not override and roi_pct <= HOLD_LOSS_MODERATE_ROI:
+            if s1h.get("against", 0) >= 2:
                 action = 'observe'
                 override = "中度亏损+1h转弱"
 
@@ -540,28 +530,17 @@ class GeminiPositionAdvisor:
         s1h: dict,
         s5: Optional[dict] = None,
     ) -> Tuple[str, str]:
-        """综合复核：禁止仅凭单周期或 ROI 就 sell；须 1h 确认且 15m+5m 同向确认."""
+        """综合复核：禁止仅凭短周期或 ROI 就 sell；须 1h 近 2 根确认反转."""
         if action != 'sell':
             return action, reason
 
         s5 = s5 or {}
         s1h_for = s1h.get("for", 0)
         s1h_against = s1h.get("against", 0)
-        s15_trail = s15.get("trail_against", 0)
-        s15_against = s15.get("against", 0)
-        s15_for = s15.get("for", 0)
-        s5_trail = s5.get("trail_against", 0)
-        s5_against = s5.get("against", 0)
-        s5_for = s5.get("for", 0)
-        s15_confirms = s15_trail >= 3 or s15_against > s15_for
-        s5_confirms = s5_trail >= 2 or s5_against > s5_for
-        short_confirms = s15_confirms and (not s5 or s5_confirms)
 
         if (
             roi_pct <= HOLD_LOSS_SEVERE_ROI
             and s1h_against >= 2
-            and s15_trail >= 2
-            and (not s5 or s5_trail >= 2)
         ):
             return action, reason
 
@@ -571,16 +550,10 @@ class GeminiPositionAdvisor:
             override = "1h仍顺向·禁止仅凭短周期平仓"
         elif s1h_against < 2:
             action = 'hold' if s1h_for >= s1h_against else 'observe'
-            override = "1h未确认反转·禁止仅凭15m/5m平仓"
-        elif roi_pct <= HOLD_LOSS_STRICT_ROI and not short_confirms:
+            override = "1h未确认反转·禁止平仓"
+        elif roi_pct > HOLD_LOSS_MILD_ROI:
             action = 'observe'
-            override = "亏损>1%·15m5m未双确认·暂缓平仓"
-        elif not s15_confirms:
-            action = 'observe'
-            override = "1h转弱但15m未确认·暂缓平仓"
-        elif s5 and not s5_confirms:
-            action = 'observe'
-            override = "1h15m转弱但5m未确认·暂缓平仓"
+            override = "1h转弱但亏损不深·暂缓平仓"
 
         if override:
             reason = f"{reason[:80]}|复核:{override}"[:200]
@@ -644,23 +617,24 @@ class GeminiPositionAdvisor:
 
         side_cn = "做多 LONG" if side == 'LONG' else "做空 SHORT"
         strict_note = (
-            "**本仓亏损已超 1%（保证金 ROI≤-1%）**：须严格审查下方 1h+15m+5m 后再给结论，禁止敷衍一律 hold。\n"
+            "**本仓亏损已超 1%（保证金 ROI≤-1%）**：须严格审查 1h 结构 + 量价 + RSI 后再给结论，禁止敷衍一律 hold。\n"
             if strict_loss else ""
         )
-        return f"""你是模拟仓**持仓监管**顾问。须**综合评估** 1h + 15m + 5m 后再给 hold / observe / sell。
+        vol_hint = GeminiPositionAdvisor._volume_hint_from_klines(k1h)
+        return f"""你是模拟仓**持仓监管**顾问。本笔为 **6~8 小时持仓** 逻辑，**以 1h K 线为主**，结合量价、RSI、价格位置后给 hold / observe / sell。
 
-{strict_note}## 核心原则（1h 定方向，15m/5m 必看）
-- **决策顺序**：① ROI 档位 → ② **1h 趋势结构**（主判据）→ ③ **15m 短周期** → ④ **5m 近端确认** → ⑤ RSI/7日 → ⑥ 宏观辅证
-- **每轮必须给出明确结论**；须写明 15m 与 5m 读法，不可敷衍一律 hold
+{strict_note}## 核心原则（1h 主判据，15m/5m 辅证）
+- **决策顺序**：① ROI 档位 → ② **1h 趋势结构**（主判据）→ ③ **成交量** → ④ **RSI + 7日位置** → ⑤ 15m/5m 辅证 → ⑥ 宏观辅证
+- **每轮必须给出明确结论**；reason 须写明 1h 读法 + 量能或 RSI 要点
 - **1h 未破方向**时，15m/5m 回调/震荡 → **hold** 或 **observe**，**不得 sell**
-- **sell**：近 2 根 1h 确认反转 **且** 15m 多数反向 **且** 5m 连反向≥2；缺一维 → **observe**
-- ROI、Big4 单独变化不足以 sell；须 K 线结构综合印证
+- **sell**：近 2 根 1h 确认反转 **且** 量价/RSI 不支持原方向；缺一 → **observe**
+- ROI、Big4 单独变化不足以 sell；须 1h 结构 + 量价印证
 
 ## 禁止（违反则 reason 无效）
-- **严禁**仅凭 5m/15m 单根或连阴连阳就 **sell**（无 1h 反转证据时一律 hold/observe）
+- **严禁**仅凭 5m/15m 单根就 **sell**（无 1h 反转证据时一律 hold/observe）
 - **不得**主要因 Big4/BTC/ETH 宏观偏多偏空就 sell
-- **不得**空泛主观（「感觉要跌」「大盘不好」「先跑为敬」）；reason 须引用 1h+15m+5m 证据
-- **不得**仅因 ROI 正负或幅度就 sell；亏损>1% 时更须写明 15m/5m 评估
+- **不得**空泛主观（「感觉要跌」「大盘不好」「先跑为敬」）；reason 须引用 1h + 量价/RSI
+- **不得**仅因 ROI 正负或幅度就 sell；亏损>1% 时更须写明 1h 与量能/RSI 评估
 
 ## 仓位
   Symbol:          {symbol}
@@ -673,11 +647,12 @@ class GeminiPositionAdvisor:
   ROI on margin:   {roi_pct:+.2f}%  （档位: {loss_tier}）
   Source:          {source}
   {rsi_line}
+  1h量能(近{HOLD_1H_BARS}根): {vol_hint}
 
 ## 客观统计（须与 reason 一致，勿矛盾）
-  1h({HOLD_1H_BARS}根):  {s1h['summary']}  ← **主判据**
-  15m({HOLD_15M_BARS}根): {s15['summary']}  ← **必看**
-  5m({HOLD_5M_BARS}根):  {s5['summary']}  ← **近端确认，必看**
+  1h({HOLD_1H_BARS}根):  {s1h['summary']}  ← **主判据（6~8h）**
+  15m({HOLD_15M_BARS}根): {s15['summary']}  ← 辅证
+  5m({HOLD_5M_BARS}根):  {s5['summary']}  ← 辅证
   结构位: {struct_line}
 
 {loss_rules}
@@ -692,16 +667,16 @@ class GeminiPositionAdvisor:
 ## 综合评估清单（给 sell 前必须逐项核对）
 1. **ROI 档位**（{loss_tier}）是否允许在当前趋势下平仓？
 2. **1h 趋势**是否已破 {side}？近 2 根 1h 是否确认反转？→ 未破则 **不得 sell**
-3. **15m** 是否转弱或仅回调？连反向≥2 是否出现？
-4. **5m** 近端是否确认 15m/1h 方向？连反向≥2 是否出现？→ 5m 仍顺向 → 倾向 **hold/observe**
-5. **RSI/结构位**是否支持继续持仓或仅观察？
+3. **成交量**：对照 1h 表 volume 列与上方量能摘要 — 是否支持 hold/sell？
+4. **RSI/结构位**（{rsi_line}，{struct_line}）是否支持继续持仓？
+5. **15m/5m** 仅辅证，不能单独触发 sell
 6. **宏观**仅作辅证，不能单独触发 sell
 
-## K 线读法（1h 定趋势，15m/5m 必评估）
+## K 线读法（1h 定 6~8h 持仓逻辑）
 1. **近 {HOLD_1H_BARS} 根 1h**（**主判据**）：大趋势是否仍支持 {side}？
-2. **近 {HOLD_15M_BARS} 根 15m**（**必看**）：中短周期是否确认或否定 1h？
-3. **近 {HOLD_5M_BARS} 根 5m**（**必看**）：最近 30 分钟动量是否支持持仓方向？
-4. reason 示例：「1h仍抬高+15m回调+5m连2阳→hold」或「1h连2阴+15m连3阴+5m连2阴→sell」
+2. **量价**：突破/延续须放量，衰竭须缩量
+3. **RSI**：是否与 1h 方向一致、仍有空间？
+4. reason 示例：「1h仍抬高+缩量回踩+RSI58→hold」或「1h连2阴+放量下破+RSI转弱→sell」
 
 ## 近 {HOLD_1H_BARS} 根 1h K 线 (oldest → newest)
 {klines_1h_str}
@@ -717,22 +692,39 @@ class GeminiPositionAdvisor:
   仅当 K 线已明确反向时，方可引用 Big4 加强 sell 理由；不得单独因 Big4 sell。
 
 ## 决策
-- **hold**: 1h 仍支持 {side}；15m/5m 仅为回调或震荡
-- **observe**: 1h/15m/5m/RSI 信号混杂、趋势待确认（**应主动使用**）
+- **hold**: 1h 仍支持 {side}；量价/RSI 未明显转弱
+- **observe**: 1h/RSI/量能信号混杂（**应主动使用**）
 - **sell**（须**综合**满足）:
   (A) ROI 档位允许（见上）
   (B) 近 2 根 1h **确认**趋势反转
-  (C) 15m **多数反向**且 5m 连反向≥2（写进 reason）
-  例外：ROI ≤ -15% **且** 1h+15m+5m 三重走弱 → **sell**
+  (C) 量价或 RSI 不支持继续 {side}（写进 reason）
+  例外：ROI ≤ -15% **且** 1h 走弱 + 量价/RSI 不支持 → **sell**
 
-**1h 未破时不得 sell**；reason 须含 15m 与 5m 结论。
+**1h 未破时不得 sell**；reason 须含 1h + 量能或 RSI 结论。
 
 Output ONLY JSON:
 {{
   "action": "hold" | "observe" | "sell",
-  "reason": "<50字中文，含1h主判+15m/5m短周期结论>"
+  "reason": "<50字中文，含1h主判+量价/RSI要点>"
 }}
 """
+
+    @staticmethod
+    def _volume_hint_from_klines(klines: list) -> str:
+        if not klines or len(klines) < 4:
+            return "N/A"
+        vols = [float(k.get("v", 0) or 0) for k in klines]
+        r_avg = sum(vols[-3:]) / 3.0
+        p_avg = sum(vols[:-3]) / max(len(vols) - 3, 1)
+        if p_avg <= 0:
+            return "量数据不足"
+        if r_avg > p_avg * 1.1:
+            trend = "放量"
+        elif r_avg < p_avg * 0.9:
+            trend = "缩量"
+        else:
+            trend = "持平"
+        return f"近段均量={r_avg:.0f} 前段均量={p_avg:.0f} ({trend})"
 
     @staticmethod
     def _format_kline_table(klines: list) -> str:
@@ -813,7 +805,7 @@ Output ONLY JSON:
             return False, side_reason
 
         ctx = self._fetch_market_context(symbol)
-        ok_pre, pre_reason = precheck_open_advisor(profile, side, ctx)
+        ok_pre, pre_reason = precheck_open_advisor(profile, side, ctx, catalyst=catalyst)
         if not ok_pre:
             log_advisor_review(
                 "open", "reject", symbol,
