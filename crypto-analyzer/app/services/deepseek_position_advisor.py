@@ -13,6 +13,7 @@ from app.services.deepseek_advisor_reviews import log_deepseek_advisor_review
 from app.services.gemini_position_advisor import (
     GeminiPositionAdvisor,
     HOLD_15M_BARS,
+    HOLD_5M_BARS,
     HOLD_1H_BARS,
     HOLD_ADVISOR_JSON_SYSTEM_ZH,
     HOLD_CHECK_INTERVAL_S,
@@ -346,20 +347,22 @@ class DeepSeekPositionAdvisor:
                 roi = pct * int(pos["leverage"])
 
                 k15 = helper._recent_klines(ctx.get("klines_15m", []), HOLD_15M_BARS)
+                k5 = helper._recent_klines(ctx.get("klines_5m", []), HOLD_5M_BARS)
                 k1h = helper._recent_klines(ctx.get("klines_1h", []), HOLD_1H_BARS)
                 s15 = helper._score_klines_for_side(k15, pos["position_side"])
+                s5 = helper._score_klines_for_side(k5, pos["position_side"])
                 s1h = helper._score_klines_for_side(k1h, pos["position_side"])
 
                 action = decision["action"]
                 reason = decision["reason"]
                 action, reason = helper._temper_losing_hold(
-                    roi, action, reason, pos["position_side"], s15, s1h,
+                    roi, action, reason, pos["position_side"], s15, s1h, s5,
                 )
                 action, reason = helper._temper_profitable_hold(
                     roi, action, reason, pos["position_side"], s15, s1h,
                 )
                 action, reason = helper._temper_premature_sell(
-                    roi, action, reason, pos["position_side"], s15, s1h,
+                    roi, action, reason, pos["position_side"], s15, s1h, s5,
                 )
                 stats[action] += 1
                 stats["evaluated"] += 1
@@ -389,7 +392,7 @@ class DeepSeekPositionAdvisor:
                         "current_price": current_price,
                         "market_context": ctx,
                         "roi_pct": round(roi, 2),
-                        "kline_scores": {"15m": s15, "1h": s1h},
+                        "kline_scores": {"15m": s15, "5m": s5, "1h": s1h},
                     },
                     raw_response=decision.get("_raw_response"),
                     system_prompt=decision.get("_system_prompt"),

@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
+
+OPEN_KLINE_15M_BARS = 6   # 开仓顾问：近 6 根 15m 形态统计
+OPEN_KLINE_1H_RECENT_BARS = 6  # 开仓顾问：近 6 根 1h 结构统计
 
 CHASE_RSI_MAX = 68
 CHASE_RSI_MIN = 54
@@ -108,14 +111,12 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         expected_side=None,
         rubric=(
             "【探索专属，与探索 prompt 一致；勿用已移除战术标准】\n"
-            "上游已通过 catalyst 技术面门槛；你做**矛盾复核**，勿用单一 RSI 否决整笔。\n"
-            "- **允许趋势延续**（与探索 A 类一致）：catalyst 写清 1h 整体+近4~6根与方向同向、"
-            "可有 15m 共振时，下跌趋势中 SHORT、上涨趋势中 LONG → 可 approve。\n"
-            "- 亦允许：LONG=下跌后反转/利好结构；SHORT=上涨后衰竭/利空结构。\n"
-            "- **禁止**仅因「RSI 偏低不能做空」「RSI 偏高不能做多」「距7d 低点近」"
-            "单独 reject；须判断 catalyst 描述的是延续还是逆势摸顶/抄底。\n"
-            "- **必须 reject**：catalyst 与 proposed side 明显矛盾；仅 24h 涨跌幅/费率无 K 线；"
-            "结构叙述空泛；与用户方向闸门或 Big4 硬冲突（见上节）。"
+            "上游已通过 catalyst 技术面门槛；你做**矛盾复核**，须综合 **1h 形态+15m 形态+RSI+成交量+入场价**。\n"
+            "- **允许趋势延续**：1h 整体+近6根与方向同向，15m 共振，量能不显著背离 → 可 approve。\n"
+            "- 亦允许：LONG=下跌后反转/利好结构；SHORT=上涨后衰竭/利空结构（须在 1h/15m 有形态依据）。\n"
+            "- **禁止**仅因单一 RSI 高低 reject；但 RSI 与 1h/15m 形态明显矛盾 → reject。\n"
+            "- **必须 reject**：catalyst 与 side 矛盾；1h/15m 形态均不支持 proposed side；"
+            "仅 24h 涨跌幅无 K 线；缩量假突破/放量反向；与用户方向闸门或 Big4 硬冲突。"
         ),
     ),
     "predict": OpenAdvisorStrategyProfile(
@@ -124,10 +125,10 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         expected_side=None,
         rubric=(
             "【预测专属，与预测 prompt 一致；勿用战术/探索混审】\n"
-            "上游已通过 catalyst 门槛；勿用单一 RSI 否决。\n"
-            "catalyst 须含 1h/15m 方向依据；允许趋势延续与反转两类，只要与 side 自洽。\n"
-            "与 Big4 严重冲突且个股 catalyst 不足 → reject；"
-            "非极端行情下允许与 Big4 反向但须在 catalyst 中自洽。"
+            "上游已通过 catalyst 门槛；须综合 **1h 形态+15m 形态+RSI+成交量+入场价** 后给结论。\n"
+            "catalyst 须与 1h/15m K 线表、RSI、量能自洽；允许延续或反转，只要多维印证。\n"
+            "1h 与 15m 形态均不支持 proposed side，或量能明显背离 catalyst → reject。\n"
+            "与 Big4 严重冲突且个股多维技术面不足 → reject。"
         ),
     ),
     "btc_momentum": OpenAdvisorStrategyProfile(
@@ -144,8 +145,8 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         title_zh="主策略/smart_trader",
         expected_side=None,
         rubric=(
-            "主策略：entry_reason/catalyst 须与 proposed side 一致；"
-            "震荡/趋势模式与 K 线匹配；信号含糊 → reject。"
+            "主策略：须综合 1h/15m 形态、RSI、成交量与 entry_reason；"
+            "方向与 K 线多维一致才 approve；震荡/趋势模式不匹配或信号含糊 → reject。"
         ),
     ),
     "mean_reversion": OpenAdvisorStrategyProfile(
@@ -162,8 +163,9 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         title_zh="其他策略",
         expected_side=None,
         rubric=(
-            "【通用兜底】仅审 catalyst/entry_reason 与方向、K 线是否一致；"
-            "禁止套用追涨/回调/探索等其它策略的专属 checklist。"
+            "【通用兜底】须综合审查 **1h 形态、15m 形态、RSI、成交量、入场价** 与 catalyst 是否一致；"
+            "禁止套用追涨/回调/探索等其它策略专属 checklist。\n"
+            "1h/15m 形态不支持 proposed side，或仅 narrative 无量价印证 → reject。"
             "结构不清晰或与 Big4/方向闸门冲突 → reject。"
         ),
     ),
@@ -262,11 +264,100 @@ def build_big4_subjective_block(
     return "\n".join(lines)
 
 
-_KLINE_1H_READING = """
-## 1h K 线读法
-- **禁止**仅凭最近 **1 根** 1h K 线下结论。
-- **整体趋势**：近 **24 根 1h**（约24小时）。
-- **近期结构**：近 **4~6 根 1h**（回调/反弹/连阳连阴）。
+def _recent_klines(klines: list, n: int) -> list:
+    if not klines or n <= 0:
+        return klines or []
+    return klines[-n:]
+
+
+def _score_klines_for_side(klines: list, side: str) -> dict:
+    """客观统计 K 线对开仓方向的支持/反向根数（供 prompt 综合审查）."""
+    empty = {
+        "for": 0, "against": 0, "last3": "", "trail_against": 0,
+        "summary": "数据不足",
+    }
+    if not klines:
+        return empty
+    dirs: List[str] = []
+    for_count = 0
+    against_count = 0
+    for k in klines:
+        o, c = float(k["o"]), float(k["c"])
+        if c > o:
+            d = "G"
+        elif c < o:
+            d = "R"
+        else:
+            d = "D"
+        dirs.append(d)
+        if side == "LONG":
+            if d == "G":
+                for_count += 1
+            elif d == "R":
+                against_count += 1
+        else:
+            if d == "R":
+                for_count += 1
+            elif d == "G":
+                against_count += 1
+    want = "G" if side == "LONG" else "R"
+    trail_against = 0
+    for d in reversed(dirs):
+        if d == "D":
+            continue
+        if d != want:
+            trail_against += 1
+        else:
+            break
+    last3 = "".join(dirs[-3:])
+    summary = (
+        f"顺向={for_count} 反向={against_count} "
+        f"末3根={last3} 连反向={trail_against}"
+    )
+    return {
+        "for": for_count,
+        "against": against_count,
+        "last3": last3,
+        "trail_against": trail_against,
+        "summary": summary,
+    }
+
+
+def _volume_summary(klines: list, n: int = 6) -> str:
+    """近 n 根 vs 前 n 根均量对比（缩量/放量/持平）."""
+    if not klines:
+        return "数据不足"
+    recent = _recent_klines(klines, n)
+    if len(klines) >= n * 2:
+        prior = klines[-(n * 2):-n]
+    elif len(klines) > n:
+        prior = klines[:-n]
+    else:
+        prior = []
+    r_avg = sum(float(k.get("v", 0) or 0) for k in recent) / len(recent)
+    p_avg = (
+        sum(float(k.get("v", 0) or 0) for k in prior) / len(prior)
+        if prior else r_avg
+    )
+    last_v = float(recent[-1].get("v", 0) or 0)
+    if r_avg > p_avg * 1.1:
+        trend = "放量"
+    elif r_avg < p_avg * 0.9:
+        trend = "缩量"
+    else:
+        trend = "持平"
+    return f"近{n}均量={r_avg:.0f} 前段均量={p_avg:.0f} 最新={last_v:.0f} ({trend})"
+
+
+_KLINE_COMPREHENSIVE_READING = """
+## K 线综合读法（开仓必审：1h 定趋势 + 15m 定入场）
+- **禁止**仅凭单根 K 线、仅 24h 涨跌幅、或仅 catalyst 措辞下结论。
+- **1h 整体趋势**：近 **24 根 1h**（通道/高低点结构）。
+- **1h 近期形态**：近 **4~6 根 1h**（回调/反弹/连阳连阴/破结构）。
+- **15m 入场形态**：近 **6 根 15m**（短线方向是否与 proposed side 一致；假突破/逆势入场 → reject）。
+- **成交量**：对照 1h/15m 表 volume 列 + 下方量能摘要；突破须放量、反弹衰竭须缩量（策略 rubric 有明确要求时严格执行）。
+- **RSI + 价格位置**：RSI(1h) 与 below/above 7d 须与形态一致；入场价勿追在 7d 极端无结构处。
+- **reason 须写明**：1h 形态结论 + 15m 形态结论 + 量能/RSI 至少一项，再写 approve/reject。
 """
 
 
@@ -278,52 +369,67 @@ def build_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
         "## 审核步骤（仅适用于本策略）",
         f"- 本笔仅按 **「{title}」**（profile=`{key}`）审核；"
         "**禁止**用其它策略（回调/追涨/探索/预测等）的标准替代下文 rubric。",
-        "1. 方向闸门 + Big4（上节）— 冲突则 reject。",
-        f"2. **仅执行上文「{title}」专属 rubric** — 与 K 线表、下方量化指标交叉验证。",
+        "1. **综合技术面**（所有策略必做）：对照 1h 形态、15m 形态、RSI、成交量、入场价；"
+        "任一维与 proposed side 明显矛盾且无策略 rubric 豁免 → reject。",
+        "2. 方向闸门 + Big4（上节）— 冲突则 reject。",
+        f"3. **执行上文「{title}」专属 rubric** — 与 K 线表、客观统计、量化指标交叉验证。",
     ]
     if key in _TACTICAL_PROFILE_KEYS:
         lines.append(
-            "3. **战术互斥**（仅四战术）：形态更符合其它战术名 → reject，即使 catalyst 措辞漂亮。"
+            "4. **战术互斥**（仅四战术）：形态更符合其它战术名 → reject，即使 catalyst 措辞漂亮。"
         )
         lines.append(
-            "4. catalyst 须与 RSI、below_7d_high_pct 一致；仅24h涨跌 / 单根1h → reject。"
+            "5. catalyst 须与 1h/15m 形态、RSI、量能一致；仅24h涨跌 / 单根K线 → reject。"
         )
-        lines.append("5. 完全符合**本战术**才 approve；存疑 reject。")
+        lines.append("6. 完全符合**本战术**才 approve；存疑 reject。")
     elif key == "reversal":
         lines.append(
-            "3. SHORT=真顶部反转、LONG=真底部反转；禁止「涨多了/跌多了」无结构。"
+            "4. SHORT=真顶部反转、LONG=真底部反转；禁止「涨多了/跌多了」无结构。"
         )
-        lines.append("4. 勿按回调/追涨/杀跌战术 checklist 审核反转单。")
-        lines.append("5. 完全符合反转定义才 approve。")
+        lines.append("5. 勿按回调/追涨/杀跌战术 checklist 审核反转单。")
+        lines.append("6. 完全符合反转定义才 approve。")
     elif key == "explore":
         lines.append(
-            "3. 以探索 catalyst 为主：延续/反转均可；**勿**用四战术互斥 checklist。"
+            "4. 以探索 catalyst 为主：延续/反转均可；**勿**用四战术互斥 checklist。"
         )
         lines.append(
-            "4. 仅当 catalyst 与 K 线/方向矛盾、或纯涨跌幅追价 → reject；"
-            "存疑且 catalyst 已写清多周期结构时 → approve。"
+            "5. 1h+15m 形态与量能均不支持 side、或纯涨跌幅追价 → reject；"
+            "多维自洽时可 approve。"
         )
     elif key == "predict":
-        lines.append("3. 审 2h 预测逻辑与多周期依据，**勿**用战术 checklist。")
+        lines.append("4. 审 2h 预测逻辑与 1h/15m/RSI/量能多周期依据，**勿**用战术 checklist。")
         lines.append(
-            "4. catalyst 与 side 自洽即可 approve；勿因 RSI 高低单独否决。"
+            "5. catalyst 与 1h/15m 形态自洽可 approve；勿因单一 RSI 否决。"
         )
     else:
-        lines.append("3. entry_reason/catalyst 与方向、K 线一致；含糊或与闸门冲突 → reject。")
-        lines.append("4. 勿套用未列出的其它策略专属标准。")
+        lines.append("4. entry_reason/catalyst 与 1h/15m 形态、量能、方向一致；含糊 → reject。")
+        lines.append("5. 勿套用未列出的其它策略专属标准。")
     return "\n".join(lines)
 
 
-def build_tech_metrics_block(profile: OpenAdvisorStrategyProfile, ctx: dict) -> str:
-    """战术/探索类顾问可见的量化字段（便于按策略核对，非通用模糊描述）."""
-    if profile.key not in _TACTICAL_PROFILE_KEYS | {"explore", "predict"}:
-        return ""
+def build_tech_metrics_block(
+    profile: OpenAdvisorStrategyProfile,
+    ctx: dict,
+    side: str,
+    price: float,
+) -> str:
+    """所有策略开仓顾问：1h/15m 形态统计 + RSI + 量能 + 价格位置."""
     rsi = ctx.get("rsi_14_1h")
     b7h = ctx.get("below_7d_high_pct")
     a7l = ctx.get("above_7d_low_pct")
     rsi_s = f"{rsi:.1f}" if rsi is not None else "N/A"
     b7h_s = f"{b7h:.2f}%" if b7h is not None else "N/A"
     a7l_s = f"{a7l:.2f}%" if a7l is not None else "N/A"
+
+    k1h_all = ctx.get("klines_1h") or []
+    k15_all = ctx.get("klines_15m") or []
+    k1h = _recent_klines(k1h_all, OPEN_KLINE_1H_RECENT_BARS)
+    k15 = _recent_klines(k15_all, OPEN_KLINE_15M_BARS)
+    s1h = _score_klines_for_side(k1h, side)
+    s15 = _score_klines_for_side(k15, side)
+    vol_1h = _volume_summary(k1h_all, OPEN_KLINE_1H_RECENT_BARS)
+    vol_15m = _volume_summary(k15_all, OPEN_KLINE_15M_BARS)
+
     extra = ""
     if profile.key == "chase":
         extra = (
@@ -342,11 +448,16 @@ def build_tech_metrics_block(profile: OpenAdvisorStrategyProfile, ctx: dict) -> 
         )
     elif profile.key == "dump":
         extra = f"\n- 杀跌硬线: RSI≤{DUMP_RSI_MAX}"
+
     return (
-        "## 量化指标（须与 rubric 交叉验证）\n"
+        "## 综合量化指标（开仓必审，须与 rubric 交叉验证）\n"
+        f"- 拟入场价: {price}\n"
         f"- RSI(1h): {rsi_s}\n"
-        f"- below_7d_high_pct: {b7h_s}\n"
-        f"- above_7d_low_pct: {a7l_s}"
+        f"- below_7d_high_pct: {b7h_s} | above_7d_low_pct: {a7l_s}\n"
+        f"- 1h形态({OPEN_KLINE_1H_RECENT_BARS}根): {s1h['summary']}\n"
+        f"- 15m形态({OPEN_KLINE_15M_BARS}根): {s15['summary']}\n"
+        f"- 1h量能: {vol_1h}\n"
+        f"- 15m量能: {vol_15m}"
         f"{extra}"
     )
 
@@ -437,7 +548,7 @@ def build_open_advisor_prompt(
     klines_1h = format_kline_table(ctx.get("klines_1h", []))
     narr_1h = (ctx.get("narrative_1h") or "").strip() or "(缓存暂无，以上表为准)"
     narr_15m = (ctx.get("narrative_15m") or "").strip() or "(无)"
-    tech_block = build_tech_metrics_block(profile, ctx)
+    tech_block = build_tech_metrics_block(profile, ctx, side, price)
     review_steps = build_strategy_review_steps(profile)
     sl_s = f"{sl_pct}%" if sl_pct is not None else "默认"
     tp_s = f"{tp_pct}%" if tp_pct is not None else "默认"
@@ -447,6 +558,7 @@ def build_open_advisor_prompt(
 ## 重要
 - 本笔 **唯一** 审核标准：下方「{profile.title_zh}」专属 rubric（profile={profile.key}）。
 - **禁止**用其它策略的标准审本单（例如用「追涨」标准审「回调」单）。
+- **必须综合审查**：1h 形态、15m 形态、RSI、成交量、入场价位置；缺一不可。
 
 ## 本笔策略
   策略名:     {profile.title_zh}
@@ -457,7 +569,7 @@ def build_open_advisor_prompt(
 ### 「{profile.title_zh}」专属审核标准（仅此一节有效）
 {profile.rubric}
 
-{_KLINE_1H_READING}
+{_KLINE_COMPREHENSIVE_READING}
 
 {tech_block}
 
@@ -489,7 +601,7 @@ def build_open_advisor_prompt(
 Output ONLY JSON:
 {{
   "decision": "approve" | "reject",
-  "reason": "<50字中文，必须写明策略名「{profile.title_zh}」通过/驳回要点>"
+  "reason": "<50字中文，须含1h+15m形态与量能/RSI要点，写明策略名「{profile.title_zh}」通过/驳回依据>"
 }}
 """
 
@@ -675,37 +787,24 @@ def build_gpt_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
     return "\n".join(lines)
 
 
-def build_gpt_tech_metrics_block(profile: OpenAdvisorStrategyProfile, ctx: dict) -> str:
-    if profile.key not in _TACTICAL_PROFILE_KEYS | {"explore", "predict"}:
-        return ""
-    rsi = ctx.get("rsi_14_1h")
-    b7h = ctx.get("below_7d_high_pct")
-    a7l = ctx.get("above_7d_low_pct")
-    rsi_s = f"{rsi:.1f}" if rsi is not None else "N/A"
-    b7h_s = f"{b7h:.2f}%" if b7h is not None else "N/A"
-    a7l_s = f"{a7l:.2f}%" if a7l is not None else "N/A"
-    extra = ""
-    if profile.key == "chase":
-        extra = (
-            f"\n- Chase hard lines: RSI<={CHASE_RSI_MAX}, "
-            f"below_7d_high<=-{CHASE_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}%"
-        )
-    elif profile.key == "pullback":
-        extra = f"\n- Pullback hard lines: RSI<={PULLBACK_RSI_MAX}, deep dip vs 7d high"
-    return (
-        "## Quant metrics (cross-check rubric)\n"
-        f"- RSI(1h): {rsi_s}\n"
-        f"- below_7d_high_pct: {b7h_s}\n"
-        f"- above_7d_low_pct: {a7l_s}"
-        f"{extra}"
-    )
+def build_gpt_tech_metrics_block(
+    profile: OpenAdvisorStrategyProfile,
+    ctx: dict,
+    side: str,
+    price: float,
+) -> str:
+    return build_tech_metrics_block(profile, ctx, side, price)
 
 
-_KLINE_1H_READING_EN = """
-## 1h K-line reading
-- **Never** decide from the latest **single** 1h candle.
-- **Trend**: last **24** 1h bars (~24h).
-- **Local structure**: last **4-6** 1h bars (pullback/bounce/streak).
+_KLINE_COMPREHENSIVE_READING_EN = """
+## Comprehensive K-line review (required for every open)
+- **Never** decide from a single bar, 24h % move, or catalyst wording alone.
+- **1h trend**: last 24x1h (channel / highs-lows).
+- **1h local structure**: last 4-6x1h (pullback/bounce/streak/break).
+- **15m entry structure**: last 6x15m aligned with proposed side; fake breakout → reject.
+- **Volume**: use table volume + summaries below; breakouts need volume support where rubric says so.
+- **RSI + price**: RSI(1h) and 7d distance must match structure; do not chase 7d extremes without form.
+- **reason** must cite 1h form + 15m form + volume or RSI before approve/reject.
 """
 
 
@@ -741,7 +840,7 @@ def build_gpt_open_advisor_prompt(
     klines_1h = format_kline_table(ctx.get("klines_1h", []))
     narr_1h = (ctx.get("narrative_1h") or "").strip() or "(no cache; use tables)"
     narr_15m = (ctx.get("narrative_15m") or "").strip() or "(none)"
-    tech_block = build_gpt_tech_metrics_block(profile, ctx)
+    tech_block = build_gpt_tech_metrics_block(profile, ctx, side, price)
     review_steps = build_gpt_strategy_review_steps(profile)
     sl_s = f"{sl_pct}%" if sl_pct is not None else "default"
     tp_s = f"{tp_pct}%" if tp_pct is not None else "default"
@@ -755,7 +854,7 @@ def build_gpt_open_advisor_prompt(
 ## Strategy rubric ({title_en})
 {rubric_en}
 
-{_KLINE_1H_READING_EN}
+{_KLINE_COMPREHENSIVE_READING_EN}
 
 {tech_block}
 
