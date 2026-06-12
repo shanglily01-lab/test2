@@ -805,73 +805,9 @@ GOOD — skip:
 }}
 """
 
-KLINE_1H_READING_BLOCK_EN = """
-## 1h K-line reading (6~8h hold — **1h primary**)
-- **Horizon**: trade for **6~8 hours** (plan {hold_hours}h); primary evidence is 1h; 15m/1d auxiliary.
-- **Trend**: kline_narrative.1h overall ≈ last **24** 1h bars.
-- **Local**: last **4~8** bars for pullback/bounce/streak.
-- catalyst must cite **24-bar trend + last 4~8 bars** plus **volume/RSI/price**, not single 1h bar or 24h % alone.
-"""
-
-CATALYST_EVIDENCE_BLOCK_EN = """
-""" + KLINE_1H_READING_BLOCK_EN + """
-# catalyst rules (backend validates; weak → skipped_weak_catalyst)
-Required in catalyst for bullish/bearish: (1) 1h 24-bar trend (2) 1h last 4~8 bars structure
-(3) RSI number if tech.rsi_14_1h exists (4) volume word (放量/缩量/etc).
-15m/1d one sentence max; cannot replace 1h block.
-No 24h%-only, funding-only, or vague phrases. Default most symbols to skip.
-"""
-
-EXPLORE_PROMPT_TEMPLATE_EN = """You are a senior crypto futures analyst. **6~8 hour hold** (plan {hold_hours}h), SL={sl_pct}, TP={tp_pct}, 5x leverage.
-
-Task: **1h K-lines primary** + volume/RSI/price — judge 6~8h tradeability; not macro-only bets.
-
-# Position context
-- Need room toward {tp_pct} TP or survive {sl_pct} SL within {hold_hours}h; skip 1-2% chop names.
-
-# Global context (macro background only)
-{global_context_json}
-""" + BIG4_PROMPT_BLOCK_EXPLORE_EN + """
-# Historical stats (calibration, not macro entries)
-{historical_stats_json}
-
-# Candidate note
-{llm_universe_note_en}
-Each row: triggers (not catalyst), price/24h/volume, funding, kline_narrative, tech RSI/7d fields.
-
-{universe_json}
-
-""" + CATALYST_EVIDENCE_BLOCK_EN + """
-# Task — one verdict per symbol; **skip when unsure**
-- category: bullish | bearish | skip (default skip for chop/neutral RSI)
-- catalyst: 1h four-part block + RSI number + volume (Chinese OK)
-- Max **6** bullish+bearish total; expect **≥70%** skip rate
-
-# Confidence
-| 0.75+ | strong 1h + volume + RSI + 7d room |
-| 0.65-0.74 | 1h 24-bar + 4~8 bars + RSI + volume all stated |
-| 0.60-0.64 | marginal, ≤2 per round |
-| <0.60 | skip |
-
-# Rules
-- Technical 1h-primary only; no pool bias from Big4.
-- Quality over quantity; do not inflate confidence to open.
-
-Output ONE JSON only (summary_zh in Chinese):
-{{
-  "summary_zh": "1-2 sentences Chinese",
-  "verdicts": [
-    {{
-      "symbol": "FOO/USDT",
-      "category": "bullish",
-      "confidence": 0.72,
-      "catalyst": "...",
-      "data_signal": "...",
-      "risk_note": "..."
-    }}
-  ]
-}}
-"""
+KLINE_1H_READING_BLOCK_EN = KLINE_1H_READING_BLOCK
+CATALYST_EVIDENCE_BLOCK_EN = CATALYST_EVIDENCE_BLOCK
+EXPLORE_PROMPT_TEMPLATE_EN = EXPLORE_PROMPT_TEMPLATE
 
 
 def build_explore_prompt_en(
@@ -881,18 +817,7 @@ def build_explore_prompt_en(
     *,
     max_symbols: int = EXPLORE_LLM_MAX_SYMBOLS,
 ) -> Tuple[str, Dict[str, Any]]:
-    """English main explore prompt (GPT production / A-B tests)."""
-    universe_list, meta = prepare_universe_for_llm(universe, max_symbols=max_symbols)
-    compact = {"ensure_ascii": False, "separators": (",", ":"), "default": str}
-    note_en = (
-        f"TOP {meta['llm_symbol_count']} of {meta['universe_total']} by technical score "
-        f"(not |24h| extreme). Verdicts only for symbols in this list."
+    """兼容旧调用名：现在一律返回中文主探索 prompt。"""
+    return build_explore_prompt_zh(
+        universe, global_ctx, historical_stats, max_symbols=max_symbols,
     )
-    prompt = EXPLORE_PROMPT_TEMPLATE_EN.format(
-        global_context_json=json.dumps(global_ctx, **compact),
-        universe_json=json.dumps(universe_list, **compact),
-        historical_stats_json=json.dumps(historical_stats, **compact),
-        llm_universe_note_en=note_en,
-        **_sl_tp_prompt_kwargs(),
-    )
-    return prompt, meta

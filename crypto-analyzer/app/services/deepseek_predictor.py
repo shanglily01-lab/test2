@@ -492,7 +492,7 @@ def _call_deepseek_predict(symbols_data: List[Dict], global_ctx: dict) -> Option
         resp = client.chat.completions.create(
             model=DEEPSEEK_MODEL,
             messages=[
-                {"role": "system", "content": "You are a professional crypto trading analyst. Output ONLY valid JSON."},
+                {"role": "system", "content": "你是专业的加密货币合约交易分析师。只能输出合法 JSON，不要输出 Markdown 或解释。"},
                 {"role": "user", "content": prompt},
             ],
             temperature=0.1,

@@ -185,7 +185,7 @@ class UnifiedDataScheduler:
 
         # 注意: 自动合约交易和评级更新已移至 smart_trader_service.py
         # 6. 自动合约交易服务 - 已移至 smart_trader_service.py
-        # 7. 交易对评级管理器 - scheduler/smart_trader_service 每4小时刷新
+        # 7. 交易对评级管理器 - scheduler/smart_trader_service 每1小时刷新
 
 
 
@@ -700,7 +700,7 @@ class UnifiedDataScheduler:
             self.task_stats[task_name]['last_error'] = str(e)
 
     # ==================== 交易对评级更新任务 ====================
-    # 注意: TOP50 + 评级更新由 scheduler/smart_trader_service 每4小时刷新
+    # 注意: TOP50 + 评级更新由 scheduler/smart_trader_service 每1小时刷新
 
     # ==================== 自动合约交易任务 ====================
     # 注意: 自动合约交易已移至 smart_trader_service.py
@@ -1215,7 +1215,7 @@ class UnifiedDataScheduler:
             logger.info("  ℹ️  Hyperliquid 钱包监控已移至独立调度器 (app/hyperliquid_scheduler.py)")
             logger.info("     请单独运行: python app/hyperliquid_scheduler.py")
 
-        # 6.5 TOP50 榜单 + 白名单/黑名单评级（每 4 小时 + 15min 轮询 next_due）
+        # 6.5 TOP50 榜单 + 白名单/黑名单评级（每 1 小时 + 15min 轮询 next_due）
         def _run_rating_refresh(triggered_by: str = "scheduler"):
             try:
                 from app.services.rating_refresh_schedule import run_rating_refresh_if_due
@@ -1228,14 +1228,14 @@ class UnifiedDataScheduler:
         def _schedule_rating_refresh(triggered_by: str = "scheduler"):
             self._run_sync_in_thread(lambda: _run_rating_refresh(triggered_by))
 
-        schedule.every(4).hours.do(
-            lambda: _schedule_rating_refresh("schedule_4h")
+        schedule.every(1).hours.do(
+            lambda: _schedule_rating_refresh("schedule_1h")
         )
         schedule.every(15).minutes.do(
             lambda: _schedule_rating_refresh("schedule_poll")
         )
         logger.info(
-            "  ✓ TOP50 + 白名单/黑名单评级 - 每 4 小时 + 15min 轮询 "
+            "  ✓ TOP50 + 白名单/黑名单评级 - 每 1 小时 + 15min 轮询 "
             "(rating_refresh_next_due_utc, 启动后 +60s 补跑)"
         )
 
@@ -1968,4 +1968,3 @@ if __name__ == '__main__':
     except ImportError:
         pass  # 老环境无 pid_lock 模块,不强制
     main()
-

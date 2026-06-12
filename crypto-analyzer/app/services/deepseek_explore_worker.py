@@ -45,7 +45,6 @@ from app.services.ai_explore_prompt import (
     EXPLORE_LLM_MAX_OUTPUT_TOKENS,
     EXPLORE_CONFIDENCE_THRESHOLD,
     build_explore_prompt,
-    build_explore_prompt_en,
     explore_catalyst_technical_ok,
     parse_explore_llm_json,
 )
@@ -845,7 +844,7 @@ def _call_deepseek_explore(
         logger.error("[DeepSeek探索] DEEPSEEK_API_KEY 未设置")
         return None, "DEEPSEEK_API_KEY 未设置"
 
-    prompt, llm_meta = build_explore_prompt_en(universe, global_ctx, historical_stats)
+    prompt, llm_meta = build_explore_prompt(universe, global_ctx, historical_stats)
     logger.info(
         f"[DeepSeek探索] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens), "
         f"送模 {llm_meta['llm_symbol_count']}/{llm_meta['universe_total']} symbols"
@@ -861,7 +860,7 @@ def _call_deepseek_explore(
         resp = client.chat.completions.create(
             model=DEEPSEEK_MODEL,
             messages=[
-                {"role": "system", "content": "You are a professional crypto trading analyst. Output ONLY valid JSON."},
+                {"role": "system", "content": "你是专业的加密货币合约交易分析师。只能输出合法 JSON，不要输出 Markdown 或解释。"},
                 {"role": "user", "content": prompt},
             ],
             temperature=0.1,

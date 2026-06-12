@@ -88,47 +88,7 @@ PREDICT_PROMPT_TEMPLATE_ZH = """你是超级交易大师. 预测每个币种在�
 }}
 """
 
-PREDICT_PROMPT_TEMPLATE_EN = """You predict each symbol over **6~8 hours** (plan {hold_hours}h). **1h K-lines primary** + volume/RSI/price.
-
-SL={sl_pct}, TP={tp_pct}, 5x. Skip when no clear 6~8h edge — do not force bullish/bearish on every row.
-
-# Global context
-{global_context_json}
-""" + BIG4_PROMPT_BLOCK_PREDICT_EN + """
-# Each symbol row
-- kline_narrative: 1h **24-bar trend + last 4-6 bars**; 15m/1d auxiliary
-""" + KLINE_1H_READING_BLOCK_EN + """
-- price, 24h change, volume, funding, rsi_14_1h, 7d distance fields
-
-{symbols_data_json}
-
-""" + CATALYST_EVIDENCE_BLOCK + """
-# Task — one verdict per symbol; **skip default when unsure**
-- catalyst: 1h trend + 4~8 bars + RSI number + volume (required for bullish/bearish)
-- Max 6 bullish+bearish total; ≥70% skip expected
-
-# Confidence
-| 0.75+ | strong 1h + volume + RSI + 7d room |
-| 0.65-0.74 | full 1h four-part block, """ + CONFIDENCE_ROW_BIG4_OK + """ |
-| 0.60-0.64 | ≤2 per round |
-| <0.60 | skip |
-
-- No pool-wide bias from Big4; quality over quantity.
-
-{{
-  "summary_zh": "1-2 sentences Chinese",
-  "verdicts": [
-    {{
-      "symbol": "FOO/USDT",
-      "category": "bullish",
-      "confidence": 0.72,
-      "catalyst": "...",
-      "data_signal": "...",
-      "risk_note": "..."
-    }}
-  ]
-}}
-"""
+PREDICT_PROMPT_TEMPLATE_EN = PREDICT_PROMPT_TEMPLATE_ZH
 
 
 def build_predict_prompt_zh(
@@ -155,8 +115,5 @@ def build_predict_prompt_en(
     symbols_data: List[Dict[str, Any]],
     global_ctx: dict,
 ) -> str:
-    return PREDICT_PROMPT_TEMPLATE_EN.format(
-        global_context_json=json.dumps(global_ctx, ensure_ascii=False, indent=2),
-        symbols_data_json=json.dumps(symbols_data, ensure_ascii=False, indent=2, default=str),
-        **_sl_tp_prompt_kwargs(),
-    )
+    """兼容旧调用名：现在一律返回中文主预测 prompt。"""
+    return build_predict_prompt_zh(symbols_data, global_ctx)

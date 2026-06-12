@@ -1,7 +1,7 @@
-"""TOP50 + 白名单/黑名单评级 — 4h 动态刷新（scheduler 重启后仍可靠）。
+"""TOP50 + 白名单/黑名单评级 — 1h 动态刷新（scheduler 重启后仍可靠）。
 
-- schedule.every(4).hours 在进程重启后会重新计时
-- 15min 轮询 + system_settings.rating_refresh_next_due_utc 保证至少每 4h 刷新一次
+- schedule.every(1).hours 在进程重启后会重新计时
+- 15min 轮询 + system_settings.rating_refresh_next_due_utc 保证至少每 1h 刷新一次
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from loguru import logger
 
 from app.utils.config_loader import get_db_config
 
-RATING_REFRESH_INTERVAL_HOURS = 4
+RATING_REFRESH_INTERVAL_HOURS = 1
 RATING_REFRESH_INTERVAL_SECONDS = RATING_REFRESH_INTERVAL_HOURS * 3600
 RATING_REFRESH_POLL_MINUTES = 15
 
@@ -115,7 +115,7 @@ def rating_claim_next_slot(
     now: Optional[datetime] = None,
     triggered_by: str = "scheduler",
 ) -> datetime:
-    """认领下一 4h 窗口，防止 15min 轮询重复触发。"""
+    """认领下一刷新窗口，防止 15min 轮询重复触发。"""
     now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     next_due = now + timedelta(seconds=RATING_REFRESH_INTERVAL_SECONDS)
     value = next_due.strftime("%Y-%m-%dT%H:%M:%S")

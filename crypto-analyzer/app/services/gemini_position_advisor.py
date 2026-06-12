@@ -702,7 +702,7 @@ class GeminiPositionAdvisor:
 
 **1h 未破时不得 sell**；reason 须含 1h + 量能或 RSI 结论。
 
-Output ONLY JSON:
+只输出合法 JSON:
 {{
   "action": "hold" | "observe" | "sell",
   "reason": "<50字中文，含1h主判+量价/RSI要点>"
