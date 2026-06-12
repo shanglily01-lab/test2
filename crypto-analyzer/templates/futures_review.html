@@ -1087,15 +1087,19 @@ function loadHoldingAnalysis() {
   var url = '/api/futures/review/holding-analysis?account_id=' + accountId() + '&hours=' + hrs;
   if (src) url += '&source=' + encodeURIComponent(src);
   fetch(url)
-    .then(function(r){ return r.json(); })
+    .then(function(r){
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
     .then(function(d) {
-      var s = d.data || d || {};
+      if (d && d.success === false) throw new Error(d.detail || d.message || 'API error');
+      var s = (d && d.data) ? d.data : (d || {});
       var buckets = s.buckets || [];
       var scatter = s.scatter || [];
       var strategies = s.strategies || [];
 
       // 填充策略下拉
-      if (stratSel && strategies.length) {
+      if (stratSel) {
         var currentVal = stratSel.value;
         stratSel.innerHTML = '<option value="">全部策略</option>';
         strategies.forEach(function(st) {
@@ -1125,7 +1129,12 @@ function loadHoldingAnalysis() {
       renderHoldingCharts(buckets, scatter);
       renderHoldingTable(buckets);
     })
-    .catch(function(e){ console.error('loadHoldingAnalysis error:', e); });
+    .catch(function(e){
+      console.error('loadHoldingAnalysis error:', e);
+      var grid = document.getElementById('ha-strategy-grid');
+      if (grid) grid.innerHTML = '<p class="text-xs text-error col-span-full">加载失败: ' + (e.message || e) + '</p>';
+      renderHoldingTable([]);
+    });
 }
 
 function renderHaStrategyGrid(strategies, currentSource) {
@@ -1139,7 +1148,7 @@ function renderHaStrategyGrid(strategies, currentSource) {
     var isActive = st.source === currentSource;
     var borderCls = isActive ? 'border-primary/50 bg-primary/5' : 'border-outline-variant/10';
     var activeBadge = isActive ? '<span class="text-[9px] text-primary ml-1">&#9679; 当前</span>' : '';
-    return '<div class="bg-surface-container rounded-lg p-3 border ' + borderCls + ' hover:border-primary/30 transition-all cursor-pointer" onclick="document.getElementById(\'ha-strategy-select\').value=\'' + st.source + '\';loadHoldingAnalysis()">' +
+    return '<div class="bg-surface-container rounded-lg p-3 border ' + borderCls + ' hover:border-primary/30 transition-all cursor-pointer" data-ha-source="' + st.source + '" onclick="selectHaStrategy(this.getAttribute(\'data-ha-source\'))">' +
       '<div class="flex items-center justify-between mb-2">' +
         '<span class="text-xs font-medium text-on-surface truncate max-w-[120px]">' + st.display_name + activeBadge + '</span>' +
         '<span class="mono text-[11px] ' + pCls(st.total_pnl) + '">' + fmtPnl(st.total_pnl) + '</span>' +
@@ -1151,6 +1160,12 @@ function renderHaStrategyGrid(strategies, currentSource) {
       '</div>' +
     '</div>';
   }).join('');
+}
+
+function selectHaStrategy(source) {
+  var stratSel = document.getElementById('ha-strategy-select');
+  if (stratSel) stratSel.value = source || '';
+  loadHoldingAnalysis();
 }
 
 function renderHoldingCharts(buckets, scatter) {
@@ -1504,8 +1519,11 @@ function renderDpnlChart(data) {
   if (!canvas) return;
   if (dailyPnlChart) { dailyPnlChart.destroy(); dailyPnlChart = null; }
   if (!data || data.length === 0) return;
-  var labels = data.map(function(d){ return d.date ? d.date.slice(5) : '--'; });
-  var values = data.map(function(d){ return parseFloat(d.total_pnl !== undefined ? d.total_pnl : (d.pnl || 0)); });
+  var chartData = data.slice().sort(function(a, b) {
+    return String(a.date || '').localeCompare(String(b.date || ''));
+  });
+  var labels = chartData.map(function(d){ return d.date ? d.date.slice(5) : '--'; });
+  var values = chartData.map(function(d){ return parseFloat(d.total_pnl !== undefined ? d.total_pnl : (d.pnl || 0)); });
   var colors = values.map(function(v){ return v >= 0 ? 'rgba(73,244,200,0.7)' : 'rgba(255,113,108,0.7)'; });
   var borders = values.map(function(v){ return v >= 0 ? '#49f4c8' : '#ff716c'; });
   dailyPnlChart = new Chart(canvas, {
@@ -1558,6 +1576,9 @@ function renderDpnlTable() {
     if (dpnlFilter === 'profit') return p >= 0;
     if (dpnlFilter === 'loss') return p < 0;
     return true;
+  });
+  filtered.sort(function(a, b) {
+    return String(b.date || '').localeCompare(String(a.date || ''));
   });
   if (!filtered.length) {
     tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-6 text-center text-on-surface-variant text-xs">暂无数据</td></tr>';

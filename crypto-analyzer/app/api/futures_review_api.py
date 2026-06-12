@@ -2022,12 +2022,12 @@ async def get_daily_pnl_stats(
                 SUM(margin) as total_margin,
                 AVG(unrealized_pnl_pct) as avg_pnl_pct
             FROM futures_positions
-            WHERE status = 'closed'
+            WHERE status = 'CLOSED'
             AND account_id = %s
             AND DATE(close_time) >= %s
             AND DATE(close_time) <= %s
             GROUP BY DATE(close_time)
-            ORDER BY trade_date ASC
+            ORDER BY trade_date DESC
         """, (account_id, month_start, month_end))
 
         daily_records = cursor.fetchall()
@@ -2231,11 +2231,13 @@ async def get_holding_analysis(
 
         for pos in positions:
             pnl = float(pos['realized_pnl'] or 0)
+            holding_minutes = 0
             if pos['open_time'] and pos['close_time']:
-                delta = pos['close_time'] - pos['open_time']
-                holding_minutes = int(delta.total_seconds() / 60)
-            else:
-                holding_minutes = 0
+                try:
+                    delta = pos['close_time'] - pos['open_time']
+                    holding_minutes = max(0, int(delta.total_seconds() / 60))
+                except (TypeError, ValueError):
+                    holding_minutes = 0
 
             if pnl >= 0:
                 total_win += pnl
@@ -2245,11 +2247,18 @@ async def get_holding_analysis(
                 loss_count += 1
 
             bucket_key = None
-            for lo, hi, label in BUCKETS:
-                if lo <= holding_minutes < hi:
-                    bucket_key = f"{lo}-{hi}"
+            bucket_label = None
+            lo = hi = 0
+            for i, (blo, bhi, label) in enumerate(BUCKETS):
+                is_last = i == len(BUCKETS) - 1
+                if (is_last and holding_minutes >= blo) or (blo <= holding_minutes < bhi):
+                    bucket_key = f"{blo}-{bhi}"
                     bucket_label = label
+                    lo, hi = blo, bhi
                     break
+
+            if bucket_key is None:
+                continue
 
             if bucket_key not in buckets_map:
                 buckets_map[bucket_key] = {
@@ -2272,7 +2281,10 @@ async def get_holding_analysis(
             })
 
         buckets = []
-        for key in sorted(buckets_map.keys(), key=lambda k: int(k.split('-')[0])):
+        for key in sorted(
+            buckets_map.keys(),
+            key=lambda k: int(k.split('-')[0]) if k and '-' in str(k) else 0,
+        ):
             b = buckets_map[key]
             wr = (b['wins'] / b['count'] * 100) if b['count'] > 0 else 0
             avg = b['total_pnl'] / b['count'] if b['count'] > 0 else 0
