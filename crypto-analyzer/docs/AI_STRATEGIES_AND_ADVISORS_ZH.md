@@ -325,7 +325,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | `live_whitelist_enabled` | 开仓：`rating_level=0` 可开实仓 |
 | `blacklist_level3_enabled` | L3 禁止开仓（多在开模拟前检查） |
 
-**开仓按 source 白名单**：`gemini_explore`、`deepseek_explore`、`deepseek_predict`。`gemini_predict`、GPT/其它策略即使 `live_trading_enabled=1` 也只写模拟仓。
+**开仓按 source 白名单**：`gemini_explore`、`gemini_predict`、`deepseek_explore`、`deepseek_predict`。GPT/战术/反转等其它策略即使 `live_trading_enabled=1` 也只写模拟仓。
 
 **北京时间实盘开仓时段**：仅 **10:00-16:00**、**22:00-次日04:00** 允许同步/直接开实盘；服务器 UTC 对应 **02:00-08:00**、**14:00-20:00**。模拟开仓不受该时段限制，用于对比禁开时段表现。
 

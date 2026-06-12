@@ -23,7 +23,7 @@
 2. **app/scheduler.py** (crypto-scheduler, systemd) — 统一调度引擎
 3. **app/main.py** (FastAPI) — Web 服务 + REST API
 
-辅助进程: fast_collector / ws_kline_collector / multi_strategy 等
+辅助进程: **fast_collector** (30min REST 补 1h/4h/1d) / **ws_kline_collector** (5m+15m WS) / multi_strategy 等
 
 ## 数据库
 
@@ -38,6 +38,9 @@
 - **WS K线 backfill exchange name**: `_check_and_backfill` 中 exchange 必须用 `binance_futures`（匹配 `save_klines` 的存储名），不能用 `usdt_futures`。
 - **关模拟仓不会自动同步实盘**: 没有后台监听服务。需要通过 `BinanceFuturesEngine.close_position_direct()` 主动在交易所平仓。
 - **除 crypto-scheduler 外不要加心跳日志**: WS 采集器日志中有 `send_heartbeat` 日志是正常的 (每 20s)，不要把它当作 bug 去修。
+- **K 线采集分工 (2026-06-12)**: **5m/15m 仅 WS** (`ws_kline_collector_service` / `crypto-ws-kline`)；`fast_collector` **30 分钟轮询**，REST **只补 1h/4h/1d**（禁止 REST 拉 5m/15m，与 WS 重复会触发 Binance IP ban -1003）。封禁状态见 `logs/binance_ban_state.json` + `app/utils/binance_rate_guard.py`。
+- **持仓时间 UTC (2026-06-13)**: `futures_positions.open_time` / 限价开仓成交须用 **`utc_now_naive()`**（`app/utils/position_time.py`）。历史行若 `open_time` 比 `close_time` 晚约 8h（CST/UTC 混存），成交记录持仓时长会显示 `--`；API 用 `calc_holding_minutes(..., created_at=)` 回退到 `created_at`/`fill_time` 对齐。
+- **config.yaml 交易对**: 与 Binance `PERPETUAL`+`TRADING` 同步；**不含** `TRADIFI_PERPETUAL`（XAG/XAU/代币化股票等）；`securities_filter.py` 另拦股票/大宗 base。
 
 ## scheduler 调度任务
 
@@ -92,9 +95,18 @@
 **日志** (非 journalctl): `logs/scheduler_YYYY-MM-DD.log`；排查:
 `grep -E "一轮开始|一轮结束|candidate_pool_snapshot 读取|回退 kline|上一轮还未结束|skipped_weak_catalyst" logs/scheduler_$(date -u +%Y-%m-%d).log`
 
-**相关 commits**: `211990b` (UPSERT+探索读缓存+锁), `15bdfc0` (partial), `e0feb1e9` (探索 4h), `162d8d5b` (主探索/预测 prompt+门槛).
+**相关 commits**: `211990b` (UPSERT+探索读缓存+锁), `15bdfc0` (partial), `e0feb1e9` (探索 4h), `162d8d5b` (主探索/预测 prompt+门槛), `2766ff8d` (REST K线 ban 修复), `fab88de7` (持仓时长 UTC+回退).
 
 详见 `.cursor/rules/scheduler-ai-ops.mdc` 与 `.cursor/rules/ai-strategies-advisors.mdc`。
+
+## K 线采集进程 (2026-06-12)
+
+| 进程 | systemd 名 | 职责 |
+|------|------------|------|
+| `ws_kline_collector_service.py` | crypto-ws-kline | **5m + 15m** WebSocket 主采集；backfill exchange 名须 `binance_futures` |
+| `fast_collector_service.py` | crypto-fast-collector | **每 30min 轮询**；仅在 1h/4h/1d 整点 REST 补数；IP 封禁时暂停并读 `binance_rate_guard` |
+
+改 collector/WS 代码后分别重启对应 systemd；**勿同时跑两份 fast_collector**（无 PID 锁时会叠加 REST 触发 ban）。
 
 ## AI 策略与顾问（完整文档）
 
@@ -117,11 +129,11 @@
 ### 主探索 (`*_explore`)
 - 每 **4h** + 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
 - SL **3%** / TP **5%** / **4h** / 5x / 500U；conf≥**0.60** + `explore_catalyst_technical_ok`
-- **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：仅 `deepseek_explore`；Gemini/GPT 探索仅模拟
+- **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：`gemini_explore`、`deepseek_explore`（+ L0 白名单等 symbol 闸门）
 
 ### 主预测 (`*_predict`)
 - 每 **4h** + 5min 轮询 + `*_predict_next_due_utc`；kill switch（Gemini 预测默认 1）
-- 同主探索持仓/SL/TP/门槛；**实盘**：仅 `deepseek_predict`；Gemini/GPT 预测仅模拟
+- 同主探索持仓/SL/TP/门槛；**实盘**：`gemini_predict`、`deepseek_predict`（+ L0 白名单等 symbol 闸门）
 
 ### 开仓 / 持仓顾问（2026-06-08 Gemini 主单回归 Gemini）
 - `gemini_explore` / `gemini_predict` 开仓和持仓由 Gemini 顾问审核；其余 source 由 DeepSeek 顾问监管
@@ -175,7 +187,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 
 ## 实盘控制
 
-- **按 source 白名单**（`app/services/trading_gates.py`）：`deepseek_explore`、`deepseek_predict` 可开实盘；`gemini_explore`、`gemini_predict`、GPT、战术、反转、smart_trader 等只写模拟仓
+- **按 source 白名单**（`app/services/trading_gates.py`）：`gemini_explore`、`gemini_predict`、`deepseek_explore`、`deepseek_predict` 可开实盘；GPT、战术、反转、smart_trader 等只写模拟仓
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)
 - **平仓总开关**: `system_settings.live_close_enabled` (1=开启；模拟平仓时同步交易所；持仓顾问 sell 亦受此规则)
 - **北京时间实盘开仓时段**: 仅 10:00-16:00、22:00-次日04:00 允许同步/直接开实盘；服务器 UTC 对应 02:00-08:00、14:00-20:00。模拟开仓不受该时段限制，用于对比禁开时段表现。
