@@ -20,6 +20,7 @@ from loguru import logger
 import pymysql
 
 from app.trading.futures_trading_engine import FuturesTradingEngine
+from app.utils.position_time import calc_holding_minutes
 
 try:
     from app.trading.binance_futures_engine import BinanceFuturesEngine
@@ -1579,7 +1580,8 @@ async def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_s
             p.stop_loss_price,
             p.take_profit_price,
             p.open_time,
-            p.close_time
+            p.close_time,
+            p.created_at
         FROM futures_trades t
         LEFT JOIN futures_orders o ON t.order_id = o.order_id
         LEFT JOIN futures_positions p ON t.position_id = p.id
@@ -1593,15 +1595,20 @@ async def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_s
         cursor.close()
         # connection.close()  # 复用连接，不关闭
 
-        # 转换 Decimal 为 float，datetime 为字符串
+        # 转换 Decimal 为 float，datetime 为字符串（UTC naive，前端按 UTC+8 展示）
         for trade in trades:
+            holding_minutes = calc_holding_minutes(
+                trade.get('open_time'),
+                trade.get('close_time'),
+                created_at=trade.get('created_at'),
+                trade_time=trade.get('trade_time'),
+            )
+            if holding_minutes is not None:
+                trade['holding_minutes'] = holding_minutes
             for key, value in trade.items():
                 if isinstance(value, Decimal):
                     trade[key] = float(value)
                 elif isinstance(value, datetime):
-                    # 将 datetime 转换为字符串（本地时间格式）
-                    # 如果数据库存储的是UTC时间，需要转换为本地时间（UTC+8）
-                    # 假设数据库存储的是本地时间（UTC+8），直接格式化
                     trade[key] = value.strftime('%Y-%m-%d %H:%M:%S')
 
         # 计算总页数

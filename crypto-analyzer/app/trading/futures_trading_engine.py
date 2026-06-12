@@ -12,6 +12,7 @@ from loguru import logger
 import pymysql
 
 from app.utils.futures_symbol import futures_symbol_rating_canonical
+from app.utils.position_time import utc_now_naive
 
 def get_quantity_precision(symbol: str) -> int:
     """
@@ -727,7 +728,7 @@ class FuturesTradingEngine:
                 float(stop_loss_pct) if stop_loss_pct else None,
                 float(take_profit_pct) if take_profit_pct else None,
                 entry_ema_diff, entry_signal_type, entry_score, entry_reason,
-                datetime.now(), source, signal_id, strategy_id
+                utc_now_naive(), source, signal_id, strategy_id
             ))
 
             position_id = cursor.lastrowid
@@ -1087,7 +1088,7 @@ class FuturesTradingEngine:
                 float(take_profit_price) if take_profit_price else None,
                 entry_ema_diff, entry_signal_type, entry_score, entry_reason,
                 max_hold_minutes, timeout_at, planned_close_time,
-                datetime.now(), source, signal_id, strategy_id,
+                utc_now_naive(), source, signal_id, strategy_id,
             ))
             position_id = cursor.lastrowid
 
@@ -1135,7 +1136,7 @@ class FuturesTradingEngine:
                     account_id, pending_order_id, position_id, trade_id,
                     symbol, side_raw, float(entry_price), float(quantity), float(notional_value),
                     leverage, float(margin_required), float(fee), float(fee_rate),
-                    float(entry_price), datetime.now(),
+                    float(entry_price), utc_now_naive(),
                 ),
             )
 

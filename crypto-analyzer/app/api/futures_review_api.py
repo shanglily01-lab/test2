@@ -21,6 +21,8 @@ from datetime import datetime, timedelta
 from loguru import logger
 import pymysql
 
+from app.utils.position_time import calc_holding_minutes
+
 # 创建 Router
 router = APIRouter(prefix='/api/futures/review', tags=['futures-review'])
 
@@ -687,7 +689,7 @@ async def get_review_trades(
                 quantity, entry_price,
                 realized_pnl, margin,
                 holding_hours, entry_reason, notes as close_reason,
-                open_time, close_time, entry_signal_type, source, status
+                open_time, close_time, created_at, entry_signal_type, source, status
             FROM futures_positions
             WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
             {filter_condition}
@@ -711,11 +713,12 @@ async def get_review_trades(
                 pos.get('source')
             )
 
-            # 计算实际持仓时长（分钟）
-            holding_minutes = 0
-            if pos['open_time'] and pos['close_time']:
-                delta = pos['close_time'] - pos['open_time']
-                holding_minutes = int(delta.total_seconds() / 60)
+            # 计算实际持仓时长（分钟）；兼容 open_time 曾误存 CST 的历史行
+            holding_minutes = calc_holding_minutes(
+                pos['open_time'],
+                pos['close_time'],
+                created_at=pos.get('created_at'),
+            ) or 0
 
             # 计算ROI (realized_pnl / margin * 100%)
             realized_pnl = float(pos['realized_pnl'] or 0)

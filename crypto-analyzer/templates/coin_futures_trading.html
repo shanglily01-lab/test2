@@ -158,12 +158,22 @@ function fmtTime(t) {
     return (u.getUTCMonth()+1) + '-' + pad(u.getUTCDate()) + ' ' + pad(u.getUTCHours()) + ':' + pad(u.getUTCMinutes());
   } catch(e) { return '--'; }
 }
-function fmtDuration(openT, closeT) {
+function fmtDuration(t) {
+  if (t && t.holding_minutes !== undefined && t.holding_minutes !== null) {
+    var m = parseInt(t.holding_minutes, 10);
+    if (!isNaN(m) && m >= 0) {
+      var h = Math.floor(m / 60);
+      var rm = m % 60;
+      return h > 0 ? (h + 'h ' + rm + 'm') : (rm + 'm');
+    }
+  }
+  var openT = t && (t.open_time || t.created_at);
+  var closeT = t && (t.close_time || t.trade_time);
   if (!openT || !closeT) return '--';
   try {
-    var toMs = function(t) {
-      var ts = (typeof t === 'string' && !t.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(t)) ? t + 'Z' : t;
-      return new Date(ts).getTime();
+    var toMs = function(ts) {
+      var s = (typeof ts === 'string' && !ts.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(ts)) ? ts + 'Z' : ts;
+      return new Date(s).getTime();
     };
     var ms = toMs(closeT) - toMs(openT);
     if (isNaN(ms) || ms < 0) return '--';
@@ -204,7 +214,7 @@ function applyHistoryFilter(resetPage) {
         '<td class="px-5 py-3.5 text-on-surface-variant monospace whitespace-nowrap text-xs leading-5">' +
           '<div>' + fmtTime(t.open_time) + '</div>' +
           '<div class="text-[#49f4c8]/70">' + fmtTime(t.close_time || t.trade_time) + '</div></td>' +
-        '<td class="px-5 py-3.5 text-on-surface-variant monospace whitespace-nowrap text-xs">' + fmtDuration(t.open_time, t.close_time || t.trade_time) + '</td>' +
+        '<td class="px-5 py-3.5 text-on-surface-variant monospace whitespace-nowrap text-xs">' + fmtDuration(t) + '</td>' +
         '<td class="px-5 py-3.5 font-bold font-headline uppercase whitespace-nowrap">' + (t.symbol || '--') + '</td>' +
         '<td class="px-5 py-3.5 font-bold text-xs ' + sideClass + '">' + (isLong ? 'LONG' : 'SHORT') + '</td>' +
         '<td class="px-5 py-3.5 monospace whitespace-nowrap">' + fmtPrice(t.entry_price) + '</td>' +
