@@ -113,6 +113,21 @@ TECHNICAL_SIGNALS_CACHE_TTL = 60  # 60秒缓存
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    bg_tasks: list[asyncio.Task] = []
+
+    def spawn(coro) -> asyncio.Task:
+        task = asyncio.create_task(coro)
+        bg_tasks.append(task)
+
+        def _on_done(t: asyncio.Task) -> None:
+            try:
+                bg_tasks.remove(t)
+            except ValueError:
+                pass
+
+        task.add_done_callback(_on_done)
+        return task
+
     # 禁用 uvicorn 访问日志（无论通过何种方式启动都生效）
     import logging
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
@@ -386,7 +401,7 @@ async def lifespan(app: FastAPI):
     if futures_limit_order_executor:
         try:
             import asyncio
-            futures_limit_order_executor.task = asyncio.create_task(
+            futures_limit_order_executor.task = spawn(
                 futures_limit_order_executor.run_loop(interval=5)
             )
             logger.info("✅ 模拟盘限价单执行服务已启动（每5秒检查）")
@@ -607,38 +622,51 @@ async def lifespan(app: FastAPI):
 
         async def _periodic(proc_name, interval_seconds, name):
             """独立周期后台任务：sleep → 子进程执行存储过程 → sleep → ..."""
-            while True:
-                await asyncio.sleep(interval_seconds)
-                try:
-                    proc = await asyncio.create_subprocess_exec(
-                        sys.executable, _call_proc_script, proc_name,
-                        stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.PIPE,
-                        cwd=str(project_root)
-                    )
-                    _, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
-                    if proc.returncode != 0 and stderr:
-                        logger.warning(f"⚠️ 周期任务 [{name}]: {stderr.decode(errors='replace')[:300]}")
-                    else:
-                        logger.debug(f"✅ 周期任务 [{name}] 完成")
-                except asyncio.TimeoutError:
-                    logger.warning(f"⚠️ 周期任务 [{name}] 超时，已终止")
+            proc = None
+            try:
+                while True:
+                    await asyncio.sleep(interval_seconds)
+                    try:
+                        proc = await asyncio.create_subprocess_exec(
+                            sys.executable, _call_proc_script, proc_name,
+                            stdout=asyncio.subprocess.DEVNULL,
+                            stderr=asyncio.subprocess.PIPE,
+                            cwd=str(project_root)
+                        )
+                        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+                        if proc.returncode != 0 and stderr:
+                            logger.warning(f"⚠️ 周期任务 [{name}]: {stderr.decode(errors='replace')[:300]}")
+                        else:
+                            logger.debug(f"✅ 周期任务 [{name}] 完成")
+                    except asyncio.TimeoutError:
+                        logger.warning(f"⚠️ 周期任务 [{name}] 超时，已终止")
+                        if proc is not None and proc.returncode is None:
+                            try:
+                                proc.kill()
+                                await proc.wait()
+                            except Exception:
+                                pass
+                    except Exception as e:
+                        logger.error(f"❌ 周期任务 [{name}] 异常: {e}")
+                    finally:
+                        proc = None
+            except asyncio.CancelledError:
+                if proc is not None and proc.returncode is None:
                     try:
                         proc.kill()
                         await proc.wait()
                     except Exception:
                         pass
-                except Exception as e:
-                    logger.error(f"❌ 周期任务 [{name}] 异常: {e}")
+                raise
 
         if os.getenv("ENABLE_APP_COIN_SCORE_PROC", "0").strip().lower() in ("1", "true", "yes", "on"):
-            asyncio.create_task(_periodic("update_all_coin_scores",        5 * 60,   "评分更新(5m)"))
+            spawn(_periodic("update_all_coin_scores",        5 * 60,   "评分更新(5m)"))
         else:
             logger.info("[评分更新] app 内 update_all_coin_scores 周期任务默认关闭；由 MySQL event 统一调度")
-        asyncio.create_task(_periodic("update_technical_signals_cache",    15 * 60,  "技术信号缓存(15m)"))
-        asyncio.create_task(_periodic("update_dashboard_hyperliquid_cache",30 * 60,  "Dashboard聪明钱(30m)"))
-        asyncio.create_task(_periodic("update_data_management_stats_cache",2 * 3600, "数据管理统计(2h)"))
-        asyncio.create_task(_periodic("update_collection_status_cache",    2 * 3600, "数据采集情况(2h)"))
+        spawn(_periodic("update_technical_signals_cache",    15 * 60,  "技术信号缓存(15m)"))
+        spawn(_periodic("update_dashboard_hyperliquid_cache",30 * 60,  "Dashboard聪明钱(30m)"))
+        spawn(_periodic("update_data_management_stats_cache",2 * 3600, "数据管理统计(2h)"))
+        spawn(_periodic("update_collection_status_cache",    2 * 3600, "数据采集情况(2h)"))
 
         # Dashboard 快照预计算（每5分钟，前端一次调用即可获取全部数据）
         async def _dashboard_snapshot_loop():
@@ -652,13 +680,13 @@ async def lifespan(app: FastAPI):
                     logger.error(f"[dashboard_snapshot] loop error: {e}")
                 await asyncio.sleep(5 * 60)
 
-        asyncio.create_task(_dashboard_snapshot_loop())
+        spawn(_dashboard_snapshot_loop())
         logger.info("Dashboard快照预计算任务已启动（每5分钟更新）")
 
         # ── 现货交易策略 ─────────────────────────────────────────────────────
         try:
             from app.services.spot_trader_service import spot_trader_loop
-            asyncio.create_task(spot_trader_loop())
+            spawn(spot_trader_loop())
             logger.info("现货交易策略后台循环已启动")
         except Exception as e:
             logger.warning(f"现货交易策略启动失败: {e}")
@@ -763,7 +791,7 @@ async def lifespan(app: FastAPI):
 
                 await asyncio.sleep(_CHECK_INTERVAL_S)
 
-        asyncio.create_task(_ws_kline_health_check_loop())
+        spawn(_ws_kline_health_check_loop())
         logger.info("WS K线数据新鲜度监控已启动 (每 5 分钟检查 5m/15m, 阈值 7/17 min)")
 
         # schedule 仅保留用于定时点任务（每天00:00和12:00的复盘分析）
@@ -785,7 +813,7 @@ async def lifespan(app: FastAPI):
                     _sleep = max(int(_idle) + 1, 5)
                 await asyncio.sleep(_sleep)
 
-        asyncio.create_task(schedule_runner())
+        spawn(schedule_runner())
         logger.info("✅ 超级大脑自我优化服务已启动（每4小时执行一次）")
         logger.info("✅ 12小时复盘分析服务已启动（每天00:00和12:00执行）")
         logger.info("✅ 子进程周期调度已启动：评分5m / 技术信号15m / Dashboard聪明钱30m / 数据管理&采集情况2h")
@@ -809,21 +837,22 @@ async def lifespan(app: FastAPI):
     # 关闭时的清理工作
     logger.info("👋 关闭系统...")
 
-    # 限价单自动执行服务已停用（系统使用合约市价单交易）
-    # if pending_order_executor:
-    #     try:
-    #         pending_order_executor.stop()
-    #         logger.info("✅ 待成交订单自动执行服务已停止")
-    #     except Exception as e:
-    #         logger.warning(f"⚠️  停止待成交订单自动执行服务失败: {e}")
-    #
-    # if futures_limit_order_executor:
-    #     try:
-    #         futures_limit_order_executor.stop()
-    #         logger.info("✅ 合约限价单自动执行服务已停止")
-    #     except Exception as e:
-    #         logger.warning(f"⚠️  停止合约限价单自动执行服务失败: {e}")
-    
+    try:
+        from app.services.paper_limit_sync_service import get_paper_limit_sync_service
+        _paper_sync_svc = get_paper_limit_sync_service()
+        if _paper_sync_svc:
+            _paper_sync_svc.stop()
+            logger.info("✅ 模拟盘实盘同步服务已停止")
+    except Exception as e:
+        logger.warning(f"⚠️  停止模拟盘实盘同步服务失败: {e}")
+
+    if futures_limit_order_executor:
+        try:
+            futures_limit_order_executor.stop()
+            logger.info("✅ 模拟盘限价单执行服务已停止")
+        except Exception as e:
+            logger.warning(f"⚠️  停止模拟盘限价单执行服务失败: {e}")
+
     # 停止合约止盈止损监控服务
     if futures_monitor_service:
         try:
@@ -855,6 +884,19 @@ async def lifespan(app: FastAPI):
             logger.info("✅ 超级大脑优化服务已停止")
         except Exception as e:
             logger.warning(f"⚠️  停止超级大脑优化服务失败: {e}")
+
+    async def _cancel_background_tasks() -> None:
+        pending = list(bg_tasks)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    try:
+        await asyncio.wait_for(_cancel_background_tasks(), timeout=20.0)
+        logger.info("✅ 后台周期任务已取消")
+    except asyncio.TimeoutError:
+        logger.warning("⚠️  后台任务取消超时(20s)，继续关闭")
 
     # 信号分析后台服务已不在 main 启动 (2026-05-19), 此处保留兼容 lifespan 关闭流程
     if signal_analysis_service:
