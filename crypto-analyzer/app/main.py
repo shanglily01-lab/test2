@@ -400,7 +400,6 @@ async def lifespan(app: FastAPI):
     
     if futures_limit_order_executor:
         try:
-            import asyncio
             futures_limit_order_executor.task = spawn(
                 futures_limit_order_executor.run_loop(interval=5)
             )
