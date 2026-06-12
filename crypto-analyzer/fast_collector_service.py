@@ -29,6 +29,7 @@ _project_root = Path(__file__).parent
 sys.path.insert(0, str(_project_root))
 
 from app.collectors.smart_futures_collector import SmartFuturesCollector
+from app.utils.binance_rate_guard import rate_guard
 
 
 class SmartCollectorService:
@@ -64,20 +65,19 @@ class SmartCollectorService:
         # 初始化智能采集器
         self.collector = SmartFuturesCollector(db_config)
 
-        # 检查间隔 (秒)
-        # 2026-05-26: WS 现在覆盖 5m+15m+1h, REST 降为兜底只做长周期补漏
-        self.interval = 600  # 10 分钟
+        # 2026-06-12: WS 覆盖 5m/15m; REST 降为 1h 长周期兜底, 降低 -1003 风险
+        self.interval = 3600  # 1 小时
 
         logger.info("🧠 智能数据采集服务初始化完成 (仅 U 本位, 不采集币本位)")
-        logger.info(f"检查间隔: {self.interval}秒 (5分钟)")
-        logger.info("采集策略: 分层智能采集，节省93.5%资源")
+        logger.info(f"检查间隔: {self.interval}秒 (1小时 REST 兜底)")
+        logger.info("采集策略: 仅 1h/4h/1d (5m/15m 由 WS 采集)")
 
     async def run_forever(self):
         """持续运行智能采集服务"""
         logger.info("=" * 60)
         logger.info("🧠 智能数据采集服务启动")
-        logger.info("检查周期: 每5分钟")
-        logger.info("采集策略: 5m(每次) / 15m(每3次) / 1h(每12次) / 1d(每288次)")
+        logger.info("检查周期: 每1小时 (REST 长周期兜底)")
+        logger.info("采集策略: 1h/4h/1d (5m/15m 由 ws_kline_collector 负责)")
         logger.info("实时价格: 由 WebSocket 服务提供")
         logger.info("=" * 60)
 
@@ -91,9 +91,13 @@ class SmartCollectorService:
                 # 执行采集
                 await self.collector.run_collection_cycle()
 
-                # 等待下一次采集
-                logger.info(f"等待 {self.interval} 秒...\n")
-                await asyncio.sleep(self.interval)
+                if rate_guard.is_banned():
+                    wait_s = rate_guard.seconds_until_unban() + 60
+                    logger.warning(f"IP 封禁中, 暂停 REST 采集 {wait_s:.0f}s 直至解封")
+                    await asyncio.sleep(wait_s)
+                else:
+                    logger.info(f"等待 {self.interval} 秒...\n")
+                    await asyncio.sleep(self.interval)
 
             except KeyboardInterrupt:
                 logger.info("收到停止信号，服务退出")

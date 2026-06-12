@@ -139,8 +139,13 @@ class _BinanceRateGuard:
         self._refresh_cache()
         existing = self._cached_until_ms
 
-        # 只在新封禁时间更晚时才写入
+        # 内存始终同步到已知的最大封禁截止, 让同进程并发请求尽快看到熔断
+        self._cached_until_ms = max(self._cached_until_ms, until_ms)
+        self._cached_force_clear = False
+
+        # 只在新封禁时间更晚时才写盘
         if until_ms <= existing:
+            self._cached_at = time.time()
             return False
 
         try:

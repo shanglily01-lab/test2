@@ -469,6 +469,12 @@ class WSKlineCollector:
 
     async def _check_and_backfill(self, interval: str) -> None:
         """检查 U本位 DB 新鲜度, 落后则 REST 回填"""
+        from app.utils.binance_rate_guard import rate_guard
+        if rate_guard.is_banned():
+            logger.warning(
+                f"[回填] IP 封禁中, 跳过 {interval} (剩余 {rate_guard.seconds_until_unban():.0f}s)"
+            )
+            return
         try:
             import pymysql
             conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor, autocommit=True)
@@ -537,11 +543,16 @@ class WSKlineCollector:
         await asyncio.sleep(BACKFILL_CHECK_INTERVAL_S)  # 先给 WS 一段时间预热
         while True:
             try:
-                tasks = []
-                for interval in BACKFILL_ALLOWED_INTERVALS:
-                    tasks.append(self._check_and_backfill(interval))
-                if tasks:
-                    await asyncio.gather(*tasks)
+                from app.utils.binance_rate_guard import rate_guard
+                if rate_guard.is_banned():
+                    logger.warning(
+                        f"[回填] IP 封禁中, 暂停检查 (剩余 {rate_guard.seconds_until_unban():.0f}s)"
+                    )
+                else:
+                    for interval in BACKFILL_ALLOWED_INTERVALS:
+                        if rate_guard.is_banned():
+                            break
+                        await self._check_and_backfill(interval)
             except Exception as e:
                 logger.error(f"[回填] 循环异常: {e}")
             await asyncio.sleep(BACKFILL_CHECK_INTERVAL_S)

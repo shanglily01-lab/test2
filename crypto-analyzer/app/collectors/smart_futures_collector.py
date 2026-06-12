@@ -122,7 +122,14 @@ class SmartFuturesCollector:
         else:
             return True
 
-    async def fetch_kline(self, session: aiohttp.ClientSession, symbol: str, interval: str = '5m', limit: int = 1) -> Optional[List[Dict]]:
+    async def fetch_kline(
+        self,
+        session: aiohttp.ClientSession,
+        symbol: str,
+        interval: str = '5m',
+        limit: int = 1,
+        ban_event: Optional[asyncio.Event] = None,
+    ) -> Optional[List[Dict]]:
         """
         异步获取单个U本位合约交易对的K线
 
@@ -150,6 +157,14 @@ class SmartFuturesCollector:
             async with session.get(url, params=params, timeout=self.timeout) as response:
                 if response.status == 200:
                     data = await response.json()
+                    # 少数情况下 -1003 包在 200 JSON 里
+                    if isinstance(data, dict) and data.get('code') == -1003:
+                        until_ms = parse_ban_msg(str(data.get('msg', '')))
+                        if until_ms and rate_guard.set_banned_until(until_ms, source='fast_collector_usdt'):
+                            logger.error(f"fast_collector U本位收到 IP ban: {str(data)[:200]}")
+                        if ban_event:
+                            ban_event.set()
+                        return None
                     if data and len(data) > 0:
                         klines = []
                         # 🔥 修复：只处理已完成的K线（排除最后一根未完成的）
@@ -183,6 +198,8 @@ class SmartFuturesCollector:
                             until_ms = parse_ban_msg(body)
                             if until_ms and rate_guard.set_banned_until(until_ms, source='fast_collector_usdt'):
                                 logger.error(f"fast_collector U本位收到 IP ban: {body[:200]}")
+                            if ban_event:
+                                ban_event.set()
                         except Exception:
                             pass
                     return None
@@ -204,25 +221,42 @@ class SmartFuturesCollector:
         Returns:
             成功采集的K线数据列表（扁平化）
         """
-        results = []
+        results: List[Dict] = []
+        if rate_guard.is_banned():
+            logger.warning(
+                f"IP 封禁中, 跳过 {interval} REST 采集 (剩余 {rate_guard.seconds_until_unban():.0f}s)"
+            )
+            return results
+
+        ban_event = asyncio.Event()
 
         async with aiohttp.ClientSession() as session:
-            tasks = [self.fetch_kline(session, symbol, interval, limit) for symbol in symbols]
-
             semaphore = asyncio.Semaphore(self.max_concurrent)
 
-            async def bounded_task(task):
+            async def fetch_one(symbol: str):
+                if ban_event.is_set() or rate_guard.is_banned():
+                    return None
                 async with semaphore:
-                    return await task
+                    if ban_event.is_set() or rate_guard.is_banned():
+                        return None
+                    return await self.fetch_kline(
+                        session, symbol, interval, limit, ban_event=ban_event
+                    )
 
-            bounded_tasks = [bounded_task(task) for task in tasks]
-            results_raw = await asyncio.gather(*bounded_tasks, return_exceptions=True)
-
-            # 过滤成功的结果并扁平化
-            for result in results_raw:
-                if result is not None and not isinstance(result, Exception):
-                    if isinstance(result, list):
-                        results.extend(result)
+            # 分块采集: 一旦触发 ban 即停止后续 chunk, 避免雪崩延长封禁
+            chunk_size = max(self.max_concurrent * 4, 24)
+            for i in range(0, len(symbols), chunk_size):
+                if ban_event.is_set() or rate_guard.is_banned():
+                    break
+                chunk = symbols[i:i + chunk_size]
+                chunk_results = await asyncio.gather(
+                    *[fetch_one(s) for s in chunk],
+                    return_exceptions=True,
+                )
+                for result in chunk_results:
+                    if result is not None and not isinstance(result, Exception):
+                        if isinstance(result, list):
+                            results.extend(result)
 
         return results
 
@@ -315,11 +349,21 @@ class SmartFuturesCollector:
         if cached and (_t.time() - cached[1]) < cls._active_symbols_ttl_sec:
             return cached[0]
 
+        if rate_guard.is_banned():
+            if cached:
+                return cached[0]
+            return None
+
         try:
             import requests
             url = 'https://fapi.binance.com/fapi/v1/exchangeInfo'
 
             resp = requests.get(url, timeout=10)
+            if resp.status_code in (418, 429):
+                until_ms = parse_ban_msg(resp.text)
+                if until_ms:
+                    rate_guard.set_banned_until(until_ms, source='exchangeInfo')
+                return cached[0] if cached else None
             if resp.status_code != 200:
                 logger.warning(f"币安 exchangeInfo HTTP {resp.status_code}, 跳过过滤")
                 return None
@@ -416,9 +460,15 @@ class SmartFuturesCollector:
         根据时间判断需要采集哪些时间周期，避免重复采集
         各周期并行采集，大幅缩短总耗时
         """
+        if rate_guard.is_banned():
+            logger.warning(
+                f"IP 封禁中, 跳过整轮 REST 采集 (剩余 {rate_guard.seconds_until_unban():.0f}s)"
+            )
+            return
+
         start_time = datetime.now()
         logger.info("=" * 60)
-        logger.info("🧠 开始智能数据采集周期（并行采集策略, 仅 U 本位）")
+        logger.info("🧠 开始智能数据采集周期（长周期 REST 兜底, 仅 U 本位）")
 
         usdt_symbols = self.get_trading_symbols()
 
@@ -428,10 +478,8 @@ class SmartFuturesCollector:
 
         logger.info(f"目标: {len(usdt_symbols)} 个 U 本位交易对")
 
-        # 定义所有时间周期及其采集规则
+        # 5m/15m 由 ws_kline_collector WebSocket 负责; REST 只做长周期兜底
         intervals = [
-            ('5m', 2),    # 5分钟K线，获取2根，只保存第1根（已完成）
-            ('15m', 2),   # 15分钟K线，获取2根，只保存第1根（已完成）
             ('1h', 100),  # 1小时K线，要100条（超级大脑需要）
             ('4h', 10),   # 4小时K线，要10条（Big4动量判断）
             ('1d', 50)    # 1天K线，要50条（超级大脑需要）
@@ -440,39 +488,33 @@ class SmartFuturesCollector:
         all_klines = []
         collected_intervals = []
 
-        # 首轮启动雪崩防护: last_collection_time 为空时, 只采 5m, 其它周期标记为已采
+        # 首轮启动雪崩防护: 只采 1h, 其它长周期等下次整点自然触发
         first_run = not self.last_collection_time
         if first_run:
-            logger.info("🛡️  首轮启动: 只采 5m, 其它周期等下次整点自然触发")
+            logger.info("🛡️  首轮启动: 只采 1h, 4h/1d 等下次整点自然触发")
             now_utc = datetime.now()
             for itv, _ in intervals:
-                if itv != '5m':
+                if itv != '1h':
                     self.last_collection_time[itv] = now_utc
 
-        # 智能判断需要采集的周期，并行执行
-        interval_tasks = []
+        # 按周期顺序采集; 任一周期触发 ban 则中止后续周期
         for interval, limit in intervals:
+            if rate_guard.is_banned():
+                logger.warning("IP 封禁中, 中止剩余周期采集")
+                break
             if self.should_collect_interval(interval):
-                logger.info(f"✅ 采集 {interval} K线 (每个交易对{limit}条，距上次 {self._get_elapsed_time(interval)})...")
-                collected_intervals.append(interval)
-                interval_tasks.append(
-                    self.collect_interval_data(usdt_symbols, interval, limit)
+                logger.info(
+                    f"✅ 采集 {interval} K线 (每个交易对{limit}条，距上次 {self._get_elapsed_time(interval)})..."
                 )
+                collected_intervals.append(interval)
+                klines = await self.collect_interval_data(usdt_symbols, interval, limit)
+                if klines:
+                    all_klines.extend(klines)
+                count = len([k for k in klines if k.get('timeframe') == interval]) if klines else 0
+                logger.info(f"  ✓ {interval}: {count} 条")
             else:
                 elapsed = self._get_elapsed_time(interval)
                 logger.info(f"⏭️  跳过 {interval} K线 (距上次仅 {elapsed})")
-
-        # 并行执行所有需要采集的周期
-        if interval_tasks:
-            results = await asyncio.gather(*interval_tasks)
-            for klines in results:
-                if klines:
-                    all_klines.extend(klines)
-
-            # 统计各周期采集量
-            for interval in collected_intervals:
-                count = len([k for k in all_klines if k.get('timeframe') == interval])
-                logger.info(f"  ✓ {interval}: {count} 条")
 
         # 保存所有K线
         if all_klines:
