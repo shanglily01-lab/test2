@@ -228,16 +228,20 @@ class DeepSeekPositionAdvisor:
                 "tactical_open_advisor_llm_enabled", "1"
             ),
             explore_predict_llm_enabled=self._prompt_helper._read_setting_bool(
-                "explore_predict_open_advisor_llm_enabled", "0"
+                "explore_predict_open_advisor_llm_enabled", "1"
             ),
         ):
+            skip_reason = "上游已通过 catalyst 门槛，跳过 LLM 复审"
+            logger.info(
+                f"[DeepSeek开仓顾问] 跳过LLM {symbol} {side} source={source} | {skip_reason}"
+            )
             log_deepseek_advisor_review(
                 "open", "approve", symbol,
                 position_side=side, source=source, entry_price=price,
-                leverage=leverage, reason="上游已通过 catalyst 门槛，跳过 LLM 复审",
+                leverage=leverage, reason=skip_reason,
                 catalyst=catalyst, conn=conn,
             )
-            return True, "上游已通过 catalyst 门槛，跳过 LLM 复审"
+            return True, skip_reason
 
         prompt = self._prompt_helper._build_open_prompt(
             symbol, side, price, source, catalyst, leverage,

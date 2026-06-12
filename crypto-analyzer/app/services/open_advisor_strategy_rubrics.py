@@ -178,9 +178,9 @@ def should_skip_llm_for_tactical_open(
     source: str,
     *,
     tactical_llm_enabled: bool = True,
-    explore_predict_llm_enabled: bool = False,
+    explore_predict_llm_enabled: bool = True,
 ) -> bool:
-    """上游已过 catalyst 门槛时，可跳过开仓顾问 LLM 复审（避免与探索/预测 prompt 双标全拒）."""
+    """上游已过 catalyst 门槛时，可跳过开仓顾问 LLM 复审（system_settings 可关）."""
     if profile.key not in _UPSTREAM_GATED_OPEN_PROFILES:
         return False
     if profile.key in ("explore", "predict"):

@@ -55,10 +55,10 @@ HOLD_LOSS_SEVERE_ROI = -15.0    # 严重亏损（近策略 SL）
 
 # DeepSeek/GPT 持仓顾问 system（与 user prompt 中文 reason 一致）
 HOLD_ADVISOR_JSON_SYSTEM_ZH = (
-    "你是模拟仓持仓监管顾问，须综合 ROI 档位、1h 趋势、RSI、叙事与宏观后再决策。"
+    "你是模拟仓持仓监管顾问，每轮须认真综合 ROI、1h 趋势、RSI、叙事与宏观后给出明确结论。"
     "仅输出合法 JSON：action 为 hold|observe|sell；"
-    "reason 为50字以内中文，必须以 1h 趋势为主并引用多维度证据；"
-    "禁止仅凭 15m K 线、ROI 数字或 Big4 单独触发 sell。"
+    "reason 为50字以内中文，必须引用 1h 为主的多维证据；"
+    "信号混杂时用 observe，1h+15m 双确认转弱时才 sell；禁止仅凭 15m 或 ROI 单独 sell。"
 )
 
 # DeepSeek/GPT 开仓顾问 system（与 build_open_advisor_prompt 中文 reason 一致）
@@ -519,9 +519,6 @@ class GeminiPositionAdvisor:
         elif not s15_confirms:
             action = 'observe'
             override = "1h转弱但15m未确认·暂缓平仓"
-        elif s1h_for == s1h_against and s15_trail < 4:
-            action = 'observe'
-            override = "1h中性·15m确认不足"
 
         if override:
             reason = f"{reason[:80]}|复核:{override}"[:200]
@@ -582,9 +579,10 @@ class GeminiPositionAdvisor:
 
 ## 核心原则（综合评估，1h 定方向）
 - **决策顺序**：① ROI 档位 → ② **1h 趋势结构**（主判据）→ ③ RSI/7日位置 → ④ 15m 确认 → ⑤ 宏观辅证
-- **1h 未破方向**时，15m 回调/震荡/连阴连阳 → 默认 **hold** 或 **observe**，**不得 sell**
-- **sell 最低门槛**：近 2 根 1h 确认反转 **且** 15m 多数同向转弱；缺一维度 → **observe**
-- ROI、Big4、叙事单独变化 **均不足以 sell**；须 K 线结构 + 档位综合印证
+- **每轮必须给出明确结论**；不可敷衍一律 hold
+- **1h 未破方向**时，15m 回调/震荡 → **hold** 或 **observe**，**不得 sell**
+- **sell**：近 2 根 1h 确认反转 **且** 15m 同向转弱；仅缺一维 → **observe**
+- ROI、Big4 单独变化不足以 sell；须 K 线结构综合印证
 
 ## 禁止（违反则 reason 无效）
 - **严禁**仅凭 15m 反向、单根 15m、15m 连阴/连阳就 **sell**（无 1h 反转证据时一律 hold/observe）
@@ -627,8 +625,8 @@ class GeminiPositionAdvisor:
 
 ## K 线读法（1h 定趋势，15m 仅确认）
 1. **近 {HOLD_1H_BARS} 根 1h**（**主判据，权重最高**）：大趋势是否仍支持 {side}？
-   - LONG：高点/低点抬高；最近 2 根 1h 仍偏多 → 趋势未破，**必须 hold**
-   - SHORT：高点/低点降低；最近 2 根 1h 仍偏空 → 趋势未破，**必须 hold**
+   - LONG：高点/低点抬高；最近 2 根 1h 仍偏多 → 趋势未破，倾向 **hold**
+   - SHORT：高点/低点降低；最近 2 根 1h 仍偏空 → 趋势未破，倾向 **hold**
 2. **近 {HOLD_15M_BARS} 根 15m**（**辅助确认**）：仅在 1h 已转弱后用于确认；**禁止**仅凭 15m sell
 3. reason 须以 1h 为主写综合结论，例如「1h仍抬高+15m回调震荡→hold」或「1h连2阴破结构+15m连3阴→sell」
 
@@ -643,18 +641,15 @@ class GeminiPositionAdvisor:
   仅当 K 线已明确反向时，方可引用 Big4 加强 sell 理由；不得单独因 Big4 sell。
 
 ## 决策
-- **hold**（默认倾向）: 1h 仍支持 {side}；或 1h 未破 + 15m 仅为回调/震荡；或仅 15m 转弱
-- **observe**: 1h/15m/RSI 信号混杂、趋势待确认；**不可**用 observe 代替仅凭 15m 的 sell
-- **sell**（高门槛，须**综合**满足）:
+- **hold**: 1h 仍支持 {side}；1h 未破 + 15m 仅为回调/震荡
+- **observe**: 1h/15m/RSI 信号混杂、趋势待确认、结构不明（**应主动使用**，勿一律 hold）
+- **sell**（须**综合**满足）:
   (A) ROI 档位允许（见上）
   (B) 近 2 根 1h **确认**趋势反转（破结构/连反向）
   (C) 15m **多数反向**且与 1h 同向（写进 reason）
-  (D) 叙事/RSI 不强烈反对平仓
   例外：ROI ≤ -15% **且** 1h+15m 双重走弱 → **sell**
 
-**1h 未破时不得 sell**；**仅 15m 弱不得 sell**；reason 须以 1h 为主引用综合证据。
-
-趋势不明时默认 **observe**；仅 1h 明确反转且 15m 确认时才 **sell**。
+**1h 未破时不得 sell**；**仅 15m 弱不得 sell**；reason 须以 1h 为主写综合结论。
 
 Output ONLY JSON:
 {{
@@ -758,16 +753,20 @@ Output ONLY JSON:
                 "tactical_open_advisor_llm_enabled", "1"
             ),
             explore_predict_llm_enabled=self._read_setting_bool(
-                "explore_predict_open_advisor_llm_enabled", "0"
+                "explore_predict_open_advisor_llm_enabled", "1"
             ),
         ):
+            skip_reason = "上游已通过 catalyst 门槛，跳过 LLM 复审"
+            logger.info(
+                f"[Gemini开仓顾问] 跳过LLM {symbol} {side} source={source} | {skip_reason}"
+            )
             log_advisor_review(
                 "open", "approve", symbol,
                 position_side=side, source=source, entry_price=price,
-                leverage=leverage, reason="上游已通过 catalyst 门槛，跳过 LLM 复审",
+                leverage=leverage, reason=skip_reason,
                 catalyst=catalyst, conn=conn,
             )
-            return True, "上游已通过 catalyst 门槛，跳过 LLM 复审"
+            return True, skip_reason
 
         prompt = self._build_open_prompt(
             symbol, side, price, source, catalyst, leverage,
