@@ -86,13 +86,25 @@ _KBAR_COUNT_RE = re.compile(r"\d+\s*[阳阴]")
 _PCT_RE = re.compile(r"[-+]?\d+(\.\d+)?%")
 
 
-def _multi_tf_kline_ok(text: str) -> bool:
-    """至少两个周期 (1h/15m/1d), 或单周期但有具体 K 线结构描述."""
+_VOLUME_MARKERS = ("放量", "缩量", "量缩", "量增", "量能", "成交量", "量平", "量萎缩", "量放大", "volume")
+
+
+def _1h_kline_structure_ok(text: str) -> bool:
+    """1h 为主：须出现 1h 且有具体 K 线结构词或阳阴根数."""
     low = text.lower()
-    tfs = {tf for tf in ("1h", "15m", "1d") if tf in low}
-    if len(tfs) >= 2:
-        return True
-    return bool(tfs) and any(m in text for m in _STRUCTURE_MARKERS)
+    if "1h" not in low:
+        return False
+    return any(m in text for m in _STRUCTURE_MARKERS) or bool(_KBAR_COUNT_RE.search(text))
+
+
+def _volume_mentioned_ok(text: str) -> bool:
+    low = text.lower()
+    return any(m in text for m in _VOLUME_MARKERS) or "volume" in low
+
+
+def _multi_tf_kline_ok(text: str) -> bool:
+    """兼容旧逻辑；探索/预测开仓以 _1h_kline_structure_ok 为准."""
+    return _1h_kline_structure_ok(text)
 
 
 def _quantified_technical_ok(text: str) -> bool:
@@ -217,11 +229,14 @@ def explore_catalyst_technical_ok(
     text = f"{catalyst or ''} {data_signal or ''}"
     low = text.lower()
 
-    if not _multi_tf_kline_ok(text):
-        return False, "catalyst 须写明至少两个周期(1h/15m/1d)的 K 线形态"
+    if not _1h_kline_structure_ok(text):
+        return False, "catalyst 须写明 1h K 线结构（连阳/连阴/突破/回踩/放量缩量等）"
 
     if re.search(r"最近\s*1\s*根\s*1h", low) or re.search(r"单根\s*1h", low):
-        return False, "须基于 1h 近 4~6 根结构 + 24 根整体趋势，禁止只看 1 根 1h"
+        return False, "须基于 1h 近 4~8 根结构 + 24 根整体趋势，禁止只看 1 根 1h"
+
+    if not _volume_mentioned_ok(text):
+        return False, "catalyst 须写明成交量变化（放量/缩量/量平等）"
 
     if not _quantified_technical_ok(text):
         sym = _as_sym_dict(sym_data)
@@ -639,45 +654,37 @@ def _salvage_truncated_explore_json(text: str) -> Optional[dict]:
     return {"summary_zh": summary_zh, "verdicts": verdicts}
 
 
-# catalyst 必须引用的字段类型 (写进 prompt 供 LLM 自检)
+# catalyst 必须引用的字段类型 (写进 prompt 供 LLM 自检; 与 explore_catalyst_technical_ok 对齐)
 CATALYST_EVIDENCE_BLOCK = """
 """ + KLINE_1H_READING_BLOCK + """
-# catalyst 写法 (强制 — 违反则 confidence 不得超过 0.45, 应标 skip)
+# catalyst 写法 (强制 — 后端校验；不合格 → skipped_weak_catalyst，勿侥幸凑字)
 
-## 你必须做的 (每条 bullish/bearish 至少满足 3 项, 并在 catalyst 原文写出)
+## bullish/bearish 四条必填（全部写在 catalyst，缺一 → 必须 skip）
 
-1. **kline_narrative** — 引用 **24 根整体形态 + 近 4~6 根** 结构 (必填 1h, 辅以 15m/1d):
-   - 例: 「1h 整体24根偏多; 近5根阴线回踩 EMA20 缩量」「15m 沿强势整理」
-   - 必须来自 `kline_narrative.1h` / `15m` / `1d`, 不得空泛说「走势偏强」
+1. **1h 整体趋势** — 引用 `kline_narrative.1h`「整体/24根」偏多、偏空或震荡（禁「走势偏强」等空话）
+2. **1h 近期结构** — 「近4~8根」连阳/连阴/回踩/突破等（禁只看最近 1 根 1h）
+3. **RSI(1h) 数字** — 若 `tech.rsi_14_1h` 有值，**必须写出 RSI 数值**并说明是否支持方向
+4. **成交量** — 必须写放量/缩量/量平/量萎缩等及与方向关系
 
-2. **量化指标 (至少一项, 优先 RSI)** — 若 `tech.rsi_14_1h` 有值, **必须**写出 RSI 数字:
-   - 例: 「RSI 1h=58 未超买」「RSI=72 价跌 → 顶背离」
-   - 若无 RSI 或作补充: 写明 **EMA9 数值**、**7d 高低点距离%**、或 **N阳M阴** 根数
+可选: `below_7d_high_pct` / `above_7d_low_pct` 是否仍有 TP 空间。
+15m/1d **最多一句**辅助，**不得**用「15m同向」代替 1h 四条。
 
-3. **成交量** — 来自 kline_narrative 里的放量/缩量描述:
-   - 例: 「突破时量放大、回踩缩量」「近几根量萎缩」
+## 禁止（→ skip, confidence<0.55）
 
-4. **结构位置** — `tech.above_7d_low_pct` / `below_7d_high_pct`:
-   - 例: 「距 7d 高点还有 2% 空间够 TP 目标」
+- 主因仅为 `change_24h`、资金费率、Big4、triggers
+- 无 1h 结构词（连阳/连阴/突破/回踩/放量/缩量等）的空洞 catalyst
+- 套话：「技术面好」「有催化剂」「符合预期」「值得关注」
+- 为凑开仓数强行给 conf=0.60~0.64
 
-5. **1h + 量价 + RSI** — 1h 结构支持方向，且量能/RSI/7d 位置不矛盾，才给 confidence≥0.65（15m/1d 仅辅助）
+## data_signal（一行）
 
-## 仅可作辅助、不能单独作为开仓理由 (写了这些而没有多周期 K 线结构 → 必须 skip)
+例: `1h:5连阳回踩缩量, RSI=58, 距7d高3%` — 禁止仅 `24h+12%`
 
-- `change_24h` 涨跌幅 (「已经涨了 15% 所以做空」= 无效)
-- `current_rate` 资金费率 (除非配合**价格与费率背离**且 1h K 线已拐点, 并写明背离逻辑)
-- Big4 / BTC 大盘一句话 (只能写在 risk_note, 不能作为 catalyst 主因)
-- triggers 标签本身 (「异动入选」不是技术理由)
+## 自检
 
-## data_signal 字段
-
-- **一行**, 只写最强的一条可量化事实, 例: `1h:4连阳+量放大, RSI=58, 距7d高4%`
-- 禁止只写 `24h+12%` 或 `资金费+0.05%`
-
-## 自检 (输出前在心里过一遍)
-
-- catalyst 里有没有 **至少两个周期** (1h/15m/1d) + **RSI 或 EMA/7d/阳阴根数**?
-- 若删掉 change_24h 和 funding_rate 后, 理由还成立吗? 不成立 → skip
+- 删掉 24h% 与 funding 后理由仍成立？
+- catalyst 是否同时有 **1h结构** + **RSI数字(若有)** + **量能词**？
+- 任一否 → skip（默认应对**多数**币）
 """
 
 EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. **未来 6~8 小时持仓**（本笔计划 {hold_hours}h）, SL={sl_pct}, TP={tp_pct}, 杠杆 5x; 满 15min 后 Gemini 持仓顾问每 15min 可建议平仓.
@@ -708,21 +715,28 @@ EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. **未来 6~8 小时持仓
 
 """ + CATALYST_EVIDENCE_BLOCK + """
 # 任务
-为**每个** symbol 标注:
-- category: 'bullish' / 'bearish' / 'skip'
+为列表内**每个** symbol 各输出一条 verdict:
+- category: 'bullish' / 'bearish' / 'skip'（**无把握必须 skip**）
 - confidence: 0.0-1.0
-- catalyst: 技术依据, **多周期 kline_narrative + RSI(有则必填) 或 EMA/7d 量化**, 至少 2 句
-- data_signal: 一行量化摘要 (见上)
-- risk_note: 反向风险一句 (可提 Big4/BTC)
+- catalyst: **1h 四条必填**（见上）, 至少 2 句具体技术依据
+- data_signal: 一行量化摘要
+- risk_note: 反向风险一句 (Big4/BTC 仅写此处)
 
-# 置信度校准 (无技术面支撑则不得给高分)
+# 开仓纪律（质量优先 — 宁可漏单不可滥开）
+
+- **默认 skip**：1h 震荡、量价矛盾、RSI 中性(45~55)且无结构突破 → skip
+- 整轮 bullish+bearish **合计不超过 6 个**；预期 skip 占比 **≥70%**
+- conf=0.60~0.64 **整轮最多 2 个**且须四维齐全；拿不准一律 skip
+- 系统开仓门槛 conf≥0.60，但你应**极少**给到 0.60~0.64
+
+# 置信度校准 (无 1h+量价+RSI 四维则不得 bullish/bearish)
 
 | confidence | 条件 (全部满足才可给该档) |
 |---|---|
-| 0.80-1.00 | 1h 强趋势 + 成交量确认 + RSI 支持方向 + 距 7d 极值仍有 ≥3% 空间 |
-| 0.65-0.79 | 1h **24根整体** + **近4~8根** 同向 + 量价/RSI/7d 量化写在 catalyst |
-| 0.60-0.64 | 结构尚可但单周期偏弱 — **最多开 1-2 个** |
-| 0.00-0.59 | 无清晰 K 线结构 / 仅涨跌幅或费率 / 震荡 — **必须 skip** |
+| 0.75-1.00 | 1h 强趋势 + 量能确认 + RSI 顺向 + 距 7d 极值 ≥3% 空间 |
+| 0.65-0.74 | 1h **24根整体** + **近4~8根** 同向 + RSI数字 + 量能词 + 7d位置合理 |
+| 0.60-0.64 | 四维齐但边际 — **整轮≤2个**，否则应 skip |
+| 0.00-0.59 | 震荡/矛盾/仅涨跌幅 — **必须 skip**（多数币应落此档） |
 
 # 判定原则 — {hold_hours} 小时持仓
 
@@ -752,13 +766,13 @@ BAD — 仅复述行情 (应 skip, confidence≤0.35):
   "risk_note": ""
 }}
 
-GOOD — 技术面 (可 bullish 0.72):
+GOOD — 技术面 (可 bullish 0.68):
 {{
   "symbol": "NEAR/USDT",
   "category": "bullish",
-  "confidence": 0.72,
-  "catalyst": "1h 整体24根偏多; 近4根连阳放量; RSI 1h=58 未超买. 15m 同向",
-  "data_signal": "1h:4连阳+量放大, RSI=58, 距7d高4%",
+  "confidence": 0.68,
+  "catalyst": "1h整体24根偏多; 近5根连阳后缩量回踩; RSI 1h=58未超买; 突破段放量回踩缩量",
+  "data_signal": "1h:5连阳回踩缩量, RSI=58, 距7d高4%",
   "risk_note": "BTC 若急跌可能拖累"
 }}
 
@@ -774,7 +788,7 @@ GOOD — skip:
 
 # 输出要求
 **仅** 一个合法 JSON, 不要 markdown 围栏.
-优先 quality: 无多周期 K 线+量化指标则 skip; **仅对列表内 symbol 给 verdict**, 宁可 5-15 条高质量, 不要凑满全表.
+**质量优先**: 无 1h 四维证据一律 skip; 整轮开仓≤6; 不要为凑数降低标准.
 
 {{
   "summary_zh": "整体技术面氛围 1-2 句 (勿写只做多/只做空)",
@@ -801,13 +815,11 @@ KLINE_1H_READING_BLOCK_EN = """
 
 CATALYST_EVIDENCE_BLOCK_EN = """
 """ + KLINE_1H_READING_BLOCK_EN + """
-# catalyst rules (violations → confidence ≤0.45 or skip)
-- Cite kline_narrative 1h/15m/1d with **24-bar + 4-6 bar** structure.
-- If tech.rsi_14_1h exists, **state RSI number** in catalyst.
-- Volume from narrative; position vs 7d high/low via tech fields.
-- 1h structure + volume/RSI aligned for confidence≥0.65 (15m/1d auxiliary).
-- Do NOT use 24h %, funding alone, or Big4 alone as primary catalyst.
-- data_signal: one quantitative line only.
+# catalyst rules (backend validates; weak → skipped_weak_catalyst)
+Required in catalyst for bullish/bearish: (1) 1h 24-bar trend (2) 1h last 4~8 bars structure
+(3) RSI number if tech.rsi_14_1h exists (4) volume word (放量/缩量/etc).
+15m/1d one sentence max; cannot replace 1h block.
+No 24h%-only, funding-only, or vague phrases. Default most symbols to skip.
 """
 
 EXPLORE_PROMPT_TEMPLATE_EN = """You are a senior crypto futures analyst. **6~8 hour hold** (plan {hold_hours}h), SL={sl_pct}, TP={tp_pct}, 5x leverage.
@@ -830,24 +842,20 @@ Each row: triggers (not catalyst), price/24h/volume, funding, kline_narrative, t
 {universe_json}
 
 """ + CATALYST_EVIDENCE_BLOCK_EN + """
-# Task
-Per symbol in list:
-- category: bullish | bearish | skip
-- confidence: 0.0-1.0
-- catalyst: multi-TF K-lines + RSI/EMA/7d (Chinese text OK)
-- data_signal: one line
-- risk_note: one line (Big4/BTC allowed here only)
+# Task — one verdict per symbol; **skip when unsure**
+- category: bullish | bearish | skip (default skip for chop/neutral RSI)
+- catalyst: 1h four-part block + RSI number + volume (Chinese OK)
+- Max **6** bullish+bearish total; expect **≥70%** skip rate
 
 # Confidence
-Validator rule: for bullish/bearish verdicts, `catalyst` must literally mention at least two timeframe labels among `1h`, `15m`, and `1d` with their K-line structure. If only one timeframe is cited, mark skip.
-| 0.80-1.00 | 1h+15m aligned + volume + RSI supports side + ≥3% room to 7d extreme |
-| 0.65-0.79 | 24h trend + last 4-6 bars aligned + quant in catalyst |
-| 0.60-0.64 | OK but max 1-2 names |
+| 0.75+ | strong 1h + volume + RSI + 7d room |
+| 0.65-0.74 | 1h 24-bar + 4~8 bars + RSI + volume all stated |
+| 0.60-0.64 | marginal, ≤2 per round |
 | <0.60 | skip |
 
 # Rules
-- Technical setups only; no pool-wide long/short from Big4 alone.
-- Quality over quantity; 5-15 strong verdicts enough.
+- Technical 1h-primary only; no pool bias from Big4.
+- Quality over quantity; do not inflate confidence to open.
 
 Output ONE JSON only (summary_zh in Chinese):
 {{
