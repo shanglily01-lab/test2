@@ -855,13 +855,13 @@ class GeminiPositionAdvisor:
         }
         if not result:
             log_advisor_review(
-                "open", "approve", symbol,
+                "open", "reject", symbol,
                 position_side=side, source=source, entry_price=price,
-                leverage=leverage, reason="Gemini API 异常，默认放行",
+                leverage=leverage, reason="Gemini API 异常，保守拒绝开仓",
                 catalyst=catalyst, conn=conn, prompt_text=prompt,
                 input_json=input_payload, system_prompt=OPEN_ADVISOR_JSON_SYSTEM_ZH,
             )
-            return True, "Gemini API 异常，默认放行"
+            return False, "Gemini API 异常，保守拒绝开仓"
 
         decision = str(result.get("decision", "approve")).lower()
         reason = str(result.get("reason", ""))[:500]
@@ -896,13 +896,19 @@ class GeminiPositionAdvisor:
         text = ''
         try:
             from google.genai import types
+            system_msg = OPEN_ADVISOR_JSON_SYSTEM_ZH if open_mode else HOLD_ADVISOR_JSON_SYSTEM_ZH
+            effective_prompt = (
+                f"{system_msg}\n"
+                "强制要求：JSON 内所有自然语言字段必须使用中文，尤其 reason 禁止英文。\n\n"
+                f"{prompt}"
+            )
             cfg = types.GenerateContentConfig(
                 response_mime_type='application/json',
                 http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS),
             )
             model_name = os.getenv('GEMINI_MODEL', 'gemini-3-flash-preview')
             resp = client.models.generate_content(
-                model=model_name, contents=prompt, config=cfg,
+                model=model_name, contents=effective_prompt, config=cfg,
             )
             text = (resp.text or '').strip()
             from app.services.ai_explore_prompt import _extract_llm_json_text, _try_parse_json
@@ -915,9 +921,9 @@ class GeminiPositionAdvisor:
                 decision = str(sig.get('decision', '')).strip().lower()
                 if decision not in ('approve', 'reject'):
                     logger.warning(
-                        f"[开仓顾问] 非法 decision={decision}, 降级 approve"
+                        f"[开仓顾问] 非法 decision={decision}, 降级 reject"
                     )
-                    decision = 'approve'
+                    decision = 'reject'
                 return {
                     'decision': decision,
                     'reason': str(sig.get('reason', ''))[:500],

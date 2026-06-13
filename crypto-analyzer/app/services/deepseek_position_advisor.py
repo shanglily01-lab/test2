@@ -148,8 +148,8 @@ class DeepSeekPositionAdvisor:
                 }
             decision = str(parsed.get("decision", "")).strip().lower()
             if decision not in ("approve", "reject"):
-                logger.warning(f"[DeepSeek顾问] 非法 decision={decision}, 降级 approve")
-                decision = "approve"
+                logger.warning(f"[DeepSeek顾问] 非法 decision={decision}, 降级 reject")
+                decision = "reject"
             return {
                 "decision": decision,
                 "reason": str(parsed.get("reason", ""))[:500],
@@ -157,7 +157,7 @@ class DeepSeekPositionAdvisor:
                 "_system_prompt": system_msg,
             }
         except Exception as e:
-            logger.warning(f"[DeepSeek顾问] API 异常: {e}")
+            logger.exception(f"[DeepSeek顾问] API 异常: {e}")
             return None
 
     def get_due_positions(self):
@@ -263,13 +263,13 @@ class DeepSeekPositionAdvisor:
         }
         if not result:
             log_deepseek_advisor_review(
-                "open", "approve", symbol,
+                "open", "reject", symbol,
                 position_side=side, source=source, entry_price=price,
-                leverage=leverage, reason="DeepSeek API 异常，默认放行",
+                leverage=leverage, reason="DeepSeek API 异常，保守拒绝开仓",
                 catalyst=catalyst, conn=conn, prompt_text=prompt,
                 input_json=input_payload, system_prompt=OPEN_ADVISOR_JSON_SYSTEM_ZH,
             )
-            return True, "DeepSeek API 异常，默认放行"
+            return False, "DeepSeek API 异常，保守拒绝开仓"
 
         decision = str(result.get("decision", "approve")).lower()
         reason = str(result.get("reason", ""))[:500]
