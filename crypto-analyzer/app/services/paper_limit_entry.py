@@ -189,6 +189,8 @@ def create_paper_limit_order(
             entry_signal_type=entry_signal_type,
             entry_reason=entry_reason,
             entry_score=entry_score,
+            max_hold_minutes=max_hold_minutes,
+            planned_close_time=planned_close_time,
             signal_id=signal_id,
             strategy_id=strategy_id,
             account_id=account_id,
@@ -331,6 +333,8 @@ def _open_paper_market_position(
     entry_signal_type: str,
     entry_reason: str,
     entry_score: Optional[float],
+    max_hold_minutes: Optional[int],
+    planned_close_time: Optional[datetime],
     signal_id: Optional[int],
     strategy_id: Optional[int],
     account_id: int,
@@ -377,6 +381,8 @@ def _open_paper_market_position(
             entry_signal_type=entry_signal_type or source,
             entry_reason=entry_reason,
             entry_score=entry_score,
+            max_hold_minutes=max_hold_minutes,
+            planned_close_time=planned_close_time,
         )
         if not result.get("success"):
             logger.warning(

@@ -341,7 +341,9 @@ class FuturesTradingEngine:
         strategy_id: Optional[int] = None,
         entry_signal_type: Optional[str] = None,
         entry_reason: Optional[str] = None,
-        entry_score: Optional[float] = None
+        entry_score: Optional[float] = None,
+        max_hold_minutes: Optional[int] = None,
+        planned_close_time: Optional[datetime] = None,
     ) -> Dict:
         """
         开仓
@@ -708,6 +710,7 @@ class FuturesTradingEngine:
                     entry_price, mark_price, liquidation_price,
                     stop_loss_price, take_profit_price, stop_loss_pct, take_profit_pct,
                     entry_ema_diff, entry_signal_type, entry_score, entry_reason,
+                    max_hold_minutes, timeout_at, planned_close_time,
                     open_time, source, signal_id, strategy_id, status
                 ) VALUES (
                     %s, %s, %s, %s,
@@ -715,9 +718,14 @@ class FuturesTradingEngine:
                     %s, %s, %s,
                     %s, %s, %s, %s,
                     %s, %s, %s, %s,
+                    %s, %s, %s,
                     %s, %s, %s, %s, 'open'
                 )
             """
+
+            timeout_at = None
+            if max_hold_minutes:
+                timeout_at = utc_now_naive() + timedelta(minutes=int(max_hold_minutes))
 
             cursor.execute(position_sql, (
                 account_id, symbol, position_side, leverage,
@@ -728,6 +736,9 @@ class FuturesTradingEngine:
                 float(stop_loss_pct) if stop_loss_pct else None,
                 float(take_profit_pct) if take_profit_pct else None,
                 entry_ema_diff, entry_signal_type, entry_score, entry_reason,
+                int(max_hold_minutes) if max_hold_minutes else None,
+                timeout_at,
+                planned_close_time,
                 utc_now_naive(), source, signal_id, strategy_id
             ))
 
