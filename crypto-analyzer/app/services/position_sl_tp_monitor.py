@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional
 import pymysql
 import requests
 from loguru import logger
+from app.utils.position_time import utc_now_naive
 
 
 def _db_cfg() -> Dict[str, Any]:
@@ -170,7 +171,7 @@ class PositionSLTPMonitor:
                 if isinstance(pct, _dt.datetime):
                     if pct.tzinfo is not None:
                         pct = pct.replace(tzinfo=None)
-                    if _dt.datetime.now() >= pct:
+                    if utc_now_naive() >= pct:
                         price = self._get_live_price(ws, symbol) or entry_price
                         logger.warning(
                             f"[SL/TP Monitor] 计划平仓到期 pid={pid} {symbol} {side} "
@@ -214,7 +215,7 @@ class PositionSLTPMonitor:
                 open_time = pos.get("open_time")
                 if open_time:
                     if isinstance(open_time, _dt.datetime):
-                        age_s = time.time() - open_time.timestamp()
+                        age_s = (utc_now_naive() - open_time).total_seconds()
                         in_tp_grace = age_s < _AI_TP_GRACE_MIN * 60
 
                 trig = self._check_trigger(side, price, sl, tp)
@@ -243,7 +244,7 @@ class PositionSLTPMonitor:
                 in_grace = False
                 if open_time:
                     if isinstance(open_time, _dt.datetime):
-                        age_s = time.time() - open_time.timestamp()
+                        age_s = (utc_now_naive() - open_time).total_seconds()
                         in_grace = age_s < ENTRY_GRACE_MIN * 60
 
                 pullback_thresh = _dynamic_trail_pullback(new_peak)

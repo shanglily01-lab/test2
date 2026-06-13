@@ -54,6 +54,7 @@ from app.services.ai_predict_schedule import (
     explore_round_is_due,
 )
 from app.services.gemini_explore_worker import _get_current_price, _would_instant_tp
+from app.utils.position_time import utc_now_naive
 from app.services.gemini_swan_worker import (
     GEMINI_MODEL,
     GEMINI_API_KEY,
@@ -1088,7 +1089,7 @@ def _open_simulated_position(
         entry_signal_type='deepseek_explore',
         entry_reason=entry_reason,
         max_hold_minutes=get_ai_position_hold_hours() * 60,
-        planned_close_time=datetime.now() + timedelta(hours=get_ai_position_hold_hours()),
+        planned_close_time=utc_now_naive() + timedelta(hours=get_ai_position_hold_hours()),
         account_id=EXPLORE_ACCOUNT_ID,
     )
 

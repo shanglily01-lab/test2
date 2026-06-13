@@ -536,7 +536,7 @@ class FuturesTradingEngine:
                         float(limit_stop_loss_price) if limit_stop_loss_price else None,
                         float(limit_take_profit_price) if limit_take_profit_price else None,
                         source, entry_signal_type, signal_id, strategy_id,
-                        order_notes, datetime.now()
+                        order_notes, utc_now_naive()
                     ))
                     
                     # 更新总权益（限价单时还没有持仓，未实现盈亏为0）
@@ -777,7 +777,7 @@ class FuturesTradingEngine:
                 float(entry_price), float(quantity), float(quantity),
                 float(margin_required), float(notional_value), float(notional_value),
                 float(fee), float(fee_rate),
-                float(entry_price), datetime.now(),
+                float(entry_price), utc_now_naive(),
                 source, signal_id, strategy_id
             ))
 
@@ -802,7 +802,7 @@ class FuturesTradingEngine:
                 account_id, order_id, position_id, trade_id,
                 symbol, side, float(entry_price), float(quantity), float(notional_value),
                 leverage, float(margin_required), float(fee), float(fee_rate),
-                float(entry_price), datetime.now()
+                float(entry_price), utc_now_naive()
             ))
 
             # 9. 更新账户余额
@@ -1070,7 +1070,7 @@ class FuturesTradingEngine:
 
             timeout_at = None
             if max_hold_minutes:
-                timeout_at = datetime.now() + timedelta(minutes=int(max_hold_minutes))
+                timeout_at = utc_now_naive() + timedelta(minutes=int(max_hold_minutes))
 
             position_sql = """
                 INSERT INTO futures_positions (
@@ -1379,7 +1379,7 @@ class FuturesTradingEngine:
                 float(current_price), float(close_quantity), float(close_quantity),
                 float(close_value), float(close_value),
                 float(fee), float(fee_rate),
-                float(current_price), datetime.now(),
+                float(current_price), utc_now_naive(),
                 float(realized_pnl), float(pnl_pct),
                 'strategy', reason
             ))
@@ -1408,7 +1408,7 @@ class FuturesTradingEngine:
                 symbol, side, float(current_price), float(close_quantity), float(close_value),
                 leverage, float(position_margin), float(fee), float(fee_rate),
                 float(realized_pnl), float(pnl_pct), float(roi),
-                float(entry_price), float(current_price), datetime.now()
+                float(entry_price), float(current_price), utc_now_naive()
             ))
 
             # 7. 更新持仓状态
@@ -1442,7 +1442,7 @@ class FuturesTradingEngine:
                     realized_pnl = %s, notes = %s,
                     mark_price = %s, unrealized_pnl_pct = %s
                 WHERE id = %s""",
-                (datetime.now(), float(realized_pnl), notes_reason,
+                (utc_now_naive(), float(realized_pnl), notes_reason,
                  float(current_price), profit_pct_at_close, position_id)
             )
 
@@ -1530,7 +1530,7 @@ class FuturesTradingEngine:
                         open_time = position['open_time']
                         if isinstance(open_time, str):
                             open_time = datetime.strptime(open_time, '%Y-%m-%d %H:%M:%S')
-                        hold_duration = datetime.now() - open_time
+                        hold_duration = utc_now_naive() - open_time
                         hours, remainder = divmod(hold_duration.total_seconds(), 3600)
                         minutes = remainder // 60
                         if hours >= 24:
@@ -1668,11 +1668,11 @@ class FuturesTradingEngine:
                                             "realized_pnl=%s, close_reason=%s, updated_at=%s "
                                             "WHERE id=%s",
                                             (
-                                                datetime.now(),
+                                                utc_now_naive(),
                                                 live_result.get('close_price'),
                                                 live_result.get('realized_pnl'),
                                                 f'paper_sync_{reason}',
-                                                datetime.now(),
+                                                utc_now_naive(),
                                                 row['id'],
                                             ),
                                         )

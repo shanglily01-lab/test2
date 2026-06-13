@@ -9,6 +9,8 @@ from typing import Dict, Optional
 from datetime import datetime
 from decimal import Decimal
 
+from app.utils.position_time import utc_now_naive
+
 logger = logging.getLogger(__name__)
 
 
@@ -19,7 +21,7 @@ def format_hold_time_from_open(open_time) -> Optional[str]:
     try:
         if isinstance(open_time, str):
             open_time = datetime.strptime(open_time[:19], '%Y-%m-%d %H:%M:%S')
-        hold_duration = datetime.now() - open_time
+        hold_duration = utc_now_naive() - open_time
         hours, remainder = divmod(hold_duration.total_seconds(), 3600)
         minutes = int(remainder // 60)
         if hours >= 24:

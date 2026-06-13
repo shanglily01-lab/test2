@@ -30,6 +30,7 @@ import pymysql.cursors
 from loguru import logger
 
 from app.utils.futures_symbol import futures_symbol_rating_canonical
+from app.utils.position_time import utc_now_naive
 
 from app.services.ai_big4_prompt import (
     big4_conflict_risk_note,
@@ -666,7 +667,7 @@ def _open_simulated_position(
         entry_signal_type='deepseek_predict',
         entry_reason=entry_reason,
         max_hold_minutes=get_ai_position_hold_hours() * 60,
-        planned_close_time=datetime.now() + timedelta(hours=get_ai_position_hold_hours()),
+        planned_close_time=utc_now_naive() + timedelta(hours=get_ai_position_hold_hours()),
         account_id=PREDICT_ACCOUNT_ID,
     )
 

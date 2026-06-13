@@ -21,6 +21,7 @@ from loguru import logger
 from app.services.smart_entry_executor import _live_sync_locks
 
 from app.services.optimization_config import OptimizationConfig
+from app.utils.position_time import utc_now_naive
 
 
 class KlinePullbackEntryExecutor:
@@ -422,8 +423,9 @@ class KlinePullbackEntryExecutor:
 
             from app.services.system_settings_loader import get_max_hold_hours
             max_hold_minutes = get_max_hold_hours() * 60
-            timeout_at = datetime.now() + timedelta(minutes=max_hold_minutes)
-            planned_close_time = datetime.now() + timedelta(hours=4)
+            now_utc = utc_now_naive()
+            timeout_at = now_utc + timedelta(minutes=max_hold_minutes)
+            planned_close_time = now_utc + timedelta(hours=4)
 
             # 准备数据
             entry_score = signal.get('trade_params', {}).get('entry_score', 0)

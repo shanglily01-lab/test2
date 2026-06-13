@@ -15,6 +15,7 @@ from app.services.signal_analysis_service import SignalAnalysisService
 from app.analyzers.kline_strength_scorer import KlineStrengthScorer
 from app.services.api_key_service import get_api_key_service
 from app.services.binance_data_hub import get_global_data_hub
+from app.utils.position_time import utc_now_naive
 
 
 class SmartExitOptimizer:
@@ -175,7 +176,7 @@ class SmartExitOptimizer:
                 # 最高优先级：检查 planned_close_time 到期后强制平仓
                 # 不依赖实时价格，无论能否取价都要平仓
                 # ────────────────────────────────────────────────────────────
-                if position.get('planned_close_time') and datetime.now() >= position['planned_close_time']:
+                if position.get('planned_close_time') and utc_now_naive() >= position['planned_close_time']:
                     close_price = await self._resolve_expiry_close_price(position)
                     logger.warning(f"[到期平仓] 持仓{position_id} {position['symbol']} 持有到期，强制平仓 @ {close_price}")
                     await self._execute_close(position_id, close_price, f"计划平仓时间到期强制平仓")
@@ -254,8 +255,8 @@ class SmartExitOptimizer:
                         elif isinstance(_open_time, datetime):
                             _open_dt = _open_time
                         else:
-                            _open_dt = datetime.now()
-                        _age_hours = (datetime.now() - _open_dt).total_seconds() / 3600
+                            _open_dt = utc_now_naive()
+                        _age_hours = (utc_now_naive() - _open_dt).total_seconds() / 3600
                     else:
                         _age_hours = 0
                 except Exception:
@@ -591,8 +592,8 @@ class SmartExitOptimizer:
         # ========== 智能监控逻辑（需 smart_exit_enabled）==========
         position_id = position['id']
         position_side = position.get('position_side', position['direction'])
-        entry_time = position.get('entry_signal_time') or position.get('open_time') or datetime.now()
-        hold_minutes = (datetime.now() - entry_time).total_seconds() / 60
+        entry_time = position.get('entry_signal_time') or position.get('open_time') or utc_now_naive()
+        hold_minutes = (utc_now_naive() - entry_time).total_seconds() / 60
 
         leverage = float(position.get('leverage', 1))
         roi_pct = profit_pct * leverage
@@ -630,7 +631,7 @@ class SmartExitOptimizer:
         if planned_close_time is None:
             return False, ""
 
-        now = datetime.now()
+        now = utc_now_naive()
         monitoring_start_time = planned_close_time - timedelta(minutes=30)
         if now < monitoring_start_time:
             return False, ""
@@ -679,7 +680,7 @@ class SmartExitOptimizer:
         if planned_close_time is None:
             return False
 
-        now = datetime.now()
+        now = utc_now_naive()
         monitoring_start_time = planned_close_time - timedelta(minutes=30)
 
         # ========== 最高优先级：超时强制平仓 ==========
@@ -805,7 +806,7 @@ class SmartExitOptimizer:
             (是否平仓, 原因)
         """
         direction = position['direction']
-        now = datetime.now()
+        now = utc_now_naive()
 
         # ========== 最高优先级：超时强制平仓（已到达planned_close_time）==========
         if now >= planned_close_time:
@@ -1146,7 +1147,7 @@ class SmartExitOptimizer:
             conn = self._get_pool_connection()
             cursor = conn.cursor()
 
-            now = datetime.now()
+            now = utc_now_naive()
 
             # 先获取持仓的 entry_price 以计算闭仓时刻的 profit_pct
             cursor.execute(
@@ -1613,12 +1614,12 @@ class SmartExitOptimizer:
             direction = position['direction']
             position_side = position.get('position_side', direction)  # LONG/SHORT
             entry_price = float(position.get('entry_price', 0))
-            entry_time = position.get('entry_signal_time') or position.get('open_time') or datetime.now()
+            entry_time = position.get('entry_signal_time') or position.get('open_time') or utc_now_naive()
             quantity = float(position.get('quantity', 0))
             margin = float(position.get('margin', 0))
             leverage = float(position.get('leverage', 1))
 
-            hold_minutes = (datetime.now() - entry_time).total_seconds() / 60
+            hold_minutes = (utc_now_naive() - entry_time).total_seconds() / 60
             hold_hours = hold_minutes / 60
 
             # ============================================================
@@ -1694,7 +1695,7 @@ class SmartExitOptimizer:
             # ============================================================
             timeout_at = position.get('timeout_at')
             if timeout_at:
-                now_utc = datetime.now()
+                now_utc = utc_now_naive()
                 if now_utc >= timeout_at:
                     max_hold_minutes = position.get('max_hold_minutes') or 240  # fallback 4小时
                     logger.warning(

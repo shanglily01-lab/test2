@@ -64,6 +64,7 @@ from app.services.gemini_swan_worker import (
     _read_setting,
 )
 from app.utils.config_loader import get_db_config
+from app.utils.position_time import utc_now_naive
 
 # ── data_cache 层: 尝试从缓存快速读取, 失败时回退到主库 ──
 _DATA_CACHE_AVAILABLE = False
@@ -1345,7 +1346,7 @@ def _open_simulated_position(
         entry_signal_type='gemini_explore',
         entry_reason=entry_reason,
         max_hold_minutes=get_ai_position_hold_hours() * 60,
-        planned_close_time=datetime.now() + timedelta(hours=get_ai_position_hold_hours()),
+        planned_close_time=utc_now_naive() + timedelta(hours=get_ai_position_hold_hours()),
         account_id=EXPLORE_ACCOUNT_ID,
     )
 

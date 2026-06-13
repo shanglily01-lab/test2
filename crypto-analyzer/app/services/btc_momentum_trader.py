@@ -16,6 +16,8 @@ from decimal import Decimal
 from typing import Optional, List, Dict, Tuple
 from loguru import logger
 
+from app.utils.position_time import utc_now_naive
+
 
 class BTCMomentumTrader:
     COOLDOWN_HOURS = 4
@@ -269,7 +271,7 @@ class BTCMomentumTrader:
 
             from app.services.paper_limit_entry import create_paper_limit_order
             conn = self._get_conn()
-            planned_close_time = datetime.now() + timedelta(hours=self._get_max_hold_hours())
+            planned_close_time = utc_now_naive() + timedelta(hours=self._get_max_hold_hours())
             order_id = create_paper_limit_order(
                 conn,
                 symbol=symbol,

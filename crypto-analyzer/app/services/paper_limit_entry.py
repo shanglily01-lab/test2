@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 from loguru import logger
 
 from app.utils.futures_symbol import futures_symbol_rating_canonical
+from app.utils.position_time import utc_now_naive
 
 # 模拟盘默认账户
 PAPER_ACCOUNT_ID = 2
@@ -299,7 +300,7 @@ def create_paper_limit_order(
                     fee, 0.0004,
                     sl_price, tp_price,
                     source, entry_signal_type or source, signal_id, strategy_id,
-                    notes, datetime.now(),
+                    notes, utc_now_naive(),
                 ),
             )
             db_id = cur.lastrowid
