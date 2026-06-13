@@ -11,6 +11,7 @@ from app.services.gemini_position_advisor import GEMINI_PER_CALL_DELAY_S
 from app.services.deepseek_position_advisor import DEEPSEEK_PER_CALL_DELAY_S
 from app.services.open_advisor_routing import resolve_open_advisors
 from app.services.securities_filter import is_security
+from app.utils.futures_symbol import futures_symbol_clean, sql_rating_symbol_clean
 
 _open_gate_lock = threading.Lock()
 _open_gate_waiting = 0
@@ -19,6 +20,98 @@ _PROVIDER_DELAY = {
     "gemini": GEMINI_PER_CALL_DELAY_S,
     "deepseek": DEEPSEEK_PER_CALL_DELAY_S,
 }
+
+RECENT_STOP_LOSS_COOLDOWN_HOURS = 4
+RECENT_LOSS_COOLDOWN_HOURS = 24
+RECENT_LOSS_TRADE_LIMIT = 2
+RECENT_LOSS_PNL_LIMIT = -80.0
+
+
+def _check_recent_loss_cooldown(
+    symbol: str,
+    conn=None,
+    account_id: int = 2,
+) -> Tuple[bool, str]:
+    """
+    短周期亏损冷却:
+    - 近4小时同币有止损，禁止新开仓；
+    - 近24小时同币亏损>=2笔或净亏<=-80U，禁止新开仓。
+    """
+    clean = futures_symbol_clean(symbol)
+    if not clean:
+        return True, ""
+
+    own_conn = conn is None
+    if own_conn:
+        import pymysql
+        import pymysql.cursors
+        from app.utils.config_loader import get_db_config
+        conn = pymysql.connect(
+            **get_db_config(),
+            charset="utf8mb4",
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=True,
+        )
+
+    cur = None
+    try:
+        cur = conn.cursor()
+        clean_expr = sql_rating_symbol_clean("symbol")
+        cur.execute(
+            f"""
+            SELECT COUNT(*) AS n
+            FROM futures_positions
+            WHERE account_id=%s
+              AND status='closed'
+              AND close_time >= DATE_SUB(NOW(), INTERVAL %s HOUR)
+              AND {clean_expr} = %s
+              AND (
+                notes = '止损'
+                OR notes LIKE '%%止损%%'
+                OR notes LIKE '%%code:SL%%'
+              )
+            """,
+            (account_id, RECENT_STOP_LOSS_COOLDOWN_HOURS, clean),
+        )
+        row = cur.fetchone() or {}
+        stop_n = int((row.get("n") if isinstance(row, dict) else row[0]) or 0)
+        if stop_n > 0:
+            return False, f"近{RECENT_STOP_LOSS_COOLDOWN_HOURS}小时同币已止损{stop_n}笔，冷却禁止开仓"
+
+        cur.execute(
+            f"""
+            SELECT
+              COUNT(*) AS total_n,
+              SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS loss_n,
+              COALESCE(SUM(realized_pnl), 0) AS net_pnl
+            FROM futures_positions
+            WHERE account_id=%s
+              AND status='closed'
+              AND close_time >= DATE_SUB(NOW(), INTERVAL %s HOUR)
+              AND realized_pnl IS NOT NULL
+              AND {clean_expr} = %s
+            """,
+            (account_id, RECENT_LOSS_COOLDOWN_HOURS, clean),
+        )
+        row = cur.fetchone() or {}
+        loss_n = int((row.get("loss_n") if isinstance(row, dict) else row[1]) or 0)
+        net_pnl = float((row.get("net_pnl") if isinstance(row, dict) else row[2]) or 0)
+        if loss_n >= RECENT_LOSS_TRADE_LIMIT:
+            return False, f"近{RECENT_LOSS_COOLDOWN_HOURS}小时同币亏损{loss_n}笔，冷却禁止开仓"
+        if net_pnl <= RECENT_LOSS_PNL_LIMIT:
+            return False, f"近{RECENT_LOSS_COOLDOWN_HOURS}小时同币净亏{net_pnl:.2f}U，冷却禁止开仓"
+        return True, ""
+    finally:
+        if cur is not None:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if own_conn and conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def gate_simulated_open(
@@ -57,6 +150,17 @@ def gate_simulated_open(
     except Exception as e:
         logger.warning(f"[开仓闸门] {symbol} 基础币种闸门异常，拒绝开仓: {e}")
         return False, "symbol_gate_error"
+
+    try:
+        allowed, reason = _check_recent_loss_cooldown(symbol, conn)
+        if not allowed:
+            logger.info(
+                f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {reason}"
+            )
+            return False, reason
+    except Exception as e:
+        logger.warning(f"[开仓闸门] {symbol} 短周期亏损冷却检查异常，拒绝开仓: {e}")
+        return False, "recent_loss_cooldown_error"
 
     try:
         providers = resolve_open_advisors(source)
