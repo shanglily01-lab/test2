@@ -49,7 +49,7 @@ HOLD_CHECK_INTERVAL_S = 900     # 同仓 15min 内不重复问
 GEMINI_PER_CALL_DELAY_S = 1.0   # 防 Gemini rate limit
 HOLD_15M_BARS = 6               # 持仓顾问：近 6 根 15m
 HOLD_5M_BARS = 6                # 持仓顾问：近 6 根 5m（约 30min）
-HOLD_1H_BARS = 8                # 持仓顾问：近 8 根 1h（≈6~8h 持仓窗口）
+HOLD_1H_BARS = 4                # 持仓顾问：近 4 根 1h（≈4h 交易窗口）
 HOLD_PROFIT_TEMPER_ROI = 5.0    # 程序化复核：浮盈较高时才收紧 hold
 HOLD_LOSS_STRICT_ROI = -1.0     # 保证金 ROI ≤ -1%：严格审查 1h+量价+RSI
 HOLD_LOSS_MILD_ROI = -5.0       # 保证金 ROI %，轻微亏损
@@ -58,16 +58,16 @@ HOLD_LOSS_SEVERE_ROI = -15.0    # 严重亏损（近策略 SL）
 
 # DeepSeek/GPT 持仓顾问 system（与 user prompt 中文 reason 一致）
 HOLD_ADVISOR_JSON_SYSTEM_ZH = (
-    "你是模拟仓持仓监管顾问，本笔为 6~8 小时持仓逻辑，以 1h K 线为主，结合量价、RSI、价格位置与 ROI 后给结论。"
+    "你是模拟仓持仓监管顾问，本笔按 4 小时交易窗口复核，以 1h K 线为主，结合15m、量价、RSI、价格位置与 ROI 后给结论。"
     "仅输出合法 JSON：action 为 hold|observe|sell；"
-    "reason 为50字以内中文，须引用 1h 形态 + 量能或 RSI 要点；"
+    "reason 为50字以内中文，须引用 15m/1h 表格形态 + 量能或 RSI 要点；"
     "保证金 ROI≤-1% 须严格审查 1h 是否仍支持原方向，不可敷衍 hold；"
-    "15m/5m 仅作辅证；1h 未破方向时不得 sell；禁止仅凭 ROI 或短周期杂音单独 sell。"
+    "1h 未破方向时不得 sell；亏损越深 hold 门槛越高；禁止仅凭 ROI、Big4 或短周期杂音单独 sell。"
 )
 
 # DeepSeek/GPT 开仓顾问 system（与 build_open_advisor_prompt 中文 reason 一致）
 OPEN_ADVISOR_JSON_SYSTEM_ZH = (
-    "你是模拟仓开仓审核顾问，审核 6~8 小时持仓单是否允许入场。"
+    "你是模拟仓开仓审核顾问，审核 4 小时交易窗口的开仓单是否允许入场。"
     "仅输出合法 JSON：decision 为 approve|reject；"
     "reason 为50字以内中文，须写明 1h 形态 + 量能/RSI + 策略名要点；"
     "探索/预测：核对上游 catalyst 与当前 1h 表是否矛盾，矛盾或空洞 → reject；"
@@ -402,7 +402,7 @@ class GeminiPositionAdvisor:
         if roi_pct > 0:
             return (
                 "## 盈亏档位：盈利 (ROI > 0%)\n"
-                f"- **以 1h 为主**：6~8h 持仓逻辑是否仍成立？对照量价、{side_cn} 方向。\n"
+                f"- **以 1h 为主**：4h 交易逻辑是否仍成立？对照量价、{side_cn} 方向。\n"
                 f"- **1h 趋势仍支持 {side_cn}** 时默认 **hold**，不因 15m/5m 一两根回撤就止盈。\n"
                 "- **sell** 须 1h 结构转弱 + 量价/RSI 不支持；仅短周期震荡 → **hold/observe**。\n"
                 "- ROI ≥ +10% 且 1h 确认反转 + 量价背离 → **sell**。"
@@ -418,22 +418,22 @@ class GeminiPositionAdvisor:
             return (
                 "## 盈亏档位：小幅亏损·严格审查 (-5% < ROI ≤ -1%)\n"
                 f"- **亏损已超 1%**：须严格审查 **1h 结构 + 量价 + RSI** 后再给结论，禁止敷衍一律 hold。\n"
-                f"- **hold** 须 1h 仍支持 {side_cn} 且量能/RSI 未明显转弱。\n"
+                f"- **hold** 须 1h 仍支持 {side_cn}，且 15m 未连续反向，量能/RSI 未明显转弱。\n"
                 "- **sell** 须 1h 近 2 根确认反向 + 量价/RSI 不支持；仅 15m/5m 弱而 1h 未破 → **observe**。\n"
-                "- reason 须写明 1h 与量能/RSI 读法。"
+                "- reason 须写明 15m/1h 表格形态与量能/RSI 读法。"
             )
         if roi_pct > HOLD_LOSS_MODERATE_ROI:
             return (
                 "## 盈亏档位：中度亏损 (-12% < ROI ≤ -5%)\n"
                 f"- **严格审查 1h+量价+RSI**；1h 趋势未破时优先 **hold/observe**，不因浮亏情绪化 **sell**。\n"
-                f"- **hold** 须近 2 根 1h 仍支持 {side_cn}，量能未放量反向。\n"
-                "- **sell** 须 1h 近 2 根确认反向且 RSI/量能不支持；结构不清 → **observe**。"
+                f"- **hold 门槛更高**：近 2 根 1h 仍支持 {side_cn}，且 15m 顺向≥反向，量能未放量反向。\n"
+                "- 15m 连续反向≥3 或 1h 反向≥2 → 倾向 **sell**；结构不清 → **observe**，不要弱 hold。"
             )
         return (
             "## 盈亏档位：严重亏损 (ROI ≤ -12%)\n"
-            f"- **严格审查**：1h 未破方向且量价有企稳 → 可 **hold/observe**，勿单纯因亏损额 **sell**。\n"
-            f"- **sell** 须 1h 延续亏损方向且 RSI/量能无反转；仅 ROI 深亏但 1h 仍支持 {side_cn} → **observe**。\n"
-            "- ROI ≤ -15% **且** 1h 走弱 + 量价/RSI 不支持 → **sell**。"
+            f"- **默认止损倾向**：除非 15m 明确企稳/反转且 1h 未延续亏损方向，否则优先 **sell/observe**，极少 **hold**。\n"
+            f"- **hold** 须同时满足：15m 顺向≥反向且连反向≤1；近 2 根 1h 未延续亏损方向；reason 引用表格 K 线。\n"
+            "- ROI ≤ -15% 且 15m 无企稳，或 1h 走弱 + 量价/RSI 不支持 → **sell**。"
         )
 
     @staticmethod
@@ -470,6 +470,9 @@ class GeminiPositionAdvisor:
         if roi_pct <= HOLD_LOSS_STRICT_ROI:
             s1h_against = s1h.get("against", 0)
             s1h_for = s1h.get("for", 0)
+            s15_against = s15.get("against", 0)
+            s15_for = s15.get("for", 0)
+            s15_trail = s15.get("trail_against", 0)
             if s1h_against >= 2:
                 if roi_pct <= HOLD_LOSS_MILD_ROI:
                     action = 'sell'
@@ -477,6 +480,12 @@ class GeminiPositionAdvisor:
                 else:
                     action = 'observe'
                     override = "亏损>1%+1h转弱待确认"
+            elif roi_pct <= HOLD_LOSS_SEVERE_ROI and (s15_trail >= 2 or s15_against >= 4):
+                action = 'sell'
+                override = "严重亏损+15m连续反向"
+            elif roi_pct <= HOLD_LOSS_MODERATE_ROI and s15_against > s15_for and s15_trail >= 2:
+                action = 'observe'
+                override = "亏损较深+15m偏弱"
             elif s1h_against >= 1 and s1h_for <= s1h_against:
                 action = 'observe'
                 override = "亏损>1%+1h结构模糊"
@@ -539,10 +548,16 @@ class GeminiPositionAdvisor:
         s1h_for = s1h.get("for", 0)
         s1h_against = s1h.get("against", 0)
 
-        if (
+        s15 = s15 or {}
+        severe_loss_confirmed = (
             roi_pct <= HOLD_LOSS_SEVERE_ROI
-            and s1h_against >= 2
-        ):
+            and (
+                s1h_against >= 2
+                or s15.get("trail_against", 0) >= 2
+                or s15.get("against", 0) >= 4
+            )
+        )
+        if severe_loss_confirmed:
             return action, reason
 
         override = ""
@@ -622,11 +637,11 @@ class GeminiPositionAdvisor:
             if strict_loss else ""
         )
         vol_hint = GeminiPositionAdvisor._volume_hint_from_klines(k1h)
-        return f"""你是模拟仓**持仓监管**顾问。本笔为 **6~8 小时持仓** 逻辑，**以 1h K 线为主**，结合量价、RSI、价格位置后给 hold / observe / sell。
+        return f"""你是模拟仓**持仓监管**顾问。本笔按 **4 小时交易窗口** 复核，**以 1h K 线为主**，结合15m、量价、RSI、价格位置后给 hold / observe / sell。
 
 {strict_note}## 核心原则（1h 主判据，15m/5m 辅证）
 - **决策顺序**：① ROI 档位 → ② **1h 趋势结构**（主判据）→ ③ **成交量** → ④ **RSI + 7日位置** → ⑤ 15m/5m 辅证 → ⑥ 宏观辅证
-- **每轮必须给出明确结论**；reason 须写明 1h 读法 + 量能或 RSI 要点
+- **每轮必须给出明确结论**；reason 须写明 15m/1h 表格形态 + 量能或 RSI 要点
 - **1h 未破方向**时，15m/5m 回调/震荡 → **hold** 或 **observe**，**不得 sell**
 - **sell**：近 2 根 1h 确认反转 **且** 量价/RSI 不支持原方向；缺一 → **observe**
 - ROI、Big4 单独变化不足以 sell；须 1h 结构 + 量价印证
@@ -634,7 +649,7 @@ class GeminiPositionAdvisor:
 ## 禁止（违反则 reason 无效）
 - **严禁**仅凭 5m/15m 单根就 **sell**（无 1h 反转证据时一律 hold/observe）
 - **不得**主要因 Big4/BTC/ETH 宏观偏多偏空就 sell
-- **不得**空泛主观（「感觉要跌」「大盘不好」「先跑为敬」）；reason 须引用 1h + 量价/RSI
+- **不得**空泛主观（「感觉要跌」「大盘不好」「先跑为敬」）；reason 须引用 15m/1h 表格 + 量价/RSI
 - **不得**仅因 ROI 正负或幅度就 sell；亏损>1% 时更须写明 1h 与量能/RSI 评估
 
 ## 仓位
@@ -651,7 +666,7 @@ class GeminiPositionAdvisor:
   1h量能(近{HOLD_1H_BARS}根): {vol_hint}
 
 ## 客观统计（须与 reason 一致，勿矛盾）
-  1h({HOLD_1H_BARS}根):  {s1h['summary']}  ← **主判据（6~8h）**
+  1h({HOLD_1H_BARS}根):  {s1h['summary']}  ← **主判据（4h）**
   15m({HOLD_15M_BARS}根): {s15['summary']}  ← 辅证
   5m({HOLD_5M_BARS}根):  {s5['summary']}  ← 辅证
   结构位: {struct_line}
@@ -673,11 +688,11 @@ class GeminiPositionAdvisor:
 5. **15m/5m** 仅辅证，不能单独触发 sell
 6. **宏观**仅作辅证，不能单独触发 sell
 
-## K 线读法（1h 定 6~8h 持仓逻辑）
+## K 线读法（1h 定 4h 交易逻辑）
 1. **近 {HOLD_1H_BARS} 根 1h**（**主判据**）：大趋势是否仍支持 {side}？
 2. **量价**：突破/延续须放量，衰竭须缩量
 3. **RSI**：是否与 1h 方向一致、仍有空间？
-4. reason 示例：「1h仍抬高+缩量回踩+RSI58→hold」或「1h连2阴+放量下破+RSI转弱→sell」
+4. reason 示例：「15m止跌+1h仍抬高+RSI58→hold」或「15m连阴+1h放量下破+RSI转弱→sell」
 
 ## 近 {HOLD_1H_BARS} 根 1h K 线 (oldest → newest)
 {klines_1h_str}
@@ -701,12 +716,12 @@ class GeminiPositionAdvisor:
   (C) 量价或 RSI 不支持继续 {side}（写进 reason）
   例外：ROI ≤ -15% **且** 1h 走弱 + 量价/RSI 不支持 → **sell**
 
-**1h 未破时不得 sell**；reason 须含 1h + 量能或 RSI 结论。
+**1h 未破时不得 sell**；亏损越深 hold 门槛越高；reason 须含 15m/1h + 量能或 RSI 结论。
 
 只输出合法 JSON:
 {{
   "action": "hold" | "observe" | "sell",
-  "reason": "<50字中文，含1h主判+量价/RSI要点>"
+  "reason": "<50字中文，含15m/1h形态+量价/RSI要点>"
 }}
 """
 

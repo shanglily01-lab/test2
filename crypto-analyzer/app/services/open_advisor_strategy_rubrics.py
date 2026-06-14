@@ -120,6 +120,7 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
             "- **approve**：四块与 proposed side、当前 1h 表、RSI、量能自洽；允许趋势延续或结构反转。\n"
             "- **reject**：catalyst 与 side 矛盾；四块空洞或与 K 线表明显不符；仅 24h 涨跌幅；"
             "缩量假突破/放量反向；与用户方向闸门或 Big4 硬冲突。\n"
+            "- **不得单因 RSI 高/低或距7日极值近就否决**；先判断 catalyst 是趋势延续、突破回踩还是结构反转。\n"
             "- 15m **仅辅证**，不得因 15m 单独逆势就 reject（1h 四维齐全且自洽可 approve）。"
         ),
     ),
@@ -133,6 +134,7 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
             "四块要求同探索（1h整体+近结构+RSI数字+量能）；与表矛盾 → reject。\n"
             "允许延续或反转，只要 1h 多维印证且 catalyst 自洽。\n"
             "1h 形态与量能均不支持 proposed side → reject。\n"
+            "不得单因 RSI 高/低否决；必须结合 1h 结构、量能与 7日空间。\n"
             "与 Big4 严重冲突且个股 1h 技术面不足 → reject；勿因单一 RSI 高低单独 reject。"
         ),
     ),
@@ -363,6 +365,14 @@ _KLINE_COMPREHENSIVE_READING_EXPLORE_PREDICT = """
 - **成交量 + RSI**：对照 1h 表 volume 列 + 量能摘要 + RSI(1h)；与 catalyst 自洽。
 - **15m**：仅一句辅证，**不得**单独否决 1h 四维齐全的单。
 - **reason 须写明**：1h 形态结论 + 量能/RSI 要点 + catalyst 是否仍自洽，再写 approve/reject。
+"""
+
+_OPEN_ADVISOR_SELF_CHECK = """
+## 6/5 高盈利版本保留的自检
+- 删除 `24h涨跌幅`、资金费率、Big4、triggers 后，开仓理由仍能独立成立吗？不能 → reject。
+- catalyst 必须同时有 **1h结构 + RSI数字(若有) + 量能词**；缺任一项 → reject。
+- 允许趋势延续，也允许结构反转；但必须说清是「延续 / 回踩突破 / 反转确认」哪一类。
+- reason 不得写空话；必须落到 1h 形态、量能/RSI、策略名三点。
 """
 
 _KLINE_COMPREHENSIVE_READING_TACTICAL = """
@@ -678,6 +688,7 @@ def build_open_advisor_prompt(
     tech_block = build_tech_metrics_block(profile, ctx, side, price)
     review_steps = build_strategy_review_steps(profile)
     kline_reading = _kline_reading_block(profile)
+    self_check = _OPEN_ADVISOR_SELF_CHECK if profile.key in ("explore", "predict") else ""
     sl_s = f"{sl_pct}%" if sl_pct is not None else "默认"
     tp_s = f"{tp_pct}%" if tp_pct is not None else "默认"
     hold_s = f"{hold_hours}h" if hold_hours is not None else "策略默认"
@@ -718,6 +729,8 @@ def build_open_advisor_prompt(
 {kline_reading}
 
 {tech_block}
+
+{self_check}
 
 {big4_block}
 
