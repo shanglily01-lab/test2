@@ -162,15 +162,16 @@ def _get_predict_symbols(conn) -> List[str]:
 
     rows = _get_candidate_pool_cached()
     if rows:
-        from app.services.ai_explore_prompt import select_all_symbols_from_pool
+        from app.services.ai_explore_prompt import select_llm_symbols_from_pool
 
-        symbols = select_all_symbols_from_pool(
+        symbols = select_llm_symbols_from_pool(
             rows[:PREDICT_CANDIDATE_LIMIT],
             banned=banned,
+            max_symbols=PREDICT_TOP_N_FALLBACK,
         )
         if symbols:
             logger.info(
-                f"[Gemini预测] 从 candidate_pool_snapshot 全量获取 {len(symbols)} 个 symbol"
+                f"[Gemini预测] 从 candidate_pool_snapshot 技术面截断获取 {len(symbols)} 个 symbol"
             )
             return symbols
 
@@ -647,28 +648,28 @@ def _open_simulated_position(
     side: str,
     price: float,
     catalyst: str,
-) -> Optional[int]:
+) -> Tuple[Optional[int], str]:
     """INSERT 到 futures_positions, 模拟单, 返回 position_id."""
     symbol = futures_symbol_rating_canonical(symbol)
     # 黑名单3级防御性检查
     from app.services.trading_gates import is_symbol_blocked_level3
     if is_symbol_blocked_level3(symbol):
         logger.warning(f"[Gemini预测] {symbol} 黑名单3级, 禁止开仓模拟单")
-        return None
+        return None, "黑名单3级，禁止开仓"
 
     from app.services.paper_open_gate import gate_simulated_open
-    allowed, _gate_reason = gate_simulated_open(
+    allowed, gate_reason = gate_simulated_open(
         symbol, side, price, PREDICT_SOURCE, catalyst,
         leverage=PREDICT_LEVERAGE,
         sl_pct=get_ai_position_sl_pct(), tp_pct=get_ai_position_tp_pct(),
         hold_hours=get_ai_position_hold_hours(), conn=conn,
     )
     if not allowed:
-        return None
+        return None, gate_reason or "开仓闸门拒绝"
 
     entry_reason = (catalyst or 'gemini_predict')[:180]
     from app.services.paper_limit_entry import create_paper_limit_order
-    return create_paper_limit_order(
+    position_id = create_paper_limit_order(
         conn,
         symbol=symbol,
         side=side,
@@ -684,6 +685,9 @@ def _open_simulated_position(
         planned_close_time=utc_now_naive() + timedelta(hours=get_ai_position_hold_hours()),
         account_id=PREDICT_ACCOUNT_ID,
     )
+    if position_id is None:
+        return None, "create_paper_limit_order 返回空"
+    return position_id, ""
 
 
 # ============================================================
@@ -1008,13 +1012,13 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                 continue
 
             # 7g. 开仓
-            position_id = _open_simulated_position(conn, symbol, side, price, catalyst)
+            position_id, open_skip_reason = _open_simulated_position(conn, symbol, side, price, catalyst)
             if position_id is None:
                 verdict_rows.append((
                     run_id, symbol, category, confidence,
                     catalyst, data_signal, risk_note,
                     price_at_pred, 'skipped_other', None,
-                    "开仓 INSERT 失败",
+                    open_skip_reason or "开仓 INSERT 失败",
                 ))
                 predictions_made += 1
                 continue
