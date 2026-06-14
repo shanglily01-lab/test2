@@ -100,6 +100,8 @@ def main() -> None:
     for verdict_table, run_table, label in [
         ("gemini_predict_verdicts", "gemini_predict_runs", "gemini_predict"),
         ("deepseek_predict_verdicts", "deepseek_predict_runs", "deepseek_predict"),
+        ("gemini_explore_verdicts", "gemini_explore_runs", "gemini_explore"),
+        ("deepseek_explore_verdicts", "deepseek_explore_runs", "deepseek_explore"),
     ]:
         for action in ("skipped_other", "skipped_weak_catalyst", "skipped_confidence"):
             try:
@@ -122,6 +124,58 @@ def main() -> None:
                         print(f"  [{r['cnt']}] {r['skip_reason']}")
             except Exception as e:
                 print(f"{label} {action} err: {e}")
+
+    for verdict_table, run_table, label in [
+        ("gemini_explore_verdicts", "gemini_explore_runs", "gemini_explore"),
+        ("deepseek_explore_verdicts", "deepseek_explore_runs", "deepseek_explore"),
+        ("deepseek_predict_verdicts", "deepseek_predict_runs", "deepseek_predict"),
+    ]:
+        try:
+            cur.execute(f"SELECT id FROM {run_table} WHERE asof_utc >= %s ORDER BY id DESC LIMIT 1", (since,))
+            latest = cur.fetchone()
+            if not latest:
+                continue
+            run_id = latest["id"]
+            cur.execute(
+                f"""
+                SELECT
+                  action_taken,
+                  category,
+                  COUNT(*) cnt,
+                  ROUND(AVG(confidence), 3) avg_conf,
+                  ROUND(MAX(confidence), 3) max_conf
+                FROM {verdict_table}
+                WHERE run_id = %s
+                GROUP BY action_taken, category
+                ORDER BY cnt DESC
+                """,
+                (run_id,),
+            )
+            print(f"\n{label} latest run={run_id} action/category/conf:")
+            for r in cur.fetchall():
+                print(
+                    f"  {r['action_taken']} {r['category']}: "
+                    f"cnt={r['cnt']} avg={r['avg_conf']} max={r['max_conf']}"
+                )
+            cur.execute(
+                f"""
+                SELECT symbol, category, confidence, action_taken, LEFT(skip_reason, 120) skip_reason,
+                       LEFT(catalyst, 180) catalyst
+                FROM {verdict_table}
+                WHERE run_id = %s
+                ORDER BY confidence DESC, id ASC
+                LIMIT 12
+                """,
+                (run_id,),
+            )
+            print(f"\n{label} latest run={run_id} top verdicts:")
+            for r in cur.fetchall():
+                print(
+                    f"  {r['symbol']} {r['category']} conf={float(r['confidence'] or 0):.2f} "
+                    f"{r['action_taken']} reason={r['skip_reason']} catalyst={r['catalyst']}"
+                )
+        except Exception as e:
+            print(f"{label} latest-run detail err: {e}")
 
     conn.close()
 

@@ -35,6 +35,15 @@ MIN_TRADES = MIN_TRADES_TOP50  # 兼容旧引用（TOP50）
 TOP_N_DEFAULT = 50
 
 
+def _mysql_config(**overrides) -> Dict[str, Any]:
+    cfg = {**MYSQL_CONFIG}
+    cfg.setdefault("connect_timeout", 10)
+    cfg.setdefault("read_timeout", 30)
+    cfg.setdefault("write_timeout", 30)
+    cfg.update(overrides)
+    return cfg
+
+
 # ── 评级规则 ──────────────────────────────────────────────
 
 def _is_l0_whitelist(pnl: float, win_rate_pct: float) -> bool:
@@ -209,13 +218,7 @@ def update_top_performing_symbols(
     conn = None
     lock_acquired = False
     try:
-        conn = pymysql.connect(
-            **MYSQL_CONFIG,
-            autocommit=True,
-            connect_timeout=10,
-            read_timeout=30,
-            write_timeout=30,
-        )
+        conn = pymysql.connect(**_mysql_config(autocommit=True))
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
         cursor.execute("SELECT GET_LOCK('update_top_performers_refresh', 0) AS got_lock")

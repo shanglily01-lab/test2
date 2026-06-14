@@ -862,7 +862,14 @@ def _call_deepseek_explore(
         resp = client.chat.completions.create(
             model=DEEPSEEK_MODEL,
             messages=[
-                {"role": "system", "content": "你是专业的加密货币合约交易分析师。只能输出合法 JSON，不要输出 Markdown 或解释。"},
+                {
+                    "role": "system",
+                    "content": (
+                        "你是专业的加密货币合约交易分析师。只能输出合法 JSON，不要输出 Markdown 或解释。"
+                        "重点校准：不要过度保守。若 1h 24根趋势与近4~6根结构同向、量能支持且无明确反转，"
+                        "应给 bullish/bearish 0.65~0.72；RSI偏高/超卖只是 risk_note 风险，不是自动 skip。"
+                    ),
+                },
                 {"role": "user", "content": prompt},
             ],
             temperature=0.1,

@@ -674,7 +674,11 @@ async def refresh_top50():
         loop = asyncio.get_event_loop()
         ran = await loop.run_in_executor(
             None,
-            lambda: run_rating_refresh_if_due(manual=True, triggered_by="api_top50_refresh"),
+            lambda: run_rating_refresh_if_due(
+                manual=True,
+                triggered_by="api_top50_refresh",
+                raise_on_error=True,
+            ),
         )
         if not ran:
             return {

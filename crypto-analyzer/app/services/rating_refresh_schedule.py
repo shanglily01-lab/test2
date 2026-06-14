@@ -22,7 +22,17 @@ RATING_REFRESH_LAST_OK_KEY = "rating_refresh_last_ok_utc"
 
 
 def _db_config() -> dict:
-    return {**get_db_config()}
+    cfg = {**get_db_config()}
+    cfg.setdefault("connect_timeout", 10)
+    cfg.setdefault("read_timeout", 30)
+    cfg.setdefault("write_timeout", 30)
+    return cfg
+
+
+def _connect(**kwargs):
+    cfg = _db_config()
+    cfg.update(kwargs)
+    return pymysql.connect(**cfg)
 
 
 def _parse_utc_naive(value: str) -> Optional[datetime]:
@@ -152,6 +162,7 @@ def run_rating_refresh_if_due(
     *,
     manual: bool = False,
     triggered_by: str = "scheduler",
+    raise_on_error: bool = False,
 ) -> bool:
     """
     若到点则刷新 TOP50 + trading_symbol_rating。
@@ -159,7 +170,7 @@ def run_rating_refresh_if_due(
     """
     conn = None
     try:
-        conn = pymysql.connect(**_db_config(), autocommit=True, connect_timeout=10)
+        conn = _connect(autocommit=True)
         due, reason = rating_round_is_due(conn, manual=manual)
         if not due:
             logger.info(f"[评级刷新] 跳过: {reason} triggered_by={triggered_by}")
@@ -180,15 +191,19 @@ def run_rating_refresh_if_due(
         import traceback
 
         logger.error(traceback.format_exc())
+        if raise_on_error:
+            raise
         return False
 
     if result != "ok":
         logger.info(f"[评级刷新] 未写入完成 status={result} triggered_by={triggered_by}")
+        if raise_on_error and result == "error":
+            raise RuntimeError("TOP50 + rating refresh failed; see server logs for details")
         return False
 
     conn2 = None
     try:
-        conn2 = pymysql.connect(**_db_config(), autocommit=True, connect_timeout=10)
+        conn2 = _connect(autocommit=True)
         rating_mark_ok(conn2, triggered_by=triggered_by)
     finally:
         if conn2:
