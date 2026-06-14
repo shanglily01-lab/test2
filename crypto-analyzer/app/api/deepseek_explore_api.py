@@ -37,44 +37,17 @@ def _connect():
     return get_api_connection()
 
 
-def _get_price_hub():
+def _to_float(value) -> Optional[float]:
+    if value is None:
+        return None
     try:
-        from app.services.binance_data_hub import get_global_data_hub
-        return get_global_data_hub()
-    except Exception:
+        return float(value)
+    except (TypeError, ValueError):
         return None
 
 
-def _live_price(symbol: str, hub) -> Optional[float]:
-    if hub is not None:
-        try:
-            lp = hub.get_price_sync(symbol, max_age_seconds=90)
-            if lp is not None and lp > 0:
-                return float(lp)
-        except Exception:
-            pass
-    try:
-        conn = _connect()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT close_price FROM kline_data "
-                    "WHERE symbol=%s AND timeframe='5m' AND exchange='binance_futures' "
-                    "ORDER BY open_time DESC LIMIT 1",
-                    (symbol,),
-                )
-                row = cur.fetchone()
-                if row and row.get('close_price'):
-                    return float(row['close_price'])
-        finally:
-            conn.close()
-    except Exception:
-        pass
-    return None
-
-
 def _build_live_positions(positions):
-    """用实时价现场算浮盈, 不用 DB 里可能过期的 unrealized_pnl."""
+    """用持仓表里的最新快照展示浮盈, 避免页面请求逐仓阻塞行情源."""
     if not positions:
         return [], {
             "total_unrealized_pnl": 0.0,
@@ -83,23 +56,23 @@ def _build_live_positions(positions):
             "open_count": 0,
         }
 
-    hub = _get_price_hub()
     result = []
     for p in positions:
         symbol = futures_symbol_rating_canonical(p['symbol'])
         side = p['position_side']
-        entry = float(p['entry_price'])
-        qty = float(p['quantity'])
-        margin = float(p['margin'])
-        live_price = _live_price(symbol, hub)
+        entry = float(p['entry_price'] or 0)
+        qty = float(p['quantity'] or 0)
+        margin = float(p['margin'] or 0)
+        live_price = _to_float(p.get('mark_price'))
+        unrealized_pnl = _to_float(p.get('unrealized_pnl'))
+        unrealized_pnl_pct = _to_float(p.get('unrealized_pnl_pct'))
 
-        unrealized_pnl = None
-        unrealized_pnl_pct = None
-        if live_price is not None and live_price > 0:
+        if unrealized_pnl is None and live_price is not None and live_price > 0:
             if side == 'LONG':
                 unrealized_pnl = (live_price - entry) * qty
             else:
                 unrealized_pnl = (entry - live_price) * qty
+        if unrealized_pnl_pct is None and unrealized_pnl is not None:
             unrealized_pnl_pct = (unrealized_pnl / margin * 100) if margin > 0 else 0
 
         result.append({
@@ -134,12 +107,13 @@ def _build_live_positions(positions):
 
 _OPEN_POSITIONS_SQL = (
     "SELECT id, symbol, position_side, leverage, quantity, "
-    "       entry_price, margin, "
+    "       entry_price, mark_price, margin, unrealized_pnl, unrealized_pnl_pct, "
     "       stop_loss_price, take_profit_price, "
     "       open_time, planned_close_time, entry_reason "
     "FROM futures_positions "
     "WHERE source='deepseek_explore' AND status='open' AND account_id=2 "
-    "ORDER BY open_time DESC"
+    "ORDER BY open_time DESC "
+    "LIMIT 200"
 )
 
 
@@ -147,7 +121,7 @@ _OPEN_POSITIONS_SQL = (
 # 状态 + 开关
 # ============================================================
 @router.get("/status")
-async def status():
+def status():
     """返回当前 kill switch 状态 + 最近一轮元数据 + 当前 OPEN 持仓数."""
     try:
         conn = _connect()
@@ -214,7 +188,7 @@ class ToggleRequest(BaseModel):
 
 
 @router.post("/toggle")
-async def toggle(request: ToggleRequest):
+def toggle(request: ToggleRequest):
     """切换 kill switch. 只改 system_settings."""
     try:
         val = '1' if request.enabled else '0'
@@ -240,7 +214,7 @@ async def toggle(request: ToggleRequest):
 # 运行记录
 # ============================================================
 @router.get("/runs")
-async def list_runs(limit: int = Query(20, ge=1, le=200)):
+def list_runs(limit: int = Query(20, ge=1, le=200)):
     """最近 N 轮运行记录."""
     try:
         conn = _connect()
@@ -266,7 +240,7 @@ async def list_runs(limit: int = Query(20, ge=1, le=200)):
 
 
 @router.get("/runs/{run_id}/detail")
-async def get_run_detail(run_id: int):
+def get_run_detail(run_id: int):
     """返回某轮的完整 prompt 与模型原始 JSON 响应."""
     try:
         conn = _connect()
@@ -291,7 +265,7 @@ async def get_run_detail(run_id: int):
 
 
 @router.get("/verdicts")
-async def list_verdicts(run_id: int = Query(..., ge=1)):
+def list_verdicts(run_id: int = Query(..., ge=1)):
     """某轮已开仓 verdicts (未开仓的不返回)."""
     try:
         conn = _connect()
@@ -323,7 +297,7 @@ async def list_verdicts(run_id: int = Query(..., ge=1)):
 # 持仓查询
 # ============================================================
 @router.get("/positions")
-async def list_positions(
+def list_positions(
     status: str = Query('open', pattern='^(open|closed)$'),
     limit: int = Query(50, ge=1, le=500),
 ):
@@ -386,11 +360,11 @@ async def list_positions(
 
 
 # ============================================================
-# 实时价格 + 实时盈亏
+# 持仓盈亏快照
 # ============================================================
 @router.get("/positions/live")
-async def list_positions_live():
-    """返回所有 OPEN 仓位的实时盈亏."""
+def list_positions_live():
+    """返回所有 OPEN 仓位的盈亏快照, 不在页面请求内逐仓阻塞行情源."""
     try:
         conn = _connect()
         try:
@@ -416,7 +390,7 @@ async def list_positions_live():
 # 盈亏统计
 # ============================================================
 @router.get("/stats")
-async def stats(days: int = Query(30, ge=1, le=365)):
+def stats(days: int = Query(30, ge=1, le=365)):
     """返回 DeepSeek 探索的累计盈亏统计."""
     try:
         conn = _connect()
@@ -443,13 +417,18 @@ async def stats(days: int = Query(30, ge=1, le=365)):
                 losses = counts["losses"]
                 breakeven = counts["breakeven"]
 
-                cur.execute(_OPEN_POSITIONS_SQL)
-                open_positions = cur.fetchall()
+                cur.execute(
+                    """
+                    SELECT COALESCE(SUM(unrealized_pnl), 0) AS floating_pnl
+                    FROM futures_positions
+                    WHERE source='deepseek_explore' AND status='open' AND account_id=2
+                    """
+                )
+                floating_row = cur.fetchone() or {}
         finally:
             conn.close()
 
-        _, live_summary = _build_live_positions(open_positions)
-        floating_pnl = float(live_summary['total_unrealized_pnl'])
+        floating_pnl = float(floating_row.get('floating_pnl') or 0)
 
         total_pnl = float(row['total_pnl'] or 0)
         avg_pnl = float(row['avg_pnl'] or 0)
@@ -494,7 +473,7 @@ def _run_in_background(triggered_by: str):
 
 
 @router.post("/run-now")
-async def run_now():
+def run_now():
     """手动触发一轮 (后台线程跑, 立即返回)."""
     if not _run_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="上一轮还在跑, 请稍后再试")
