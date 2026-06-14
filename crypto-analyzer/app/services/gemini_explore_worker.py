@@ -1488,7 +1488,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
       4. 新 prompt: 去天鹅化 + Few-shot + 置信度校准 + 鼓励空 verdicts
       5+6. 传递历史表现数据给 Gemini
       7. SL 缓冲: 硬 SL 3% + 入场保护 30min
-      8. 置信度判定沿用 EXPLORE_CONFIDENCE_THRESHOLD=0.6
+      8. 置信度判定沿用 EXPLORE_CONFIDENCE_THRESHOLD=0.65
       9+10. 新增 _get_historical_stats 并注入 prompt
     """
     # 并发锁: 防止 scheduler + manual 同时触发

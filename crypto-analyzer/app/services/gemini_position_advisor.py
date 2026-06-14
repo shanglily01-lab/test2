@@ -38,6 +38,7 @@ from app.services.open_advisor_strategy_rubrics import (
     precheck_open_advisor,
     resolve_strategy_profile,
     should_skip_llm_for_tactical_open,
+    validate_open_advisor_approval,
 )
 
 
@@ -863,9 +864,15 @@ class GeminiPositionAdvisor:
             )
             return False, "Gemini API 异常，保守拒绝开仓"
 
-        decision = str(result.get("decision", "approve")).lower()
+        decision = str(result.get("decision", "reject")).lower()
         reason = str(result.get("reason", ""))[:500]
         approved = decision == "approve"
+        if approved:
+            ok_post, post_reason = validate_open_advisor_approval(profile, side, ctx, reason)
+            if not ok_post:
+                approved = False
+                decision = "reject"
+                reason = post_reason
         log_advisor_review(
             "open",
             "approve" if approved else "reject",

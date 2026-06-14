@@ -25,12 +25,18 @@ RECENT_STOP_LOSS_COOLDOWN_HOURS = 4
 RECENT_LOSS_COOLDOWN_HOURS = 24
 RECENT_LOSS_TRADE_LIMIT = 2
 RECENT_LOSS_PNL_LIMIT = -80.0
+RECENT_BAD_SYMBOL_COOLDOWN_HOURS = 24
+RECENT_BAD_SYMBOL_LOSS_TRADE_LIMIT = 3
+RECENT_BAD_SYMBOL_PNL_LIMIT = -120.0
+RECENT_SOURCE_SYMBOL_LOSS_TRADE_LIMIT = 2
+RECENT_SOURCE_SYMBOL_PNL_LIMIT = -100.0
 
 
 def _check_recent_loss_cooldown(
     symbol: str,
     conn=None,
     account_id: int = 2,
+    source: str = "",
 ) -> Tuple[bool, str]:
     """
     短周期亏损冷却:
@@ -100,6 +106,53 @@ def _check_recent_loss_cooldown(
             return False, f"近{RECENT_LOSS_COOLDOWN_HOURS}小时同币亏损{loss_n}笔，冷却禁止开仓"
         if net_pnl <= RECENT_LOSS_PNL_LIMIT:
             return False, f"近{RECENT_LOSS_COOLDOWN_HOURS}小时同币净亏{net_pnl:.2f}U，冷却禁止开仓"
+
+        cur.execute(
+            f"""
+            SELECT
+              SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS loss_n,
+              COALESCE(SUM(realized_pnl), 0) AS net_pnl
+            FROM futures_positions
+            WHERE account_id=%s
+              AND status='closed'
+              AND close_time >= DATE_SUB(NOW(), INTERVAL %s HOUR)
+              AND realized_pnl IS NOT NULL
+              AND {clean_expr} = %s
+            """,
+            (account_id, RECENT_BAD_SYMBOL_COOLDOWN_HOURS, clean),
+        )
+        row = cur.fetchone() or {}
+        bad_loss_n = int((row.get("loss_n") if isinstance(row, dict) else row[0]) or 0)
+        bad_net_pnl = float((row.get("net_pnl") if isinstance(row, dict) else row[1]) or 0)
+        if bad_loss_n >= RECENT_BAD_SYMBOL_LOSS_TRADE_LIMIT:
+            return False, f"近{RECENT_BAD_SYMBOL_COOLDOWN_HOURS}小时同币亏损{bad_loss_n}笔，连续亏损冷静禁止开仓"
+        if bad_net_pnl <= RECENT_BAD_SYMBOL_PNL_LIMIT:
+            return False, f"近{RECENT_BAD_SYMBOL_COOLDOWN_HOURS}小时同币净亏{bad_net_pnl:.2f}U，连续亏损冷静禁止开仓"
+
+        src = (source or "").strip()
+        if src:
+            cur.execute(
+                f"""
+                SELECT
+                  SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS loss_n,
+                  COALESCE(SUM(realized_pnl), 0) AS net_pnl
+                FROM futures_positions
+                WHERE account_id=%s
+                  AND status='closed'
+                  AND close_time >= DATE_SUB(NOW(), INTERVAL %s HOUR)
+                  AND realized_pnl IS NOT NULL
+                  AND source=%s
+                  AND {clean_expr} = %s
+                """,
+                (account_id, RECENT_BAD_SYMBOL_COOLDOWN_HOURS, src, clean),
+            )
+            row = cur.fetchone() or {}
+            src_loss_n = int((row.get("loss_n") if isinstance(row, dict) else row[0]) or 0)
+            src_net_pnl = float((row.get("net_pnl") if isinstance(row, dict) else row[1]) or 0)
+            if src_loss_n >= RECENT_SOURCE_SYMBOL_LOSS_TRADE_LIMIT:
+                return False, f"近{RECENT_BAD_SYMBOL_COOLDOWN_HOURS}小时{src}同币亏损{src_loss_n}笔，策略连续亏损冷静禁止开仓"
+            if src_net_pnl <= RECENT_SOURCE_SYMBOL_PNL_LIMIT:
+                return False, f"近{RECENT_BAD_SYMBOL_COOLDOWN_HOURS}小时{src}同币净亏{src_net_pnl:.2f}U，策略连续亏损冷静禁止开仓"
         return True, ""
     finally:
         if cur is not None:
@@ -152,7 +205,7 @@ def gate_simulated_open(
         return False, "symbol_gate_error"
 
     try:
-        allowed, reason = _check_recent_loss_cooldown(symbol, conn)
+        allowed, reason = _check_recent_loss_cooldown(symbol, conn, source=source)
         if not allowed:
             logger.info(
                 f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {reason}"

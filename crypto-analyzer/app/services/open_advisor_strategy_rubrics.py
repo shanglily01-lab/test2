@@ -110,11 +110,11 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         title_zh="AI 主探索（事件/结构）",
         expected_side=None,
         rubric=(
-            "【探索专属，与探索 prompt 一致；6~8h 持仓，1h 主审】\n"
+            "【探索专属，与探索 prompt 一致；4h 交易窗口，1h 主审】\n"
             "上游已通过 catalyst 技术面门槛；你做**矛盾复核**，核对 catalyst 四块与当前表是否仍一致。\n"
             "**catalyst 四块**（缺一或矛盾 → reject）：\n"
             "1. 1h 整体趋势（24根偏多/偏空/震荡）\n"
-            "2. 1h 近4~8根结构（连阳/连阴/回踩/突破等）\n"
+            "2. 1h 近4~6根结构（连阳/连阴/回踩/突破等）\n"
             "3. RSI(1h) 数字（若有 tech 值须写出）\n"
             "4. 成交量（放量/缩量/量平及与方向关系）\n"
             "- **approve**：四块与 proposed side、当前 1h 表、RSI、量能自洽；允许趋势延续或结构反转。\n"
@@ -125,10 +125,10 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
     ),
     "predict": OpenAdvisorStrategyProfile(
         key="predict",
-        title_zh="AI 预测（6~8h 方向）",
+        title_zh="AI 预测（4h 方向）",
         expected_side=None,
         rubric=(
-            "【预测专属，与预测 prompt 一致；6~8h 持仓，1h 主审】\n"
+            "【预测专属，与预测 prompt 一致；4h 交易窗口，1h 主审】\n"
             "上游已通过 catalyst 门槛；核对 catalyst 四块与当前 1h 表、RSI、量能是否仍支持 proposed side。\n"
             "四块要求同探索（1h整体+近结构+RSI数字+量能）；与表矛盾 → reject。\n"
             "允许延续或反转，只要 1h 多维印证且 catalyst 自洽。\n"
@@ -355,11 +355,11 @@ def _volume_summary(klines: list, n: int = 6) -> str:
 
 
 _KLINE_COMPREHENSIVE_READING_EXPLORE_PREDICT = """
-## K 线综合读法（探索/预测：6~8h 持仓，**1h 主审**）
+## K 线综合读法（探索/预测：4h 交易窗口，**1h 主审**）
 - **禁止**仅凭单根 K 线、仅 24h 涨跌幅、或仅 catalyst 措辞下结论。
-- **核对 catalyst 四块**：1h整体趋势、1h近4~8根结构、RSI(1h)数字、成交量 — 与下方表交叉验证。
+- **核对 catalyst 四块**：1h整体趋势、1h近4~6根结构、RSI(1h)数字、成交量 — 与下方表交叉验证。
 - **1h 整体趋势**：近 **24 根 1h**（通道/高低点结构）。
-- **1h 近期形态**：近 **4~8 根 1h**（回调/反弹/连阳连阴/破结构）。
+- **1h 近期形态**：近 **4~6 根 1h**（回调/反弹/连阳连阴/破结构）。
 - **成交量 + RSI**：对照 1h 表 volume 列 + 量能摘要 + RSI(1h)；与 catalyst 自洽。
 - **15m**：仅一句辅证，**不得**单独否决 1h 四维齐全的单。
 - **reason 须写明**：1h 形态结论 + 量能/RSI 要点 + catalyst 是否仍自洽，再写 approve/reject。
@@ -429,7 +429,7 @@ def build_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
             "5. 1h 四维自洽可 approve；勿用四战术 checklist；15m 仅辅证。"
         )
     elif key == "predict":
-        lines.append("4. 审 6~8h 预测逻辑与 1h/RSI/量能依据，**勿**用战术 checklist。")
+        lines.append("4. 审 4h 预测逻辑与 1h/RSI/量能依据，**勿**用战术 checklist。")
         lines.append(
             "5. catalyst 四块与 1h 表自洽可 approve；勿因单一 RSI 否决。"
         )
@@ -579,6 +579,73 @@ def precheck_open_advisor(
     return True, ""
 
 
+def validate_open_advisor_approval(
+    profile: OpenAdvisorStrategyProfile,
+    side: str,
+    ctx: dict,
+    reason: str = "",
+) -> Tuple[bool, str]:
+    """LLM 返回 approve 后的代码层复核；用于压低边际单/追噪音单通过率."""
+    s = (side or "").upper()
+    k1h_all = ctx.get("klines_1h") or []
+    k15_all = ctx.get("klines_15m") or []
+    k1h = _recent_klines(k1h_all, OPEN_KLINE_1H_RECENT_BARS)
+    k15 = _recent_klines(k15_all, OPEN_KLINE_15M_BARS)
+    score_1h = _score_klines_for_side(k1h, s)
+    score_15m = _score_klines_for_side(k15, s)
+    rsi = ctx.get("rsi_14_1h")
+    b7h = ctx.get("below_7d_high_pct")
+    a7l = ctx.get("above_7d_low_pct")
+
+    if not (reason or "").strip():
+        return False, "顾问 approve 但 reason 为空，二次复核拒绝"
+
+    if len(k1h) < OPEN_KLINE_1H_RECENT_BARS:
+        return False, f"1h K线不足{OPEN_KLINE_1H_RECENT_BARS}根，二次复核拒绝"
+
+    if rsi is not None:
+        r = float(rsi)
+        if s == "LONG" and r >= 78:
+            return False, f"LONG RSI(1h)={r:.1f} 极端过热，二次复核拒绝"
+        if s == "SHORT" and r <= 22:
+            return False, f"SHORT RSI(1h)={r:.1f} 极端超跌，二次复核拒绝"
+        if s == "LONG" and b7h is not None and r >= 70 and float(b7h) > -1.0:
+            return False, f"LONG RSI(1h)={r:.1f}且贴近7日高点，追高风险过大，二次复核拒绝"
+        if s == "SHORT" and a7l is not None and r <= 30 and float(a7l) < 1.0:
+            return False, f"SHORT RSI(1h)={r:.1f}且贴近7日低点，追空风险过大，二次复核拒绝"
+
+    if profile.key in ("explore", "predict"):
+        if score_1h["against"] >= 4 and score_1h["for"] <= 1:
+            return (
+                False,
+                f"{profile.title_zh} 1h近结构明显反向({score_1h['summary']})，二次复核拒绝",
+            )
+        if score_1h["for"] == 0 and score_1h["against"] >= 2:
+            return (
+                False,
+                f"{profile.title_zh} 1h没有顺向K线且存在反向压力({score_1h['summary']})，二次复核拒绝",
+            )
+        if score_1h["trail_against"] >= 3:
+            return (
+                False,
+                f"{profile.title_zh} 1h连续反向{score_1h['trail_against']}根，二次复核拒绝",
+            )
+        if len(k15) >= OPEN_KLINE_15M_BARS and score_15m["trail_against"] >= 4:
+            return (
+                False,
+                f"{profile.title_zh} 15m连续反向{score_15m['trail_against']}根，入场太逆，二次复核拒绝",
+            )
+        return True, ""
+
+    if profile.key in _TACTICAL_PROFILE_KEYS:
+        if score_1h["for"] < score_1h["against"] and score_15m["for"] <= score_15m["against"]:
+            return (
+                False,
+                f"{profile.title_zh} 1h/15m均不支持{s}，二次复核拒绝",
+            )
+    return True, ""
+
+
 def build_open_advisor_prompt(
     *,
     profile: OpenAdvisorStrategyProfile,
@@ -643,7 +710,7 @@ def build_open_advisor_prompt(
   策略 profile: {profile.key}
   来源 source: {source}
   固定方向:   {profile.expected_side or '按信号 LONG/SHORT'}
-  计划持仓:   {hold_s}（探索/预测为 6~8h）
+  计划持仓:   {hold_s}（探索/预测按 4h 交易窗口审）
 
 ### 「{profile.title_zh}」专属审核标准（仅此一节有效）
 {profile.rubric}

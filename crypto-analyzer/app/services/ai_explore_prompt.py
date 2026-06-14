@@ -60,16 +60,16 @@ def _sl_tp_prompt_kwargs() -> Dict[str, str]:
 # 模拟仓持仓顾问: 满 15min 后每 15min 轮询 (见 gemini_position_advisor.HOLD_MIN_MINUTES)
 AI_ADVISOR_MIN_HOLD_HOURS = 0.25  # 15min, 与 gemini_position_advisor.HOLD_MIN_MINUTES 一致
 AI_ADVISOR_CHECK_INTERVAL_S = 900
-# 主探索/预测开仓置信度 (与 prompt 校准表 0.60+ 对齐)
-EXPLORE_CONFIDENCE_THRESHOLD = 0.60
-PREDICT_CONFIDENCE_THRESHOLD = 0.60
+# 主探索/预测开仓置信度 (对齐 6/5-6/7 高盈利 prompt：0.65+ 必须有 1h 四维证据)
+EXPLORE_CONFIDENCE_THRESHOLD = 0.65
+PREDICT_CONFIDENCE_THRESHOLD = 0.65
 
 KLINE_1H_READING_BLOCK = """
-## 1h K 线读法 (6~8 小时持仓 — **以 1h 为主**)
-- **持仓视角**: 判断未来 **6~8 小时**内方向是否可持有（本笔计划 {hold_hours}h）；**主证据是 1h**，15m/1d 仅作辅助。
+## 1h K 线读法 (4 小时交易窗口 — **以 1h 为主**)
+- **持仓视角**: 判断未来 **4 小时**内方向是否可持有（本笔计划 {hold_hours}h）；**主证据是 1h**，15m/1d 仅作辅助。
 - **整体趋势**: `kline_narrative.1h` 中「整体 N 根趋势 / 整体形态」≈ 近 **24 根 1h**。
-- **近期结构**: 「最近 4~8 根明细 / 近期形态」描述回调、反弹、连阳连阴（对应 6~8h 窗口）。
-- catalyst 须引用 **24 根整体 + 近 4~8 根 1h**，并配合 **RSI / 成交量 / 价格位置**；不得只写「最近 1 根 1h」或仅 24h 涨跌幅。
+- **近期结构**: 「最近 4~6 根明细 / 近期形态」描述回调、反弹、连阳连阴（对应 4h 窗口）。
+- catalyst 须引用 **24 根整体 + 近 4~6 根 1h**，并配合 **RSI / 成交量 / 价格位置**；不得只写「最近 1 根 1h」或仅 24h 涨跌幅。
 """
 
 _KLINE_MARKERS = (
@@ -233,7 +233,7 @@ def explore_catalyst_technical_ok(
         return False, "catalyst 须写明 1h K 线结构（连阳/连阴/突破/回踩/放量缩量等）"
 
     if re.search(r"最近\s*1\s*根\s*1h", low) or re.search(r"单根\s*1h", low):
-        return False, "须基于 1h 近 4~8 根结构 + 24 根整体趋势，禁止只看 1 根 1h"
+        return False, "须基于 1h 近 4~6 根结构 + 24 根整体趋势，禁止只看 1 根 1h"
 
     if not _volume_mentioned_ok(text):
         return False, "catalyst 须写明成交量变化（放量/缩量/量平等）"
@@ -662,7 +662,7 @@ CATALYST_EVIDENCE_BLOCK = """
 ## bullish/bearish 四条必填（全部写在 catalyst，缺一 → 必须 skip）
 
 1. **1h 整体趋势** — 引用 `kline_narrative.1h`「整体/24根」偏多、偏空或震荡（禁「走势偏强」等空话）
-2. **1h 近期结构** — 「近4~8根」连阳/连阴/回踩/突破等（禁只看最近 1 根 1h）
+2. **1h 近期结构** — 「近4~6根」连阳/连阴/回踩/突破等（禁只看最近 1 根 1h）
 3. **RSI(1h) 数字** — 若 `tech.rsi_14_1h` 有值，**必须写出 RSI 数值**并说明是否支持方向
 4. **成交量** — 必须写放量/缩量/量平/量萎缩等及与方向关系
 
@@ -687,9 +687,9 @@ CATALYST_EVIDENCE_BLOCK = """
 - 任一否 → skip（默认应对**多数**币）
 """
 
-EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. **未来 6~8 小时持仓**（本笔计划 {hold_hours}h）, SL={sl_pct}, TP={tp_pct}, 杠杆 5x; 满 15min 后 Gemini 持仓顾问每 15min 可建议平仓.
+EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. **未来 4 小时交易窗口**（本笔计划 {hold_hours}h）, SL={sl_pct}, TP={tp_pct}, 杠杆 5x; 满 15min 后 Gemini 持仓顾问每 15min 可建议平仓.
 
-你的任务是: 以 **1h K 线为主**，结合量价、RSI、价格位置，判断未来 6~8 小时内是否值得持有; 不是复述行情、不是宏观押注.
+你的任务是: 以 **1h K 线为主**，结合量价、RSI、价格位置，判断未来 4 小时内是否值得持有; 不是复述行情、不是宏观押注.
 
 # 仓位设置 (供你理解容错空间)
 - 杠杆 5x, 名义本金 ~2500U, SL={sl_pct} 价格跌幅, TP={tp_pct} 涨幅
@@ -725,17 +725,16 @@ EXPLORE_PROMPT_TEMPLATE = """你是超级交易大师. **未来 6~8 小时持仓
 # 开仓纪律（质量优先 — 宁可漏单不可滥开）
 
 - **默认 skip**：1h 震荡、量价矛盾、RSI 中性(45~55)且无结构突破 → skip
-- 整轮 bullish+bearish **合计不超过 6 个**；预期 skip 占比 **≥70%**
-- conf=0.60~0.64 **整轮最多 2 个**且须四维齐全；拿不准一律 skip
-- 系统开仓门槛 conf≥0.60，但你应**极少**给到 0.60~0.64
+- conf=0.60~0.64 属边际观察区，默认 skip；只有四维齐全且强自洽才可给到
+- 系统开仓门槛：探索/预测 conf≥0.65；拿不准一律 skip
 
 # 置信度校准 (无 1h+量价+RSI 四维则不得 bullish/bearish)
 
 | confidence | 条件 (全部满足才可给该档) |
 |---|---|
 | 0.75-1.00 | 1h 强趋势 + 量能确认 + RSI 顺向 + 距 7d 极值 ≥3% 空间 |
-| 0.65-0.74 | 1h **24根整体** + **近4~8根** 同向 + RSI数字 + 量能词 + 7d位置合理 |
-| 0.60-0.64 | 四维齐但边际 — **整轮≤2个**，否则应 skip |
+| 0.65-0.74 | 1h **24根整体** + **近4~6根** 同向 + RSI数字 + 量能词 + 7d位置合理 |
+| 0.60-0.64 | 四维齐但边际 — 默认 skip，除非 catalyst 非常具体且无矛盾 |
 | 0.00-0.59 | 震荡/矛盾/仅涨跌幅 — **必须 skip**（多数币应落此档） |
 
 # 判定原则 — {hold_hours} 小时持仓
@@ -781,14 +780,14 @@ GOOD — skip:
   "symbol": "XRP/USDT",
   "category": "skip",
   "confidence": 0.30,
-  "catalyst": "1h/15m narrative 均为震荡, 量持平; RSI=52 中性. 虽 24h+3% 但无 2h 可交易结构",
+  "catalyst": "1h/15m narrative 均为震荡, 量持平; RSI=52 中性. 虽 24h+3% 但无 4h 可交易结构",
   "data_signal": "双周期震荡, RSI=52",
   "risk_note": ""
 }}
 
 # 输出要求
 **仅** 一个合法 JSON, 不要 markdown 围栏.
-**质量优先**: 无 1h 四维证据一律 skip; 整轮开仓≤6; 不要为凑数降低标准.
+**质量优先**: 无 1h 四维证据一律 skip; 不要为凑数降低标准.
 
 {{
   "summary_zh": "整体技术面氛围 1-2 句 (勿写只做多/只做空)",
