@@ -70,7 +70,10 @@ class LiveOrderMonitor:
                     database=self.db_config.get('database', 'binance-data'),
                     charset='utf8mb4',
                     cursorclass=pymysql.cursors.DictCursor,
-                    autocommit=True
+                    autocommit=True,
+                    connect_timeout=5,
+                    read_timeout=10,
+                    write_timeout=10
                 )
             except Exception as e:
                 logger.error(f"[实盘监控] 创建数据库连接失败: {e}")
@@ -87,7 +90,10 @@ class LiveOrderMonitor:
                     database=self.db_config.get('database', 'binance-data'),
                     charset='utf8mb4',
                     cursorclass=pymysql.cursors.DictCursor,
-                    autocommit=True
+                    autocommit=True,
+                    connect_timeout=5,
+                    read_timeout=10,
+                    write_timeout=10
                 )
         return self.connection
 

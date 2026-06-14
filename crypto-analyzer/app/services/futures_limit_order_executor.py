@@ -40,6 +40,9 @@ class FuturesLimitOrderExecutor:
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor,
             autocommit=True,
+            connect_timeout=5,
+            read_timeout=10,
+            write_timeout=10,
         )
 
     def _get_price(self, conn, symbol: str) -> Decimal:

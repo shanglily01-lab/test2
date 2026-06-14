@@ -28,6 +28,9 @@ from app.utils.config_loader import get_db_config
 def _db_cfg() -> Dict[str, Any]:
     cfg = dict(get_db_config())
     cfg.setdefault("charset", "utf8mb4")
+    cfg.setdefault("connect_timeout", 5)
+    cfg.setdefault("read_timeout", 10)
+    cfg.setdefault("write_timeout", 10)
     cfg["cursorclass"] = pymysql.cursors.DictCursor
     return cfg
 

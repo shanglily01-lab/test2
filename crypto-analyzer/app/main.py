@@ -642,7 +642,7 @@ async def lifespan(app: FastAPI):
                         if proc is not None and proc.returncode is None:
                             try:
                                 proc.kill()
-                                await proc.wait()
+                                await asyncio.wait_for(proc.wait(), timeout=5.0)
                             except Exception:
                                 pass
                     except Exception as e:
@@ -653,7 +653,7 @@ async def lifespan(app: FastAPI):
                 if proc is not None and proc.returncode is None:
                     try:
                         proc.kill()
-                        await proc.wait()
+                        await asyncio.wait_for(proc.wait(), timeout=5.0)
                     except Exception:
                         pass
                 raise
@@ -718,6 +718,9 @@ async def lifespan(app: FastAPI):
                 'password': mysql_cfg.get('password'),
                 'database': mysql_cfg.get('database'),
                 'charset': 'utf8mb4',
+                'connect_timeout': 5,
+                'read_timeout': 10,
+                'write_timeout': 10,
             }
 
             await asyncio.sleep(120)  # 启动延迟, 等 ws_kline_collector 完成 hydration
@@ -836,11 +839,42 @@ async def lifespan(app: FastAPI):
     # 关闭时的清理工作
     logger.info("👋 关闭系统...")
 
+    async def _await_cancelled_task(task, name: str, timeout: float = 5.0) -> None:
+        """等待已取消的后台任务退出，避免 systemd stop 被悬挂任务拖到超时."""
+        if not task or task.done():
+            return
+        try:
+            await asyncio.wait_for(task, timeout=timeout)
+        except asyncio.CancelledError:
+            pass
+        except asyncio.TimeoutError:
+            logger.warning(f"⚠️  {name} 停止等待超时({timeout:.0f}s)，继续关闭")
+        except Exception as e:
+            logger.warning(f"⚠️  {name} 停止时异常: {e}")
+
+    async def _cancel_background_tasks() -> None:
+        pending = list(bg_tasks)
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
+    try:
+        await asyncio.wait_for(_cancel_background_tasks(), timeout=20.0)
+        logger.info("✅ 后台周期任务已取消")
+    except asyncio.TimeoutError:
+        logger.warning("⚠️  后台任务取消超时(20s)，继续关闭")
+
     try:
         from app.services.paper_limit_sync_service import get_paper_limit_sync_service
         _paper_sync_svc = get_paper_limit_sync_service()
         if _paper_sync_svc:
             _paper_sync_svc.stop()
+            await _await_cancelled_task(
+                getattr(_paper_sync_svc, "_task", None),
+                "模拟盘实盘同步服务",
+                timeout=5.0,
+            )
             logger.info("✅ 模拟盘实盘同步服务已停止")
     except Exception as e:
         logger.warning(f"⚠️  停止模拟盘实盘同步服务失败: {e}")
@@ -848,6 +882,11 @@ async def lifespan(app: FastAPI):
     if futures_limit_order_executor:
         try:
             futures_limit_order_executor.stop()
+            await _await_cancelled_task(
+                getattr(futures_limit_order_executor, "task", None),
+                "模拟盘限价单执行服务",
+                timeout=5.0,
+            )
             logger.info("✅ 模拟盘限价单执行服务已停止")
         except Exception as e:
             logger.warning(f"⚠️  停止模拟盘限价单执行服务失败: {e}")
@@ -864,6 +903,11 @@ async def lifespan(app: FastAPI):
     if live_order_monitor:
         try:
             live_order_monitor.stop()
+            await _await_cancelled_task(
+                getattr(live_order_monitor, "task", None),
+                "实盘订单监控服务",
+                timeout=5.0,
+            )
             logger.info("✅ 实盘订单监控服务已停止")
         except Exception as e:
             logger.warning(f"⚠️  停止实盘订单监控服务失败: {e}")
@@ -872,6 +916,11 @@ async def lifespan(app: FastAPI):
     if sl_tp_monitor:
         try:
             sl_tp_monitor.stop()
+            await _await_cancelled_task(
+                getattr(sl_tp_monitor, "_task", None),
+                "止盈止损监控服务",
+                timeout=5.0,
+            )
             logger.info("✅ 止盈止损监控服务已停止")
         except Exception as e:
             logger.warning(f"⚠️  停止止盈止损监控服务失败: {e}")
@@ -883,19 +932,6 @@ async def lifespan(app: FastAPI):
             logger.info("✅ 超级大脑优化服务已停止")
         except Exception as e:
             logger.warning(f"⚠️  停止超级大脑优化服务失败: {e}")
-
-    async def _cancel_background_tasks() -> None:
-        pending = list(bg_tasks)
-        for task in pending:
-            task.cancel()
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
-
-    try:
-        await asyncio.wait_for(_cancel_background_tasks(), timeout=20.0)
-        logger.info("✅ 后台周期任务已取消")
-    except asyncio.TimeoutError:
-        logger.warning("⚠️  后台任务取消超时(20s)，继续关闭")
 
     # 信号分析后台服务已不在 main 启动 (2026-05-19), 此处保留兼容 lifespan 关闭流程
     if signal_analysis_service:
@@ -915,8 +951,10 @@ async def lifespan(app: FastAPI):
     # 停止 BinanceDataHub
     try:
         from app.services.binance_data_hub import stop_global_data_hub
-        await stop_global_data_hub()
+        await asyncio.wait_for(stop_global_data_hub(), timeout=8.0)
         logger.info("[OK] BinanceDataHub 已停止")
+    except asyncio.TimeoutError:
+        logger.warning("停止 BinanceDataHub 超时(8s)，继续关闭")
     except Exception as e:
         logger.warning(f"停止 BinanceDataHub 失败: {e}")
 

@@ -32,6 +32,9 @@ def _db_cfg() -> Dict[str, Any]:
         "password": os.getenv("DB_PASSWORD", ""),
         "database": os.getenv("DB_NAME", ""),
         "charset":  "utf8mb4",
+        "connect_timeout": 5,
+        "read_timeout": 10,
+        "write_timeout": 10,
         "cursorclass": pymysql.cursors.DictCursor,
     }
 
