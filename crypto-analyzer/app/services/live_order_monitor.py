@@ -212,7 +212,7 @@ class LiveOrderMonitor:
             order_id = position['binance_order_id']
 
             # 调用交易引擎取消订单
-            result = self.live_engine.cancel_order(symbol, order_id)
+            result = await asyncio.to_thread(self.live_engine.cancel_order, symbol, order_id)
 
             if result.get('success'):
                 logger.info(f"[实盘监控] ✓ 币安订单已取消: {symbol} #{order_id} - {reason}")
@@ -322,10 +322,15 @@ class LiveOrderMonitor:
             position_side = position['position_side']
 
             # 查询币安订单状态
-            result = self.live_engine._request('GET', '/fapi/v1/order', {
-                'symbol': binance_symbol,
-                'orderId': order_id
-            })
+            result = await asyncio.to_thread(
+                self.live_engine._request,
+                'GET',
+                '/fapi/v1/order',
+                {
+                    'symbol': binance_symbol,
+                    'orderId': order_id,
+                },
+            )
 
             if isinstance(result, dict) and result.get('success') == False:
                 logger.warning(f"[实盘监控] 查询订单 {order_id} 失败: {result.get('error')}")
@@ -348,7 +353,10 @@ class LiveOrderMonitor:
                 # 订单尚未成交
 
                 # 1. 检查趋势是否转向
-                trend_reversal_reason = self._check_trend_reversal(position)
+                trend_reversal_reason = await asyncio.to_thread(
+                    self._check_trend_reversal,
+                    position,
+                )
                 if trend_reversal_reason:
                     logger.info(f"[实盘监控] 📉 检测到趋势转向，准备取消限价单: {symbol} #{order_id}")
                     await self._cancel_binance_order(position, trend_reversal_reason)
@@ -458,7 +466,7 @@ class LiveOrderMonitor:
             limit_price = Decimal(str(position.get('entry_price', 0)))
 
             # 获取当前价格
-            current_price = self.live_engine.get_current_price(symbol)
+            current_price = await asyncio.to_thread(self.live_engine.get_current_price, symbol)
             if current_price == 0:
                 logger.warning(f"[实盘监控] 无法获取 {symbol} 当前价格，跳过超时处理")
                 return
@@ -476,7 +484,7 @@ class LiveOrderMonitor:
             max_deviation_pct = Decimal('0.5')  # 最大允许偏离 0.5%
 
             # 先取消币安上的限价单
-            cancel_result = self.live_engine.cancel_order(symbol, order_id)
+            cancel_result = await asyncio.to_thread(self.live_engine.cancel_order, symbol, order_id)
             if not cancel_result.get('success'):
                 logger.error(f"[实盘监控] 取消限价单失败: {cancel_result.get('error')}")
                 return
@@ -529,7 +537,8 @@ class LiveOrderMonitor:
                        f"数量={quantity}, 杠杆={leverage}x")
 
             # 调用实盘引擎以市价开仓
-            result = self.live_engine.open_position(
+            result = await asyncio.to_thread(
+                self.live_engine.open_position,
                 account_id=account_id,
                 symbol=symbol,
                 position_side=position_side,  # 直接使用 'LONG' 或 'SHORT'
@@ -539,7 +548,7 @@ class LiveOrderMonitor:
                 stop_loss_price=Decimal(str(stop_loss_price)) if stop_loss_price else None,
                 take_profit_price=Decimal(str(take_profit_price)) if take_profit_price else None,
                 source=f"{source}_timeout_market",
-                strategy_id=strategy_id
+                strategy_id=strategy_id,
             )
 
             if result.get('success'):
@@ -593,7 +602,7 @@ class LiveOrderMonitor:
 
         # 获取当前价格用于验证
         try:
-            current_price = self.live_engine.get_current_price(symbol)
+            current_price = await asyncio.to_thread(self.live_engine.get_current_price, symbol)
             if current_price == 0:
                 logger.warning(f"[实盘监控] 无法获取 {symbol} 当前价格，跳过止损止盈设置")
                 return
@@ -615,11 +624,12 @@ class LiveOrderMonitor:
 
             if is_valid:
                 try:
-                    sl_result = self.live_engine._place_stop_loss(
+                    sl_result = await asyncio.to_thread(
+                        self.live_engine._place_stop_loss,
                         symbol=symbol,
                         position_side=position_side,
                         quantity=executed_qty,
-                        stop_price=stop_loss_price
+                        stop_price=stop_loss_price,
                     )
                     if sl_result.get('success'):
                         sl_order_id = sl_result.get('order_id')
@@ -673,11 +683,12 @@ class LiveOrderMonitor:
 
             if is_valid:
                 try:
-                    tp_result = self.live_engine._place_take_profit(
+                    tp_result = await asyncio.to_thread(
+                        self.live_engine._place_take_profit,
                         symbol=symbol,
                         position_side=position_side,
                         quantity=executed_qty,
-                        take_profit_price=take_profit_price
+                        take_profit_price=take_profit_price,
                     )
                     if tp_result.get('success'):
                         tp_order_id = tp_result.get('order_id')

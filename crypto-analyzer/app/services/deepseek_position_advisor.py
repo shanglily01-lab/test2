@@ -41,6 +41,7 @@ DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_TIMEOUT_S = int(os.getenv("DEEPSEEK_TIMEOUT_S", "180"))
 DEEPSEEK_PER_CALL_DELAY_S = 1.0
 DEEPSEEK_HOLD_ADVISOR_TAG = "deepseek_advisor"
+DEEPSEEK_SELF_GATED_OPEN_SOURCES = {"deepseek_explore", "deepseek_predict"}
 
 _deepseek_advisor_singleton: Optional["DeepSeekPositionAdvisor"] = None
 
@@ -94,6 +95,15 @@ class DeepSeekPositionAdvisor:
 
     def _is_hold_advisor_enabled(self) -> bool:
         return self._read_setting_bool("deepseek_position_advisor_enabled", "1")
+
+    def _should_skip_self_gated_open_llm(self, source: str, profile_key: str) -> bool:
+        """DeepSeek 探索/预测已由 DeepSeek 主模型+技术门审过，避免同源 LLM 二审把通道压死."""
+        src = (source or "").strip().lower()
+        if src not in DEEPSEEK_SELF_GATED_OPEN_SOURCES:
+            return False
+        if profile_key not in ("explore", "predict"):
+            return False
+        return self._read_setting_bool("deepseek_self_gated_open_skip_llm", "1")
 
     def _read_direction_gates(self) -> Tuple[bool, bool]:
         allow_long = self._read_setting_bool("allow_long", "1")
@@ -222,6 +232,19 @@ class DeepSeekPositionAdvisor:
                 leverage=leverage, reason=pre_reason, catalyst=catalyst, conn=conn,
             )
             return False, pre_reason
+
+        if self._should_skip_self_gated_open_llm(source, profile.key):
+            skip_reason = "DeepSeek探索/预测已通过上游模型与catalyst技术门，跳过同源LLM二审"
+            logger.info(
+                f"[DeepSeek开仓顾问] 跳过同源LLM二审 {symbol} {side} source={source} | {skip_reason}"
+            )
+            log_deepseek_advisor_review(
+                "open", "approve", symbol,
+                position_side=side, source=source, entry_price=price,
+                leverage=leverage, reason=skip_reason,
+                catalyst=catalyst, conn=conn,
+            )
+            return True, skip_reason
 
         if should_skip_llm_for_tactical_open(
             profile,

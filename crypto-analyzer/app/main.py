@@ -25,8 +25,10 @@ except Exception:
     pass
 
 import asyncio
+import faulthandler
 import subprocess
 import threading
+import time
 from datetime import datetime
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Request
@@ -833,6 +835,36 @@ async def lifespan(app: FastAPI):
         logger.info("[data_cache] settings_cache 初始同步已提交 (后台)")
     except Exception as e:
         logger.warning(f"[data_cache] 初始同步失败: {e}")
+
+    async def _event_loop_lag_watchdog() -> None:
+        """记录 FastAPI 事件循环卡顿，帮助定位 main 假死。"""
+        interval = 1.0
+        warn_threshold = float(os.getenv("MAIN_LOOP_LAG_WARN_S", "5"))
+        dump_threshold = float(os.getenv("MAIN_LOOP_LAG_DUMP_S", "15"))
+        dump_cooldown = float(os.getenv("MAIN_LOOP_LAG_DUMP_COOLDOWN_S", "300"))
+        next_expected = time.monotonic() + interval
+        last_dump_at = 0.0
+        while True:
+            await asyncio.sleep(interval)
+            now = time.monotonic()
+            lag = now - next_expected
+            next_expected = now + interval
+            if lag < warn_threshold:
+                continue
+            logger.warning(f"[MAIN WATCHDOG] FastAPI 事件循环卡顿 {lag:.2f}s")
+            if lag < dump_threshold or (now - last_dump_at) < dump_cooldown:
+                continue
+            last_dump_at = now
+            dump_path = log_dir / f"main_hang_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.dump"
+            try:
+                with open(dump_path, "w", encoding="utf-8") as fp:
+                    faulthandler.dump_traceback(file=fp, all_threads=True)
+                logger.warning(f"[MAIN WATCHDOG] 已写入线程栈: {dump_path}")
+            except Exception as e:
+                logger.warning(f"[MAIN WATCHDOG] 写入线程栈失败: {e}")
+
+    spawn(_event_loop_lag_watchdog())
+    logger.info("✅ FastAPI 事件循环卡顿监控已启动")
 
     yield
 

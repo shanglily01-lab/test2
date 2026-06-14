@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -634,27 +635,27 @@ def _open_simulated_position(
     side: str,
     price: float,
     catalyst: str,
-) -> Optional[int]:
+) -> Tuple[Optional[int], str]:
     """INSERT 到 futures_positions, 模拟单, 返回 position_id."""
     symbol = futures_symbol_rating_canonical(symbol)
     from app.services.trading_gates import is_symbol_blocked_level3
     if is_symbol_blocked_level3(symbol):
         logger.warning(f"[DeepSeek预测] {symbol} 黑名单3级, 禁止开仓模拟单")
-        return None
+        return None, "黑名单3级，禁止开仓"
 
     from app.services.paper_open_gate import gate_simulated_open
-    allowed, _gate_reason = gate_simulated_open(
+    allowed, gate_reason = gate_simulated_open(
         symbol, side, price, PREDICT_SOURCE, catalyst,
         leverage=PREDICT_LEVERAGE,
         sl_pct=get_ai_position_sl_pct(), tp_pct=get_ai_position_tp_pct(),
         hold_hours=get_ai_position_hold_hours(), conn=conn,
     )
     if not allowed:
-        return None
+        return None, gate_reason or "开仓闸门拒绝"
 
     entry_reason = (catalyst or 'deepseek_predict')[:180]
     from app.services.paper_limit_entry import create_paper_limit_order
-    return create_paper_limit_order(
+    position_id = create_paper_limit_order(
         conn,
         symbol=symbol,
         side=side,
@@ -670,6 +671,9 @@ def _open_simulated_position(
         planned_close_time=utc_now_naive() + timedelta(hours=get_ai_position_hold_hours()),
         account_id=PREDICT_ACCOUNT_ID,
     )
+    if position_id is None:
+        return None, "create_paper_limit_order 返回空"
+    return position_id, ""
 
 
 # ============================================================
@@ -986,13 +990,13 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                 predictions_made += 1
                 continue
 
-            position_id = _open_simulated_position(conn, symbol, side, price, catalyst)
+            position_id, open_skip_reason = _open_simulated_position(conn, symbol, side, price, catalyst)
             if position_id is None:
                 verdict_rows.append((
                     run_id, symbol, category, confidence,
                     catalyst, data_signal, risk_note,
                     price_at_pred, 'skipped_other', None,
-                    "开仓 INSERT 失败",
+                    open_skip_reason or "开仓 INSERT 失败",
                 ))
                 predictions_made += 1
                 continue
@@ -1008,6 +1012,14 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         # 8. 落库
         _insert_verdicts(conn, run_id, verdict_rows)
         _update_run_stats(conn, run_id, predictions_made, orders_opened)
+
+        skip_counts = Counter(row[8] for row in verdict_rows if row[8] != 'opened')
+        skip_reasons = Counter((row[10] or '')[:120] for row in verdict_rows if row[8] != 'opened')
+        if skip_counts:
+            logger.info(
+                f"[DeepSeek预测] 跳过分类统计 run_id={run_id}: "
+                f"{dict(skip_counts)} top_reasons={skip_reasons.most_common(5)}"
+            )
 
         try:
             from app.services.ai_shadow_explore import (

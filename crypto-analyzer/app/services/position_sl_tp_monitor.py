@@ -5,8 +5,8 @@
 
 职责：
 - 周期扫描 futures_positions 中所有 status='open' 的持仓
-- 用 Binance WS 实时价（回退 REST ticker）与 DB 里存的 stop_loss_price / take_profit_price 比较
-- 命中 SL/TP 立刻通过 HTTP API 平仓（避免共享 engine 连接线程安全问题）
+- 用进程内 DataHub 实时价与 DB 里存的 stop_loss_price / take_profit_price 比较
+- 命中 SL/TP 后直接调用模拟盘平仓引擎，避免 main 进程 HTTP 反打自己
 """
 
 from __future__ import annotations
@@ -18,7 +18,6 @@ import time
 from typing import Any, Dict, List, Optional
 
 import pymysql
-import requests
 from loguru import logger
 from app.utils.position_time import utc_now_naive
 
@@ -320,27 +319,27 @@ class PositionSLTPMonitor:
 
     def _do_close(self, pid: int, symbol: str, side: str, reason: str,
                   trigger_price: float, now: float) -> None:
-        """通过 HTTP API 平仓，避免直接调用 engine 的共享连接导致线程冲突。
-        
-        使用详细的 reason 字符串（如"移动止盈(峰值...)"）提交，API 端会写入 notes。
-        """
+        """直接调用模拟盘平仓引擎，避免后台监控 HTTP 反打 FastAPI 自己。"""
         try:
-            resp = requests.post(
-                f"{self.api_base}/api/futures/close/{pid}",
-                json={"reason": reason, "close_price": trigger_price},
-                timeout=10,
+            from decimal import Decimal
+            from app.api.futures_api import _get_engine
+
+            data = _get_engine().close_position(
+                position_id=pid,
+                close_quantity=None,
+                reason=reason,
+                close_price=Decimal(str(trigger_price)) if trigger_price else None,
             )
-            data = resp.json() if resp.content else {}
         except Exception as e:
-            logger.exception(f"[SL/TP Monitor] HTTP 平仓请求异常 pid={pid}: {e}")
+            logger.exception(f"[SL/TP Monitor] 平仓调用异常 pid={pid}: {e}")
             self._cooldown[pid] = now + max(self._cooldown_seconds, 60.0)
             return
 
-        if not resp.ok:
+        if not data.get("success"):
             self._cooldown[pid] = now + max(self._cooldown_seconds, 60.0)
             logger.error(
-                f"[SL/TP Monitor] HTTP 平仓失败 pid={pid} status={resp.status_code} "
-                f"body={resp.text[:200]}"
+                f"[SL/TP Monitor] 平仓失败 pid={pid}: "
+                f"{data.get('message') or data.get('error') or data}"
             )
             return
 
@@ -386,7 +385,23 @@ class PositionSLTPMonitor:
         return out
 
     def _get_live_price(self, ws, symbol: str) -> Optional[float]:
-        # 1. 首选 WebSocket（零 REST 消耗）
+        # 1. 首选 DataHub 进程内缓存 / WS / 受限 REST，避免 HTTP 反打 FastAPI 自己。
+        try:
+            from app.services.binance_data_hub import get_global_data_hub
+            hub = get_global_data_hub()
+            if hub is not None:
+                p = hub.get_trade_price_sync(
+                    symbol,
+                    max_age_seconds=self.price_max_age,
+                    allow_rest_fallback=True,
+                    allow_db_fallback=False,
+                )
+                if p is not None and p > 0:
+                    return float(p)
+        except Exception as e:
+            logger.debug(f"[SL/TP Monitor] DataHub 取价失败 {symbol}: {e}")
+
+        # 2. 兼容旧 WS price 服务（如果进程内仍有启动）。
         if ws is not None:
             try:
                 p = ws.get_price(symbol, max_age_seconds=self.price_max_age)
@@ -394,22 +409,37 @@ class PositionSLTPMonitor:
                     return float(p)
             except Exception:
                 pass
-        # 2. fallback 走 FastAPI /api/futures/price 端点
-        #    该端点优先命中 L2 内存字典（约每 10s 从 Binance 批量拉全市场一次）
-        #    1s × N 仓位的 monitor 轮询在这里几乎全部命中内存，不直打 Binance
-        #    ▸ 早期版本曾直接 requests.get fapi.binance.com —— 会让 monitor 提速到 1s 后快速打爆 IP 限额
+
+        # 3. 最后回退 DB 5m K 线，保证后台循环不依赖本机 HTTP 服务。
         try:
-            r = requests.get(
-                f"{self.api_base}/api/futures/price/{symbol}",
-                timeout=2,
-            )
-            if r.status_code == 200:
-                data = r.json() or {}
-                price = data.get("price")
-                if price is not None and float(price) > 0:
-                    return float(price)
-        except Exception:
-            pass
+            from app.utils.futures_symbol import futures_symbol_kline_keys
+
+            keys = futures_symbol_kline_keys(symbol)
+            conn = pymysql.connect(**_db_cfg())
+            try:
+                with conn.cursor() as c:
+                    placeholders = ",".join(["%s"] * len(keys))
+                    c.execute(
+                        f"""
+                        SELECT close_price
+                        FROM kline_data
+                        WHERE symbol IN ({placeholders})
+                          AND timeframe='5m'
+                          AND exchange='binance_futures'
+                        ORDER BY `timestamp` DESC
+                        LIMIT 1
+                        """,
+                        tuple(keys),
+                    )
+                    row = c.fetchone()
+                    if row and row.get("close_price"):
+                        price = float(row["close_price"])
+                        if price > 0:
+                            return price
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.debug(f"[SL/TP Monitor] DB 价格回退失败 {symbol}: {e}")
         return None
 
     @staticmethod

@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+import asyncio
 from fastapi import APIRouter, HTTPException, Body, Request
 from pydantic import BaseModel, Field
 import yaml
@@ -34,7 +35,11 @@ router = APIRouter(prefix='/api/futures', tags=['futures'])
 from app.utils.config_loader import load_config
 config = load_config()
 
-db_config = config['database']['mysql']
+db_config = dict(config['database']['mysql'])
+db_config.setdefault('charset', 'utf8mb4')
+db_config.setdefault('connect_timeout', 5)
+db_config.setdefault('read_timeout', 10)
+db_config.setdefault('write_timeout', 10)
 
 # 全局数据库连接（复用连接，避免每次请求都重新建立）
 _global_connection = None
@@ -63,15 +68,33 @@ def get_db_connection():
 
 # 初始化实盘引擎（用于同步平仓）
 live_engine = None
-if BinanceFuturesEngine:
+
+
+def _get_live_engine():
+    """懒加载实盘引擎，避免路由 import 阶段被 DB/API 初始化拖住。"""
+    global live_engine
+    if live_engine is not None:
+        return live_engine
+    if not BinanceFuturesEngine:
+        return None
     try:
         live_engine = BinanceFuturesEngine(db_config)
         logger.info("✅ Futures API: 实盘引擎已初始化")
     except Exception as e:
         logger.warning(f"⚠️ Futures API: 实盘引擎初始化失败: {e}")
+        live_engine = None
+    return live_engine
 
 # 初始化交易引擎（模拟盘不传入trade_notifier，不发送TG通知，传入live_engine以便平仓同步）
-engine = FuturesTradingEngine(db_config, trade_notifier=None, live_engine=live_engine)
+# 不在模块导入时强制连接 DB，避免 main 路由注册阶段被数据库抖动拖死。
+engine = None
+
+
+def _get_engine() -> FuturesTradingEngine:
+    global engine
+    if engine is None:
+        engine = FuturesTradingEngine(db_config, trade_notifier=None, live_engine=_get_live_engine())
+    return engine
 
 
 # ==================== Pydantic Models ====================
@@ -125,7 +148,7 @@ class AutoOpenRequest(BaseModel):
 # ==================== 持仓管理 ====================
 
 @router.get('/positions')
-async def get_positions(account_id: int = 2, status: str = 'open'):
+def get_positions(account_id: int = 2, status: str = 'open'):
     """
     获取持仓列表
 
@@ -135,7 +158,7 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
     try:
         # 获取持仓
         if status == 'open':
-            positions = engine.get_open_positions(account_id)
+            positions = _get_engine().get_open_positions(account_id)
             # 补充 DB 中的止损/止盈价、id、source、开仓时间等字段
             try:
                 connection = get_db_connection()
@@ -238,7 +261,7 @@ async def get_positions(account_id: int = 2, status: str = 'open'):
 
 
 @router.put('/positions/{position_id}/stop-loss-take-profit')
-async def update_stop_loss_take_profit(
+def update_stop_loss_take_profit(
     position_id: int,
     request: UpdateStopLossTakeProfitRequest
 ):
@@ -401,7 +424,7 @@ async def update_stop_loss_take_profit(
 
 
 @router.get('/positions/{position_id}')
-async def get_position(position_id: int):
+def get_position(position_id: int):
     """获取单个持仓详情"""
     try:
         connection = get_db_connection()
@@ -466,7 +489,7 @@ async def get_position(position_id: int):
 # ==================== 开仓 ====================
 
 @router.post('/open')
-async def open_position(request: OpenPositionRequest):
+def open_position(request: OpenPositionRequest):
     """
     开仓
 
@@ -482,7 +505,7 @@ async def open_position(request: OpenPositionRequest):
             raise HTTPException(status_code=400, detail="杠杆倍数必须在1-125之间")
         
         # 开仓
-        result = engine.open_position(
+        result = _get_engine().open_position(
             account_id=request.account_id,
             symbol=request.symbol,
             position_side=request.position_side,
@@ -519,7 +542,7 @@ async def open_position(request: OpenPositionRequest):
 # ==================== 订单管理 ====================
 
 @router.get('/orders')
-async def get_orders(
+def get_orders(
     account_id: int = 2,
     status: str = 'PENDING',
     order_type: Optional[str] = None,
@@ -638,7 +661,7 @@ class UpdateOrderStopLossTakeProfitRequest(BaseModel):
 
 
 @router.put('/orders/stop-loss-take-profit')
-async def update_order_stop_loss_take_profit(
+def update_order_stop_loss_take_profit(
     request: UpdateOrderStopLossTakeProfitRequest = Body(...),
     account_id: int = 2
 ):
@@ -712,7 +735,7 @@ async def update_order_stop_loss_take_profit(
 
 
 @router.delete('/orders/{order_id}')
-async def cancel_order(order_id: str, account_id: int = 2, reason: str = 'manual'):
+def cancel_order(order_id: str, account_id: int = 2, reason: str = 'manual'):
     """
     撤销订单（同步撤销模拟盘和实盘订单）
 
@@ -900,7 +923,7 @@ def _fetch_pending_limit_open_order(cursor, order_id: str, account_id: int) -> D
 
 
 @router.post('/orders/{order_id}/convert-market')
-async def convert_limit_order_to_market(order_id: str, account_id: int = 2):
+def convert_limit_order_to_market(order_id: str, account_id: int = 2):
     """
     将单笔 PENDING 限价开仓单按当前市价立即成交（手动转市价单）。
     """
@@ -910,7 +933,7 @@ async def convert_limit_order_to_market(order_id: str, account_id: int = 2):
         order = _fetch_pending_limit_open_order(cursor, order_id, account_id)
         cursor.close()
 
-        result = engine.fill_paper_limit_order(order, at_market=True)
+        result = _get_engine().fill_paper_limit_order(order, at_market=True)
         if not result.get('success'):
             raise HTTPException(status_code=400, detail=result.get('message') or '转市价单失败')
 
@@ -929,7 +952,7 @@ async def convert_limit_order_to_market(order_id: str, account_id: int = 2):
 
 
 @router.post('/orders/convert-all-market')
-async def convert_all_limit_orders_to_market(account_id: int = 2):
+def convert_all_limit_orders_to_market(account_id: int = 2):
     """
     一键将账户下所有 PENDING 限价开仓单按当前市价成交。
     """
@@ -956,7 +979,7 @@ async def convert_all_limit_orders_to_market(account_id: int = 2):
             oid = order.get('order_id')
             sym = order.get('symbol')
             try:
-                result = engine.fill_paper_limit_order(order, at_market=True)
+                result = _get_engine().fill_paper_limit_order(order, at_market=True)
                 if result.get('success'):
                     converted.append({
                         'order_id': oid,
@@ -1008,11 +1031,12 @@ async def close_position(
         close_quantity = Decimal(str(request.close_quantity)) if request.close_quantity else None
 
         # 平仓模拟盘（内部会自动同步实盘，无需额外处理）
-        result = engine.close_position(
+        result = await asyncio.to_thread(
+            _get_engine().close_position,
             position_id=position_id,
             close_quantity=close_quantity,
             reason=request.reason or 'manual',
-            close_price=Decimal(str(request.close_price)) if request.close_price else None
+            close_price=Decimal(str(request.close_price)) if request.close_price else None,
         )
 
         if result['success']:
@@ -1040,7 +1064,6 @@ async def close_positions_batch(request: BatchCloseRequest):
 
     一次性平仓多个持仓，使用并发处理提高效率
     """
-    import asyncio
     from concurrent.futures import ThreadPoolExecutor
 
     position_ids = request.position_ids
@@ -1056,7 +1079,7 @@ async def close_positions_batch(request: BatchCloseRequest):
     # 使用线程池并发执行平仓操作
     def close_single(pos_id):
         try:
-            result = engine.close_position(
+            result = _get_engine().close_position(
                 position_id=pos_id,
                 close_quantity=None,
                 reason=reason
@@ -1065,16 +1088,23 @@ async def close_positions_batch(request: BatchCloseRequest):
         except Exception as e:
             return {'position_id': pos_id, 'success': False, 'error': str(e)}
 
-    # 并发执行所有平仓操作
-    with ThreadPoolExecutor(max_workers=min(len(position_ids), 10)) as executor:
-        futures = [executor.submit(close_single, pid) for pid in position_ids]
-        for future in futures:
-            result = future.result()
-            results.append(result)
-            if result['success']:
-                success_count += 1
-            else:
-                fail_count += 1
+    def close_all_sync():
+        batch_results = []
+        batch_success = 0
+        batch_fail = 0
+        with ThreadPoolExecutor(max_workers=min(len(position_ids), 10)) as executor:
+            futures = [executor.submit(close_single, pid) for pid in position_ids]
+            for future in futures:
+                result = future.result()
+                batch_results.append(result)
+                if result['success']:
+                    batch_success += 1
+                else:
+                    batch_fail += 1
+        return batch_results, batch_success, batch_fail
+
+    # 整个批量平仓放入线程，避免 async 路由阻塞 FastAPI 事件循环。
+    results, success_count, fail_count = await asyncio.to_thread(close_all_sync)
 
     return {
         'success': fail_count == 0,
@@ -1088,7 +1118,7 @@ async def close_positions_batch(request: BatchCloseRequest):
 # ==================== 基于投资建议自动开仓 ====================
 
 @router.post('/auto-open')
-async def auto_open_from_signals(request: AutoOpenRequest):
+def auto_open_from_signals(request: AutoOpenRequest):
     """
     基于投资建议自动开仓
 
@@ -1210,7 +1240,7 @@ async def auto_open_from_signals(request: AutoOpenRequest):
                 continue
 
             # 检查是否已有持仓
-            existing = engine.get_open_positions(account_id)
+            existing = _get_engine().get_open_positions(account_id)
             has_position = any(p['symbol'] == symbol for p in existing)
 
             if has_position:
@@ -1222,7 +1252,7 @@ async def auto_open_from_signals(request: AutoOpenRequest):
 
             # 实际开仓
             try:
-                result = engine.open_position(
+                result = _get_engine().open_position(
                     account_id=account_id,
                     symbol=symbol,
                     position_side=position_side,
@@ -1266,7 +1296,7 @@ async def auto_open_from_signals(request: AutoOpenRequest):
 # ==================== 账户信息 ====================
 
 @router.get('/account/{account_id}')
-async def get_account(account_id: int):
+def get_account(account_id: int):
     """获取账户信息"""
     try:
         connection = get_db_connection()
@@ -1523,7 +1553,7 @@ async def get_futures_prices_batch(symbols: List[str] = Body(..., embed=True)):
 # ==================== 健康检查 ====================
 
 @router.get('/trades')
-async def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_size: int = 10):
+def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_size: int = 10):
     """
     获取交易历史记录
 
@@ -1662,7 +1692,7 @@ async def health():
 # ==================== 策略配置管理 ====================
 
 @router.get('/strategies')
-async def get_futures_strategies():
+def get_futures_strategies():
     """
     获取所有合约交易策略配置（从数据库读取）
     
@@ -1745,7 +1775,7 @@ async def get_futures_strategies():
 
 
 @router.post('/strategies')
-async def save_futures_strategies(strategies: List[Dict] = Body(...)):
+def save_futures_strategies(strategies: List[Dict] = Body(...)):
     """
     保存合约交易策略配置（保存到数据库）
     
@@ -1840,7 +1870,7 @@ async def save_futures_strategies(strategies: List[Dict] = Body(...)):
 
 
 @router.delete('/strategies/{strategy_id}')
-async def delete_futures_strategy(strategy_id: int):
+def delete_futures_strategy(strategy_id: int):
     """
     删除合约交易策略配置
     
@@ -1889,7 +1919,7 @@ async def delete_futures_strategy(strategy_id: int):
 
 
 @router.patch('/strategies/{strategy_id}/toggle')
-async def toggle_futures_strategy(strategy_id: int):
+def toggle_futures_strategy(strategy_id: int):
     """
     切换策略启用/禁用状态
     
@@ -2006,7 +2036,7 @@ async def toggle_strategy_sync_live(strategy_id: int, request: Request):
 
 
 @router.get("/pending-positions")
-async def get_pending_positions():
+def get_pending_positions():
     """获取待检查订单列表"""
     try:
         connection = get_db_connection()
@@ -2058,7 +2088,7 @@ async def get_pending_positions():
 
 
 @router.delete("/pending-positions/{position_id}")
-async def delete_pending_position(position_id: int):
+def delete_pending_position(position_id: int):
     """删除/取消待检查订单"""
     try:
         connection = get_db_connection()

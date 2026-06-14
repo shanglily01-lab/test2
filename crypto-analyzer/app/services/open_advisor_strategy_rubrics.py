@@ -111,17 +111,17 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         expected_side=None,
         rubric=(
             "【探索专属，与探索 prompt 一致；4h 交易窗口，1h 主审】\n"
-            "上游已通过 catalyst 技术面门槛；你做**矛盾复核**，核对 catalyst 四块与当前表是否仍一致。\n"
-            "**catalyst 四块**（缺一或矛盾 → reject）：\n"
+            "上游已通过 catalyst 技术面门槛；你做**矛盾复核**，不要把 B+ 机会按完美 A+ 标准错杀。\n"
+            "**catalyst 核对项**（结构必须有；RSI/量能不得明显反向）：\n"
             "1. 1h 整体趋势（24根偏多/偏空/震荡）\n"
             "2. 1h 近4~6根结构（连阳/连阴/回踩/突破等）\n"
             "3. RSI(1h) 数字（若有 tech 值须写出）\n"
             "4. 成交量（放量/缩量/量平及与方向关系）\n"
-            "- **approve**：四块与 proposed side、当前 1h 表、RSI、量能自洽；允许趋势延续或结构反转。\n"
-            "- **reject**：catalyst 与 side 矛盾；四块空洞或与 K 线表明显不符；仅 24h 涨跌幅；"
+            "- **approve**：1h结构与 proposed side 基本一致，RSI未极端反向，量能持平/放大/缩量回踩能解释方向；允许趋势延续或结构反转。\n"
+            "- **reject**：catalyst 与 side 矛盾；1h结构空洞或与 K 线表明显不符；仅 24h 涨跌幅；"
             "缩量假突破/放量反向；与用户方向闸门或 Big4 硬冲突。\n"
             "- **不得单因 RSI 高/低或距7日极值近就否决**；先判断 catalyst 是趋势延续、突破回踩还是结构反转。\n"
-            "- 15m **仅辅证**，不得因 15m 单独逆势就 reject（1h 四维齐全且自洽可 approve）。"
+            "- 15m **仅辅证**，不得因 15m 单独逆势就 reject（1h结构自洽可 approve）。"
         ),
     ),
     "predict": OpenAdvisorStrategyProfile(
@@ -130,8 +130,8 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         expected_side=None,
         rubric=(
             "【预测专属，与预测 prompt 一致；4h 交易窗口，1h 主审】\n"
-            "上游已通过 catalyst 门槛；核对 catalyst 四块与当前 1h 表、RSI、量能是否仍支持 proposed side。\n"
-            "四块要求同探索（1h整体+近结构+RSI数字+量能）；与表矛盾 → reject。\n"
+            "上游已通过 catalyst 门槛；核对 1h 结构、RSI、量能是否仍支持 proposed side，避免过度保守。\n"
+            "要求同预测 prompt：1h整体+近结构必须清楚；RSI/量能不得明显反向；与表矛盾 → reject。\n"
             "允许延续或反转，只要 1h 多维印证且 catalyst 自洽。\n"
             "1h 形态与量能均不支持 proposed side → reject。\n"
             "不得单因 RSI 高/低否决；必须结合 1h 结构、量能与 7日空间。\n"
@@ -363,14 +363,14 @@ _KLINE_COMPREHENSIVE_READING_EXPLORE_PREDICT = """
 - **1h 整体趋势**：近 **24 根 1h**（通道/高低点结构）。
 - **1h 近期形态**：近 **4~6 根 1h**（回调/反弹/连阳连阴/破结构）。
 - **成交量 + RSI**：对照 1h 表 volume 列 + 量能摘要 + RSI(1h)；与 catalyst 自洽。
-- **15m**：仅一句辅证，**不得**单独否决 1h 四维齐全的单。
+- **15m**：仅一句辅证，**不得**单独否决 1h 结构自洽且 RSI/量能不反向的单。
 - **reason 须写明**：1h 形态结论 + 量能/RSI 要点 + catalyst 是否仍自洽，再写 approve/reject。
 """
 
 _OPEN_ADVISOR_SELF_CHECK = """
 ## 6/5 高盈利版本保留的自检
 - 删除 `24h涨跌幅`、资金费率、Big4、triggers 后，开仓理由仍能独立成立吗？不能 → reject。
-- catalyst 必须同时有 **1h结构 + RSI数字(若有) + 量能词**；缺任一项 → reject。
+- catalyst 必须有 **1h结构**，并尽量包含 RSI数字(若有) + 量能词；若 RSI/量能缺失但 1h 表明确支持，可继续综合判断，不要机械 reject。
 - 允许趋势延续，也允许结构反转；但必须说清是「延续 / 回踩突破 / 反转确认」哪一类。
 - reason 不得写空话；必须落到 1h 形态、量能/RSI、策略名三点。
 """
@@ -433,15 +433,15 @@ def build_strategy_review_steps(profile: OpenAdvisorStrategyProfile) -> str:
         lines.append("6. 完全符合反转定义才 approve。")
     elif key == "explore":
         lines.append(
-            "4. 核对 catalyst **四块**（1h整体+近结构+RSI+量能）与 K 线表；矛盾 → reject。"
+            "4. 核对 catalyst 的 1h整体+近结构+RSI+量能与 K 线表；结构矛盾 → reject，细节不完美但不反向可 approve。"
         )
         lines.append(
-            "5. 1h 四维自洽可 approve；勿用四战术 checklist；15m 仅辅证。"
+            "5. 1h 结构自洽且 RSI/量能不明显反向可 approve；勿用四战术 checklist；15m 仅辅证。"
         )
     elif key == "predict":
         lines.append("4. 审 4h 预测逻辑与 1h/RSI/量能依据，**勿**用战术 checklist。")
         lines.append(
-            "5. catalyst 四块与 1h 表自洽可 approve；勿因单一 RSI 否决。"
+            "5. catalyst 与 1h 表自洽、RSI/量能不明显反向可 approve；勿因单一 RSI 否决。"
         )
     else:
         lines.append("4. entry_reason/catalyst 与 1h/15m 形态、量能、方向一致；含糊 → reject。")
@@ -694,8 +694,8 @@ def build_open_advisor_prompt(
     hold_s = f"{hold_hours}h" if hold_hours is not None else "策略默认"
     if profile.key in ("explore", "predict"):
         review_focus = (
-            "**必须综合审查**：1h 形态（主）、RSI、成交量、catalyst 四块自洽；"
-            "15m 仅辅证。"
+            "**必须综合审查**：1h 形态（主）、RSI、成交量、catalyst 自洽；"
+            "15m 仅辅证。不要把结构清楚的 B+ 机会按完美形态错杀。"
         )
         reason_tpl = (
             f'"reason": "<50字中文，须含1h形态+量能/RSI+catalyst自洽要点，'

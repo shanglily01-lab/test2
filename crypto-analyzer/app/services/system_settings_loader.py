@@ -26,7 +26,7 @@ def _reload_cache():
     try:
         cache_cfg = {**cfg, "database": "data_cache"}
         conn = pymysql.connect(**cache_cfg, charset='utf8mb4',
-                                cursorclass=pymysql.cursors.DictCursor, connect_timeout=5)
+                                cursorclass=pymysql.cursors.DictCursor)
         with conn.cursor() as cur:
             cur.execute("SELECT setting_key, setting_value FROM settings_cache")
             rows = cur.fetchall()
@@ -49,7 +49,7 @@ def _reload_cache():
     # 2) 兜底: 直接查主库 system_settings
     try:
         conn = pymysql.connect(**cfg, charset='utf8mb4',
-                                cursorclass=pymysql.cursors.DictCursor, connect_timeout=5)
+                                cursorclass=pymysql.cursors.DictCursor)
         with conn.cursor() as cur:
             cur.execute("SELECT setting_key, setting_value FROM system_settings")
             rows = cur.fetchall()

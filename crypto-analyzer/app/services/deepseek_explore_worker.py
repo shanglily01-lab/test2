@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -1055,28 +1056,28 @@ def _open_simulated_position(
     side: str,
     price: float,
     catalyst: str,
-) -> Optional[int]:
+) -> Tuple[Optional[int], str]:
     symbol = futures_symbol_rating_canonical(symbol)
     from app.services.trading_gates import is_symbol_blocked_level3
     if is_symbol_blocked_level3(symbol):
         logger.warning(f"[DeepSeek探索] {symbol} 黑名单3级, 禁止开仓")
-        return None
+        return None, "黑名单3级，禁止开仓"
 
     from app.services.paper_open_gate import gate_simulated_open
-    allowed, _gate_reason = gate_simulated_open(
+    allowed, gate_reason = gate_simulated_open(
         symbol, side, price, EXPLORE_SOURCE, catalyst,
         leverage=EXPLORE_LEVERAGE,
         sl_pct=get_ai_position_sl_pct(), tp_pct=get_ai_position_tp_pct(),
         hold_hours=get_ai_position_hold_hours(), conn=conn,
     )
     if not allowed:
-        return None
+        return None, gate_reason or "开仓闸门拒绝"
 
     entry_reason = (catalyst or 'deepseek_explore')[:180]
     entry_reason += f" | SL={get_ai_position_sl_pct()}% TP={get_ai_position_tp_pct()}% lev={EXPLORE_LEVERAGE}x hold={get_ai_position_hold_hours()}h"
 
     from app.services.paper_limit_entry import create_paper_limit_order
-    return create_paper_limit_order(
+    position_id = create_paper_limit_order(
         conn,
         symbol=symbol,
         side=side,
@@ -1092,6 +1093,9 @@ def _open_simulated_position(
         planned_close_time=utc_now_naive() + timedelta(hours=get_ai_position_hold_hours()),
         account_id=EXPLORE_ACCOUNT_ID,
     )
+    if position_id is None:
+        return None, "create_paper_limit_order 返回空"
+    return position_id, ""
 
 
 # ============================================================
@@ -1467,13 +1471,13 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            position_id = _open_simulated_position(conn, symbol, side, price, catalyst)
+            position_id, open_skip_reason = _open_simulated_position(conn, symbol, side, price, catalyst)
             if position_id is None:
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,
                     catalyst, data_signal, risk_note,
                     'skipped_other', None,
-                    "开仓 INSERT 失败 (见日志)",
+                    open_skip_reason or "开仓 INSERT 失败 (见日志)",
                 ))
                 continue
 
@@ -1486,6 +1490,14 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
 
         _insert_verdicts(conn, run_id, verdict_rows)
         _update_run_trades_opened(conn, run_id, trades_opened)
+
+        skip_counts = Counter(row[7] for row in verdict_rows if row[7] != 'opened')
+        skip_reasons = Counter((row[9] or '')[:120] for row in verdict_rows if row[7] != 'opened')
+        if skip_counts:
+            logger.info(
+                f"[DeepSeek探索] 跳过分类统计 run_id={run_id}: "
+                f"{dict(skip_counts)} top_reasons={skip_reasons.most_common(5)}"
+            )
 
         try:
             from app.services.ai_shadow_explore import run_shadow_after_teacher_explore

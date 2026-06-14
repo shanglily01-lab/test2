@@ -23,8 +23,8 @@ _PROVIDER_DELAY = {
 
 RECENT_STOP_LOSS_COOLDOWN_HOURS = 4
 RECENT_LOSS_COOLDOWN_HOURS = 24
-RECENT_LOSS_TRADE_LIMIT = 2
-RECENT_LOSS_PNL_LIMIT = -80.0
+RECENT_LOSS_TRADE_LIMIT = 3
+RECENT_LOSS_PNL_LIMIT = -120.0
 RECENT_BAD_SYMBOL_COOLDOWN_HOURS = 24
 RECENT_BAD_SYMBOL_LOSS_TRADE_LIMIT = 3
 RECENT_BAD_SYMBOL_PNL_LIMIT = -120.0
@@ -41,7 +41,8 @@ def _check_recent_loss_cooldown(
     """
     短周期亏损冷却:
     - 近4小时同币有止损，禁止新开仓；
-    - 近24小时同币亏损>=2笔或净亏<=-80U，禁止新开仓。
+    - 近24小时同币亏损>=3笔或净亏<=-120U，禁止新开仓；
+    - 同一策略同一币近24小时亏损>=2笔仍执行策略冷静。
     """
     clean = futures_symbol_clean(symbol)
     if not clean:

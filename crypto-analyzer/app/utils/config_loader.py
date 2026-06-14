@@ -46,6 +46,9 @@ def get_db_config(env_path: Optional[Path] = None) -> Dict[str, Any]:
         'user':     env.get('DB_USER', 'root'),
         'password': env.get('DB_PASSWORD', ''),
         'database': env.get('DB_NAME', 'binance-data'),
+        'connect_timeout': int(env.get('DB_CONNECT_TIMEOUT', 5)),
+        'read_timeout': int(env.get('DB_READ_TIMEOUT', 10)),
+        'write_timeout': int(env.get('DB_WRITE_TIMEOUT', 10)),
     }
 
 

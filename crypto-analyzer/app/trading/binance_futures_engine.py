@@ -158,7 +158,10 @@ class BinanceFuturesEngine:
                 database=self.db_config.get('database', 'binance-data'),
                 charset='utf8mb4',
                 cursorclass=pymysql.cursors.DictCursor,
-                autocommit=True
+                autocommit=True,
+                connect_timeout=int(self.db_config.get('connect_timeout', 5)),
+                read_timeout=int(self.db_config.get('read_timeout', 10)),
+                write_timeout=int(self.db_config.get('write_timeout', 10)),
             )
 
             if self._is_first_connection:

@@ -110,7 +110,10 @@ class FuturesTradingEngine:
                 database=self.db_config.get('database', 'binance-data'),
                 charset='utf8mb4',
                 cursorclass=pymysql.cursors.DictCursor,
-                autocommit=True  # 启用自动提交，确保每次操作立即生效
+                autocommit=True,  # 启用自动提交，确保每次操作立即生效
+                connect_timeout=int(self.db_config.get('connect_timeout', 5)),
+                read_timeout=int(self.db_config.get('read_timeout', 10)),
+                write_timeout=int(self.db_config.get('write_timeout', 10)),
             )
             self._connection_created_at = time.time()  # 记录连接创建时间
             
