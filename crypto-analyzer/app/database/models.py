@@ -68,12 +68,12 @@ class KlineData(Base):
     high_price = Column(DECIMAL(18, 8), nullable=False)  # 最高价
     low_price = Column(DECIMAL(18, 8), nullable=False)  # 最低价
     close_price = Column(DECIMAL(18, 8), nullable=False)  # 收盘价
-    volume = Column(DECIMAL(28, 8), nullable=False)  # 成交量
+    volume = Column(DECIMAL(20, 8), nullable=False)  # 成交量
 
     # 额外数据
     quote_volume = Column(DECIMAL(24, 2))  # 成交额 - 扩大以支持大额合约数据
     number_of_trades = Column(Integer)  # 成交笔数
-    taker_buy_base_volume = Column(DECIMAL(28, 8))  # 主动买入成交量
+    taker_buy_base_volume = Column(DECIMAL(20, 8))  # 主动买入成交量
     taker_buy_quote_volume = Column(DECIMAL(24, 2))  # 主动买入成交额 - 扩大以支持大额合约数据
 
     created_at = Column(DateTime, default=datetime.now)
