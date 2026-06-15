@@ -27,17 +27,35 @@ LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
     "deepseek_predict",
 })
 
-def _bool_setting(key: str, default: bool = True) -> bool:
+def _coerce_bool(value, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def _bool_setting(key: str, default: bool = True, cursor=None) -> bool:
+    if cursor is not None:
+        try:
+            cursor.execute(
+                "SELECT setting_value FROM system_settings WHERE setting_key=%s LIMIT 1",
+                (key,),
+            )
+            row = cursor.fetchone()
+            if row:
+                val = row.get('setting_value') if isinstance(row, dict) else row[0]
+                return _coerce_bool(val, default)
+            return default
+        except Exception as e:
+            logger.warning(f"[trading_gates] direct setting read failed {key}: {e}")
+
     try:
         from app.services.system_settings_loader import get_setting
         val = get_setting(key)
     except Exception:
         val = None
-    if val is None:
-        return default
-    if isinstance(val, bool):
-        return val
-    return str(val).strip().lower() in ('1', 'true', 'yes', 'on')
+    return _coerce_bool(val, default)
 
 
 def is_blacklist_level3_enforced() -> bool:
@@ -50,9 +68,9 @@ def is_live_top50_required() -> bool:
     return False
 
 
-def is_live_whitelist_enabled() -> bool:
+def is_live_whitelist_enabled(cursor=None) -> bool:
     """实盘同步是否允许白名单 (rating_level=0) 开实仓 (默认开启)."""
-    return _bool_setting('live_whitelist_enabled', True)
+    return _bool_setting('live_whitelist_enabled', True, cursor)
 
 
 def _normalize_source(source: str) -> str:
@@ -90,7 +108,7 @@ def check_live_open_allowed(
     time_allowed, time_reason = get_beijing_open_window_status()
     if not time_allowed:
         return False, time_reason
-    if not is_live_trading_enabled():
+    if not _bool_setting("live_trading_enabled", False, cursor):
         return False, "live_trading_enabled=0"
     if not should_sync_live_for_source(source):
         return False, f"策略 {source} 仅模拟盘"
@@ -277,7 +295,7 @@ def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
 
     Returns: (allowed, reject_reason)
     """
-    if not is_live_whitelist_enabled():
+    if not is_live_whitelist_enabled(cursor):
         return False, '实盘白名单闸门未开启'
 
     rating_level, _ = get_symbol_rating_info(symbol, cursor)

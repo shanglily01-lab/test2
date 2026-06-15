@@ -343,6 +343,8 @@ def _open_paper_market_position(
     """限价开关关闭时，模拟盘改市价立即开仓。"""
     side = side.upper()
     market_ref = float(ref_price)
+    margin_value = float(margin)
+    leverage_value = int(leverage)
     try:
         from app.utils.futures_price import get_futures_trade_price
         fresh = get_futures_trade_price(
@@ -354,7 +356,7 @@ def _open_paper_market_position(
         logger.debug(f"[市价开仓] {symbol} 刷新市价失败，用参考价: {e}")
 
     if quantity is None or quantity <= 0:
-        notional = margin * leverage
+        notional = margin_value * leverage_value
         quantity = round(notional / market_ref, 6) if market_ref > 0 else 0
     if quantity <= 0:
         logger.error(f"[市价开仓] {symbol} {side} 数量非正")

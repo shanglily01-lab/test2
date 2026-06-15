@@ -34,13 +34,28 @@
 ## 重要规则
 
 - **Big4RegimeMonitor / 熔断禁止改系统设置**: Big4 和盈亏熔断只能发通知，不允许修改 `system_settings` 的 `allow_long`/`allow_short`/`trading_enabled`。用户手动控制。
+- **DB 配置形状禁止静默回退 (2026-06-15 事故)**: `get_db_config()` 返回裸 MySQL dict (`host/user/password/database`)，`DatabaseService` 期待完整结构 `{'type':'mysql','mysql':{...}}`。任何桥接代码必须 normalize 或 fail-fast，禁止因为缺少 `mysql` key 静默 fallback 到 `root@localhost`/空密码。已在 `PriceCacheService` 做兼容修复；后续改 DB 相关代码前必须检查调用方传入的配置形状。
+- **FastAPI systemd 日志不在 journalctl**: `crypto-app-main.service` 的 stdout/stderr 追加到 `logs/main_systemd.log`；loguru 主日志为 `logs/main_YYYY-MM-DD.log`。`journalctl -u crypto-app-main` 主要看 systemd stop/start/timeout，不一定有 Python 异常。
 - **1h K线天然滞后**: 1h 最新收盘的 K 线永远是上一小时的，延迟约 60-65 分钟属正常。`BACKFILL_LAG_THRESHOLD_S['1h']=3900` (65min)，不要改小。
 - **WS K线 backfill exchange name**: `_check_and_backfill` 中 exchange 必须用 `binance_futures`（匹配 `save_klines` 的存储名），不能用 `usdt_futures`。
 - **关模拟仓不会自动同步实盘**: 没有后台监听服务。需要通过 `BinanceFuturesEngine.close_position_direct()` 主动在交易所平仓。
 - **除 crypto-scheduler 外不要加心跳日志**: WS 采集器日志中有 `send_heartbeat` 日志是正常的 (每 20s)，不要把它当作 bug 去修。
 - **K 线采集分工 (2026-06-12)**: **5m/15m 仅 WS** (`ws_kline_collector_service` / `crypto-ws-kline`)；`fast_collector` **30 分钟轮询**，REST **只补 1h/4h/1d**（禁止 REST 拉 5m/15m，与 WS 重复会触发 Binance IP ban -1003）。封禁状态见 `logs/binance_ban_state.json` + `app/utils/binance_rate_guard.py`。
+- **Kline volume 精度 (2026-06-15)**: 生产库 `kline_data.volume` 与 `taker_buy_base_volume` 已升级为 `DECIMAL(28,8)`，模型必须保持一致。原因是 DOGS/NEIRO 等低价高供应合约 base volume 会超过 `DECIMAL(20,8)` 的 12 位整数上限。
 - **持仓时间 UTC (2026-06-13)**: `futures_positions.open_time` / 限价开仓成交须用 **`utc_now_naive()`**（`app/utils/position_time.py`）。历史行若 `open_time` 比 `close_time` 晚约 8h（CST/UTC 混存），成交记录持仓时长会显示 `--`；API 用 `calc_holding_minutes(..., created_at=)` 回退到 `created_at`/`fill_time` 对齐。
 - **config.yaml 交易对**: 与 Binance `PERPETUAL`+`TRADING` 同步；**不含** `TRADIFI_PERPETUAL`（XAG/XAU/代币化股票等）；`securities_filter.py` 另拦股票/大宗 base。
+
+### 2026-06-15 DB 配置事故复盘
+
+- 症状: `logs/main_2026-06-15.log` 反复报 `Access denied for user 'root'@'localhost' (using password: NO)`，同时 `PriceCacheUpdater` / `app.database.db_service` 重试。
+- 根因: `main.py` 用 `get_db_config()` 从 `.env` 读出了正确裸 MySQL dict，但 `PriceCacheService` 直接传给 `DatabaseService`；后者执行 `self.config.get('mysql', {})`，取不到后回退默认 root/空密码。
+- 修复: commit `0efc818f` 在 `app/services/price_cache_service.py` 增加 `_normalize_database_service_config()`，兼容裸 MySQL dict 和完整 database config。
+- 以后规则: DB password 不应靠默认值兜底；服务启动路径里出现 root/空密码日志时，优先查配置形状，不要先怀疑 `.env` 丢失。
+- 服务器排查命令:
+  `tail -200 logs/main_systemd.log`
+  `tail -200 logs/main_$(date -u +%Y-%m-%d).log`
+  `sudo systemctl status crypto-app-main --no-pager -l`
+  `curl -sS --max-time 5 http://127.0.0.1:9020/api/futures/health`
 
 ## scheduler 调度任务
 

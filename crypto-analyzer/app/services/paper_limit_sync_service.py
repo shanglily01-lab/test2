@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 import pymysql
 import requests
 from loguru import logger
+from urllib.parse import quote
 
 from app.utils.config_loader import get_db_config
 
@@ -111,7 +112,8 @@ class PaperLimitSyncService:
             SELECT
                 fo.id, fo.account_id, fo.symbol, fo.side,
                 fo.leverage, fo.quantity, fo.avg_fill_price,
-                fo.stop_loss_price, fo.take_profit_price,
+                COALESCE(fo.stop_loss_price, fp.stop_loss_price) AS stop_loss_price,
+                COALESCE(fo.take_profit_price, fp.take_profit_price) AS take_profit_price,
                 fo.order_source, fo.position_id,
                 fta.user_id
             FROM futures_orders fo
@@ -179,6 +181,8 @@ class PaperLimitSyncService:
                     "[PaperSync] order_id=%s %s source=%s 跳过实盘同步: %s",
                     order_id, symbol, order_source, reason,
                 )
+                if reason == "live_trading_enabled=0":
+                    return
                 self._mark(conn, order_id, "SKIPPED", None)
                 return
 
@@ -334,13 +338,33 @@ class PaperLimitSyncService:
     def _get_price(self, symbol: str) -> Optional[float]:
         try:
             r = requests.get(
-                f"{self.api_base}/api/futures/price/{symbol}", timeout=5
+                f"{self.api_base}/api/futures/price/{quote(symbol, safe='')}", timeout=5
             )
             r.raise_for_status()
             return float(r.json()["price"])
         except Exception as e:
+            price = self._get_price_fallback(symbol)
+            if price and price > 0:
+                return price
             logger.warning(f"[PaperSync] 获取价格失败 {symbol}: {e}")
             return None
+
+    def _get_price_fallback(self, symbol: str) -> Optional[float]:
+        try:
+            from app.utils.futures_price import get_futures_trade_price
+
+            price = get_futures_trade_price(
+                None,
+                symbol,
+                max_age_seconds=90,
+                log_tag="PaperSync",
+                require_fresh=False,
+            )
+            if price and price > 0:
+                return float(price)
+        except Exception as e:
+            logger.warning(f"[PaperSync] REST fallback price failed {symbol}: {e}")
+        return None
 
     def _mark(self, conn, order_id: int, status: str, live_position_id: Optional[str]) -> None:
         try:

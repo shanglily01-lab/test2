@@ -20,6 +20,7 @@ Gemini 预测 worker (v2 — 2026-05-29)
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -123,7 +124,9 @@ PREDICT_LEVERAGE = 5
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'gemini_predict'
 PREDICT_CANDIDATE_LIMIT = 500
-PREDICT_TOP_N_FALLBACK = 50
+PREDICT_TOP_N_FALLBACK = 30
+PREDICT_MAX_OUTPUT_TOKENS = max(EXPLORE_LLM_MAX_OUTPUT_TOKENS, 16384)
+_VALID_USDT_FUTURES_SYMBOL_RE = re.compile(r"^[A-Z0-9]{1,20}/USDT$")
 
 # 数据新鲜度门槛
 PREDICT_PRICE_FRESH_MIN = 20
@@ -164,11 +167,12 @@ def _get_predict_symbols(conn) -> List[str]:
     if rows:
         from app.services.ai_explore_prompt import select_llm_symbols_from_pool
 
-        symbols = select_llm_symbols_from_pool(
+        raw_symbols = select_llm_symbols_from_pool(
             rows[:PREDICT_CANDIDATE_LIMIT],
             banned=banned,
-            max_symbols=PREDICT_TOP_N_FALLBACK,
+            max_symbols=PREDICT_TOP_N_FALLBACK * 2,
         )
+        symbols = _filter_predict_symbols(raw_symbols, PREDICT_TOP_N_FALLBACK)
         if symbols:
             logger.info(
                 f"[Gemini预测] 从 candidate_pool_snapshot 技术面截断获取 {len(symbols)} 个 symbol"
@@ -191,9 +195,27 @@ def _get_predict_symbols(conn) -> List[str]:
                 "ORDER BY rank_score ASC LIMIT %s",
                 (PREDICT_TOP_N_FALLBACK,),
             )
-        symbols = [r['symbol'] for r in cur.fetchall()]
+        symbols = _filter_predict_symbols([r['symbol'] for r in cur.fetchall()], PREDICT_TOP_N_FALLBACK)
         logger.warning(f"[Gemini预测] candidate_pool 不可用, 回退 top_performing_symbols {len(symbols)} 个")
         return symbols
+
+
+def _filter_predict_symbols(symbols: List[str], limit: int) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for raw in symbols:
+        sym = futures_symbol_rating_canonical(raw)
+        if not _VALID_USDT_FUTURES_SYMBOL_RE.match(sym):
+            logger.info(f"[Gemini预测] 跳过非标准 U 本位 symbol: {raw}")
+            continue
+        clean = sym.replace("/", "")
+        if clean in seen:
+            continue
+        seen.add(clean)
+        out.append(sym)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _get_current_price(conn, symbol: str) -> Optional[float]:
@@ -496,7 +518,7 @@ def _call_gemini_predict(
     cfg = types.GenerateContentConfig(
         response_mime_type="application/json",
         temperature=0.1,
-        max_output_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
+        max_output_tokens=PREDICT_MAX_OUTPUT_TOKENS,
         http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_S * 1000),
     )
 
@@ -511,6 +533,17 @@ def _call_gemini_predict(
 
     text = (resp.text or "").strip()
     logger.info(f"[Gemini预测] gemini 用时 {time.time()-t0:.1f}s, output_len={len(text)}")
+
+    finish_reason = None
+    try:
+        finish_reason = resp.candidates[0].finish_reason
+    except Exception:
+        finish_reason = None
+    if finish_reason:
+        logger.info(f"[Gemini预测] finish_reason={finish_reason}")
+
+    if text and not text.rstrip().endswith("}"):
+        return None, f"JSON response truncated (len={len(text)}, finish_reason={finish_reason})"
 
     parsed, parse_err = parse_explore_llm_json(text, "Gemini预测")
     if parsed is None:
