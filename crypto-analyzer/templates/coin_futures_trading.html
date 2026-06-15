@@ -262,14 +262,20 @@ async function loadHistory(page) {
   _historyPageSize = limitEl ? parseInt(limitEl.value) || 30 : 30;
   if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="px-6 py-8 text-center text-on-surface-variant text-xs">加载中...</td></tr>';
 
+  var controller = new AbortController();
+  var timeoutId = setTimeout(function() { controller.abort(); }, 10000);
   try {
-    var res = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&page=' + _historyPage + '&page_size=' + _historyPageSize);
+    var res = await fetch('/api/futures/trades?account_id=' + ACCOUNT_ID + '&page=' + _historyPage + '&page_size=' + _historyPageSize, {signal: controller.signal});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     var data = await res.json();
     _historyAllTrades = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
     _historyTotalCount = data.total_count || 0;
   } catch(e) {
+    console.warn('交易记录加载失败:', e);
     if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败</td></tr>';
     return;
+  } finally {
+    clearTimeout(timeoutId);
   }
   applyHistoryFilter(false);
 }

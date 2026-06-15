@@ -1079,9 +1079,14 @@ function loadStats(posResult) {
 // ---- 加载账户统计 ----
 
 async function loadAccountInfo() {
+    var controller = new AbortController();
+    var timeoutId = setTimeout(function() { controller.abort(); }, 8000);
     try {
-        var res = await fetch('/api/futures/account/' + ACCOUNT_ID);
-        if (!res.ok) return;
+        var res = await fetch('/api/futures/account/' + ACCOUNT_ID, {signal: controller.signal});
+        if (!res.ok) {
+            console.warn('账户统计加载失败:', res.status);
+            return;
+        }
         var data = await res.json();
         var acc = data.data || data;
         var elWL     = document.getElementById('stat-win-loss');
@@ -1113,7 +1118,11 @@ async function loadAccountInfo() {
             el24h.textContent = fmtPnl(p24);
             el24h.className = 'text-2xl font-headline font-bold monospace ' + (p24 >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]');
         }
-    } catch(e) {}
+    } catch(e) {
+        console.warn('账户统计加载异常:', e);
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 // ---- 加载交易开关状态 ----

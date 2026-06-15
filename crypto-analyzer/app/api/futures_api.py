@@ -19,6 +19,7 @@ from typing import Dict, List, Optional
 from datetime import datetime
 from loguru import logger
 import pymysql
+import threading
 
 from app.trading.futures_trading_engine import FuturesTradingEngine
 from app.utils.position_time import calc_holding_minutes
@@ -41,25 +42,29 @@ db_config.setdefault('connect_timeout', 5)
 db_config.setdefault('read_timeout', 10)
 db_config.setdefault('write_timeout', 10)
 
-# 全局数据库连接（复用连接，避免每次请求都重新建立）
-_global_connection = None
+# One PyMySQL connection per worker thread. A single process-wide connection
+# is not thread-safe when the page fires concurrent API requests.
+_connection_state = threading.local()
 
 def get_db_connection():
-    """获取数据库连接（复用全局连接）"""
-    global _global_connection
+    """Get a reusable DB connection scoped to the current worker thread."""
+    connection = getattr(_connection_state, 'connection', None)
     try:
-        # 检查连接是否有效
-        if _global_connection and _global_connection.open:
-            _global_connection.ping(reconnect=True)
-            # 确保能读取最新数据（提交任何未完成的事务）
-            _global_connection.commit()
-            return _global_connection
+        if connection and connection.open:
+            connection.ping(reconnect=True)
+            connection.commit()
+            return connection
     except Exception:
-        pass
+        try:
+            if connection:
+                connection.close()
+        except Exception:
+            pass
+        _connection_state.connection = None
 
-    # 创建新连接，启用自动提交
-    _global_connection = pymysql.connect(**db_config, autocommit=True)
-    return _global_connection
+    connection = pymysql.connect(**db_config, autocommit=True)
+    _connection_state.connection = connection
+    return connection
 
 # 初始化Telegram通知服务
 # 注意：模拟盘不需要TG通知，只有实盘需要
@@ -1315,6 +1320,8 @@ def get_account(account_id: int):
             total_equity,
             total_profit_loss_pct,
             total_trades,
+            winning_trades,
+            losing_trades,
             win_rate,
             status
         FROM futures_trading_accounts
@@ -1330,27 +1337,18 @@ def get_account(account_id: int):
 
         cursor.execute(
             """
-            SELECT
-                COALESCE(SUM(CASE
-                    WHEN close_time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-                    THEN realized_pnl ELSE 0 END), 0) AS pnl_24h,
-                SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS winning_trades,
-                SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS losing_trades,
-                COALESCE(SUM(CASE WHEN realized_pnl > 0 THEN realized_pnl ELSE 0 END), 0) AS gross_profit,
-                COALESCE(SUM(CASE WHEN realized_pnl < 0 THEN realized_pnl ELSE 0 END), 0) AS gross_loss
+            SELECT COALESCE(SUM(realized_pnl), 0) AS pnl_24h
             FROM futures_positions
-            WHERE account_id = %s AND status = 'closed'
+            WHERE account_id = %s
+              AND status = 'closed'
+              AND close_time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
             """,
             (account_id,),
         )
         wl_row = cursor.fetchone() or {}
         account['pnl_24h'] = float(wl_row.get('pnl_24h') or 0)
-        account['winning_trades'] = int(wl_row.get('winning_trades') or 0)
-        account['losing_trades'] = int(wl_row.get('losing_trades') or 0)
-        account['gross_profit'] = float(wl_row.get('gross_profit') or 0)
-        account['gross_loss'] = float(wl_row.get('gross_loss') or 0)
         cursor.close()
-        # connection.close()  # 复用连接，不关闭
+        # connection.close()  # Thread-local connection is reused.
 
         # 转换 Decimal
         for key, value in account.items():
@@ -1647,7 +1645,7 @@ def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_size: i
         }
 
     except Exception as e:
-        logger.error(f"获取交易历史失败: {e}")
+        logger.exception(f"获取交易历史失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

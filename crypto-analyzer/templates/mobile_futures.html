@@ -228,8 +228,9 @@ async function loadTradingStatus() {
 async function loadStats() {
     try {
         const r = await fetch(`${API}/trades?account_id=2&page=1&page_size=50`).then(r => r.json());
-        if (r.success && r.data?.trades) {
-            const closed = r.data.trades.filter(t => t.realized_pnl != null);
+        const trades = Array.isArray(r.data) ? r.data : (r.data?.trades || []);
+        if (r.success && trades.length) {
+            const closed = trades.filter(t => t.realized_pnl != null);
             const wins = closed.filter(t => parseFloat(t.realized_pnl) > 0);
             const wr = closed.length ? Math.round(wins.length / closed.length * 100) : 0;
             const el = document.getElementById('winRate');
