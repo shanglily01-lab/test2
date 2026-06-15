@@ -17,8 +17,8 @@ cur = conn.cursor()
 print("=== open advisor settings ===")
 cur.execute(
     "SELECT setting_key, setting_value FROM system_settings "
-    "WHERE setting_key LIKE %s OR setting_key LIKE %s",
-    ("%open_advisor%", "%advisor%llm%"),
+    "WHERE setting_key LIKE %s OR setting_key LIKE %s OR setting_key=%s",
+    ("%open_advisor%", "%advisor%llm%", "deepseek_self_gated_open_skip_llm"),
 )
 for r in cur.fetchall():
     print(r)
