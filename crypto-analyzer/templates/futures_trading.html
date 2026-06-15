@@ -842,6 +842,14 @@ function updatePositionSideCounts(positions) {
     if (posBadge) posBadge.textContent = counts.long + counts.short;
 }
 
+function updateFastPositionStats(positions) {
+    positions = Array.isArray(positions) ? positions : [];
+    updatePositionSideCounts(positions);
+    loadStats({count: positions.length});
+    var badge = document.getElementById('pos-count-badge');
+    if (badge) badge.textContent = positions.length + ' 笔';
+}
+
 async function renderPositions(allPositions) {
     var tbody = document.getElementById('positions-tbody');
     if (!tbody) return null;
@@ -1027,6 +1035,7 @@ async function loadPositions() {
         var res = await fetch('/api/futures/positions?account_id=' + ACCOUNT_ID + '&status=open');
         var data = await res.json();
         positions = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : []);
+        updateFastPositionStats(positions);
     } catch(e) {
         tbody.innerHTML = '<tr><td colspan="9" class="px-6 py-8 text-center text-[#ff716c] text-xs">加载失败: ' + e.message + '</td></tr>';
         return null;
@@ -1231,12 +1240,17 @@ async function loadPaperLimitSettingsHint() {
 }
 
 async function loadAll() {
-    var posResult = await loadPositions();
-    loadStats(posResult);
-    loadPaperLimitSettingsHint();
-    loadLimitOrders();
-    await loadAccountInfo();
-    await loadTradingStatus();
+    var posPromise = loadPositions().then(function(posResult) {
+        loadStats(posResult);
+        return posResult;
+    });
+    await Promise.allSettled([
+        posPromise,
+        loadAccountInfo(),
+        loadTradingStatus(),
+        loadPaperLimitSettingsHint(),
+        loadLimitOrders()
+    ]);
 }
 
 // ---- 初始化 ----

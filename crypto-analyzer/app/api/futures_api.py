@@ -1330,19 +1330,10 @@ def get_account(account_id: int):
 
         cursor.execute(
             """
-            SELECT COALESCE(SUM(realized_pnl), 0) AS pnl_24h
-            FROM futures_positions
-            WHERE account_id = %s AND status = 'closed'
-              AND close_time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-            """,
-            (account_id,),
-        )
-        pnl_row = cursor.fetchone() or {}
-        account['pnl_24h'] = float(pnl_row.get('pnl_24h') or 0)
-
-        cursor.execute(
-            """
             SELECT
+                COALESCE(SUM(CASE
+                    WHEN close_time >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+                    THEN realized_pnl ELSE 0 END), 0) AS pnl_24h,
                 SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS winning_trades,
                 SUM(CASE WHEN realized_pnl < 0 THEN 1 ELSE 0 END) AS losing_trades,
                 COALESCE(SUM(CASE WHEN realized_pnl > 0 THEN realized_pnl ELSE 0 END), 0) AS gross_profit,
@@ -1353,6 +1344,7 @@ def get_account(account_id: int):
             (account_id,),
         )
         wl_row = cursor.fetchone() or {}
+        account['pnl_24h'] = float(wl_row.get('pnl_24h') or 0)
         account['winning_trades'] = int(wl_row.get('winning_trades') or 0)
         account['losing_trades'] = int(wl_row.get('losing_trades') or 0)
         account['gross_profit'] = float(wl_row.get('gross_profit') or 0)
