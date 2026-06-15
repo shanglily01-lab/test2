@@ -11,6 +11,17 @@ from loguru import logger
 import threading
 
 
+def _normalize_database_service_config(db_config: dict) -> dict:
+    """DatabaseService expects {'type': 'mysql', 'mysql': {...}}."""
+    if not isinstance(db_config, dict):
+        return {'type': 'mysql', 'mysql': {}}
+    if 'mysql' in db_config or 'sqlite' in db_config or 'type' in db_config:
+        return db_config
+    if {'host', 'user', 'database'} & set(db_config.keys()):
+        return {'type': 'mysql', 'mysql': db_config}
+    return db_config
+
+
 class PriceCacheService:
     """
     内存价格缓存服务
@@ -25,7 +36,7 @@ class PriceCacheService:
             db_config: 数据库配置
             update_interval: 更新间隔（秒）
         """
-        self.db_config = db_config
+        self.db_config = _normalize_database_service_config(db_config)
         self.update_interval = update_interval
 
         # 价格缓存: {symbol: {"price": Decimal, "timestamp": datetime}}
