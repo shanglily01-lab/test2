@@ -48,7 +48,7 @@ from app.services.ai_explore_prompt import (
     parse_explore_llm_json,
     sym_data_for_catalyst_gate,
 )
-from app.services.ai_predict_prompt import build_predict_prompt
+from app.services.ai_predict_prompt import build_gemini_predict_prompt
 from app.services.ai_predict_schedule import (
     GEMINI_PREDICT_NEXT_DUE_KEY,
     get_ai_round_interval_hours,
@@ -510,7 +510,7 @@ def _call_gemini_predict(
         logger.error("[Gemini预测] 缺依赖, 请 pip install google-genai")
         return None, "缺 google-genai 依赖"
 
-    prompt = build_predict_prompt(symbols_data, global_ctx)
+    prompt = build_gemini_predict_prompt(symbols_data, global_ctx)
 
     logger.info(f"[Gemini预测] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens)")
 
