@@ -1273,14 +1273,28 @@ class UnifiedDataScheduler:
         # ============================================================
         logger.info("\n  🚀 data_cache 层: 预计算缓存自动刷新")
 
+        _cache_task_running = set()
+        _cache_task_lock = threading.Lock()
+
         def _run_cache_task(job_fn):
             """在线程中执行缓存任务."""
+            job_name = getattr(job_fn, "__name__", "cache_task")
+            with _cache_task_lock:
+                if job_name in _cache_task_running:
+                    logger.info(f"[data_cache] {job_name} 上一轮仍在运行，跳过本轮")
+                    return
+                _cache_task_running.add(job_name)
+
             def wrapper():
                 try:
                     job_fn()
                 except Exception as e:
                     logger.error(f"[data_cache] 任务失败: {e}", exc_info=True)
-            threading.Thread(target=wrapper, daemon=True, name=f"Cache_{job_fn.__name__}").start()
+                finally:
+                    with _cache_task_lock:
+                        _cache_task_running.discard(job_name)
+
+            threading.Thread(target=wrapper, daemon=True, name=f"Cache_{job_name}").start()
 
         from app.services.data_cache_service import (
             refresh_market_snapshot,

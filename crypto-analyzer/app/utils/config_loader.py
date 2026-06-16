@@ -14,6 +14,10 @@ from typing import Any, Dict, Optional
 from dotenv import dotenv_values
 from loguru import logger
 
+DB_SESSION_INIT_COMMAND = (
+    "SET SESSION innodb_lock_wait_timeout=5"
+)
+
 # 项目根目录（config_loader.py 位于 app/utils/，上两级即根目录）
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
 
@@ -49,6 +53,7 @@ def get_db_config(env_path: Optional[Path] = None) -> Dict[str, Any]:
         'connect_timeout': int(env.get('DB_CONNECT_TIMEOUT', 5)),
         'read_timeout': int(env.get('DB_READ_TIMEOUT', 10)),
         'write_timeout': int(env.get('DB_WRITE_TIMEOUT', 10)),
+        'init_command': env.get('DB_INIT_COMMAND') or DB_SESSION_INIT_COMMAND,
     }
 
 

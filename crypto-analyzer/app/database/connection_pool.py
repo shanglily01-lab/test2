@@ -4,7 +4,7 @@
 MySQL 连接池管理器
 解决长时间运行的服务中连接断开的问题
 """
-from app.utils.config_loader import get_db_config
+from app.utils.config_loader import DB_SESSION_INIT_COMMAND, get_db_config
 import pymysql
 from pymysql.cursors import DictCursor
 from typing import Optional, Dict, Any
@@ -46,18 +46,34 @@ class MySQLConnectionPool:
             config.setdefault('connect_timeout', 10)
             config.setdefault('read_timeout', 30)
             config.setdefault('write_timeout', 30)
-            config.setdefault('init_command', "SET SESSION wait_timeout=28800")
+            config.setdefault('init_command', DB_SESSION_INIT_COMMAND)
 
             # cursorclass 单独设置（不能用 setdefault，因为可能是 None）
             if 'cursorclass' not in config or config['cursorclass'] is None:
                 config['cursorclass'] = DictCursor
 
             conn = pymysql.connect(**config)
+            self._apply_optional_session_guards(conn)
             logger.debug("创建新的数据库连接")
             return conn
         except Exception as e:
             logger.error(f"❌ 创建数据库连接失败: {e}")
             raise
+
+    def _apply_optional_session_guards(self, conn) -> None:
+        """Best-effort DB guards; unsupported variables must not break connects."""
+        try:
+            with conn.cursor() as cur:
+                for stmt in (
+                    "SET SESSION lock_wait_timeout=5",
+                    "SET SESSION wait_timeout=28800",
+                ):
+                    try:
+                        cur.execute(stmt)
+                    except Exception as e:
+                        logger.debug(f"DB session guard skipped ({stmt}): {e}")
+        except Exception as e:
+            logger.debug(f"DB session guard setup skipped: {e}")
 
     def _is_connection_alive(self, conn) -> bool:
         """检查连接是否存活"""
@@ -229,7 +245,8 @@ class RobustConnection:
                         charset='utf8mb4',
                         connect_timeout=10,
                         read_timeout=30,
-                        write_timeout=30
+                        write_timeout=30,
+                        init_command=DB_SESSION_INIT_COMMAND,
                     )
                     logger.debug(f"数据库连接已建立 (尝试 {attempt + 1}/{self._reconnect_attempts})")
                 else:

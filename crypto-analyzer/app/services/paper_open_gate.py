@@ -194,13 +194,22 @@ def gate_simulated_open(
         return False, reason
 
     try:
-        from app.services.trading_gates import check_simulated_symbol_allowed
+        from app.services.trading_gates import (
+            check_account_loss_cooldown,
+            check_simulated_symbol_allowed,
+        )
         allowed, reason = check_simulated_symbol_allowed(symbol, conn)
         if not allowed:
             logger.info(
                 f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {reason}"
             )
             return False, reason
+        account_allowed, account_reason = check_account_loss_cooldown(conn)
+        if not account_allowed:
+            logger.info(
+                f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {account_reason}"
+            )
+            return False, account_reason
     except Exception as e:
         logger.warning(f"[开仓闸门] {symbol} 基础币种闸门异常，拒绝开仓: {e}")
         return False, "symbol_gate_error"

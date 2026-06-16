@@ -27,6 +27,9 @@ LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
     "deepseek_predict",
 })
 
+ACCOUNT_LOSS_COOLDOWN_HOURS = 12
+ACCOUNT_LOSS_COOLDOWN_LIMIT_USD = 100.0
+
 def _coerce_bool(value, default: bool) -> bool:
     if value is None:
         return default
@@ -112,6 +115,9 @@ def check_live_open_allowed(
         return False, "live_trading_enabled=0"
     if not should_sync_live_for_source(source):
         return False, f"策略 {source} 仅模拟盘"
+    account_allowed, account_reason = check_account_loss_cooldown(cursor)
+    if not account_allowed:
+        return False, account_reason
     return check_live_symbol_allowed(symbol, cursor)
 
 
@@ -151,6 +157,90 @@ def _as_cursor(conn_or_cursor):
     if hasattr(conn_or_cursor, "cursor"):
         return conn_or_cursor.cursor()
     return conn_or_cursor
+
+
+def _row_get(row, key: str, index: int, default=None):
+    if row is None:
+        return default
+    if isinstance(row, dict):
+        return row.get(key, default)
+    try:
+        return row[index]
+    except Exception:
+        return default
+
+
+def check_account_loss_cooldown(
+    conn_or_cursor=None,
+    account_id: int = 2,
+) -> Tuple[bool, str]:
+    """账户级开仓冷却：近 12 小时已实现亏损累计达到 100U，暂停新开仓 12 小时。"""
+    own_conn = conn_or_cursor is None
+    conn = None
+    cur = None
+    close_cursor = False
+    try:
+        if own_conn:
+            conn = pymysql.connect(
+                **get_db_config(),
+                charset="utf8mb4",
+                cursorclass=pymysql.cursors.DictCursor,
+                autocommit=True,
+            )
+            cur = conn.cursor()
+            close_cursor = True
+        else:
+            cur = _as_cursor(conn_or_cursor)
+            close_cursor = hasattr(conn_or_cursor, "cursor") and cur is not conn_or_cursor
+
+        cur.execute(
+            """
+            SELECT
+              COUNT(*) AS loss_n,
+              COALESCE(SUM(CASE WHEN realized_pnl < 0 THEN -realized_pnl ELSE 0 END), 0) AS loss_abs,
+              MAX(close_time) AS last_loss_time,
+              TIMESTAMPDIFF(
+                MINUTE,
+                NOW(),
+                DATE_ADD(MAX(close_time), INTERVAL %s HOUR)
+              ) AS remaining_min
+            FROM futures_positions
+            WHERE account_id=%s
+              AND status='closed'
+              AND close_time >= DATE_SUB(NOW(), INTERVAL %s HOUR)
+              AND realized_pnl IS NOT NULL
+              AND realized_pnl < 0
+            """,
+            (ACCOUNT_LOSS_COOLDOWN_HOURS, account_id, ACCOUNT_LOSS_COOLDOWN_HOURS),
+        )
+        row = cur.fetchone() or {}
+        loss_n = int(_row_get(row, "loss_n", 0, 0) or 0)
+        loss_abs = float(_row_get(row, "loss_abs", 1, 0) or 0)
+        if loss_abs >= ACCOUNT_LOSS_COOLDOWN_LIMIT_USD:
+            remaining_min = int(_row_get(row, "remaining_min", 3, 0) or 0)
+            remaining_text = (
+                f"，剩余约{max(0, remaining_min)}分钟"
+                if remaining_min > 0
+                else ""
+            )
+            return (
+                False,
+                f"账户近{ACCOUNT_LOSS_COOLDOWN_HOURS}小时已实现亏损{loss_abs:.2f}U"
+                f"({loss_n}笔)，达到{ACCOUNT_LOSS_COOLDOWN_LIMIT_USD:.0f}U风控阈值，"
+                f"禁止新开仓{ACCOUNT_LOSS_COOLDOWN_HOURS}小时{remaining_text}",
+            )
+        return True, ""
+    finally:
+        if close_cursor and cur is not None:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if own_conn and conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def _symbol_in_candidate_pool(symbol: str) -> bool:
