@@ -570,6 +570,8 @@ function escapeHtml(s) {
 // STATUS + TOGGLE
 // ============================================================
 function loadStatus() {
+  if (loadStatus._loading) return;
+  loadStatus._loading = true;
   fetch('/api/gemini-explore/status')
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -596,13 +598,16 @@ function loadStatus() {
       document.getElementById('stat-lastrun').textContent = lr.asof_utc ? shortUTC(lr.asof_utc) : '--';
       document.getElementById('stat-laststatus').innerHTML = lr.status ? statusBadge(lr.status) : '--';
     })
-    .catch(function(e){ console.error('status error', e); });
+    .catch(function(e){ console.error('status error', e); })
+    .finally(function(){ loadStatus._loading = false; });
 }
 
 // ============================================================
 // POSITIONS
 // ============================================================
 function loadOpenPositions() {
+  if (loadOpenPositions._loading) return;
+  loadOpenPositions._loading = true;
   // 走实时端点: 后端用 Hub WS markPrice 拿当下价 + 现场算 PnL
   fetch('/api/gemini-explore/positions/live')
     .then(function(r){ return r.json(); })
@@ -650,10 +655,13 @@ function loadOpenPositions() {
     })
     .catch(function(e){
       document.getElementById('open-tbody').innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载失败: ' + e + '</td></tr>';
-    });
+    })
+    .finally(function(){ loadOpenPositions._loading = false; });
 }
 
 function loadClosedPositions() {
+  if (loadClosedPositions._loading) return;
+  loadClosedPositions._loading = true;
   fetch('/api/gemini-explore/positions?status=closed&limit=200')
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -679,13 +687,16 @@ function loadClosedPositions() {
     })
     .catch(function(e){
       document.getElementById('closed-tbody').innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载失败: ' + e + '</td></tr>';
-    });
+    })
+    .finally(function(){ loadClosedPositions._loading = false; });
 }
 
 // ============================================================
 // STATS (盈亏统计)
 // ============================================================
 function loadExploreStats() {
+  if (loadExploreStats._loading) return;
+  loadExploreStats._loading = true;
   fetch('/api/gemini-explore/stats?days=30')
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -698,7 +709,8 @@ function loadExploreStats() {
       applyWinRateCard('e', s);
       document.getElementById('e-stat-closed2').textContent = s.total_trades;
     })
-    .catch(function(e){ console.error('explore stats error', e); });
+    .catch(function(e){ console.error('explore stats error', e); })
+    .finally(function(){ loadExploreStats._loading = false; });
 }
 
 // ============================================================
@@ -707,6 +719,8 @@ function loadExploreStats() {
 var _verdictsCache = {};
 
 function loadRuns() {
+  if (loadRuns._loading) return;
+  loadRuns._loading = true;
   fetch('/api/gemini-explore/runs?limit=20')
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -732,7 +746,8 @@ function loadRuns() {
     })
     .catch(function(e){
       document.getElementById('runs-tbody').innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载失败: ' + e + '</td></tr>';
-    });
+    })
+    .finally(function(){ loadRuns._loading = false; });
 }
 
 function toggleVerdicts(runId) {
@@ -791,14 +806,22 @@ function switchTab(tab) {
 // ============================================================
 // INIT
 // ============================================================
-function loadAll() {
+function loadAll(options) {
+  options = options || {};
   loadStatus();
   loadOpenPositions();
   loadRuns();
-  loadClosedPositions();
-  loadExploreStats();
+  if (options.deferSecondary) {
+    setTimeout(function() {
+      loadExploreStats();
+      loadClosedPositions();
+    }, options.deferMs || 1000);
+  } else {
+    loadClosedPositions();
+    loadExploreStats();
+  }
 }
-loadAll();
+loadAll({ deferSecondary: true });
 // 持仓 + 实时盈亏: 每 3 秒刷 (Hub WS markPrice 秒级实时)
 setInterval(loadOpenPositions, 15000);
 // status + 顶部统计卡 (除 open_count/总盈亏外): 每 30 秒刷
@@ -1051,8 +1074,5 @@ setInterval(function(){
 
 </body>
 </html>
-
-
-
 
 
