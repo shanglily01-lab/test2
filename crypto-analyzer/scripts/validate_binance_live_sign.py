@@ -23,8 +23,9 @@ from urllib.parse import urlencode
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-import pymysql
+from dotenv import dotenv_values
 
+from app.services.api_key_service import APIKeyService
 from app.trading.binance_futures_engine import BinanceFuturesEngine
 from app.utils.config_loader import get_db_config
 
@@ -46,26 +47,23 @@ def _warn(msg: str) -> None:
 
 
 def _load_active_api_key() -> Tuple[str, str]:
-    cfg = get_db_config()
-    conn = pymysql.connect(
-        **cfg, charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor,
-    )
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT api_key, api_secret
-                FROM user_api_keys
-                WHERE status='active' AND exchange='binance'
-                ORDER BY id ASC LIMIT 1
-                """
-            )
-            row = cur.fetchone()
-    finally:
-        conn.close()
-    if not row or not row.get("api_key") or not row.get("api_secret"):
+    """与 PaperSync / UserTradingEngineManager 一致：经 APIKeyService 解密读取。"""
+    db_config = get_db_config()
+    env = dotenv_values(str(ROOT / ".env"))
+    enc = (env.get("API_KEY_ENCRYPTION_KEY") or env.get("JWT_SECRET_KEY") or "").strip()
+    svc = APIKeyService(db_config, encryption_key=enc or None)
+    keys = svc.get_all_active_api_keys("binance")
+    if not keys:
         _fail("无可用 Binance API Key (user_api_keys.status=active)")
-    return str(row["api_key"]), str(row["api_secret"])
+    row = keys[0]
+    api_key = (row.get("api_key") or "").strip()
+    api_secret = (row.get("api_secret") or "").strip()
+    if len(api_key) < 10 or len(api_secret) < 10:
+        _fail(
+            "API Key 解密后无效（长度过短）。"
+            "请确认 .env 中 JWT_SECRET_KEY / API_KEY_ENCRYPTION_KEY 与 Web 服务一致"
+        )
+    return api_key, api_secret
 
 
 def _api_error(result: Any) -> str | None:
