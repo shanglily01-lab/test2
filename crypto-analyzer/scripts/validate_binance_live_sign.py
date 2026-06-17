@@ -120,9 +120,12 @@ def _order_test_market(engine: BinanceFuturesEngine, symbol: str, leverage: int)
     px = engine.get_current_price(symbol)
     if not px or px <= 0:
         _fail(f"{symbol} 无法获取市价")
-    qty = engine._round_quantity(Decimal(str(round(1500 / float(px)))), symbol)
-    if qty <= 0:
-        _fail(f"{symbol} 计算测试数量非正")
+    raw_qty = Decimal("1500") / Decimal(str(px))
+    qty = engine._round_quantity(raw_qty, symbol)
+    info = engine._symbol_info_cache.get(binance_symbol, {})
+    min_qty = info.get("min_qty", Decimal("0.001"))
+    if qty <= 0 or qty < min_qty:
+        _fail(f"{symbol} 计算测试数量无效 raw={raw_qty} rounded={qty} min_qty={min_qty}")
 
     lev = engine.set_leverage(symbol, leverage)
     if lev.get("success") is False:
