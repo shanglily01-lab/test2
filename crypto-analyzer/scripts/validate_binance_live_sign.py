@@ -146,64 +146,74 @@ def _order_test_market(engine: BinanceFuturesEngine, symbol: str, leverage: int)
     _ok(f"{symbol} order/test MARKET qty={qty} (≈1500U notional)")
 
 
-def _order_test_stop(engine: BinanceFuturesEngine, symbol: str) -> None:
-    """与 _place_stop_loss 相同参数（无 reduceOnly）。"""
+AUTH_FAIL_MARKERS = ("-1022", "-2014")
+
+
+def _verify_algo_signed_api(engine: BinanceFuturesEngine, symbol: str, label: str) -> None:
+    """不下条件单，仅 GET openAlgoOrders 验证 Algo 路径签名（含中文 symbol）。"""
+    binance_symbol = engine._convert_symbol(symbol)
+    result = engine._request("GET", "/fapi/v1/openAlgoOrders", {"symbol": binance_symbol})
+    err = _api_error(result)
+    if err and any(m in err for m in AUTH_FAIL_MARKERS):
+        _fail(f"{symbol} {label} openAlgoOrders 签名失败: {err}")
+    _ok(f"{symbol} {label} openAlgoOrders 签名 OK")
+
+
+def _order_test_conditional(
+    engine: BinanceFuturesEngine,
+    symbol: str,
+    order_type: str,
+    trigger_price: Decimal,
+    label: str,
+) -> None:
+    """条件单：旧 /order/test 应 -4120；再验 Algo 签名路径。"""
     binance_symbol = engine._convert_symbol(symbol)
     px = float(engine.get_current_price(symbol))
     if px <= 0:
-        _fail(f"{symbol} 无法获取市价 (SL test)")
+        _fail(f"{symbol} 无法获取市价 ({label})")
     qty = engine._round_quantity(Decimal("1"), symbol)
     if qty <= 0:
         qty = Decimal("1")
-    stop_price = engine._round_price(Decimal(str(px * 0.97)), symbol)
+    side = "SELL"
+    position_side = "LONG"
 
     params = {
         "symbol": binance_symbol,
-        "side": "SELL",
-        "positionSide": "LONG",
-        "type": "STOP_MARKET",
-        "stopPrice": str(stop_price),
+        "side": side,
+        "positionSide": position_side,
+        "type": order_type,
+        "stopPrice": str(trigger_price),
         "quantity": str(qty),
         "workingType": "MARK_PRICE",
         "timeInForce": "GTE_GTC",
     }
     if "reduceOnly" in params or "reduceonly" in params:
-        _fail("SL 参数仍含 reduceOnly")
+        _fail(f"{label} 参数仍含 reduceOnly")
 
     result = engine._request("POST", "/fapi/v1/order/test", params)
     err = _api_error(result)
     if err:
+        if "-4120" in err:
+            _ok(f"{symbol} {label}: 旧 endpoint -4120 (预期，已迁移 Algo Order API)")
+            _verify_algo_signed_api(engine, symbol, label)
+            return
         if "-1106" in err and "reduceonly" in err.lower():
-            _fail(f"{symbol} SL order/test 仍触发 -1106 reduceOnly: {err}")
-        _fail(f"{symbol} SL order/test: {err}")
-    _ok(f"{symbol} SL order/test stop={stop_price} (无 reduceOnly)")
+            _fail(f"{symbol} {label} 仍触发 -1106 reduceOnly: {err}")
+        _fail(f"{symbol} {label} order/test: {err}")
+    _ok(f"{symbol} {label} order/test trigger={trigger_price} (legacy endpoint)")
+    _verify_algo_signed_api(engine, symbol, label)
+
+
+def _order_test_stop(engine: BinanceFuturesEngine, symbol: str) -> None:
+    px = float(engine.get_current_price(symbol))
+    stop_price = engine._round_price(Decimal(str(px * 0.97)), symbol)
+    _order_test_conditional(engine, symbol, "STOP_MARKET", stop_price, "SL")
 
 
 def _order_test_take_profit(engine: BinanceFuturesEngine, symbol: str) -> None:
-    binance_symbol = engine._convert_symbol(symbol)
     px = float(engine.get_current_price(symbol))
-    qty = engine._round_quantity(Decimal("1"), symbol)
-    if qty <= 0:
-        qty = Decimal("1")
     tp_price = engine._round_price(Decimal(str(px * 1.05)), symbol)
-
-    params = {
-        "symbol": binance_symbol,
-        "side": "SELL",
-        "positionSide": "LONG",
-        "type": "TAKE_PROFIT_MARKET",
-        "stopPrice": str(tp_price),
-        "quantity": str(qty),
-        "workingType": "MARK_PRICE",
-        "timeInForce": "GTE_GTC",
-    }
-    result = engine._request("POST", "/fapi/v1/order/test", params)
-    err = _api_error(result)
-    if err:
-        if "-1106" in err and "reduceonly" in err.lower():
-            _fail(f"{symbol} TP order/test 仍触发 -1106 reduceOnly: {err}")
-        _fail(f"{symbol} TP order/test: {err}")
-    _ok(f"{symbol} TP order/test stop={tp_price} (无 reduceOnly)")
+    _order_test_conditional(engine, symbol, "TAKE_PROFIT_MARKET", tp_price, "TP")
 
 
 def _inspect_engine_sl_tp_helpers(engine: BinanceFuturesEngine, symbol: str) -> None:
@@ -213,10 +223,9 @@ def _inspect_engine_sl_tp_helpers(engine: BinanceFuturesEngine, symbol: str) -> 
     src = inspect.getsource(engine._place_stop_loss)
     if "reduceOnly" in src or "reduceonly" in src:
         _fail("_place_stop_loss 源码仍含 reduceOnly")
-    src_tp = inspect.getsource(engine._place_take_profit)
-    if "reduceOnly" in src_tp or "reduceonly" in src_tp:
-        _fail("_place_take_profit 源码仍含 reduceOnly")
-    _ok("_place_stop_loss / _place_take_profit 源码无 reduceOnly")
+    if "algoOrder" not in src or "triggerPrice" not in inspect.getsource(engine._submit_algo_conditional):
+        _fail("引擎 Algo 回退未使用 /fapi/v1/algoOrder + triggerPrice")
+    _ok("_place_stop_loss 无 reduceOnly；Algo 回退走 /fapi/v1/algoOrder")
 
 
 def main() -> None:

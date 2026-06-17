@@ -902,6 +902,27 @@ class BinanceFuturesEngine:
             traceback.print_exc()
             return {'success': False, 'error': str(e)}
 
+    def _submit_algo_conditional(
+        self,
+        binance_symbol: str,
+        side: str,
+        position_side: str,
+        order_type: str,
+        trigger_price: Decimal,
+        quantity: Decimal,
+    ) -> dict:
+        """Binance 2025-12+ 条件单：POST /fapi/v1/algoOrder (algoType=CONDITIONAL)."""
+        return self._request('POST', '/fapi/v1/algoOrder', {
+            'algoType': 'CONDITIONAL',
+            'symbol': binance_symbol,
+            'side': side,
+            'positionSide': position_side,
+            'type': order_type,
+            'triggerPrice': str(trigger_price),
+            'quantity': str(quantity),
+            'workingType': 'MARK_PRICE',
+        })
+
     def _place_stop_loss(self, symbol: str, position_side: str, quantity: Decimal,
                          stop_price: Decimal) -> Dict:
         """设置止损单 (STOP_MARKET)，含 Algo Order API 回退。"""
@@ -923,19 +944,12 @@ class BinanceFuturesEngine:
 
         result = self._request('POST', '/fapi/v1/order', params)
 
-        # -4120: 该账号需用 Algo Order API 下条件单，自动回退
+        # -4120: 条件单已迁移 Algo Order API
         if isinstance(result, dict) and result.get('code') == -4120:
             logger.warning(f"[止损] 账号需用Algo Order API, 切换重试 {symbol} {position_side}")
-            algo_params = {
-                'symbol': binance_symbol,
-                'side': side,
-                'positionSide': position_side,
-                'type': 'STOP_MARKET',
-                'stopPrice': str(stop_price),
-                'quantity': str(quantity),
-                'workingType': 'MARK_PRICE',
-            }
-            result = self._request('POST', '/fapi/v1/algo/order', algo_params)
+            result = self._submit_algo_conditional(
+                binance_symbol, side, position_side, 'STOP_MARKET', stop_price, quantity,
+            )
 
         if isinstance(result, dict) and result.get('success') == False:
             return result
@@ -1072,19 +1086,13 @@ class BinanceFuturesEngine:
 
         result = self._request('POST', '/fapi/v1/order', params)
 
-        # -4120: 该账号需用 Algo Order API 下条件单，自动回退
+        # -4120: 条件单已迁移 Algo Order API
         if isinstance(result, dict) and result.get('code') == -4120:
             logger.warning(f"[止盈] 账号需用Algo Order API, 切换重试 {symbol} {position_side}")
-            algo_params = {
-                'symbol': binance_symbol,
-                'side': side,
-                'positionSide': position_side,
-                'type': 'TAKE_PROFIT_MARKET',
-                'stopPrice': str(take_profit_price),
-                'quantity': str(quantity),
-                'workingType': 'MARK_PRICE',
-            }
-            result = self._request('POST', '/fapi/v1/algo/order', algo_params)
+            result = self._submit_algo_conditional(
+                binance_symbol, side, position_side, 'TAKE_PROFIT_MARKET',
+                take_profit_price, quantity,
+            )
 
         if isinstance(result, dict) and result.get('success') == False:
             return result
