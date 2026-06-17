@@ -217,15 +217,21 @@ def _order_test_take_profit(engine: BinanceFuturesEngine, symbol: str) -> None:
 
 
 def _inspect_engine_sl_tp_helpers(engine: BinanceFuturesEngine, symbol: str) -> None:
-    """确认引擎 helper 构建的参数不含 reduceOnly。"""
+    """确认引擎 helper 构建的参数不含 reduceOnly，且 Algo 回退走新 API。"""
     import inspect
 
-    src = inspect.getsource(engine._place_stop_loss)
-    if "reduceOnly" in src or "reduceonly" in src:
+    sl_src = inspect.getsource(engine._place_stop_loss)
+    tp_src = inspect.getsource(engine._place_take_profit)
+    algo_src = inspect.getsource(engine._submit_algo_conditional)
+    if "reduceOnly" in sl_src or "reduceonly" in sl_src:
         _fail("_place_stop_loss 源码仍含 reduceOnly")
-    if "algoOrder" not in src or "triggerPrice" not in inspect.getsource(engine._submit_algo_conditional):
+    if "reduceOnly" in tp_src or "reduceonly" in tp_src:
+        _fail("_place_take_profit 源码仍含 reduceOnly")
+    if "_submit_algo_conditional" not in sl_src or "_submit_algo_conditional" not in tp_src:
+        _fail("SL/TP 未调用 _submit_algo_conditional")
+    if "algoOrder" not in algo_src or "triggerPrice" not in algo_src:
         _fail("引擎 Algo 回退未使用 /fapi/v1/algoOrder + triggerPrice")
-    _ok("_place_stop_loss 无 reduceOnly；Algo 回退走 /fapi/v1/algoOrder")
+    _ok("_place_stop_loss / _place_take_profit 无 reduceOnly；Algo 回退走 /fapi/v1/algoOrder")
 
 
 def main() -> None:
