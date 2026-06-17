@@ -5,7 +5,7 @@ import json
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
@@ -14,6 +14,11 @@ from app.utils.position_time import utc_now_naive
 
 # 模拟盘默认账户
 PAPER_ACCOUNT_ID = 2
+
+
+def is_paper_futures_account(account_id: int) -> bool:
+    """模拟合约账户：不冻结保证金，开仓不校验可用余额。"""
+    return int(account_id) == PAPER_ACCOUNT_ID
 
 # 默认限价偏移（百分比点数，0.5 = 0.5%）
 DEFAULT_PAPER_LIMIT_LONG_OFFSET_PCT = 0.5
@@ -160,12 +165,14 @@ def create_paper_limit_order(
     strategy_id: Optional[int] = None,
     account_id: int = PAPER_ACCOUNT_ID,
     timeout_minutes: int = PAPER_LIMIT_TIMEOUT_MINUTES,
+    failure_reason: Optional[List[str]] = None,
 ) -> Optional[int]:
     """
     创建模拟盘限价开仓单（不直接成交）。
 
     Returns:
-        futures_orders.id，失败返回 None。
+        futures_orders.id 或市价路径的 position_id；失败返回 None。
+        若传入 failure_reason 列表，失败时会 append 具体原因。
     """
     symbol = futures_symbol_rating_canonical(symbol)
     side = side.upper()
@@ -195,6 +202,7 @@ def create_paper_limit_order(
             signal_id=signal_id,
             strategy_id=strategy_id,
             account_id=account_id,
+            failure_reason=failure_reason,
         )
 
     if has_pending_paper_limit_order(conn, symbol, side, source, account_id):
@@ -339,6 +347,7 @@ def _open_paper_market_position(
     signal_id: Optional[int],
     strategy_id: Optional[int],
     account_id: int,
+    failure_reason: Optional[List[str]] = None,
 ) -> Optional[int]:
     """限价开关关闭时，模拟盘改市价立即开仓。"""
     side = side.upper()
@@ -359,7 +368,10 @@ def _open_paper_market_position(
         notional = margin_value * leverage_value
         quantity = round(notional / market_ref, 6) if market_ref > 0 else 0
     if quantity <= 0:
-        logger.error(f"[市价开仓] {symbol} {side} 数量非正")
+        msg = f"[市价开仓] {symbol} {side} 数量非正"
+        logger.error(msg)
+        if failure_reason is not None:
+            failure_reason.append(msg)
         return None
 
     try:
@@ -388,9 +400,12 @@ def _open_paper_market_position(
             planned_close_time=planned_close_time,
         )
         if not result.get("success"):
+            msg = result.get("message") or result.get("error") or "open_position 失败"
             logger.warning(
-                f"[市价开仓] {symbol} {side} source={source} 失败: {result.get('message')}"
+                f"[市价开仓] {symbol} {side} source={source} 失败: {msg}"
             )
+            if failure_reason is not None:
+                failure_reason.append(str(msg))
             return None
         pos_id = result.get("position_id")
         logger.info(
@@ -400,6 +415,8 @@ def _open_paper_market_position(
         return int(pos_id) if pos_id else None
     except Exception as e:
         logger.error(f"[市价开仓] {symbol} {side} 异常: {e}")
+        if failure_reason is not None:
+            failure_reason.append(str(e))
         return None
 
 

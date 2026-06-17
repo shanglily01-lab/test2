@@ -36,9 +36,6 @@ def update_account_statistics(account_id: int = None):
         conn = pymysql.connect(
             **MYSQL_CONFIG,
             autocommit=True,
-            connect_timeout=10,
-            read_timeout=30,
-            write_timeout=30
         )
         cursor = conn.cursor(pymysql.cursors.DictCursor)
 
@@ -82,7 +79,11 @@ def update_account_statistics(account_id: int = None):
             winning_trades = closed_stats['winning_trades'] or 0
             losing_trades = closed_stats['losing_trades'] or 0
             total_realized_pnl = float(closed_stats['total_realized_pnl'])
-            frozen_balance = float(open_stats['open_margin'])  # 未平仓持仓占用的保证金
+            from app.services.paper_limit_entry import is_paper_futures_account
+            if is_paper_futures_account(acc_id):
+                frozen_balance = 0.0
+            else:
+                frozen_balance = float(open_stats['open_margin'])
 
             # 当前余额 = 初始余额 + 已实现盈亏
             current_balance = initial_balance + total_realized_pnl

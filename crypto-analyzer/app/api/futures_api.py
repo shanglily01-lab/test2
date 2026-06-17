@@ -21,7 +21,8 @@ from loguru import logger
 import pymysql
 import threading
 
-from app.trading.futures_trading_engine import FuturesTradingEngine
+from app.trading.futures_trading_engine import FuturesTradingEngine, _update_account_total_equity
+from app.services.paper_limit_entry import is_paper_futures_account
 from app.utils.position_time import calc_holding_minutes
 
 try:
@@ -797,7 +798,7 @@ def cancel_order(order_id: str, account_id: int = 2, reason: str = 'manual'):
         # 限价单PENDING状态不冻结保证金
         needs_release = not (order_type == 'LIMIT' and original_status == 'PENDING')
 
-        if needs_release and order.get('margin'):
+        if needs_release and order.get('margin') and not is_paper_futures_account(account_id):
             # 计算总冻结金额（保证金 + 手续费）
             total_frozen = float(order['margin']) + float(order.get('fee', 0) or 0)
 
@@ -811,17 +812,8 @@ def cancel_order(order_id: str, account_id: int = 2, reason: str = 'manual'):
                 (total_frozen, total_frozen, account_id)
             )
 
-            # 更新总权益（余额 + 冻结余额 + 持仓未实现盈亏）
-            cursor.execute(
-                """UPDATE futures_trading_accounts a
-                SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
-                    SELECT SUM(p.unrealized_pnl)
-                    FROM futures_positions p
-                    WHERE p.account_id = a.id AND p.status = 'open'
-                ), 0)
-                WHERE a.id = %s""",
-                (account_id,)
-            )
+            # 更新总权益
+            _update_account_total_equity(cursor, account_id)
         
         connection.commit()
 
@@ -1355,8 +1347,13 @@ def get_account(account_id: int):
             if isinstance(value, Decimal):
                 account[key] = float(value)
 
-        # 计算可用余额
-        account['available_balance'] = account['current_balance'] - account['frozen_balance']
+        # 计算可用余额（模拟盘不冻结，全额可用）
+        from app.services.paper_limit_entry import is_paper_futures_account
+        if is_paper_futures_account(account_id):
+            account['frozen_balance'] = 0.0
+            account['available_balance'] = account['current_balance']
+        else:
+            account['available_balance'] = account['current_balance'] - account['frozen_balance']
 
         return {
             'success': True,

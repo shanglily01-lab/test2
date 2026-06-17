@@ -1329,6 +1329,19 @@ class UnifiedDataScheduler:
         schedule.every(30).minutes.do(lambda: _run_cache_task(refresh_position_stats))
         logger.info("  ✓ position_stats_snapshot - 每 30 分钟 (后台线程)")
 
+        def _run_account_stats_reconcile():
+            def wrapper():
+                try:
+                    from update_account_stats import update_account_statistics
+                    update_account_statistics()
+                except Exception as e:
+                    logger.error(f"[账户统计] frozen_balance 校正失败: {e}", exc_info=True)
+
+            threading.Thread(target=wrapper, daemon=True, name="AccountStats").start()
+
+        schedule.every(5).minutes.do(_run_account_stats_reconcile)
+        logger.info("  ✓ futures 账户统计校正 - 每 5 分钟 (frozen_balance 与持仓对齐)")
+
         # 系统设置缓存 - 每1分钟同步 (保持与 system_settings 表同步)
         schedule.every(1).minutes.do(lambda: _run_cache_task(sync_settings_cache))
         logger.info("  ✓ settings_cache - 每 1 分钟 (后台线程)")

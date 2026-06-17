@@ -655,6 +655,7 @@ def _open_simulated_position(
 
     entry_reason = (catalyst or 'deepseek_predict')[:180]
     from app.services.paper_limit_entry import create_paper_limit_order
+    open_fail: list = []
     position_id = create_paper_limit_order(
         conn,
         symbol=symbol,
@@ -670,9 +671,10 @@ def _open_simulated_position(
         max_hold_minutes=get_ai_position_hold_hours() * 60,
         planned_close_time=utc_now_naive() + timedelta(hours=get_ai_position_hold_hours()),
         account_id=PREDICT_ACCOUNT_ID,
+        failure_reason=open_fail,
     )
     if position_id is None:
-        return None, "create_paper_limit_order 返回空"
+        return None, (open_fail[0] if open_fail else "create_paper_limit_order 返回空")
     return position_id, ""
 
 

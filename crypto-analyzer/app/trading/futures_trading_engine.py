@@ -49,6 +49,37 @@ def round_quantity(quantity: Decimal, symbol: str) -> Decimal:
     return quantity.quantize(Decimal(quantize_str), rounding=ROUND_HALF_UP)
 
 
+def _is_paper_futures_account(account_id: int) -> bool:
+    from app.services.paper_limit_entry import is_paper_futures_account
+    return is_paper_futures_account(account_id)
+
+
+def _update_account_total_equity(cursor, account_id: int) -> None:
+    """刷新 total_equity；模拟盘不计 frozen_balance。"""
+    if _is_paper_futures_account(account_id):
+        cursor.execute(
+            """UPDATE futures_trading_accounts a
+            SET a.total_equity = a.current_balance + COALESCE((
+                SELECT SUM(p.unrealized_pnl)
+                FROM futures_positions p
+                WHERE p.account_id = a.id AND p.status = 'open'
+            ), 0)
+            WHERE a.id = %s""",
+            (account_id,),
+        )
+    else:
+        cursor.execute(
+            """UPDATE futures_trading_accounts a
+            SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
+                SELECT SUM(p.unrealized_pnl)
+                FROM futures_positions p
+                WHERE p.account_id = a.id AND p.status = 'open'
+            ), 0)
+            WHERE a.id = %s""",
+            (account_id,),
+        )
+
+
 class FuturesTradingEngine:
     """模拟合约交易引擎"""
 
@@ -475,21 +506,23 @@ class FuturesTradingEngine:
                     current_balance = Decimal(str(account['current_balance']))
                     frozen_balance = Decimal(str(account.get('frozen_balance', 0) or 0))
                     total_equity = Decimal(str(account.get('total_equity', 0) or current_balance))
-                    available_balance = current_balance - frozen_balance
+                    paper_acct = _is_paper_futures_account(account_id)
+                    available_balance = current_balance if paper_acct else (current_balance - frozen_balance)
 
-                    # 检查最大仓位限制（单笔保证金不超过总权益的10%）
-                    max_margin_allowed = total_equity * Decimal('0.1')
-                    if limit_margin_required > max_margin_allowed:
-                        return {
-                            'success': False,
-                            'message': f"保证金超过限制。单笔保证金 {limit_margin_required:.2f} USDT 超过总权益的10% ({max_margin_allowed:.2f} USDT)。总权益: {total_equity:.2f} USDT"
-                        }
+                    if not paper_acct:
+                        # 检查最大仓位限制（单笔保证金不超过总权益的10%）
+                        max_margin_allowed = total_equity * Decimal('0.1')
+                        if limit_margin_required > max_margin_allowed:
+                            return {
+                                'success': False,
+                                'message': f"保证金超过限制。单笔保证金 {limit_margin_required:.2f} USDT 超过总权益的10% ({max_margin_allowed:.2f} USDT)。总权益: {total_equity:.2f} USDT"
+                            }
 
-                    if available_balance < (limit_margin_required + limit_fee):
-                        return {
-                            'success': False,
-                            'message': f"余额不足。需要: {limit_margin_required + limit_fee:.2f} USDT, 可用: {available_balance:.2f} USDT"
-                        }
+                        if available_balance < (limit_margin_required + limit_fee):
+                            return {
+                                'success': False,
+                                'message': f"余额不足。需要: {limit_margin_required + limit_fee:.2f} USDT, 可用: {available_balance:.2f} USDT"
+                            }
                     
                     # 创建未成交订单
                     order_id = f"FUT-{uuid.uuid4().hex[:16].upper()}"
@@ -543,16 +576,7 @@ class FuturesTradingEngine:
                     ))
                     
                     # 更新总权益（限价单时还没有持仓，未实现盈亏为0）
-                    cursor.execute(
-                        """UPDATE futures_trading_accounts a
-                        SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
-                            SELECT SUM(p.unrealized_pnl) 
-                            FROM futures_positions p 
-                            WHERE p.account_id = a.id AND p.status = 'open'
-                        ), 0)
-                        WHERE a.id = %s""",
-                        (account_id,)
-                    )
+                    _update_account_total_equity(cursor, account_id)
                     
                     self.connection.commit()
 
@@ -640,26 +664,28 @@ class FuturesTradingEngine:
                 current_balance = Decimal(str(account['current_balance']))
                 frozen_balance = Decimal(str(account.get('frozen_balance', 0) or 0))
                 total_equity = Decimal(str(account.get('total_equity', 0) or current_balance))
-                available_balance = current_balance - frozen_balance
+                paper_acct = _is_paper_futures_account(account_id)
+                available_balance = current_balance if paper_acct else (current_balance - frozen_balance)
 
                 # 保存变化前的余额信息（用于资金管理记录）
                 balance_before = float(current_balance)
-                frozen_before = float(frozen_balance)
+                frozen_before = 0.0 if paper_acct else float(frozen_balance)
                 available_before = float(available_balance)
 
-                # 检查最大仓位限制（单笔保证金不超过总权益的10%）
-                max_margin_allowed = total_equity * Decimal('0.1')
-                if margin_required > max_margin_allowed:
-                    return {
-                        'success': False,
-                        'message': f"保证金超过限制。单笔保证金 {margin_required:.2f} USDT 超过总权益的10% ({max_margin_allowed:.2f} USDT)。总权益: {total_equity:.2f} USDT"
-                    }
+                if not paper_acct:
+                    # 检查最大仓位限制（单笔保证金不超过总权益的10%）
+                    max_margin_allowed = total_equity * Decimal('0.1')
+                    if margin_required > max_margin_allowed:
+                        return {
+                            'success': False,
+                            'message': f"保证金超过限制。单笔保证金 {margin_required:.2f} USDT 超过总权益的10% ({max_margin_allowed:.2f} USDT)。总权益: {total_equity:.2f} USDT"
+                        }
 
-                if available_balance < (margin_required + fee):
-                    return {
-                        'success': False,
-                        'message': f"余额不足。需要: {margin_required + fee:.2f} USDT, 可用: {available_balance:.2f} USDT (总余额: {current_balance:.2f}, 冻结: {frozen_balance:.2f})"
-                    }
+                    if available_balance < (margin_required + fee):
+                        return {
+                            'success': False,
+                            'message': f"余额不足。需要: {margin_required + fee:.2f} USDT, 可用: {available_balance:.2f} USDT (总余额: {current_balance:.2f}, 冻结: {frozen_balance:.2f})"
+                        }
             except Exception as balance_error:
                 logger.error(f"检查账户余额失败: {balance_error}")
                 import traceback
@@ -808,32 +834,24 @@ class FuturesTradingEngine:
                 float(entry_price), utc_now_naive()
             ))
 
-            # 9. 更新账户余额
-            # 手续费直接扣除，只冻结保证金
-            new_balance = current_balance - margin_required - fee  # 扣除保证金和手续费
-            cursor.execute(
-                """UPDATE futures_trading_accounts
-                SET current_balance = %s, frozen_balance = frozen_balance + %s
-                WHERE id = %s""",
-                (float(new_balance), float(margin_required), account_id)  # 只冻结保证金
-            )
-
-            # 获取变化后的余额信息（用于资金管理记录）
-            balance_after = float(new_balance)
-            frozen_after = float(frozen_balance + margin_required)  # 只冻结保证金
-            available_after = balance_after - frozen_after
-
-            # 10. 更新总权益（余额 + 冻结余额 + 持仓未实现盈亏）
-            cursor.execute(
-                """UPDATE futures_trading_accounts a
-                SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
-                    SELECT SUM(p.unrealized_pnl) 
-                    FROM futures_positions p 
-                    WHERE p.account_id = a.id AND p.status = 'open'
-                ), 0)
-                WHERE a.id = %s""",
-                (account_id,)
-            )
+            # 9. 更新账户余额（模拟盘不冻结、不扣可用）
+            if paper_acct:
+                balance_after = float(current_balance)
+                frozen_after = 0.0
+                available_after = float(current_balance)
+                _update_account_total_equity(cursor, account_id)
+            else:
+                new_balance = current_balance - fee
+                cursor.execute(
+                    """UPDATE futures_trading_accounts
+                    SET current_balance = %s, frozen_balance = frozen_balance + %s
+                    WHERE id = %s""",
+                    (float(new_balance), float(margin_required), account_id),
+                )
+                balance_after = float(new_balance)
+                frozen_after = float(frozen_balance + margin_required)
+                available_after = balance_after - frozen_after
+                _update_account_total_equity(cursor, account_id)
 
             self.connection.commit()
 
@@ -1060,9 +1078,10 @@ class FuturesTradingEngine:
             margin_required = notional_value / Decimal(leverage)
             fee_rate = Decimal('0.0004')
             fee = notional_value * fee_rate
-            available_balance = current_balance - frozen_balance
+            paper_acct = _is_paper_futures_account(account_id)
+            available_balance = current_balance if paper_acct else (current_balance - frozen_balance)
 
-            if available_balance < (margin_required + fee):
+            if not paper_acct and available_balance < (margin_required + fee):
                 self._release_paper_limit_fill_claim(cursor, pending_order_id)
                 return {'success': False, 'message': '余额不足，无法成交限价单'}
 
@@ -1154,23 +1173,17 @@ class FuturesTradingEngine:
                 ),
             )
 
-            new_balance = current_balance - margin_required - fee
-            cursor.execute(
-                """UPDATE futures_trading_accounts
-                SET current_balance=%s, frozen_balance=frozen_balance+%s
-                WHERE id=%s""",
-                (float(new_balance), float(margin_required), account_id),
-            )
-            cursor.execute(
-                """UPDATE futures_trading_accounts a
-                SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
-                    SELECT SUM(p.unrealized_pnl)
-                    FROM futures_positions p
-                    WHERE p.account_id = a.id AND p.status = 'open'
-                ), 0)
-                WHERE a.id = %s""",
-                (account_id,),
-            )
+            if paper_acct:
+                _update_account_total_equity(cursor, account_id)
+            else:
+                new_balance = current_balance - fee
+                cursor.execute(
+                    """UPDATE futures_trading_accounts
+                    SET current_balance=%s, frozen_balance=frozen_balance+%s
+                    WHERE id=%s""",
+                    (float(new_balance), float(margin_required), account_id),
+                )
+                _update_account_total_equity(cursor, account_id)
             self.connection.commit()
 
             tag = '市价转单' if at_market else '限价成交'
@@ -1449,20 +1462,20 @@ class FuturesTradingEngine:
                  float(current_price), profit_pct_at_close, position_id)
             )
 
-            # 释放全部保证金
+            # 释放全部保证金（模拟盘不维护 frozen_balance）
             released_margin = margin
+            paper_acct = _is_paper_futures_account(account_id)
 
             # 8. 更新账户余额和交易统计
-            # 判断是盈利还是亏损
             is_winning_trade = realized_pnl > 0
 
-            # 先释放保证金
-            cursor.execute(
-                """UPDATE futures_trading_accounts
-                SET frozen_balance = frozen_balance - %s
-                WHERE id = %s""",
-                (float(released_margin), account_id)
-            )
+            if not paper_acct:
+                cursor.execute(
+                    """UPDATE futures_trading_accounts
+                    SET frozen_balance = frozen_balance - %s
+                    WHERE id = %s""",
+                    (float(released_margin), account_id),
+                )
 
             # 再更新账户余额和已实现盈亏
             # 先用独立SELECT算出汇总值（避免UPDATE内嵌子查询跨表锁，防死锁）
@@ -1494,12 +1507,20 @@ class FuturesTradingEngine:
             )
             total_unrealized = float(cursor.fetchone()['total_unrealized'])
 
-            cursor.execute(
-                """UPDATE futures_trading_accounts
-                SET total_equity = current_balance + frozen_balance + %s
-                WHERE id = %s""",
-                (total_unrealized, account_id)
-            )
+            if paper_acct:
+                cursor.execute(
+                    """UPDATE futures_trading_accounts
+                    SET total_equity = current_balance + %s
+                    WHERE id = %s""",
+                    (total_unrealized, account_id),
+                )
+            else:
+                cursor.execute(
+                    """UPDATE futures_trading_accounts
+                    SET total_equity = current_balance + frozen_balance + %s
+                    WHERE id = %s""",
+                    (total_unrealized, account_id),
+                )
             
             # 获取变化后的账户余额信息（用于资金管理记录）
             cursor.execute(
@@ -1509,8 +1530,12 @@ class FuturesTradingEngine:
             account_after = cursor.fetchone()
             if account_after:
                 balance_after = float(account_after['current_balance'])
-                frozen_after = float(account_after.get('frozen_balance', 0) or 0)
-                available_after = balance_after - frozen_after
+                if paper_acct:
+                    frozen_after = 0.0
+                    available_after = balance_after
+                else:
+                    frozen_after = float(account_after.get('frozen_balance', 0) or 0)
+                    available_after = balance_after - frozen_after
             else:
                 balance_after = frozen_after = available_after = None
 
@@ -1976,17 +2001,10 @@ class FuturesTradingEngine:
             updated_count = 0
             for account_id in all_account_ids:
                 try:
-                    # 更新该账户的总权益
+                    _update_account_total_equity(cursor, account_id)
                     cursor.execute(
-                        """UPDATE futures_trading_accounts a
-                        SET a.total_equity = a.current_balance + a.frozen_balance + COALESCE((
-                            SELECT SUM(p.unrealized_pnl) 
-                            FROM futures_positions p 
-                            WHERE p.account_id = a.id AND p.status = 'open'
-                        ), 0),
-                        updated_at = NOW()
-                        WHERE a.id = %s""",
-                        (account_id,)
+                        "UPDATE futures_trading_accounts SET updated_at = NOW() WHERE id = %s",
+                        (account_id,),
                     )
                     updated_count += 1
                 except Exception as e:
