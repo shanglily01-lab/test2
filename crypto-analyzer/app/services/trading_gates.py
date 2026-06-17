@@ -27,8 +27,8 @@ LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
     "deepseek_predict",
 })
 
-ACCOUNT_LOSS_COOLDOWN_HOURS = 12
-ACCOUNT_LOSS_COOLDOWN_LIMIT_USD = 100.0
+SYMBOL_LOSS_COOLDOWN_HOURS = 12
+SYMBOL_LOSS_COOLDOWN_LIMIT_USD = 100.0
 
 def _coerce_bool(value, default: bool) -> bool:
     if value is None:
@@ -115,9 +115,9 @@ def check_live_open_allowed(
         return False, "live_trading_enabled=0"
     if not should_sync_live_for_source(source):
         return False, f"策略 {source} 仅模拟盘"
-    account_allowed, account_reason = check_account_loss_cooldown(cursor)
-    if not account_allowed:
-        return False, account_reason
+    symbol_allowed, symbol_reason = check_symbol_loss_cooldown(symbol, cursor)
+    if not symbol_allowed:
+        return False, symbol_reason
     return check_live_symbol_allowed(symbol, cursor)
 
 
@@ -170,11 +170,16 @@ def _row_get(row, key: str, index: int, default=None):
         return default
 
 
-def check_account_loss_cooldown(
+def check_symbol_loss_cooldown(
+    symbol: str,
     conn_or_cursor=None,
     account_id: int = 2,
 ) -> Tuple[bool, str]:
-    """账户级开仓冷却：近 12 小时已实现亏损累计达到 100U，暂停新开仓 12 小时。"""
+    """单币开仓冷却：近 12 小时该币已实现亏损累计达到 100U，暂停该币新开仓 12 小时。"""
+    clean = futures_symbol_clean(symbol)
+    if not clean:
+        return True, ""
+
     own_conn = conn_or_cursor is None
     conn = None
     cur = None
@@ -193,8 +198,9 @@ def check_account_loss_cooldown(
             cur = _as_cursor(conn_or_cursor)
             close_cursor = hasattr(conn_or_cursor, "cursor") and cur is not conn_or_cursor
 
+        clean_expr = sql_rating_symbol_clean("symbol")
         cur.execute(
-            """
+            f"""
             SELECT
               COUNT(*) AS loss_n,
               COALESCE(SUM(CASE WHEN realized_pnl < 0 THEN -realized_pnl ELSE 0 END), 0) AS loss_abs,
@@ -210,24 +216,26 @@ def check_account_loss_cooldown(
               AND close_time >= DATE_SUB(NOW(), INTERVAL %s HOUR)
               AND realized_pnl IS NOT NULL
               AND realized_pnl < 0
+              AND {clean_expr} = %s
             """,
-            (ACCOUNT_LOSS_COOLDOWN_HOURS, account_id, ACCOUNT_LOSS_COOLDOWN_HOURS),
+            (SYMBOL_LOSS_COOLDOWN_HOURS, account_id, SYMBOL_LOSS_COOLDOWN_HOURS, clean),
         )
         row = cur.fetchone() or {}
         loss_n = int(_row_get(row, "loss_n", 0, 0) or 0)
         loss_abs = float(_row_get(row, "loss_abs", 1, 0) or 0)
-        if loss_abs >= ACCOUNT_LOSS_COOLDOWN_LIMIT_USD:
+        if loss_abs >= SYMBOL_LOSS_COOLDOWN_LIMIT_USD:
             remaining_min = int(_row_get(row, "remaining_min", 3, 0) or 0)
             remaining_text = (
                 f"，剩余约{max(0, remaining_min)}分钟"
                 if remaining_min > 0
                 else ""
             )
+            label = symbol if "/" in (symbol or "") else f"{clean}/USDT"
             return (
                 False,
-                f"账户近{ACCOUNT_LOSS_COOLDOWN_HOURS}小时已实现亏损{loss_abs:.2f}U"
-                f"({loss_n}笔)，达到{ACCOUNT_LOSS_COOLDOWN_LIMIT_USD:.0f}U风控阈值，"
-                f"禁止新开仓{ACCOUNT_LOSS_COOLDOWN_HOURS}小时{remaining_text}",
+                f"{label} 近{SYMBOL_LOSS_COOLDOWN_HOURS}小时已实现亏损{loss_abs:.2f}U"
+                f"({loss_n}笔)，达到{SYMBOL_LOSS_COOLDOWN_LIMIT_USD:.0f}U风控阈值，"
+                f"禁止该币新开仓{SYMBOL_LOSS_COOLDOWN_HOURS}小时{remaining_text}",
             )
         return True, ""
     finally:
