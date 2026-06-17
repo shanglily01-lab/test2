@@ -531,7 +531,6 @@ async def get_dashboard_snapshot():
             **get_db_config(),
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor,
-            connect_timeout=5
         )
         cursor = conn.cursor()
         cursor.execute("""
@@ -582,7 +581,6 @@ async def get_hyperliquid_cached(
             **get_db_config(),
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor,
-            connect_timeout=10
         )
         cursor = conn.cursor()
 

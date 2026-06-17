@@ -45,13 +45,13 @@ def _get_config_symbols() -> List[str]:
 
 def get_db_connection():
     """获取数据库连接"""
+    cfg = {**get_db_config()}
+    cfg.setdefault("read_timeout", 60)
+    cfg.setdefault("write_timeout", 60)
     return pymysql.connect(
-        **get_db_config(),
+        **cfg,
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=True,
-        connect_timeout=10,
-        read_timeout=60,
-        write_timeout=60
     )
 
 
