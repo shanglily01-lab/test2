@@ -7,6 +7,7 @@ import uuid
 import time
 import hmac
 import hashlib
+from urllib.parse import urlencode
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 from typing import Dict, List, Optional, Tuple
@@ -237,9 +238,8 @@ class BinanceFuturesEngine:
             return None
 
     def _generate_signature(self, params: dict) -> str:
-        """生成请求签名"""
-        # 按原始顺序拼接参数（不排序）
-        query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+        """生成请求签名。值须 URL 编码，与 requests 表单提交一致（中文 symbol 否则 -1022）。"""
+        query_string = urlencode(list(params.items()))
         signature = hmac.new(
             self.api_secret.encode('utf-8'),
             query_string.encode('utf-8'),
@@ -919,7 +919,6 @@ class BinanceFuturesEngine:
             'quantity': str(quantity),
             'workingType': 'MARK_PRICE',
             'timeInForce': 'GTE_GTC',
-            'reduceOnly': 'true',
         }
 
         result = self._request('POST', '/fapi/v1/order', params)
@@ -1069,7 +1068,6 @@ class BinanceFuturesEngine:
             'quantity': str(quantity),
             'workingType': 'MARK_PRICE',
             'timeInForce': 'GTE_GTC',
-            'reduceOnly': 'true',
         }
 
         result = self._request('POST', '/fapi/v1/order', params)

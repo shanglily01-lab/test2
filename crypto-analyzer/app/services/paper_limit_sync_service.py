@@ -283,7 +283,11 @@ class PaperLimitSyncService:
                 )
                 self._mark(conn, order_id, "SYNCED", live_pid or None)
             else:
-                err = (result or {}).get("message", "unknown")
+                res = result or {}
+                err = res.get("error") or res.get("message") or "unknown"
+                code = res.get("code")
+                if code is not None and str(code) not in str(err):
+                    err = f"[{code}] {err}"
                 logger.error(f"[PaperSync] 实盘开仓失败 order_id={order_id} {symbol}: {err}")
                 self._mark(conn, order_id, "FAILED", None)
 
