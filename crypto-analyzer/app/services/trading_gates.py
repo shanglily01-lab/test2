@@ -27,8 +27,14 @@ LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
     "deepseek_predict",
 })
 
+SYMBOL_STOP_LOSS_COOLDOWN_HOURS = 4
 SYMBOL_LOSS_COOLDOWN_HOURS = 12
 SYMBOL_LOSS_COOLDOWN_LIMIT_USD = 100.0
+SYMBOL_LOSS_ROLLING_HOURS = 24
+SYMBOL_LOSS_TRADE_LIMIT = 3
+SYMBOL_LOSS_NET_PNL_LIMIT = -120.0
+SOURCE_SYMBOL_LOSS_TRADE_LIMIT = 2
+SOURCE_SYMBOL_LOSS_NET_PNL_LIMIT = -100.0
 
 def _coerce_bool(value, default: bool) -> bool:
     if value is None:
@@ -115,7 +121,7 @@ def check_live_open_allowed(
         return False, "live_trading_enabled=0"
     if not should_sync_live_for_source(source):
         return False, f"策略 {source} 仅模拟盘"
-    symbol_allowed, symbol_reason = check_symbol_loss_cooldown(symbol, cursor)
+    symbol_allowed, symbol_reason = check_symbol_loss_cooldown(symbol, cursor, source=source)
     if not symbol_allowed:
         return False, symbol_reason
     return check_live_symbol_allowed(symbol, cursor)
@@ -170,12 +176,79 @@ def _row_get(row, key: str, index: int, default=None):
         return default
 
 
+def _symbol_loss_cooldown_label(symbol: str, clean: str) -> str:
+    return symbol if "/" in (symbol or "") else f"{clean}/USDT"
+
+
+def _evaluate_symbol_loss_cooldowns(
+    row: dict,
+    symbol: str,
+    clean: str,
+    source: str = "",
+) -> Tuple[bool, str]:
+    """按优先级评估单币亏损冷却规则（纯逻辑，无 DB）。"""
+    stop_n_4h = int(_row_get(row, "stop_n_4h", 0, 0) or 0)
+    if stop_n_4h > 0:
+        return (
+            False,
+            f"近{SYMBOL_STOP_LOSS_COOLDOWN_HOURS}小时同币已止损{stop_n_4h}笔，冷却禁止开仓",
+        )
+
+    loss_abs_12h = float(_row_get(row, "loss_abs_12h", 1, 0) or 0)
+    loss_n_12h = int(_row_get(row, "loss_n_12h", 2, 0) or 0)
+    if loss_abs_12h >= SYMBOL_LOSS_COOLDOWN_LIMIT_USD:
+        label = _symbol_loss_cooldown_label(symbol, clean)
+        return (
+            False,
+            f"{label} 近{SYMBOL_LOSS_COOLDOWN_HOURS}小时已实现亏损{loss_abs_12h:.2f}U"
+            f"({loss_n_12h}笔)，达到{SYMBOL_LOSS_COOLDOWN_LIMIT_USD:.0f}U风控阈值，冷却禁止开仓",
+        )
+
+    loss_n_24h = int(_row_get(row, "loss_n_24h", 3, 0) or 0)
+    net_pnl_24h = float(_row_get(row, "net_pnl_24h", 4, 0) or 0)
+    if loss_n_24h >= SYMBOL_LOSS_TRADE_LIMIT:
+        return (
+            False,
+            f"近{SYMBOL_LOSS_ROLLING_HOURS}小时同币亏损{loss_n_24h}笔，冷却禁止开仓",
+        )
+    if net_pnl_24h <= SYMBOL_LOSS_NET_PNL_LIMIT:
+        return (
+            False,
+            f"近{SYMBOL_LOSS_ROLLING_HOURS}小时同币净亏{net_pnl_24h:.2f}U，冷却禁止开仓",
+        )
+
+    src = (source or "").strip()
+    if src:
+        src_loss_n = int(_row_get(row, "src_loss_n_24h", 6, 0) or 0)
+        src_net_pnl = float(_row_get(row, "src_net_pnl_24h", 7, 0) or 0)
+        if src_loss_n >= SOURCE_SYMBOL_LOSS_TRADE_LIMIT:
+            return (
+                False,
+                f"近{SYMBOL_LOSS_ROLLING_HOURS}小时{src}同币亏损{src_loss_n}笔，"
+                f"策略连续亏损冷静禁止开仓",
+            )
+        if src_net_pnl <= SOURCE_SYMBOL_LOSS_NET_PNL_LIMIT:
+            return (
+                False,
+                f"近{SYMBOL_LOSS_ROLLING_HOURS}小时{src}同币净亏{src_net_pnl:.2f}U，"
+                f"策略连续亏损冷静禁止开仓",
+            )
+    return True, ""
+
+
 def check_symbol_loss_cooldown(
     symbol: str,
     conn_or_cursor=None,
     account_id: int = 2,
+    source: str = "",
 ) -> Tuple[bool, str]:
-    """单币开仓冷却：近 12 小时该币已实现亏损累计达到 100U，暂停该币新开仓 12 小时。"""
+    """
+    单币开仓亏损冷却（一次 SQL 聚合）:
+    - 近 4h 同币止损 → 禁开；
+    - 近 12h 同币已实现亏损累计 ≥ 100U → 禁开（滚动窗口）；
+    - 近 24h 同币亏损 ≥ 3 笔或净亏 ≤ -120U → 禁开；
+    - 近 24h 同策略同币亏损 ≥ 2 笔或净亏 ≤ -100U → 禁开。
+    """
     clean = futures_symbol_clean(symbol)
     if not clean:
         return True, ""
@@ -184,6 +257,7 @@ def check_symbol_loss_cooldown(
     conn = None
     cur = None
     close_cursor = False
+    src = (source or "").strip()
     try:
         if own_conn:
             conn = pymysql.connect(
@@ -202,42 +276,58 @@ def check_symbol_loss_cooldown(
         cur.execute(
             f"""
             SELECT
-              COUNT(*) AS loss_n,
-              COALESCE(SUM(CASE WHEN realized_pnl < 0 THEN -realized_pnl ELSE 0 END), 0) AS loss_abs,
-              MAX(close_time) AS last_loss_time,
-              TIMESTAMPDIFF(
-                MINUTE,
-                NOW(),
-                DATE_ADD(MAX(close_time), INTERVAL %s HOUR)
-              ) AS remaining_min
+              SUM(
+                CASE WHEN close_time >= DATE_SUB(NOW(), INTERVAL %s HOUR)
+                  AND (
+                    notes = '止损'
+                    OR notes LIKE '%%止损%%'
+                    OR notes LIKE '%%code:SL%%'
+                  )
+                THEN 1 ELSE 0 END
+              ) AS stop_n_4h,
+              SUM(
+                CASE WHEN realized_pnl IS NOT NULL AND realized_pnl < 0 THEN 1 ELSE 0 END
+              ) AS loss_n_24h,
+              COALESCE(SUM(
+                CASE WHEN realized_pnl IS NOT NULL THEN realized_pnl ELSE 0 END
+              ), 0) AS net_pnl_24h,
+              COALESCE(SUM(
+                CASE WHEN close_time >= DATE_SUB(NOW(), INTERVAL %s HOUR)
+                  AND realized_pnl IS NOT NULL AND realized_pnl < 0
+                THEN -realized_pnl ELSE 0 END
+              ), 0) AS loss_abs_12h,
+              SUM(
+                CASE WHEN close_time >= DATE_SUB(NOW(), INTERVAL %s HOUR)
+                  AND realized_pnl IS NOT NULL AND realized_pnl < 0
+                THEN 1 ELSE 0 END
+              ) AS loss_n_12h,
+              SUM(
+                CASE WHEN realized_pnl IS NOT NULL AND realized_pnl < 0
+                  AND source = %s
+                THEN 1 ELSE 0 END
+              ) AS src_loss_n_24h,
+              COALESCE(SUM(
+                CASE WHEN realized_pnl IS NOT NULL AND source = %s
+                THEN realized_pnl ELSE 0 END
+              ), 0) AS src_net_pnl_24h
             FROM futures_positions
             WHERE account_id=%s
               AND status='closed'
               AND close_time >= DATE_SUB(NOW(), INTERVAL %s HOUR)
-              AND realized_pnl IS NOT NULL
-              AND realized_pnl < 0
               AND {clean_expr} = %s
             """,
-            (SYMBOL_LOSS_COOLDOWN_HOURS, account_id, SYMBOL_LOSS_COOLDOWN_HOURS, clean),
+            (
+                SYMBOL_STOP_LOSS_COOLDOWN_HOURS,
+                SYMBOL_LOSS_COOLDOWN_HOURS,
+                SYMBOL_LOSS_COOLDOWN_HOURS,
+                src,
+                src,
+                account_id,
+                SYMBOL_LOSS_ROLLING_HOURS,
+                clean,
+            ),
         )
-        row = cur.fetchone() or {}
-        loss_n = int(_row_get(row, "loss_n", 0, 0) or 0)
-        loss_abs = float(_row_get(row, "loss_abs", 1, 0) or 0)
-        if loss_abs >= SYMBOL_LOSS_COOLDOWN_LIMIT_USD:
-            remaining_min = int(_row_get(row, "remaining_min", 3, 0) or 0)
-            remaining_text = (
-                f"，剩余约{max(0, remaining_min)}分钟"
-                if remaining_min > 0
-                else ""
-            )
-            label = symbol if "/" in (symbol or "") else f"{clean}/USDT"
-            return (
-                False,
-                f"{label} 近{SYMBOL_LOSS_COOLDOWN_HOURS}小时已实现亏损{loss_abs:.2f}U"
-                f"({loss_n}笔)，达到{SYMBOL_LOSS_COOLDOWN_LIMIT_USD:.0f}U风控阈值，"
-                f"禁止该币新开仓{SYMBOL_LOSS_COOLDOWN_HOURS}小时{remaining_text}",
-            )
-        return True, ""
+        return _evaluate_symbol_loss_cooldowns(cur.fetchone() or {}, symbol, clean, src)
     finally:
         if close_cursor and cur is not None:
             try:
