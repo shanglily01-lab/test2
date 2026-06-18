@@ -351,9 +351,27 @@ def _bar_lines(k_rows: List[Dict], timeframe_label: str, max_lines: int = 4) -> 
 
 
 def _make_kline_narrative(k_rows: List[Dict], timeframe_label: str) -> str:
-    """生成 K 线自然语言描述. 1h: 整体 24 根趋势 + 最近 4~6 根明细."""
+    """生成 K 线自然语言描述. 15m: 整体 16 根(4h) + 最近 4~6 根; 1h: 整体 24 根 + 近 6 根."""
     if not k_rows:
         return f"[{timeframe_label}] 无数据"
+
+    if timeframe_label == "15m" and len(k_rows) >= 6:
+        trend_rows = k_rows
+        recent_rows = k_rows[-6:]
+        _, trend_prices, trend_vol, tu, td = _bar_lines(trend_rows, timeframe_label, max_lines=0)
+        recent_lines, recent_prices, recent_vol, ru, rd = _bar_lines(
+            recent_rows, timeframe_label, max_lines=6,
+        )
+        trend_desc = _trend_desc_from_bars(trend_prices, tu, td)
+        recent_desc = _trend_desc_from_bars(recent_prices, ru, rd) if len(recent_prices) >= 3 else "近期数据不足"
+        recent_body = "\n".join(recent_lines)
+        return (
+            f"[15m · 整体 {len(trend_rows)} 根/4h] (Vol≈{trend_vol:.4g})\n"
+            f"整体形态: {trend_desc}\n"
+            f"[15m · 最近 {len(recent_rows)} 根明细] (Vol≈{recent_vol:.4g})\n"
+            f"{recent_body}\n"
+            f"近期形态: {recent_desc}"
+        )
 
     if timeframe_label == "1h" and len(k_rows) >= 6:
         trend_rows = k_rows
@@ -369,6 +387,7 @@ def _make_kline_narrative(k_rows: List[Dict], timeframe_label: str) -> str:
             f"[1h · 整体 {len(trend_rows)} 根趋势] (Vol≈{trend_vol:.4g})\n"
             f"整体形态: {trend_desc}\n"
             f"[1h · 最近 {len(recent_rows)} 根明细] (Vol≈{recent_vol:.4g})\n"
+            f"同4h窗口: 最近 {min(4, len(trend_rows))} 根 1h ≈ 16 根 15m\n"
             f"{recent_body}\n"
             f"近期形态: {recent_desc}"
         )
@@ -463,7 +482,7 @@ def refresh_candidate_pool() -> dict:
 
                 # 获取 K 线数据
                 kline_1h = _fetch_klines(cur, main_db, sym, "1h", 24)
-                kline_15m = _fetch_klines(cur, main_db, sym, "15m", 8)
+                kline_15m = _fetch_klines(cur, main_db, sym, "15m", 16)
                 kline_1d = _fetch_klines(cur, main_db, sym, "1d", 7)
 
                 # 技术指标

@@ -360,13 +360,13 @@ def _build_symbol_data(conn, symbol: str) -> Optional[Dict]:
             "below_7d_high_pct": float(cached["below_7d_high_pct"]) if cached.get("below_7d_high_pct") else None,
         }
 
-    # 回退: 原逻辑 (1h 用 24 根叙事，与 candidate_pool 一致)
+    # 回退: 原逻辑 (15m 用 16 根/4h 叙事，与 candidate_pool 一致)
     from app.services.data_cache_service import _make_kline_narrative
 
     with conn.cursor() as cur:
         k_1d = _fetch_klines(cur, symbol, '1d', 7)
         k_1h = _fetch_klines(cur, symbol, '1h', 24)
-        k_15m = _fetch_klines(cur, symbol, '15m', 8)
+        k_15m = _fetch_klines(cur, symbol, '15m', 16)
 
         if not k_1d or not k_1h or not k_15m:
             return None

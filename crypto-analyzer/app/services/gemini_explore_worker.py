@@ -676,7 +676,7 @@ def _enrich_symbol(cur, sym_data: dict) -> None:
 
     k_1d = _fetch_klines(cur, symbol, '1d', 7)
     k_1h = _fetch_klines(cur, symbol, '1h', 12)
-    k_15m = _fetch_klines(cur, symbol, '15m', 8)
+    k_15m = _fetch_klines(cur, symbol, '15m', 16)
 
     # 用自然语言描述替代纯数组
     sym_data['kline_narrative'] = {

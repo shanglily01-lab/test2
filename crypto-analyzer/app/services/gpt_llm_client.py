@@ -12,7 +12,7 @@ GPT_LLM_TEMPERATURE = 0.1
 GPT_JSON_SYSTEM_ZH = """你是量化交易分析引擎。用户消息中的策略定义与 universe 数据为唯一依据。
 
 硬性要求（与 Gemini 探索一致）:
-1. catalyst / data_signal 必须引用 universe 里的 kline_narrative（1h 近24根整体 + 近4~6根结构）与 tech（有 rsi_14_1h 则 catalyst 须写出 RSI 数值；或 EMA/7d/阳阴根数）。
+1. catalyst / data_signal 必须引用 **15m** kline_narrative（16根/4h + 近结构，核心）与 tech；**1h narrative 可一句交叉验证**，不得替代 15m。
 2. 禁止仅用 24h 涨跌幅、资金费率、Big4/大盘一句话作为主因；无多周期 K 线结构则 skip / 不给 entry。
 3. 不得编造数据中不存在的价位、涨跌幅或指标；涨跌幅须与 kline_narrative / tech 一致。
 4. summary_zh 只描述技术面氛围, 不写空泛多空偏好。
