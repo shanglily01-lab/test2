@@ -33,6 +33,7 @@ from app.strategies.range_market_detector import RangeMarketDetector
 from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
 from app.strategies.mode_switcher import TradingModeSwitcher
 from app.services.big4_regime_monitor import Big4RegimeMonitor
+from app.services.midline_swing_config import is_midline_source
 
 # 加载环境变量
 load_dotenv()
@@ -2401,9 +2402,9 @@ class SmartTraderService:
             for pair in hedge_pairs:
                 symbol = pair['symbol']
 
-                # 获取该交易对的所有持仓
+                # 获取该交易对的所有持仓（中线策略不参与对冲平仓）
                 cursor.execute("""
-                    SELECT id, position_side, entry_price, quantity, open_time
+                    SELECT id, position_side, entry_price, quantity, open_time, source
                     FROM futures_positions
                     WHERE symbol = %s AND status = 'open' AND account_id = %s
                     ORDER BY position_side, open_time
@@ -2412,6 +2413,12 @@ class SmartTraderService:
                 positions = cursor.fetchall()
 
                 if len(positions) < 2:
+                    continue
+
+                if any(is_midline_source(p.get('source') or '') for p in positions):
+                    logger.debug(
+                        f"[HEDGE_SKIP] {symbol} 含中线持仓, 跳过对冲处理"
+                    )
                     continue
 
                 # 获取当前价格

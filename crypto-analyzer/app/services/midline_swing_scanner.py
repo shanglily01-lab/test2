@@ -6,10 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
-from app.services.midline_swing_config import (
-    MIDLINE_LLM_MAX_SYMBOLS,
-    MIDLINE_MIN_SIGNAL_SCORE,
-)
+from app.services.midline_swing_config import MIDLINE_MIN_SIGNAL_SCORE
 from app.services.securities_filter import is_security
 from app.utils.futures_symbol import futures_symbol_clean, futures_symbol_rating_canonical
 
@@ -258,78 +255,6 @@ def scan_universe(
 
     signals.sort(key=lambda x: x["score"], reverse=True)
     return signals, universe_size
-
-
-def build_midline_universe(
-    conn,
-    profile: str,
-    max_symbols: int = MIDLINE_LLM_MAX_SYMBOLS,
-) -> Tuple[Dict[str, Any], Dict[str, Any], int]:
-    """
-    构建送 LLM 的 universe：L0/L1 全池量化预评分后取 TOP N，附 1D/1H K 线叙事。
-  返回 (universe_dict, meta, universe_total).
-    """
-    from app.services.data_cache_service import _make_kline_narrative
-
-    symbols, ratings = load_l0_l1_symbols(conn)
-    universe_total = len(symbols)
-    ranked: List[Dict[str, Any]] = []
-    profile_l = profile.strip().lower()
-
-    with conn.cursor() as cur:
-        for symbol in symbols:
-            try:
-                rows_1d = _fetch_klines(cur, symbol, "1d", 24)
-                rows_1h = _fetch_klines(cur, symbol, "1h", 60)
-                if len(rows_1d) < 20 or len(rows_1h) < 30:
-                    continue
-                c1d, h1d, l1d, _ = _bar_floats(rows_1d)
-                c1h, h1h, l1h, v1h = _bar_floats(rows_1h)
-                if profile_l == "long":
-                    score, detail = _score_long(c1d, l1d, c1h, h1h, l1h, v1h)
-                elif profile_l == "short":
-                    score, detail = _score_short(c1d, h1d, c1h, h1h, l1h, v1h)
-                else:
-                    raise ValueError(f"unknown profile {profile}")
-
-                rsi_vals = _rsi_series(c1h, 14)
-                rsi_now = rsi_vals[-1] if rsi_vals else None
-                price = float(c1h[-1])
-                rl = ratings.get(symbol, 1)
-
-                sym_data = {
-                    "symbol": symbol,
-                    "current_price": price,
-                    "rating_level": rl,
-                    "quant_score": round(score, 1),
-                    "quant_detail": detail,
-                    "triggers": [f"L{rl}评级", f"量化分{score:.0f}"],
-                    "kline_narrative": {
-                        "1d": _make_kline_narrative(rows_1d, "1d"),
-                        "1h": _make_kline_narrative(rows_1h, "1h"),
-                    },
-                    "tech": {
-                        "rsi_1h": round(rsi_now, 1) if rsi_now is not None else None,
-                    },
-                }
-                ranked.append({"symbol": symbol, "score": score, "sym_data": sym_data})
-            except Exception as e:
-                logger.debug(f"[中线universe] {symbol} 跳过: {e}")
-
-    ranked.sort(key=lambda x: x["score"], reverse=True)
-    selected = ranked[:max_symbols]
-    universe = {item["symbol"]: item["sym_data"] for item in selected}
-    meta = {
-        "universe_total": universe_total,
-        "llm_symbol_count": len(selected),
-        "llm_symbols_truncated": universe_total > len(selected),
-        "profile": profile_l,
-    }
-    if meta["llm_symbols_truncated"]:
-        logger.info(
-            f"[中线universe] LLM 候选截断: 全池 {universe_total} → 送模 {len(selected)}"
-        )
-    return universe, meta, universe_total
 
 
 def signal_detail_json(detail: Dict[str, Any]) -> str:
