@@ -1704,6 +1704,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
 
             tech_ok, tech_reason = explore_catalyst_technical_ok(
                 catalyst, data_signal, resolve_futures_universe_item(universe, symbol),
+                category=category,
             )
             if not tech_ok:
                 verdict_rows.append((
