@@ -1132,6 +1132,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 中线做多/做空 API
+try:
+    from app.api.midline_swing_api import router as midline_swing_router
+    app.include_router(midline_swing_router)
+    logger.info("[中线策略] API路由已注册")
+except Exception as e:
+    logger.warning(f"[中线策略] API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册 DeepSeek 预测 API 路由
 try:
     from app.api.deepseek_predict_api import router as deepseek_predict_router

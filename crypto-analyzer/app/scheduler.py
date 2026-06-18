@@ -1410,6 +1410,20 @@ class UnifiedDataScheduler:
         schedule.every(5).minutes.do(_run_gemini_predict)
         logger.info("  ✓ gemini_predict - 固定槽 21:45北京 +15min, 每2h + 5min轮询")
 
+        # 中线做多/做空（Gemini + DeepSeek，量化扫描，每 6h）
+        def _run_midline_swing():
+            def wrapper():
+                try:
+                    from app.services.midline_explore_worker import run_all_midline_scheduled
+                    run_all_midline_scheduled(triggered_by='scheduler')
+                except Exception as e:
+                    logger.error(f"[中线策略] 调度异常: {e}", exc_info=True)
+            threading.Thread(target=wrapper, daemon=True, name="MidlineSwing").start()
+
+        schedule.every(6).hours.do(_run_midline_swing)
+        schedule.every(10).minutes.do(_run_midline_swing)
+        logger.info("  ✓ midline_swing - 每6h + 10min轮询 (gemini/deepseek 长/短)")
+
         # Gemini 持仓顾问 - 监管 gemini_explore/gemini_predict 模拟仓，满 15min 后每 15min 复查
         def _run_gemini_position_advisor():
             if self._gemini_position_advisor_running:

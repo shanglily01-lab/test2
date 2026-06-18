@@ -13,7 +13,11 @@ HOLD_ADVISOR_MAX_PER_TICK = 50
 HOLD_REVIEW_INTERVAL_MINUTES = 15
 
 DEEPSEEK_HOLD_SOURCE_SQL = (
-    "AND LOWER(fp.source) NOT IN ('gemini_explore', 'gemini_predict')"
+    "AND LOWER(fp.source) NOT IN ("
+    "'gemini_explore', 'gemini_predict', "
+    "'gemini_midline_long', 'gemini_midline_short', "
+    "'deepseek_midline_long', 'deepseek_midline_short'"
+    ")"
 )
 GEMINI_HOLD_SOURCE_SQL = (
     "AND LOWER(fp.source) IN ('gemini_explore', 'gemini_predict')"

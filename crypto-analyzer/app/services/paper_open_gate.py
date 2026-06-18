@@ -46,6 +46,21 @@ def gate_simulated_open(
         )
         return False, reason
 
+    from app.services.midline_swing_config import is_midline_source
+    if is_midline_source(source):
+        try:
+            from app.services.trading_gates import check_simulated_symbol_allowed
+            allowed, reason = check_simulated_symbol_allowed(symbol, conn)
+            if not allowed:
+                logger.info(
+                    f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {reason}"
+                )
+                return False, reason
+        except Exception as e:
+            logger.warning(f"[开仓闸门] {symbol} 基础闸门异常: {e}")
+            return False, "symbol_gate_error"
+        return True, "midline_skip_advisor"
+
     try:
         from app.services.trading_gates import (
             check_simulated_symbol_allowed,

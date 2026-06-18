@@ -25,6 +25,8 @@ DEFAULT_PAPER_LIMIT_LONG_OFFSET_PCT = 0.5
 DEFAULT_PAPER_LIMIT_SHORT_OFFSET_PCT = 0.5
 PAPER_LIMIT_OFFSET_MIN_PCT = 0.1
 PAPER_LIMIT_OFFSET_MAX_PCT = 1.0
+# 策略级覆盖上限（如中线 ±3%）
+PAPER_LIMIT_OFFSET_STRATEGY_MAX_PCT = 5.0
 
 # 向后兼容：模块级常量回退默认值
 PAPER_LIMIT_LONG_OFFSET = Decimal(str(DEFAULT_PAPER_LIMIT_LONG_OFFSET_PCT / 100))
@@ -42,8 +44,9 @@ PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET = "convert_market"
 DEFAULT_PAPER_LIMIT_TIMEOUT_ACTION = PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE
 
 
-def _clamp_offset_pct(pct: float) -> float:
-    return max(PAPER_LIMIT_OFFSET_MIN_PCT, min(PAPER_LIMIT_OFFSET_MAX_PCT, pct))
+def _clamp_offset_pct(pct: float, *, strategy_override: bool = False) -> float:
+    hi = PAPER_LIMIT_OFFSET_STRATEGY_MAX_PCT if strategy_override else PAPER_LIMIT_OFFSET_MAX_PCT
+    return max(PAPER_LIMIT_OFFSET_MIN_PCT, min(hi, pct))
 
 
 def is_paper_limit_entry_enabled() -> bool:
@@ -93,13 +96,22 @@ def get_paper_limit_timeout_action() -> str:
     return PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE
 
 
-def calc_paper_limit_price(side: str, ref_price: float) -> float:
-    """根据参考价与系统设置计算模拟盘限价。"""
+def calc_paper_limit_price(
+    side: str,
+    ref_price: float,
+    *,
+    limit_offset_pct: Optional[float] = None,
+) -> float:
+    """根据参考价与系统设置（或策略覆盖）计算模拟盘限价。"""
     px = Decimal(str(ref_price))
-    if side.upper() == "LONG":
+    if limit_offset_pct is not None:
+        off = Decimal(str(_clamp_offset_pct(float(limit_offset_pct), strategy_override=True) / 100))
+    elif side.upper() == "LONG":
         off = get_paper_limit_long_offset()
+    else:
+        off = get_paper_limit_short_offset()
+    if side.upper() == "LONG":
         return float((px * (Decimal("1") - off)).quantize(Decimal("0.00000001")))
-    off = get_paper_limit_short_offset()
     return float((px * (Decimal("1") + off)).quantize(Decimal("0.00000001")))
 
 
@@ -165,10 +177,13 @@ def create_paper_limit_order(
     strategy_id: Optional[int] = None,
     account_id: int = PAPER_ACCOUNT_ID,
     timeout_minutes: int = PAPER_LIMIT_TIMEOUT_MINUTES,
+    limit_offset_pct: Optional[float] = None,
+    skip_open_advisor: bool = False,
     failure_reason: Optional[List[str]] = None,
 ) -> Optional[int]:
     """
     创建模拟盘限价开仓单（不直接成交）。
+    skip_open_advisor: 由调用方跳过顾问（中线策略等）；不在此函数内调 gate。
 
     Returns:
         futures_orders.id 或市价路径的 position_id；失败返回 None。
@@ -211,6 +226,9 @@ def create_paper_limit_order(
 
     long_off = get_paper_limit_long_offset()
     short_off = get_paper_limit_short_offset()
+    if limit_offset_pct is not None:
+        pct = _clamp_offset_pct(float(limit_offset_pct), strategy_override=True)
+        long_off = short_off = Decimal(str(pct / 100))
 
     # 用最新市价重算限价，确保做多限价低于市价、做空限价高于市价
     market_ref = float(ref_price)
@@ -237,11 +255,16 @@ def create_paper_limit_order(
             f"偏离>15%，以市价为准"
         )
 
-    limit_price = calc_paper_limit_price(side, market_ref)
+    limit_price = calc_paper_limit_price(side, market_ref, limit_offset_pct=limit_offset_pct)
     if side == "LONG" and limit_price >= market_ref:
         limit_price = float(Decimal(str(market_ref)) * (Decimal("1") - long_off))
     elif side == "SHORT" and limit_price <= market_ref:
         limit_price = float(Decimal(str(market_ref)) * (Decimal("1") + short_off))
+    off_label = (
+        f"{_clamp_offset_pct(float(limit_offset_pct), strategy_override=True):g}%"
+        if limit_offset_pct is not None
+        else f"多−{get_paper_limit_long_offset_pct():g}%/空+{get_paper_limit_short_offset_pct():g}%"
+    )
     sl_price, tp_price = _calc_sl_tp(
         side, limit_price, stop_loss_pct, take_profit_pct, stop_loss_price, take_profit_price,
     )
@@ -315,7 +338,7 @@ def create_paper_limit_order(
 
         logger.info(
             f"[限价开仓] 挂单 {symbol} {side} @ {limit_price:.6g} "
-            f"(市价 {market_ref:.6g}, 多−{get_paper_limit_long_offset_pct():g}%/空+{get_paper_limit_short_offset_pct():g}%, "
+            f"(市价 {market_ref:.6g}, 偏移 {off_label}, "
             f"有效期 {timeout_minutes}min, 最早成交 {PAPER_LIMIT_MIN_FILL_AGE_SEC}s 后) "
             f"SL={sl_price} TP={tp_price} qty={quantity} source={source} order_db_id={db_id}"
         )

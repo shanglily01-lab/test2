@@ -58,6 +58,14 @@ _AI_HARD_SLTP_ONLY_SOURCES = frozenset({
     'gemini_explore', 'gemini_predict',
     'deepseek_explore', 'deepseek_predict',
 })
+_MIDLINE_SOURCES = frozenset({
+    'gemini_midline_long', 'gemini_midline_short',
+    'deepseek_midline_long', 'deepseek_midline_short',
+})
+
+
+def _is_midline_source(src: str) -> bool:
+    return (src or "").strip().lower() in _MIDLINE_SOURCES
 # 硬 TP 开仓保护：避免 entry 价与 monitor 市价源不一致时秒平（SL 仍立即生效）
 _AI_TP_GRACE_MIN = 5
 
@@ -161,6 +169,37 @@ class PositionSLTPMonitor:
             entry_price = float(pos.get("entry_price") or 0)
             sl = pos.get("stop_loss_price")
             tp = pos.get("take_profit_price")
+            src = pos.get('source') or ''
+
+            # 中线策略：无 SL/TP，仅计划到期 + 爆仓
+            if _is_midline_source(src):
+                price = self._get_live_price(ws, symbol)
+                if price is None or price <= 0:
+                    continue
+                liq = pos.get("liquidation_price")
+                reason_mid: Optional[str] = None
+                pct = pos.get("planned_close_time")
+                if pct is not None:
+                    if isinstance(pct, _dt.datetime):
+                        if pct.tzinfo is not None:
+                            pct = pct.replace(tzinfo=None)
+                        if utc_now_naive() >= pct:
+                            reason_mid = "planned_close_time_expired"
+                if not reason_mid and liq is not None and float(liq) > 0:
+                    liq_f = float(liq)
+                    if side.upper() == "LONG" and price <= liq_f:
+                        reason_mid = "liquidation"
+                    elif side.upper() == "SHORT" and price >= liq_f:
+                        reason_mid = "liquidation"
+                if reason_mid:
+                    logger.warning(
+                        f"[SL/TP Monitor] 中线平仓 pid={pid} {symbol} {side} "
+                        f"reason={reason_mid} price={price:.6f}"
+                    )
+                    self._cooldown[pid] = now + self._cooldown_seconds
+                    self._do_close(pid, symbol, side, reason_mid, price, now)
+                continue
+
             if sl is None and tp is None:
                 continue
             if entry_price <= 0:
@@ -357,12 +396,16 @@ class PositionSLTPMonitor:
     def _fetch_open_positions(self) -> List[Dict[str, Any]]:
         sql = (
             "SELECT id, symbol, position_side, entry_price, "
-            "       stop_loss_price, take_profit_price, source, open_time, "
-            "       planned_close_time "
+            "       stop_loss_price, take_profit_price, liquidation_price, "
+            "       source, open_time, planned_close_time "
             "FROM futures_positions "
             "WHERE status='open' "
             "  AND (source LIKE %s) "
-            "  AND (stop_loss_price IS NOT NULL OR take_profit_price IS NOT NULL) "
+            "  AND ("
+            "    stop_loss_price IS NOT NULL OR take_profit_price IS NOT NULL "
+            "    OR source IN ('gemini_midline_long','gemini_midline_short',"
+            "                  'deepseek_midline_long','deepseek_midline_short')"
+            "  ) "
             "LIMIT 500"
         )
         try:
@@ -381,6 +424,7 @@ class PositionSLTPMonitor:
         for r in rows:
             r["stop_loss_price"]   = float(r["stop_loss_price"])   if r.get("stop_loss_price")   is not None else None
             r["take_profit_price"] = float(r["take_profit_price"]) if r.get("take_profit_price") is not None else None
+            r["liquidation_price"] = float(r["liquidation_price"]) if r.get("liquidation_price") is not None else None
             out.append(r)
         return out
 
