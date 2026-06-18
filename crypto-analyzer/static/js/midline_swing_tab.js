@@ -59,7 +59,7 @@
       '<header class="border-b border-outline-variant/10 px-8 py-5 flex items-center justify-between">' +
       '<div><h1 class="text-2xl font-bold tracking-tight">' + esc(title) + '</h1>' +
       '<p class="text-[11px] text-on-surface-variant mt-1 uppercase tracking-widest">' +
-      'L0/L1 量化扫描 · 限价 ±3% · 2h 超时 · 15天 · 5x · 无 SL/TP · 仅模拟</p></div>' +
+      'L0/L1 量化扫描 · 限价 ±3% · 2h 超时 · SL 6% / TP 20% · 15天 · 5x · 仅模拟</p></div>' +
       '<div class="flex items-center gap-3">' +
       '<span id="' + prefix + '-status-chip" class="chip chip-off"><span id="' + prefix + '-status-label">已禁用</span></span>' +
       '<label class="toggle"><input type="checkbox" id="' + prefix + '-toggle" data-source="' + esc(source) + '"><span class="slider"></span></label>' +

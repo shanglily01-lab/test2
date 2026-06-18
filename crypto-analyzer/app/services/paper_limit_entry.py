@@ -195,7 +195,10 @@ def create_paper_limit_order(
         logger.error(f"[限价开仓] 无效方向 {side}")
         return None
 
-    if not is_paper_limit_entry_enabled():
+    from app.services.midline_swing_config import is_midline_source
+    force_limit = is_midline_source(source)
+
+    if not is_paper_limit_entry_enabled() and not force_limit:
         return _open_paper_market_position(
             conn,
             symbol=symbol,
@@ -218,6 +221,12 @@ def create_paper_limit_order(
             strategy_id=strategy_id,
             account_id=account_id,
             failure_reason=failure_reason,
+        )
+
+    if force_limit and not is_paper_limit_entry_enabled():
+        logger.info(
+            f"[限价开仓] {symbol} {side} source={source}: 中线策略强制限价 "
+            f"(忽略 paper_limit_entry_enabled=0)"
         )
 
     if has_pending_paper_limit_order(conn, symbol, side, source, account_id):

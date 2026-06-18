@@ -73,6 +73,8 @@ _AI_TP_GRACE_MIN = 5
 def _is_ai_hard_sltp_source(src: str) -> bool:
     if not src:
         return False
+    if _is_midline_source(src):
+        return True
     if src in _AI_HARD_SLTP_ONLY_SOURCES:
         return True
     if src.startswith(("gemini_", "deepseek_")):
@@ -171,36 +173,34 @@ class PositionSLTPMonitor:
             tp = pos.get("take_profit_price")
             src = pos.get('source') or ''
 
-            # 中线策略：无 SL/TP，仅计划到期 + 爆仓
-            if _is_midline_source(src):
-                price = self._get_live_price(ws, symbol)
-                if price is None or price <= 0:
-                    continue
-                liq = pos.get("liquidation_price")
-                reason_mid: Optional[str] = None
-                pct = pos.get("planned_close_time")
-                if pct is not None:
-                    if isinstance(pct, _dt.datetime):
-                        if pct.tzinfo is not None:
-                            pct = pct.replace(tzinfo=None)
-                        if utc_now_naive() >= pct:
-                            reason_mid = "planned_close_time_expired"
-                if not reason_mid and liq is not None and float(liq) > 0:
-                    liq_f = float(liq)
-                    if side.upper() == "LONG" and price <= liq_f:
-                        reason_mid = "liquidation"
-                    elif side.upper() == "SHORT" and price >= liq_f:
-                        reason_mid = "liquidation"
-                if reason_mid:
-                    logger.warning(
-                        f"[SL/TP Monitor] 中线平仓 pid={pid} {symbol} {side} "
-                        f"reason={reason_mid} price={price:.6f}"
-                    )
-                    self._cooldown[pid] = now + self._cooldown_seconds
-                    self._do_close(pid, symbol, side, reason_mid, price, now)
-                continue
-
             if sl is None and tp is None:
+                # 无 SL/TP 的中线旧仓：仅计划到期 + 爆仓
+                if _is_midline_source(src):
+                    price = self._get_live_price(ws, symbol)
+                    if price is None or price <= 0:
+                        continue
+                    liq = pos.get("liquidation_price")
+                    reason_mid: Optional[str] = None
+                    pct = pos.get("planned_close_time")
+                    if pct is not None:
+                        if isinstance(pct, _dt.datetime):
+                            if pct.tzinfo is not None:
+                                pct = pct.replace(tzinfo=None)
+                            if utc_now_naive() >= pct:
+                                reason_mid = "planned_close_time_expired"
+                    if not reason_mid and liq is not None and float(liq) > 0:
+                        liq_f = float(liq)
+                        if side.upper() == "LONG" and price <= liq_f:
+                            reason_mid = "liquidation"
+                        elif side.upper() == "SHORT" and price >= liq_f:
+                            reason_mid = "liquidation"
+                    if reason_mid:
+                        logger.warning(
+                            f"[SL/TP Monitor] 中线平仓 pid={pid} {symbol} {side} "
+                            f"reason={reason_mid} price={price:.6f}"
+                        )
+                        self._cooldown[pid] = now + self._cooldown_seconds
+                        self._do_close(pid, symbol, side, reason_mid, price, now)
                 continue
             if entry_price <= 0:
                 continue

@@ -15,6 +15,8 @@ from app.services.midline_swing_config import (
     MIDLINE_LIMIT_OFFSET_PCT,
     MIDLINE_LIMIT_TIMEOUT_MINUTES,
     MIDLINE_MARGIN_USD,
+    MIDLINE_SL_PCT,
+    MIDLINE_TP_PCT,
     MIDLINE_SOURCES,
     is_midline_source,
 )
@@ -94,6 +96,8 @@ def status(source: str = Query(...)):
                     "hold_days": MIDLINE_HOLD_DAYS,
                     "limit_offset_pct": MIDLINE_LIMIT_OFFSET_PCT,
                     "limit_timeout_minutes": MIDLINE_LIMIT_TIMEOUT_MINUTES,
+                    "sl_pct": MIDLINE_SL_PCT,
+                    "tp_pct": MIDLINE_TP_PCT,
                     "interval_hours": 6,
                     "profile": profile,
                 },

@@ -64,13 +64,15 @@ def test_scoring_logic() -> None:
 def test_limit_price() -> None:
     print("[3] limit price ±3%")
     from app.services.paper_limit_entry import calc_paper_limit_price
-    from app.services.midline_swing_config import MIDLINE_LIMIT_OFFSET_PCT
+    from app.services.midline_swing_config import MIDLINE_LIMIT_OFFSET_PCT, is_midline_source
 
     lp = calc_paper_limit_price("LONG", 100.0, limit_offset_pct=MIDLINE_LIMIT_OFFSET_PCT)
     sp = calc_paper_limit_price("SHORT", 100.0, limit_offset_pct=MIDLINE_LIMIT_OFFSET_PCT)
     assert abs(lp - 97.0) < 0.01, lp
     assert abs(sp - 103.0) < 0.01, sp
     _ok(f"LONG @ {lp}, SHORT @ {sp}")
+    assert is_midline_source("gemini_midline_long") and not is_midline_source("gemini_explore")
+    _ok("midline source 识别 → create_paper_limit_order 强制限价（不受全局开关影响）")
 
 
 def test_db_and_scan() -> None:
