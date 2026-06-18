@@ -27,6 +27,26 @@ def test_imports() -> None:
     _ok("modules import")
 
 
+def test_prompt_builder() -> None:
+    print("[2b] midline LLM prompt")
+    from app.services.ai_midline_explore_prompt import build_midline_prompt, expected_category
+
+    universe = {
+        "BTCUSDT": {
+            "symbol": "BTCUSDT",
+            "current_price": 100000,
+            "rating_level": 0,
+            "kline_narrative": {"1d": "test 1d", "1h": "test 1h"},
+        }
+    }
+    meta = {"universe_total": 10, "llm_symbol_count": 1}
+    prompt = build_midline_prompt("long", universe, {}, {}, meta=meta)
+    assert "bullish" in prompt.lower() or "做多" in prompt
+    assert expected_category("long") == "bullish"
+    assert expected_category("short") == "bearish"
+    _ok(f"prompt len={len(prompt)}")
+
+
 def test_scoring_logic() -> None:
     print("[2] scoring logic (synthetic bars)")
     from app.services.midline_swing_scanner import _score_long, _score_short
@@ -94,7 +114,7 @@ def test_db_and_scan() -> None:
             else:
                 _ok("midline_swing_runs exists")
 
-        symbols = load_l0_l1_symbols(conn)
+        symbols, _ratings = load_l0_l1_symbols(conn)
         if not symbols:
             _fail("L0/L1 池为空")
         _ok(f"L0/L1 pool size={len(symbols)} (sample: {symbols[:5]})")
@@ -172,6 +192,7 @@ def main() -> None:
     print("=== midline swing smoke test ===\n")
     test_imports()
     test_scoring_logic()
+    test_prompt_builder()
     test_limit_price()
     test_db_and_scan()
     test_worker_optional(args.worker)
