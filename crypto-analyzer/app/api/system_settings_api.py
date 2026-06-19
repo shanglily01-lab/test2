@@ -577,6 +577,13 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_by = 'web_ui',
                     updated_at = NOW()
             """, (value,))
+            if data.live_trading_enabled:
+                from app.services.paper_limit_sync_service import skip_all_pending_paper_live_sync
+                skipped = skip_all_pending_paper_live_sync(cursor)
+                if skipped:
+                    updates.append(
+                        f"实盘开仓: 已跳过 {skipped} 笔历史模拟单（仅新开仓同步实盘）"
+                    )
             status = '启动' if data.live_trading_enabled else '暂停'
             updates.append(f"实盘开仓服务: {status}")
 

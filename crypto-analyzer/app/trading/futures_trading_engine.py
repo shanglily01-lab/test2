@@ -1150,6 +1150,24 @@ class FuturesTradingEngine:
                      float(entry_price), pending_order_id),
                 )
 
+            if paper_acct:
+                from app.services.paper_limit_sync_service import decide_live_sync_at_paper_fill
+                sync_status, sync_reason = decide_live_sync_at_paper_fill(
+                    symbol, source, cursor=cursor,
+                )
+                if sync_status:
+                    cursor.execute(
+                        """
+                        UPDATE futures_orders
+                        SET live_sync_status=%s, live_synced_at=NOW()
+                        WHERE order_id=%s
+                        """,
+                        (sync_status, pending_order_id),
+                    )
+                    logger.info(
+                        f"[模拟成交] {symbol} {position_side} 实盘不同步: {sync_reason}"
+                    )
+
             trade_id = f"T-{uuid.uuid4().hex[:16].upper()}"
             cursor.execute(
                 """

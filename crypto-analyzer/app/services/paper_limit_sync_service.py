@@ -3,27 +3,29 @@
 模拟盘开仓单 -> 实盘同步服务
 
 职责：
-- 每 10 秒扫描 futures_orders 中新成交的 OPEN_LONG/OPEN_SHORT 订单
-  （live_sync_status IS NULL，LIMIT 或 MARKET 都同步；2026-04-24 从仅 LIMIT 扩展）
-- 检查 system_settings.live_trading_enabled
-- 与 AI 即时开仓相同：check_live_open_allowed(source 白名单 + symbol 评级闸门)
-- 用 user_api_keys.max_position_value / max_leverage 计算实盘数量
-- 通过 BinanceFuturesEngine 在实盘开相同仓位，TP/SL 价格与模拟盘一致
-- 成功：live_sync_status='SYNCED'；闸门拒绝：'SKIPPED'；技术失败：'FAILED'（均不重试）
+- 每 10 秒扫描**刚成交**的模拟盘 OPEN_LONG/OPEN_SHORT（live_sync_status IS NULL）
+- **仅开仓瞬间同步**：成交时 live 已开且闸门通过才留 NULL；否则当场标 SKIPPED
+- 打开 live_trading_enabled **不会**回填历史模拟仓（超窗 NULL 标 SKIPPED）
+- 与 AI 策略相同：check_live_open_allowed(source 白名单 + symbol 评级闸门)
+- 成功：SYNCED；闸门拒绝/实盘关：SKIPPED；技术失败：FAILED（均不重试）
 """
 
 from __future__ import annotations
 
 import asyncio
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pymysql
 import requests
 from loguru import logger
 from urllib.parse import quote
 
+from app.services.paper_limit_entry import PAPER_ACCOUNT_ID
 from app.utils.config_loader import get_db_config
+
+# 仅同步成交后此时间窗内的单（开仓瞬间）；禁止打开实盘开关后回填历史模拟仓
+LIVE_SYNC_FILL_WINDOW_MINUTES = 5
 
 
 def _db_cfg() -> Dict[str, Any]:
@@ -34,6 +36,82 @@ def _db_cfg() -> Dict[str, Any]:
     cfg.setdefault("write_timeout", 10)
     cfg["cursorclass"] = pymysql.cursors.DictCursor
     return cfg
+
+
+def decide_live_sync_at_paper_fill(
+    symbol: str,
+    source: str,
+    cursor=None,
+) -> Tuple[Optional[str], str]:
+    """
+    模拟盘限价/市价成交瞬间决定是否排队实盘同步。
+
+    Returns:
+        (live_sync_status, reason)
+        - (None, '')  → 留 NULL，PaperSync 在时间窗内同步
+        - ('SKIPPED', reason) → 永不同步此单（含实盘关、策略不在白名单等）
+    """
+    from app.services.trading_gates import check_live_open_allowed
+
+    allowed, reason = check_live_open_allowed(symbol, source, cursor=cursor)
+    if allowed:
+        return None, ""
+    return "SKIPPED", reason
+
+
+def mark_stale_unsynced_paper_orders(
+    cursor,
+    *,
+    window_minutes: int = LIVE_SYNC_FILL_WINDOW_MINUTES,
+    only_open_positions: bool = True,
+) -> int:
+    """
+    将超时间窗仍为 NULL 的模拟开仓单标为 SKIPPED，防止打开实盘开关后回填历史仓。
+    only_open_positions=False 时用于用户刚打开 live 开关的一次性清理。
+    """
+    open_clause = "AND fp.status = 'open'" if only_open_positions else ""
+    cursor.execute(
+        f"""
+        UPDATE futures_orders fo
+        JOIN futures_positions fp ON fp.id = fo.position_id
+        JOIN futures_trading_accounts fta ON fta.id = fo.account_id
+        SET fo.live_sync_status = 'SKIPPED',
+            fo.live_synced_at = NOW(),
+            fo.live_position_id = NULL
+        WHERE fo.status = 'FILLED'
+          AND fo.side IN ('OPEN_LONG', 'OPEN_SHORT')
+          AND fo.live_sync_status IS NULL
+          AND fta.id = %s
+          {open_clause}
+          AND (
+                fo.fill_time IS NULL
+                OR fo.fill_time < NOW() - INTERVAL %s MINUTE
+              )
+        """,
+        (PAPER_ACCOUNT_ID, int(window_minutes)),
+    )
+    return int(cursor.rowcount or 0)
+
+
+def skip_all_pending_paper_live_sync(cursor) -> int:
+    """用户打开实盘同步开关时：所有仍 open 且未同步的模拟单一律 SKIPPED，禁止回填。"""
+    cursor.execute(
+        """
+        UPDATE futures_orders fo
+        JOIN futures_positions fp ON fp.id = fo.position_id
+        JOIN futures_trading_accounts fta ON fta.id = fo.account_id
+        SET fo.live_sync_status = 'SKIPPED',
+            fo.live_synced_at = NOW(),
+            fo.live_position_id = NULL
+        WHERE fo.status = 'FILLED'
+          AND fo.side IN ('OPEN_LONG', 'OPEN_SHORT')
+          AND fo.live_sync_status IS NULL
+          AND fp.status = 'open'
+          AND fta.id = %s
+        """,
+        (PAPER_ACCOUNT_ID,),
+    )
+    return int(cursor.rowcount or 0)
 
 
 class PaperLimitSyncService:
@@ -84,7 +162,17 @@ class PaperLimitSyncService:
         try:
             with conn.cursor() as cur:
                 if not self._is_live_enabled(cur):
+                    # 实盘关：超窗 NULL 标 SKIPPED，避免日后开开关回填
+                    n = mark_stale_unsynced_paper_orders(cur)
+                    if n:
+                        conn.commit()
+                        logger.info(f"[PaperSync] 实盘关闭，已将 {n} 笔超窗未同步单标为 SKIPPED")
                     return
+
+                n = mark_stale_unsynced_paper_orders(cur)
+                if n:
+                    conn.commit()
+                    logger.info(f"[PaperSync] 已将 {n} 笔超窗未同步单标为 SKIPPED（禁止历史回填）")
 
                 orders = self._fetch_pending_sync(cur)
 
@@ -103,10 +191,7 @@ class PaperLimitSyncService:
         return str(row["setting_value"]).strip() == "1"
 
     def _fetch_pending_sync(self, cur) -> List[Dict]:
-        # 去重两条线（2026-04-24 MARKET 扩展后必须加，否则历史市价兜底单会把已平/已同步的
-        # paper 仓位在 live 上再开一次）：
-        #   1) paper 仓位必须仍 open；已 closed 的 paper 禁止再同步
-        #   2) 同一 paper_pid 已经有别的订单 live_sync_status='SYNCED' 则跳过
+        # 仅同步成交后 LIVE_SYNC_FILL_WINDOW_MINUTES 内的单（开仓瞬间）
         cur.execute(
             """
             SELECT
@@ -122,8 +207,9 @@ class PaperLimitSyncService:
             WHERE fo.status = 'FILLED'
               AND fo.side IN ('OPEN_LONG', 'OPEN_SHORT')
               AND fo.live_sync_status IS NULL
-              AND fo.fill_time >= NOW() - INTERVAL 2 HOUR
+              AND fo.fill_time >= NOW() - INTERVAL %s MINUTE
               AND fp.status = 'open'
+              AND fta.id = %s
               AND NOT EXISTS (
                   SELECT 1 FROM futures_orders fo2
                   WHERE fo2.position_id = fo.position_id
@@ -132,7 +218,8 @@ class PaperLimitSyncService:
               )
             ORDER BY fo.fill_time ASC
             LIMIT 20
-            """
+            """,
+            (LIVE_SYNC_FILL_WINDOW_MINUTES, PAPER_ACCOUNT_ID),
         )
         return cur.fetchall()
 
@@ -181,8 +268,6 @@ class PaperLimitSyncService:
                     "[PaperSync] order_id=%s %s source=%s 跳过实盘同步: %s",
                     order_id, symbol, order_source, reason,
                 )
-                if reason == "live_trading_enabled=0":
-                    return
                 self._mark(conn, order_id, "SKIPPED", None)
                 return
 
