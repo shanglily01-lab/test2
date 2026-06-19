@@ -125,6 +125,7 @@
 
 ## AI 策略与顾问（完整文档）
 
+- **业务逻辑权威（必读）**: `docs/REQUIREMENTS_LOGIC_ZH.md` — 实盘同步、闸门、15m 判据、不可变硬规则
 - 中文: `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md`
 - English: `docs/AI_STRATEGIES_AND_ADVISORS_EN.md`
 

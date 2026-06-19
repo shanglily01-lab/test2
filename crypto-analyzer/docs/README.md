@@ -1,11 +1,20 @@
 # 超级大脑交易系统 - 文档中心
 
-> **最后更新**: 2026-06-04
-> **文档版本**: V3.1
+> **最后更新**: 2026-06-18  
+> **业务逻辑权威**: [**REQUIREMENTS_LOGIC_ZH.md**](./REQUIREMENTS_LOGIC_ZH.md)（v4.0 — 改代码必须同步）
 
 ---
 
-## AI 策略与顾问（2026-06 收尾）
+## ⭐ 业务逻辑需求（必读）
+
+| 文档 | 说明 |
+|------|------|
+| [**REQUIREMENTS_LOGIC_ZH.md**](./REQUIREMENTS_LOGIC_ZH.md) | **权威**：实盘同步、闸门、AI 15m 判据、调度、不可变硬规则 INV-01～08 |
+| [.cursor/rules/requirements-doc-sync.mdc](../.cursor/rules/requirements-doc-sync.mdc) | Cursor 规则：改动逻辑必须同步上文 |
+
+---
+
+## AI 策略与顾问
 
 | 文档 | 说明 |
 |------|------|
