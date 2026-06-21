@@ -1150,6 +1150,7 @@ class FuturesTradingEngine:
                      float(entry_price), pending_order_id),
                 )
 
+            sync_status, sync_reason = None, ""
             if paper_acct:
                 from app.services.paper_limit_sync_service import decide_live_sync_at_paper_fill
                 sync_status, sync_reason = decide_live_sync_at_paper_fill(
@@ -1204,6 +1205,24 @@ class FuturesTradingEngine:
                 _update_account_total_equity(cursor, account_id)
             self.connection.commit()
 
+            live_sync_info = None
+            if paper_acct:
+                if sync_status:
+                    live_sync_info = {
+                        "attempted": False,
+                        "live_sync_status": sync_status,
+                        "reason": sync_reason,
+                    }
+                else:
+                    try:
+                        from app.services.paper_limit_sync_service import sync_filled_order_now
+                        live_sync_info = sync_filled_order_now(pending_order_id)
+                    except Exception as sync_ex:
+                        logger.warning(
+                            f"[模拟成交] 立即实盘同步失败 {pending_order_id}: {sync_ex}"
+                        )
+                        live_sync_info = {"attempted": False, "reason": str(sync_ex)}
+
             tag = '市价转单' if at_market else '限价成交'
             extra = f" 限价={limit_price}" if at_market else ''
             logger.info(
@@ -1216,6 +1235,7 @@ class FuturesTradingEngine:
                 'order_id': pending_order_id,
                 'fill_price': float(entry_price),
                 'at_market': at_market,
+                'live_sync': live_sync_info,
             }
         except Exception as e:
             if self.connection and pending_order_id:

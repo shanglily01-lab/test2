@@ -190,10 +190,7 @@ class PaperLimitSyncService:
             return False
         return str(row["setting_value"]).strip() == "1"
 
-    def _fetch_pending_sync(self, cur) -> List[Dict]:
-        # 仅同步成交后 LIVE_SYNC_FILL_WINDOW_MINUTES 内的单（开仓瞬间）
-        cur.execute(
-            """
+    _SYNC_ORDER_SELECT = """
             SELECT
                 fo.id, fo.account_id, fo.symbol, fo.side,
                 fo.leverage, fo.quantity, fo.avg_fill_price,
@@ -216,12 +213,89 @@ class PaperLimitSyncService:
                     AND fo2.id <> fo.id
                     AND fo2.live_sync_status = 'SYNCED'
               )
-            ORDER BY fo.fill_time ASC
-            LIMIT 20
-            """,
+    """
+
+    def _fetch_pending_sync(self, cur) -> List[Dict]:
+        # 仅同步成交后 LIVE_SYNC_FILL_WINDOW_MINUTES 内的单（开仓瞬间）
+        cur.execute(
+            self._SYNC_ORDER_SELECT + " ORDER BY fo.fill_time ASC LIMIT 50",
             (LIVE_SYNC_FILL_WINDOW_MINUTES, PAPER_ACCOUNT_ID),
         )
         return cur.fetchall()
+
+    def sync_filled_order_now(self, futures_order_id: str) -> Dict:
+        """
+        模拟成交后立即尝试同步实盘一次（转市价/限价成交均可）。
+        仍受 live 开关、source 白名单、L0 白名单、5 分钟窗约束。
+        """
+        out: Dict = {
+            "attempted": False,
+            "live_sync_status": None,
+            "live_position_id": None,
+            "reason": "",
+        }
+        if not futures_order_id:
+            out["reason"] = "empty order_id"
+            return out
+
+        conn = None
+        try:
+            conn = pymysql.connect(**_db_cfg())
+            with conn.cursor() as cur:
+                if not self._is_live_enabled(cur):
+                    out["reason"] = "live_trading_enabled=0"
+                    return out
+
+                cur.execute(
+                    self._SYNC_ORDER_SELECT + " AND fo.order_id = %s LIMIT 1",
+                    (LIVE_SYNC_FILL_WINDOW_MINUTES, PAPER_ACCOUNT_ID, futures_order_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    cur.execute(
+                        """SELECT live_sync_status, live_position_id, status
+                           FROM futures_orders WHERE order_id=%s LIMIT 1""",
+                        (futures_order_id,),
+                    )
+                    st = cur.fetchone() or {}
+                    out["live_sync_status"] = st.get("live_sync_status")
+                    out["live_position_id"] = st.get("live_position_id")
+                    if st.get("live_sync_status"):
+                        out["reason"] = f"already {st.get('live_sync_status')}"
+                    elif st.get("status") != "FILLED":
+                        out["reason"] = f"order status={st.get('status')}"
+                    else:
+                        out["reason"] = "不在同步窗口或持仓已关闭"
+                    return out
+
+                out["attempted"] = True
+                self._sync_one(conn, row)
+
+                cur.execute(
+                    """SELECT live_sync_status, live_position_id
+                       FROM futures_orders WHERE order_id=%s LIMIT 1""",
+                    (futures_order_id,),
+                )
+                st = cur.fetchone() or {}
+                out["live_sync_status"] = st.get("live_sync_status")
+                out["live_position_id"] = st.get("live_position_id")
+                if st.get("live_sync_status") == "SKIPPED":
+                    out["reason"] = "闸门拒绝（非 L0 / 策略不在白名单 / 亏损冷却等）"
+                elif st.get("live_sync_status") == "FAILED":
+                    out["reason"] = "实盘开仓失败，见 PaperSync 日志"
+                elif st.get("live_sync_status") != "SYNCED":
+                    out["reason"] = "未完成同步"
+                return out
+        except Exception as e:
+            logger.error(f"[PaperSync] sync_filled_order_now {futures_order_id}: {e}")
+            out["reason"] = str(e)
+            return out
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
     def _sync_one(self, conn, order: Dict) -> None:
         order_id = order["id"]
@@ -496,3 +570,11 @@ def init_paper_limit_sync_service(
     global _service
     _service = PaperLimitSyncService(interval_seconds=interval_seconds, api_base=api_base)
     return _service
+
+
+def sync_filled_order_now(futures_order_id: str) -> Dict:
+    """成交后立即尝试 PaperSync（无服务实例时临时创建）。"""
+    svc = get_paper_limit_sync_service()
+    if svc is None:
+        svc = PaperLimitSyncService()
+    return svc.sync_filled_order_now(futures_order_id)

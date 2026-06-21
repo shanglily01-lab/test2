@@ -938,6 +938,7 @@ def convert_limit_order_to_market(order_id: str, account_id: int = 2):
             'success': True,
             'message': f"{order['symbol']} 已按市价成交",
             'data': result,
+            'live_sync': result.get('live_sync'),
         }
     except HTTPException:
         raise
