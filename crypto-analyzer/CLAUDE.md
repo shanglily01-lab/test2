@@ -73,7 +73,9 @@
 | DeepSeek 探索 | 每 **4h** + **10min 轮询** |
 | DeepSeek 预测 | 每 **4h 必跑** + **5min 轮询** (`deepseek_predict_next_due_utc`) |
 | GPT 探索/预测 | 同 Gemini/DeepSeek 节奏 + `gpt_*_next_due_utc` |
+| **中线量化** ×4 | 每 **6h** + **10min 轮询** |
 | 战术探索 15 槽位 | 每 **15min** 轮询 (`tactical_explore_scheduler`) |
+| **持仓顾问** Gemini+DeepSeek | 每 **5min** tick（浮盈 5min/仓，其余 15min/仓） |
 | 市场情绪分析 | 每 **8 小时** |
 | ETF 同步 | 每天 06:45 |
 | 金库同步 | 每天 07:30 |
@@ -151,10 +153,17 @@
 - 每 **4h** + 5min 轮询 + `*_predict_next_due_utc`；kill switch（Gemini 预测默认 1）
 - 同主探索持仓/SL/TP/门槛；**实盘**：`gemini_predict`、`deepseek_predict`（+ L0 白名单等 symbol 闸门）
 
-### 开仓 / 持仓顾问（2026-06-08 Gemini 主单回归 Gemini）
-- `gemini_explore` / `gemini_predict` 开仓和持仓由 Gemini 顾问审核；其余 source 由 DeepSeek 顾问监管
-- Prompt/rubric/**reason 生产环境为中文**；开关 `*_open_advisor_enabled` / `*_position_advisor_enabled`
-- 表 `gemini/deepseek/gpt_advisor_reviews`；Web `/gemini-advisor-reviews`
+### 中线做多/做空 (`*_midline_*`) [2026-06-21]
+- **量化扫描**，非 LLM；L0/L1 池；6h + 10min 调度
+- 限价 **做多−3%/做空+3%**；6h 超时；持仓 **15 天**；SL **6%** / TP **20%** / 5x / 500U
+- **跳过**开/持仓顾问；**排除** SmartExit → `position_sl_tp_monitor`（硬 SL/TP + ai-trail-tp）
+- 实盘：`LIVE_SYNC_SOURCES` + **L0 白名单**；PaperLimitSync 成交后 5min 窗
+
+### 开仓 / 持仓顾问
+- 路由：`gemini_explore/predict` → Gemini；其余（**不含中线**）→ DeepSeek
+- 持仓 tick：**5min**；浮盈仓 5min/仓；浮盈转亏 urgent 立即再审
+- 盈利 sell：ROI **≥+5%** 且 15m 转弱；ai-trail-tp 程序化锁利（peak≥3% 回撤≥1%）
+- Prompt/rubric/**reason 中文**；开关 `*_position_advisor_enabled`
 
 ### gemini_sentiment_analyzer (情绪)
 - 每 **8h**；`gemini_sentiment_enabled`（默认 1）；不下单
@@ -203,13 +212,13 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 
 ## 实盘控制
 
-- **按 source 白名单**（`app/services/trading_gates.py`）：`gemini_explore`、`gemini_predict`、`deepseek_explore`、`deepseek_predict` 可开实盘；GPT、战术、反转、smart_trader 等只写模拟仓
+- **按 source 白名单**（`trading_gates.LIVE_SYNC_SOURCES`）：主探索/预测四路 + **四路中线**；GPT/战术/反转/smart_trader 等只模拟
+- **实盘开仓 symbol**：须 **L0 白名单**（`rating_level=0`）；L1/L2/L3 禁止实盘
+- **限价偏移**：中线 ±3% 固定；其他模拟限价读 `paper_limit_long/short_offset_pct`（系统设定）
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)
 - **平仓总开关**: `system_settings.live_close_enabled` (1=开启；模拟平仓时同步交易所；持仓顾问 sell 亦受此规则)
-- **北京时间实盘开仓时段**: 仅 10:00-16:00、22:00-次日04:00 允许同步/直接开实盘；服务器 UTC 对应 02:00-08:00、14:00-20:00。模拟开仓不受该时段限制，用于对比禁开时段表现。
-- **TOP50 实仓闸门**: `system_settings.live_top50_required` (默认 1，TOP50 内可开实仓)
-- **白名单实仓闸门**: `system_settings.live_whitelist_enabled` (默认 1，rating_level=0 可开实仓)
-- 两者为 **或** 关系；**都关** 则即使 `live_trading_enabled=1` 也不同步实盘
+- **北京时间实盘开仓时段**: 仅 10:00-16:00、22:00-次日04:00 允许同步/直接开实盘；服务器 UTC 对应 02:00-08:00、14:00-20:00。模拟开仓不受该时段限制。
+- **废弃设置**（不再参与开仓判断）：`live_top50_required`、`live_whitelist_enabled` — 开仓仅认 **L0 白名单**
 - **黑名单实盘限制**: L1/L2/L3 禁止实盘开仓；`blacklist_level3_enabled` 默认 0，仅开关开启时才拦 L3 模拟开仓
 - 各闸门由 `trading_gates.check_live_open_allowed` / `should_sync_live_for_source` 统一读取，**不在 config.yaml**
 - 每账号 OPEN 上限 20 仓

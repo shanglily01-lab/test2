@@ -1,30 +1,34 @@
 ---
-description: 业务逻辑改动必须同步 docs/REQUIREMENTS_LOGIC_ZH.md
+description: 业务逻辑改动必须同步需求/设计文档与 Cursor 上下文
 alwaysApply: true
 ---
 
 # 需求文档同步（强制）
 
-**权威需求文档**: `docs/REQUIREMENTS_LOGIC_ZH.md`（v4.0+）
+**权威需求文档**: `docs/REQUIREMENTS_LOGIC_ZH.md`（v4.0+）  
+**设计文档**: `design/需求文档.md` · `design/系统设计文档.md`  
+**AI 细节**: `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md`  
+**项目上下文**: `CLAUDE.md` · `.cursor/rules/ai-strategies-advisors.mdc` · `.cursor/rules/scheduler-ai-ops.mdc`
 
 ## 改代码前
 
-1. 先读本文档对应章节（§4 实盘同步、§6 闸门、§8 AI、§1 不可变硬规则）。
-2. **禁止**违反 INV-01～INV-08；尤其 INV-01/02（实盘仅成交瞬间同步，开开关不回填历史模拟仓）。
+1. 先读 REQUIREMENTS 对应章节（§4 实盘、§6 闸门、§7 限价、§9 顾问、§1 INV）。
+2. **禁止**违反 INV-01～INV-08；尤其 INV-01/02（实盘仅成交瞬间同步）。
 
-## 改代码后（同一提交内）
+## 改代码后（同一提交或紧随提交）
 
-1. 更新 `docs/REQUIREMENTS_LOGIC_ZH.md` 对应章节与 §15 代码索引。
-2. 在 §16 变更记录追加一行（日期 + 摘要）。
-3. 若仅改 AI prompt/门槛，同时检查 `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md` 是否需同步；冲突以 REQUIREMENTS_LOGIC 为准。
+1. 更新 `docs/REQUIREMENTS_LOGIC_ZH.md` 对应章节 + §15 索引 + §16 变更记录。
+2. 若涉及架构/FR/模块边界：同步 `design/需求文档.md` · `design/系统设计文档.md`（追加 v3.x 修订记录即可）。
+3. 若涉及 AI/顾问/中线/调度：同步 `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md` + `.cursor/rules/*.mdc` + `CLAUDE.md` 速查段。
+4. 冲突以 **REQUIREMENTS_LOGIC** 为准。
 
 ## 实盘同步不可触碰逻辑
 
 - `decide_live_sync_at_paper_fill`：成交瞬间 SKIPPED vs NULL
 - `LIVE_SYNC_FILL_WINDOW_MINUTES = 5`
-- `skip_all_pending_paper_live_sync`：用户打开 live_trading_enabled 时执行
-- **禁止**恢复 2 小时 NULL 回填或开开关批量 sync 历史 open 模拟仓
+- `skip_all_pending_paper_live_sync`：开 `live_trading_enabled` 时执行
+- **禁止** 2h NULL 回填或开开关批量 sync 历史 open 模拟仓
 
 ## 评审口令
 
-PR/提交说明须含：`需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §X 已同步` 或说明为何无需改文档。
+PR/提交说明须含：`需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §X 已同步`（及设计/上下文若已更新）。
