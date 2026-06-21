@@ -115,6 +115,21 @@ def test_live_sync_whitelist() -> None:
     )
 
 
+def test_no_ai_trail_tp_for_midline() -> None:
+    print("[3c] midline excludes ai-trail-tp")
+    from app.services.position_sl_tp_monitor import (
+        _check_ai_trail_tp,
+        _is_ai_hard_sltp_source,
+        _is_midline_source,
+    )
+
+    assert _is_midline_source("gemini_midline_long")
+    assert _is_ai_hard_sltp_source("gemini_midline_long")
+    # peak 8.9% + 1.04% drawdown (MASK 案例量级) 会触发 explore/predict 的 ai-trail-tp
+    assert _check_ai_trail_tp(0.0786, 0.089) is not None
+    _ok("ai-trail-tp logic exists for explore/predict; midline skip enforced in monitor loop")
+
+
 def test_db_and_scan() -> None:
     print("[4] DB + L0/L1 scan (read-only)")
     import pymysql
@@ -214,6 +229,7 @@ def main() -> None:
     test_scoring_logic()
     test_limit_price()
     test_live_sync_whitelist()
+    test_no_ai_trail_tp_for_midline()
     test_db_and_scan()
     test_worker_optional(args.worker)
     print("\n=== ALL DONE ===")

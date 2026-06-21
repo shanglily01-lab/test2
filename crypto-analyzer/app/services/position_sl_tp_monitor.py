@@ -188,30 +188,11 @@ class PositionSLTPMonitor:
             src = pos.get('source') or ''
 
             if sl is None and tp is None:
-                # 无 SL/TP 的中线旧仓：ai-trail-tp + 计划到期 + 爆仓
+                # 无 SL/TP 的中线旧仓：仅计划到期 + 爆仓（不走 ai-trail-tp）
                 if _is_midline_source(src):
                     price = self._get_live_price(ws, symbol)
                     if price is None or price <= 0:
                         continue
-                    if entry_price > 0:
-                        if side.upper() == "LONG":
-                            pnl_pct = (price - entry_price) / entry_price
-                        else:
-                            pnl_pct = (entry_price - price) / entry_price
-                        prev_peak = self._peak_pnl_map.get(pid, 0.0)
-                        new_peak = max(prev_peak, pnl_pct)
-                        if new_peak != prev_peak:
-                            self._peak_pnl_map[pid] = new_peak
-                        trail_mid = _check_ai_trail_tp(pnl_pct, new_peak)
-                        if trail_mid:
-                            logger.info(
-                                f"[AI trail-tp] 中线 pid={pid} {symbol} {side} "
-                                f"reason={trail_mid} price={price:.6f}"
-                            )
-                            self._cooldown[pid] = now + self._cooldown_seconds
-                            self._peak_pnl_map.pop(pid, None)
-                            self._do_close(pid, symbol, side, trail_mid, price, now)
-                            continue
                     liq = pos.get("liquidation_price")
                     reason_mid: Optional[str] = None
                     pct = pos.get("planned_close_time")
@@ -280,7 +261,7 @@ class PositionSLTPMonitor:
             trigger_price = price
 
             # ────────────────────────────────────────────────────────────────
-            # AI 探索/预测/中线：硬 SL/TP + 轻量 ai-trail-tp（无 early-sl/breakeven）
+            # AI 探索/预测：硬 SL/TP + 轻量 ai-trail-tp（中线仅硬 SL/TP，无 ai-trail-tp）
             # ────────────────────────────────────────────────────────────────
             src = pos.get('source') or ''
             if _is_ai_hard_sltp_source(src):
@@ -311,16 +292,17 @@ class PositionSLTPMonitor:
                     self._do_close(pid, symbol, side, reason, trigger_price, now)
                     continue
 
-                trail_ai = _check_ai_trail_tp(pnl_pct, new_peak)
-                if trail_ai:
-                    self._sync_peak_to_db(pid, new_peak * 100)
-                    logger.info(
-                        f"[AI trail-tp] pid={pid} {symbol} {side} source={src} "
-                        f"reason={trail_ai} price={price:.6f} peak={new_peak * 100:.2f}%"
-                    )
-                    self._cooldown[pid] = now + self._cooldown_seconds
-                    self._peak_pnl_map.pop(pid, None)
-                    self._do_close(pid, symbol, side, trail_ai, price, now)
+                if not _is_midline_source(src):
+                    trail_ai = _check_ai_trail_tp(pnl_pct, new_peak)
+                    if trail_ai:
+                        self._sync_peak_to_db(pid, new_peak * 100)
+                        logger.info(
+                            f"[AI trail-tp] pid={pid} {symbol} {side} source={src} "
+                            f"reason={trail_ai} price={price:.6f} peak={new_peak * 100:.2f}%"
+                        )
+                        self._cooldown[pid] = now + self._cooldown_seconds
+                        self._peak_pnl_map.pop(pid, None)
+                        self._do_close(pid, symbol, side, trail_ai, price, now)
                 continue
 
             # 1. 新规则（受 disable_sl_tp_hold 控制）

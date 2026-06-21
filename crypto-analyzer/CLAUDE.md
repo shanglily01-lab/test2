@@ -156,7 +156,7 @@
 ### 中线做多/做空 (`*_midline_*`) [2026-06-21]
 - **量化扫描**，非 LLM；L0/L1 池；6h + 10min 调度
 - 限价 **做多−3%/做空+3%**；6h 超时；持仓 **15 天**；SL **6%** / TP **20%** / 5x / 500U
-- **跳过**开/持仓顾问；**排除** SmartExit → `position_sl_tp_monitor`（硬 SL/TP + ai-trail-tp）
+- **跳过**开/持仓顾问；**排除** SmartExit → `position_sl_tp_monitor`（**仅硬 SL/TP**，无 ai-trail-tp）
 - 实盘：`LIVE_SYNC_SOURCES` + **L0 白名单**；PaperLimitSync 成交后 5min 窗
 
 ### 开仓 / 持仓顾问

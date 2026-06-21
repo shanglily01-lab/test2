@@ -19,7 +19,7 @@ crypto-scheduler (每 5min)
   └─ Gemini + DeepSeek 持仓顾问 tick（浮盈 5min/仓，其余 15min/仓）
 
 crypto-app-main
-  └─ position_sl_tp_monitor (1s)：AI 硬 SL/TP + ai-trail-tp；中线不参与 SmartExit
+  └─ position_sl_tp_monitor (1s)：探索/预测 ai-trail-tp；中线仅硬 SL/TP，不参与 SmartExit
 
 任意模拟开仓
   └─ paper_open_gate.gate_simulated_open()
@@ -235,7 +235,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 6.5.1 职责
 
-L0/L1 标的池 + 24×1D / 60×1H 技术评分扫描，**不调用 LLM**，**跳过**开仓/持仓顾问，**不参与** `SmartExitOptimizer`（由 `position_sl_tp_monitor` 负责 SL/TP、ai-trail-tp、15 天到期、爆仓）。
+L0/L1 标的池 + 24×1D / 60×1H 技术评分扫描，**不调用 LLM**，**跳过**开仓/持仓顾问，**不参与** `SmartExitOptimizer`（由 `position_sl_tp_monitor` 负责**仅硬 SL/TP**、15 天到期、爆仓；**无 ai-trail-tp**）。
 
 ### 6.5.2 代码入口
 
@@ -343,7 +343,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 - **Big4**：仅辅证，**不得单独触发 sell**  
 - **盈利侧**：ROI≥+5% 且 15m 转弱 → 倾向 observe/sell；`_temper_premature_sell` 对浮盈放宽  
 - **亏损分档**（保证金 ROI%）：轻微 >-5%、中度 >-12%、严重 ≤-15%；深亏 `hold` 经 `_temper_losing_hold` 统计复核  
-- **程序化锁利**：AI 仓 `position_sl_tp_monitor` **ai-trail-tp**（peak 价格收益≥3%，回撤≥1%）
+- **程序化锁利**：探索/预测 `position_sl_tp_monitor` **ai-trail-tp**（peak 价格收益≥3%，回撤≥1%）；**中线不含**
 
 ### 8.4 sell 后果
 
