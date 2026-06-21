@@ -64,15 +64,32 @@ def test_scoring_logic() -> None:
 def test_limit_price() -> None:
     print("[3] limit price ±3%")
     from app.services.paper_limit_entry import calc_paper_limit_price
-    from app.services.midline_swing_config import MIDLINE_LIMIT_OFFSET_PCT, is_midline_source
+    from app.services.midline_swing_config import (
+        MIDLINE_LIMIT_LONG_OFFSET_PCT,
+        MIDLINE_LIMIT_SHORT_OFFSET_PCT,
+        get_midline_limit_offset_pct,
+        is_midline_source,
+    )
 
-    lp = calc_paper_limit_price("LONG", 100.0, limit_offset_pct=MIDLINE_LIMIT_OFFSET_PCT)
-    sp = calc_paper_limit_price("SHORT", 100.0, limit_offset_pct=MIDLINE_LIMIT_OFFSET_PCT)
-    assert abs(lp - 97.0) < 0.01, lp
-    assert abs(sp - 103.0) < 0.01, sp
+    lp = calc_paper_limit_price(
+        "LONG", 100.0, limit_offset_pct=get_midline_limit_offset_pct("LONG"),
+    )
+    sp = calc_paper_limit_price(
+        "SHORT", 100.0, limit_offset_pct=get_midline_limit_offset_pct("SHORT"),
+    )
+    assert abs(lp - (100.0 * (1 - MIDLINE_LIMIT_LONG_OFFSET_PCT / 100))) < 0.01, lp
+    assert abs(sp - (100.0 * (1 + MIDLINE_LIMIT_SHORT_OFFSET_PCT / 100))) < 0.01, sp
     _ok(f"LONG @ {lp}, SHORT @ {sp}")
     assert is_midline_source("gemini_midline_long") and not is_midline_source("gemini_explore")
-    _ok("midline source 识别 → create_paper_limit_order 强制限价（不受全局开关影响）")
+    _ok("midline source → 强制 ±3% 限价")
+
+    # 非中线：走 system_settings（默认 0.5%）
+    lp_sys = calc_paper_limit_price("LONG", 100.0)
+    sp_sys = calc_paper_limit_price("SHORT", 100.0)
+    from app.services.paper_limit_entry import get_paper_limit_long_offset_pct, get_paper_limit_short_offset_pct
+    assert abs(lp_sys - (100.0 * (1 - get_paper_limit_long_offset_pct() / 100))) < 0.01, lp_sys
+    assert abs(sp_sys - (100.0 * (1 + get_paper_limit_short_offset_pct() / 100))) < 0.01, sp_sys
+    _ok(f"非中线 LONG @ {lp_sys}, SHORT @ {sp_sys} (系统设定偏移)")
 
 
 def test_live_sync_whitelist() -> None:

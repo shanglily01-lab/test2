@@ -95,7 +95,7 @@
       teacherLabel + ' · <span class="text-primary">L0/L1 量化扫描</span>（24×1D + 60×1H 技术评分）' +
       ' · 不调用 LLM · 不经开仓/持仓顾问</p>' +
       '<p class="text-[10px] text-on-surface-variant/80 mt-1">' +
-      '限价 ±3% · 2h 超时 · SL 6% / TP 20% · 持仓 15 天 · 5x · 500U · 仅模拟 · 不受 smart_trader 对冲平仓</p>' +
+      '限价 做多−3% / 做空+3% · 6h 超时 · SL 6% / TP 20% · 持仓 15 天 · 5x · 500U · 仅模拟 · 不受 smart_trader 对冲平仓</p>' +
       '</div>' +
       '<div class="flex items-center gap-3 shrink-0">' +
       '<span id="' + prefix + '-status-chip" class="chip chip-off"><span id="' + prefix + '-status-label">已禁用</span></span>' +

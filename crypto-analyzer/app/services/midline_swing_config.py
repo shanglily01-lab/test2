@@ -7,7 +7,10 @@ MIDLINE_HOLD_DAYS = 15
 MIDLINE_HOLD_MINUTES = MIDLINE_HOLD_DAYS * 24 * 60
 MIDLINE_LEVERAGE = 5
 MIDLINE_MARGIN_USD = 500.0
-MIDLINE_LIMIT_OFFSET_PCT = 3.0
+# 限价偏移：做多 = 市价 −3%，做空 = 市价 +3%
+MIDLINE_LIMIT_LONG_OFFSET_PCT = 3.0
+MIDLINE_LIMIT_SHORT_OFFSET_PCT = 3.0
+MIDLINE_LIMIT_OFFSET_PCT = MIDLINE_LIMIT_LONG_OFFSET_PCT  # 向后兼容 API/文档
 MIDLINE_LIMIT_TIMEOUT_MINUTES = 6 * 60  # 限价单 6 小时未成交则过期
 MIDLINE_SL_PCT = 6.0
 MIDLINE_TP_PCT = 20.0
@@ -41,6 +44,25 @@ MIDLINE_KILL_SWITCH: Dict[str, str] = {
 
 def is_midline_source(source: str) -> bool:
     return (source or "").strip().lower() in MIDLINE_SOURCES
+
+
+def get_midline_limit_offset_pct(side: str) -> float:
+    """中线限价偏移：LONG −3% / SHORT +3%."""
+    return (
+        MIDLINE_LIMIT_LONG_OFFSET_PCT
+        if (side or "").upper() == "LONG"
+        else MIDLINE_LIMIT_SHORT_OFFSET_PCT
+    )
+
+
+def calc_midline_limit_price(side: str, ref_price: float) -> float:
+    """按中线 ±3% 规则计算限价."""
+    from app.services.paper_limit_entry import calc_paper_limit_price
+    return calc_paper_limit_price(
+        side,
+        ref_price,
+        limit_offset_pct=get_midline_limit_offset_pct(side),
+    )
 
 
 def midline_source_sql_not_in(column: str = "source") -> str:

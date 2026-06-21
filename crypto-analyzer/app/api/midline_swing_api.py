@@ -12,13 +12,14 @@ from app.services.midline_swing_config import (
     MIDLINE_HOLD_DAYS,
     MIDLINE_KILL_SWITCH,
     MIDLINE_LEVERAGE,
+    MIDLINE_LIMIT_LONG_OFFSET_PCT,
+    MIDLINE_LIMIT_SHORT_OFFSET_PCT,
     MIDLINE_LIMIT_OFFSET_PCT,
     MIDLINE_LIMIT_TIMEOUT_MINUTES,
     MIDLINE_MARGIN_USD,
     MIDLINE_SL_PCT,
     MIDLINE_TP_PCT,
     MIDLINE_SOURCES,
-    is_midline_source,
 )
 from app.utils.futures_symbol import futures_symbol_rating_canonical
 
@@ -98,6 +99,8 @@ def status(source: str = Query(...)):
                     "live_margin_source": "user_api_keys.max_position_value",
                     "leverage": MIDLINE_LEVERAGE,
                     "hold_days": MIDLINE_HOLD_DAYS,
+                    "limit_long_offset_pct": MIDLINE_LIMIT_LONG_OFFSET_PCT,
+                    "limit_short_offset_pct": MIDLINE_LIMIT_SHORT_OFFSET_PCT,
                     "limit_offset_pct": MIDLINE_LIMIT_OFFSET_PCT,
                     "limit_timeout_minutes": MIDLINE_LIMIT_TIMEOUT_MINUTES,
                     "sl_pct": MIDLINE_SL_PCT,

@@ -195,7 +195,7 @@ def create_paper_limit_order(
         logger.error(f"[限价开仓] 无效方向 {side}")
         return None
 
-    from app.services.midline_swing_config import is_midline_source
+    from app.services.midline_swing_config import is_midline_source, get_midline_limit_offset_pct
     force_limit = is_midline_source(source)
 
     if not is_paper_limit_entry_enabled() and not force_limit:
@@ -233,11 +233,20 @@ def create_paper_limit_order(
         logger.info(f"[限价开仓] 跳过 {symbol} {side} source={source}: 已有挂单")
         return None
 
-    long_off = get_paper_limit_long_offset()
-    short_off = get_paper_limit_short_offset()
-    if limit_offset_pct is not None:
+    # 限价偏移：中线固定 ±3%；其余策略读 system_settings（paper_limit_*_offset_pct）
+    if force_limit:
+        long_pct = get_midline_limit_offset_pct("LONG")
+        short_pct = get_midline_limit_offset_pct("SHORT")
+        limit_offset_pct = get_midline_limit_offset_pct(side)
+        long_off = Decimal(str(_clamp_offset_pct(long_pct, strategy_override=True) / 100))
+        short_off = Decimal(str(_clamp_offset_pct(short_pct, strategy_override=True) / 100))
+    elif limit_offset_pct is not None:
         pct = _clamp_offset_pct(float(limit_offset_pct), strategy_override=True)
         long_off = short_off = Decimal(str(pct / 100))
+    else:
+        long_off = get_paper_limit_long_offset()
+        short_off = get_paper_limit_short_offset()
+        limit_offset_pct = None
 
     # 用最新市价重算限价，确保做多限价低于市价、做空限价高于市价
     market_ref = float(ref_price)
@@ -270,9 +279,14 @@ def create_paper_limit_order(
     elif side == "SHORT" and limit_price <= market_ref:
         limit_price = float(Decimal(str(market_ref)) * (Decimal("1") + short_off))
     off_label = (
-        f"{_clamp_offset_pct(float(limit_offset_pct), strategy_override=True):g}%"
-        if limit_offset_pct is not None
-        else f"多−{get_paper_limit_long_offset_pct():g}%/空+{get_paper_limit_short_offset_pct():g}%"
+        f"多−{_clamp_offset_pct(float(get_midline_limit_offset_pct('LONG')), strategy_override=True):g}%/"
+        f"空+{_clamp_offset_pct(float(get_midline_limit_offset_pct('SHORT')), strategy_override=True):g}%"
+        if force_limit
+        else (
+            f"{_clamp_offset_pct(float(limit_offset_pct), strategy_override=True):g}%"
+            if limit_offset_pct is not None
+            else f"多−{get_paper_limit_long_offset_pct():g}%/空+{get_paper_limit_short_offset_pct():g}%"
+        )
     )
     sl_price, tp_price = _calc_sl_tp(
         side, limit_price, stop_loss_pct, take_profit_pct, stop_loss_price, take_profit_price,

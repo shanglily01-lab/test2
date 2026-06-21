@@ -18,7 +18,6 @@ from app.services.midline_swing_config import (
     MIDLINE_INTERVAL_HOURS,
     MIDLINE_KILL_SWITCH,
     MIDLINE_LEVERAGE,
-    MIDLINE_LIMIT_OFFSET_PCT,
     MIDLINE_LIMIT_TIMEOUT_MINUTES,
     MIDLINE_MARGIN_USD,
     MIDLINE_SL_PCT,
@@ -277,7 +276,6 @@ def _open_limit_order(
         planned_close_time=hold_deadline,
         account_id=MIDLINE_ACCOUNT_ID,
         timeout_minutes=MIDLINE_LIMIT_TIMEOUT_MINUTES,
-        limit_offset_pct=MIDLINE_LIMIT_OFFSET_PCT,
         skip_open_advisor=True,
     )
 
