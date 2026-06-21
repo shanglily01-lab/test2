@@ -17,7 +17,7 @@ from app.services.paper_limit_entry import (
     get_paper_limit_timeout_action,
     parse_order_notes,
 )
-from app.utils.futures_price import get_futures_trade_price
+from app.utils.futures_price import get_futures_limit_trigger_price
 from app.utils.futures_symbol import futures_symbol_rating_canonical
 
 
@@ -46,22 +46,39 @@ class FuturesLimitOrderExecutor:
         )
 
     def _get_price(self, conn, symbol: str) -> Decimal:
-        """与挂单创建/UI 一致：优先 mark/ticker 实时价，失败再回退引擎取价。"""
+        """与限价单 UI /prices/batch 一致：ticker 最新价触价，不用 mark。"""
         sym = futures_symbol_rating_canonical(symbol)
         try:
-            fresh = get_futures_trade_price(
-                conn, sym, max_age_seconds=30, log_tag="limit_executor", require_fresh=False,
+            fresh = get_futures_limit_trigger_price(
+                conn, sym, max_age_seconds=30, log_tag="limit_executor",
             )
             if fresh and fresh > 0:
                 return Decimal(str(fresh))
         except Exception as e:
-            logger.debug(f"[限价执行器] {sym} get_futures_trade_price 失败: {e}")
+            logger.debug(f"[限价执行器] {sym} get_futures_limit_trigger_price 失败: {e}")
         try:
             px = self.trading_engine.get_current_price(sym, use_realtime=True)
             return Decimal(str(px)) if px else Decimal('0')
         except Exception as e:
             logger.warning(f"[限价执行器] 获取价格失败 {sym}: {e}")
             return Decimal('0')
+
+    def _recover_stale_filling_orders(self, conn) -> None:
+        """成交中断后 FILLING 卡死 → 还原 PENDING 以便重试。"""
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE futures_orders
+                SET status='PENDING', updated_at=NOW()
+                WHERE status='FILLING'
+                  AND order_type='LIMIT'
+                  AND side IN ('OPEN_LONG', 'OPEN_SHORT')
+                  AND updated_at < NOW() - INTERVAL 3 MINUTE
+                """
+            )
+            n = cur.rowcount
+        if n:
+            logger.warning(f"[限价执行器] 恢复 {n} 笔卡住 FILLING → PENDING")
 
     def _cancel_order(self, conn, order_id: str, reason: str) -> None:
         with conn.cursor() as cur:
@@ -79,6 +96,7 @@ class FuturesLimitOrderExecutor:
         conn = None
         try:
             conn = self._connect()
+            self._recover_stale_filling_orders(conn)
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -192,6 +210,10 @@ class FuturesLimitOrderExecutor:
                     if not should_fill:
                         continue
 
+                    logger.info(
+                        f"[限价执行器] 触价 {symbol} {side} "
+                        f"现价={current_price} 限价={limit_price} order={order_id}"
+                    )
                     result = self.trading_engine.fill_paper_limit_order(order)
                     if result.get('success'):
                         logger.info(
@@ -200,7 +222,8 @@ class FuturesLimitOrderExecutor:
                         )
                     else:
                         logger.warning(
-                            f"[限价执行器] 成交失败 {symbol} {side}: {result.get('message')}"
+                            f"[限价执行器] 触价但成交失败 {symbol} {side} "
+                            f"现价={current_price} 限价={limit_price}: {result.get('message')}"
                         )
                 except Exception as e:
                     logger.error(f"[限价执行器] 处理订单异常: {e}")
