@@ -25,6 +25,10 @@ LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
     "gemini_predict",
     "deepseek_explore",
     "deepseek_predict",
+    "gemini_midline_long",
+    "gemini_midline_short",
+    "deepseek_midline_long",
+    "deepseek_midline_short",
 })
 
 SYMBOL_STOP_LOSS_COOLDOWN_HOURS = 4
@@ -68,8 +72,8 @@ def _bool_setting(key: str, default: bool = True, cursor=None) -> bool:
 
 
 def is_blacklist_level3_enforced() -> bool:
-    """L3 禁止开仓 — 固定开启，不再提供设置开关."""
-    return True
+    """L3 是否禁止模拟盘开仓；默认关闭（L3 仍可模拟，仅禁止实盘）。"""
+    return _bool_setting("blacklist_level3_enabled", False)
 
 
 def is_live_top50_required() -> bool:
@@ -441,6 +445,54 @@ def get_symbol_rating_info(
     return (None, False)
 
 
+DEFAULT_LIVE_BASE_MARGIN_USD = 100.0
+
+
+def get_live_base_margin_usd(user_id: Optional[int] = None, cursor=None) -> float:
+    """
+    实盘单笔基础保证金（USDT），来自 user_api_keys.max_position_value。
+    多 key 取最小正值；无配置时 DEFAULT_LIVE_BASE_MARGIN_USD。
+    """
+    own_conn = cursor is None
+    conn = None
+    try:
+        if cursor is not None:
+            cur = cursor
+        else:
+            conn = pymysql.connect(**get_db_config(), cursorclass=pymysql.cursors.DictCursor)
+            cur = conn.cursor()
+        if user_id is not None:
+            cur.execute(
+                """SELECT max_position_value FROM user_api_keys
+                   WHERE user_id=%s AND status='active'
+                   ORDER BY id ASC LIMIT 1""",
+                (int(user_id),),
+            )
+            row = cur.fetchone()
+            if row:
+                v = float(row.get("max_position_value") or 0)
+                return v if v > 0 else DEFAULT_LIVE_BASE_MARGIN_USD
+            return DEFAULT_LIVE_BASE_MARGIN_USD
+        cur.execute(
+            """SELECT max_position_value FROM user_api_keys
+               WHERE exchange='binance' AND status='active' ORDER BY id""",
+        )
+        vals = [
+            float(r.get("max_position_value") or 0)
+            for r in (cur.fetchall() or [])
+            if float(r.get("max_position_value") or 0) > 0
+        ]
+        if vals:
+            return min(vals)
+        return DEFAULT_LIVE_BASE_MARGIN_USD
+    except Exception as e:
+        logger.warning(f"[trading_gates] 读取 max_position_value 失败: {e}")
+        return DEFAULT_LIVE_BASE_MARGIN_USD
+    finally:
+        if own_conn and conn is not None:
+            conn.close()
+
+
 def get_live_margin_ratio(symbol: str, cursor=None) -> float:
     """
     根据 symbol 评级等级获取实盘保证金比例.
@@ -501,12 +553,12 @@ def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]
     """
     模拟盘开仓基础币种闸门。
 
-    允许: TOP50 / 已有评级(非 L3) / candidate_pool_snapshot 候选池内币种。
-    拒绝 L3 及完全未知的币种。
+    允许: TOP50 / 已有评级 / candidate_pool_snapshot 候选池内币种。
+    L3 仅在 blacklist_level3_enabled=1 时拒绝模拟盘；默认 L3 可模拟、不可实盘。
     """
     rating_level, in_top50 = get_symbol_rating_info(symbol, cursor)
 
-    if rating_level is not None and rating_level >= 3:
+    if is_blacklist_level3_enforced() and rating_level is not None and rating_level >= 3:
         return False, f'黑名单{rating_level}级禁止模拟盘'
 
     if in_top50 or rating_level is not None:

@@ -490,7 +490,7 @@ async def get_trading_services():
             'deepseek_position_advisor_enabled': True,
             'deepseek_open_advisor_enabled': True,
             'smart_exit_enabled': False,
-            'blacklist_level3_enabled': True,
+            'blacklist_level3_enabled': False,
             'live_top50_required': True,
             'live_whitelist_enabled': True,
             'stop_loss_pct': 0.03,

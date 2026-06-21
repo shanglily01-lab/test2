@@ -284,11 +284,20 @@ class PaperLimitSyncService:
                 return
 
             from app.services.trading_gates import get_live_margin_ratio
+            from app.services.midline_swing_config import (
+                is_midline_source,
+                MIDLINE_LEVERAGE,
+                MIDLINE_SL_PCT,
+                MIDLINE_TP_PCT,
+            )
 
             with conn.cursor() as ratio_cur:
                 margin_ratio = get_live_margin_ratio(symbol, ratio_cur)
             margin = float(api_cfg["base_margin"]) * margin_ratio
-            leverage = int(api_cfg["max_leverage"])
+            if is_midline_source(order_source):
+                leverage = int(order.get("leverage") or MIDLINE_LEVERAGE)
+            else:
+                leverage = int(api_cfg["max_leverage"])
             if margin_ratio <= 0 or margin < 5:
                 logger.info(
                     "[PaperSync] order_id=%s %s margin_ratio=%s margin=%.2fU, 跳过实盘同步",
@@ -340,13 +349,17 @@ class PaperLimitSyncService:
                         tp_pct = Decimal(str(round(raw_tp, 4)))
 
             if paper_fill <= 0 or sl_pct is None or tp_pct is None:
-                logger.warning(
-                    "[PaperSync] order_id=%s %s 无法计算SL/TP百分比 "
-                    "fill=%.6f sl=%.6f tp=%.6f sl_pct=%s tp_pct=%s",
-                    order_id, symbol, paper_fill, paper_sl, paper_tp, sl_pct, tp_pct,
-                )
-                self._mark(conn, order_id, "FAILED", None)
-                return
+                if is_midline_source(order_source):
+                    sl_pct = Decimal(str(MIDLINE_SL_PCT))
+                    tp_pct = Decimal(str(MIDLINE_TP_PCT))
+                else:
+                    logger.warning(
+                        "[PaperSync] order_id=%s %s 无法计算SL/TP百分比 "
+                        "fill=%.6f sl=%.6f tp=%.6f sl_pct=%s tp_pct=%s",
+                        order_id, symbol, paper_fill, paper_sl, paper_tp, sl_pct, tp_pct,
+                    )
+                    self._mark(conn, order_id, "FAILED", None)
+                    return
 
             result = engine.open_position(
                 account_id=live_account_id,

@@ -82,6 +82,8 @@ def status(source: str = Query(...)):
             conn.close()
 
         profile = "long" if source.endswith("_long") else "short"
+        from app.services.trading_gates import get_live_base_margin_usd
+
         return {
             "success": True,
             "data": {
@@ -92,6 +94,8 @@ def status(source: str = Query(...)):
                 "closed_positions_30d": closed_30d,
                 "params": {
                     "margin_usd": MIDLINE_MARGIN_USD,
+                    "live_margin_usd": get_live_base_margin_usd(),
+                    "live_margin_source": "user_api_keys.max_position_value",
                     "leverage": MIDLINE_LEVERAGE,
                     "hold_days": MIDLINE_HOLD_DAYS,
                     "limit_offset_pct": MIDLINE_LIMIT_OFFSET_PCT,

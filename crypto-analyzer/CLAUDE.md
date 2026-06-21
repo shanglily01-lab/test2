@@ -188,10 +188,10 @@
 
 | 等级 | 条件 | 保证金倍数 |
 |------|------|----------|
-| L0 (白名单) | 盈利 >= 300U **且** 胜率 >= 50%，或盈利 >= 100U **且** 胜率 >= 55% | 1.0x |
-| L1 (黑名单1级) | 盈利 > 50U **或** 胜率 > 50% | 0 (禁止实盘) |
+| L0 (白名单) | 盈利 >= 300U **且** 胜率 >= 40%，或盈利 >= 100U **且** 胜率 >= 45% | 1.0x |
+| L1 (黑名单1级) | 盈利 > 50U **或** 胜率 > 46% | 0 (禁止实盘) |
 | L2 (黑名单2级) | -100 < 盈利 < 0 **或** 胜率 > 44% | 0.125x |
-| L3 (黑名单3级) | 盈利 < -100U **且** 胜率 < 44% | 0 (禁止) |
+| L3 (黑名单3级) | 盈利 < -100U **且** 胜率 < 44% | 0 (禁止实盘；模拟默认放行) |
 
 优先级判断逻辑: L3(双条件最严重)→L0(双条件最优)→L1→L2→默认0。
 
@@ -210,7 +210,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 - **TOP50 实仓闸门**: `system_settings.live_top50_required` (默认 1，TOP50 内可开实仓)
 - **白名单实仓闸门**: `system_settings.live_whitelist_enabled` (默认 1，rating_level=0 可开实仓)
 - 两者为 **或** 关系；**都关** 则即使 `live_trading_enabled=1` 也不同步实盘
-- **黑名单实盘限制**: L1/L2/L3 禁止实盘开仓；`blacklist_level3_enabled` 仍仅控制 L3 模拟开仓排除
+- **黑名单实盘限制**: L1/L2/L3 禁止实盘开仓；`blacklist_level3_enabled` 默认 0，仅开关开启时才拦 L3 模拟开仓
 - 各闸门由 `trading_gates.check_live_open_allowed` / `should_sync_live_for_source` 统一读取，**不在 config.yaml**
 - 每账号 OPEN 上限 20 仓
 - 允许实盘的策略通过 `_sync_live()` / `_sync_to_live()` 同步到 BinanceFuturesEngine

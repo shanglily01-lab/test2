@@ -5,8 +5,8 @@
 2. trading_symbol_rating: 按全仓累计规则评定 L0/L1/L2/L3（有平仓即可）
 
 评级规则（全仓累计，有交易即评）:
-  L0 白名单:    (盈利>=300U 且 胜率>=50%) 或 (盈利>=100U 且 胜率>=55%)
-  L1 黑名单1级: 盈利 > 50U 或 胜率 > 46%（排除 L0 白名单，含盈利>=100U且胜率>=55%）
+  L0 白名单:    (盈利>=300U 且 胜率>=40%) 或 (盈利>=100U 且 胜率>=45%)
+  L1 黑名单1级: 盈利 > 50U 或 胜率 > 46%（排除 L0 白名单）
   L2 黑名单2级: -100 < 盈利 < 0 或 胜率 > 44%
   L3 黑名单3级: 盈利 < -100U 且 胜率 < 44%（双条件）
 
@@ -48,7 +48,7 @@ def _mysql_config(**overrides) -> Dict[str, Any]:
 
 def _is_l0_whitelist(pnl: float, win_rate_pct: float) -> bool:
     """L0 白名单：高盈利路径 或 高胜率路径。"""
-    return (pnl >= 300.0 and win_rate_pct >= 50.0) or (pnl >= 100.0 and win_rate_pct >= 55.0)
+    return (pnl >= 300.0 and win_rate_pct >= 40.0) or (pnl >= 100.0 and win_rate_pct >= 45.0)
 
 
 def compute_rating_level(pnl: float, win_rate_pct: float, total_trades: int) -> Tuple[int, str]:
@@ -66,7 +66,7 @@ def compute_rating_level(pnl: float, win_rate_pct: float, total_trades: int) -> 
     if _is_l0_whitelist(pnl, win_rate_pct):
         return 0, f"白名单: 累计盈利{pnl:.0f}U, 胜率{win_rate_pct:.1f}%"
 
-    # L1: 盈利 > 50U 或 胜率 > 46%，但不含白名单（盈利>=100U 且 胜率>=55% 等）
+    # L1: 盈利 > 50U 或 胜率 > 46%，但不含 L0 白名单
     if (pnl > 50.0 or win_rate_pct > 46.0) and not _is_l0_whitelist(pnl, win_rate_pct):
         parts = []
         if pnl > 50.0:
@@ -84,7 +84,7 @@ def compute_rating_level(pnl: float, win_rate_pct: float, total_trades: int) -> 
             parts.append(f"胜率{win_rate_pct:.1f}%")
         return 2, "黑名单2级: " + ", ".join(parts)
 
-    return 1, "黑名单1级: 未达白名单条件（需盈利>=300U且胜率>=50%，或盈利>=100U且胜率>=55%）"
+    return 1, "黑名单1级: 未达白名单条件（需盈利>=300U且胜率>=40%，或盈利>=100U且胜率>=45%）"
 
 
 # ── SQL ───────────────────────────────────────────────────

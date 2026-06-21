@@ -109,6 +109,11 @@ class PaperClosedLiveSync:
 
         for row in rows:
             stats["checked"] += 1
+            paper_source = (row.get("paper_source") or row.get("live_source") or "").strip()
+            from app.services.trading_gates import should_sync_live_for_source
+            if not should_sync_live_for_source(paper_source):
+                stats["skipped"] += 1
+                continue
             key_info = keys_by_id.get(row["live_account_id"])
             if not key_info:
                 logger.warning(

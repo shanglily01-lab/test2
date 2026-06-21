@@ -75,6 +75,29 @@ def test_limit_price() -> None:
     _ok("midline source 识别 → create_paper_limit_order 强制限价（不受全局开关影响）")
 
 
+def test_live_sync_whitelist() -> None:
+    print("[3b] live sync whitelist")
+    from app.services.trading_gates import LIVE_SYNC_SOURCES
+    from app.services.midline_swing_config import (
+        MIDLINE_SOURCES,
+        MIDLINE_SL_PCT,
+        MIDLINE_TP_PCT,
+        MIDLINE_LEVERAGE,
+    )
+    from app.services.trading_gates import get_live_base_margin_usd
+
+    assert MIDLINE_SOURCES.issubset(LIVE_SYNC_SOURCES)
+    assert MIDLINE_LEVERAGE == 5
+    assert MIDLINE_SL_PCT == 6.0
+    assert MIDLINE_TP_PCT == 20.0
+    live_margin = get_live_base_margin_usd()
+    assert live_margin > 0
+    _ok(
+        f"midline in LIVE_SYNC; live margin from API max_position_value={live_margin}U; "
+        f"SL/TP/leverage unchanged"
+    )
+
+
 def test_db_and_scan() -> None:
     print("[4] DB + L0/L1 scan (read-only)")
     import pymysql
@@ -173,6 +196,7 @@ def main() -> None:
     test_imports()
     test_scoring_logic()
     test_limit_price()
+    test_live_sync_whitelist()
     test_db_and_scan()
     test_worker_optional(args.worker)
     print("\n=== ALL DONE ===")
