@@ -5,7 +5,7 @@
 
 ## 1. 总览
 
-系统在三套 **教师模型**（Gemini、DeepSeek、GPT）上运行多类 **AI 策略**，统一走 **模拟仓**（`futures_positions.account_id=2`）。开仓前经 **开仓顾问** 审查；持仓满 15 分钟后由 **持仓顾问** 每 15 分钟监管。
+系统在三套 **教师模型**（Gemini、DeepSeek、GPT）上运行多类 **AI 策略**，统一走 **模拟仓**（`futures_positions.account_id=2`）。开仓前经 **开仓顾问** 审查；持仓满 15 分钟后由 **持仓顾问** 监管（浮盈 5min/仓，其余 15min/仓）。
 
 ```text
 crypto-scheduler (app/scheduler.py)
@@ -274,7 +274,11 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 
 ### 8.1 职责
 
-模拟仓 OPEN 且持仓 **≥15 分钟** 后，每 **15 分钟/仓** 请求 LLM：`hold` | `observe` | `sell`。
+模拟仓 OPEN 且持仓 **≥15 分钟** 后请求 LLM：`hold` | `observe` | `sell`。
+
+- **调度**：`crypto-scheduler` 每 **5 分钟** tick 一次  
+- **复审间隔**：上次审核 **浮盈**（ROI>0）→ **5 分钟/仓**；其余 → **15 分钟/仓**  
+- **浮盈转亏**：上次审核浮盈、现已亏损 → **立即 urgent 再审**（不等间隔）
 
 ### 8.2 代码入口
 
@@ -283,13 +287,15 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | Gemini | `gemini_position_advisor.GeminiPositionAdvisor.tick` | `gemini_explore` / `gemini_predict` |
 | DeepSeek | `deepseek_position_advisor` | 其他 source |
 
-`crypto-scheduler` 每 **15 分钟** 调用 Gemini / DeepSeek 两个 tick。
+`crypto-scheduler` 每 **5 分钟** 调用 Gemini / DeepSeek 两个 tick（浮盈仓 5min/仓，其余 15min/仓）。
 
-### 8.3 决策依据（英文 prompt）
+### 8.3 决策依据（中文 prompt）
 
-- **主依据**：近 **4 根 1h** + 近 **6 根 15m** K 线表与客观统计（`G/R/D` 序列）
-- **Big4**：仅辅证，**不得单独触发 sell**
-- **亏损分档**（保证金 ROI%）：轻微 >-5%、中度 >-12%、严重 ≤-15%；深亏 `hold` 经 `_temper_losing_hold` 统计复核
+- **主依据**：近 **16 根 15m**（4h 窗口）K 线表 + 量价/RSI；1h 交叉验证  
+- **Big4**：仅辅证，**不得单独触发 sell**  
+- **盈利侧**：ROI≥+5% 且 15m 转弱 → 倾向 observe/sell；`_temper_premature_sell` 对浮盈放宽  
+- **亏损分档**（保证金 ROI%）：轻微 >-5%、中度 >-12%、严重 ≤-15%；深亏 `hold` 经 `_temper_losing_hold` 统计复核  
+- **程序化锁利**：AI 仓 `position_sl_tp_monitor` **ai-trail-tp**（peak 价格收益≥3%，回撤≥1%）
 
 ### 8.4 sell 后果
 

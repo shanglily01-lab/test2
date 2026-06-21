@@ -1452,11 +1452,11 @@ class UnifiedDataScheduler:
                 name="GeminiPositionAdvisor",
             ).start()
 
-        schedule.every(15).minutes.do(_run_gemini_position_advisor)
+        schedule.every(5).minutes.do(_run_gemini_position_advisor)
         _run_gemini_position_advisor()
-        logger.info("  ✓ gemini_position_advisor - 每 15 分钟 (后台线程)")
+        logger.info("  ✓ gemini_position_advisor - 每 5 分钟 (后台线程；浮盈仓 5min/仓，其余 15min)")
 
-        # DeepSeek 持仓顾问 - 监管非 Gemini 主探索/预测模拟仓，满 15min 后每 15min 复查
+        # DeepSeek 持仓顾问 - 监管非 Gemini 主探索/预测模拟仓；scheduler 每 5min tick
         def _run_deepseek_position_advisor():
             if self._deepseek_position_advisor_running:
                 logger.info("[DeepSeek持仓顾问] 上一轮仍在运行，跳过本轮")
@@ -1484,9 +1484,9 @@ class UnifiedDataScheduler:
                 name="DeepSeekPositionAdvisor",
             ).start()
 
-        schedule.every(15).minutes.do(_run_deepseek_position_advisor)
+        schedule.every(5).minutes.do(_run_deepseek_position_advisor)
         _run_deepseek_position_advisor()
-        logger.info("  ✓ deepseek_position_advisor - 每 15 分钟 (后台线程)")
+        logger.info("  ✓ deepseek_position_advisor - 每 5 分钟 (后台线程；浮盈仓 5min/仓，其余 15min)")
 
         # Big4 综合行情 LLM 分析 — 每 2h (Gemini + DeepSeek)
         def _run_gemini_big4_analysis():

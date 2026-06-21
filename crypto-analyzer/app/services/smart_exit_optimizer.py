@@ -16,6 +16,7 @@ from app.analyzers.kline_strength_scorer import KlineStrengthScorer
 from app.services.api_key_service import get_api_key_service
 from app.services.binance_data_hub import get_global_data_hub
 from app.utils.position_time import utc_now_naive
+from app.services.midline_swing_config import is_midline_source
 
 
 class SmartExitOptimizer:
@@ -77,8 +78,8 @@ class SmartExitOptimizer:
         self._loss_onset_times: Dict[str, datetime] = {}
 
         # === 模拟仓持仓顾问 ===
-        # 外部 (smart_trader 主循环) 每 15 min 调 Gemini / DeepSeek tick。
-        # gemini_explore/gemini_predict 由 Gemini 监管，其余 source 由 DeepSeek 监管。
+        # 外部 (smart_trader / scheduler) 每 5 min 调 Gemini / DeepSeek tick。
+        # 中线四策略不参与 SmartExit 监控与持仓顾问；由 position_sl_tp_monitor 负责。
         try:
             from app.services.gemini_position_advisor import GeminiPositionAdvisor
             from app.services.deepseek_position_advisor import DeepSeekPositionAdvisor
@@ -112,6 +113,14 @@ class SmartExitOptimizer:
         """
         if position_id in self.monitoring_tasks:
             logger.warning(f"持仓 {position_id} 已在监控中")
+            return
+
+        position = await self._get_position(position_id)
+        if position and is_midline_source(position.get("source") or ""):
+            logger.info(
+                f"[SmartExit] 跳过中线持仓监控 id={position_id} "
+                f"source={position.get('source')}"
+            )
             return
 
         # 创建独立监控任务
@@ -170,6 +179,13 @@ class SmartExitOptimizer:
                 # 支持monitoring status='open'
                 if position['status'] != 'open':
                     logger.info(f"持仓 {position_id} 已关闭 (status={position['status']})，停止监控")
+                    break
+
+                if is_midline_source(position.get("source") or ""):
+                    logger.info(
+                        f"[SmartExit] 中线持仓 {position_id} {position.get('symbol')} "
+                        f"不参与 SmartExit，停止监控"
+                    )
                     break
 
                 # ────────────────────────────────────────────────────────────

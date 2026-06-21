@@ -23,7 +23,7 @@ from app.services.gemini_position_advisor import (
 )
 from app.services.hold_advisor_query import (
     DEEPSEEK_HOLD_SOURCE_SQL,
-    fetch_due_hold_positions,
+    fetch_all_due_hold_positions,
 )
 from app.services.open_advisor_routing import should_use_deepseek_hold_advisor
 from app.services.open_advisor_strategy_rubrics import (
@@ -172,13 +172,14 @@ class DeepSeekPositionAdvisor:
             return None
 
     def get_due_positions(self):
-        """到期模拟仓：满 15min 且距上次 hold 审核 ≥15min（或首审）."""
+        """到期模拟仓：浮盈每 5min、其余 15min；浮盈转亏立即再审."""
         try:
             conn = self._get_conn()
-            rows = fetch_due_hold_positions(
+            rows = fetch_all_due_hold_positions(
                 conn,
                 reviews_table="deepseek_advisor_reviews",
                 source_sql=DEEPSEEK_HOLD_SOURCE_SQL,
+                get_price=self._prompt_helper._get_current_price,
             )
             conn.close()
             return rows

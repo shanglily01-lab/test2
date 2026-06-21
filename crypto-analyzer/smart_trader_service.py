@@ -33,7 +33,7 @@ from app.strategies.range_market_detector import RangeMarketDetector
 from app.strategies.bollinger_mean_reversion import BollingerMeanReversionStrategy
 from app.strategies.mode_switcher import TradingModeSwitcher
 from app.services.big4_regime_monitor import Big4RegimeMonitor
-from app.services.midline_swing_config import is_midline_source
+from app.services.midline_swing_config import is_midline_source, midline_source_sql_not_in
 
 # 加载环境变量
 load_dotenv()
@@ -3374,12 +3374,13 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # 查询所有开仓持仓（不再区分是否分批建仓，统一由SmartExitOptimizer管理）
-            cursor.execute("""
+            # 查询开仓持仓（中线策略由 position_sl_tp_monitor 监管，不纳入 SmartExit）
+            cursor.execute(f"""
                 SELECT id, symbol, position_side
                 FROM futures_positions
                 WHERE status = 'open'
                 AND account_id = %s
+                AND {midline_source_sql_not_in('source')}
             """, (self.account_id,))
 
             positions = cursor.fetchall()
@@ -3407,23 +3408,32 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # 获取DB中所有open持仓的ID（精确对比，不只是数量）
-            cursor.execute("""
-                SELECT id
+            # 获取 DB 中 open 持仓（SmartExit 仅监控非中线）
+            cursor.execute(f"""
+                SELECT id, source
                 FROM futures_positions
                 WHERE status = 'open'
                 AND account_id = %s
             """, (self.account_id,))
-            db_position_ids = {row[0] for row in cursor.fetchall()}
+            db_rows = cursor.fetchall()
+            db_position_ids = set()
+            midline_monitor_ids = set()
+            for row in db_rows:
+                pid, src = row[0], (row[1] or "")
+                if is_midline_source(src):
+                    midline_monitor_ids.add(pid)
+                else:
+                    db_position_ids.add(pid)
 
-            # 检查超时未平仓持仓并执行兜底平仓
-            cursor.execute("""
+            # 检查超时未平仓持仓并执行兜底平仓（不含中线 15 天仓）
+            cursor.execute(f"""
                 SELECT id, symbol, position_side
                 FROM futures_positions
                 WHERE status = 'open'
                 AND account_id = %s
                 AND planned_close_time IS NOT NULL
                 AND NOW() > planned_close_time
+                AND {midline_source_sql_not_in('source')}
             """, (self.account_id,))
             timeout_rows = cursor.fetchall()
             timeout_count = len(timeout_rows)
@@ -3454,10 +3464,10 @@ class SmartTraderService:
 
             monitoring_ids = set(self.smart_exit_optimizer.monitoring_tasks.keys())
 
-            # 在DB中但未被监控的持仓 → 补充启动监控
+            # 在DB中但未被监控的非中线持仓 → 补充启动
             to_add = db_position_ids - monitoring_ids
-            # 在监控中但DB已无记录的持仓 → 停止冗余监控（finally已处理大部分）
-            to_remove = monitoring_ids - db_position_ids
+            # DB 已关仓 / 中线仓仍在监控 → 停止
+            to_remove = (monitoring_ids - db_position_ids) | (midline_monitor_ids & monitoring_ids)
 
             for pid in to_add:
                 try:
@@ -3520,11 +3530,12 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            cursor.execute("""
+            cursor.execute(f"""
                 SELECT id, symbol, position_side, planned_close_time
                 FROM futures_positions
                 WHERE status = 'open'
                 AND account_id = %s
+                AND {midline_source_sql_not_in('source')}
                 ORDER BY id ASC
             """, (self.account_id,))
 
@@ -3651,8 +3662,8 @@ class SmartTraderService:
                         logger.warning(f"[对账] 异常: {_re}")
                     last_reconcile = now
 
-                # 0.61. 持仓顾问 (每 15 min; 模拟仓 ≥30min)
-                if (now - last_gemini_advisor).total_seconds() >= 900:
+                # 0.61. 持仓顾问 (每 5 min tick；浮盈仓 5min/仓，其余 15min)
+                if (now - last_gemini_advisor).total_seconds() >= 300:
                     try:
                         if self.smart_exit_optimizer:
                             self.smart_exit_optimizer.gemini_advisor_tick()

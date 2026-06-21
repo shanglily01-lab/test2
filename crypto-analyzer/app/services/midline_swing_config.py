@@ -43,6 +43,12 @@ def is_midline_source(source: str) -> bool:
     return (source or "").strip().lower() in MIDLINE_SOURCES
 
 
+def midline_source_sql_not_in(column: str = "source") -> str:
+    """SQL 片段：排除四路中线 source（供 SmartExit / 健康检查等）."""
+    quoted = ", ".join(f"'{s}'" for s in sorted(MIDLINE_SOURCES))
+    return f"LOWER({column}) NOT IN ({quoted})"
+
+
 def source_for(teacher: str, profile: str) -> str:
     key = (teacher.strip().lower(), profile.strip().lower())
     if key not in MIDLINE_SOURCE_MAP:
