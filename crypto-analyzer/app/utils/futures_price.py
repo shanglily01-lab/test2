@@ -1,12 +1,13 @@
 """U 本位模拟开仓/展示用价格 — 统一走 DataHub，禁止旁路读 kline_data。"""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, List, Optional
 
 from loguru import logger
 
 from app.utils.futures_symbol import (
     futures_symbol_clean,
+    futures_symbol_groups,
     futures_symbol_rating_canonical,
 )
 
@@ -102,6 +103,78 @@ def get_futures_limit_trigger_price(
         return live
 
     logger.warning(f"[{log_tag}] {sym} ticker/kline/REST 均无有效触价")
+    return None
+
+
+def build_futures_limit_trigger_price_map(
+    conn,
+    symbols: List[str],
+    max_age_seconds: int = 30,
+    log_tag: str = "limit_batch",
+) -> Dict[str, float]:
+    """
+    批量触价 map（canonical symbol -> price）。
+    每 tick 只拉一次 ticker 全表，避免对每笔挂单重复 HTTP/Hub 调用。
+    """
+    if not symbols:
+        return {}
+
+    out: Dict[str, float] = {}
+    tmap: Dict[str, float] = {}
+    try:
+        from app.services.binance_data_hub import get_global_data_hub
+
+        hub = get_global_data_hub()
+        if hub is not None:
+            raw = hub.get_full_ticker_map(market="futures")
+            tmap = {k: float(v) for k, v in raw.items() if v and float(v) > 0}
+    except Exception as e:
+        logger.debug(f"[{log_tag}] ticker_map 失败: {e}")
+
+    for clean, originals in futures_symbol_groups(symbols).items():
+        px = tmap.get(clean)
+        if not px or px <= 0:
+            continue
+        for orig in originals:
+            canon = futures_symbol_rating_canonical(orig)
+            out[canon] = px
+            out[orig] = px
+            out[clean] = px
+
+    missing: List[str] = []
+    seen = set()
+    for s in symbols:
+        canon = futures_symbol_rating_canonical(s)
+        if canon in out or canon in seen:
+            continue
+        seen.add(canon)
+        missing.append(canon)
+
+    for sym in missing:
+        px = _kline_close_fallback(conn, sym)
+        if not px or px <= 0:
+            px = _rest_futures_last_price(sym)
+        if px and px > 0:
+            out[sym] = px
+            clean = futures_symbol_clean(sym)
+            if clean:
+                out[clean] = px
+
+    return out
+
+
+def lookup_limit_trigger_price(
+    price_map: Dict[str, float], symbol: str,
+) -> Optional[float]:
+    """从批量 map 取价（兼容 canonical / clean / 原始写法）。"""
+    sym = futures_symbol_rating_canonical(symbol)
+    if sym in price_map:
+        return price_map[sym]
+    clean = futures_symbol_clean(sym)
+    if clean in price_map:
+        return price_map[clean]
+    if symbol in price_map:
+        return price_map[symbol]
     return None
 
 

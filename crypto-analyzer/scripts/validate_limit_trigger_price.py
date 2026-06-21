@@ -34,10 +34,14 @@ def main() -> None:
         fail("trigger price must not use get_trade_price_sync (mark-first)")
     if "get_full_ticker_map" not in trigger_block:
         fail("trigger price must use get_full_ticker_map")
-    if "get_futures_limit_trigger_price" not in src_ex:
-        fail("executor must call get_futures_limit_trigger_price")
-    if "get_futures_trade_price" in src_ex:
-        fail("executor still uses get_futures_trade_price (mark)")
+    if "build_futures_limit_trigger_price_map" not in src_ex:
+        fail("executor must batch-build trigger prices")
+    if "lookup_limit_trigger_price" not in src_ex:
+        fail("executor must use lookup_limit_trigger_price")
+    if "LIMIT 50" in src_ex and "PENDING_FETCH_LIMIT" not in src_ex:
+        fail("executor still hardcoded LIMIT 50")
+    if "PENDING_FETCH_LIMIT" not in src_ex:
+        fail("executor missing PENDING_FETCH_LIMIT")
     if "_recover_stale_filling_orders" not in src_ex:
         fail("executor missing FILLING recovery")
     ok("limit trigger price = ticker; executor wired; FILLING recovery present")
