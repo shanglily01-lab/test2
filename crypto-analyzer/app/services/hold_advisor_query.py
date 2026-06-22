@@ -8,10 +8,9 @@ from loguru import logger
 # 与 gemini_position_advisor.HOLD_MIN_MINUTES 一致
 HOLD_MIN_MINUTES = 15
 
-# 每 5min tick 上限 (~3s/笔 → 约 2.5min，留足 scheduler 余量)
+# 每 15min tick 上限 (~3s/笔 → 约 2.5min，留足 scheduler 余量)
 HOLD_ADVISOR_MAX_PER_TICK = 50
 HOLD_REVIEW_INTERVAL_MINUTES = 15
-HOLD_PROFIT_REVIEW_INTERVAL_MINUTES = 5
 
 DEEPSEEK_HOLD_SOURCE_SQL = (
     "AND LOWER(fp.source) NOT IN ("
@@ -46,8 +45,7 @@ _DUE_SELECT = """
           AND TIMESTAMPDIFF(MINUTE, fp.open_time, NOW()) >= %s
           AND (
                 lr.last_hold_review IS NULL
-                OR TIMESTAMPDIFF(MINUTE, lr.last_hold_review, NOW()) >=
-                   IF(IFNULL(lr2.roi_pct, 0) > 0, %s, %s)
+                OR TIMESTAMPDIFF(MINUTE, lr.last_hold_review, NOW()) >= %s
           )
           {source_sql}
         ORDER BY lr.last_hold_review IS NULL DESC,
@@ -81,15 +79,13 @@ def fetch_due_hold_positions(
     source_params: Optional[Sequence[Any]] = None,
     hold_min_minutes: int = HOLD_MIN_MINUTES,
     review_interval_minutes: int = HOLD_REVIEW_INTERVAL_MINUTES,
-    profit_review_interval_minutes: int = HOLD_PROFIT_REVIEW_INTERVAL_MINUTES,
     max_per_tick: int = HOLD_ADVISOR_MAX_PER_TICK,
 ) -> List[Dict]:
-    """持仓满 hold_min；浮盈仓每 profit_interval 复审，其余每 review_interval."""
+    """持仓满 hold_min；每仓每 review_interval 复审一次."""
     extra_params: Tuple[Any, ...] = tuple(source_params or ())
     sql = _DUE_SELECT.format(reviews_table=reviews_table, source_sql=source_sql)
     params = (
         hold_min_minutes,
-        profit_review_interval_minutes,
         review_interval_minutes,
         *extra_params,
         max_per_tick,
@@ -115,7 +111,7 @@ def fetch_profit_flip_urgent_positions(
     max_per_tick: int = 20,
 ) -> List[Dict]:
     """
-    上次审核浮盈、现已转亏 → 立即再审（不等 5/15min 间隔）。
+    上次审核浮盈、现已转亏 → 立即再审（不等 15min 间隔）。
     """
     if get_price is None:
         return []

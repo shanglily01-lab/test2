@@ -75,7 +75,7 @@
 | GPT 探索/预测 | 同 Gemini/DeepSeek 节奏 + `gpt_*_next_due_utc` |
 | **中线量化** ×4 | 每 **6h** + **10min 轮询** |
 | 战术探索 15 槽位 | 每 **15min** 轮询 (`tactical_explore_scheduler`) |
-| **持仓顾问** Gemini+DeepSeek | 每 **5min** tick（浮盈 5min/仓，其余 15min/仓） |
+| **持仓顾问** Gemini+DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent） |
 | 市场情绪分析 | 每 **8 小时** |
 | ETF 同步 | 每天 06:45 |
 | 金库同步 | 每天 07:30 |
@@ -161,8 +161,8 @@
 
 ### 开仓 / 持仓顾问
 - 路由：`gemini_explore/predict` → Gemini；其余（**不含中线**）→ DeepSeek
-- 持仓 tick：**5min**；浮盈仓 5min/仓；浮盈转亏 urgent 立即再审
-- 盈利 sell：ROI **≥+5%** 且 15m 转弱；ai-trail-tp 程序化锁利（peak≥3% 回撤≥1%）
+- 持仓 tick：**15min**；每仓 15min；浮盈转亏 urgent 立即再审
+- 盈利 sell：ROI **≥+8%** 且 15m 明确转弱（反向≥4）；过早 sell 程序化拦截恢复严格
 - Prompt/rubric/**reason 中文**；开关 `*_position_advisor_enabled`
 
 ### gemini_sentiment_analyzer (情绪)

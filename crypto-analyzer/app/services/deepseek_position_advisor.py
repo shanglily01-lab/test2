@@ -172,7 +172,7 @@ class DeepSeekPositionAdvisor:
             return None
 
     def get_due_positions(self):
-        """到期模拟仓：浮盈每 5min、其余 15min；浮盈转亏立即再审."""
+        """到期模拟仓：每 15min/仓；浮盈转亏立即 urgent 再审."""
         try:
             conn = self._get_conn()
             rows = fetch_all_due_hold_positions(
