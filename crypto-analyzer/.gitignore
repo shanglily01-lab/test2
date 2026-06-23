@@ -50,6 +50,7 @@ data/*.xlsx
 !migrations/014_futures_positions_account_status_close_time.sql
 !migrations/015_midline_swing_tables.sql
 !migrations/016_midline_llm_columns.sql
+!migrations/018_rating_locked.sql
 !migrations/015_create_gpt_explore_tables.sql
 !migrations/016_create_gpt_advisor_reviews.sql
 !migrations/017_create_gpt_tactical_predict_tables.sql

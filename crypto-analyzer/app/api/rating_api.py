@@ -48,6 +48,11 @@ class ManualRatingRequest(BaseModel):
     symbol: str
     rating_level: int  # 0=白名单, 1=黑名单1级, 2=黑名单2级, 3=永久禁止
     reason: Optional[str] = "手动设置"
+    rating_locked: bool = True  # 默认锁定，不被自动评级覆盖
+
+
+class UnlockRatingRequest(BaseModel):
+    symbol: str
 
 
 @router.get("/api/rating/config")
@@ -117,6 +122,7 @@ async def get_current_ratings(trading_type: Optional[str] = None):
                 "symbol": symbol,
                 "rating_level": level,
                 "reason": rating.get('level_change_reason', '') or '',
+                "rating_locked": bool(int(rating.get('rating_locked') or 0)),
                 "hard_stop_loss_count": rating.get('hard_stop_loss_count', 0),
                 "total_loss_amount": safe_float(rating.get('total_loss_amount', 0)),
                 "total_profit_amount": safe_float(rating.get('total_profit_amount', 0)),
@@ -165,10 +171,36 @@ async def set_symbol_rating(request: ManualRatingRequest):
         opt_config.update_symbol_rating(
             symbol=futures_symbol_rating_canonical(request.symbol),
             new_level=request.rating_level,
-            reason=request.reason or "手动设置"
+            reason=request.reason or "手动设置",
+            rating_locked=request.rating_locked,
         )
         canon = futures_symbol_rating_canonical(request.symbol)
-        return {"success": True, "message": f"{canon} 评级已设置为 {request.rating_level}"}
+        lock_note = "（已锁定，自动评级不覆盖）" if request.rating_locked else "（未锁定，将随自动评级更新）"
+        return {"success": True, "message": f"{canon} 评级已设置为 {request.rating_level}{lock_note}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/api/rating/unlock")
+async def unlock_symbol_rating(request: UnlockRatingRequest):
+    """解除手动锁定，恢复自动评级覆盖"""
+    try:
+        opt_config = OptimizationConfig(DB_CONFIG)
+        canon = futures_symbol_rating_canonical(request.symbol)
+        cur = opt_config.get_symbol_rating(canon)
+        if not cur:
+            raise HTTPException(status_code=404, detail=f"{canon} 未找到评级记录")
+        if not int(cur.get("rating_locked") or 0):
+            return {"success": True, "message": f"{canon} 本就未锁定"}
+        opt_config.update_symbol_rating(
+            symbol=canon,
+            new_level=int(cur["rating_level"]),
+            reason=(cur.get("level_change_reason") or "手动设置") + " | 已解除锁定",
+            rating_locked=False,
+        )
+        return {"success": True, "message": f"{canon} 已解除锁定，下次自动刷新将按规则更新"}
     except HTTPException:
         raise
     except Exception as e:
@@ -738,6 +770,7 @@ async def get_symbol_rating(symbol: str):
             "current_rating": {
                 "level": current_level,
                 "reason": current_rating.get("level_change_reason", "无评级") if current_rating else "无评级",
+                "rating_locked": bool(int(current_rating.get("rating_locked") or 0)) if current_rating else False,
                 "updated_at": current_rating["updated_at"].isoformat() if current_rating and current_rating.get("updated_at") else None,
             },
             "performance_stats": {

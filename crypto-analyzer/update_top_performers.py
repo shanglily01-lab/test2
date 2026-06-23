@@ -137,6 +137,7 @@ def _apply_rating(symbol_stats: list, opt: OptimizationConfig):
     """
     results = {
         "updated": 0,
+        "skipped_locked": 0,
         "detail": {"L0": 0, "L1": 0, "L2": 0, "L3": 0},
     }
 
@@ -148,9 +149,13 @@ def _apply_rating(symbol_stats: list, opt: OptimizationConfig):
         gross_loss = float(row["gross_loss"] or 0)
         gross_profit = float(row["gross_profit"] or 0)
 
+        cur = opt.get_symbol_rating(symbol)
+        if cur and int(cur.get("rating_locked") or 0) == 1:
+            results["skipped_locked"] += 1
+            continue
+
         new_level, reason = compute_rating_level(pnl, wr, trades)
 
-        cur = opt.get_symbol_rating(symbol)
         old_level = cur["rating_level"] if cur else 0
 
         opt.update_symbol_rating(
@@ -175,7 +180,7 @@ def _clean_stale_ratings(cursor, active_symbols: set):
     try:
         cursor.execute(
             """
-            SELECT symbol, rating_level, level_change_reason, total_trades
+            SELECT symbol, rating_level, level_change_reason, total_trades, rating_locked
             FROM trading_symbol_rating
             """
         )
@@ -183,6 +188,8 @@ def _clean_stale_ratings(cursor, active_symbols: set):
         for r in cursor.fetchall():
             sym = r["symbol"]
             if sym in active_symbols:
+                continue
+            if int(r.get("rating_locked") or 0) == 1:
                 continue
             reason = (r.get("level_change_reason") or "")
             total_trades = int(r.get("total_trades") or 0)

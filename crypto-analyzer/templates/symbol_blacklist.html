@@ -64,6 +64,7 @@
         </div>
         <div class="h-6 w-px bg-gray-800"></div>
         <button onclick="openAddModal()" class="text-[#49f4c8] border border-[#49f4c8] px-4 py-1.5 rounded text-sm hover:bg-[#49f4c8]/10 transition-all font-medium active:scale-95">手动添加</button>
+        <button onclick="triggerAutoRefresh()" class="text-gray-300 border border-gray-700 px-4 py-1.5 rounded text-sm hover:border-gray-500 transition-all font-medium active:scale-95">自动刷新评级</button>
         <button onclick="loadData()" class="p-2 text-gray-400 hover:text-[#49f4c8] transition-all"><span class="material-symbols-outlined">refresh</span></button>
       </div>
     </div>
@@ -158,6 +159,13 @@
         <textarea id="modal-reason" placeholder="请输入限制原因或备注..." rows="3" class="w-full bg-[#0d1117] border border-gray-800 rounded-lg px-4 py-3 text-sm focus:border-[#49f4c8] focus:ring-0 text-white outline-none resize-none"></textarea>
       </div>
       <div id="modal-error" class="hidden text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2"></div>
+      <label class="flex items-start gap-3 p-4 rounded-xl border border-gray-800 bg-[#0d1117] cursor-pointer select-none">
+        <input id="modal-lock" type="checkbox" checked class="mt-0.5 rounded border-gray-600 text-[#49f4c8] focus:ring-[#49f4c8] bg-[#070b10]"/>
+        <span>
+          <span class="text-sm font-medium text-gray-200 block">锁定（不被自动评级覆盖）</span>
+          <span class="text-xs text-gray-500 mt-1 block">勾选后，定时 TOP50/评级刷新不会按盈亏规则改等级；取消勾选则恢复自动更新。</span>
+        </span>
+      </label>
     </div>
     <div class="p-6 bg-[#0d1117]/50 border-t border-gray-800 flex gap-3">
       <button onclick="closeModal()" class="flex-1 px-4 py-3 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold transition-all text-sm">取消</button>
@@ -177,6 +185,7 @@ var currentMarket = 'usdt_futures';
 var currentTab = 'all';
 var allData = {};
 var selectedLevel = 0;
+var editingSymbol = null;
 
 var LEVEL_ICONS  = ['check_circle','warning','report_problem','cancel'];
 var LEVEL_LABELS = ['白名单','黑名单1级','黑名单2级','永久禁止'];
@@ -265,13 +274,20 @@ function renderGrid() {
     html += '<div class="flex flex-wrap gap-2">';
     lvlItems.forEach(function(item) {
       var tip = '';
+      if (item.rating_locked) tip += '[手动锁定] ';
       if (item.reason) tip += item.reason;
       if (item.total_trades) tip += ' | ' + item.total_trades + '笔 胜率' + (item.win_rate ? item.win_rate.toFixed(1)+'%' : '--');
       if (item.hard_stop_loss_count) tip += ' | 止损' + item.hard_stop_loss_count + '次';
       html += '<div class="flex items-center gap-1 ' + c.bg + ' border ' + c.border + ' px-3 py-1.5 rounded-md ' + c.hover + ' transition-all">';
-      html += '<span class="text-xs font-mono font-medium ' + c.text + ' cursor-pointer" onclick="openEditModal(\'' + esc(item.symbol) + '\',' + item.rating_level + ')" title="' + esc(tip) + '">' + esc(item.symbol) + '</span>';
+      if (item.rating_locked) {
+        html += '<span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30" title="手动锁定">锁</span>';
+      }
+      html += '<span class="text-xs font-mono font-medium ' + c.text + ' cursor-pointer" onclick="openEditModal(\'' + escJs(item.symbol) + '\',' + item.rating_level + ',' + (item.rating_locked ? 'true' : 'false') + ',\'' + escJs(item.reason || '') + '\')" title="' + esc(tip) + '">' + esc(item.symbol) + '</span>';
       // Edit icon
-      html += '<span class="material-symbols-outlined text-[14px] text-gray-600 cursor-pointer hover:' + c.text.replace('text-','') + ' transition-colors" onclick="openEditModal(\'' + esc(item.symbol) + '\',' + item.rating_level + ')" title="编辑">edit</span>';
+      html += '<span class="material-symbols-outlined text-[14px] text-gray-600 cursor-pointer hover:' + c.text.replace('text-','') + ' transition-colors" onclick="openEditModal(\'' + escJs(item.symbol) + '\',' + item.rating_level + ',' + (item.rating_locked ? 'true' : 'false') + ',\'' + escJs(item.reason || '') + '\')" title="编辑">edit</span>';
+      if (item.rating_locked) {
+        html += '<span class="material-symbols-outlined text-[14px] text-amber-500/70 hover:text-amber-300 transition-colors cursor-pointer" onclick="unlockSymbol(\'' + escJs(item.symbol) + '\')" title="解除锁定">lock_open</span>';
+      }
       // Delete button (red, on hover)
       html += '<span class="material-symbols-outlined text-[14px] text-gray-600 hover:text-status-danger transition-colors cursor-pointer ml-1" onclick="deleteSymbol(\'' + esc(item.symbol) + '\')" title="删除">remove_circle</span>';
       html += '</div>';
@@ -286,19 +302,29 @@ function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function escJs(s) {
+  return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r?\n/g,' ');
+}
+
 // Modal
 function openAddModal() {
+  editingSymbol = null;
   document.getElementById('modal-symbol').value = '';
+  document.getElementById('modal-symbol').disabled = false;
   document.getElementById('modal-reason').value = '';
+  document.getElementById('modal-lock').checked = true;
   document.getElementById('modal-error').classList.add('hidden');
   selectLevel(0);
   document.getElementById('modal').classList.remove('hidden');
   setTimeout(function(){ document.getElementById('modal-symbol').focus(); }, 50);
 }
 
-function openEditModal(symbol, level) {
+function openEditModal(symbol, level, locked, reason) {
+  editingSymbol = symbol;
   document.getElementById('modal-symbol').value = symbol;
-  document.getElementById('modal-reason').value = '';
+  document.getElementById('modal-symbol').disabled = true;
+  document.getElementById('modal-reason').value = reason || '';
+  document.getElementById('modal-lock').checked = !!locked;
   document.getElementById('modal-error').classList.add('hidden');
   selectLevel(level);
   document.getElementById('modal').classList.remove('hidden');
@@ -335,6 +361,7 @@ function selectLevel(lvl) {
 async function submitRating() {
   var symbol = document.getElementById('modal-symbol').value.trim().toUpperCase();
   var reason = document.getElementById('modal-reason').value.trim() || '手动设置';
+  var locked = document.getElementById('modal-lock').checked;
   var errEl = document.getElementById('modal-error');
 
   if (!symbol) {
@@ -348,16 +375,51 @@ async function submitRating() {
     var r = await fetch('/api/rating/set', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({symbol: symbol, rating_level: selectedLevel, reason: reason})
+      body: JSON.stringify({
+        symbol: symbol,
+        rating_level: selectedLevel,
+        reason: reason,
+        rating_locked: locked
+      })
     });
     var data = await r.json();
     if (!data.success) throw new Error(data.detail || '设置失败');
     closeModal();
-    showToast(symbol + ' 已设置为 ' + LEVEL_LABELS[selectedLevel]);
+    showToast(data.message || (symbol + ' 已设置为 ' + LEVEL_LABELS[selectedLevel]));
     loadData();
   } catch(e) {
     errEl.textContent = e.message;
     errEl.classList.remove('hidden');
+  }
+}
+
+async function unlockSymbol(symbol) {
+  if (!confirm('解除 ' + symbol + ' 的锁定？下次自动刷新将按盈亏规则更新等级。')) return;
+  try {
+    var r = await fetch('/api/rating/unlock', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ symbol: symbol })
+    });
+    var data = await r.json();
+    if (!data.success) throw new Error(data.detail || '解除失败');
+    showToast(data.message || (symbol + ' 已解除锁定'));
+    loadData();
+  } catch(e) {
+    showToast('解除失败: ' + e.message);
+  }
+}
+
+async function triggerAutoRefresh() {
+  if (!confirm('立即按当前盈亏规则刷新全部未锁定交易对的评级？')) return;
+  try {
+    var r = await fetch('/api/rating/update', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' });
+    var data = await r.json();
+    if (!data.success) throw new Error(data.detail || '刷新失败');
+    showToast(data.message || '评级已刷新');
+    loadData();
+  } catch(e) {
+    showToast('刷新失败: ' + e.message);
   }
 }
 

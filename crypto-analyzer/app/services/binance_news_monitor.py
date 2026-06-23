@@ -383,6 +383,7 @@ class BinanceNewsMonitor:
                     symbol=canon,
                     new_level=3,
                     reason=f"下架公告: {title[:120]}",
+                    force=True,
                 )
                 blocked.append(canon)
                 logger.warning("下架公告 - 设置 Level3 禁止: %s", canon)

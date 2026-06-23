@@ -81,7 +81,7 @@ def main():
     for symbol in SYMBOLS_TO_BAN:
         canon = futures_symbol_rating_canonical(symbol)
         try:
-            opt.update_symbol_rating(symbol=canon, new_level=3, reason=REASON)
+            opt.update_symbol_rating(symbol=canon, new_level=3, reason=REASON, rating_locked=True)
             print(f"OK: {canon} -> Level 3 永久禁止")
         except Exception as e:
             print(f"ERROR: {symbol} 设置失败: {e}")

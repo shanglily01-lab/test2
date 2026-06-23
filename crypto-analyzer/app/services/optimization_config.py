@@ -497,19 +497,15 @@ class OptimizationConfig:
                             total_loss_amount: float = 0,
                             total_profit_amount: float = 0,
                             win_rate: float = 0,
-                            total_trades: int = 0):
+                            total_trades: int = 0,
+                            rating_locked: Optional[bool] = None,
+                            force: bool = False):
         """
         更新交易对评级
 
         Args:
-            symbol: 交易对符号
-            new_level: 新评级等级
-            reason: 评级变更原因
-            hard_stop_loss_count: hard_stop_loss次数
-            total_loss_amount: 总亏损金额
-            total_profit_amount: 总盈利金额
-            win_rate: 胜率
-            total_trades: 总交易次数
+            rating_locked: True=手动锁定；False=解除锁定；None=保持原值（自动刷新）
+            force: True 时忽略锁定（如下架公告强制 L3）
         """
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -525,6 +521,19 @@ class OptimizationConfig:
             """, (clean,))
             old_rating = cursor.fetchone()
             old_level = old_rating['rating_level'] if old_rating else 0
+
+            if (
+                old_rating
+                and int(old_rating.get('rating_locked') or 0) == 1
+                and rating_locked is None
+                and not force
+            ):
+                logger.debug(f"[评级] {canon} 手动锁定，跳过自动更新")
+                return
+
+            lock_val = (
+                1 if rating_locked else 0
+            ) if rating_locked is not None else int(old_rating.get('rating_locked') or 0) if old_rating else 0
 
             # 获取统计日期范围
             observation_days = self.get_blacklist_upgrade_config()['observation_days']
@@ -551,9 +560,9 @@ class OptimizationConfig:
                     symbol, rating_level, margin_multiplier, score_bonus,
                     hard_stop_loss_count, total_loss_amount, total_profit_amount,
                     win_rate, total_trades, previous_level, level_changed_at,
-                    level_change_reason, stats_start_date, stats_end_date
+                    level_change_reason, rating_locked, stats_start_date, stats_end_date
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s, %s, %s
                 )
                 ON DUPLICATE KEY UPDATE
                     rating_level = VALUES(rating_level),
@@ -567,11 +576,12 @@ class OptimizationConfig:
                     previous_level = %s,
                     level_changed_at = NOW(),
                     level_change_reason = VALUES(level_change_reason),
+                    rating_locked = VALUES(rating_locked),
                     stats_start_date = VALUES(stats_start_date),
                     stats_end_date = VALUES(stats_end_date)
             """, (canon, new_level, margin_multiplier, score_bonus,
                   hard_stop_loss_count, total_loss_amount, total_profit_amount,
-                  win_rate, total_trades, old_level, reason, start_date, end_date,
+                  win_rate, total_trades, old_level, reason, lock_val, start_date, end_date,
                   old_level))
 
             cursor.execute(
