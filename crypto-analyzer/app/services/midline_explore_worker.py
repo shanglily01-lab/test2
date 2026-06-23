@@ -1,4 +1,4 @@
-"""????/?? ? ?? worker?Gemini / DeepSeek ????????? LLM ???."""
+"""中线做多/做空 — 调度 worker（Gemini / DeepSeek 四路量化扫描，不调用 LLM）。"""
 from __future__ import annotations
 
 import json
@@ -120,7 +120,7 @@ def _has_open_or_pending(conn, symbol: str, side: str, source: str) -> bool:
 
 
 def _has_midline_position_on_symbol(conn, symbol: str, teacher: str) -> bool:
-    """????????????? symbol ????????????"""
+    """同教师任一中线策略已持仓该 symbol 则跳过（避免多空叠仓）。"""
     symbol = futures_symbol_rating_canonical(symbol)
     prefix = f"{teacher}_midline_%"
     with conn.cursor() as cur:
@@ -144,7 +144,7 @@ def _get_open_price(conn, symbol: str) -> Optional[float]:
         if p and p > 0:
             return float(p)
     except Exception as e:
-        logger.debug(f"[??] ???? {symbol}: {e}")
+        logger.debug(f"[中线] 取价失败 {symbol}: {e}")
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -160,6 +160,21 @@ def _get_open_price(conn, symbol: str) -> Optional[float]:
             if cp and float(cp) > 0:
                 return float(cp)
     return None
+
+
+def _format_run_summary(
+    universe_size: int,
+    signals_count: int,
+    orders_placed: int,
+    profile: str,
+    side: str,
+) -> str:
+    """量化扫描轮次摘要（写入 summary_zh）。"""
+    profile_cn = "做多" if profile == "long" else "做空"
+    return (
+        f"池{universe_size}个 L0/L1 | 信号{signals_count}个 | "
+        f"挂单{orders_placed}笔 | {profile_cn} {side}"
+    )
 
 
 def _insert_run(conn, source: str, asof_utc: datetime, status: str, triggered_by: str) -> int:
@@ -286,8 +301,8 @@ def run_midline_round(
     triggered_by: str = "scheduler",
 ) -> Optional[int]:
     """
-    ????????teacher: gemini|deepseek?profile: long|short?
-    ???? run_id????? None?
+    跑一轮中线策略。teacher: gemini|deepseek；profile: long|short。
+    成功返回 run_id，跳过返回 None。
     """
     teacher = teacher.strip().lower()
     profile = profile.strip().lower()
@@ -297,7 +312,7 @@ def run_midline_round(
     lock = _locks[lock_key]
 
     if not lock.acquire(blocking=False):
-        logger.warning(f"[??/{source}] ???????, ??")
+        logger.warning(f"[中线/{source}] 上一轮还未结束, 跳过")
         return None
 
     t0 = time.time()
@@ -309,13 +324,13 @@ def run_midline_round(
         try:
             with conn.cursor() as cur:
                 if not _is_enabled(cur, source):
-                    logger.info(f"[??/{source}] kill switch=0, ??")
+                    logger.info(f"[中线/{source}] kill switch=0, 跳过")
                     return None
 
             manual = triggered_by == "manual"
             if not manual and _last_ok_within_hours(conn, source, MIDLINE_INTERVAL_HOURS):
                 logger.info(
-                    f"[??/{source}] ?????? < {MIDLINE_INTERVAL_HOURS}h, ??"
+                    f"[中线/{source}] 上次成功距今 < {MIDLINE_INTERVAL_HOURS}h, 跳过"
                 )
                 return None
 
@@ -335,14 +350,14 @@ def run_midline_round(
                 if _has_midline_position_on_symbol(conn, symbol, teacher):
                     _insert_verdict(
                         conn, run_id, source, symbol, side, score, detail,
-                        "skipped_dedup", None, "?symbol??????",
+                        "skipped_dedup", None, "同symbol已有中线持仓",
                     )
                     continue
 
                 if _has_open_or_pending(conn, symbol, side, source):
                     _insert_verdict(
                         conn, run_id, source, symbol, side, score, detail,
-                        "skipped_dedup", None, "?????????",
+                        "skipped_dedup", None, "已有同向持仓或挂单",
                     )
                     continue
 
@@ -358,7 +373,7 @@ def run_midline_round(
                 if not price or price <= 0:
                     _insert_verdict(
                         conn, run_id, source, symbol, side, score, detail,
-                        "skipped_no_price", None, "?????",
+                        "skipped_no_price", None, "无有效市价",
                     )
                     continue
 
@@ -372,13 +387,12 @@ def run_midline_round(
                 else:
                     _insert_verdict(
                         conn, run_id, source, symbol, side, score, detail,
-                        "skipped_order_fail", None, "???????",
+                        "skipped_order_fail", None, "限价单创建失败",
                     )
 
             elapsed = time.time() - t0
-            summary = (
-                f"?{universe_size}? L0/L1 | ??{len(signals)}? | "
-                f"??{orders_placed}? | {profile} {side}"
+            summary = _format_run_summary(
+                universe_size, len(signals), orders_placed, profile, side,
             )
             _finish_run(
                 conn, run_id,
@@ -390,12 +404,12 @@ def run_midline_round(
                 summary_zh=summary,
             )
             conn.commit()
-            logger.info(f"[??/{source}] === ???? run_id={run_id} {summary} elapsed={elapsed:.1f}s")
+            logger.info(f"[中线/{source}] === 一轮结束 run_id={run_id} {summary} elapsed={elapsed:.1f}s")
             return run_id
         finally:
             conn.close()
     except Exception as e:
-        logger.error(f"[??/{source}] ??: {e}", exc_info=True)
+        logger.error(f"[中线/{source}] 异常: {e}", exc_info=True)
         try:
             conn = _connect()
             try:
@@ -417,10 +431,10 @@ def run_midline_round(
 
 
 def run_all_midline_scheduled(triggered_by: str = "scheduler") -> None:
-    """????????? 4 ??????"""
+    """调度入口：依次尝试 4 个策略槽位。"""
     for teacher in ("gemini", "deepseek"):
         for profile in ("long", "short"):
             try:
                 run_midline_round(teacher, profile, triggered_by=triggered_by)
             except Exception as e:
-                logger.error(f"[??] {teacher}/{profile} ????: {e}", exc_info=True)
+                logger.error(f"[中线] {teacher}/{profile} 调度异常: {e}", exc_info=True)

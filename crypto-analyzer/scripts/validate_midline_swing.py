@@ -130,6 +130,16 @@ def test_no_ai_trail_tp_for_midline() -> None:
     _ok("ai-trail-tp logic exists for explore/predict; midline skip enforced in monitor loop")
 
 
+def test_run_summary_zh() -> None:
+    print("[3d] run summary_zh")
+    from app.services.midline_explore_worker import _format_run_summary
+
+    s = _format_run_summary(181, 29, 24, "long", "LONG")
+    assert "池181个" in s and "信号29个" in s and "挂单24笔" in s
+    assert "做多" in s and "L0/L1" in s
+    _ok(s)
+
+
 def test_db_and_scan() -> None:
     print("[4] DB + L0/L1 scan (read-only)")
     import pymysql
@@ -230,6 +240,7 @@ def main() -> None:
     test_limit_price()
     test_live_sync_whitelist()
     test_no_ai_trail_tp_for_midline()
+    test_run_summary_zh()
     test_db_and_scan()
     test_worker_optional(args.worker)
     print("\n=== ALL DONE ===")

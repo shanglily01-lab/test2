@@ -112,6 +112,10 @@
       <button id="tab-1"   onclick="setTab('1')"   class="tab-btn pb-4 text-gray-400 hover:text-gray-200 transition-colors">黑名单1级 <span id="cnt-1">0</span></button>
       <button id="tab-2"   onclick="setTab('2')"   class="tab-btn pb-4 text-gray-400 hover:text-gray-200 transition-colors">黑名单2级 <span id="cnt-2">0</span></button>
       <button id="tab-3"   onclick="setTab('3')"   class="tab-btn pb-4 text-gray-400 hover:text-gray-200 transition-colors">永久禁止 <span id="cnt-3">0</span></button>
+      <button id="tab-locked" onclick="setTab('locked')" class="tab-btn pb-4 text-gray-400 hover:text-gray-200 transition-colors flex items-center gap-1">
+        <span class="material-symbols-outlined text-[16px] text-amber-400/80">lock</span>
+        手动锁定 <span id="cnt-locked">0</span>
+      </button>
     </div>
 
     <!-- Symbol Grid -->
@@ -225,6 +229,7 @@ async function loadData() {
       total += cnt;
     });
     document.getElementById('cnt-all').textContent = total;
+    document.getElementById('cnt-locked').textContent = getLockedItems().length;
     document.getElementById('total-badge').textContent = '共 ' + total + ' 个交易对';
 
     renderGrid();
@@ -235,21 +240,84 @@ async function loadData() {
 
 function filterSymbols() { renderGrid(); }
 
+function getAllItems() {
+  var items = [];
+  [0,1,2,3].forEach(function(i) {
+    (allData['level' + i] || []).forEach(function(x) { items.push(x); });
+  });
+  return items;
+}
+
+function getLockedItems() {
+  return getAllItems().filter(function(x) { return x.rating_locked; });
+}
+
 function getFilteredItems() {
   var q = document.getElementById('search-input').value.trim().toUpperCase();
   var items = [];
-  if (currentTab === 'all') {
-    [0,1,2,3].forEach(function(i) { (allData['level'+i]||[]).forEach(function(x){ items.push(x); }); });
+  if (currentTab === 'locked') {
+    items = getLockedItems();
+  } else if (currentTab === 'all') {
+    items = getAllItems();
   } else {
-    items = allData['level'+currentTab] || [];
+    items = allData['level' + currentTab] || [];
   }
   if (q) items = items.filter(function(x){ return x.symbol.includes(q); });
   return items;
 }
 
+function renderLockedTable(items) {
+  var grid = document.getElementById('symbol-grid');
+  if (!items.length) {
+    grid.innerHTML = '<div class="text-gray-500 text-sm text-center py-16">暂无手动锁定的交易对<br><span class="text-xs text-gray-600 mt-2 inline-block">在「手动添加」时勾选锁定，或编辑已有评级开启锁定</span></div>';
+    return;
+  }
+  items.sort(function(a, b) {
+    var ta = a.updated_at || '';
+    var tb = b.updated_at || '';
+    return tb.localeCompare(ta);
+  });
+  var html = '<div class="bg-brand-surface border border-gray-800 rounded-xl overflow-hidden">';
+  html += '<div class="px-4 py-3 border-b border-gray-800 flex items-center gap-2 text-amber-300/90 text-sm">';
+  html += '<span class="material-symbols-outlined text-[18px]">lock</span>';
+  html += '<span>以下交易对<strong class="font-bold mx-1">不会被自动评级覆盖</strong>（定时 TOP50/评级刷新跳过）</span>';
+  html += '</div>';
+  html += '<div class="overflow-x-auto"><table class="w-full text-sm font-mono">';
+  html += '<thead><tr class="text-left text-gray-500 text-xs border-b border-gray-800">';
+  html += '<th class="px-4 py-3 font-medium">交易对</th>';
+  html += '<th class="px-4 py-3 font-medium">等级</th>';
+  html += '<th class="px-4 py-3 font-medium">原因</th>';
+  html += '<th class="px-4 py-3 font-medium">更新时间</th>';
+  html += '<th class="px-4 py-3 font-medium text-right">操作</th>';
+  html += '</tr></thead><tbody>';
+  items.forEach(function(item) {
+    var lvl = item.rating_level;
+    var c = LEVEL_COLORS[lvl] || LEVEL_COLORS[0];
+    var updated = item.updated_at ? item.updated_at.replace('T', ' ').slice(0, 19) : '--';
+    html += '<tr class="border-b border-gray-800/60 hover:bg-white/[0.02]">';
+    html += '<td class="px-4 py-3 font-medium text-white">' + esc(item.symbol) + '</td>';
+    html += '<td class="px-4 py-3"><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded ' + c.bg + ' border ' + c.border + ' ' + c.text + ' text-xs">' + esc(LEVEL_LABELS[lvl]) + '</span></td>';
+    html += '<td class="px-4 py-3 text-gray-400 text-xs max-w-md truncate" title="' + esc(item.reason || '') + '">' + esc(item.reason || '—') + '</td>';
+    html += '<td class="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">' + esc(updated) + '</td>';
+    html += '<td class="px-4 py-3 text-right whitespace-nowrap">';
+    html += '<button type="button" onclick="openEditModal(\'' + escJs(item.symbol) + '\',' + lvl + ',true,\'' + escJs(item.reason || '') + '\')" class="text-gray-400 hover:text-[#49f4c8] text-xs mr-3">编辑</button>';
+    html += '<button type="button" onclick="unlockSymbol(\'' + escJs(item.symbol) + '\')" class="text-amber-400/80 hover:text-amber-300 text-xs mr-3">解除锁定</button>';
+    html += '<button type="button" onclick="deleteSymbol(\'' + escJs(item.symbol) + '\')" class="text-gray-500 hover:text-status-danger text-xs">删除</button>';
+    html += '</td></tr>';
+  });
+  html += '</tbody></table></div></div>';
+  grid.innerHTML = html;
+}
+
 function renderGrid() {
   var items = getFilteredItems();
   var grid = document.getElementById('symbol-grid');
+
+  if (currentTab === 'locked') {
+    renderLockedTable(items);
+    return;
+  }
+
   if (!items.length) {
     grid.innerHTML = '<div class="text-gray-500 text-sm text-center py-16">暂无数据</div>';
     return;
@@ -289,7 +357,7 @@ function renderGrid() {
         html += '<span class="material-symbols-outlined text-[14px] text-amber-500/70 hover:text-amber-300 transition-colors cursor-pointer" onclick="unlockSymbol(\'' + escJs(item.symbol) + '\')" title="解除锁定">lock_open</span>';
       }
       // Delete button (red, on hover)
-      html += '<span class="material-symbols-outlined text-[14px] text-gray-600 hover:text-status-danger transition-colors cursor-pointer ml-1" onclick="deleteSymbol(\'' + esc(item.symbol) + '\')" title="删除">remove_circle</span>';
+      html += '<span class="material-symbols-outlined text-[14px] text-gray-600 hover:text-status-danger transition-colors cursor-pointer ml-1" onclick="deleteSymbol(\'' + escJs(item.symbol) + '\')" title="删除">remove_circle</span>';
       html += '</div>';
     });
     html += '</div></section>';
