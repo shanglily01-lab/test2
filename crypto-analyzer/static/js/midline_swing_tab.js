@@ -4,7 +4,7 @@
  */
 (function (global) {
   var API = '/api/midline-swing';
-  var PANEL_VERSION = '3';
+  var PANEL_VERSION = '4';
 
   function esc(s) {
     if (s == null) return '';
@@ -116,6 +116,22 @@
       '<button type="button" id="' + prefix + '-run-now" data-source="' + esc(source) + '" class="px-3 py-1.5 rounded-lg bg-surface-container text-xs">立即扫描</button>' +
       '<button type="button" id="' + prefix + '-refresh" data-source="' + esc(source) + '" class="px-3 py-1.5 rounded-lg bg-surface-container text-xs">刷新</button>' +
       '</div></header>' +
+      '<section class="px-8 py-5 border-b border-outline-variant/10">' +
+      '<h2 class="text-sm font-bold uppercase tracking-widest text-primary mb-3">' +
+      '策略参数 <span class="text-[10px] font-normal normal-case text-on-surface-variant">（Gemini/DeepSeek 四路中线共用）</span></h2>' +
+      '<div class="bg-surface-container-low rounded-xl p-4 flex flex-wrap items-end gap-4 border border-primary/20">' +
+      '<label class="text-xs"><span class="block text-on-surface-variant mb-1">执行周期 (小时)</span>' +
+      '<input type="number" id="' + prefix + '-param-interval" min="1" max="48" step="1" value="6" ' +
+      'class="w-28 px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/20 mono text-sm"></label>' +
+      '<label class="text-xs"><span class="block text-on-surface-variant mb-1">做多限价偏移 (%)</span>' +
+      '<input type="number" id="' + prefix + '-param-long-off" min="0.1" max="5" step="0.1" value="3" ' +
+      'class="w-28 px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/20 mono text-sm"></label>' +
+      '<label class="text-xs"><span class="block text-on-surface-variant mb-1">做空限价偏移 (%)</span>' +
+      '<input type="number" id="' + prefix + '-param-short-off" min="0.1" max="5" step="0.1" value="3" ' +
+      'class="w-28 px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/20 mono text-sm"></label>' +
+      '<button type="button" id="' + prefix + '-param-save" class="px-4 py-2 rounded-lg bg-primary text-on-primary text-xs font-medium">保存参数</button>' +
+      '<p class="text-[10px] text-on-surface-variant w-full">做多 = 市价 −偏移%；做空 = 市价 +偏移%。限价单超时 = 执行周期。系统设置页也可修改。</p>' +
+      '</div></section>' +
       '<section class="px-8 py-6 grid grid-cols-2 md:grid-cols-4 gap-4">' +
       '<div class="bg-surface-container-low rounded-xl p-4"><p class="text-[10px] uppercase text-on-surface-variant mb-1">当前持仓</p>' +
       '<p class="mono text-2xl" id="' + prefix + '-stat-open">--</p></div>' +
@@ -126,21 +142,6 @@
       '<div class="bg-surface-container-low rounded-xl p-4"><p class="text-[10px] uppercase text-on-surface-variant mb-1">上轮挂单</p>' +
       '<p class="mono text-2xl" id="' + prefix + '-stat-orders">--</p></div>' +
       '</section>' +
-      '<section class="px-8 pb-6"><h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant mb-3">' +
-      '策略参数 <span class="text-[10px] font-normal normal-case text-on-surface-variant/80">（四路中线共用）</span></h2>' +
-      '<div class="bg-surface-container-low rounded-xl p-4 flex flex-wrap items-end gap-4">' +
-      '<label class="text-xs"><span class="block text-on-surface-variant mb-1">执行周期 (小时)</span>' +
-      '<input type="number" id="' + prefix + '-param-interval" min="1" max="48" step="1" ' +
-      'class="w-24 px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/20 mono text-sm"></label>' +
-      '<label class="text-xs"><span class="block text-on-surface-variant mb-1">做多限价偏移 (%)</span>' +
-      '<input type="number" id="' + prefix + '-param-long-off" min="0.1" max="5" step="0.1" ' +
-      'class="w-24 px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/20 mono text-sm"></label>' +
-      '<label class="text-xs"><span class="block text-on-surface-variant mb-1">做空限价偏移 (%)</span>' +
-      '<input type="number" id="' + prefix + '-param-short-off" min="0.1" max="5" step="0.1" ' +
-      'class="w-24 px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/20 mono text-sm"></label>' +
-      '<button type="button" id="' + prefix + '-param-save" class="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs">保存参数</button>' +
-      '<p class="text-[10px] text-on-surface-variant w-full">做多 = 市价 −偏移%；做空 = 市价 +偏移%。限价单超时 = 执行周期。</p>' +
-      '</div></section>' +
       '<section class="px-8 pb-6"><div class="flex items-center justify-between mb-3">' +
       '<h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant">运行记录</h2>' +
       '<p class="text-[10px] text-on-surface-variant">点击行查看量化信号明细</p></div>' +
@@ -377,6 +378,20 @@
     loadOpen(prefix, source);
   }
 
+  function loadGlobalParams() {
+    fetch(API + '/params')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.success) return;
+        var runtime = d.data || {};
+        var panels = global._midlinePanels || [];
+        panels.forEach(function (p) {
+          applyParamsToPanel(p.prefix, runtime);
+        });
+      })
+      .catch(function (e) { console.error('midline global params', e); });
+  }
+
   function init(cfg) {
     var teacher = (cfg && cfg.teacher) || 'gemini';
     var teacherLabel = teacher === 'gemini' ? 'Gemini 分轨' : 'DeepSeek 分轨';
@@ -406,6 +421,7 @@
       el._midlineSource = p.source;
     });
     global._midlinePanels = panels;
+    loadGlobalParams();
   }
 
   function onTabShow(tabId) {
