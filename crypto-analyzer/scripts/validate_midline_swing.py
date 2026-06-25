@@ -62,26 +62,32 @@ def test_scoring_logic() -> None:
 
 
 def test_limit_price() -> None:
-    print("[3] limit price ±3%")
+    print("[3] limit price (configurable offset)")
     from app.services.paper_limit_entry import calc_paper_limit_price
     from app.services.midline_swing_config import (
-        MIDLINE_LIMIT_LONG_OFFSET_PCT,
-        MIDLINE_LIMIT_SHORT_OFFSET_PCT,
+        DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT,
+        DEFAULT_MIDLINE_LIMIT_SHORT_OFFSET_PCT,
+        get_midline_limit_long_offset_pct,
         get_midline_limit_offset_pct,
+        get_midline_limit_short_offset_pct,
         is_midline_source,
     )
 
+    long_pct = get_midline_limit_long_offset_pct()
+    short_pct = get_midline_limit_short_offset_pct()
     lp = calc_paper_limit_price(
         "LONG", 100.0, limit_offset_pct=get_midline_limit_offset_pct("LONG"),
     )
     sp = calc_paper_limit_price(
         "SHORT", 100.0, limit_offset_pct=get_midline_limit_offset_pct("SHORT"),
     )
-    assert abs(lp - (100.0 * (1 - MIDLINE_LIMIT_LONG_OFFSET_PCT / 100))) < 0.01, lp
-    assert abs(sp - (100.0 * (1 + MIDLINE_LIMIT_SHORT_OFFSET_PCT / 100))) < 0.01, sp
-    _ok(f"LONG @ {lp}, SHORT @ {sp}")
+    assert abs(lp - (100.0 * (1 - long_pct / 100))) < 0.01, lp
+    assert abs(sp - (100.0 * (1 + short_pct / 100))) < 0.01, sp
+    _ok(f"LONG @ {lp} (-{long_pct}%), SHORT @ {sp} (+{short_pct}%)")
     assert is_midline_source("gemini_midline_long") and not is_midline_source("gemini_explore")
-    _ok("midline source → 强制 ±3% 限价")
+    _ok("midline source → 强制可配置限价偏移")
+    assert long_pct == DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT
+    assert short_pct == DEFAULT_MIDLINE_LIMIT_SHORT_OFFSET_PCT
 
     # 非中线：走 system_settings（默认 0.5%）
     lp_sys = calc_paper_limit_price("LONG", 100.0)
@@ -113,6 +119,28 @@ def test_live_sync_whitelist() -> None:
         f"midline in LIVE_SYNC; live margin from API max_position_value={live_margin}U; "
         f"SL/TP/leverage unchanged"
     )
+
+
+def test_runtime_params() -> None:
+    print("[3e] runtime params from system_settings")
+    from app.services.midline_swing_config import (
+        DEFAULT_MIDLINE_INTERVAL_HOURS,
+        get_midline_interval_hours,
+        get_midline_limit_timeout_minutes,
+        get_midline_runtime_params,
+        _clamp_midline_interval_hours,
+        _clamp_midline_limit_offset_pct,
+    )
+
+    assert _clamp_midline_interval_hours(0) == 1
+    assert _clamp_midline_interval_hours(99) == 48
+    assert _clamp_midline_limit_offset_pct(0.05) == 0.1
+    assert _clamp_midline_limit_offset_pct(9) == 5.0
+    runtime = get_midline_runtime_params()
+    assert runtime["interval_hours"] == get_midline_interval_hours()
+    assert runtime["limit_timeout_minutes"] == get_midline_limit_timeout_minutes()
+    assert runtime["limit_timeout_minutes"] == runtime["interval_hours"] * 60
+    _ok(f"interval={runtime['interval_hours']}h timeout={runtime['limit_timeout_minutes']}min")
 
 
 def test_no_ai_trail_tp_for_midline() -> None:
@@ -238,6 +266,7 @@ def main() -> None:
     test_imports()
     test_scoring_logic()
     test_limit_price()
+    test_runtime_params()
     test_live_sync_whitelist()
     test_no_ai_trail_tp_for_midline()
     test_run_summary_zh()

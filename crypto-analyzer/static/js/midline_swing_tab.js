@@ -4,7 +4,7 @@
  */
 (function (global) {
   var API = '/api/midline-swing';
-  var PANEL_VERSION = '2';
+  var PANEL_VERSION = '3';
 
   function esc(s) {
     if (s == null) return '';
@@ -86,6 +86,18 @@
     return parts.length ? esc(parts.join(' · ')) : '<span class="text-on-surface-variant">--</span>';
   }
 
+  function paramsSubtitle(p) {
+    p = p || {};
+    var lo = p.limit_long_offset_pct != null ? p.limit_long_offset_pct : 3;
+    var so = p.limit_short_offset_pct != null ? p.limit_short_offset_pct : 3;
+    var ih = p.interval_hours != null ? p.interval_hours : 6;
+    var tm = p.limit_timeout_minutes != null ? p.limit_timeout_minutes : ih * 60;
+    return (
+      '限价 做多−' + lo + '% / 做空+' + so + '% · ' + tm + 'min 超时 · ' +
+      '每 ' + ih + 'h 扫描 · SL 6% / TP 20% · 持仓 15 天 · 5x · 500U · 仅模拟 · 不受 smart_trader 对冲平仓'
+    );
+  }
+
   function panelHtml(prefix, title, source, teacherLabel) {
     return (
       '<header class="border-b border-outline-variant/10 px-8 py-5 flex items-center justify-between flex-wrap gap-4">' +
@@ -94,8 +106,9 @@
       '<p class="text-[11px] text-on-surface-variant mt-1">' +
       teacherLabel + ' · <span class="text-primary">L0/L1 量化扫描</span>（24×1D + 60×1H 技术评分）' +
       ' · 不调用 LLM · 不经开仓/持仓顾问</p>' +
-      '<p class="text-[10px] text-on-surface-variant/80 mt-1">' +
-      '限价 做多−3% / 做空+3% · 6h 超时 · SL 6% / TP 20% · 持仓 15 天 · 5x · 500U · 仅模拟 · 不受 smart_trader 对冲平仓</p>' +
+      '<p class="text-[10px] text-on-surface-variant/80 mt-1" id="' + prefix + '-params-subtitle">' +
+      esc(paramsSubtitle()) +
+      '</p>' +
       '</div>' +
       '<div class="flex items-center gap-3 shrink-0">' +
       '<span id="' + prefix + '-status-chip" class="chip chip-off"><span id="' + prefix + '-status-label">已禁用</span></span>' +
@@ -113,6 +126,21 @@
       '<div class="bg-surface-container-low rounded-xl p-4"><p class="text-[10px] uppercase text-on-surface-variant mb-1">上轮挂单</p>' +
       '<p class="mono text-2xl" id="' + prefix + '-stat-orders">--</p></div>' +
       '</section>' +
+      '<section class="px-8 pb-6"><h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant mb-3">' +
+      '策略参数 <span class="text-[10px] font-normal normal-case text-on-surface-variant/80">（四路中线共用）</span></h2>' +
+      '<div class="bg-surface-container-low rounded-xl p-4 flex flex-wrap items-end gap-4">' +
+      '<label class="text-xs"><span class="block text-on-surface-variant mb-1">执行周期 (小时)</span>' +
+      '<input type="number" id="' + prefix + '-param-interval" min="1" max="48" step="1" ' +
+      'class="w-24 px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/20 mono text-sm"></label>' +
+      '<label class="text-xs"><span class="block text-on-surface-variant mb-1">做多限价偏移 (%)</span>' +
+      '<input type="number" id="' + prefix + '-param-long-off" min="0.1" max="5" step="0.1" ' +
+      'class="w-24 px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/20 mono text-sm"></label>' +
+      '<label class="text-xs"><span class="block text-on-surface-variant mb-1">做空限价偏移 (%)</span>' +
+      '<input type="number" id="' + prefix + '-param-short-off" min="0.1" max="5" step="0.1" ' +
+      'class="w-24 px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/20 mono text-sm"></label>' +
+      '<button type="button" id="' + prefix + '-param-save" class="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs">保存参数</button>' +
+      '<p class="text-[10px] text-on-surface-variant w-full">做多 = 市价 −偏移%；做空 = 市价 +偏移%。限价单超时 = 执行周期。</p>' +
+      '</div></section>' +
       '<section class="px-8 pb-6"><div class="flex items-center justify-between mb-3">' +
       '<h2 class="text-sm font-bold uppercase tracking-widest text-on-surface-variant">运行记录</h2>' +
       '<p class="text-[10px] text-on-surface-variant">点击行查看量化信号明细</p></div>' +
@@ -170,6 +198,58 @@
       refBtn._midlineBound = true;
       refBtn.addEventListener('click', function () { loadAll(prefix, source); });
     }
+    var saveBtn = document.getElementById(prefix + '-param-save');
+    if (saveBtn && !saveBtn._midlineBound) {
+      saveBtn._midlineBound = true;
+      saveBtn.addEventListener('click', function () { saveParams(prefix, source); });
+    }
+  }
+
+  function applyParamsToPanel(prefix, params) {
+    var p = params || {};
+    var sub = document.getElementById(prefix + '-params-subtitle');
+    if (sub) sub.textContent = paramsSubtitle(p);
+    var el;
+    el = document.getElementById(prefix + '-param-interval');
+    if (el && p.interval_hours != null) el.value = p.interval_hours;
+    el = document.getElementById(prefix + '-param-long-off');
+    if (el && p.limit_long_offset_pct != null) el.value = p.limit_long_offset_pct;
+    el = document.getElementById(prefix + '-param-short-off');
+    if (el && p.limit_short_offset_pct != null) el.value = p.limit_short_offset_pct;
+  }
+
+  function saveParams(prefix, source) {
+    var intervalEl = document.getElementById(prefix + '-param-interval');
+    var longEl = document.getElementById(prefix + '-param-long-off');
+    var shortEl = document.getElementById(prefix + '-param-short-off');
+    var body = {};
+    if (intervalEl && intervalEl.value !== '') body.interval_hours = Number(intervalEl.value);
+    if (longEl && longEl.value !== '') body.limit_long_offset_pct = Number(longEl.value);
+    if (shortEl && shortEl.value !== '') body.limit_short_offset_pct = Number(shortEl.value);
+    fetch(API + '/params', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.success) throw new Error(d.detail || '保存失败');
+        var runtime = d.data || {};
+        var panels = global._midlinePanels || [];
+        panels.forEach(function (p) {
+          applyParamsToPanel(p.prefix, runtime);
+        });
+        if (typeof global.showToast === 'function') {
+          global.showToast('中线参数已保存', 'success');
+        }
+        loadStatus(prefix, source);
+      })
+      .catch(function (e) {
+        console.error('midline params save', e);
+        if (typeof global.showToast === 'function') {
+          global.showToast(e.message || '保存失败', 'error');
+        }
+      });
   }
 
   function loadStatus(prefix, source) {
@@ -194,6 +274,7 @@
         if (el) el.textContent = lr.universe_size != null ? lr.universe_size : '--';
         el = document.getElementById(prefix + '-stat-orders');
         if (el) el.textContent = lr.orders_placed != null ? lr.orders_placed : '--';
+        if (s.params) applyParamsToPanel(prefix, s.params);
       })
       .catch(function (e) { console.error('midline status', e); });
   }

@@ -15,13 +15,13 @@ from app.utils.config_loader import get_db_config
 from app.services.midline_swing_config import (
     MIDLINE_ACCOUNT_ID,
     MIDLINE_HOLD_MINUTES,
-    MIDLINE_INTERVAL_HOURS,
     MIDLINE_KILL_SWITCH,
     MIDLINE_LEVERAGE,
-    MIDLINE_LIMIT_TIMEOUT_MINUTES,
     MIDLINE_MARGIN_USD,
     MIDLINE_SL_PCT,
     MIDLINE_TP_PCT,
+    get_midline_interval_hours,
+    get_midline_limit_timeout_minutes,
     profile_side,
     source_for,
 )
@@ -290,7 +290,7 @@ def _open_limit_order(
         max_hold_minutes=MIDLINE_HOLD_MINUTES,
         planned_close_time=hold_deadline,
         account_id=MIDLINE_ACCOUNT_ID,
-        timeout_minutes=MIDLINE_LIMIT_TIMEOUT_MINUTES,
+        timeout_minutes=get_midline_limit_timeout_minutes(),
         skip_open_advisor=True,
     )
 
@@ -328,9 +328,10 @@ def run_midline_round(
                     return None
 
             manual = triggered_by == "manual"
-            if not manual and _last_ok_within_hours(conn, source, MIDLINE_INTERVAL_HOURS):
+            interval_h = get_midline_interval_hours()
+            if not manual and _last_ok_within_hours(conn, source, interval_h):
                 logger.info(
-                    f"[中线/{source}] 上次成功距今 < {MIDLINE_INTERVAL_HOURS}h, 跳过"
+                    f"[中线/{source}] 上次成功距今 < {interval_h}h, 跳过"
                 )
                 return None
 

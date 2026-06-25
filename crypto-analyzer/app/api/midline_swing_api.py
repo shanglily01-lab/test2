@@ -12,14 +12,16 @@ from app.services.midline_swing_config import (
     MIDLINE_HOLD_DAYS,
     MIDLINE_KILL_SWITCH,
     MIDLINE_LEVERAGE,
-    MIDLINE_LIMIT_LONG_OFFSET_PCT,
-    MIDLINE_LIMIT_SHORT_OFFSET_PCT,
-    MIDLINE_LIMIT_OFFSET_PCT,
-    MIDLINE_LIMIT_TIMEOUT_MINUTES,
     MIDLINE_MARGIN_USD,
+    MIDLINE_SETTING_INTERVAL_HOURS,
+    MIDLINE_SETTING_LIMIT_LONG_OFFSET_PCT,
+    MIDLINE_SETTING_LIMIT_SHORT_OFFSET_PCT,
     MIDLINE_SL_PCT,
     MIDLINE_TP_PCT,
     MIDLINE_SOURCES,
+    _clamp_midline_interval_hours,
+    _clamp_midline_limit_offset_pct,
+    get_midline_runtime_params,
 )
 from app.utils.futures_symbol import futures_symbol_rating_canonical
 
@@ -85,6 +87,7 @@ def status(source: str = Query(...)):
         profile = "long" if source.endswith("_long") else "short"
         from app.services.trading_gates import get_live_base_margin_usd
 
+        runtime = get_midline_runtime_params()
         return {
             "success": True,
             "data": {
@@ -99,13 +102,13 @@ def status(source: str = Query(...)):
                     "live_margin_source": "user_api_keys.max_position_value",
                     "leverage": MIDLINE_LEVERAGE,
                     "hold_days": MIDLINE_HOLD_DAYS,
-                    "limit_long_offset_pct": MIDLINE_LIMIT_LONG_OFFSET_PCT,
-                    "limit_short_offset_pct": MIDLINE_LIMIT_SHORT_OFFSET_PCT,
-                    "limit_offset_pct": MIDLINE_LIMIT_OFFSET_PCT,
-                    "limit_timeout_minutes": MIDLINE_LIMIT_TIMEOUT_MINUTES,
+                    "limit_long_offset_pct": runtime["limit_long_offset_pct"],
+                    "limit_short_offset_pct": runtime["limit_short_offset_pct"],
+                    "limit_offset_pct": runtime["limit_offset_pct"],
+                    "limit_timeout_minutes": runtime["limit_timeout_minutes"],
                     "sl_pct": MIDLINE_SL_PCT,
                     "tp_pct": MIDLINE_TP_PCT,
-                    "interval_hours": 6,
+                    "interval_hours": runtime["interval_hours"],
                     "profile": profile,
                 },
             },
@@ -119,6 +122,87 @@ def status(source: str = Query(...)):
 
 class ToggleRequest(BaseModel):
     enabled: bool
+
+
+class MidlineParamsRequest(BaseModel):
+    interval_hours: Optional[int] = None
+    limit_long_offset_pct: Optional[float] = None
+    limit_short_offset_pct: Optional[float] = None
+
+
+def _invalidate_midline_settings_cache() -> None:
+    from app.services.data_cache_service import invalidate_setting_cache
+    from app.services.system_settings_loader import invalidate_loader_cache
+
+    invalidate_setting_cache()
+    invalidate_loader_cache()
+
+
+def _upsert_setting(cur, key: str, value: str) -> None:
+    cur.execute(
+        "INSERT INTO system_settings (setting_key, setting_value) "
+        "VALUES (%s, %s) ON DUPLICATE KEY UPDATE setting_value=%s",
+        (key, value, value),
+    )
+
+
+@router.get("/params")
+def get_params():
+    """四路中线策略共用的执行周期与限价偏移。"""
+    try:
+        runtime = get_midline_runtime_params()
+        return {
+            "success": True,
+            "data": {
+                **runtime,
+                "margin_usd": MIDLINE_MARGIN_USD,
+                "leverage": MIDLINE_LEVERAGE,
+                "hold_days": MIDLINE_HOLD_DAYS,
+                "sl_pct": MIDLINE_SL_PCT,
+                "tp_pct": MIDLINE_TP_PCT,
+            },
+        }
+    except Exception as e:
+        logger.error(f"[中线 API] /params GET 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/params")
+def update_params(request: MidlineParamsRequest):
+    """更新中线执行周期与限价偏移（四路共用）。"""
+    updates: dict[str, str] = {}
+    if request.interval_hours is not None:
+        updates[MIDLINE_SETTING_INTERVAL_HOURS] = str(
+            _clamp_midline_interval_hours(request.interval_hours)
+        )
+    if request.limit_long_offset_pct is not None:
+        updates[MIDLINE_SETTING_LIMIT_LONG_OFFSET_PCT] = str(
+            _clamp_midline_limit_offset_pct(request.limit_long_offset_pct)
+        )
+    if request.limit_short_offset_pct is not None:
+        updates[MIDLINE_SETTING_LIMIT_SHORT_OFFSET_PCT] = str(
+            _clamp_midline_limit_offset_pct(request.limit_short_offset_pct)
+        )
+    if not updates:
+        raise HTTPException(status_code=400, detail="至少提供一个可更新字段")
+
+    try:
+        conn = _connect()
+        try:
+            with conn.cursor() as cur:
+                for key, val in updates.items():
+                    _upsert_setting(cur, key, val)
+            conn.commit()
+        finally:
+            conn.close()
+        _invalidate_midline_settings_cache()
+        runtime = get_midline_runtime_params()
+        return {"success": True, "data": runtime, "updated": list(updates.keys())}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[中线 API] /params POST 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/toggle")

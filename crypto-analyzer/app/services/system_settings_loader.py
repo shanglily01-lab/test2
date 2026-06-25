@@ -179,6 +179,13 @@ def get_max_positions() -> int:
         return _DEFAULT_MAX_POSITIONS
 
 
+def invalidate_loader_cache() -> None:
+    """写入 system_settings 后清除本地 TTL 缓存。"""
+    global _local_cache, _local_cache_time
+    _local_cache = {}
+    _local_cache_time = 0
+
+
 def get_strategy_open_params() -> dict:
     """Web/AI 状态页展示用：SL/TP/持仓时长/最大持仓数。"""
     sl_d, tp_d = get_sl_tp_decimal()
