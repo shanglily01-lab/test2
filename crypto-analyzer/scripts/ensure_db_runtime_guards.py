@@ -35,6 +35,12 @@ INDEXES = {
             "ADD INDEX idx_fp_source_account_status_close "
             "(source, account_id, status, close_time)",
         ),
+        (
+            "idx_fp_source_account_status_open",
+            "ALTER TABLE futures_positions "
+            "ADD INDEX idx_fp_source_account_status_open "
+            "(source, account_id, status, open_time)",
+        ),
     ],
     "futures_orders": [
         (

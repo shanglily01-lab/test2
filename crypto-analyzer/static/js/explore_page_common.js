@@ -1,9 +1,53 @@
 /**
- * Gemini / DeepSeek 探索页共用 UI（run 详情、verdicts 表、复制、通知）
+ * Gemini / DeepSeek 探索页共用 UI（run 详情、verdicts 表、复制、通知、轮询）
  * 依赖: fmt, escapeHtml, modal.js (showToast / showAlert)
  */
 (function (global) {
   var _runDetailCache = {};
+  var _HTML_CACHE_MAX = 10;
+  var _CODE_RENDER_CHUNK = 12000;
+  var _CODE_RENDER_MAX = 120000;
+
+  function exploreTrimCache(cache, maxKeys) {
+    if (!cache || typeof cache !== 'object') return;
+    maxKeys = maxKeys || _HTML_CACHE_MAX;
+    var keys = Object.keys(cache);
+    while (keys.length > maxKeys) {
+      delete cache[keys[0]];
+      keys = Object.keys(cache);
+    }
+  }
+
+  function createExplorePollRegistry() {
+    var timers = [];
+    var paused = document.hidden;
+
+    function tabVisible(tabId) {
+      var el = document.getElementById(tabId);
+      return !!(el && !el.classList.contains('hidden'));
+    }
+
+    function register(fn, ms, guard) {
+      var timer = setInterval(function () {
+        if (paused) return;
+        if (guard && !guard()) return;
+        fn();
+      }, ms);
+      timers.push(timer);
+      return timer;
+    }
+
+    function clearAll() {
+      timers.forEach(function (t) { clearInterval(t); });
+      timers = [];
+    }
+
+    document.addEventListener('visibilitychange', function () {
+      paused = document.hidden;
+    });
+
+    return { register: register, clearAll: clearAll, tabVisible: tabVisible };
+  }
 
   function exploreNotify(message, type) {
     type = type || 'info';
@@ -26,10 +70,40 @@
   }
 
   function buildCodeBlock(text) {
-    return '<div class="code-block-wrap"><pre class="code-block">' + escapeHtml(text) + '</pre>' +
+    var raw = text == null ? '' : String(text);
+    var id = 'code-' + Math.random().toString(36).slice(2, 10);
+    return '<div class="code-block-wrap" data-full-text-id="' + id + '">' +
+      '<pre class="code-block" id="' + id + '-pre"></pre>' +
       '<div class="code-block-toolbar">' +
-      '<button type="button" class="code-copy-btn" onclick="copyCodeBlock(this)">' +
+      '<button type="button" class="code-copy-btn" data-copy-id="' + id + '" onclick="copyCodeBlock(this)">' +
       '<span class="material-symbols-outlined text-[14px]">content_copy</span>复制</button></div></div>';
+  }
+
+  function renderCodeBlockAsync(wrap, text) {
+    if (!wrap) return;
+    var pre = wrap.querySelector('pre.code-block');
+    if (!pre) return;
+    var raw = text == null ? '' : String(text);
+    wrap._fullText = raw;
+    if (raw.length <= _CODE_RENDER_CHUNK) {
+      pre.textContent = raw;
+      return;
+    }
+    pre.textContent = '渲染中…';
+    var pos = 0;
+    var displayMax = Math.min(raw.length, _CODE_RENDER_MAX);
+    function step() {
+      var next = Math.min(pos + _CODE_RENDER_CHUNK, displayMax);
+      if (pos === 0) pre.textContent = raw.slice(0, next);
+      else pre.textContent += raw.slice(pos, next);
+      pos = next;
+      if (pos < displayMax) {
+        setTimeout(step, 0);
+      } else if (raw.length > displayMax) {
+        pre.textContent += '\n\n… [已截断显示，共 ' + raw.length + ' 字符，请点「复制」获取全文] …';
+      }
+    }
+    setTimeout(step, 0);
   }
 
   function formatRawJson(text) {
@@ -44,8 +118,9 @@
   function copyCodeBlock(btn) {
     var wrap = btn.closest('.code-block-wrap');
     var pre = wrap ? wrap.querySelector('pre.code-block') : null;
-    if (!pre) return;
-    navigator.clipboard.writeText(pre.textContent).then(function () {
+    if (!wrap || !pre) return;
+    var full = wrap._fullText != null ? wrap._fullText : pre.textContent;
+    navigator.clipboard.writeText(full).then(function () {
       var old = btn.innerHTML;
       btn.innerHTML = '<span class="material-symbols-outlined text-[14px]">check</span>已复制';
       setTimeout(function () { btn.innerHTML = old; }, 1500);
@@ -82,35 +157,41 @@
     }
   }
 
+  function mountCodePanel(panel, html, rawText) {
+    panel.innerHTML = html;
+    var wrap = panel.querySelector('.code-block-wrap');
+    if (wrap && rawText != null) renderCodeBlockAsync(wrap, rawText);
+  }
+
   function loadRunDetail(prefix, runId, tab) {
     var cacheKey = prefix + runId + ':' + tab;
     var panel = document.getElementById('run-panel-' + prefix + runId + '-' + tab);
     if (!panel) return;
     if (_runDetailCache[cacheKey]) {
-      panel.innerHTML = _runDetailCache[cacheKey];
+      panel.innerHTML = _runDetailCache[cacheKey].html;
+      var cachedWrap = panel.querySelector('.code-block-wrap');
+      if (cachedWrap && _runDetailCache[cacheKey].raw != null) {
+        renderCodeBlockAsync(cachedWrap, _runDetailCache[cacheKey].raw);
+      }
       return;
     }
     var wrap = document.getElementById('run-wrap-' + prefix + runId);
     var apiPrefix = wrap ? wrap.getAttribute('data-api') : '';
-    fetch(apiPrefix + '/runs/' + runId + '/detail')
+    var field = tab === 'prompt' ? 'prompt' : 'raw';
+    fetch(apiPrefix + '/runs/' + runId + '/detail?field=' + field)
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!d.success) throw new Error(d.detail || 'load failed');
         var data = d.data || {};
-        var html;
-        if (tab === 'prompt') {
-          html = buildCodeBlock(data.prompt_text || '');
-          if (data.summary_zh) {
-            html = '<p class="text-xs text-on-surface-variant mb-2"><span class="text-primary">summary_zh:</span> ' + escapeHtml(data.summary_zh) + '</p>' + html;
-          }
-        } else {
-          html = formatRawJson(data.raw_response || '');
-          if (data.summary_zh) {
-            html = '<p class="text-xs text-on-surface-variant mb-2"><span class="text-primary">summary_zh:</span> ' + escapeHtml(data.summary_zh) + '</p>' + html;
-          }
+        var rawText = tab === 'prompt' ? (data.prompt_text || '') : (data.raw_response || '');
+        var bodyHtml = tab === 'prompt' ? buildCodeBlock(rawText) : formatRawJson(rawText);
+        if (data.summary_zh) {
+          bodyHtml = '<p class="text-xs text-on-surface-variant mb-2"><span class="text-primary">summary_zh:</span> ' +
+            escapeHtml(data.summary_zh) + '</p>' + bodyHtml;
         }
-        _runDetailCache[cacheKey] = html;
-        panel.innerHTML = html;
+        _runDetailCache[cacheKey] = { html: bodyHtml, raw: rawText };
+        exploreTrimCache(_runDetailCache);
+        mountCodePanel(panel, bodyHtml, rawText);
       })
       .catch(function (e) {
         panel.innerHTML = '<p class="text-on-surface-variant text-xs">加载失败: ' + escapeHtml(String(e)) + '</p>';
@@ -174,4 +255,6 @@
   global.switchRunTab = switchRunTab;
   global.loadRunDetail = loadRunDetail;
   global.buildVerdictsTable = buildVerdictsTable;
+  global.exploreTrimCache = exploreTrimCache;
+  global.explorePoll = createExplorePollRegistry();
 })(window);

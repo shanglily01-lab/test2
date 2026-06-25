@@ -160,6 +160,7 @@
       .then(function (d) {
         var html = renderDetail(d.data || {});
         detailCache[runId] = html;
+        if (typeof exploreTrimCache === 'function') exploreTrimCache(detailCache, 8);
         cell.innerHTML = html;
       })
       .catch(function (e) {
@@ -192,6 +193,11 @@
     loadRuns(cfg);
   }
 
+  function loadPoll(cfg) {
+    loadStatus(cfg);
+    loadRuns(cfg);
+  }
+
   function init(cfg) {
     global._big4AnalysisCfg = cfg;
     var toggle = document.getElementById('b4-enable-toggle');
@@ -216,6 +222,7 @@
   global.Big4AnalysisTab = {
     init: init,
     loadAll: loadAll,
+    loadPoll: loadPoll,
     toggleDetail: function (runId) {
       toggleDetail(global._big4AnalysisCfg || { api: '/api/gemini-big4-analysis' }, runId);
     }

@@ -781,6 +781,7 @@ function toggleVerdicts(runId) {
       var verdictsHtml = buildVerdictsTable(vs, false, true);
       var html = buildRunDetailShell(runId, '', '/api/deepseek-explore', verdictsHtml);
       _verdictsCache[runId] = html;
+      exploreTrimCache(_verdictsCache);
       cell.innerHTML = html;
     })
     .catch(function(e){
@@ -831,12 +832,9 @@ function loadAll(options) {
   }
 }
 loadAll({ deferSecondary: true });
-// 持仓 + 实时盈亏: 每 3 秒刷
-setInterval(loadOpenPositions, 15000);
-// status + 顶部统计卡: 每 60 秒刷
-setInterval(loadStatus, 60000);
-// 盈亏统计: 每 60 秒刷
-setInterval(loadExploreStats, 60000);
+explorePoll.register(loadOpenPositions, 15000, function () { return explorePoll.tabVisible('tab-explore'); });
+explorePoll.register(loadStatus, 60000, function () { return explorePoll.tabVisible('tab-explore'); });
+explorePoll.register(loadExploreStats, 60000, function () { return explorePoll.tabVisible('tab-explore'); });
 
 // ============================================================
 // DEEPSEEK PREDICT - STATUS
@@ -1026,6 +1024,7 @@ function togglePredictVerdicts(runId) {
       var verdictsHtml = buildVerdictsTable(vs, true);
       var html = buildRunDetailShell(runId, 'p-', '/api/deepseek-predict', verdictsHtml);
       _pVerdictsCache[runId] = html;
+      exploreTrimCache(_pVerdictsCache);
       cell.innerHTML = html;
     })
     .catch(function(e){
@@ -1043,25 +1042,20 @@ function loadPredictAll() {
   loadPredictClosedPositions();
   loadPredictStats();
 }
-// Predict tab: 每 3 秒刷持仓
-setInterval(function(){
-  if (!document.getElementById('tab-predict').classList.contains('hidden')) {
-    loadPredictOpenPositions();
-  }
-}, 3000);
-// Predict tab: 每 30 秒刷状态
-setInterval(function(){
-  if (!document.getElementById('tab-predict').classList.contains('hidden')) {
-    loadPredictStatus();
-  }
-}, 30000);
-// Predict tab: 每 30 秒刷盈亏统计 + 运行记录
-setInterval(function(){
-  if (!document.getElementById('tab-predict').classList.contains('hidden')) {
-    loadPredictStats();
-    loadPredictRuns();
-  }
-}, 30000);
+// Predict tab: 仅可见时轮询
+explorePoll.register(function () {
+  if (!explorePoll.tabVisible('tab-predict')) return;
+  loadPredictOpenPositions();
+}, 15000);
+explorePoll.register(function () {
+  if (!explorePoll.tabVisible('tab-predict')) return;
+  loadPredictStatus();
+}, 60000);
+explorePoll.register(function () {
+  if (!explorePoll.tabVisible('tab-predict')) return;
+  loadPredictStats();
+  loadPredictRuns();
+}, 60000);
 
 // URL ?tab= 直达 — 在 big4_analysis_tab.js 加载后执行 (见下方 script)
 </script>
@@ -1077,11 +1071,10 @@ Big4AnalysisTab.init({ api: '/api/deepseek-big4-analysis' });
   else if (tab === 'midline-long' || tab === 'midline-short') switchTab(tab);
   else if (tab) switchTab(tab);
 })();
-setInterval(function(){
-  if (!document.getElementById('tab-big4').classList.contains('hidden')) {
-    Big4AnalysisTab.loadAll({ api: '/api/deepseek-big4-analysis' });
-  }
-}, 30000);
+explorePoll.register(function () {
+  if (!explorePoll.tabVisible('tab-big4')) return;
+  Big4AnalysisTab.loadPoll({ api: '/api/deepseek-big4-analysis' });
+}, 60000);
 </script>
 
 </body>

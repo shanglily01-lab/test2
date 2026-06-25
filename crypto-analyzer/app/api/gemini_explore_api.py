@@ -144,18 +144,11 @@ def status():
                 )
                 last_run = cur.fetchone()
 
-                cur.execute(
-                    "SELECT COUNT(*) AS cnt FROM futures_positions "
-                    "WHERE source='gemini_explore' AND status='open' AND account_id=2"
-                )
-                open_count = int((cur.fetchone() or {}).get('cnt', 0) or 0)
+                from app.utils.explore_page_stats import status_counts
 
-                cur.execute(
-                    "SELECT COUNT(*) AS cnt FROM futures_positions "
-                    "WHERE source='gemini_explore' AND status='closed' AND account_id=2 "
-                    "AND close_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
-                )
-                closed_30d = int((cur.fetchone() or {}).get('cnt', 0) or 0)
+                counts = status_counts("gemini_explore", cur=cur)
+                open_count = counts["open_positions"]
+                closed_30d = counts["closed_positions_30d"]
         finally:
             conn.close()
 
@@ -242,18 +235,18 @@ def list_runs(limit: int = Query(20, ge=1, le=200)):
 
 
 @router.get("/runs/{run_id}/detail")
-def get_run_detail(run_id: int):
-    """返回某轮的完整 prompt 与模型原始 JSON 响应."""
+def get_run_detail(
+    run_id: int,
+    field: Optional[str] = Query(None, pattern="^(prompt|raw)$"),
+):
+    """返回某轮 prompt 或原始 JSON；field=prompt|raw 时只拉单列，减轻页面卡顿."""
     try:
+        from app.utils.explore_api_helpers import fetch_run_detail_row
+
         conn = _connect()
         try:
             with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, prompt_text, raw_response, summary_zh "
-                    "FROM gemini_explore_runs WHERE id=%s",
-                    (run_id,),
-                )
-                row = cur.fetchone()
+                row = fetch_run_detail_row(cur, "gemini_explore_runs", run_id, field)
         finally:
             conn.close()
         if not row:
@@ -397,61 +390,16 @@ def list_positions_live():
 def stats(days: int = Query(30, ge=1, le=365)):
     """返回 Gemini 探索的累计盈亏统计."""
     try:
+        from app.utils.explore_page_stats import explore_stats_payload
+
         conn = _connect()
         try:
             with conn.cursor() as cur:
-                from app.utils.pnl_stats import PNL_COUNT_SELECT, parse_pnl_counts
-
-                cur.execute(
-                    f"""
-                    SELECT
-                        {PNL_COUNT_SELECT},
-                        COALESCE(SUM(realized_pnl), 0) AS total_pnl,
-                        COALESCE(AVG(realized_pnl), 0) AS avg_pnl
-                    FROM futures_positions
-                    WHERE source='gemini_explore' AND status='closed' AND account_id=2
-                      AND close_time >= DATE_SUB(NOW(), INTERVAL %s DAY)
-                    """,
-                    (days,),
-                )
-                row = cur.fetchone()
-                counts = parse_pnl_counts(row)
-                total = counts["total_trades"]
-                wins = counts["wins"]
-                losses = counts["losses"]
-                breakeven = counts["breakeven"]
-
-                cur.execute(
-                    """
-                    SELECT COALESCE(SUM(unrealized_pnl), 0) AS floating_pnl
-                    FROM futures_positions
-                    WHERE source='gemini_explore' AND status='open' AND account_id=2
-                    """
-                )
-                floating_row = cur.fetchone() or {}
+                data = explore_stats_payload("gemini_explore", days=days, cur=cur)
         finally:
             conn.close()
 
-        floating_pnl = float(floating_row.get('floating_pnl') or 0)
-
-        total_pnl = float(row['total_pnl'] or 0)
-        avg_pnl = float(row['avg_pnl'] or 0)
-
-        return {
-            "success": True,
-            "data": {
-                "total_trades": total,
-                "wins": wins,
-                "losses": losses,
-                "breakeven": breakeven,
-                "win_rate": counts["win_rate"],
-                "total_realized_pnl": round(total_pnl, 2),
-                "avg_realized_pnl": round(avg_pnl, 2),
-                "floating_pnl": round(floating_pnl, 2),
-                "total_pnl": round(total_pnl + floating_pnl, 2),
-                "days": days,
-            },
-        }
+        return {"success": True, "data": data}
     except Exception as e:
         logger.error(f"[Gemini探索 API] /stats 失败: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
