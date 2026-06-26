@@ -19,10 +19,7 @@ from dotenv import load_dotenv, dotenv_values
 # 导入 WebSocket 价格服务
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from app.services.binance_ws_price import get_ws_price_service, BinanceWSPriceService
-from app.services.adaptive_optimizer import AdaptiveOptimizer
-from app.services.optimization_config import OptimizationConfig
 from app.utils.futures_symbol import futures_symbol_rating_canonical
-from app.services.volatility_profile_updater import VolatilityProfileUpdater
 from app.services.smart_exit_optimizer import SmartExitOptimizer
 from app.services.big4_trend_detector import Big4TrendDetector
 from app.services.breakout_signal_booster import BreakoutSignalBooster
@@ -1207,16 +1204,6 @@ class SmartTraderService:
         # WebSocket 价格服务
         self.ws_service: BinanceWSPriceService = get_ws_price_service()
 
-        # 自适应优化器
-        self.optimizer = AdaptiveOptimizer(self.db_config)
-        self.last_optimization_date = None  # 记录上次优化日期
-
-        # 优化配置管理器 (支持自我优化的参数配置)
-        self.opt_config = OptimizationConfig(self.db_config)
-
-        # 波动率配置更新器 (15M K线动态止盈)
-        self.volatility_updater = VolatilityProfileUpdater(self.db_config)
-
         # 市场状态监控器（操纵子原理：自动感知市场状态，切换allow_long/allow_short）
         self.regime_monitor = Big4RegimeMonitor(self.db_config)
 
@@ -1288,8 +1275,7 @@ class SmartTraderService:
         logger.info(f"账户ID: {self.account_id}")
         logger.info(f"仓位: 正常${self.position_size_usdt} / 黑名单${self.blacklist_position_size_usdt} | 杠杆: {self.leverage}x | 最大持仓: {self.max_positions}")
         logger.info(f"白名单: {len(self.brain.whitelist)}个币种 | 黑名单: {len(self.brain.blacklist)}个币种 | 扫描间隔: {self.scan_interval}秒")
-        logger.info("🧠 自适应优化器已启用 (每日凌晨2点自动运行)")
-        logger.info("🔧 优化配置管理器已启用 (支持4大优化问题的自我配置)")
+        logger.info("持仓监控模式 (趋势开仓扫描已下线)")
         logger.info("=" * 60)
 
     def _get_connection(self):
@@ -2669,133 +2655,6 @@ class SmartTraderService:
             logger.error(f"异步平仓失败: {symbol} {direction} | {e}")
             return {'success': False, 'error': str(e)}
 
-    def run_adaptive_optimization(self):
-        """运行自适应优化 - 每日定时任务"""
-        try:
-            logger.info("=" * 80)
-            logger.info("🧠 开始运行自适应优化...")
-            logger.info("=" * 80)
-
-            # 生成24小时优化报告
-            report = self.optimizer.generate_optimization_report(hours=24)
-
-            # 打印报告
-            self.optimizer.print_report(report)
-
-            # 检查是否有高严重性问题
-            high_severity_count = report['summary']['high_severity_issues']
-
-            if high_severity_count > 0:
-                logger.warning(f"🔴 发现 {high_severity_count} 个高严重性问题!")
-                # TODO: 发送Telegram通知 (需要集成telegram bot)
-
-            # 自动应用优化 (黑名单 + 参数调整)
-            if report['blacklist_candidates'] or report['problematic_signals']:
-                logger.info(f"📝 准备应用优化:")
-                if report['blacklist_candidates']:
-                    logger.info(f"   🚫 黑名单候选: {len(report['blacklist_candidates'])} 个")
-                if report['problematic_signals']:
-                    logger.info(f"   ⚙️  问题信号: {len(report['problematic_signals'])} 个")
-
-                # 自动应用优化 (包括参数调整和权重调整)
-                results = self.optimizer.apply_optimizations(report, auto_apply=True, apply_params=True, apply_weights=True)
-
-                if results['blacklist_added']:
-                    logger.info(f"✅ 自动添加 {len(results['blacklist_added'])} 个交易对到黑名单")
-                    for item in results['blacklist_added']:
-                        logger.info(f"   ➕ {item['symbol']} - {item['reason']}")
-
-                if results['params_updated']:
-                    logger.info(f"✅ 自动调整 {len(results['params_updated'])} 个参数")
-                    for update in results['params_updated']:
-                        logger.info(f"   📊 {update}")
-
-                if results.get('weights_adjusted'):
-                    logger.info(f"✅ 自动调整 {len(results['weights_adjusted'])} 个评分权重")
-
-                # 重新加载配置以应用所有更新
-                if results['blacklist_added'] or results['params_updated'] or results.get('weights_adjusted'):
-                    whitelist_count = self.brain.reload_config()
-                    logger.info(f"🔄 配置已重新加载，当前可交易: {whitelist_count} 个币种")
-
-                if results['warnings']:
-                    logger.warning("⚠️ 优化警告:")
-                    for warning in results['warnings']:
-                        logger.warning(f"   {warning}")
-            else:
-                logger.info("✅ 无需加入黑名单的交易对")
-
-            logger.info("=" * 80)
-            logger.info("🧠 自适应优化完成")
-            logger.info("=" * 80)
-
-        except Exception as e:
-            logger.error(f"❌ 自适应优化失败: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
-
-    def check_and_run_daily_optimization(self):
-        """检查是否需要运行每日优化 (凌晨2点)"""
-        try:
-            now = datetime.now()
-            current_date = now.date()
-
-            # 检查是否是凌晨2点且今天还没运行过
-            if now.hour == 2 and self.last_optimization_date != current_date:
-                logger.info(f"⏰ 触发每日自适应优化 (时间: {now.strftime('%Y-%m-%d %H:%M:%S')})")
-
-                # 1. 运行原有的自适应优化 (参数调整)
-                self.run_adaptive_optimization()
-
-                # 2. 更新交易对评级 + TOP50（统一核心机制，update_top_performers 一步完成）
-                logger.info("=" * 80)
-                logger.info("🏆 开始更新 TOP50 + 交易对评级 (统一核心机制)")
-                logger.info("=" * 80)
-                from app.services.rating_refresh_schedule import run_rating_refresh_if_due
-                run_rating_refresh_if_due(manual=True, triggered_by="smart_trader_daily_2am")
-
-                # 3. 问题4优化: 更新波动率配置 (15M K线动态止盈)
-                logger.info("=" * 80)
-                logger.info("📊 开始更新波动率配置 (15M K线动态止盈)")
-                logger.info("=" * 80)
-                volatility_results = self.volatility_updater.update_all_symbols_volatility(self.brain.whitelist)
-                self.volatility_updater.print_volatility_report(volatility_results)
-
-                # 4. 新增: 评估信号黑名单（动态升级/降级）
-                logger.info("=" * 80)
-                logger.info("🔍 开始评估信号黑名单（动态管理）")
-                logger.info("=" * 80)
-                try:
-                    from app.services.signal_blacklist_reviewer import SignalBlacklistReviewer
-                    reviewer = SignalBlacklistReviewer(self.db_config)
-                    review_results = reviewer.review_all_blacklisted_signals()
-                    reviewer.close()
-
-                    # 打印评估结果摘要
-                    if review_results['removed']:
-                        logger.info(f"✅ 解除黑名单: {len(review_results['removed'])} 个信号")
-                        for item in review_results['removed'][:5]:  # 只显示前5个
-                            logger.info(f"   - {item['signal'][:50]} ({item['side']})")
-                    if review_results['upgraded']:
-                        logger.info(f"📈 降低等级: {len(review_results['upgraded'])} 个信号")
-                    if review_results['downgraded']:
-                        logger.warning(f"📉 提高等级: {len(review_results['downgraded'])} 个信号")
-
-                    # 如果有信号被解除黑名单，重新加载配置
-                    if review_results['removed'] or review_results['upgraded']:
-                        logger.info("🔄 重新加载黑名单配置...")
-                        self.brain.reload_blacklist()
-
-                except Exception as e:
-                    logger.error(f"❌ 信号黑名单评估失败: {e}")
-                    import traceback
-                    logger.error(traceback.format_exc())
-
-                self.last_optimization_date = current_date
-
-        except Exception as e:
-            logger.error(f"检查每日优化失败: {e}")
-
     async def init_ws_service(self):
         """初始化 WebSocket 价格服务"""
         try:
@@ -3033,7 +2892,6 @@ class SmartTraderService:
     def run(self):
         """主循环"""
         last_smart_exit_check = datetime.now()
-        last_blacklist_reload = datetime.now()
         last_config_reload = datetime.now()
         last_regime_check = datetime.now()  # 市场状态机检测（每小时一次）
         last_reconcile = datetime.now()     # 实盘持仓对账（每5分钟）
@@ -3041,14 +2899,7 @@ class SmartTraderService:
 
         while self.running:
             try:
-                # 0. 检查是否需要运行每日自适应优化 (凌晨2点)
-                self.check_and_run_daily_optimization()
-
-                # 0.5. 定期重新加载黑名单 (每5分钟)
                 now = datetime.now()
-                if (now - last_blacklist_reload).total_seconds() >= 300:  # 5分钟
-                    self.brain._reload_blacklist()
-                    last_blacklist_reload = now
 
                 # 0.55. 市场状态机检测（每小时一次，操纵子原理）
                 # 根据Big4过去48H趋势分布自动更新allow_long/allow_short
@@ -3171,29 +3022,6 @@ async def async_main():
     # 创建后台任务
     asyncio.create_task(update_account_stats_task())
     logger.info("✅ 账户统计定时更新任务已启动（每5分钟）")
-
-    # TOP50 + 评级：与 crypto-scheduler 共用 next_due（15min 轮询，4h 周期）
-    from app.services.rating_refresh_schedule import (
-        RATING_REFRESH_POLL_MINUTES,
-        run_rating_refresh_if_due,
-    )
-
-    async def update_top_performers_task():
-        poll_s = RATING_REFRESH_POLL_MINUTES * 60
-        while True:
-            try:
-                await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: run_rating_refresh_if_due(triggered_by="smart_trader_poll"),
-                )
-            except Exception as e:
-                logger.error(f"❌ TOP50 + 交易对评级更新失败: {e}")
-            await asyncio.sleep(poll_s)
-
-    asyncio.create_task(update_top_performers_task())
-    logger.info(
-        f"✅ TOP50 + 交易对评级轮询已启动（每{RATING_REFRESH_POLL_MINUTES}分钟检查，4h 周期）"
-    )
 
     # 在事件循环中运行同步的主循环
     loop = asyncio.get_event_loop()

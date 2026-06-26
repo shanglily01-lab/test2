@@ -436,105 +436,12 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  启动实盘订单监控任务失败: {e}")
             live_order_monitor = None
 
-    # 信号分析后台服务已从 main 移除 (2026-05-19)
-        # 日终维护已移至 scheduler.py (每天 02:05 TOP50 + 统一评级)
+    # 信号分析 / 超级大脑自我优化已从 main 移除 (趋势策略下线)
     signal_analysis_service = None
-
-    # 启动每日优化服务（每天凌晨1点执行）
     daily_optimizer_task = None
+
     try:
         import schedule
-        from app.services.auto_parameter_optimizer import AutoParameterOptimizer
-
-        # 配置数据库（从 mysql 子配置读取）
-        mysql_config = config['database']['mysql']
-        db_config = {
-            'host': mysql_config['host'],
-            'port': mysql_config['port'],
-            'user': mysql_config['user'],
-            'password': mysql_config['password'],
-            'database': mysql_config['database']
-        }
-
-        # 定义优化任务
-        def run_daily_optimization():
-            """执行超级大脑自我优化（每4小时）"""
-            try:
-                import subprocess
-                import json
-                from pathlib import Path
-
-                logger.info("=" * 80)
-                logger.info("🧠 开始执行超级大脑自我优化...")
-                logger.info("=" * 80)
-
-                # 1. 运行24小时信号分析
-                logger.info("📊 分析最近24小时信号盈亏...")
-                result = subprocess.run(
-                    ['python', str(project_root / 'app' / 'analyze_24h_signals.py')],
-                    capture_output=True,
-                    text=True,
-                    timeout=300  # 5分钟超时
-                )
-
-                if result.returncode != 0:
-                    logger.error(f"❌ 信号分析失败: {result.stderr}")
-                    return
-
-                logger.info("✅ 信号分析完成")
-
-                # 2. 检查是否有优化建议
-                optimization_file = Path('optimization_actions.json')
-                if not optimization_file.exists():
-                    logger.info("ℹ️  未发现需要优化的信号")
-                    return
-
-                # 读取优化建议
-                with open(optimization_file, 'r', encoding='utf-8') as f:
-                    optimization_data = json.load(f)
-
-                actions = optimization_data.get('actions', [])
-                if not actions:
-                    logger.info("ℹ️  没有需要执行的优化操作")
-                    return
-
-                logger.info(f"📋 发现 {len(actions)} 个优化操作待执行")
-
-                # 3. 执行优化
-                logger.info("🔧 执行优化操作...")
-                result = subprocess.run(
-                    ['python', str(project_root / 'app' / 'execute_brain_optimization.py')],
-                    capture_output=True,
-                    text=True,
-                    timeout=300
-                )
-
-                if result.returncode != 0:
-                    logger.error(f"❌ 优化执行失败: {result.stderr}")
-                    return
-
-                logger.info("✅ 超级大脑优化完成")
-
-                # 4. 输出优化结果摘要
-                blacklisted = [a for a in actions if a['action'] == 'BLACKLIST_SIGNAL']
-                threshold_raised = [a for a in actions if a['action'] == 'RAISE_THRESHOLD']
-
-                if blacklisted:
-                    logger.info(f"  🚫 已禁用 {len(blacklisted)} 个低质量信号")
-                if threshold_raised:
-                    logger.info(f"  ⬆️  已提高 {len(threshold_raised)} 个信号阈值")
-
-                logger.info("=" * 80)
-
-            except subprocess.TimeoutExpired:
-                logger.error("❌ 优化任务超时（超过5分钟）")
-            except Exception as e:
-                logger.error(f"❌ 超级大脑优化失败: {e}")
-                import traceback
-                logger.error(traceback.format_exc())
-
-        # 配置定时任务：每4小时执行一次
-        schedule.every(4).hours.do(run_daily_optimization)
 
         # 定义12小时复盘分析任务
         def run_12h_retrospective():
@@ -818,9 +725,8 @@ async def lifespan(app: FastAPI):
                 await asyncio.sleep(_sleep)
 
         spawn(schedule_runner())
-        logger.info("✅ 超级大脑自我优化服务已启动（每4小时执行一次）")
         logger.info("✅ 12小时复盘分析服务已启动（每天00:00和12:00执行）")
-        logger.info("✅ 子进程周期调度已启动：评分5m / 技术信号15m / Dashboard聪明钱30m / 数据管理&采集情况2h")
+        logger.info("✅ 子进程周期调度已启动：技术信号15m / Dashboard聪明钱30m / 数据管理&采集情况2h")
 
     except Exception as e:
         logger.warning(f"⚠️  启动超级大脑优化服务失败: {e}")
