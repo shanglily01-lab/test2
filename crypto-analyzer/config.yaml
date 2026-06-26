@@ -5,8 +5,6 @@ advanced:
   multi_strategy:
     enabled: false
     strategies:
-    - trend_following
-    - mean_reversion
     - breakout
   onchain:
     bscscan_api_key: ''

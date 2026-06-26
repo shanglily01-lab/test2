@@ -56,6 +56,7 @@ data/*.xlsx
 !migrations/017_create_gpt_tactical_predict_tables.sql
 !migrations/019_tactical_explore_screened.sql
 !migrations/020_midline_runtime_settings.sql
+!migrations/021_remove_trend_btc_settings.sql
 
 # 系统文件
 .DS_Store

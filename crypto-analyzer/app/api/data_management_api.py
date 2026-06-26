@@ -481,8 +481,6 @@ async def get_data_statistics():
             {'name': 'parameter_adjustments',             'label': '参数调整',        'description': '系统参数调整历史',            'is_binance': False, 'category': '系统配置'},
             {'name': 'trading_control',                   'label': '交易控制',        'description': '交易开关控制',                'is_binance': False, 'category': '系统配置'},
             {'name': 'trading_cooldowns',                 'label': '交易冷却',        'description': '币种交易冷却时间',            'is_binance': False, 'category': '系统配置'},
-            {'name': 'trading_mode_config',               'label': '交易模式配置',    'description': '交易模式相关配置',            'is_binance': False, 'category': '系统配置'},
-            {'name': 'trading_mode_switch_log',           'label': '交易模式切换',    'description': '交易模式切换日志',            'is_binance': False, 'category': '系统配置'},
             # ---- 系统管理 ----
             {'name': 'users',                             'label': '用户表',          'description': '系统用户信息',                'is_binance': False, 'category': '系统管理'},
             {'name': 'login_logs',                        'label': '登录日志',        'description': '用户登录记录',                'is_binance': False, 'category': '系统管理'},

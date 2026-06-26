@@ -268,24 +268,6 @@
 <p class="cfg-l2-label">2.1 子策略</p>
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#49f4c8] text-xl shrink-0">rocket_launch</span>
-<div><div class="text-sm font-medium text-slate-200">BTC 动量跟随</div></div>
-</div>
-<div id="btcMomentumToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#f97316] text-xl shrink-0">waves</span>
-<div><div class="text-sm font-medium text-slate-200">趋势策略</div><p class="text-[11px] text-slate-500">smart_trader 趋势跟随 · 仅模拟盘</p></div>
-</div>
-<div id="trendFollowingToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#00e676] text-xl shrink-0">auto_awesome</span>
 <div><div class="text-sm font-medium text-slate-200">Gemini 探索</div><p class="text-[11px] text-slate-500">每 2h 检测方向异动，模拟单持仓 2h · SL 2% / TP 3%</p></div>
 </div>
@@ -356,19 +338,6 @@
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
 </div>
 </div>
-</div>
-<div class="cfg-l2">
-<p class="cfg-l2-label">2.2 主策略模式</p>
-<p class="text-[11px] text-slate-500 mb-3 leading-relaxed border-l-2 border-slate-700/80 pl-3">
-  <strong class="text-slate-400">勾选才启用</strong>信号确认路径；Big4 STRONG_BULLISH/STRONG_BEARISH 时触发开仓。BTC 动量为上方独立开关。
-</p>
-<label class="flex items-start justify-between gap-4 py-3 cursor-pointer group">
-<div class="min-w-0">
-<span class="text-sm font-medium text-slate-200 group-hover:text-white">信号确认</span>
-<p class="text-xs text-slate-500 mt-1">Big4 强势路径（STRONG_BULLISH / STRONG_BEARISH）</p>
-</div>
-<input id="signalConfirmCheckbox" type="checkbox" class="mt-1 w-4 h-4 rounded border-slate-600 bg-[#151a20] text-[#49f4c8] focus:ring-[#49f4c8]/40" />
-</label>
 </div>
 </section>
 
@@ -744,8 +713,6 @@
                 setToggle('usdtToggle', svc.usdt_futures_enabled !== false);
 
                 // 策略开关
-                setToggle('btcMomentumToggle', !!svc.btc_momentum_enabled);
-                setToggle('trendFollowingToggle', !!svc.trend_following_enabled);
                 setToggle('geminiExploreToggle', !!svc.gemini_explore_enabled);
                 setToggle('geminiPredictToggle', !!svc.gemini_predict_enabled);
                 setToggle('deepseekExploreToggle', !!svc.deepseek_explore_enabled);
@@ -760,8 +727,6 @@
                     big4Setting.value === 'true' ||
                     big4Setting.value === 1
                 );
-                var scCb = document.getElementById('signalConfirmCheckbox');
-                if (scCb) scCb.checked = !!svc.signal_confirmation_enabled;
                 // 最大持仓时长
                 const sel = document.getElementById('maxHoldHoursSelect');
                 if (sel) {
@@ -949,28 +914,6 @@
             }
         });
 
-        // BTC动量跟随
-        bindToggle('btcMomentumToggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { btc_momentum_enabled: enabled });
-                showToast('BTC动量跟随已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
-        // 趋势策略
-        bindToggle('trendFollowingToggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { trend_following_enabled: enabled });
-                showToast('趋势策略已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
         // Gemini 探索
         bindToggle('geminiExploreToggle', async function (enabled) {
             try {
@@ -1075,20 +1018,6 @@
             }
         });
 
-        // 信号确认（复选框）
-        var scCbEl = document.getElementById('signalConfirmCheckbox');
-        if (scCbEl) {
-            scCbEl.addEventListener('change', async function () {
-                try {
-                    await apiPut('/trading-services', { signal_confirmation_enabled: this.checked });
-                    showToast('信号确认已' + (this.checked ? '开启' : '关闭'), false);
-                } catch (err) {
-                    showToast('保存失败: ' + err.message, true);
-                    this.checked = !this.checked;
-                }
-            });
-        }
-
         // ---------------------------------------------------------------
         // 最大持仓时长 select
         // ---------------------------------------------------------------
@@ -1131,8 +1060,6 @@
                         apiPut('/trading-services', {
                             live_trading_enabled: getToggle('liveToggle'),
                             usdt_futures_enabled: getToggle('usdtToggle'),
-                            btc_momentum_enabled: getToggle('btcMomentumToggle'),
-                            signal_confirmation_enabled: document.getElementById('signalConfirmCheckbox')?.checked ?? false,
                             smart_exit_enabled: getToggle('smartExitToggle'),
                             live_whitelist_enabled: getToggle('liveWhitelistToggle'),
                             stop_loss_pct: slVal,

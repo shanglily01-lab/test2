@@ -687,7 +687,7 @@ class BinanceFuturesEngine:
             # 5.5. 添加 clientOrderId 标记策略来源（在交易所订单列表可见）
             source_prefix = source.lower().replace(' ', '_')
             known_sources = {
-                'btc_momentum', 'predictor',
+                'predictor',
             }
             if source_prefix in known_sources:
                 # newClientOrderId 最长 36 字符，截短以防溢出

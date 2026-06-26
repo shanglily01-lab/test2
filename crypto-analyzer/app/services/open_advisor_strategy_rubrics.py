@@ -44,12 +44,10 @@ def _match_source(source: str) -> str:
         return "predict"
     if "explore" in s:
         return "explore"
-    if "btc_momentum" in s or s == "btc_momentum":
-        return "btc_momentum"
-    if s in ("smart_trader", "smart_trader_sync") or "signal_confirm" in s or "trend_follow" in s:
+    if s in ("smart_trader", "smart_trader_sync", "btc_momentum", "BTC_MOMENTUM") or "signal_confirm" in s or "trend_follow" in s:
         return "smart_trader"
     if "bollinger" in s or "mean_reversion" in s:
-        return "mean_reversion"
+        return "generic"
     if "pullback" in s or "kline_pullback" in s:
         return "pullback"
     return "generic"
@@ -134,15 +132,6 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
             "- 1h 保留作同窗口对照；**不得**用 1h/RSI 替代 15m 趋势定方向。"
         ),
     ),
-    "btc_momentum": OpenAdvisorStrategyProfile(
-        key="btc_momentum",
-        title_zh="BTC 动量",
-        expected_side=None,
-        rubric=(
-            "BTC 动量：方向须与 BTC 短周期动量一致；"
-            "逆势且无独立强 catalyst → reject。"
-        ),
-    ),
     "smart_trader": OpenAdvisorStrategyProfile(
         key="smart_trader",
         title_zh="主策略/smart_trader",
@@ -150,15 +139,6 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
         rubric=(
             "主策略：须综合 1h/15m 形态、RSI、成交量与 entry_reason；"
             "方向与 K 线多维一致才 approve；震荡/趋势模式不匹配或信号含糊 → reject。"
-        ),
-    ),
-    "mean_reversion": OpenAdvisorStrategyProfile(
-        key="mean_reversion",
-        title_zh="布林均值回归",
-        expected_side=None,
-        rubric=(
-            "震荡市均值回归：须在震荡区间边缘；"
-            "强趋势突破追单 → reject。"
         ),
     ),
     "generic": OpenAdvisorStrategyProfile(

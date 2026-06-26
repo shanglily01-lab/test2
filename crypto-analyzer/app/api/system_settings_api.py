@@ -74,10 +74,7 @@ class TradingServicesUpdate(BaseModel):
     live_close_enabled: Optional[bool] = None       # 2026-05-22 实盘平仓独立开关
     spot_trading_enabled: Optional[bool] = None      # 2026-05-23 现货交易开关
     spot_close_enabled: Optional[bool] = None         # 2026-05-23 现货自动卖出开关
-    btc_momentum_enabled: Optional[bool] = None
     u_coin_style_enabled: Optional[bool] = None
-    signal_confirmation_enabled: Optional[bool] = None
-    trend_following_enabled: Optional[bool] = None
     gemini_explore_enabled: Optional[bool] = None   # 2026-05-27 Gemini 探索
     gemini_predict_enabled: Optional[bool] = None   # 2026-05-27 Gemini 预测
     deepseek_explore_enabled: Optional[bool] = None   # DeepSeek 探索
@@ -423,8 +420,7 @@ async def get_trading_services():
             WHERE setting_key IN ('u_futures_trading_enabled',
                                   'live_trading_enabled', 'live_close_enabled',
                                   'spot_trading_enabled', 'spot_close_enabled',
-                                  'btc_momentum_enabled', 'u_coin_style_enabled',
-                                  'signal_confirmation_enabled', 'trend_following_enabled',
+                                  'u_coin_style_enabled',
                                   'gemini_explore_enabled', 'gemini_predict_enabled',
                                   'deepseek_explore_enabled', 'deepseek_predict_enabled',
                                   'gemini_position_advisor_enabled',
@@ -452,10 +448,7 @@ async def get_trading_services():
             'live_close_enabled': 'live_close_enabled',
             'spot_trading_enabled': 'spot_trading_enabled',
             'spot_close_enabled': 'spot_close_enabled',
-            'btc_momentum_enabled': 'btc_momentum_enabled',
             'u_coin_style_enabled': 'u_coin_style_enabled',
-            'signal_confirmation_enabled': 'signal_confirmation_enabled',
-            'trend_following_enabled': 'trend_following_enabled',
             'gemini_explore_enabled': 'gemini_explore_enabled',
             'gemini_predict_enabled': 'gemini_predict_enabled',
             'deepseek_explore_enabled': 'deepseek_explore_enabled',
@@ -477,10 +470,7 @@ async def get_trading_services():
             'live_close_enabled': True,
             'spot_trading_enabled': True,
             'spot_close_enabled': True,
-            'btc_momentum_enabled': True,
             'u_coin_style_enabled': False,
-            'signal_confirmation_enabled': False,
-            'trend_following_enabled': False,
             'gemini_explore_enabled': False,
             'gemini_predict_enabled': True,
             'deepseek_explore_enabled': False,
@@ -626,19 +616,6 @@ async def update_trading_services(data: TradingServicesUpdate):
             status = '启动' if data.spot_close_enabled else '暂停'
             updates.append(f"现货卖出: {status}")
 
-        if data.btc_momentum_enabled is not None:
-            value = '1' if data.btc_momentum_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('btc_momentum_enabled', %s, 'BTC动量跟随开关 (1=启用, 0=禁用)', 'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            status = '启动' if data.btc_momentum_enabled else '暂停'
-            updates.append(f"BTC动量跟随: {status}")
-
         if data.u_coin_style_enabled is not None:
             value = '1' if data.u_coin_style_enabled else '0'
             cursor.execute("""
@@ -651,30 +628,6 @@ async def update_trading_services(data: TradingServicesUpdate):
             """, (value,))
             status = '启动' if data.u_coin_style_enabled else '暂停'
             updates.append(f"U本位破位策略: {status}")
-
-        if data.signal_confirmation_enabled is not None:
-            value = '1' if data.signal_confirmation_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('signal_confirmation_enabled', %s, '信号确认模式开关 (1=启用, 0=禁用)', 'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            updates.append(f"信号确认: {'启用' if data.signal_confirmation_enabled else '禁用'}")
-
-        if data.trend_following_enabled is not None:
-            value = '1' if data.trend_following_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('trend_following_enabled', %s, '趋势跟随模式开关 (1=启用, 0=禁用)', 'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            updates.append(f"趋势跟随: {'启用' if data.trend_following_enabled else '禁用'}")
 
         if data.gemini_explore_enabled is not None:
             value = '1' if data.gemini_explore_enabled else '0'
