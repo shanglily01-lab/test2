@@ -57,6 +57,7 @@ data/*.xlsx
 !migrations/019_tactical_explore_screened.sql
 !migrations/020_midline_runtime_settings.sql
 !migrations/021_remove_trend_btc_settings.sql
+!migrations/022_position_stats_floating_pnl.sql
 
 # 系统文件
 .DS_Store

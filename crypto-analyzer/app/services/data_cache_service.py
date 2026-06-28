@@ -671,9 +671,7 @@ def refresh_position_stats() -> dict:
         conn = _get_conn()
         with conn.cursor() as cur:
 
-            # 清空旧数据
-            cur.execute("DELETE FROM data_cache.position_stats_snapshot")
-
+            # 禁止 DELETE 全表 — 空窗会导致探索页并发回退扫 futures_positions（见 2026-06 事故）
             sources = [
                 "gemini_explore",
                 "gemini_predict",
@@ -682,14 +680,26 @@ def refresh_position_stats() -> dict:
             ]
             account_id = 2
 
+            cur.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM information_schema.columns
+                WHERE table_schema='data_cache' AND table_name='position_stats_snapshot'
+                  AND column_name='floating_pnl'
+                """
+            )
+            has_floating_col = int((cur.fetchone() or {}).get("cnt") or 0) > 0
+
             def _agg(src: str) -> dict:
-                # 当前持仓数
+                # 当前持仓数 + 浮盈
                 cur.execute(
-                    f"SELECT COUNT(*) AS cnt FROM `{MAIN_DB}`.futures_positions "
+                    f"SELECT COUNT(*) AS cnt, COALESCE(SUM(unrealized_pnl), 0) AS floating "
+                    f"FROM `{MAIN_DB}`.futures_positions "
                     f"WHERE source=%s AND status='open' AND account_id=%s",
                     (src, account_id),
                 )
-                open_count = (cur.fetchone() or {}).get("cnt", 0) or 0
+                open_row = cur.fetchone() or {}
+                open_count = int(open_row.get("cnt", 0) or 0)
+                floating_pnl = float(open_row.get("floating", 0) or 0)
 
                 # 30d 聚合
                 cur.execute(
@@ -734,6 +744,7 @@ def refresh_position_stats() -> dict:
 
                 return {
                     "open_count": open_count,
+                    "floating_pnl": floating_pnl,
                     "closed_24h": int(r24.get("total", 0) or 0),
                     "closed_7d": int(r7.get("total", 0) or 0),
                     "closed_30d": total30,
@@ -750,9 +761,27 @@ def refresh_position_stats() -> dict:
                     "short_pnl": float(r30.get("short_pnl", 0) or 0),
                 }
 
-            for src in sources:
-                d = _agg(src)
-                cur.execute(
+            if has_floating_col:
+                _UPSERT_SQL = (
+                    "INSERT INTO data_cache.position_stats_snapshot "
+                    "(source, account_id, open_count, floating_pnl, closed_24h, closed_7d, closed_30d, "
+                    " pnl_24h, pnl_7d, pnl_30d, total_pnl, "
+                    " wins_30d, losses_30d, win_rate_30d, "
+                    " long_count, short_count, long_pnl, short_pnl) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, "
+                    " %s, %s, %s, %s, "
+                    " %s, %s, %s, %s, %s, %s, %s) "
+                    "ON DUPLICATE KEY UPDATE "
+                    " open_count=VALUES(open_count), floating_pnl=VALUES(floating_pnl), "
+                    " closed_24h=VALUES(closed_24h), closed_7d=VALUES(closed_7d), closed_30d=VALUES(closed_30d), "
+                    " pnl_24h=VALUES(pnl_24h), pnl_7d=VALUES(pnl_7d), pnl_30d=VALUES(pnl_30d), total_pnl=VALUES(total_pnl), "
+                    " wins_30d=VALUES(wins_30d), losses_30d=VALUES(losses_30d), win_rate_30d=VALUES(win_rate_30d), "
+                    " long_count=VALUES(long_count), short_count=VALUES(short_count), "
+                    " long_pnl=VALUES(long_pnl), short_pnl=VALUES(short_pnl), "
+                    " updated_at=CURRENT_TIMESTAMP"
+                )
+            else:
+                _UPSERT_SQL = (
                     "INSERT INTO data_cache.position_stats_snapshot "
                     "(source, account_id, open_count, closed_24h, closed_7d, closed_30d, "
                     " pnl_24h, pnl_7d, pnl_30d, total_pnl, "
@@ -760,15 +789,42 @@ def refresh_position_stats() -> dict:
                     " long_count, short_count, long_pnl, short_pnl) "
                     "VALUES (%s, %s, %s, %s, %s, %s, "
                     " %s, %s, %s, %s, "
-                    " %s, %s, %s, %s, %s, %s, %s)",
-                    (
-                        src, account_id,
-                        d["open_count"], d["closed_24h"], d["closed_7d"], d["closed_30d"],
-                        d["pnl_24h"], d["pnl_7d"], d["pnl_30d"], 0,
-                        d["wins_30d"], d["losses_30d"], d["win_rate_30d"],
-                        d["long_count"], d["short_count"], d["long_pnl"], d["short_pnl"],
-                    ),
+                    " %s, %s, %s, %s, %s, %s, %s) "
+                    "ON DUPLICATE KEY UPDATE "
+                    " open_count=VALUES(open_count), "
+                    " closed_24h=VALUES(closed_24h), closed_7d=VALUES(closed_7d), closed_30d=VALUES(closed_30d), "
+                    " pnl_24h=VALUES(pnl_24h), pnl_7d=VALUES(pnl_7d), pnl_30d=VALUES(pnl_30d), total_pnl=VALUES(total_pnl), "
+                    " wins_30d=VALUES(wins_30d), losses_30d=VALUES(losses_30d), win_rate_30d=VALUES(win_rate_30d), "
+                    " long_count=VALUES(long_count), short_count=VALUES(short_count), "
+                    " long_pnl=VALUES(long_pnl), short_pnl=VALUES(short_pnl), "
+                    " updated_at=CURRENT_TIMESTAMP"
                 )
+
+            for src in sources:
+                d = _agg(src)
+                if has_floating_col:
+                    cur.execute(
+                        _UPSERT_SQL,
+                        (
+                            src, account_id,
+                            d["open_count"], d["floating_pnl"],
+                            d["closed_24h"], d["closed_7d"], d["closed_30d"],
+                            d["pnl_24h"], d["pnl_7d"], d["pnl_30d"], 0,
+                            d["wins_30d"], d["losses_30d"], d["win_rate_30d"],
+                            d["long_count"], d["short_count"], d["long_pnl"], d["short_pnl"],
+                        ),
+                    )
+                else:
+                    cur.execute(
+                        _UPSERT_SQL,
+                        (
+                            src, account_id,
+                            d["open_count"], d["closed_24h"], d["closed_7d"], d["closed_30d"],
+                            d["pnl_24h"], d["pnl_7d"], d["pnl_30d"], 0,
+                            d["wins_30d"], d["losses_30d"], d["win_rate_30d"],
+                            d["long_count"], d["short_count"], d["long_pnl"], d["short_pnl"],
+                        ),
+                    )
 
             # "all" — 综合统计
             cur.execute(
@@ -784,22 +840,39 @@ def refresh_position_stats() -> dict:
             r_all = cur.fetchone() or {}
             all_total = int(r_all.get("cnt", 0) or 0)
             all_wins = int(r_all.get("wins", 0) or 0)
-            cur.execute(
-                "INSERT INTO data_cache.position_stats_snapshot "
-                "(source, account_id, closed_30d, pnl_30d, "
-                " wins_30d, losses_30d, win_rate_30d) "
-                "VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                (
-                    "all", account_id,
-                    all_total,
-                    float(r_all.get("total_pnl", 0) or 0),
-                    all_wins,
-                    all_total - all_wins,
-                    round(all_wins / all_total * 100, 2) if all_total > 0 else 0,
-                ),
-            )
+            if has_floating_col:
+                cur.execute(
+                    _UPSERT_SQL,
+                    (
+                        "all", account_id,
+                        0, 0.0,
+                        0, 0, all_total,
+                        0, 0, float(r_all.get("total_pnl", 0) or 0), 0,
+                        all_wins, all_total - all_wins,
+                        round(all_wins / all_total * 100, 2) if all_total > 0 else 0,
+                        0, 0, 0, 0,
+                    ),
+                )
+            else:
+                cur.execute(
+                    _UPSERT_SQL,
+                    (
+                        "all", account_id,
+                        0, 0, all_total,
+                        0, 0, float(r_all.get("total_pnl", 0) or 0), 0,
+                        all_wins, all_total - all_wins,
+                        round(all_wins / all_total * 100, 2) if all_total > 0 else 0,
+                        0, 0, 0, 0,
+                    ),
+                )
 
             conn.commit()
+
+        try:
+            from app.utils.explore_page_stats import invalidate_snapshot_mem_cache
+            invalidate_snapshot_mem_cache()
+        except Exception:
+            pass
 
         elapsed = int((time.time() - t0) * 1000)
         stat["elapsed_ms"] = elapsed

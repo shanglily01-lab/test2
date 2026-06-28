@@ -23,6 +23,8 @@ from loguru import logger
 
 from app.utils.futures_symbol import futures_symbol_rating_canonical
 from app.utils.position_display import canonicalize_symbol_fields
+from app.utils.explore_db_guard import apply_explore_read_guard
+from app.utils.explore_page_stats import explore_stats_payload, status_counts
 
 
 router = APIRouter(prefix="/api/deepseek-predict", tags=["DeepSeek预测"])
@@ -170,9 +172,7 @@ async def status():
                 )
                 last_run = cur.fetchone()
 
-                from app.utils.explore_page_stats import status_counts
-
-                counts = status_counts("deepseek_predict", cur=cur)
+                counts = status_counts("deepseek_predict")
                 open_count = counts["open_positions"]
                 closed_30d = counts["closed_positions_30d"]
         finally:
@@ -334,6 +334,7 @@ async def list_positions(
         conn = _connect()
         try:
             with conn.cursor() as cur:
+                apply_explore_read_guard(cur)
                 if status == 'open':
                     cur.execute(
                         "SELECT id, symbol, position_side, leverage, quantity, "
@@ -396,6 +397,7 @@ async def list_positions_live():
         conn = _connect()
         try:
             with conn.cursor() as cur:
+                apply_explore_read_guard(cur)
                 cur.execute(_OPEN_POSITIONS_SQL)
                 positions = cur.fetchall()
         finally:
@@ -420,15 +422,7 @@ async def list_positions_live():
 async def stats(days: int = Query(30, ge=1, le=365)):
     """返回 DeepSeek 预测的累计盈亏统计."""
     try:
-        from app.utils.explore_page_stats import explore_stats_payload
-
-        conn = _connect()
-        try:
-            with conn.cursor() as cur:
-                data = explore_stats_payload("deepseek_predict", days=days, cur=cur)
-        finally:
-            conn.close()
-
+        data = explore_stats_payload("deepseek_predict", days=days)
         return {"success": True, "data": data}
     except Exception as e:
         logger.error(f"[DeepSeek预测 API] /stats 失败: {e}", exc_info=True)

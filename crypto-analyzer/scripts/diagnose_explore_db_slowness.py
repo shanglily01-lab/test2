@@ -116,7 +116,9 @@ def main() -> int:
             )
             snap = cur.fetchall()
             if not snap:
-                print("  (空 — 探索页会回退扫主表，建议 POST /api/data-cache/refresh/position-stats)")
+                print("  (空 — 探索页 /status /stats 将显示 0 且 stats_stale=true)")
+                print("  → 执行: curl -X POST http://127.0.0.1:9020/api/data-cache/refresh/position-stats")
+                print("  → 并确认 migrations/019 + 022 已在生产执行")
             else:
                 for r in snap:
                     print(f"  {r['source']:20} open={r.get('open_count')} closed30={r.get('closed_30d')} wr={r.get('win_rate_30d')}")

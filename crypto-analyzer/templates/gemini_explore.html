@@ -669,10 +669,11 @@ function loadOpenPositions() {
     .finally(function(){ loadOpenPositions._loading = false; });
 }
 
-function loadClosedPositions() {
+function loadClosedPositions(force) {
   if (loadClosedPositions._loading) return;
+  if (!force && loadClosedPositions._loaded) return;
   loadClosedPositions._loading = true;
-  fetch('/api/gemini-explore/positions?status=closed&limit=200')
+  fetch('/api/gemini-explore/positions?status=closed&limit=80')
     .then(function(r){ return r.json(); })
     .then(function(d){
       var rows = d.data || [];
@@ -698,7 +699,10 @@ function loadClosedPositions() {
     .catch(function(e){
       document.getElementById('closed-tbody').innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载失败: ' + e + '</td></tr>';
     })
-    .finally(function(){ loadClosedPositions._loading = false; });
+    .finally(function(){
+      loadClosedPositions._loading = false;
+      loadClosedPositions._loaded = true;
+    });
 }
 
 // ============================================================
@@ -825,14 +829,15 @@ function loadAll(options) {
   loadStatus();
   loadOpenPositions();
   loadRuns();
+  loadExploreStats();
   if (options.deferSecondary) {
     setTimeout(function() {
-      loadExploreStats();
-      loadClosedPositions();
-    }, options.deferMs || 1000);
+      if (!document.hidden && explorePoll.tabVisible('tab-explore')) {
+        loadClosedPositions(true);
+      }
+    }, options.deferMs || 2500);
   } else {
-    loadClosedPositions();
-    loadExploreStats();
+    loadClosedPositions(true);
   }
 }
 loadAll({ deferSecondary: true });
