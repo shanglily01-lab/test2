@@ -159,618 +159,636 @@ async def lifespan(app: FastAPI):
         summary = get_config_summary(config)
         logger.debug(f"配置摘要: {summary}")
 
-    # 使用延迟导入，避免模块级别的初始化代码
-    try:
-        from app.collectors.price_collector import MultiExchangeCollector
-        from app.collectors.mock_price_collector import MockPriceCollector
-        from app.collectors.news_collector import NewsAggregator
-        from app.analyzers.technical_indicators import TechnicalIndicators
-        from app.analyzers.sentiment_analyzer import SentimentAnalyzer
-        from app.analyzers.signal_generator import SignalGenerator
-        # 启用缓存版Dashboard，提升性能
-        from app.api.enhanced_dashboard_cached import EnhancedDashboardCached as EnhancedDashboard
-
-        logger.info("🔄 开始初始化分析模块...")
-
-        # 初始化价格采集器
-        # 使用真实API从Binance和Gate.io获取数据
-        USE_REAL_API = True  # True=真实API, False=模拟数据
-
-        if USE_REAL_API:
-            try:
-                price_collector = MultiExchangeCollector(config)
-                logger.info("✅ 价格采集器初始化成功（真实API模式 - Binance ）")
-            except Exception as e:
-                logger.error(f"❌ 真实API初始化失败: {e}，切换到模拟模式")
-                price_collector = MockPriceCollector('binance_demo', config)
-                logger.info("✅ 价格采集器初始化成功（模拟模式 - 降级）")
-        else:
-            price_collector = MockPriceCollector('binance_demo', config)
-            logger.info("✅ 价格采集器初始化成功（模拟模式）")
-
-        # 初始化新闻采集器（可能在Windows上导致问题）
-        try:
-            news_aggregator = NewsAggregator(config)
-            logger.info("✅ 新闻采集器初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  新闻采集器初始化失败: {e}")
-            news_aggregator = None
-
-        # 初始化技术分析器
-        try:
-            technical_analyzer = TechnicalIndicators(config)
-            logger.info("✅ 技术分析器初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  技术分析器初始化失败: {e}")
-            technical_analyzer = None
-
-        # 初始化情绪分析器
-        try:
-            sentiment_analyzer = SentimentAnalyzer()
-            logger.info("✅ 情绪分析器初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  情绪分析器初始化失败: {e}")
-            sentiment_analyzer = None
-
-        # 初始化信号生成器
-        try:
-            signal_generator = SignalGenerator(config)
-            logger.info("✅ 信号生成器初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  信号生成器初始化失败: {e}")
-            signal_generator = None
-
-        # 初始化 EnhancedDashboard（缓存版）
-        try:
-            # EnhancedDashboard 需要完整的 config（它内部会提取 database 部分）
-            enhanced_dashboard = EnhancedDashboard(config, price_collector=price_collector)
-            logger.info("✅ EnhancedDashboard（缓存版）初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  EnhancedDashboard初始化失败: {e}")
-            enhanced_dashboard = None
-
-        # 初始化价格缓存服务
-        try:
-            from app.utils.config_loader import get_db_config
-            db_config = get_db_config()
-            price_cache_service = init_global_price_cache(db_config, update_interval=3)
-            logger.info("[OK] 价格缓存服务初始化成功（每3秒更新）")
-        except Exception as e:
-            logger.warning(f"[WARN] 价格缓存服务初始化失败: {e}")
-            price_cache_service = None
-
-        # 初始化 BinanceDataHub - 统一币安数据网关 (60s 后台拉取全市场 ticker + premiumIndex)
-        # 所有业务代码必须通过 hub 取价/K线/资金费率, 禁止直连 binance REST
-        try:
-            from app.services.binance_data_hub import init_global_data_hub
-            from app.utils.config_loader import get_db_config
-            db_cfg_for_hub = get_db_config()
-            data_hub = init_global_data_hub(db_config=db_cfg_for_hub)
-            await data_hub.start()
-            logger.info("[OK] BinanceDataHub 已启动 (60s 拉一次全市场, 200 req/min 令牌桶)")
-        except Exception as e:
-            logger.error(f"[FAIL] BinanceDataHub 启动失败: {e}")
-            import traceback
-            traceback.print_exc()
-
-        # 反 import 扫描: 仅告警, 不阻塞启动 (防止后续代码偷偷直连 Binance REST)
-        try:
-            from pathlib import Path
-            from scripts.check_no_direct_binance import run_check
-            n = run_check(project_root=Path(project_root), fail_hard=False)
-            if n == 0:
-                logger.info("[OK] 反直连扫描通过 - 无业务代码直连 Binance REST")
-        except Exception as e:
-            logger.debug(f"反直连扫描执行异常 (不影响启动): {e}")
-
-        # 待成交订单自动执行器已停用（现货交易，系统使用合约交易）
-        # 当前系统使用 smart_trader_service.py 进行合约自动交易，不需要现货限价单服务
-        pending_order_executor = None
-
-        # 初始化实盘交易引擎（需要在限价单执行器之前初始化）
-        live_engine = None
-        try:
-            from app.trading.binance_futures_engine import BinanceFuturesEngine
-            db_config = config.get('database', {}).get('mysql', {})
-            live_engine = BinanceFuturesEngine(db_config)
-            logger.info("✅ 实盘交易引擎初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  实盘交易引擎初始化失败: {e}")
-            import traceback
-            traceback.print_exc()
-
-        # 初始化Telegram通知服务（需要先初始化，供其他服务使用）
-        try:
-            from app.services.trade_notifier import init_trade_notifier
-            trade_notifier = init_trade_notifier(config)
-            logger.info("✅ Telegram通知服务初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  Telegram通知服务初始化失败: {e}")
-            trade_notifier = None
-        # 移除 main 进程内的 WS markPrice 服务: 单连接 249 streams 同样有僵尸 bug,
-        # 影响 web 进程稳定性. Web API 的实时价格走 futures_api 直调 Binance, 失败
-        # fallback 5m K 线 (由 ws_kline_collector_service 写入).
-
-        # 模拟盘限价单执行器（做多-0.5% / 做空+0.5%，30分钟超时）
-        futures_limit_order_executor = None
-        try:
-            from app.trading.futures_trading_engine import FuturesTradingEngine
-            from app.services.futures_limit_order_executor import init_futures_limit_order_executor
-            from app.utils.config_loader import get_db_config
-            _futures_db_cfg = get_db_config()
-            _futures_engine = FuturesTradingEngine(_futures_db_cfg, trade_notifier=None, live_engine=live_engine)
-            futures_limit_order_executor = init_futures_limit_order_executor(_futures_db_cfg, _futures_engine)
-            logger.info("✅ 模拟盘限价单执行器初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  模拟盘限价单执行器初始化失败: {e}")
-            futures_limit_order_executor = None
-
-        # 合约止盈止损监控服务已停用 — 改用独立 PositionSLTPMonitor
-        # SmartExitOptimizer 只对非多策略持仓有效 (AI 策略等被跳过 SL/TP),
-        # 因此需要 PositionSLTPMonitor 兜底所有模拟盘的硬 SL/TP 检查
-        futures_monitor_service = None
-
-        # 止盈止损监控服务（独立于 SmartExitOptimizer）
-        # 负责所有模拟盘 (futures_positions) 的硬 SL/TP 检查
-        # 覆盖范围: gemini_explore, gemini_predict, 及其他所有 source
-        # SmartExitOptimizer 会跳过部分 AI 策略的 SL/TP, 所以此处必须启动
-        sl_tp_monitor = None
-        try:
-            from app.services.position_sl_tp_monitor import init_sl_tp_monitor
-            sl_tp_monitor = init_sl_tp_monitor(
-                interval_seconds=5.0,
-                source_filter='%',
-                api_base='http://localhost:9020',
-            )
-            logger.info("✅ 止盈止损监控服务初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  止盈止损监控服务初始化失败: {e}")
-            import traceback
-            traceback.print_exc()
-            sl_tp_monitor = None
-
-        # 初始化实盘订单监控服务（限价单成交后自动设置止损止盈）
-        try:
-            from app.services.live_order_monitor import init_live_order_monitor
-
-            db_config = config.get('database', {}).get('mysql', {})
-            live_order_monitor = init_live_order_monitor(db_config, live_engine)
-            logger.info("✅ 实盘订单监控服务初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  实盘订单监控服务初始化失败: {e}")
-            import traceback
-            traceback.print_exc()
-            live_order_monitor = None
-
-        # Telegram通知服务已在前面初始化
-
-        # 初始化用户认证服务
-        try:
-            from app.auth.auth_service import init_auth_service
-            db_config = config.get('database', {}).get('mysql', {})
-            jwt_config = config.get('auth', {})
-            init_auth_service(db_config, jwt_config)
-            logger.info("✅ 用户认证服务初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  用户认证服务初始化失败: {e}")
-            import traceback
-            traceback.print_exc()
-
-        # 初始化API密钥管理服务
-        try:
-            from app.services.api_key_service import init_api_key_service
-            db_config = config.get('database', {}).get('mysql', {})
-            init_api_key_service(db_config)
-            logger.info("✅ API密钥管理服务初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  API密钥管理服务初始化失败: {e}")
-            import traceback
-            traceback.print_exc()
-
-        # 初始化用户交易引擎管理器
-        try:
-            from app.services.user_trading_engine_manager import init_engine_manager
-            db_config = config.get('database', {}).get('mysql', {})
-            init_engine_manager(db_config)
-            logger.info("✅ 用户交易引擎管理器初始化成功")
-        except Exception as e:
-            logger.warning(f"⚠️  用户交易引擎管理器初始化失败: {e}")
-            import traceback
-            traceback.print_exc()
-
-        logger.info("🎉 分析模块初始化完成！")
-
-    except Exception as e:
-        logger.error(f"❌ 模块初始化失败: {e}")
-        import traceback
-        traceback.print_exc()
-        # 降级模式：所有模块设为None
-        price_collector = None
-        news_aggregator = None
-        technical_analyzer = None
-        sentiment_analyzer = None
-        signal_generator = None
-        enhanced_dashboard = None
-        price_cache_service = None
-        pending_order_executor = None
-        futures_limit_order_executor = None
-        futures_monitor_service = None
-        live_order_monitor = None
-        logger.warning("⚠️  系统以降级模式运行")
-
-    logger.info("🚀 FastAPI 启动完成")
-    
-    if futures_limit_order_executor:
-        try:
-            futures_limit_order_executor.task = spawn(
-                futures_limit_order_executor.run_loop(interval=5)
-            )
-            logger.info("✅ 模拟盘限价单执行服务已启动（每5秒检查）")
-        except Exception as e:
-            logger.warning(f"⚠️  启动模拟盘限价单执行服务失败: {e}")
-            futures_limit_order_executor = None
-
-    try:
-        from app.services.paper_limit_sync_service import init_paper_limit_sync_service
-        _paper_sync = init_paper_limit_sync_service(interval_seconds=10.0)
-        _paper_sync.start()
-        logger.info("✅ 模拟盘限价成交实盘同步服务已启动（每10秒）")
-    except Exception as e:
-        logger.warning(f"⚠️  启动模拟盘实盘同步服务失败: {e}")
-
-    # 启动止盈止损监控服务（每5秒检查模拟盘硬SL/TP）
-    if sl_tp_monitor:
-        try:
-            sl_tp_monitor.start()
-            logger.info("✅ 止盈止损监控服务已启动（每5秒检查）")
-        except Exception as e:
-            logger.warning(f"⚠️  启动止盈止损监控服务失败: {e}")
-            sl_tp_monitor = None
-
-    # 启动实盘订单监控服务（限价单成交后自动设置止损止盈）
-    if live_order_monitor:
-        try:
-            live_order_monitor.start()
-            logger.info("✅ 实盘订单监控服务已启动（每10秒检查限价单成交状态）")
-        except Exception as e:
-            logger.warning(f"⚠️  启动实盘订单监控任务失败: {e}")
-            live_order_monitor = None
-
-    # 信号分析 / 超级大脑自我优化已从 main 移除 (趋势策略下线)
+    _boot_t0 = time.monotonic()
     signal_analysis_service = None
     daily_optimizer_task = None
 
-    try:
-        import schedule
+    async def _deferred_main_startup() -> None:
+        global config, price_collector, news_aggregator
+        global technical_analyzer, sentiment_analyzer, signal_generator, enhanced_dashboard, price_cache_service
+        global pending_order_executor, futures_limit_order_executor, futures_monitor_service, live_order_monitor
+        global sl_tp_monitor
+        nonlocal signal_analysis_service, daily_optimizer_task
+        logger.info(f"[启动] 后台模块初始化开始 (+{time.monotonic() - _boot_t0:.1f}s)")
 
-        # 定义12小时复盘分析任务
-        def run_12h_retrospective():
-            """执行12小时复盘分析"""
-            try:
-                logger.info("=" * 80)
-                logger.info("🔍 开始执行12小时复盘分析...")
-                logger.info("=" * 80)
-
-                import subprocess
-                result = subprocess.run(
-                    ['python', str(project_root / 'app' / '12h_retrospective_analysis.py')],
-                    capture_output=True,
-                    text=True,
-                    timeout=300,
-                    encoding='utf-8',
-                    errors='ignore'
-                )
-
-                if result.returncode == 0:
-                    logger.info("✅ 12小时复盘分析完成")
-
-                    # 保存分析结果
-                    from datetime import datetime
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                    report_dir = project_root / 'logs' / 'retrospective'
-                    report_dir.mkdir(parents=True, exist_ok=True)
-
-                    report_file = report_dir / f'analysis_{timestamp}.txt'
-                    with open(report_file, 'w', encoding='utf-8') as f:
-                        f.write(result.stdout)
-
-                    logger.info(f"分析报告已保存: {report_file}")
-                else:
-                    logger.error(f"❌ 12小时复盘分析失败: {result.stderr}")
-
-            except subprocess.TimeoutExpired:
-                logger.error("❌ 12小时复盘分析超时")
-            except Exception as e:
-                logger.error(f"❌ 12小时复盘分析失败: {e}")
-                import traceback
-                logger.error(traceback.format_exc())
-
-        # 配置12小时复盘分析：每天00:00和12:00执行
-        schedule.every().day.at("00:00").do(run_12h_retrospective)
-        schedule.every().day.at("12:00").do(run_12h_retrospective)
-
-        # 每日复盘报告：每天00:00 UTC 执行，通过 Telegram 推送
-        def run_daily_review():
-            """每日复盘报告——市场涨跌榜 + 开单表现 + 策略诊断，Telegram推送"""
-            try:
-                logger.info("📊 开始执行每日复盘报告...")
-                result = subprocess.run(
-                    [sys.executable, str(project_root / 'app' / 'daily_review_report.py')],
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
-                    encoding='utf-8',
-                    errors='ignore',
-                    cwd=str(project_root),
-                )
-                if result.returncode == 0:
-                    logger.info("✅ 每日复盘报告已发送至 Telegram")
-                else:
-                    logger.error(f"❌ 每日复盘报告失败: {result.stderr[:300]}")
-            except subprocess.TimeoutExpired:
-                logger.error("❌ 每日复盘报告超时")
-            except Exception as e:
-                logger.error(f"❌ 每日复盘报告异常: {e}")
-
-        schedule.every().day.at("00:00").do(run_daily_review)
-
-        # 盈亏日终任务已移至 scheduler.py (每天 02:05 统一执行 TOP50 + 评级)
-        # 本文件不再重复注册，避免双重触发
-
-        # ── AI 任务已移至 scheduler.py（统一调度引擎），每任务用独立后台线程运行 ──
-        # 不在 main.py 重复注册，避免双重触发 + 阻塞 schedule_runner 主循环
-        logger.info("[AI任务] Gemini/DeepSeek 探索/预测/情绪 由 scheduler.py 统一调度")
-
-
-        # ── 独立子进程周期任务（与 FastAPI 主进程完全隔离）──────────────────────────
-        # 每个存储过程调用都在独立 OS 子进程中运行；
-        # asyncio.sleep 期间事件循环可自由处理 HTTP 请求；
-        # 子进程慢/卡不会占用主进程线程池，也不影响其他任务。
-        _call_proc_script = str(project_root / "scripts" / "call_proc.py")
-
-        async def _periodic(proc_name, interval_seconds, name):
-            """独立周期后台任务：sleep → 子进程执行存储过程 → sleep → ..."""
-            proc = None
-            try:
-                while True:
-                    await asyncio.sleep(interval_seconds)
-                    try:
-                        proc = await asyncio.create_subprocess_exec(
-                            sys.executable, _call_proc_script, proc_name,
-                            stdout=asyncio.subprocess.DEVNULL,
-                            stderr=asyncio.subprocess.PIPE,
-                            cwd=str(project_root)
-                        )
-                        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
-                        if proc.returncode != 0 and stderr:
-                            logger.warning(f"⚠️ 周期任务 [{name}]: {stderr.decode(errors='replace')[:300]}")
-                        else:
-                            logger.debug(f"✅ 周期任务 [{name}] 完成")
-                    except asyncio.TimeoutError:
-                        logger.warning(f"⚠️ 周期任务 [{name}] 超时，已终止")
-                        if proc is not None and proc.returncode is None:
-                            try:
-                                proc.kill()
-                                await asyncio.wait_for(proc.wait(), timeout=5.0)
-                            except Exception:
-                                pass
-                    except Exception as e:
-                        logger.error(f"❌ 周期任务 [{name}] 异常: {e}")
-                    finally:
-                        proc = None
-            except asyncio.CancelledError:
-                if proc is not None and proc.returncode is None:
-                    try:
-                        proc.kill()
-                        await asyncio.wait_for(proc.wait(), timeout=5.0)
-                    except Exception:
-                        pass
-                raise
-
-        if os.getenv("ENABLE_APP_COIN_SCORE_PROC", "0").strip().lower() in ("1", "true", "yes", "on"):
-            spawn(_periodic("update_all_coin_scores",        5 * 60,   "评分更新(5m)"))
-        else:
-            logger.info("[评分更新] app 内 update_all_coin_scores 周期任务默认关闭；由 MySQL event 统一调度")
-        spawn(_periodic("update_technical_signals_cache",    15 * 60,  "技术信号缓存(15m)"))
-        spawn(_periodic("update_dashboard_hyperliquid_cache",30 * 60,  "Dashboard聪明钱(30m)"))
-        spawn(_periodic("update_data_management_stats_cache",2 * 3600, "数据管理统计(2h)"))
-        spawn(_periodic("update_collection_status_cache",    2 * 3600, "数据采集情况(2h)"))
-
-        # Dashboard 快照预计算（每5分钟，前端一次调用即可获取全部数据）
-        async def _dashboard_snapshot_loop():
-            await asyncio.sleep(30)  # 等待服务启动稳定
-            while True:
-                try:
-                    from app.services.dashboard_snapshot_service import update_dashboard_snapshot
-                    loop = asyncio.get_event_loop()
-                    await loop.run_in_executor(None, update_dashboard_snapshot)
-                except Exception as e:
-                    logger.error(f"[dashboard_snapshot] loop error: {e}")
-                await asyncio.sleep(5 * 60)
-
-        spawn(_dashboard_snapshot_loop())
-        logger.info("Dashboard快照预计算任务已启动（每5分钟更新）")
-
-        # ── 现货交易策略 ─────────────────────────────────────────────────────
+        # 使用延迟导入，避免模块级别的初始化代码
         try:
-            from app.services.spot_trader_service import spot_trader_loop
-            spawn(spot_trader_loop())
-            logger.info("现货交易策略后台循环已启动")
-        except Exception as e:
-            logger.warning(f"现货交易策略启动失败: {e}")
+            from app.collectors.price_collector import MultiExchangeCollector
+            from app.collectors.mock_price_collector import MockPriceCollector
+            from app.collectors.news_collector import NewsAggregator
+            from app.analyzers.technical_indicators import TechnicalIndicators
+            from app.analyzers.sentiment_analyzer import SentimentAnalyzer
+            from app.analyzers.signal_generator import SignalGenerator
+            # 启用缓存版Dashboard，提升性能
+            from app.api.enhanced_dashboard_cached import EnhancedDashboardCached as EnhancedDashboard
 
-        # watchdog 已移除 — fast_collector_service 和 ws_kline_collector_service
-        # 改由 systemd 管理 (见 deploy/*.service)
-        # 进程自愈逻辑已在 binance_ws_kline_collector.py 内置 (recv timeout 重连)
+            logger.info("🔄 开始初始化分析模块...")
 
-        # ── WS K线数据新鲜度监控 ─────────────────────────────────────────────
-        # 每 5 分钟检查 kline_data 中 5m/15m 最新 timestamp.
-        # 超过阈值未更新 -> WS 可能卡死, TG 告警.
-        # 阈值: 5m K线 close + 落盘 ~1-2s, 留 2 分钟缓冲 = 7 分钟.
-        # 告警去重: 同 timeframe 4 小时内只告警一次, 避免 TG 刷屏.
-        async def _ws_kline_health_check_loop():
-            import pymysql as _pymysql
-            from app.services.trade_notifier import get_trade_notifier as _get_notifier
+            # 初始化价格采集器
+            # 使用真实API从Binance和Gate.io获取数据
+            USE_REAL_API = True  # True=真实API, False=模拟数据
 
-            _STALE_THRESHOLD_MIN = {'5m': 7, '15m': 17}  # 周期 + 2min 缓冲
-            _CHECK_INTERVAL_S = 5 * 60
-            _ALERT_COOLDOWN_S = 4 * 3600  # 4 小时冷却, 避免 TG 刷屏
-
-            last_alert_at: dict = {}
-            in_alert_state: dict = {}
-
-            mysql_cfg = config.get('database', {}).get('mysql', {})
-            db_cfg = {
-                'host': mysql_cfg.get('host'),
-                'port': int(mysql_cfg.get('port', 3306)),
-                'user': mysql_cfg.get('user'),
-                'password': mysql_cfg.get('password'),
-                'database': mysql_cfg.get('database'),
-                'charset': 'utf8mb4',
-                'connect_timeout': 5,
-                'read_timeout': 10,
-                'write_timeout': 10,
-            }
-
-            await asyncio.sleep(120)  # 启动延迟, 等 ws_kline_collector 完成 hydration
-
-            import time as _time
-            while True:
+            if USE_REAL_API:
                 try:
-                    conn = _pymysql.connect(**db_cfg)
-                    try:
-                        with conn.cursor() as cur:
-                            cur.execute(
-                                """
-                                SELECT timeframe, MAX(`timestamp`) AS latest,
-                                       TIMESTAMPDIFF(SECOND, MAX(`timestamp`), NOW()) AS stale_sec
-                                FROM kline_data
-                                WHERE exchange = 'binance_futures'
-                                  AND timeframe IN ('5m', '15m')
-                                  AND `timestamp` > NOW() - INTERVAL 2 HOUR
-                                GROUP BY timeframe
-                                """
-                            )
-                            rows = cur.fetchall()
-                    finally:
-                        conn.close()
-
-                    now = _time.time()
-                    seen_tfs = set()
-                    for row in rows:
-                        tf, latest, stale_sec = row[0], row[1], int(row[2] or 0)
-                        seen_tfs.add(tf)
-                        threshold_sec = _STALE_THRESHOLD_MIN.get(tf, 7) * 60
-                        is_stale = stale_sec > threshold_sec
-                        stale_min = stale_sec / 60.0
-
-                        if is_stale:
-                            last_at = last_alert_at.get(tf, 0)
-                            if now - last_at > _ALERT_COOLDOWN_S:
-                                last_alert_at[tf] = now
-                                msg = (
-                                    f"[WS 告警] kline_data {tf} 数据 {stale_min:.1f} 分钟未更新\n"
-                                    f"最新时间: {latest}\n"
-                                    f"可能 WS 卡死, 请检查 ws_kline_collector_service 日志"
-                                )
-                                logger.warning(msg)
-                                # 不再发送 TG 通知，避免过多告警
-                            in_alert_state[tf] = True
-                        else:
-                            if in_alert_state.get(tf):
-                                msg = f"[WS 恢复] kline_data {tf} 数据已恢复 (stale={stale_min:.1f}min)"
-                                logger.info(msg)
-                                # 不再发送 TG 通知
-                                in_alert_state[tf] = False
-
-                    # 完全没查到记录的 timeframe (2 小时内零数据) 也算告警
-                    for tf in _STALE_THRESHOLD_MIN.keys():
-                        if tf not in seen_tfs:
-                            last_at = last_alert_at.get(tf, 0)
-                            if now - last_at > _ALERT_COOLDOWN_S:
-                                last_alert_at[tf] = now
-                                msg = (
-                                    f"[WS 告警] kline_data {tf} 2 小时内零数据\n"
-                                    f"WS 可能完全未连接, 请检查 ws_kline_collector_service"
-                                )
-                                logger.warning(msg)
-                                # 不再发送 TG 通知
-                            in_alert_state[tf] = True
-
+                    price_collector = MultiExchangeCollector(config)
+                    logger.info("✅ 价格采集器初始化成功（真实API模式 - Binance ）")
                 except Exception as e:
-                    logger.error(f"[WS HEALTH] 健康检查异常: {e}")
+                    logger.error(f"❌ 真实API初始化失败: {e}，切换到模拟模式")
+                    price_collector = MockPriceCollector('binance_demo', config)
+                    logger.info("✅ 价格采集器初始化成功（模拟模式 - 降级）")
+            else:
+                price_collector = MockPriceCollector('binance_demo', config)
+                logger.info("✅ 价格采集器初始化成功（模拟模式）")
 
-                await asyncio.sleep(_CHECK_INTERVAL_S)
-
-        spawn(_ws_kline_health_check_loop())
-        logger.info("WS K线数据新鲜度监控已启动 (每 5 分钟检查 5m/15m, 阈值 7/17 min)")
-
-        # schedule 仅保留用于定时点任务（每天00:00和12:00的复盘分析）
-        async def schedule_runner():
-            """运行 schedule 中的定时点任务（复盘分析等），在线程池执行避免阻塞"""
-            loop = asyncio.get_event_loop()
-            while True:
-                try:
-                    await loop.run_in_executor(None, schedule.run_pending)
-                except Exception as e:
-                    logger.error(f"[调度主循环] run_pending 异常: {e}", exc_info=True)
-                # 智能休眠: 用 idle_seconds 动态调节
-                _idle = schedule.idle_seconds()
-                if _idle is None or _idle <= 0:
-                    _sleep = 30
-                elif _idle > 120:
-                    _sleep = 120
-                else:
-                    _sleep = max(int(_idle) + 1, 5)
-                await asyncio.sleep(_sleep)
-
-        spawn(schedule_runner())
-        logger.info("✅ 12小时复盘分析服务已启动（每天00:00和12:00执行）")
-        logger.info("✅ 子进程周期调度已启动：技术信号15m / Dashboard聪明钱30m / 数据管理&采集情况2h")
-
-    except Exception as e:
-        logger.warning(f"⚠️  启动超级大脑优化服务失败: {e}")
-        import traceback
-        traceback.print_exc()
-
-    # data_cache 初始同步 (后台线程, 不阻塞启动)
-    try:
-        from app.services.data_cache_service import sync_settings_cache
-        import threading as _t
-        _t.Thread(target=sync_settings_cache, daemon=True, name="InitSettingsCache").start()
-        logger.info("[data_cache] settings_cache 初始同步已提交 (后台)")
-    except Exception as e:
-        logger.warning(f"[data_cache] 初始同步失败: {e}")
-
-    async def _event_loop_lag_watchdog() -> None:
-        """记录 FastAPI 事件循环卡顿，帮助定位 main 假死。"""
-        interval = 1.0
-        warn_threshold = float(os.getenv("MAIN_LOOP_LAG_WARN_S", "5"))
-        dump_threshold = float(os.getenv("MAIN_LOOP_LAG_DUMP_S", "15"))
-        dump_cooldown = float(os.getenv("MAIN_LOOP_LAG_DUMP_COOLDOWN_S", "300"))
-        next_expected = time.monotonic() + interval
-        last_dump_at = 0.0
-        while True:
-            await asyncio.sleep(interval)
-            now = time.monotonic()
-            lag = now - next_expected
-            next_expected = now + interval
-            if lag < warn_threshold:
-                continue
-            logger.warning(f"[MAIN WATCHDOG] FastAPI 事件循环卡顿 {lag:.2f}s")
-            if lag < dump_threshold or (now - last_dump_at) < dump_cooldown:
-                continue
-            last_dump_at = now
-            dump_path = log_dir / f"main_hang_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.dump"
+            # 初始化新闻采集器（可能在Windows上导致问题）
             try:
-                with open(dump_path, "w", encoding="utf-8") as fp:
-                    faulthandler.dump_traceback(file=fp, all_threads=True)
-                logger.warning(f"[MAIN WATCHDOG] 已写入线程栈: {dump_path}")
+                news_aggregator = NewsAggregator(config)
+                logger.info("✅ 新闻采集器初始化成功")
             except Exception as e:
-                logger.warning(f"[MAIN WATCHDOG] 写入线程栈失败: {e}")
+                logger.warning(f"⚠️  新闻采集器初始化失败: {e}")
+                news_aggregator = None
 
-    spawn(_event_loop_lag_watchdog())
-    logger.info("✅ FastAPI 事件循环卡顿监控已启动")
+            # 初始化技术分析器
+            try:
+                technical_analyzer = TechnicalIndicators(config)
+                logger.info("✅ 技术分析器初始化成功")
+            except Exception as e:
+                logger.warning(f"⚠️  技术分析器初始化失败: {e}")
+                technical_analyzer = None
+
+            # 初始化情绪分析器
+            try:
+                sentiment_analyzer = SentimentAnalyzer()
+                logger.info("✅ 情绪分析器初始化成功")
+            except Exception as e:
+                logger.warning(f"⚠️  情绪分析器初始化失败: {e}")
+                sentiment_analyzer = None
+
+            # 初始化信号生成器
+            try:
+                signal_generator = SignalGenerator(config)
+                logger.info("✅ 信号生成器初始化成功")
+            except Exception as e:
+                logger.warning(f"⚠️  信号生成器初始化失败: {e}")
+                signal_generator = None
+
+            # 初始化 EnhancedDashboard（缓存版）
+            try:
+                # EnhancedDashboard 需要完整的 config（它内部会提取 database 部分）
+                enhanced_dashboard = EnhancedDashboard(config, price_collector=price_collector)
+                logger.info("✅ EnhancedDashboard（缓存版）初始化成功")
+            except Exception as e:
+                logger.warning(f"⚠️  EnhancedDashboard初始化失败: {e}")
+                enhanced_dashboard = None
+
+            # 初始化价格缓存服务
+            try:
+                from app.utils.config_loader import get_db_config
+                db_config = get_db_config()
+                price_cache_service = init_global_price_cache(db_config, update_interval=3)
+                logger.info("[OK] 价格缓存服务初始化成功（每3秒更新）")
+            except Exception as e:
+                logger.warning(f"[WARN] 价格缓存服务初始化失败: {e}")
+                price_cache_service = None
+
+            # 初始化 BinanceDataHub - 统一币安数据网关 (60s 后台拉取全市场 ticker + premiumIndex)
+            # 所有业务代码必须通过 hub 取价/K线/资金费率, 禁止直连 binance REST
+            try:
+                from app.services.binance_data_hub import init_global_data_hub
+                from app.utils.config_loader import get_db_config
+                db_cfg_for_hub = get_db_config()
+                data_hub = init_global_data_hub(db_config=db_cfg_for_hub)
+                await data_hub.start()
+                logger.info("[OK] BinanceDataHub 已启动 (60s 拉一次全市场, 200 req/min 令牌桶)")
+            except Exception as e:
+                logger.error(f"[FAIL] BinanceDataHub 启动失败: {e}")
+                import traceback
+                traceback.print_exc()
+
+            # 反 import 扫描: 仅告警, 不阻塞启动 (防止后续代码偷偷直连 Binance REST)
+            try:
+                from pathlib import Path
+                from scripts.check_no_direct_binance import run_check
+                n = run_check(project_root=Path(project_root), fail_hard=False)
+                if n == 0:
+                    logger.info("[OK] 反直连扫描通过 - 无业务代码直连 Binance REST")
+            except Exception as e:
+                logger.debug(f"反直连扫描执行异常 (不影响启动): {e}")
+
+            # 待成交订单自动执行器已停用（现货交易，系统使用合约交易）
+            # 当前系统使用 smart_trader_service.py 进行合约自动交易，不需要现货限价单服务
+            pending_order_executor = None
+
+            # 初始化实盘交易引擎（需要在限价单执行器之前初始化）
+            live_engine = None
+            try:
+                from app.trading.binance_futures_engine import BinanceFuturesEngine
+                db_config = config.get('database', {}).get('mysql', {})
+                live_engine = BinanceFuturesEngine(db_config)
+                logger.info("✅ 实盘交易引擎初始化成功")
+            except Exception as e:
+                logger.warning(f"⚠️  实盘交易引擎初始化失败: {e}")
+                import traceback
+                traceback.print_exc()
+
+            # 初始化Telegram通知服务（需要先初始化，供其他服务使用）
+            try:
+                from app.services.trade_notifier import init_trade_notifier
+                trade_notifier = init_trade_notifier(config)
+                logger.info("✅ Telegram通知服务初始化成功")
+            except Exception as e:
+                logger.warning(f"⚠️  Telegram通知服务初始化失败: {e}")
+                trade_notifier = None
+            # 移除 main 进程内的 WS markPrice 服务: 单连接 249 streams 同样有僵尸 bug,
+            # 影响 web 进程稳定性. Web API 的实时价格走 futures_api 直调 Binance, 失败
+            # fallback 5m K 线 (由 ws_kline_collector_service 写入).
+
+            # 模拟盘限价单执行器（做多-0.5% / 做空+0.5%，30分钟超时）
+            futures_limit_order_executor = None
+            try:
+                from app.trading.futures_trading_engine import FuturesTradingEngine
+                from app.services.futures_limit_order_executor import init_futures_limit_order_executor
+                from app.utils.config_loader import get_db_config
+                _futures_db_cfg = get_db_config()
+                _futures_engine = FuturesTradingEngine(_futures_db_cfg, trade_notifier=None, live_engine=live_engine)
+                futures_limit_order_executor = init_futures_limit_order_executor(_futures_db_cfg, _futures_engine)
+                logger.info("✅ 模拟盘限价单执行器初始化成功")
+            except Exception as e:
+                logger.warning(f"⚠️  模拟盘限价单执行器初始化失败: {e}")
+                futures_limit_order_executor = None
+
+            # 合约止盈止损监控服务已停用 — 改用独立 PositionSLTPMonitor
+            # SmartExitOptimizer 只对非多策略持仓有效 (AI 策略等被跳过 SL/TP),
+            # 因此需要 PositionSLTPMonitor 兜底所有模拟盘的硬 SL/TP 检查
+            futures_monitor_service = None
+
+            # 止盈止损监控服务（独立于 SmartExitOptimizer）
+            # 负责所有模拟盘 (futures_positions) 的硬 SL/TP 检查
+            # 覆盖范围: gemini_explore, gemini_predict, 及其他所有 source
+            # SmartExitOptimizer 会跳过部分 AI 策略的 SL/TP, 所以此处必须启动
+            sl_tp_monitor = None
+            try:
+                from app.services.position_sl_tp_monitor import init_sl_tp_monitor
+                sl_tp_monitor = init_sl_tp_monitor(
+                    interval_seconds=5.0,
+                    source_filter='%',
+                    api_base='http://localhost:9020',
+                )
+                logger.info("✅ 止盈止损监控服务初始化成功")
+            except Exception as e:
+                logger.warning(f"⚠️  止盈止损监控服务初始化失败: {e}")
+                import traceback
+                traceback.print_exc()
+                sl_tp_monitor = None
+
+            # 初始化实盘订单监控服务（限价单成交后自动设置止损止盈）
+            try:
+                from app.services.live_order_monitor import init_live_order_monitor
+
+                db_config = config.get('database', {}).get('mysql', {})
+                live_order_monitor = init_live_order_monitor(db_config, live_engine)
+                logger.info("✅ 实盘订单监控服务初始化成功")
+            except Exception as e:
+                logger.warning(f"⚠️  实盘订单监控服务初始化失败: {e}")
+                import traceback
+                traceback.print_exc()
+                live_order_monitor = None
+
+            # Telegram通知服务已在前面初始化
+
+            # 初始化用户认证服务
+            try:
+                from app.auth.auth_service import init_auth_service
+                db_config = config.get('database', {}).get('mysql', {})
+                jwt_config = config.get('auth', {})
+                init_auth_service(db_config, jwt_config)
+                logger.info("✅ 用户认证服务初始化成功")
+            except Exception as e:
+                logger.warning(f"⚠️  用户认证服务初始化失败: {e}")
+                import traceback
+                traceback.print_exc()
+
+            # 初始化API密钥管理服务
+            try:
+                from app.services.api_key_service import init_api_key_service
+                db_config = config.get('database', {}).get('mysql', {})
+                init_api_key_service(db_config)
+                logger.info("✅ API密钥管理服务初始化成功")
+            except Exception as e:
+                logger.warning(f"⚠️  API密钥管理服务初始化失败: {e}")
+                import traceback
+                traceback.print_exc()
+
+            # 初始化用户交易引擎管理器
+            try:
+                from app.services.user_trading_engine_manager import init_engine_manager
+                db_config = config.get('database', {}).get('mysql', {})
+                init_engine_manager(db_config)
+                logger.info("✅ 用户交易引擎管理器初始化成功")
+            except Exception as e:
+                logger.warning(f"⚠️  用户交易引擎管理器初始化失败: {e}")
+                import traceback
+                traceback.print_exc()
+
+            logger.info("🎉 分析模块初始化完成！")
+
+        except Exception as e:
+            logger.error(f"❌ 模块初始化失败: {e}")
+            import traceback
+            traceback.print_exc()
+            # 降级模式：所有模块设为None
+            price_collector = None
+            news_aggregator = None
+            technical_analyzer = None
+            sentiment_analyzer = None
+            signal_generator = None
+            enhanced_dashboard = None
+            price_cache_service = None
+            pending_order_executor = None
+            futures_limit_order_executor = None
+            futures_monitor_service = None
+            live_order_monitor = None
+            logger.warning("⚠️  系统以降级模式运行")
+
+        logger.info("🚀 FastAPI 启动完成")
+    
+        if futures_limit_order_executor:
+            try:
+                futures_limit_order_executor.task = spawn(
+                    futures_limit_order_executor.run_loop(interval=5)
+                )
+                logger.info("✅ 模拟盘限价单执行服务已启动（每5秒检查）")
+            except Exception as e:
+                logger.warning(f"⚠️  启动模拟盘限价单执行服务失败: {e}")
+                futures_limit_order_executor = None
+
+        try:
+            from app.services.paper_limit_sync_service import init_paper_limit_sync_service
+            _paper_sync = init_paper_limit_sync_service(interval_seconds=10.0)
+            _paper_sync.start()
+            logger.info("✅ 模拟盘限价成交实盘同步服务已启动（每10秒）")
+        except Exception as e:
+            logger.warning(f"⚠️  启动模拟盘实盘同步服务失败: {e}")
+
+        # 启动止盈止损监控服务（每5秒检查模拟盘硬SL/TP）
+        if sl_tp_monitor:
+            try:
+                sl_tp_monitor.start()
+                logger.info("✅ 止盈止损监控服务已启动（每5秒检查）")
+            except Exception as e:
+                logger.warning(f"⚠️  启动止盈止损监控服务失败: {e}")
+                sl_tp_monitor = None
+
+        # 启动实盘订单监控服务（限价单成交后自动设置止损止盈）
+        if live_order_monitor:
+            try:
+                live_order_monitor.start()
+                logger.info("✅ 实盘订单监控服务已启动（每10秒检查限价单成交状态）")
+            except Exception as e:
+                logger.warning(f"⚠️  启动实盘订单监控任务失败: {e}")
+                live_order_monitor = None
+
+        # 信号分析 / 超级大脑自我优化已从 main 移除 (趋势策略下线)
+        signal_analysis_service = None
+        daily_optimizer_task = None
+
+        try:
+            import schedule
+
+            # 定义12小时复盘分析任务
+            def run_12h_retrospective():
+                """执行12小时复盘分析"""
+                try:
+                    logger.info("=" * 80)
+                    logger.info("🔍 开始执行12小时复盘分析...")
+                    logger.info("=" * 80)
+
+                    import subprocess
+                    result = subprocess.run(
+                        [sys.executable, str(project_root / 'app' / '12h_retrospective_analysis.py')],
+                        capture_output=True,
+                        text=True,
+                        timeout=300,
+                        encoding='utf-8',
+                        errors='ignore'
+                    )
+
+                    if result.returncode == 0:
+                        logger.info("✅ 12小时复盘分析完成")
+
+                        # 保存分析结果
+                        from datetime import datetime
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        report_dir = project_root / 'logs' / 'retrospective'
+                        report_dir.mkdir(parents=True, exist_ok=True)
+
+                        report_file = report_dir / f'analysis_{timestamp}.txt'
+                        with open(report_file, 'w', encoding='utf-8') as f:
+                            f.write(result.stdout)
+
+                        logger.info(f"分析报告已保存: {report_file}")
+                    else:
+                        logger.error(f"❌ 12小时复盘分析失败: {result.stderr}")
+
+                except subprocess.TimeoutExpired:
+                    logger.error("❌ 12小时复盘分析超时")
+                except Exception as e:
+                    logger.error(f"❌ 12小时复盘分析失败: {e}")
+                    import traceback
+                    logger.error(traceback.format_exc())
+
+            # 配置12小时复盘分析：每天00:00和12:00执行
+            schedule.every().day.at("00:05").do(run_12h_retrospective)  # 错峰 UTC 00:00 整点 DB 高峰
+            schedule.every().day.at("12:00").do(run_12h_retrospective)
+
+            # 每日复盘报告：每天00:00 UTC 执行，通过 Telegram 推送
+            def run_daily_review():
+                """每日复盘报告——市场涨跌榜 + 开单表现 + 策略诊断，Telegram推送"""
+                try:
+                    logger.info("📊 开始执行每日复盘报告...")
+                    result = subprocess.run(
+                        [sys.executable, str(project_root / 'app' / 'daily_review_report.py')],
+                        capture_output=True,
+                        text=True,
+                        timeout=120,
+                        encoding='utf-8',
+                        errors='ignore',
+                        cwd=str(project_root),
+                    )
+                    if result.returncode == 0:
+                        logger.info("✅ 每日复盘报告已发送至 Telegram")
+                    else:
+                        logger.error(f"❌ 每日复盘报告失败: {result.stderr[:300]}")
+                except subprocess.TimeoutExpired:
+                    logger.error("❌ 每日复盘报告超时")
+                except Exception as e:
+                    logger.error(f"❌ 每日复盘报告异常: {e}")
+
+            schedule.every().day.at("00:12").do(run_daily_review)  # 错峰，避免与 12h 复盘同秒抢 DB
+
+            # 盈亏日终任务已移至 scheduler.py (每天 02:05 统一执行 TOP50 + 评级)
+            # 本文件不再重复注册，避免双重触发
+
+            # ── AI 任务已移至 scheduler.py（统一调度引擎），每任务用独立后台线程运行 ──
+            # 不在 main.py 重复注册，避免双重触发 + 阻塞 schedule_runner 主循环
+            logger.info("[AI任务] Gemini/DeepSeek 探索/预测/情绪 由 scheduler.py 统一调度")
+
+
+            # ── 独立子进程周期任务（与 FastAPI 主进程完全隔离）──────────────────────────
+            # 每个存储过程调用都在独立 OS 子进程中运行；
+            # asyncio.sleep 期间事件循环可自由处理 HTTP 请求；
+            # 子进程慢/卡不会占用主进程线程池，也不影响其他任务。
+            _call_proc_script = str(project_root / "scripts" / "call_proc.py")
+
+            async def _periodic(proc_name, interval_seconds, name):
+                """独立周期后台任务：sleep → 子进程执行存储过程 → sleep → ..."""
+                proc = None
+                try:
+                    while True:
+                        await asyncio.sleep(interval_seconds)
+                        try:
+                            proc = await asyncio.create_subprocess_exec(
+                                sys.executable, _call_proc_script, proc_name,
+                                stdout=asyncio.subprocess.DEVNULL,
+                                stderr=asyncio.subprocess.PIPE,
+                                cwd=str(project_root)
+                            )
+                            _, stderr = await asyncio.wait_for(proc.communicate(), timeout=300)
+                            if proc.returncode != 0 and stderr:
+                                logger.warning(f"⚠️ 周期任务 [{name}]: {stderr.decode(errors='replace')[:300]}")
+                            else:
+                                logger.debug(f"✅ 周期任务 [{name}] 完成")
+                        except asyncio.TimeoutError:
+                            logger.warning(f"⚠️ 周期任务 [{name}] 超时，已终止")
+                            if proc is not None and proc.returncode is None:
+                                try:
+                                    proc.kill()
+                                    await asyncio.wait_for(proc.wait(), timeout=5.0)
+                                except Exception:
+                                    pass
+                        except Exception as e:
+                            logger.error(f"❌ 周期任务 [{name}] 异常: {e}")
+                        finally:
+                            proc = None
+                except asyncio.CancelledError:
+                    if proc is not None and proc.returncode is None:
+                        try:
+                            proc.kill()
+                            await asyncio.wait_for(proc.wait(), timeout=5.0)
+                        except Exception:
+                            pass
+                    raise
+
+            if os.getenv("ENABLE_APP_COIN_SCORE_PROC", "0").strip().lower() in ("1", "true", "yes", "on"):
+                spawn(_periodic("update_all_coin_scores",        5 * 60,   "评分更新(5m)"))
+            else:
+                logger.info("[评分更新] app 内 update_all_coin_scores 周期任务默认关闭；由 MySQL event 统一调度")
+            spawn(_periodic("update_technical_signals_cache",    15 * 60,  "技术信号缓存(15m)"))
+            spawn(_periodic("update_dashboard_hyperliquid_cache",30 * 60,  "Dashboard聪明钱(30m)"))
+            spawn(_periodic("update_data_management_stats_cache",2 * 3600, "数据管理统计(2h)"))
+            spawn(_periodic("update_collection_status_cache",    2 * 3600, "数据采集情况(2h)"))
+
+            # Dashboard 快照预计算（每5分钟，前端一次调用即可获取全部数据）
+            async def _dashboard_snapshot_loop():
+                await asyncio.sleep(30)  # 等待服务启动稳定
+                while True:
+                    try:
+                        from app.services.dashboard_snapshot_service import update_dashboard_snapshot
+                        loop = asyncio.get_event_loop()
+                        await loop.run_in_executor(None, update_dashboard_snapshot)
+                    except Exception as e:
+                        logger.error(f"[dashboard_snapshot] loop error: {e}")
+                    await asyncio.sleep(5 * 60)
+
+            spawn(_dashboard_snapshot_loop())
+            logger.info("Dashboard快照预计算任务已启动（每5分钟更新）")
+
+            # ── 现货交易策略 ─────────────────────────────────────────────────────
+            try:
+                from app.services.spot_trader_service import spot_trader_loop
+                spawn(spot_trader_loop())
+                logger.info("现货交易策略后台循环已启动")
+            except Exception as e:
+                logger.warning(f"现货交易策略启动失败: {e}")
+
+            # watchdog 已移除 — fast_collector_service 和 ws_kline_collector_service
+            # 改由 systemd 管理 (见 deploy/*.service)
+            # 进程自愈逻辑已在 binance_ws_kline_collector.py 内置 (recv timeout 重连)
+
+            # ── WS K线数据新鲜度监控 ─────────────────────────────────────────────
+            # 每 5 分钟检查 kline_data 中 5m/15m 最新 timestamp.
+            # 超过阈值未更新 -> WS 可能卡死, TG 告警.
+            # 阈值: 5m K线 close + 落盘 ~1-2s, 留 2 分钟缓冲 = 7 分钟.
+            # 告警去重: 同 timeframe 4 小时内只告警一次, 避免 TG 刷屏.
+            async def _ws_kline_health_check_loop():
+                import pymysql as _pymysql
+                from app.services.trade_notifier import get_trade_notifier as _get_notifier
+
+                _STALE_THRESHOLD_MIN = {'5m': 7, '15m': 17}  # 周期 + 2min 缓冲
+                _CHECK_INTERVAL_S = 5 * 60
+                _ALERT_COOLDOWN_S = 4 * 3600  # 4 小时冷却, 避免 TG 刷屏
+
+                last_alert_at: dict = {}
+                in_alert_state: dict = {}
+
+                mysql_cfg = config.get('database', {}).get('mysql', {})
+                db_cfg = {
+                    'host': mysql_cfg.get('host'),
+                    'port': int(mysql_cfg.get('port', 3306)),
+                    'user': mysql_cfg.get('user'),
+                    'password': mysql_cfg.get('password'),
+                    'database': mysql_cfg.get('database'),
+                    'charset': 'utf8mb4',
+                    'connect_timeout': 5,
+                    'read_timeout': 10,
+                    'write_timeout': 10,
+                }
+
+                await asyncio.sleep(120)  # 启动延迟, 等 ws_kline_collector 完成 hydration
+
+                import time as _time
+                while True:
+                    try:
+                        conn = _pymysql.connect(**db_cfg)
+                        try:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    """
+                                    SELECT timeframe, MAX(`timestamp`) AS latest,
+                                           TIMESTAMPDIFF(SECOND, MAX(`timestamp`), NOW()) AS stale_sec
+                                    FROM kline_data
+                                    WHERE exchange = 'binance_futures'
+                                      AND timeframe IN ('5m', '15m')
+                                      AND `timestamp` > NOW() - INTERVAL 2 HOUR
+                                    GROUP BY timeframe
+                                    """
+                                )
+                                rows = cur.fetchall()
+                        finally:
+                            conn.close()
+
+                        now = _time.time()
+                        seen_tfs = set()
+                        for row in rows:
+                            tf, latest, stale_sec = row[0], row[1], int(row[2] or 0)
+                            seen_tfs.add(tf)
+                            threshold_sec = _STALE_THRESHOLD_MIN.get(tf, 7) * 60
+                            is_stale = stale_sec > threshold_sec
+                            stale_min = stale_sec / 60.0
+
+                            if is_stale:
+                                last_at = last_alert_at.get(tf, 0)
+                                if now - last_at > _ALERT_COOLDOWN_S:
+                                    last_alert_at[tf] = now
+                                    msg = (
+                                        f"[WS 告警] kline_data {tf} 数据 {stale_min:.1f} 分钟未更新\n"
+                                        f"最新时间: {latest}\n"
+                                        f"可能 WS 卡死, 请检查 ws_kline_collector_service 日志"
+                                    )
+                                    logger.warning(msg)
+                                    # 不再发送 TG 通知，避免过多告警
+                                in_alert_state[tf] = True
+                            else:
+                                if in_alert_state.get(tf):
+                                    msg = f"[WS 恢复] kline_data {tf} 数据已恢复 (stale={stale_min:.1f}min)"
+                                    logger.info(msg)
+                                    # 不再发送 TG 通知
+                                    in_alert_state[tf] = False
+
+                        # 完全没查到记录的 timeframe (2 小时内零数据) 也算告警
+                        for tf in _STALE_THRESHOLD_MIN.keys():
+                            if tf not in seen_tfs:
+                                last_at = last_alert_at.get(tf, 0)
+                                if now - last_at > _ALERT_COOLDOWN_S:
+                                    last_alert_at[tf] = now
+                                    msg = (
+                                        f"[WS 告警] kline_data {tf} 2 小时内零数据\n"
+                                        f"WS 可能完全未连接, 请检查 ws_kline_collector_service"
+                                    )
+                                    logger.warning(msg)
+                                    # 不再发送 TG 通知
+                                in_alert_state[tf] = True
+
+                    except Exception as e:
+                        logger.error(f"[WS HEALTH] 健康检查异常: {e}")
+
+                    await asyncio.sleep(_CHECK_INTERVAL_S)
+
+            spawn(_ws_kline_health_check_loop())
+            logger.info("WS K线数据新鲜度监控已启动 (每 5 分钟检查 5m/15m, 阈值 7/17 min)")
+
+            # schedule 仅保留用于定时点任务（每天00:00和12:00的复盘分析）
+            async def schedule_runner():
+                """运行 schedule 中的定时点任务（复盘分析等），在线程池执行避免阻塞"""
+                loop = asyncio.get_event_loop()
+                while True:
+                    try:
+                        await loop.run_in_executor(None, schedule.run_pending)
+                    except Exception as e:
+                        logger.error(f"[调度主循环] run_pending 异常: {e}", exc_info=True)
+                    # 智能休眠: 用 idle_seconds 动态调节
+                    _idle = schedule.idle_seconds()
+                    if _idle is None or _idle <= 0:
+                        _sleep = 30
+                    elif _idle > 120:
+                        _sleep = 120
+                    else:
+                        _sleep = max(int(_idle) + 1, 5)
+                    await asyncio.sleep(_sleep)
+
+            spawn(schedule_runner())
+            logger.info("✅ 12小时复盘分析服务已启动（每天 00:05/12:00 UTC 执行）")
+            logger.info("✅ 子进程周期调度已启动：技术信号15m / Dashboard聪明钱30m / 数据管理&采集情况2h")
+
+        except Exception as e:
+            logger.warning(f"⚠️  启动超级大脑优化服务失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+        # data_cache 初始同步 (后台线程, 不阻塞启动)
+        try:
+            from app.services.data_cache_service import sync_settings_cache
+            import threading as _t
+            _t.Thread(target=sync_settings_cache, daemon=True, name="InitSettingsCache").start()
+            logger.info("[data_cache] settings_cache 初始同步已提交 (后台)")
+        except Exception as e:
+            logger.warning(f"[data_cache] 初始同步失败: {e}")
+
+        async def _event_loop_lag_watchdog() -> None:
+            """记录 FastAPI 事件循环卡顿，帮助定位 main 假死。"""
+            interval = 1.0
+            warn_threshold = float(os.getenv("MAIN_LOOP_LAG_WARN_S", "5"))
+            dump_threshold = float(os.getenv("MAIN_LOOP_LAG_DUMP_S", "15"))
+            dump_cooldown = float(os.getenv("MAIN_LOOP_LAG_DUMP_COOLDOWN_S", "300"))
+            next_expected = time.monotonic() + interval
+            last_dump_at = 0.0
+            while True:
+                await asyncio.sleep(interval)
+                now = time.monotonic()
+                lag = now - next_expected
+                next_expected = now + interval
+                if lag < warn_threshold:
+                    continue
+                logger.warning(f"[MAIN WATCHDOG] FastAPI 事件循环卡顿 {lag:.2f}s")
+                if lag < dump_threshold or (now - last_dump_at) < dump_cooldown:
+                    continue
+                last_dump_at = now
+                dump_path = log_dir / f"main_hang_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.dump"
+                try:
+                    with open(dump_path, "w", encoding="utf-8") as fp:
+                        faulthandler.dump_traceback(file=fp, all_threads=True)
+                    logger.warning(f"[MAIN WATCHDOG] 已写入线程栈: {dump_path}")
+                except Exception as e:
+                    logger.warning(f"[MAIN WATCHDOG] 写入线程栈失败: {e}")
+
+        spawn(_event_loop_lag_watchdog())
+        logger.info("✅ FastAPI 事件循环卡顿监控已启动")
+
+
+        logger.info(f"[启动] 后台模块初始化完成 (+{time.monotonic() - _boot_t0:.1f}s)")
+
+    spawn(_deferred_main_startup())
+    logger.info(f"[启动] HTTP 端口即将开放 (+{time.monotonic() - _boot_t0:.1f}s)，重量级服务后台加载")
 
     yield
 
@@ -1490,16 +1508,19 @@ async def mobile_manual_page(request: Request):
 
 @app.get("/health")
 async def health_check():
-    """健康检查"""
+    """健康检查（starting=端口已开但后台模块仍在加载）"""
+    ready = price_cache_service is not None and enhanced_dashboard is not None
     return {
-        "status": "healthy",
+        "status": "healthy" if ready else "starting",
         "modules": {
             "price_collector": price_collector is not None,
             "news_aggregator": news_aggregator is not None,
             "technical_analyzer": technical_analyzer is not None,
             "sentiment_analyzer": sentiment_analyzer is not None,
-            "signal_generator": signal_generator is not None
-        }
+            "signal_generator": signal_generator is not None,
+            "enhanced_dashboard": enhanced_dashboard is not None,
+            "price_cache": price_cache_service is not None,
+        },
     }
 
 
