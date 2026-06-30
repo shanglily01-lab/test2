@@ -914,6 +914,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"停止 BinanceDataHub 失败: {e}")
 
+    try:
+        from app.database.connection_pool import close_global_pool
+        close_global_pool()
+        logger.info("[OK] API 连接池已关闭")
+    except Exception as e:
+        logger.warning(f"关闭 API 连接池失败: {e}")
+
     # Windows兼容性：简化关闭逻辑，不调用可能阻塞的close()方法
     # 让Python的垃圾回收机制自动清理资源
     logger.info("🎉 FastAPI 已关闭")

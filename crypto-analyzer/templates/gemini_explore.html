@@ -574,8 +574,11 @@ function escapeHtml(s) {
 }
 
 </script>
-<script src="/static/js/explore_page_common.js"></script>
+<script src="/static/js/explore_page_common.js?v=20260630"></script>
 <script>
+function fetchExploreApi(url) {
+  return fetch(url).then(function (r) { return r.json(); });
+}
 // ============================================================
 // STATUS + TOGGLE
 // ============================================================
@@ -607,7 +610,7 @@ function renderExploreStatus(s) {
 function loadStatus() {
   if (loadStatus._loading) return;
   loadStatus._loading = true;
-  exploreFetchJson('/api/gemini-explore/status')
+  fetchExploreApi('/api/gemini-explore/status')
     .then(function(d){ renderExploreStatus(d.data || {}); })
     .catch(function(e){ console.error('status error', e); })
     .finally(function(){ loadStatus._loading = false; });
@@ -658,7 +661,7 @@ function renderExploreOpen(rows, summary) {
 function loadOpenPositions() {
   if (loadOpenPositions._loading) return;
   loadOpenPositions._loading = true;
-  exploreFetchJson('/api/gemini-explore/positions/live')
+  fetchExploreApi('/api/gemini-explore/positions/live')
     .then(function(d){
       renderExploreOpen(d.data || [], d.summary || {});
     })
@@ -720,7 +723,7 @@ function renderExploreStats(s) {
 function loadExploreStats() {
   if (loadExploreStats._loading) return;
   loadExploreStats._loading = true;
-  exploreFetchJson('/api/gemini-explore/stats?days=30')
+  fetchExploreApi('/api/gemini-explore/stats?days=30')
     .then(function(d){
       if (!d.success) return;
       renderExploreStats(d.data || {});
@@ -760,7 +763,7 @@ function renderExploreRuns(rows) {
 function loadRuns() {
   if (loadRuns._loading) return;
   loadRuns._loading = true;
-  exploreFetchJson('/api/gemini-explore/runs?limit=20')
+  fetchExploreApi('/api/gemini-explore/runs?limit=20')
     .then(function(d){ renderExploreRuns(d.data || []); })
     .catch(function(e){
       document.getElementById('runs-tbody').innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载失败: ' + e + '</td></tr>';
@@ -845,24 +848,9 @@ function loadAll(options) {
   }
 }
 loadAll({ deferSecondary: true });
-// 轮询走 bootstrap 单接口，避免 15s 并行 /live + /status + /stats 打满 DB
-function refreshExploreBootstrap() {
-  if (refreshExploreBootstrap._loading) return;
-  refreshExploreBootstrap._loading = true;
-  exploreFetchJson('/api/gemini-explore/bootstrap?runs_limit=20', 12000)
-    .then(function(d) {
-      if (!d || !d.success || !d.data) return;
-      var b = d.data;
-      renderExploreStatus(b.status || {});
-      var live = b.live || {};
-      renderExploreOpen(live.data || [], live.summary || {});
-      renderExploreStats(b.stats || {});
-      renderExploreRuns(b.runs || []);
-    })
-    .catch(function(e) { console.warn('bootstrap refresh', e); })
-    .finally(function() { refreshExploreBootstrap._loading = false; });
-}
-explorePoll.register(refreshExploreBootstrap, 30000, function () { return explorePoll.tabVisible('tab-explore'); });
+explorePoll.register(loadOpenPositions, 15000, function () { return explorePoll.tabVisible('tab-explore'); });
+explorePoll.register(loadStatus, 60000, function () { return explorePoll.tabVisible('tab-explore'); });
+explorePoll.register(loadExploreStats, 60000, function () { return explorePoll.tabVisible('tab-explore'); });
 
 // ============================================================
 // GEMINI PREDICT - STATUS + TOGGLE
