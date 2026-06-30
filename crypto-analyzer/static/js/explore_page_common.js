@@ -8,6 +8,16 @@
   var _CODE_RENDER_CHUNK = 12000;
   var _CODE_RENDER_MAX = 120000;
 
+  function exploreFetchJson(url, timeoutMs) {
+    timeoutMs = timeoutMs || 12000;
+    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, timeoutMs) : null;
+    var opts = ctrl ? { signal: ctrl.signal } : {};
+    return fetch(url, opts)
+      .then(function (r) { return r.json(); })
+      .finally(function () { if (timer) clearTimeout(timer); });
+  }
+
   function exploreTrimCache(cache, maxKeys) {
     if (!cache || typeof cache !== 'object') return;
     maxKeys = maxKeys || _HTML_CACHE_MAX;
@@ -247,6 +257,7 @@
   }
 
   global.exploreNotify = exploreNotify;
+  global.exploreFetchJson = exploreFetchJson;
   global.aiLogBadge = aiLogBadge;
   global.buildCodeBlock = buildCodeBlock;
   global.formatRawJson = formatRawJson;

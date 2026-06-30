@@ -25,6 +25,7 @@ from loguru import logger
 from app.services.securities_filter import is_security
 from app.utils.config_loader import get_db_config
 from app.utils.futures_symbol import futures_symbol_rating_canonical
+from app.utils.explore_sql import POSITION_STATS_AGG_SQL, POSITION_STATS_ALL_SQL
 
 DATA_CACHE_DB = "data_cache"
 # 主数据库名 — 懒加载, 避免 import 时抛出异常
@@ -46,7 +47,7 @@ EXCLUDED_PREFIXES = (
 # DB 连接
 # ============================================================
 def _get_conn(database: str = None) -> pymysql.Connection:
-    cfg = get_db_config()
+    cfg = dict(get_db_config())
     if database:
         cfg["database"] = database
     return pymysql.connect(
@@ -54,6 +55,9 @@ def _get_conn(database: str = None) -> pymysql.Connection:
         charset="utf8mb4",
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=True,
+        connect_timeout=8,
+        read_timeout=12,
+        write_timeout=12,
     )
 
 
@@ -690,75 +694,33 @@ def refresh_position_stats() -> dict:
             has_floating_col = int((cur.fetchone() or {}).get("cnt") or 0) > 0
 
             def _agg(src: str) -> dict:
-                # 当前持仓数 + 浮盈
                 cur.execute(
-                    f"SELECT COUNT(*) AS cnt, COALESCE(SUM(unrealized_pnl), 0) AS floating "
-                    f"FROM `{MAIN_DB}`.futures_positions "
-                    f"WHERE source=%s AND status='open' AND account_id=%s",
+                    POSITION_STATS_AGG_SQL.format(main_db=MAIN_DB),
                     (src, account_id),
                 )
-                open_row = cur.fetchone() or {}
-                open_count = int(open_row.get("cnt", 0) or 0)
-                floating_pnl = float(open_row.get("floating", 0) or 0)
-
-                # 30d 聚合
-                cur.execute(
-                    f"SELECT COUNT(*) AS total, "
-                    f"  COALESCE(SUM(realized_pnl), 0) AS total_pnl, "
-                    f"  SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins, "
-                    f"  SUM(CASE WHEN realized_pnl <= 0 THEN 1 ELSE 0 END) AS losses, "
-                    f"  SUM(CASE WHEN position_side='LONG' THEN 1 ELSE 0 END) AS long_cnt, "
-                    f"  SUM(CASE WHEN position_side='SHORT' THEN 1 ELSE 0 END) AS short_cnt, "
-                    f"  SUM(CASE WHEN position_side='LONG' THEN COALESCE(realized_pnl, 0) ELSE 0 END) AS long_pnl, "
-                    f"  SUM(CASE WHEN position_side='SHORT' THEN COALESCE(realized_pnl, 0) ELSE 0 END) AS short_pnl "
-                    f"FROM `{MAIN_DB}`.futures_positions "
-                    f"WHERE source=%s AND status='closed' AND account_id=%s "
-                    f"  AND close_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)",
-                    (src, account_id),
-                )
-                r30 = cur.fetchone() or {}
-
-                # 7d
-                cur.execute(
-                    f"SELECT COUNT(*) AS total, COALESCE(SUM(realized_pnl),0) AS pnl "
-                    f"FROM `{MAIN_DB}`.futures_positions "
-                    f"WHERE source=%s AND status='closed' AND account_id=%s "
-                    f"  AND close_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)",
-                    (src, account_id),
-                )
-                r7 = cur.fetchone() or {}
-
-                # 24h
-                cur.execute(
-                    f"SELECT COUNT(*) AS total, COALESCE(SUM(realized_pnl),0) AS pnl "
-                    f"FROM `{MAIN_DB}`.futures_positions "
-                    f"WHERE source=%s AND status='closed' AND account_id=%s "
-                    f"  AND close_time >= DATE_SUB(NOW(), INTERVAL 1 DAY)",
-                    (src, account_id),
-                )
-                r24 = cur.fetchone() or {}
-
-                total30 = int(r30.get("total", 0) or 0)
-                wins30 = int(r30.get("wins", 0) or 0)
-                losses30 = int(r30.get("losses", 0) or 0)
-
+                row = cur.fetchone() or {}
+                open_count = int(row.get("open_count", 0) or 0)
+                floating_pnl = float(row.get("floating_pnl", 0) or 0)
+                total30 = int(row.get("closed_30d", 0) or 0)
+                wins30 = int(row.get("wins_30d", 0) or 0)
+                losses30 = int(row.get("losses_30d", 0) or 0)
                 return {
                     "open_count": open_count,
                     "floating_pnl": floating_pnl,
-                    "closed_24h": int(r24.get("total", 0) or 0),
-                    "closed_7d": int(r7.get("total", 0) or 0),
+                    "closed_24h": int(row.get("closed_24h", 0) or 0),
+                    "closed_7d": int(row.get("closed_7d", 0) or 0),
                     "closed_30d": total30,
-                    "pnl_24h": float(r24.get("pnl", 0) or 0),
-                    "pnl_7d": float(r7.get("pnl", 0) or 0),
-                    "pnl_30d": float(r30.get("total_pnl", 0) or 0),
+                    "pnl_24h": float(row.get("pnl_24h", 0) or 0),
+                    "pnl_7d": float(row.get("pnl_7d", 0) or 0),
+                    "pnl_30d": float(row.get("pnl_30d", 0) or 0),
                     "total_pnl": 0,
                     "wins_30d": wins30,
                     "losses_30d": losses30,
                     "win_rate_30d": round(wins30 / total30 * 100, 2) if total30 > 0 else 0,
-                    "long_count": int(r30.get("long_cnt", 0) or 0),
-                    "short_count": int(r30.get("short_cnt", 0) or 0),
-                    "long_pnl": float(r30.get("long_pnl", 0) or 0),
-                    "short_pnl": float(r30.get("short_pnl", 0) or 0),
+                    "long_count": int(row.get("long_cnt", 0) or 0),
+                    "short_count": int(row.get("short_cnt", 0) or 0),
+                    "long_pnl": float(row.get("long_pnl", 0) or 0),
+                    "short_pnl": float(row.get("short_pnl", 0) or 0),
                 }
 
             if has_floating_col:
@@ -826,20 +788,14 @@ def refresh_position_stats() -> dict:
                         ),
                     )
 
-            # "all" — 综合统计
+            # "all" — 综合统计（单次扫描）
             cur.execute(
-                f"SELECT COUNT(*) AS total, "
-                f"  COALESCE(SUM(realized_pnl),0) AS total_pnl, "
-                f"  SUM(CASE WHEN realized_pnl>0 THEN 1 ELSE 0 END) AS wins, "
-                f"  COUNT(*) AS cnt "
-                f"FROM `{MAIN_DB}`.futures_positions "
-                f"WHERE status='closed' AND account_id=%s "
-                f"  AND close_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)",
+                POSITION_STATS_ALL_SQL.format(main_db=MAIN_DB),
                 (account_id,),
             )
             r_all = cur.fetchone() or {}
-            all_total = int(r_all.get("cnt", 0) or 0)
-            all_wins = int(r_all.get("wins", 0) or 0)
+            all_total = int(r_all.get("closed_30d", 0) or 0)
+            all_wins = int(r_all.get("wins_30d", 0) or 0)
             if has_floating_col:
                 cur.execute(
                     _UPSERT_SQL,
@@ -847,7 +803,7 @@ def refresh_position_stats() -> dict:
                         "all", account_id,
                         0, 0.0,
                         0, 0, all_total,
-                        0, 0, float(r_all.get("total_pnl", 0) or 0), 0,
+                        0, 0, float(r_all.get("pnl_30d", 0) or 0), 0,
                         all_wins, all_total - all_wins,
                         round(all_wins / all_total * 100, 2) if all_total > 0 else 0,
                         0, 0, 0, 0,
@@ -859,7 +815,7 @@ def refresh_position_stats() -> dict:
                     (
                         "all", account_id,
                         0, 0, all_total,
-                        0, 0, float(r_all.get("total_pnl", 0) or 0), 0,
+                        0, 0, float(r_all.get("pnl_30d", 0) or 0), 0,
                         all_wins, all_total - all_wins,
                         round(all_wins / all_total * 100, 2) if all_total > 0 else 0,
                         0, 0, 0, 0,
@@ -870,7 +826,12 @@ def refresh_position_stats() -> dict:
 
         try:
             from app.utils.explore_page_stats import invalidate_snapshot_mem_cache
+            from app.utils.explore_bootstrap import invalidate_explore_bootstrap_cache
+            from app.utils.explore_db_guard import invalidate_explore_positions_cache
+
             invalidate_snapshot_mem_cache()
+            invalidate_explore_bootstrap_cache()
+            invalidate_explore_positions_cache()
         except Exception:
             pass
 

@@ -23,8 +23,13 @@ from loguru import logger
 
 from app.utils.futures_symbol import futures_symbol_rating_canonical
 from app.utils.position_display import canonicalize_symbol_fields
-from app.utils.explore_db_guard import apply_explore_read_guard
+from app.utils.explore_db_guard import explore_db_cursor, explore_positions_cache_get
 from app.utils.explore_page_stats import explore_stats_payload, status_counts
+from app.utils.explore_list_queries import (
+    fetch_closed_positions,
+    fetch_open_positions,
+    fetch_predict_runs_list,
+)
 
 
 router = APIRouter(prefix="/api/deepseek-predict", tags=["DeepSeek预测"])
@@ -236,22 +241,8 @@ async def toggle(request: ToggleRequest):
 @router.get("/runs")
 async def list_runs(limit: int = Query(20, ge=1, le=200)):
     try:
-        conn = _connect()
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT id, asof_utc, model, symbol_count, predictions_made, "
-                    "       orders_opened, elapsed_s, status, error_msg, triggered_by, "
-                    "       LEFT(summary_zh, 200) AS summary_short, created_at, "
-                    "       (prompt_text IS NOT NULL AND prompt_text != '') AS has_prompt, "
-                    "       (raw_response IS NOT NULL AND raw_response != '') AS has_raw "
-                    "FROM deepseek_predict_runs "
-                    "ORDER BY id DESC LIMIT %s",
-                    (limit,),
-                )
-                runs = cur.fetchall()
-        finally:
-            conn.close()
+        with explore_db_cursor() as cur:
+            runs = fetch_predict_runs_list(cur, "deepseek_predict_runs", limit)
         return {"success": True, "data": runs, "count": len(runs)}
     except Exception as e:
         logger.error(f"[DeepSeek预测 API] /runs 失败: {e}")
@@ -331,43 +322,11 @@ async def list_positions(
     limit: int = Query(50, ge=1, le=500),
 ):
     try:
-        conn = _connect()
-        try:
-            with conn.cursor() as cur:
-                apply_explore_read_guard(cur)
-                if status == 'open':
-                    cur.execute(
-                        "SELECT id, symbol, position_side, leverage, quantity, "
-                        "       entry_price, mark_price, "
-                        "       stop_loss_price, take_profit_price, "
-                        "       stop_loss_pct, take_profit_pct, "
-                        "       margin, unrealized_pnl, unrealized_pnl_pct, "
-                        "       open_time, planned_close_time, "
-                        "       entry_reason, source "
-                        "FROM futures_positions "
-                        "WHERE source='deepseek_predict' AND status='open' AND account_id=2 "
-                        "ORDER BY open_time DESC "
-                        "LIMIT %s",
-                        (limit,),
-                    )
-                else:
-                    cur.execute(
-                        "SELECT id, symbol, position_side, leverage, quantity, "
-                        "       entry_price, mark_price, "
-                        "       stop_loss_price, take_profit_price, "
-                        "       margin, realized_pnl, "
-                        "       open_time, close_time, "
-                        "       entry_reason, notes, source "
-                        "FROM futures_positions "
-                        "WHERE source='deepseek_predict' AND status='closed' AND account_id=2 "
-                        "  AND close_time >= DATE_SUB(NOW(), INTERVAL 30 DAY) "
-                        "ORDER BY close_time DESC "
-                        "LIMIT %s",
-                        (limit,),
-                    )
-                rows = cur.fetchall()
-        finally:
-            conn.close()
+        with explore_db_cursor() as cur:
+            if status == 'open':
+                rows = fetch_open_positions(cur, "deepseek_predict", limit)
+            else:
+                rows = fetch_closed_positions(cur, "deepseek_predict", limit)
 
         for r in rows:
             for k, v in list(r.items()):
@@ -394,14 +353,8 @@ async def list_positions(
 @router.get("/positions/live")
 async def list_positions_live():
     try:
-        conn = _connect()
-        try:
-            with conn.cursor() as cur:
-                apply_explore_read_guard(cur)
-                cur.execute(_OPEN_POSITIONS_SQL)
-                positions = cur.fetchall()
-        finally:
-            conn.close()
+        with explore_db_cursor() as cur:
+            positions = fetch_open_positions(cur, "deepseek_predict", 200)
 
         result, summary = _build_live_positions(positions)
         return {

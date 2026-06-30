@@ -693,17 +693,20 @@ def _insert_run(
     prompt_text: Optional[str] = None,
     raw_response: Optional[str] = None,
 ) -> int:
+    from app.utils.explore_sql import prompt_flags
+
+    hp, hr = prompt_flags(prompt_text, raw_response)
     with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO deepseek_predict_runs
               (asof_utc, model, symbol_count, predictions_made, orders_opened,
                elapsed_s, status, error_msg, triggered_by, summary_zh,
-               prompt_text, raw_response)
-            VALUES (%s, %s, %s, 0, 0, %s, %s, %s, %s, %s, %s, %s)
+               prompt_text, raw_response, has_prompt, has_raw)
+            VALUES (%s, %s, %s, 0, 0, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (asof_utc, DEEPSEEK_MODEL, symbol_count, elapsed_s, status, error_msg,
-             triggered_by, summary_zh, prompt_text, raw_response),
+             triggered_by, summary_zh, prompt_text, raw_response, hp, hr),
         )
         return cur.lastrowid
 

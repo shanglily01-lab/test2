@@ -29,6 +29,7 @@ class MySQLConnectionPool:
         self.pool_size = pool_size
         self.connections = []
         self.lock = threading.Lock()
+        self._slot_sem = threading.BoundedSemaphore(pool_size)
         self._last_check_time = time.time()
         self._check_interval = 300  # 每5分钟检查一次连接健康
 
@@ -89,27 +90,23 @@ class MySQLConnectionPool:
             return False
 
     def _get_healthy_connection(self):
-        """从池中获取健康的连接"""
+        """从池中获取健康的连接（建连在锁外，避免并行 API 串行卡死）."""
         with self.lock:
-            # 定期清理无效连接
             current_time = time.time()
             if current_time - self._last_check_time > self._check_interval:
                 self._cleanup_dead_connections()
                 self._last_check_time = current_time
 
-            # 尝试从池中获取健康连接
             while self.connections:
                 conn = self.connections.pop(0)
                 if self._is_connection_alive(conn):
                     return conn
-                else:
-                    try:
-                        conn.close()
-                    except:
-                        pass
+                try:
+                    conn.close()
+                except Exception:
+                    pass
 
-            # 池中没有可用连接，创建新连接
-            return self._create_connection()
+        return self._create_connection()
 
     def _cleanup_dead_connections(self):
         """清理池中的死连接"""
@@ -355,14 +352,19 @@ def close_global_pool():
         _global_pool = None
 
 
-def get_api_connection():
-    """获取一个由全局连接池管理的连接. conn.close() 实际归还到池中（非关 TCP）.
-
-    与 `with get_db_connection() as conn:` 不同，本函数兼容现有
-    `conn = _connect(); try: ... finally: conn.close()` 的调用模式.
-    """
+def get_api_connection(acquire_timeout: float = 5.0):
+    """获取一个由全局连接池管理的连接. conn.close() 实际归还到池中（非关 TCP）."""
     pool = get_global_pool(get_db_config(), pool_size=10)
-    conn = pool._get_healthy_connection()
+    if not pool._slot_sem.acquire(timeout=acquire_timeout):
+        raise TimeoutError(
+            f"MySQL 连接池已满 ({pool.pool_size})，{acquire_timeout:.0f}s 内无可用连接"
+        )
+    try:
+        conn = pool._get_healthy_connection()
+    except Exception:
+        pool._slot_sem.release()
+        raise
+
     orig_close = conn.close
 
     def _pool_close():
@@ -372,6 +374,10 @@ def get_api_connection():
             pass
         try:
             pool._return_connection(conn)
+        except Exception:
+            pass
+        try:
+            pool._slot_sem.release()
         except Exception:
             pass
 

@@ -1366,18 +1366,21 @@ def _insert_run(
     prompt_text: Optional[str] = None,
     raw_response: Optional[str] = None,
 ) -> int:
+    from app.utils.explore_sql import prompt_flags
+
+    hp, hr = prompt_flags(prompt_text, raw_response)
     with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO gemini_explore_runs
               (asof_utc, model, universe_size, summary_zh,
                trades_opened, elapsed_s, status, error_msg, triggered_by,
-               prompt_text, raw_response)
-            VALUES (%s, %s, %s, %s, 0, %s, %s, %s, %s, %s, %s)
+               prompt_text, raw_response, has_prompt, has_raw)
+            VALUES (%s, %s, %s, %s, 0, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (asof_utc, GEMINI_MODEL, universe_size, summary_zh,
              elapsed_s, status, error_msg, triggered_by,
-             prompt_text, raw_response),
+             prompt_text, raw_response, hp, hr),
         )
         return cur.lastrowid
 
@@ -1404,6 +1407,9 @@ def _finish_run(
     raw_response: Optional[str] = None,
 ) -> int:
     """更新已登记的 partial(进行中) 记录, 无 run_id 时退化为 INSERT."""
+    from app.utils.explore_sql import prompt_flags
+
+    hp, hr = prompt_flags(prompt_text, raw_response)
     if run_id:
         with conn.cursor() as cur:
             cur.execute(
@@ -1411,13 +1417,13 @@ def _finish_run(
                 UPDATE gemini_explore_runs SET
                   universe_size=%s, summary_zh=%s, elapsed_s=%s,
                   status=%s, error_msg=%s, triggered_by=%s,
-                  prompt_text=%s, raw_response=%s
+                  prompt_text=%s, raw_response=%s, has_prompt=%s, has_raw=%s
                 WHERE id=%s
                 """,
                 (
                     universe_size, summary_zh, elapsed_s,
                     status, error_msg, triggered_by,
-                    prompt_text, raw_response, run_id,
+                    prompt_text, raw_response, hp, hr, run_id,
                 ),
             )
         return run_id

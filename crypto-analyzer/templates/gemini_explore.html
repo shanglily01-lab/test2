@@ -579,35 +579,36 @@ function escapeHtml(s) {
 // ============================================================
 // STATUS + TOGGLE
 // ============================================================
+function renderExploreStatus(s) {
+  s = s || {};
+  var enabled = !!s.enabled;
+  var chip = document.getElementById('status-chip');
+  var label = document.getElementById('status-label');
+  if (!chip || !label) return;
+  if (enabled) {
+    chip.className = 'chip chip-on';
+    chip.querySelector('span.material-symbols-outlined').textContent = 'power';
+    label.textContent = '已启用';
+  } else {
+    chip.className = 'chip chip-off';
+    chip.querySelector('span.material-symbols-outlined').textContent = 'power_off';
+    label.textContent = '已禁用';
+  }
+  document.getElementById('stat-open').textContent = s.open_positions ?? '--';
+  document.getElementById('stat-max').textContent = s.max_positions == null ? '无限制' : s.max_positions;
+  document.getElementById('stat-closed').textContent = s.closed_positions_30d ?? '--';
+  var lr = s.last_run || {};
+  document.getElementById('stat-universe').textContent = lr.universe_size ?? '--';
+  document.getElementById('stat-trades').textContent = lr.trades_opened ?? '--';
+  document.getElementById('stat-lastrun').textContent = lr.asof_utc ? shortUTC(lr.asof_utc) : '--';
+  document.getElementById('stat-laststatus').innerHTML = lr.status ? statusBadge(lr.status) : '--';
+}
+
 function loadStatus() {
   if (loadStatus._loading) return;
   loadStatus._loading = true;
-  fetch('/api/gemini-explore/status')
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      var s = d.data || {};
-      var enabled = !!s.enabled;
-      var chip = document.getElementById('status-chip');
-      var label = document.getElementById('status-label');
-      if (enabled) {
-        chip.className = 'chip chip-on';
-        chip.querySelector('span.material-symbols-outlined').textContent = 'power';
-        label.textContent = '已启用';
-      } else {
-        chip.className = 'chip chip-off';
-        chip.querySelector('span.material-symbols-outlined').textContent = 'power_off';
-        label.textContent = '已禁用';
-      }
-      // stats
-      document.getElementById('stat-open').textContent = s.open_positions ?? '--';
-      document.getElementById('stat-max').textContent = s.max_positions == null ? '无限制' : s.max_positions;
-      document.getElementById('stat-closed').textContent = s.closed_positions_30d ?? '--';
-      var lr = s.last_run || {};
-      document.getElementById('stat-universe').textContent = lr.universe_size ?? '--';
-      document.getElementById('stat-trades').textContent = lr.trades_opened ?? '--';
-      document.getElementById('stat-lastrun').textContent = lr.asof_utc ? shortUTC(lr.asof_utc) : '--';
-      document.getElementById('stat-laststatus').innerHTML = lr.status ? statusBadge(lr.status) : '--';
-    })
+  exploreFetchJson('/api/gemini-explore/status')
+    .then(function(d){ renderExploreStatus(d.data || {}); })
     .catch(function(e){ console.error('status error', e); })
     .finally(function(){ loadStatus._loading = false; });
 }
@@ -615,53 +616,51 @@ function loadStatus() {
 // ============================================================
 // POSITIONS
 // ============================================================
+function renderExploreOpen(rows, summary) {
+  rows = rows || [];
+  summary = summary || {};
+  var tbody = document.getElementById('open-tbody');
+  if (!tbody) return;
+  var openEl = document.getElementById('stat-open');
+  if (openEl) openEl.innerHTML = summary.open_count !== undefined
+      ? (summary.open_count + ' <span class="text-xs text-on-surface-variant">仓</span>')
+      : '--';
+  _lastExploreFloating = liveFloatingFromResponse(summary, rows);
+  applyFloatingCards('e', _exploreRealizedPnl, _lastExploreFloating);
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无 OPEN 持仓</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(function(p){
+    var pnl = p.unrealized_pnl;
+    var pnlPct = p.unrealized_pnl_pct;
+    var markCls = '';
+    if (p.mark_price != null && p.entry_price > 0) {
+      var d = p.mark_price - p.entry_price;
+      var favorable = (p.position_side === 'LONG' && d >= 0) || (p.position_side === 'SHORT' && d <= 0);
+      markCls = favorable ? 'pp' : 'pn';
+    }
+    return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container/40 transition-colors">' +
+      '<td class="px-4 py-3 mono">' + escapeHtml(p.symbol) + '</td>' +
+      '<td class="px-4 py-3">' + dirBadge(p.position_side) + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.entry_price, 6) + '</td>' +
+      '<td class="px-4 py-3 text-right mono ' + markCls + '">' + fmt(p.mark_price, 6) + '</td>' +
+      '<td class="px-4 py-3 text-right mono ' + pCls(pnl) + '">' + fmtSigned(pnl) + ' <span class="text-[10px] opacity-70">(' + fmtSigned(pnlPct, 2) + '%)</span></td>' +
+      '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.stop_loss_price, 6) + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.take_profit_price, 6) + '</td>' +
+      '<td class="px-4 py-3 mono text-on-surface-variant text-[11px]">' + shortUTC(p.open_time) + '</td>' +
+      '<td class="px-4 py-3 mono text-on-surface-variant text-[11px]">' + shortUTC(p.planned_close_time) + '</td>' +
+      '<td class="px-4 py-3 text-on-surface-variant text-[11px] max-w-xs truncate" title="' + escapeHtml(p.entry_reason || '') + '">' + escapeHtml(p.entry_reason || '') + '</td>' +
+      '</tr>';
+  }).join('');
+}
+
 function loadOpenPositions() {
   if (loadOpenPositions._loading) return;
   loadOpenPositions._loading = true;
-  // 走实时端点: 后端用 Hub WS markPrice 拿当下价 + 现场算 PnL
-  fetch('/api/gemini-explore/positions/live')
-    .then(function(r){ return r.json(); })
+  exploreFetchJson('/api/gemini-explore/positions/live')
     .then(function(d){
-      var rows = d.data || [];
-      var summary = d.summary || {};
-      var tbody = document.getElementById('open-tbody');
-
-      // 更新顶部统计卡 (浮盈总计)
-      var openEl = document.getElementById('stat-open');
-      if (openEl) openEl.innerHTML = summary.open_count !== undefined
-          ? (summary.open_count + ' <span class="text-xs text-on-surface-variant">仓</span>')
-          : '--';
-
-      _lastExploreFloating = liveFloatingFromResponse(summary, rows);
-      applyFloatingCards('e', _exploreRealizedPnl, _lastExploreFloating);
-
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无 OPEN 持仓</td></tr>';
-        return;
-      }
-      tbody.innerHTML = rows.map(function(p){
-        var pnl = p.unrealized_pnl;
-        var pnlPct = p.unrealized_pnl_pct;
-        var markCls = '';
-        // 实时价跟 entry 比较的色彩 (LONG 涨绿, SHORT 跌绿)
-        if (p.mark_price != null && p.entry_price > 0) {
-          var d = p.mark_price - p.entry_price;
-          var favorable = (p.position_side === 'LONG' && d >= 0) || (p.position_side === 'SHORT' && d <= 0);
-          markCls = favorable ? 'pp' : 'pn';
-        }
-        return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container/40 transition-colors">' +
-          '<td class="px-4 py-3 mono">' + escapeHtml(p.symbol) + '</td>' +
-          '<td class="px-4 py-3">' + dirBadge(p.position_side) + '</td>' +
-          '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.entry_price, 6) + '</td>' +
-          '<td class="px-4 py-3 text-right mono ' + markCls + '">' + fmt(p.mark_price, 6) + '</td>' +
-          '<td class="px-4 py-3 text-right mono ' + pCls(pnl) + '">' + fmtSigned(pnl) + ' <span class="text-[10px] opacity-70">(' + fmtSigned(pnlPct, 2) + '%)</span></td>' +
-          '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.stop_loss_price, 6) + '</td>' +
-          '<td class="px-4 py-3 text-right mono text-on-surface-variant">' + fmt(p.take_profit_price, 6) + '</td>' +
-          '<td class="px-4 py-3 mono text-on-surface-variant text-[11px]">' + shortUTC(p.open_time) + '</td>' +
-          '<td class="px-4 py-3 mono text-on-surface-variant text-[11px]">' + shortUTC(p.planned_close_time) + '</td>' +
-          '<td class="px-4 py-3 text-on-surface-variant text-[11px] max-w-xs truncate" title="' + escapeHtml(p.entry_reason || '') + '">' + escapeHtml(p.entry_reason || '') + '</td>' +
-          '</tr>';
-      }).join('');
+      renderExploreOpen(d.data || [], d.summary || {});
     })
     .catch(function(e){
       document.getElementById('open-tbody').innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载失败: ' + e + '</td></tr>';
@@ -708,20 +707,23 @@ function loadClosedPositions(force) {
 // ============================================================
 // STATS (盈亏统计)
 // ============================================================
+function renderExploreStats(s) {
+  s = s || {};
+  var pClsLocal = function(v){ return (v || 0) >= 0 ? 'pp' : 'pn'; };
+  _exploreRealizedPnl = s.total_realized_pnl || 0;
+  document.getElementById('e-stat-realized').innerHTML = '<span class="' + pClsLocal(s.total_realized_pnl) + '">' + fmtSigned(s.total_realized_pnl) + ' U</span>';
+  applyFloatingCards('e', _exploreRealizedPnl, _lastExploreFloating);
+  applyWinRateCard('e', s);
+  document.getElementById('e-stat-closed2').textContent = s.total_trades;
+}
+
 function loadExploreStats() {
   if (loadExploreStats._loading) return;
   loadExploreStats._loading = true;
-  fetch('/api/gemini-explore/stats?days=30')
-    .then(function(r){ return r.json(); })
+  exploreFetchJson('/api/gemini-explore/stats?days=30')
     .then(function(d){
       if (!d.success) return;
-      var s = d.data || {};
-      var pClsLocal = function(v){ return (v || 0) >= 0 ? 'pp' : 'pn'; };
-      _exploreRealizedPnl = s.total_realized_pnl || 0;
-      document.getElementById('e-stat-realized').innerHTML = '<span class="' + pClsLocal(s.total_realized_pnl) + '">' + fmtSigned(s.total_realized_pnl) + ' U</span>';
-      applyFloatingCards('e', _exploreRealizedPnl, _lastExploreFloating);
-      applyWinRateCard('e', s);
-      document.getElementById('e-stat-closed2').textContent = s.total_trades;
+      renderExploreStats(d.data || {});
     })
     .catch(function(e){ console.error('explore stats error', e); })
     .finally(function(){ loadExploreStats._loading = false; });
@@ -732,32 +734,34 @@ function loadExploreStats() {
 // ============================================================
 var _verdictsCache = {};
 
+function renderExploreRuns(rows) {
+  rows = rows || [];
+  var tbody = document.getElementById('runs-tbody');
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无运行记录</td></tr>';
+    return;
+  }
+  tbody.innerHTML = rows.map(function(r){
+    return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container/40 transition-colors cursor-pointer" onclick="toggleVerdicts(' + r.id + ')">' +
+      '<td class="px-4 py-3 mono text-on-surface-variant">' + r.id + aiLogBadge(r) + '</td>' +
+      '<td class="px-4 py-3 mono text-[11px]">' + shortUTC(r.asof_utc) + '</td>' +
+      '<td class="px-4 py-3 text-right mono">' + (r.universe_size || 0) + '</td>' +
+      '<td class="px-4 py-3 text-right mono ' + ((r.trades_opened || 0) > 0 ? 'pp' : 'text-on-surface-variant') + '">' + (r.trades_opened || 0) + '</td>' +
+      '<td class="px-4 py-3 text-right mono text-on-surface-variant text-[11px]">' + fmt(r.elapsed_s, 1) + 's</td>' +
+      '<td class="px-4 py-3">' + statusBadge(r.status) + '</td>' +
+      '<td class="px-4 py-3 text-on-surface-variant text-[11px]">' + escapeHtml(r.triggered_by || '') + '</td>' +
+      '<td class="px-4 py-3 text-on-surface-variant text-[11px] max-w-md truncate" title="' + escapeHtml(r.summary_short || '') + '">' + escapeHtml(r.summary_short || (r.error_msg ? '[err] ' + r.error_msg : '')) + '</td>' +
+      '</tr>' +
+      '<tr id="verdict-row-' + r.id + '" class="hidden row-expand"><td colspan="8" class="px-6 py-4" id="verdict-cell-' + r.id + '"></td></tr>';
+  }).join('');
+}
+
 function loadRuns() {
   if (loadRuns._loading) return;
   loadRuns._loading = true;
-  fetch('/api/gemini-explore/runs?limit=20')
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      var rows = d.data || [];
-      var tbody = document.getElementById('runs-tbody');
-      if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-xs">暂无运行记录</td></tr>';
-        return;
-      }
-      tbody.innerHTML = rows.map(function(r){
-        return '<tr class="border-b border-outline-variant/10 hover:bg-surface-container/40 transition-colors cursor-pointer" onclick="toggleVerdicts(' + r.id + ')">' +
-          '<td class="px-4 py-3 mono text-on-surface-variant">' + r.id + aiLogBadge(r) + '</td>' +
-          '<td class="px-4 py-3 mono text-[11px]">' + shortUTC(r.asof_utc) + '</td>' +
-          '<td class="px-4 py-3 text-right mono">' + (r.universe_size || 0) + '</td>' +
-          '<td class="px-4 py-3 text-right mono ' + ((r.trades_opened || 0) > 0 ? 'pp' : 'text-on-surface-variant') + '">' + (r.trades_opened || 0) + '</td>' +
-          '<td class="px-4 py-3 text-right mono text-on-surface-variant text-[11px]">' + fmt(r.elapsed_s, 1) + 's</td>' +
-          '<td class="px-4 py-3">' + statusBadge(r.status) + '</td>' +
-          '<td class="px-4 py-3 text-on-surface-variant text-[11px]">' + escapeHtml(r.triggered_by || '') + '</td>' +
-          '<td class="px-4 py-3 text-on-surface-variant text-[11px] max-w-md truncate" title="' + escapeHtml(r.summary_short || '') + '">' + escapeHtml(r.summary_short || (r.error_msg ? '[err] ' + r.error_msg : '')) + '</td>' +
-          '</tr>' +
-          '<tr id="verdict-row-' + r.id + '" class="hidden row-expand"><td colspan="8" class="px-6 py-4" id="verdict-cell-' + r.id + '"></td></tr>';
-      }).join('');
-    })
+  exploreFetchJson('/api/gemini-explore/runs?limit=20')
+    .then(function(d){ renderExploreRuns(d.data || []); })
     .catch(function(e){
       document.getElementById('runs-tbody').innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-on-surface-variant text-xs">加载失败: ' + e + '</td></tr>';
     })
@@ -841,10 +845,24 @@ function loadAll(options) {
   }
 }
 loadAll({ deferSecondary: true });
-// 仅当前可见 Tab + 页面在前台时轮询，避免后台堆积请求与 DOM 重绘
-explorePoll.register(loadOpenPositions, 15000, function () { return explorePoll.tabVisible('tab-explore'); });
-explorePoll.register(loadStatus, 60000, function () { return explorePoll.tabVisible('tab-explore'); });
-explorePoll.register(loadExploreStats, 60000, function () { return explorePoll.tabVisible('tab-explore'); });
+// 轮询走 bootstrap 单接口，避免 15s 并行 /live + /status + /stats 打满 DB
+function refreshExploreBootstrap() {
+  if (refreshExploreBootstrap._loading) return;
+  refreshExploreBootstrap._loading = true;
+  exploreFetchJson('/api/gemini-explore/bootstrap?runs_limit=20', 12000)
+    .then(function(d) {
+      if (!d || !d.success || !d.data) return;
+      var b = d.data;
+      renderExploreStatus(b.status || {});
+      var live = b.live || {};
+      renderExploreOpen(live.data || [], live.summary || {});
+      renderExploreStats(b.stats || {});
+      renderExploreRuns(b.runs || []);
+    })
+    .catch(function(e) { console.warn('bootstrap refresh', e); })
+    .finally(function() { refreshExploreBootstrap._loading = false; });
+}
+explorePoll.register(refreshExploreBootstrap, 30000, function () { return explorePoll.tabVisible('tab-explore'); });
 
 // ============================================================
 // GEMINI PREDICT - STATUS + TOGGLE
