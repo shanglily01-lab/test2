@@ -50,6 +50,8 @@ def _get_conn(database: str = None) -> pymysql.Connection:
     cfg = dict(get_db_config())
     if database:
         cfg["database"] = database
+    for k in ("connect_timeout", "read_timeout", "write_timeout"):
+        cfg.pop(k, None)
     return pymysql.connect(
         **cfg,
         charset="utf8mb4",

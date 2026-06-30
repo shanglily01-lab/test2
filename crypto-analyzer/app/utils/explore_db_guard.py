@@ -48,6 +48,8 @@ def explore_db_cursor(*, max_seconds: int = _EXPLORE_READ_MAX_S):
     from app.utils.config_loader import get_db_config
 
     cfg = dict(get_db_config())
+    for k in ("connect_timeout", "read_timeout", "write_timeout"):
+        cfg.pop(k, None)
     conn = pymysql.connect(
         **cfg,
         charset="utf8mb4",
