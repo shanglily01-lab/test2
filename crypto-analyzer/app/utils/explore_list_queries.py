@@ -1,4 +1,4 @@
-"""探索/预测页列表查询 — 统一优化后的 SQL."""
+"""探索/预测页列表查询 — 轻量 SQL，禁止 information_schema 探测."""
 from __future__ import annotations
 
 from typing import Dict, List
@@ -10,34 +10,33 @@ from app.utils.explore_sql import (
     runs_list_sql,
 )
 
+# True=用 has_prompt 列；若库未跑 migration 023 则自动降级一次
 _RUN_FLAG_COLS: Dict[str, bool] = {}
 
 
-def _table_has_prompt_flags(cursor, table: str) -> bool:
-    if table in _RUN_FLAG_COLS:
-        return _RUN_FLAG_COLS[table]
-    cursor.execute(
-        """
-        SELECT COUNT(*) AS cnt FROM information_schema.columns
-        WHERE table_schema = DATABASE() AND table_name = %s AND column_name = 'has_prompt'
-        """,
-        (table,),
-    )
-    ok = int((cursor.fetchone() or {}).get("cnt") or 0) > 0
-    _RUN_FLAG_COLS[table] = ok
-    return ok
+def _exec_runs_list(cursor, table: str, limit: int, predict: bool = False) -> List[dict]:
+    use_flags = _RUN_FLAG_COLS.get(table, True)
+    builder = predict_runs_list_sql if predict else runs_list_sql
+    sql = builder(table, has_flag_columns=use_flags)
+    try:
+        cursor.execute(sql, (limit,))
+        return cursor.fetchall() or []
+    except Exception as e:
+        err = str(e).lower()
+        if use_flags and ("has_prompt" in err or "1054" in err or "unknown column" in err):
+            _RUN_FLAG_COLS[table] = False
+            sql = builder(table, has_flag_columns=False)
+            cursor.execute(sql, (limit,))
+            return cursor.fetchall() or []
+        raise
 
 
 def fetch_runs_list(cursor, table: str, limit: int) -> List[dict]:
-    sql = runs_list_sql(table, has_flag_columns=_table_has_prompt_flags(cursor, table))
-    cursor.execute(sql, (limit,))
-    return cursor.fetchall() or []
+    return _exec_runs_list(cursor, table, limit, predict=False)
 
 
 def fetch_predict_runs_list(cursor, table: str, limit: int) -> List[dict]:
-    sql = predict_runs_list_sql(table, has_flag_columns=_table_has_prompt_flags(cursor, table))
-    cursor.execute(sql, (limit,))
-    return cursor.fetchall() or []
+    return _exec_runs_list(cursor, table, limit, predict=True)
 
 
 def fetch_open_positions(cursor, source: str, limit: int = 200) -> List[dict]:
@@ -45,6 +44,6 @@ def fetch_open_positions(cursor, source: str, limit: int = 200) -> List[dict]:
     return cursor.fetchall() or []
 
 
-def fetch_closed_positions(cursor, source: str, limit: int = 80) -> List[dict]:
-    cursor.execute(CLOSED_POSITIONS_LIST_SQL, (source, limit))
+def fetch_closed_positions(cursor, source: str, limit: int = 50) -> List[dict]:
+    cursor.execute(CLOSED_POSITIONS_LIST_SQL, (source, min(limit, 50)))
     return cursor.fetchall() or []

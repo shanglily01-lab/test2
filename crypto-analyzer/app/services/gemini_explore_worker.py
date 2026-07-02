@@ -403,7 +403,7 @@ def _build_universe(conn) -> dict:
     global EXCLUDED_EXTREME_SYMBOLS
     EXCLUDED_EXTREME_SYMBOLS = set()
 
-    # ── 加载黑名单3级 (永久禁止交易, system_settings 可关闭) ──
+    # ── 加载禁止交易名单（L3 + 手动锁定）──
     from app.services.trading_gates import load_blacklist_level3_symbols
     _level3_set = load_blacklist_level3_symbols(conn)
 

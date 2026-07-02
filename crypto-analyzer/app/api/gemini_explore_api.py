@@ -116,24 +116,24 @@ def status():
     """返回当前 kill switch 状态 + 最近一轮元数据 + 当前 OPEN 持仓数."""
     try:
         with explore_db_cursor() as cur:
-                cur.execute(
-                    "SELECT setting_value FROM system_settings "
-                    "WHERE setting_key='gemini_explore_enabled' LIMIT 1"
-                )
-                row = cur.fetchone()
-                enabled_raw = str((row or {}).get('setting_value', '0')).strip().lower()
-                enabled = enabled_raw in ('1', 'true', 'yes', 'on')
+            cur.execute(
+                "SELECT setting_value FROM system_settings "
+                "WHERE setting_key='gemini_explore_enabled' LIMIT 1"
+            )
+            row = cur.fetchone()
+            enabled_raw = str((row or {}).get('setting_value', '0')).strip().lower()
+            enabled = enabled_raw in ('1', 'true', 'yes', 'on')
 
-                cur.execute(
-                    "SELECT id, asof_utc, model, universe_size, trades_opened, "
-                    "       elapsed_s, status, error_msg, triggered_by, created_at "
-                    "FROM gemini_explore_runs ORDER BY id DESC LIMIT 1"
-                )
-                last_run = cur.fetchone()
+            cur.execute(
+                "SELECT id, asof_utc, model, universe_size, trades_opened, "
+                "       elapsed_s, status, error_msg, triggered_by, created_at "
+                "FROM gemini_explore_runs ORDER BY id DESC LIMIT 1"
+            )
+            last_run = cur.fetchone()
 
-                counts = status_counts("gemini_explore")
-                open_count = counts["open_positions"]
-                closed_30d = counts["closed_positions_30d"]
+        counts = status_counts("gemini_explore")
+        open_count = counts["open_positions"]
+        closed_30d = counts["closed_positions_30d"]
 
         from app.services.system_settings_loader import get_strategy_open_params
         _params = get_strategy_open_params()

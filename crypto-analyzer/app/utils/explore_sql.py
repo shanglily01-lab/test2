@@ -44,7 +44,6 @@ OPEN_POSITIONS_LIST_SQL = """
 SELECT id, symbol, position_side, leverage, quantity,
        entry_price, mark_price,
        stop_loss_price, take_profit_price,
-       stop_loss_pct, take_profit_pct,
        margin, unrealized_pnl, unrealized_pnl_pct,
        open_time, planned_close_time,
        entry_reason, source
@@ -58,7 +57,8 @@ CLOSED_POSITIONS_LIST_SQL = """
 SELECT id, symbol, position_side,
        entry_price, mark_price,
        margin, realized_pnl,
-       open_time, close_time, notes, source
+       open_time, close_time,
+       LEFT(notes, 150) AS notes, source
 FROM futures_positions
 WHERE source=%s AND status='closed' AND account_id=2
   AND close_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)

@@ -828,11 +828,10 @@ def refresh_position_stats() -> dict:
 
         try:
             from app.utils.explore_page_stats import invalidate_snapshot_mem_cache
-            from app.utils.explore_bootstrap import invalidate_explore_bootstrap_cache
             from app.utils.explore_db_guard import invalidate_explore_positions_cache
 
             invalidate_snapshot_mem_cache()
-            invalidate_explore_bootstrap_cache()
+            invalidate_position_stats_mem_cache()
             invalidate_explore_positions_cache()
         except Exception:
             pass
@@ -1032,24 +1031,47 @@ def load_candidate_pool_for_explore(
     return None
 
 
+_pos_stats_mem: Dict[str, tuple] = {}
+_POS_STATS_MEM_TTL_S = 120
+
+
 def get_position_stats(source: str, account_id: int = 2) -> Optional[Dict]:
-    """读取持仓统计快照."""
+    """读取持仓统计快照（进程内缓存 120s，减轻探索页重复查 data_cache）."""
+    key = f"{source}:{account_id}"
+    now = time.time()
+    hit = _pos_stats_mem.get(key)
+    if hit and now - hit[0] < _POS_STATS_MEM_TTL_S:
+        return hit[1]
+    conn = None
     try:
         conn = _get_conn(DATA_CACHE_DB)
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT * FROM position_stats_snapshot "
+                "SELECT source, account_id, open_count, closed_30d, wins_30d, losses_30d, "
+                "       pnl_30d, win_rate_30d, floating_pnl, updated_at "
+                "FROM position_stats_snapshot "
                 "WHERE source=%s AND account_id=%s",
                 (source, account_id),
             )
-            return cur.fetchone()
+            row = cur.fetchone()
+        if row is not None:
+            _pos_stats_mem[key] = (now, row)
+        return row
     except Exception:
         return None
     finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def invalidate_position_stats_mem_cache(source: str = None, account_id: int = 2) -> None:
+    if source:
+        _pos_stats_mem.pop(f"{source}:{account_id}", None)
+    else:
+        _pos_stats_mem.clear()
 
 
 # ============================================================

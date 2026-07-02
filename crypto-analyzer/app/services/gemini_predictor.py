@@ -179,22 +179,15 @@ def _get_predict_symbols(conn) -> List[str]:
             )
             return symbols
 
-    from app.services.trading_gates import is_blacklist_level3_enforced, sql_exclude_level3_filter
+    from app.services.trading_gates import sql_exclude_level3_filter
     _l3 = sql_exclude_level3_filter("symbol")
     with conn.cursor() as cur:
-        if is_blacklist_level3_enforced():
-            cur.execute(
-                f"SELECT symbol FROM top_performing_symbols "
-                f"WHERE 1=1 {_l3} "
-                f"ORDER BY rank_score ASC LIMIT %s",
-                (PREDICT_TOP_N_FALLBACK,),
-            )
-        else:
-            cur.execute(
-                "SELECT symbol FROM top_performing_symbols "
-                "ORDER BY rank_score ASC LIMIT %s",
-                (PREDICT_TOP_N_FALLBACK,),
-            )
+        cur.execute(
+            f"SELECT symbol FROM top_performing_symbols "
+            f"WHERE 1=1 {_l3} "
+            f"ORDER BY rank_score ASC LIMIT %s",
+            (PREDICT_TOP_N_FALLBACK,),
+        )
         symbols = _filter_predict_symbols([r['symbol'] for r in cur.fetchall()], PREDICT_TOP_N_FALLBACK)
         logger.warning(f"[Gemini预测] candidate_pool 不可用, 回退 top_performing_symbols {len(symbols)} 个")
         return symbols

@@ -15,7 +15,6 @@ from loguru import logger
 from app.utils.config_loader import get_db_config
 from app.utils.futures_symbol import (
     futures_symbol_clean,
-    sql_rating_l3_clean_subquery,
     sql_rating_symbol_clean,
 )
 
@@ -72,8 +71,8 @@ def _bool_setting(key: str, default: bool = True, cursor=None) -> bool:
 
 
 def is_blacklist_level3_enforced() -> bool:
-    """L3 是否禁止模拟盘开仓；默认关闭（L3 仍可模拟，仅禁止实盘）。"""
-    return _bool_setting("blacklist_level3_enabled", False)
+    """向后兼容：L3/手动锁定已恒禁模拟+实盘；此开关不再改变闸门行为。"""
+    return True
 
 
 def is_live_top50_required() -> bool:
@@ -132,30 +131,11 @@ def check_live_open_allowed(
 
 
 def is_symbol_blocked_level3(symbol: str, rating_level: Optional[int] = None) -> bool:
-    """True = 应拒绝开仓 (L3 且开关开启)."""
-    if not is_blacklist_level3_enforced():
-        return False
-    if rating_level is not None:
-        return int(rating_level) >= 3
-    try:
-        db_config = get_db_config()
-        conn = pymysql.connect(**db_config, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
-        cur = conn.cursor()
-        clean = futures_symbol_clean(symbol)
-        cur.execute(
-            f"SELECT rating_level FROM trading_symbol_rating "
-            f"WHERE {sql_rating_symbol_clean('symbol')} = %s "
-            f"ORDER BY rating_level DESC LIMIT 1",
-            (clean,),
-        )
-        row = cur.fetchone()
-        cur.close()
-        conn.close()
-        if row and row.get('rating_level') is not None:
-            return int(row['rating_level']) >= 3
-    except Exception as e:
-        logger.warning(f"[trading_gates] L3 检查失败 {symbol}: {e}")
-    return False
+    """True = 应拒绝开仓（L3 或 rating_locked=1）。"""
+    blocked, _ = check_symbol_trading_forbidden(
+        symbol, rating_level=rating_level,
+    )
+    return blocked
 
 
 def _as_cursor(conn_or_cursor):
@@ -367,24 +347,28 @@ def _symbol_in_candidate_pool(symbol: str) -> bool:
         return False
 
 
-def load_blacklist_level3_symbols(conn=None) -> Set[str]:
-    """返回 L3 禁止交易 symbol 集合；开关关闭时返回空集."""
-    if not is_blacklist_level3_enforced():
-        return set()
+def load_trading_forbidden_symbols(conn=None) -> Set[str]:
+    """返回禁止开仓 symbol 集合：L3 + rating_locked=1。"""
     own_conn = conn is None
     try:
         if own_conn:
             db_config = get_db_config()
             conn = pymysql.connect(**db_config, charset='utf8mb4', cursorclass=pymysql.cursors.DictCursor)
         cur = conn.cursor()
-        cur.execute("SELECT symbol FROM trading_symbol_rating WHERE rating_level >= 3")
+        cur.execute(
+            "SELECT symbol FROM trading_symbol_rating "
+            "WHERE rating_level >= 3 OR COALESCE(rating_locked, 0) = 1"
+        )
         rows = cur.fetchall()
         if own_conn:
             cur.close()
             conn.close()
-        return {futures_symbol_clean(r['symbol'] if isinstance(r, dict) else r[0]) for r in rows}
+        return {
+            futures_symbol_clean(r['symbol'] if isinstance(r, dict) else r[0])
+            for r in rows
+        }
     except Exception as e:
-        logger.warning(f"[trading_gates] 读取黑名单3级失败: {e}")
+        logger.warning(f"[trading_gates] 读取禁止交易名单失败: {e}")
         if own_conn and conn:
             try:
                 conn.close()
@@ -393,18 +377,24 @@ def load_blacklist_level3_symbols(conn=None) -> Set[str]:
         return set()
 
 
+def load_blacklist_level3_symbols(conn=None) -> Set[str]:
+    """向后兼容：返回 L3 + 手动锁定 symbol 集合。"""
+    return load_trading_forbidden_symbols(conn)
+
+
 def get_symbol_rating_info(
     symbol: str, cursor=None,
-) -> Tuple[Optional[int], bool]:
+) -> Tuple[Optional[int], bool, bool]:
     """
-    统一查询 symbol 的评级等级与 TOP50 状态.
+    统一查询 symbol 的评级等级、TOP50 与手动锁定状态.
 
     cursor 可为 pymysql Cursor 或 Connection（与 gate_simulated_open 一致）.
 
     Returns:
-        (rating_level, in_top50):
+        (rating_level, in_top50, rating_locked):
           rating_level: None=无评级(未在评级表中), 0/1/2/3=评级等级
           in_top50: 是否在 top_performing_symbols 中
+          rating_locked: 是否手动锁定（锁定后禁止模拟+实盘开仓）
     """
     clean = futures_symbol_clean(symbol)
     cur = _as_cursor(cursor)
@@ -416,8 +406,11 @@ def get_symbol_rating_info(
                 f"   WHERE {sql_rating_symbol_clean('symbol')} = %s LIMIT 1) AS in_top100,"
                 f"  (SELECT rating_level FROM trading_symbol_rating "
                 f"   WHERE {sql_rating_symbol_clean('symbol')} = %s "
-                f"   ORDER BY rating_level DESC LIMIT 1) AS rating_level",
-                (clean, clean),
+                f"   ORDER BY rating_level DESC LIMIT 1) AS rating_level,"
+                f"  (SELECT COALESCE(rating_locked, 0) FROM trading_symbol_rating "
+                f"   WHERE {sql_rating_symbol_clean('symbol')} = %s "
+                f"   ORDER BY rating_level DESC LIMIT 1) AS rating_locked",
+                (clean, clean, clean),
             )
             row = cur.fetchone()
         else:
@@ -430,8 +423,11 @@ def get_symbol_rating_info(
                 f"   WHERE {sql_rating_symbol_clean('symbol')} = %s LIMIT 1) AS in_top100,"
                 f"  (SELECT rating_level FROM trading_symbol_rating "
                 f"   WHERE {sql_rating_symbol_clean('symbol')} = %s "
-                f"   ORDER BY rating_level DESC LIMIT 1) AS rating_level",
-                (clean, clean),
+                f"   ORDER BY rating_level DESC LIMIT 1) AS rating_level,"
+                f"  (SELECT COALESCE(rating_locked, 0) FROM trading_symbol_rating "
+                f"   WHERE {sql_rating_symbol_clean('symbol')} = %s "
+                f"   ORDER BY rating_level DESC LIMIT 1) AS rating_locked",
+                (clean, clean, clean),
             )
             row = cur.fetchone()
             cur.close()
@@ -439,10 +435,40 @@ def get_symbol_rating_info(
         if row:
             in_top50 = (row.get('in_top100') if isinstance(row, dict) else row[0]) == 1
             rl = row.get('rating_level') if isinstance(row, dict) else row[1]
-            return (int(rl) if rl is not None else None, in_top50)
+            locked_raw = row.get('rating_locked') if isinstance(row, dict) else row[2]
+            rating_locked = bool(int(locked_raw or 0))
+            return (
+                int(rl) if rl is not None else None,
+                in_top50,
+                rating_locked,
+            )
     except Exception as e:
         logger.warning(f"[trading_gates] 评级查询失败 {symbol}: {e}")
-    return (None, False)
+    return (None, False, False)
+
+
+def check_symbol_trading_forbidden(
+    symbol: str,
+    cursor=None,
+    rating_level: Optional[int] = None,
+    rating_locked: Optional[bool] = None,
+) -> Tuple[bool, str]:
+    """
+    L3 或 rating_locked=1 → 禁止模拟盘与实盘开仓（不依赖 blacklist_level3_enabled）。
+
+    Returns: (forbidden, reason)
+    """
+    if rating_level is None or rating_locked is None:
+        rl, _, locked = get_symbol_rating_info(symbol, cursor)
+        if rating_level is None:
+            rating_level = rl
+        if rating_locked is None:
+            rating_locked = locked
+    if rating_locked:
+        return True, "交易对已手动锁定，禁止开仓"
+    if rating_level is not None and int(rating_level) >= 3:
+        return True, f"黑名单{int(rating_level)}级禁止交易"
+    return False, ""
 
 
 DEFAULT_LIVE_BASE_MARGIN_USD = 100.0
@@ -501,7 +527,12 @@ def get_live_margin_ratio(symbol: str, cursor=None) -> float:
       - L0 (白名单) → 1.0 (100%)
       - 其它 (无评级 / TOP50 / L1/L2/L3) → 0.0 (禁止实盘)
     """
-    rating_level, _ = get_symbol_rating_info(symbol, cursor)
+    rating_level, _, rating_locked = get_symbol_rating_info(symbol, cursor)
+    forbidden, _ = check_symbol_trading_forbidden(
+        symbol, cursor, rating_level=rating_level, rating_locked=rating_locked,
+    )
+    if forbidden:
+        return 0.0
 
     if rating_level is not None and rating_level >= 1:
         return 0.0
@@ -538,7 +569,12 @@ def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
     if not is_live_whitelist_enabled(cursor):
         return False, '实盘白名单闸门未开启'
 
-    rating_level, _ = get_symbol_rating_info(symbol, cursor)
+    rating_level, _, rating_locked = get_symbol_rating_info(symbol, cursor)
+    forbidden, forbid_reason = check_symbol_trading_forbidden(
+        symbol, cursor, rating_level=rating_level, rating_locked=rating_locked,
+    )
+    if forbidden:
+        return False, forbid_reason
 
     if rating_level is not None and rating_level >= 1:
         return False, f'黑名单{rating_level}级禁止实盘'
@@ -553,13 +589,15 @@ def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]
     """
     模拟盘开仓基础币种闸门。
 
-    允许: TOP50 / 已有评级 / candidate_pool_snapshot 候选池内币种。
-    L3 仅在 blacklist_level3_enabled=1 时拒绝模拟盘；默认 L3 可模拟、不可实盘。
+    拒绝: L3 / rating_locked=1。
+    允许: TOP50 / 已有评级且非禁止 / candidate_pool_snapshot 候选池内币种。
     """
-    rating_level, in_top50 = get_symbol_rating_info(symbol, cursor)
-
-    if is_blacklist_level3_enforced() and rating_level is not None and rating_level >= 3:
-        return False, f'黑名单{rating_level}级禁止模拟盘'
+    rating_level, in_top50, rating_locked = get_symbol_rating_info(symbol, cursor)
+    forbidden, forbid_reason = check_symbol_trading_forbidden(
+        symbol, cursor, rating_level=rating_level, rating_locked=rating_locked,
+    )
+    if forbidden:
+        return False, forbid_reason
 
     if in_top50 or rating_level is not None:
         return True, ''
@@ -642,10 +680,16 @@ def has_open_futures_position(conn, source: str, symbol: str, account_id: Option
         return False
 
 
-def sql_exclude_level3_filter(column: str = "symbol") -> str:
-    """动态 SQL：排除 L3 的 AND 子句；开关关闭时返回空串."""
-    if not is_blacklist_level3_enforced():
-        return ""
+def sql_exclude_forbidden_symbols_filter(column: str = "symbol") -> str:
+    """动态 SQL：排除 L3 与手动锁定 symbol 的 AND 子句。"""
+    clean_col = sql_rating_symbol_clean(column)
     return (
-        f" AND {sql_rating_symbol_clean(column)} NOT IN ({sql_rating_l3_clean_subquery()})"
+        f" AND {clean_col} NOT IN ("
+        f"SELECT {sql_rating_symbol_clean('symbol')} FROM trading_symbol_rating "
+        f"WHERE rating_level >= 3 OR COALESCE(rating_locked, 0) = 1)"
     )
+
+
+def sql_exclude_level3_filter(column: str = "symbol") -> str:
+    """向后兼容：排除 L3 + 手动锁定。"""
+    return sql_exclude_forbidden_symbols_filter(column)

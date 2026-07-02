@@ -809,17 +809,22 @@ async def lifespan(app: FastAPI):
             logger.warning(f"⚠️  {name} 停止时异常: {e}")
 
     async def _cancel_background_tasks() -> None:
-        pending = list(bg_tasks)
+        pending = [t for t in bg_tasks if not t.done()]
         for task in pending:
             task.cancel()
-        if pending:
-            await asyncio.gather(*pending, return_exceptions=True)
+        if not pending:
+            return
+        _done, still_pending = await asyncio.wait(pending, timeout=8.0)
+        if still_pending:
+            logger.warning(
+                f"⚠️  {len(still_pending)} 个后台任务取消后仍未退出，继续关闭"
+            )
 
     try:
-        await asyncio.wait_for(_cancel_background_tasks(), timeout=20.0)
+        await _cancel_background_tasks()
         logger.info("✅ 后台周期任务已取消")
-    except asyncio.TimeoutError:
-        logger.warning("⚠️  后台任务取消超时(20s)，继续关闭")
+    except Exception as e:
+        logger.warning(f"⚠️  后台任务取消异常: {e}，继续关闭")
 
     try:
         from app.services.paper_limit_sync_service import get_paper_limit_sync_service
@@ -4991,6 +4996,7 @@ if __name__ == "__main__":
         port=9020,  # 改为9020端口，避免8000端口冲突
         reload=False,
         log_level="info",
-        access_log=False  # 禁用访问日志
+        access_log=False,  # 禁用访问日志
+        timeout_graceful_shutdown=15,
     )
 

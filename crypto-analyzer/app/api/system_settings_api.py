@@ -718,7 +718,7 @@ async def update_trading_services(data: TradingServicesUpdate):
             cursor.execute("""
                 INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
                 VALUES ('blacklist_level3_enabled', %s,
-                        '黑名单3级禁止开仓 (1=启用, 0=禁用). 关闭后 L3 交易对可开仓',
+                        '已废弃：L3/手动锁定恒禁模拟+实盘；保留设置项仅为兼容',
                         'web_ui', NOW())
                 ON DUPLICATE KEY UPDATE
                     setting_value = VALUES(setting_value),

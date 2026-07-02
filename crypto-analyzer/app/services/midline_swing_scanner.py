@@ -46,6 +46,7 @@ def load_l0_l1_symbols(conn) -> List[str]:
             """
             SELECT symbol, rating_level FROM trading_symbol_rating
             WHERE rating_level IN (0, 1)
+              AND COALESCE(rating_locked, 0) = 0
             ORDER BY rating_level ASC, symbol ASC
             """
         )

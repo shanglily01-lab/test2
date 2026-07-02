@@ -60,6 +60,11 @@ class SmartEntryExecutor:
 
     def _get_margin_amount(self, symbol: str) -> float:
         """根据交易对评级等级获取保证金金额"""
+        from app.services.trading_gates import check_symbol_trading_forbidden
+        forbidden, _ = check_symbol_trading_forbidden(symbol)
+        if forbidden:
+            return 0.0
+
         rating_level = self.opt_config.get_symbol_rating_level(symbol)
 
         if rating_level == 0:

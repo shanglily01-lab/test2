@@ -140,7 +140,7 @@ def test_l3_still_blocked() -> None:
         allowed, reason = check_simulated_symbol_allowed("HYPE/USDT", conn)
         if allowed:
             _fail("HYPE/USDT (L3) should be blocked")
-        if "3级" not in reason:
+        if "3级" not in reason and "禁止交易" not in reason:
             _fail(f"HYPE block reason unexpected: {reason}")
         _ok("L3 symbol still blocked with conn")
     finally:

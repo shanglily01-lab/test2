@@ -72,8 +72,13 @@ class KlinePullbackEntryExecutor:
             symbol: 交易对符号
 
         Returns:
-            保证金金额(USDT)，如果是黑名单3级则返回0
+            保证金金额(USDT)，L3/手动锁定/黑名单3级则返回0
         """
+        from app.services.trading_gates import check_symbol_trading_forbidden
+        forbidden, _ = check_symbol_trading_forbidden(symbol)
+        if forbidden:
+            return 0.0
+
         rating_level = self.opt_config.get_symbol_rating_level(symbol)
 
         # 根据评级等级设置保证金

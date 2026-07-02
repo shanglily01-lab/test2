@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 from loguru import logger
 
 _MEM_CACHE: Dict[str, tuple] = {}
-_MEM_TTL_S = 30
+_MEM_TTL_S = 120
 
 
 def _empty_counts() -> Dict[str, int]:

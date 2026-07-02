@@ -10,11 +10,11 @@ User=ec2-user
 Group=ec2-user
 WorkingDirectory=/home/test2/crypto-analyzer
 Environment="PYTHONUNBUFFERED=1"
-ExecStart=/home/test2/crypto-analyzer/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 9020
+ExecStart=/home/test2/crypto-analyzer/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 9020 --timeout-graceful-shutdown 15
 Restart=on-failure
 RestartSec=10
-# 优雅关闭：lifespan 会停后台任务；若 DB/API 卡住，最多等 120s 再 SIGKILL
-TimeoutStopSec=120
+# uvicorn 默认无限等 in-flight HTTP；lifespan 关停预算 ~45s；合计留 90s
+TimeoutStopSec=90
 StandardOutput=append:/home/test2/crypto-analyzer/logs/main_systemd.log
 StandardError=append:/home/test2/crypto-analyzer/logs/main_systemd.log
 
