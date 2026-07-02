@@ -831,7 +831,9 @@ class GeminiPositionAdvisor:
             return False, side_reason
 
         ctx = self._fetch_market_context(symbol)
-        ok_pre, pre_reason = precheck_open_advisor(profile, side, ctx, catalyst=catalyst)
+        ok_pre, pre_reason = precheck_open_advisor(
+            profile, side, ctx, catalyst=catalyst, source=source,
+        )
         if not ok_pre:
             log_advisor_review(
                 "open", "reject", symbol,

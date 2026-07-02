@@ -156,6 +156,18 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
 
 _TACTICAL_PROFILE_KEYS = frozenset({"pullback", "rebound", "chase", "dump"})
 _UPSTREAM_GATED_OPEN_PROFILES = _TACTICAL_PROFILE_KEYS | {"explore", "predict"}
+_UPSTREAM_CATALYST_VALIDATED_SOURCES = frozenset({
+    "gemini_explore", "gemini_predict",
+    "deepseek_explore", "deepseek_predict",
+    "gpt_explore", "gpt_predict",
+})
+
+
+def should_skip_upstream_catalyst_precheck(source: str, profile_key: str) -> bool:
+    """探索/预测 worker 已用 catalyst+data_signal 做过技术门，开仓顾问勿重复弱校验."""
+    if profile_key not in ("explore", "predict"):
+        return False
+    return (source or "").strip().lower() in _UPSTREAM_CATALYST_VALIDATED_SOURCES
 
 
 def should_skip_llm_for_tactical_open(
@@ -507,13 +519,19 @@ def precheck_open_advisor(
     side: str,
     ctx: dict,
     catalyst: str = "",
+    source: str = "",
+    data_signal: str = "",
 ) -> Tuple[bool, str]:
     """代码层策略专属预检（LLM 之前），避免所有单用同一套模糊标准."""
     s = (side or "").upper()
     rsi = ctx.get("rsi_14_1h")
     b7h = ctx.get("below_7d_high_pct")
 
-    if profile.key in ("explore", "predict") and (catalyst or "").strip():
+    if (
+        profile.key in ("explore", "predict")
+        and (catalyst or "").strip()
+        and not should_skip_upstream_catalyst_precheck(source, profile.key)
+    ):
         from app.services.ai_explore_prompt import (
             explore_catalyst_technical_ok,
             sym_data_for_catalyst_gate,
@@ -531,6 +549,7 @@ def precheck_open_advisor(
         }
         tech_ok, tech_reason = explore_catalyst_technical_ok(
             catalyst,
+            data_signal or "",
             sym_data=sym_data_for_catalyst_gate(sym_item),
             side=side,
         )

@@ -224,16 +224,6 @@ class DeepSeekPositionAdvisor:
             )
             return False, side_reason
 
-        ctx = self._prompt_helper._fetch_market_context(symbol)
-        ok_pre, pre_reason = precheck_open_advisor(profile, side, ctx, catalyst=catalyst)
-        if not ok_pre:
-            log_deepseek_advisor_review(
-                "open", "reject", symbol,
-                position_side=side, source=source, entry_price=price,
-                leverage=leverage, reason=pre_reason, catalyst=catalyst, conn=conn,
-            )
-            return False, pre_reason
-
         if self._should_skip_self_gated_open_llm(source, profile.key):
             skip_reason = "DeepSeek探索/预测已通过上游模型与catalyst技术门，跳过同源LLM二审"
             logger.info(
@@ -246,6 +236,18 @@ class DeepSeekPositionAdvisor:
                 catalyst=catalyst, conn=conn,
             )
             return True, skip_reason
+
+        ctx = self._prompt_helper._fetch_market_context(symbol)
+        ok_pre, pre_reason = precheck_open_advisor(
+            profile, side, ctx, catalyst=catalyst, source=source,
+        )
+        if not ok_pre:
+            log_deepseek_advisor_review(
+                "open", "reject", symbol,
+                position_side=side, source=source, entry_price=price,
+                leverage=leverage, reason=pre_reason, catalyst=catalyst, conn=conn,
+            )
+            return False, pre_reason
 
         if should_skip_llm_for_tactical_open(
             profile,
