@@ -34,7 +34,7 @@
 <header class="flex items-center justify-between mb-6 pb-4 border-b border-[#44484e]/40">
   <div>
     <h1 class="text-2xl font-bold">顾问审核记录</h1>
-    <p class="text-xs text-[#a8abb2] mt-1">Gemini / DeepSeek 开仓审核 · Gemini 持仓审核 · 近 7 日汇总</p>
+    <p class="text-xs text-[#a8abb2] mt-1">Gemini / DeepSeek 开仓审核 · Gemini 持仓审核 · 近 7 日汇总 · 列表仅最近 500 条</p>
   </div>
   <button onclick="loadAll()" class="flex items-center gap-1 px-3 py-2 rounded-lg bg-[#151a20] hover:bg-[#1a2027] text-xs">
     <span class="material-symbols-outlined text-[16px]">refresh</span>刷新
@@ -250,8 +250,9 @@ async function loadReviews() {
   var r = await fetch('/api/advisor/reviews?' + params.toString());
   var d = await r.json();
   totalItems = d.total || 0;
+  var capNote = (d.recent_cap && totalItems >= d.recent_cap) ? (' · 仅显示最近 ' + d.recent_cap + ' 条') : '';
   document.getElementById('resultCount').textContent =
-    totalItems > 0 ? ('匹配 ' + totalItems + ' 条') : (q || decision ? '无匹配结果' : '');
+    totalItems > 0 ? ('匹配 ' + totalItems + ' 条' + capNote) : (q || decision ? '无匹配结果' : '');
 
   body.innerHTML = '';
   if (!d.reviews || d.reviews.length === 0) {

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from typing import Any, Optional
 
 import pymysql
@@ -14,41 +15,11 @@ router = APIRouter(prefix="/api/advisor", tags=["顾问审核"])
 # 兼容旧路径
 legacy_router = APIRouter(prefix="/api/gemini-advisor", tags=["Gemini顾问审核(兼容)"])
 
-_REVIEW_COLS = """
-  id, review_type, decision, symbol, position_side, source,
-  position_id, entry_price, leverage, hold_hours, roi_pct,
-  reason, catalyst, created_at
-"""
+# 开仓/持仓列表仅扫描最近 N 条（分页在此窗口内）
+RECENT_REVIEWS_CAP = 500
 
-_UNION_SELECT_TEMPLATE = """
-SELECT
-  '{provider}' COLLATE utf8mb4_general_ci AS provider,
-  id,
-  review_type COLLATE utf8mb4_general_ci AS review_type,
-  decision COLLATE utf8mb4_general_ci AS decision,
-  symbol COLLATE utf8mb4_general_ci AS symbol,
-  position_side COLLATE utf8mb4_general_ci AS position_side,
-  source COLLATE utf8mb4_general_ci AS source,
-  position_id,
-  entry_price,
-  leverage,
-  hold_hours,
-  roi_pct,
-  CAST(reason AS CHAR) COLLATE utf8mb4_general_ci AS reason,
-  CAST(catalyst AS CHAR) COLLATE utf8mb4_general_ci AS catalyst,
-  (prompt_text IS NOT NULL AND prompt_text != '') AS has_prompt,
-  (input_json IS NOT NULL AND input_json != '') AS has_input,
-  (raw_response IS NOT NULL AND raw_response != '') AS has_raw,
-  created_at
-FROM {table} WHERE 1=1
-"""
-
-
-def _union_select(cur, provider: str, table: str) -> str:
-    cols = _table_columns(cur, table)
-    has_prompt = "(prompt_text IS NOT NULL AND prompt_text != '')" if "prompt_text" in cols else "0"
-    has_input = "(input_json IS NOT NULL AND input_json != '')" if "input_json" in cols else "0"
-    has_raw = "(raw_response IS NOT NULL AND raw_response != '')" if "raw_response" in cols else "0"
+def _union_select_list(provider: str, table: str) -> str:
+    """列表页轻量 SELECT：不读 prompt/raw 大字段。"""
     return f"""
 SELECT
   '{provider}' COLLATE utf8mb4_general_ci AS provider,
@@ -63,11 +34,8 @@ SELECT
   leverage,
   hold_hours,
   roi_pct,
-  CAST(reason AS CHAR) COLLATE utf8mb4_general_ci AS reason,
-  CAST(catalyst AS CHAR) COLLATE utf8mb4_general_ci AS catalyst,
-  {has_prompt} AS has_prompt,
-  {has_input} AS has_input,
-  {has_raw} AS has_raw,
+  LEFT(CAST(reason AS CHAR), 200) COLLATE utf8mb4_general_ci AS reason,
+  LEFT(CAST(catalyst AS CHAR), 120) COLLATE utf8mb4_general_ci AS catalyst,
   created_at
 FROM {table} WHERE 1=1
 """
@@ -190,6 +158,22 @@ def _build_summary():
     }
 
 
+def _limited_subquery(
+    provider: str,
+    table: str,
+    review_type: Optional[str],
+    per_table: int,
+) -> tuple[str, list[Any]]:
+    sql = _union_select_list(provider, table)
+    params: list[Any] = []
+    if review_type:
+        sql += " AND review_type = %s"
+        params.append(review_type)
+    sql = f"({sql} ORDER BY created_at DESC, id DESC LIMIT %s)"
+    params.append(per_table)
+    return sql, params
+
+
 def _list_reviews(
     review_type: Optional[str],
     decision: Optional[str],
@@ -204,33 +188,53 @@ def _list_reviews(
         gemini_ok, deepseek_ok, gpt_ok = _tables_ready(cur)
         if not gemini_ok and not deepseek_ok and not gpt_ok:
             conn.close()
-            return {"reviews": [], "ready": False, "total": 0}
+            return {"reviews": [], "ready": False, "total": 0, "recent_cap": RECENT_REVIEWS_CAP}
 
-        parts = []
+        table_specs: list[tuple[str, str]] = []
         if gemini_ok and provider in (None, "", "all", "gemini"):
-            parts.append(_union_select(cur, "gemini", "gemini_advisor_reviews"))
+            table_specs.append(("gemini", "gemini_advisor_reviews"))
         if deepseek_ok and provider in (None, "", "all", "deepseek"):
-            parts.append(_union_select(cur, "deepseek", "deepseek_advisor_reviews"))
+            table_specs.append(("deepseek", "deepseek_advisor_reviews"))
         if gpt_ok and provider in (None, "", "all", "gpt"):
-            parts.append(_union_select(cur, "gpt", "gpt_advisor_reviews"))
-        if not parts:
+            table_specs.append(("gpt", "gpt_advisor_reviews"))
+        if not table_specs:
             conn.close()
-            return {"reviews": [], "ready": True, "total": 0}
+            return {"reviews": [], "ready": True, "total": 0, "recent_cap": RECENT_REVIEWS_CAP}
+
+        n_tables = len(table_specs)
+        per_table = (
+            RECENT_REVIEWS_CAP
+            if n_tables <= 1
+            else min(RECENT_REVIEWS_CAP, math.ceil(RECENT_REVIEWS_CAP / n_tables) + 50)
+        )
+
+        parts: list[str] = []
+        union_params: list[Any] = []
+        for prov, table in table_specs:
+            sub_sql, sub_params = _limited_subquery(prov, table, review_type, per_table)
+            parts.append(sub_sql)
+            union_params.extend(sub_params)
 
         union_sql = " UNION ALL ".join(parts)
-        filt, params = _review_filters(review_type, decision, symbol, q, provider)
+        filt, filt_params = _review_filters(review_type, decision, symbol, q, provider)
+        base_params = union_params + filt_params
 
-        count_sql = f"SELECT COUNT(*) AS cnt FROM ({union_sql}) AS u WHERE 1=1" + filt
-        cur.execute(count_sql, params)
+        capped_sql = (
+            f"SELECT * FROM ("
+            f"  SELECT * FROM ({union_sql}) AS u WHERE 1=1{filt}"
+            f"  ORDER BY created_at DESC, id DESC"
+            f"  LIMIT {RECENT_REVIEWS_CAP}"
+            f") AS capped"
+        )
+
+        cur.execute(f"SELECT COUNT(*) AS cnt FROM ({capped_sql}) AS c", base_params)
         total = int((cur.fetchone() or {}).get("cnt") or 0)
 
         list_sql = (
-            f"SELECT * FROM ({union_sql}) AS u WHERE 1=1"
-            + filt
-            + " ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s"
+            f"SELECT * FROM ({capped_sql}) AS page"
+            f" ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s"
         )
-        qparams = list(params) + [limit, offset]
-        cur.execute(list_sql, qparams)
+        cur.execute(list_sql, base_params + [limit, offset])
         rows = cur.fetchall() or []
     conn.close()
 
@@ -240,7 +244,12 @@ def _list_reviews(
         for k in ("entry_price", "hold_hours", "roi_pct"):
             if r.get(k) is not None:
                 r[k] = float(r[k])
-    return {"ready": True, "total": total, "reviews": rows}
+    return {
+        "ready": True,
+        "total": total,
+        "reviews": rows,
+        "recent_cap": RECENT_REVIEWS_CAP,
+    }
 
 
 @router.get("/summary")
