@@ -579,10 +579,14 @@ async def lifespan(app: FastAPI):
                             pass
                     raise
 
+            # coin_scores 已下线（migration 025）：不再调度 update_all_coin_scores / calculate_coin_score
             if os.getenv("ENABLE_APP_COIN_SCORE_PROC", "0").strip().lower() in ("1", "true", "yes", "on"):
-                spawn(_periodic("update_all_coin_scores",        5 * 60,   "评分更新(5m)"))
+                logger.warning(
+                    "[评分更新] ENABLE_APP_COIN_SCORE_PROC=1 已忽略：coin_scores 已下线，"
+                    "请 unset 该环境变量"
+                )
             else:
-                logger.info("[评分更新] app 内 update_all_coin_scores 周期任务默认关闭；由 MySQL event 统一调度")
+                logger.info("[评分更新] coin_scores 已下线（无 EVENT / 无周期任务）")
             spawn(_periodic("update_technical_signals_cache",    15 * 60,  "技术信号缓存(15m)"))
             spawn(_periodic("update_dashboard_hyperliquid_cache",30 * 60,  "Dashboard聪明钱(30m)"))
             spawn(_periodic("update_data_management_stats_cache",2 * 3600, "数据管理统计(2h)"))

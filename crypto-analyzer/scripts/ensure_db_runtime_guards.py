@@ -86,11 +86,11 @@ def ensure_indexes(cur) -> None:
             cur.execute(ddl)
 
 
-def ensure_coin_scores_event_interval(cur) -> None:
-    """coin_scores EVENT 至少 15 分钟一轮，避免每 5min 扫 kline_data 拖垮 API."""
+def ensure_coin_scores_disabled(cur) -> None:
+    """下线 coin_scores：DROP EVENT + 存储过程（扫 kline_data 拖垮 API，业务已不用）."""
     cur.execute(
         """
-        SELECT EVENT_NAME, INTERVAL_VALUE, INTERVAL_FIELD, STATUS
+        SELECT EVENT_NAME, STATUS
         FROM information_schema.EVENTS
         WHERE EVENT_SCHEMA = DATABASE()
           AND EVENT_NAME = 'update_coin_scores_every_5min'
@@ -98,23 +98,31 @@ def ensure_coin_scores_event_interval(cur) -> None:
         """
     )
     row = cur.fetchone()
-    if not row:
-        print("SKIP coin_scores EVENT not present")
-        return
-    interval = int(row.get("INTERVAL_VALUE") or 0)
-    field = str(row.get("INTERVAL_FIELD") or "").upper()
-    if field.startswith("MINUTE") and interval >= 15:
-        print(f"OK coin_scores EVENT every {interval} MINUTE")
-        return
-    print(f"ALTER coin_scores EVENT {interval}{field} -> every 15 MINUTE")
-    cur.execute(
-        """
-        ALTER EVENT update_coin_scores_every_5min
-            ON SCHEDULE EVERY 15 MINUTE
-            DO CALL update_all_coin_scores()
-        """
-    )
-    print("OK coin_scores EVENT throttled to 15 MINUTE")
+    if row:
+        print(f"DROP EVENT update_coin_scores_every_5min (was {row.get('STATUS')})")
+        cur.execute("DROP EVENT IF EXISTS update_coin_scores_every_5min")
+        print("OK coin_scores EVENT removed")
+    else:
+        print("OK coin_scores EVENT already absent")
+
+    for proc in ("update_all_coin_scores", "calculate_coin_score"):
+        cur.execute(
+            """
+            SELECT ROUTINE_NAME
+            FROM information_schema.ROUTINES
+            WHERE ROUTINE_SCHEMA = DATABASE()
+              AND ROUTINE_TYPE = 'PROCEDURE'
+              AND ROUTINE_NAME = %s
+            LIMIT 1
+            """,
+            (proc,),
+        )
+        if cur.fetchone():
+            print(f"DROP PROCEDURE {proc}")
+            cur.execute(f"DROP PROCEDURE IF EXISTS `{proc}`")
+            print(f"OK procedure {proc} removed")
+        else:
+            print(f"OK procedure {proc} already absent")
 
 
 def print_blocking_sessions(cur) -> None:
@@ -149,7 +157,7 @@ def main() -> None:
     try:
         with conn.cursor() as cur:
             ensure_indexes(cur)
-            ensure_coin_scores_event_interval(cur)
+            ensure_coin_scores_disabled(cur)
             print_blocking_sessions(cur)
     finally:
         conn.close()

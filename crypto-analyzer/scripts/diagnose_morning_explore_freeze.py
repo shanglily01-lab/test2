@@ -8,7 +8,7 @@
 
 常见复现: 第二天早上点 Gemini/DeepSeek 探索页 → 整站卡死。
 根因组合:
-  - MySQL EVENT update_coin_scores（calculate_coin_score 扫 kline_data，单条可达数十秒）
+  - （已下线）MySQL EVENT update_coin_scores / calculate_coin_score
   - scheduler price_stats_24h 每分钟 UPDATE（与 WS INSERT 争 kline_data）
   - 探索页首屏曾并行 5~6 路 API 打满 main 连接池（已改 /bootstrap 单请求）
 """
@@ -133,7 +133,7 @@ def _now_labels() -> dict:
 def _print_schedule_hint(cst_hour: int) -> None:
     print("\n=== 与探索页卡死相关的后台负载（代码侧）===")
     rows = [
-        ("每 15min EVENT", "MySQL", "update_all_coin_scores → calculate_coin_score×全 symbol"),
+        ("已下线", "MySQL", "coin_scores EVENT / calculate_coin_score"),
         ("每 1min", "scheduler", "price_stats_24h 批量 UPDATE（GET_LOCK 防重）"),
         ("每 6min", "scheduler", "candidate_pool_snapshot（K 线叙事）"),
         ("每 15min", "scheduler", "explore_prepared_snapshot"),
@@ -146,7 +146,7 @@ def _print_schedule_hint(cst_hour: int) -> None:
     for when, where, what in rows:
         print(f"  [{when:22}] {where:12} {what}")
     if 8 <= cst_hour < 11:
-        print("\n  [HINT] 上午常撞上固定槽探索 worker + coin_scores；看 PROCESSLIST 是否有 calculate_coin_score。")
+        print("\n  [HINT] 上午常撞上固定槽探索 worker + price_stats；看 PROCESSLIST 是否有 kline_data 慢查询。")
 
 
 def _check_indexes(cur) -> None:
@@ -395,8 +395,8 @@ def main() -> int:
         conn.close()
 
     print("\n=== 建议 ===")
-    print("  1. PROCESSLIST 有 calculate_coin_score / close_price>open_price 且 TIME>10s")
-    print("     → 跑 python scripts/ensure_db_runtime_guards.py（EVENT 改为 15min）")
+    print("  1. PROCESSLIST 仍有 calculate_coin_score / close_price>open_price")
+    print("     → 跑 python scripts/ensure_db_runtime_guards.py（DROP EVENT+PROCEDURE）")
     print("  2. 若 account_stats / top50 >3s → ensure_db_runtime_guards.py 补索引")
     print("  3. 若 snapshot updated_at >45min → POST /api/data-cache/refresh/position-stats")
     print("  4. 若 explore runs status=partial 持续 → 查 scheduler 日志")
