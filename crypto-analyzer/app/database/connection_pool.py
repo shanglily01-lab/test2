@@ -76,74 +76,65 @@ class MySQLConnectionPool:
         except Exception as e:
             logger.debug(f"DB session guard setup skipped: {e}")
 
+    @staticmethod
+    def _raw_close(conn) -> None:
+        """关闭底层 TCP。禁止调用被 get_api_connection 劫持的 close()（会误 release 信号量）."""
+        if conn is None:
+            return
+        real_close = getattr(conn, "_pymysql_close", None)
+        try:
+            if real_close is not None:
+                real_close()
+            elif not getattr(conn, "_pool_managed", False):
+                # 尚未被池包装的原始连接
+                pymysql.connections.Connection.close(conn)
+        except Exception:
+            pass
+
     def _is_connection_alive(self, conn) -> bool:
-        """检查连接是否存活"""
+        """检查连接是否存活（可能阻塞至 read_timeout，调用方不得持有 self.lock）."""
         try:
             if conn is None:
                 return False
             if not conn.open:
                 return False
-            # 使用 ping 检查连接
             conn.ping(reconnect=False)
             return True
-        except:
+        except Exception:
             return False
 
     def _get_healthy_connection(self):
-        """从池中获取健康的连接（建连在锁外，避免并行 API 串行卡死）."""
-        with self.lock:
-            current_time = time.time()
-            if current_time - self._last_check_time > self._check_interval:
-                self._cleanup_dead_connections()
-                self._last_check_time = current_time
+        """从池中取连接：pop 持锁，ping/建连在锁外。
 
-            while self.connections:
-                conn = self.connections.pop(0)
-                if self._is_connection_alive(conn):
-                    return conn
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-
-        return self._create_connection()
-
-    def _cleanup_dead_connections(self):
-        """清理池中的死连接"""
-        alive_connections = []
-        for conn in self.connections:
+        隔夜 idle > wait_timeout 后池内多为死连接。若在锁内 ping，
+        第二天首屏并行请求会串行卡在 pool.lock 上，表现为整站查询锁死。
+        """
+        while True:
+            conn = None
+            with self.lock:
+                if self.connections:
+                    conn = self.connections.pop(0)
+            if conn is None:
+                return self._create_connection()
             if self._is_connection_alive(conn):
-                alive_connections.append(conn)
-            else:
-                try:
-                    conn.close()
-                    logger.debug("清理无效连接")
-                except:
-                    pass
-        self.connections = alive_connections
+                return conn
+            logger.debug("丢弃池内失效连接")
+            self._raw_close(conn)
 
     def _return_connection(self, conn):
-        """将连接归还到池中"""
-        with self.lock:
-            # 清理事务状态，避免死锁
-            try:
-                conn.rollback()  # 回滚任何未完成的事务
-            except:
-                pass
+        """将连接归还到池中。归还时不 ping（避免持锁阻塞）；死连接下次取出时丢弃."""
+        try:
+            conn.rollback()
+        except Exception:
+            self._raw_close(conn)
+            return
 
+        with self.lock:
             if len(self.connections) < self.pool_size:
-                if self._is_connection_alive(conn):
-                    self.connections.append(conn)
-                else:
-                    try:
-                        conn.close()
-                    except:
-                        pass
-            else:
-                try:
-                    conn.close()
-                except:
-                    pass
+                self.connections.append(conn)
+                return
+        # 池已满：关底层连接，禁止调用劫持后的 close()（会误 release 信号量）
+        self._raw_close(conn)
 
     @contextmanager
     def get_connection(self):
@@ -205,13 +196,11 @@ class MySQLConnectionPool:
     def close_all(self):
         """关闭池中所有连接"""
         with self.lock:
-            for conn in self.connections:
-                try:
-                    conn.close()
-                except:
-                    pass
+            pending = list(self.connections)
             self.connections = []
-            logger.info("✅ 连接池已关闭")
+        for conn in pending:
+            self._raw_close(conn)
+        logger.info("✅ 连接池已关闭")
 
 
 class RobustConnection:
@@ -366,23 +355,26 @@ def get_api_connection(acquire_timeout: float = 5.0):
         pool._slot_sem.release()
         raise
 
-    orig_close = conn.close
+    # 只包装一次：保留底层 close，丢弃死连接时必须走 _pymysql_close
+    if not getattr(conn, "_pool_managed", False):
+        conn._pymysql_close = conn.close
+        conn._pool_managed = True
 
-    def _pool_close():
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        try:
-            pool._return_connection(conn)
-        except Exception:
-            pass
-        try:
-            pool._slot_sem.release()
-        except Exception:
-            pass
+        def _pool_close():
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            try:
+                pool._return_connection(conn)
+            except Exception:
+                pass
+            try:
+                pool._slot_sem.release()
+            except Exception:
+                pass
 
-    conn.close = _pool_close
+        conn.close = _pool_close
     return conn
 
 
