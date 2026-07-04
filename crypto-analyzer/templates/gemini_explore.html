@@ -829,14 +829,29 @@ function switchTab(tab) {
   }
 }
 // ============================================================
-// INIT
+// INIT — 首屏单请求 bootstrap，避免并行打满 API 连接池
 // ============================================================
 function loadAll(options) {
   options = options || {};
-  loadStatus();
-  loadOpenPositions();
-  loadRuns();
-  loadExploreStats();
+  if (loadAll._loading) return;
+  loadAll._loading = true;
+  fetchExploreApi('/api/gemini-explore/bootstrap')
+    .then(function(d) {
+      var data = (d && d.data) || {};
+      renderExploreStatus(data.status || {});
+      renderExploreOpen(data.open_positions || [], data.open_summary || {});
+      renderExploreRuns(data.runs || []);
+      renderExploreStats(data.stats || {});
+    })
+    .catch(function(e) {
+      console.error('bootstrap error', e);
+      // 降级：串行拉各接口，仍避免瞬时 4 路并行
+      loadStatus();
+      setTimeout(loadOpenPositions, 200);
+      setTimeout(loadRuns, 400);
+      setTimeout(loadExploreStats, 600);
+    })
+    .finally(function() { loadAll._loading = false; });
   if (options.deferSecondary) {
     setTimeout(function() {
       if (!document.hidden && explorePoll.tabVisible('tab-explore')) {

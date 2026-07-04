@@ -86,6 +86,37 @@ def ensure_indexes(cur) -> None:
             cur.execute(ddl)
 
 
+def ensure_coin_scores_event_interval(cur) -> None:
+    """coin_scores EVENT 至少 15 分钟一轮，避免每 5min 扫 kline_data 拖垮 API."""
+    cur.execute(
+        """
+        SELECT EVENT_NAME, INTERVAL_VALUE, INTERVAL_FIELD, STATUS
+        FROM information_schema.EVENTS
+        WHERE EVENT_SCHEMA = DATABASE()
+          AND EVENT_NAME = 'update_coin_scores_every_5min'
+        LIMIT 1
+        """
+    )
+    row = cur.fetchone()
+    if not row:
+        print("SKIP coin_scores EVENT not present")
+        return
+    interval = int(row.get("INTERVAL_VALUE") or 0)
+    field = str(row.get("INTERVAL_FIELD") or "").upper()
+    if field.startswith("MINUTE") and interval >= 15:
+        print(f"OK coin_scores EVENT every {interval} MINUTE")
+        return
+    print(f"ALTER coin_scores EVENT {interval}{field} -> every 15 MINUTE")
+    cur.execute(
+        """
+        ALTER EVENT update_coin_scores_every_5min
+            ON SCHEDULE EVERY 15 MINUTE
+            DO CALL update_all_coin_scores()
+        """
+    )
+    print("OK coin_scores EVENT throttled to 15 MINUTE")
+
+
 def print_blocking_sessions(cur) -> None:
     cur.execute(
         """
@@ -118,6 +149,7 @@ def main() -> None:
     try:
         with conn.cursor() as cur:
             ensure_indexes(cur)
+            ensure_coin_scores_event_interval(cur)
             print_blocking_sessions(cur)
     finally:
         conn.close()

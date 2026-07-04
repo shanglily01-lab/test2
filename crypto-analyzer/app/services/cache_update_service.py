@@ -92,6 +92,7 @@ class CacheUpdateService:
         - volume_24h / quote_volume_24h: 近 24h 内 5m K线累计
         - change_24h: (current - 24h前) / 24h前 * 100
         """
+        lock_acquired = False
         try:
             # 用 pymysql 直接跑 SQL, 绕开 SQLAlchemy ORM 开销
             import pymysql
@@ -113,6 +114,15 @@ class CacheUpdateService:
 
         try:
             with conn.cursor() as cur:
+                # 上一轮未完成则跳过，避免与 WS INSERT kline_data / coin_scores 叠锁
+                cur.execute("SELECT GET_LOCK('price_stats_24h_refresh', 0) AS got_lock")
+                lock_row = cur.fetchone()
+                got = lock_row[0] if isinstance(lock_row, (tuple, list)) else (lock_row or {}).get("got_lock")
+                lock_acquired = bool(got and int(got) == 1)
+                if not lock_acquired:
+                    logger.info("[price_stats] 上一轮仍在运行，跳过本轮")
+                    return
+
                 # 单条 UPDATE 用 4 个子聚合一次性更新所有 symbol
                 # 注意: ago24h/stat24h 使用 LEFT JOIN, 避免因个别数据缺失导致整行不更新
                 # 即使 24h 前价格不可用, 也会刷新 updated_at 防止数据全表过时
@@ -217,6 +227,12 @@ class CacheUpdateService:
         except Exception as e:
             logger.error(f"[price_stats] 批量更新失败: {e}", exc_info=True)
         finally:
+            if lock_acquired:
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT RELEASE_LOCK('price_stats_24h_refresh')")
+                except Exception:
+                    pass
             try:
                 conn.close()
             except Exception:

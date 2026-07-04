@@ -833,10 +833,24 @@ function switchTab(tab) {
 // ============================================================
 function loadAll(options) {
   options = options || {};
-  loadStatus();
-  loadOpenPositions();
-  loadRuns();
-  loadExploreStats();
+  if (loadAll._loading) return;
+  loadAll._loading = true;
+  fetchExploreApi('/api/deepseek-explore/bootstrap')
+    .then(function(d) {
+      var data = (d && d.data) || {};
+      renderExploreStatus(data.status || {});
+      renderExploreOpen(data.open_positions || [], data.open_summary || {});
+      renderExploreRuns(data.runs || []);
+      renderExploreStats(data.stats || {});
+    })
+    .catch(function(e) {
+      console.error('bootstrap error', e);
+      loadStatus();
+      setTimeout(loadOpenPositions, 200);
+      setTimeout(loadRuns, 400);
+      setTimeout(loadExploreStats, 600);
+    })
+    .finally(function() { loadAll._loading = false; });
   if (options.deferSecondary) {
     setTimeout(function() {
       if (!document.hidden && explorePoll.tabVisible('tab-explore')) {

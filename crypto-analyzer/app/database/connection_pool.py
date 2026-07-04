@@ -354,7 +354,8 @@ def close_global_pool():
 
 def get_api_connection(acquire_timeout: float = 5.0):
     """获取一个由全局连接池管理的连接. conn.close() 实际归还到池中（非关 TCP）."""
-    pool = get_global_pool(get_db_config(), pool_size=10)
+    # 探索页首屏曾并行 5~6 路；池过小会在 kline 维护高峰把整站卡死
+    pool = get_global_pool(get_db_config(), pool_size=20)
     if not pool._slot_sem.acquire(timeout=acquire_timeout):
         raise TimeoutError(
             f"MySQL 连接池已满 ({pool.pool_size})，{acquire_timeout:.0f}s 内无可用连接"

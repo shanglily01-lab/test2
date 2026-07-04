@@ -2,6 +2,7 @@
 Gemini 探索 HTTP API.
 
 端点:
+- GET  /api/gemini-explore/bootstrap              首屏单请求 (status+runs+open+stats)
 - GET  /api/gemini-explore/status                 返回 kill switch + 最近一轮元数据
 - POST /api/gemini-explore/toggle                 切换 kill switch (写 system_settings)
 - GET  /api/gemini-explore/runs?limit=20          最近 N 轮运行记录
@@ -106,6 +107,28 @@ def _build_live_positions(positions):
         "open_count": len(result),
     }
     return result, summary
+
+
+# ============================================================
+# 首屏 bootstrap（单连接，避免并行打满 API 池）
+# ============================================================
+@router.get("/bootstrap")
+def bootstrap():
+    """首屏一次返回 status + runs + open + stats."""
+    try:
+        from app.utils.explore_bootstrap import explore_bootstrap_payload
+
+        data = explore_bootstrap_payload(
+            source="gemini_explore",
+            enabled_key="gemini_explore_enabled",
+            runs_table="gemini_explore_runs",
+            leverage=3,
+            confidence_threshold=0.6,
+        )
+        return {"success": True, "data": data}
+    except Exception as e:
+        logger.error(f"[Gemini探索 API] /bootstrap 失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================

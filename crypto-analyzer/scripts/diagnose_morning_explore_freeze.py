@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""早上探索页卡死巡检 — 查定时任务相关 SQL、锁等待、慢查询、快照新鲜度。
+"""探索页卡死巡检 — 查 coin_scores EVENT、kline 锁、慢查询、快照新鲜度。
 
 用法（生产服务器）:
   cd /home/test2/crypto-analyzer
   python scripts/diagnose_morning_explore_freeze.py
   python scripts/diagnose_morning_explore_freeze.py --since-hours 12
 
-北京时间 08:00 ≈ UTC 00:00（若服务器为 UTC）:
-  - main.py: 12h 复盘 + daily_review 子进程（扫 kline_data / futures_positions）
-  - scheduler: position_stats 每 30min 在 :00/:30 触发
-  - scheduler: TOP50+评级 每 1h + 15min 轮询（update_top_performing_symbols 全表 GROUP BY）
-  - scheduler: update_account_statistics 每 5min（account 全量 closed 聚合）
+常见复现: 第二天早上点 Gemini/DeepSeek 探索页 → 整站卡死。
+根因组合:
+  - MySQL EVENT update_coin_scores（calculate_coin_score 扫 kline_data，单条可达数十秒）
+  - scheduler price_stats_24h 每分钟 UPDATE（与 WS INSERT 争 kline_data）
+  - 探索页首屏曾并行 5~6 路 API 打满 main 连接池（已改 /bootstrap 单请求）
 """
 from __future__ import annotations
 
@@ -131,21 +131,22 @@ def _now_labels() -> dict:
 
 
 def _print_schedule_hint(cst_hour: int) -> None:
-    print("\n=== 与早上 8 点相关的定时任务（代码侧）===")
+    print("\n=== 与探索页卡死相关的后台负载（代码侧）===")
     rows = [
-        ("00:00 UTC (=08:00 CST)", "main.py", "12h_retrospective 子进程"),
-        ("00:00 UTC (=08:00 CST)", "main.py", "daily_review_report 子进程"),
-        ("每 5min", "scheduler", "update_account_statistics（全量 closed 聚合）"),
-        ("每 30min :00/:30", "scheduler", "refresh_position_stats（多路 futures_positions 聚合）"),
-        ("每 1h + 15min 轮询", "scheduler", "TOP50 + trading_symbol_rating（全 symbol GROUP BY）"),
+        ("每 15min EVENT", "MySQL", "update_all_coin_scores → calculate_coin_score×全 symbol"),
+        ("每 1min", "scheduler", "price_stats_24h 批量 UPDATE（GET_LOCK 防重）"),
         ("每 6min", "scheduler", "candidate_pool_snapshot（K 线叙事）"),
         ("每 15min", "scheduler", "explore_prepared_snapshot"),
-        ("每 4h + 10min", "scheduler", "gemini/deepseek explore worker"),
+        ("固定槽+轮询", "scheduler", "gemini/deepseek explore/predict worker"),
+        ("每 1h + 15min", "scheduler", "TOP50 + trading_symbol_rating"),
+        ("每 5min", "scheduler", "update_account_statistics"),
+        ("每 30min", "scheduler", "refresh_position_stats"),
+        ("首屏", "main API", "/api/*-explore/bootstrap（单连接）"),
     ]
     for when, where, what in rows:
         print(f"  [{when:22}] {where:12} {what}")
-    if cst_hour >= 8 and cst_hour < 10:
-        print("\n  [WARN] 当前处于北京时间 08:00-10:00 窗口，上述任务易叠加，连接池/锁竞争概率高。")
+    if 8 <= cst_hour < 11:
+        print("\n  [HINT] 上午常撞上固定槽探索 worker + coin_scores；看 PROCESSLIST 是否有 calculate_coin_score。")
 
 
 def _check_indexes(cur) -> None:
@@ -394,11 +395,12 @@ def main() -> int:
         conn.close()
 
     print("\n=== 建议 ===")
-    print("  1. 若 account_stats / top50_symbol_stats >3s → 跑 ensure_db_runtime_guards.py 补索引")
-    print("  2. 若 PROCESSLIST 有 update_top_performers / daily_review → 等其结束或错峰 scheduler")
-    print("  3. 若 snapshot updated_at >45min → curl -X POST .../api/data-cache/refresh/position-stats")
-    print("  4. 若 gemini_explore_runs status=partial 持续 → 查 scheduler 日志 explore 卡死")
-    print("  5. 探索页 API 已禁止回退扫主表；卡死多为连接池被维护任务占满，看上面慢查询")
+    print("  1. PROCESSLIST 有 calculate_coin_score / close_price>open_price 且 TIME>10s")
+    print("     → 跑 python scripts/ensure_db_runtime_guards.py（EVENT 改为 15min）")
+    print("  2. 若 account_stats / top50 >3s → ensure_db_runtime_guards.py 补索引")
+    print("  3. 若 snapshot updated_at >45min → POST /api/data-cache/refresh/position-stats")
+    print("  4. 若 explore runs status=partial 持续 → 查 scheduler 日志")
+    print("  5. 探索页首屏应走 /bootstrap；卡死多为 coin_scores + kline 锁占满连接池")
     return 0
 
 
