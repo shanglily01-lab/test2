@@ -14,6 +14,12 @@ import time
 from contextlib import contextmanager
 
 
+# 池内连接 idle 超过此值直接丢弃，不做 ping（隔夜死连接 ping 会阻塞至 read_timeout）
+POOL_CONN_MAX_IDLE_SEC = 1800  # 30min
+# 单次 checkout 最多从池内 pop 并丢弃几条，避免一条请求扫光 20 条死连接
+MAX_DISCARD_PER_CHECKOUT = 5
+
+
 class MySQLConnectionPool:
     """MySQL 连接池管理器 - 支持自动重连和连接健康检查"""
 
@@ -91,43 +97,63 @@ class MySQLConnectionPool:
         except Exception:
             pass
 
-    def _is_connection_alive(self, conn) -> bool:
-        """检查连接是否存活（可能阻塞至 read_timeout，调用方不得持有 self.lock）."""
-        try:
-            if conn is None:
-                return False
-            if not conn.open:
-                return False
-            conn.ping(reconnect=False)
-            return True
-        except Exception:
-            return False
+    @staticmethod
+    def _pool_idle_seconds(conn) -> Optional[float]:
+        returned_at = getattr(conn, "_pool_returned_at", None)
+        if returned_at is None:
+            return None
+        return time.time() - float(returned_at)
+
+    def _discard_pooled_connection(self, conn, reason: str) -> None:
+        logger.debug(f"丢弃池内连接 ({reason})")
+        self._raw_close(conn)
 
     def _get_healthy_connection(self):
-        """从池中取连接：pop 持锁，ping/建连在锁外。
+        """从池中取连接：pop 持锁；过期连接按 idle 时间丢弃，禁止对隔夜死连接 ping.
 
-        隔夜 idle > wait_timeout 后池内多为死连接。若在锁内 ping，
-        第二天首屏并行请求会串行卡在 pool.lock 上，表现为整站查询锁死。
+        旧逻辑对池内每条死连接 ping(reconnect=False)，read_timeout=30s 时
+        一条请求可阻塞数分钟并占满信号量，次日首屏表现为整站卡死。
         """
-        while True:
+        discarded = 0
+        while discarded < MAX_DISCARD_PER_CHECKOUT:
             conn = None
             with self.lock:
                 if self.connections:
                     conn = self.connections.pop(0)
             if conn is None:
                 return self._create_connection()
-            if self._is_connection_alive(conn):
-                return conn
-            logger.debug("丢弃池内失效连接")
-            self._raw_close(conn)
+
+            idle_s = self._pool_idle_seconds(conn)
+            if idle_s is not None and idle_s > POOL_CONN_MAX_IDLE_SEC:
+                self._discard_pooled_connection(conn, f"idle {idle_s:.0f}s")
+                discarded += 1
+                continue
+
+            if not getattr(conn, "open", True):
+                self._discard_pooled_connection(conn, "socket closed")
+                discarded += 1
+                continue
+
+            return conn
+
+        if discarded >= MAX_DISCARD_PER_CHECKOUT:
+            logger.warning(
+                f"连接池: 连续丢弃 {discarded} 条过期/失效连接，新建 TCP"
+            )
+        return self._create_connection()
 
     def _return_connection(self, conn):
-        """将连接归还到池中。归还时不 ping（避免持锁阻塞）；死连接下次取出时丢弃."""
+        """将连接归还到池中。归还时不 ping（避免持锁阻塞）；过期连接 checkout 时按 idle 丢弃."""
         try:
             conn.rollback()
         except Exception:
             self._raw_close(conn)
             return
+
+        try:
+            conn._pool_returned_at = time.time()
+        except Exception:
+            pass
 
         with self.lock:
             if len(self.connections) < self.pool_size:
@@ -307,6 +333,7 @@ class RobustConnection:
 
 # 全局连接池实例（懒加载）
 _global_pool: Optional[MySQLConnectionPool] = None
+_api_pool: Optional[MySQLConnectionPool] = None
 _pool_lock = threading.Lock()
 
 
@@ -341,10 +368,22 @@ def close_global_pool():
         _global_pool = None
 
 
+def _get_api_pool() -> MySQLConnectionPool:
+    """FastAPI 专用池：与后台服务隔离，短 read_timeout，避免 ping/慢查占满."""
+    global _api_pool
+    if _api_pool is None:
+        with _pool_lock:
+            if _api_pool is None:
+                cfg = get_db_config().copy()
+                cfg.setdefault("read_timeout", 5)
+                cfg.setdefault("write_timeout", 5)
+                _api_pool = MySQLConnectionPool(cfg, pool_size=20)
+    return _api_pool
+
+
 def get_api_connection(acquire_timeout: float = 5.0):
-    """获取一个由全局连接池管理的连接. conn.close() 实际归还到池中（非关 TCP）."""
-    # 探索页首屏曾并行 5~6 路；池过小会在 kline 维护高峰把整站卡死
-    pool = get_global_pool(get_db_config(), pool_size=20)
+    """获取一个由 API 连接池管理的连接. conn.close() 实际归还到池中（非关 TCP）."""
+    pool = _get_api_pool()
     if not pool._slot_sem.acquire(timeout=acquire_timeout):
         raise TimeoutError(
             f"MySQL 连接池已满 ({pool.pool_size})，{acquire_timeout:.0f}s 内无可用连接"

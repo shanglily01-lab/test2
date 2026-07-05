@@ -421,10 +421,13 @@
       el._midlineSource = p.source;
     });
     global._midlinePanels = panels;
-    loadGlobalParams();
   }
 
   function onTabShow(tabId) {
+    if (!global._midlineParamsLoaded) {
+      global._midlineParamsLoaded = true;
+      loadGlobalParams();
+    }
     var panels = global._midlinePanels || [];
     panels.forEach(function (p) {
       if (p.tabId === tabId) loadAll(p.prefix, p.source);

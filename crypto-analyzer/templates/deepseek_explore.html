@@ -842,6 +842,9 @@ function loadAll(options) {
       renderExploreOpen(data.open_positions || [], data.open_summary || {});
       renderExploreRuns(data.runs || []);
       renderExploreStats(data.stats || {});
+      if (typeof explorePoll !== 'undefined' && explorePoll.pauseFor) {
+        explorePoll.pauseFor(90000);
+      }
     })
     .catch(function(e) {
       console.error('bootstrap error', e);
@@ -856,7 +859,7 @@ function loadAll(options) {
       if (!document.hidden && explorePoll.tabVisible('tab-explore')) {
         loadClosedPositions(true);
       }
-    }, options.deferMs || 2500);
+    }, options.deferMs || 8000);
   } else {
     loadClosedPositions(true);
   }

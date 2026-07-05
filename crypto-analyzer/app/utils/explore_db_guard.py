@@ -28,19 +28,46 @@ def apply_explore_read_guard(cursor, *, max_seconds: int = _EXPLORE_READ_MAX_S) 
             logger.debug(f"[explore_db_guard] {stmt[0]} not applied: {e}")
 
 
+_STALE_CONN_CODES = frozenset({2006, 2013, 2055})
+
+
+def _is_stale_connection_error(exc: Exception) -> bool:
+    code = exc.args[0] if getattr(exc, "args", None) else None
+    try:
+        return int(code) in _STALE_CONN_CODES
+    except (TypeError, ValueError):
+        return False
+
+
 @contextmanager
 def explore_db_cursor(*, max_seconds: int = _EXPLORE_READ_MAX_S):
     """复用 API 连接池，避免探索页每次握手 + 占满独立连接."""
+    import pymysql
     import pymysql.cursors
     from app.database.connection_pool import get_api_connection
 
-    conn = get_api_connection(acquire_timeout=3.0)
+    conn = None
     try:
-        with conn.cursor(pymysql.cursors.DictCursor) as cur:
-            apply_explore_read_guard(cur, max_seconds=max_seconds)
-            yield cur
+        for attempt in range(2):
+            conn = get_api_connection(acquire_timeout=3.0)
+            try:
+                with conn.cursor(pymysql.cursors.DictCursor) as cur:
+                    apply_explore_read_guard(cur, max_seconds=max_seconds)
+                    yield cur
+                return
+            except pymysql.OperationalError as e:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = None
+                if attempt == 0 and _is_stale_connection_error(e):
+                    logger.warning(f"[explore_db_guard] stale connection, retry once: {e}")
+                    continue
+                raise
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
 
 def explore_positions_cache_get(cache_key: str, loader: Callable[[], T]) -> T:

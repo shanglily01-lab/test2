@@ -31,15 +31,24 @@
   function createExplorePollRegistry() {
     var timers = [];
     var paused = document.hidden;
+    var pausedUntil = 0;
 
     function tabVisible(tabId) {
       var el = document.getElementById(tabId);
       return !!(el && !el.classList.contains('hidden'));
     }
 
+    function pollAllowed() {
+      return !paused && Date.now() >= pausedUntil;
+    }
+
+    function pauseFor(ms) {
+      pausedUntil = Math.max(pausedUntil, Date.now() + (ms || 0));
+    }
+
     function register(fn, ms, guard) {
       var timer = setInterval(function () {
-        if (paused) return;
+        if (!pollAllowed()) return;
         if (guard && !guard()) return;
         fn();
       }, ms);
@@ -56,7 +65,7 @@
       paused = document.hidden;
     });
 
-    return { register: register, clearAll: clearAll, tabVisible: tabVisible };
+    return { register: register, clearAll: clearAll, tabVisible: tabVisible, pauseFor: pauseFor };
   }
 
   function exploreNotify(message, type) {
