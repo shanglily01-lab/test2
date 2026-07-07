@@ -61,6 +61,8 @@ _AI_HARD_SLTP_ONLY_SOURCES = frozenset({
 # AI 轻量移动止盈：峰值价格收益 ≥3% 后，从峰值回撤 ≥1% 平仓
 _AI_TRAIL_TP_ACTIVATE = 0.03
 _AI_TRAIL_TP_PULLBACK = 0.01
+_AI_TRAIL_TP_ROI_ACTIVATE = 0.06
+_AI_TRAIL_TP_ROI_PULLBACK = 0.02
 _MIDLINE_SOURCES = frozenset({
     'gemini_midline_long', 'gemini_midline_short',
     'deepseek_midline_long', 'deepseek_midline_short',
@@ -94,13 +96,20 @@ def _dynamic_trail_pullback(peak_pct: float) -> float:
     return float('inf')
 
 
-def _check_ai_trail_tp(pnl_pct: float, peak_pct: float) -> Optional[str]:
-    """AI 策略轻量移动止盈（peak≥3% 价格收益，回撤≥1%）."""
-    if peak_pct >= _AI_TRAIL_TP_ACTIVATE and (peak_pct - pnl_pct) >= _AI_TRAIL_TP_PULLBACK:
-        dd = (peak_pct - pnl_pct) * 100
+def _check_ai_trail_tp(pnl_pct: float, peak_pct: float, leverage: int = 1) -> Optional[str]:
+    """AI strategies trail by either price move or leverage-adjusted ROI."""
+    lev = max(int(leverage or 1), 1)
+    pullback_pct = peak_pct - pnl_pct
+    peak_roi = peak_pct * lev
+    pullback_roi = pullback_pct * lev
+    price_trail = peak_pct >= _AI_TRAIL_TP_ACTIVATE and pullback_pct >= _AI_TRAIL_TP_PULLBACK
+    roi_trail = peak_roi >= _AI_TRAIL_TP_ROI_ACTIVATE and pullback_roi >= _AI_TRAIL_TP_ROI_PULLBACK
+    if price_trail or roi_trail:
         return (
-            f"移动止盈(AI peak{peak_pct * 100:.2f}% "
-            f"回撤{dd:.2f}%, ai-trail-tp)"
+            f"AI trail-tp(peak_price={peak_pct * 100:.2f}%, "
+            f"drawdown_price={pullback_pct * 100:.2f}%, "
+            f"peak_roi={peak_roi * 100:.2f}%, "
+            f"drawdown_roi={pullback_roi * 100:.2f}%, ai-trail-tp)"
         )
     return None
 
@@ -293,7 +302,11 @@ class PositionSLTPMonitor:
                     continue
 
                 if not _is_midline_source(src):
-                    trail_ai = _check_ai_trail_tp(pnl_pct, new_peak)
+                    trail_ai = _check_ai_trail_tp(
+                        pnl_pct,
+                        new_peak,
+                        int(pos.get("leverage") or 1),
+                    )
                     if trail_ai:
                         self._sync_peak_to_db(pid, new_peak * 100)
                         logger.info(
@@ -422,7 +435,7 @@ class PositionSLTPMonitor:
 
     def _fetch_open_positions(self) -> List[Dict[str, Any]]:
         sql = (
-            "SELECT id, symbol, position_side, entry_price, "
+            "SELECT id, symbol, position_side, entry_price, leverage, "
             "       stop_loss_price, take_profit_price, liquidation_price, "
             "       source, open_time, planned_close_time "
             "FROM futures_positions "

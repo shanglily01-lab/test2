@@ -26,6 +26,7 @@ GEMINI_HOLD_SOURCE_SQL = (
 _DUE_SELECT = """
         SELECT fp.id, fp.account_id, fp.symbol, fp.position_side, fp.entry_price,
                fp.quantity, fp.leverage, fp.margin, fp.open_time, fp.source,
+               fp.max_profit_pct,
                TIMESTAMPDIFF(MINUTE, fp.open_time, NOW()) / 60.0 AS hold_hours,
                lr.last_hold_review,
                lr2.roi_pct AS last_roi_pct
@@ -119,6 +120,7 @@ def fetch_profit_flip_urgent_positions(
     sql = f"""
         SELECT fp.id, fp.account_id, fp.symbol, fp.position_side, fp.entry_price,
                fp.quantity, fp.leverage, fp.margin, fp.open_time, fp.source,
+               fp.max_profit_pct,
                TIMESTAMPDIFF(MINUTE, fp.open_time, NOW()) / 60.0 AS hold_hours,
                lr.last_hold_review,
                lr2.roi_pct AS last_roi_pct
@@ -136,7 +138,10 @@ def fetch_profit_flip_urgent_positions(
         WHERE fp.status = 'open'
           AND fp.account_id = 2
           AND TIMESTAMPDIFF(MINUTE, fp.open_time, NOW()) >= %s
-          AND IFNULL(lr2.roi_pct, 0) > 0
+          AND (
+                IFNULL(lr2.roi_pct, 0) > 0
+                OR IFNULL(fp.max_profit_pct, 0) * GREATEST(IFNULL(fp.leverage, 1), 1) >= 3
+          )
           AND TIMESTAMPDIFF(MINUTE, lr.last_hold_review, NOW()) < %s
           {source_sql}
         ORDER BY lr.last_hold_review ASC
@@ -171,9 +176,24 @@ def fetch_profit_flip_urgent_positions(
             row["position_side"],
             int(row.get("leverage") or 5),
         )
-        if roi < 0:
+        leverage = max(int(row.get("leverage") or 5), 1)
+        last_roi = float(row.get("last_roi_pct") or 0)
+        peak_roi = float(row.get("max_profit_pct") or 0) * leverage
+        last_roi_drawdown = last_roi - roi
+        peak_roi_drawdown = peak_roi - roi
+        urgent_reason = ""
+        if last_roi > 0 and roi < 0:
+            urgent_reason = "profit_to_loss_flip"
+        elif last_roi >= 3 and last_roi_drawdown >= 2:
+            urgent_reason = "profit_review_drawdown"
+        elif peak_roi >= 6 and peak_roi_drawdown >= 2:
+            urgent_reason = "profit_peak_drawdown"
+
+        if urgent_reason:
             row = dict(row)
-            row["urgent_reason"] = "profit_to_loss_flip"
+            row["urgent_reason"] = urgent_reason
+            row["current_roi_pct"] = round(roi, 2)
+            row["peak_roi_pct"] = round(peak_roi, 2)
             out.append(row)
     return out
 

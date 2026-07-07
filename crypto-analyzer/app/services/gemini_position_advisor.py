@@ -50,8 +50,8 @@ GEMINI_PER_CALL_DELAY_S = 1.0   # 防 Gemini rate limit
 HOLD_15M_BARS = 16              # 持仓顾问：近 16 根 15m（4h 交易窗口，主判据）
 HOLD_5M_BARS = 6                # 持仓顾问：近 6 根 5m（约 30min，辅证）
 HOLD_1H_BARS = 4                # 持仓顾问：近 4 根 1h（背景参考，非主判）
-HOLD_PROFIT_TEMPER_ROI = 8.0    # 程序化复核：浮盈≥8% ROI 时才收紧 hold
-HOLD_PROFIT_SELL_ROI = 8.0      # prompt：浮盈≥8% 且 15m 明确转弱可 sell
+HOLD_PROFIT_TEMPER_ROI = 3.0    # 程序化复核：浮盈≥3% ROI 即开始防回吐
+HOLD_PROFIT_SELL_ROI = 5.0      # prompt：浮盈≥5% 且 15m 明确转弱可 sell
 HOLD_LOSS_STRICT_ROI = -1.0     # 保证金 ROI ≤ -1%：严格审查 15m+量价+RSI
 HOLD_LOSS_MILD_ROI = -5.0       # 保证金 ROI %，轻微亏损
 HOLD_LOSS_MODERATE_ROI = -12.0  # 中度亏损
@@ -64,7 +64,7 @@ HOLD_ADVISOR_JSON_SYSTEM_ZH = (
     "仅输出合法 JSON：action 为 hold|observe|sell；"
     "reason 为50字以内中文，须引用 **15m** 表格形态 + 量能或 RSI 要点；"
     "保证金 ROI≤-1% 须严格审查 15m 是否仍支持原方向，不可敷衍 hold；"
-    "浮盈 ROI≥+8% 且 15m 明确转弱时应倾向 observe/sell，避免盈利回吐；"
+    "浮盈 ROI≥+3% 且 15m 转弱时至少 observe，ROI≥+5% 且 15m 明确转弱时应倾向 sell，避免盈利回吐；"
     "15m 未破方向时不得 sell；亏损越深 hold 门槛越高；禁止仅凭 ROI、Big4 或 1h 滞后信号单独 sell。"
 )
 
@@ -516,23 +516,25 @@ class GeminiPositionAdvisor:
         s15: dict,
         s1h: dict,
     ) -> Tuple[str, str]:
-        """浮盈 hold 复核：ROI≥8% 且 15m 明确转弱时才下调."""
-        if action != 'hold' or roi_pct <= HOLD_PROFIT_TEMPER_ROI:
+        """Tighten profitable holds once ROI is meaningful and 15m weakens."""
+        if action != 'hold' or roi_pct < HOLD_PROFIT_TEMPER_ROI:
             return action, reason
 
         override = ""
         s15_against = s15.get("against", 0)
         s15_for = s15.get("for", 0)
-        if s15_against >= 4 and s15.get("trail_against", 0) >= 3:
+        s15_trail = s15.get("trail_against", 0)
+
+        if roi_pct >= HOLD_PROFIT_SELL_ROI and s15_against >= 3 and s15_trail >= 2:
             action = 'sell'
-            override = "浮盈≥8%+15m转弱"
-        elif s15_against >= 4 and s15_against > s15_for:
+            override = f"profit_guard_roi>={HOLD_PROFIT_SELL_ROI:.0f}%+15m_weak"
+        elif s15_against >= 3 and s15_against > s15_for:
             action = 'observe'
-            override = "浮盈≥8%+15m转弱待确认"
+            override = f"profit_guard_roi>={HOLD_PROFIT_TEMPER_ROI:.0f}%+15m_soft_weak"
 
         if override:
-            reason = f"{reason[:80]}|复核:{override}"[:200]
-            logger.info(f"[Gemini顾问] 盈利 hold 复核 → {action} ({override})")
+            reason = f"{reason[:80]}|guard:{override}"[:200]
+            logger.info(f"[GeminiAdvisor] profitable hold guard -> {action} ({override})")
         return action, reason
 
     @staticmethod
@@ -650,8 +652,8 @@ class GeminiPositionAdvisor:
 {strict_note}## 核心原则（**15m 核心**，1h 交叉验证，5m 辅证）
 - **决策顺序**：① ROI 档位 → ② **15m 趋势结构**（主判据）→ ③ **成交量** → ④ **RSI + 7日位置** → ⑤ 5m 辅证 → ⑥ 宏观辅证
 - **每轮必须给出明确结论**；reason 须写明 **15m** 表格形态 + 量能或 RSI 要点
-- **15m 未破方向**时，5m 回调/震荡 → **hold** 或 **observe**；**浮盈≥+8% 且 15m 明确转弱** → 倾向 **observe/sell**
-- **sell**：近 4 根 15m 确认反转 **且** 量价/RSI 不支持原方向；浮盈≥+8% 时须 15m 反向≥4 且近 3 根连续不利才可 sell
+- **15m 未破方向**时，5m 回调/震荡 → **hold** 或 **observe**；**浮盈≥+3% 且 15m 转弱** → 至少 **observe**，**浮盈≥+5% 且 15m 明确转弱** → 倾向 **sell**
+- **sell**：近 4 根 15m 确认反转 **且** 量价/RSI 不支持原方向；浮盈≥+5% 时 15m 反向≥3 且近 2 根连续不利即可 sell
 - ROI、Big4 单独变化不足以 sell；须 **15m** 结构 + 量价印证
 - **禁止**主要依据 1h 表做 sell/hold（1h 滞后约 1h，易误判）
 
