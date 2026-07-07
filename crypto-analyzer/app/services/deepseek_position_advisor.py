@@ -103,7 +103,7 @@ class DeepSeekPositionAdvisor:
             return False
         if profile_key not in ("explore", "predict"):
             return False
-        return self._read_setting_bool("deepseek_self_gated_open_skip_llm", "1")
+        return self._read_setting_bool("deepseek_self_gated_open_skip_llm", "0")
 
     def _read_direction_gates(self) -> Tuple[bool, bool]:
         allow_long = self._read_setting_bool("allow_long", "1")

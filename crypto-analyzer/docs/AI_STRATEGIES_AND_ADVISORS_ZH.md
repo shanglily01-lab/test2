@@ -65,7 +65,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 2.3 共用硬门槛
 
-- **主探索/预测**：`explore_catalyst_technical_ok` + 置信度 ≥ **0.60**（`EXPLORE_CONFIDENCE_THRESHOLD` / `PREDICT_CONFIDENCE_THRESHOLD`）。
+- **主探索/预测**：`explore_catalyst_technical_ok` + 置信度 ≥ **0.70**（`EXPLORE_CONFIDENCE_THRESHOLD` / `PREDICT_CONFIDENCE_THRESHOLD`）。
 - **战术四策略**：`tactical_catalyst_ok` + 置信度 ≥ **0.55**。
 - **顶空底多**：`reversal_catalyst_technical_ok` + 置信度 ≥ **0.65**。
 - LLM 候选池：技术面评分 **TOP50**（`prepare_universe_for_llm`），非按 24h 涨跌幅排序。

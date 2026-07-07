@@ -229,7 +229,7 @@
 ### 8.2 持仓参数（默认）
 
 - SL **3%** / TP **5%** / 杠杆 **5x** / 保证金 **500U** / 持仓 **4h**  
-- 置信度门槛 ≥ **0.65**（`EXPLORE_CONFIDENCE_THRESHOLD` / `PREDICT_CONFIDENCE_THRESHOLD`，以代码为准）  
+- 置信度门槛 ≥ **0.70**（`EXPLORE_CONFIDENCE_THRESHOLD` / `PREDICT_CONFIDENCE_THRESHOLD`，以代码为准）
 - `explore_catalyst_technical_ok` 硬门槛（含 15m 结构、量价、趋势与 category 一致）
 
 ### 8.3 K 线判据（INV-08 展开）
@@ -263,7 +263,7 @@
 
 **AI 轻量移动止盈**（`position_sl_tp_monitor.py`）：探索/预测等 AI 仓在硬 SL/TP 之外，peak 价格收益 **≥3%** 后回撤 **≥1%** 程序化平仓（`ai-trail-tp`）；**中线不含**；不走 early-sl/breakeven。
 
-探索/预测：`gemini/deepseek/gpt_*_explore|predict` 在 worker 已用 **catalyst+data_signal** 过 `explore_catalyst_technical_ok` 后，开仓顾问**不再重复** catalyst 预检（`should_skip_upstream_catalyst_precheck`）；DeepSeek 同源另可 `deepseek_self_gated_open_skip_llm` 跳过 LLM 二审。其它策略仍走 `precheck_open_advisor` + 可选 LLM。
+探索/预测：`gemini/deepseek/gpt_*_explore|predict` 在 worker 已用 **catalyst+data_signal** 过 `explore_catalyst_technical_ok` 后，开仓顾问**不再重复** catalyst 预检（`should_skip_upstream_catalyst_precheck`）；DeepSeek 同源 `deepseek_self_gated_open_skip_llm` 默认关闭，避免绕过 RSI/15m 二次复核。其它策略仍走 `precheck_open_advisor` + 可选 LLM。
 
 ---
 
