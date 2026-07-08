@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import os
 import time
+from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import pymysql
 import pymysql.cursors
+from dotenv import dotenv_values
 from loguru import logger
 
 from app.services.deepseek_advisor_reviews import log_deepseek_advisor_review
@@ -35,10 +37,17 @@ from app.services.open_advisor_strategy_rubrics import (
     validate_open_advisor_approval,
 )
 
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "") or os.getenv("DeepSeek_API_KEY", "")
-DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-DEEPSEEK_TIMEOUT_S = int(os.getenv("DEEPSEEK_TIMEOUT_S", "180"))
+_ENV = dotenv_values(Path(__file__).resolve().parents[2] / ".env")
+
+
+def _env(name: str, default: str = "") -> str:
+    return os.getenv(name, "") or str(_ENV.get(name) or default)
+
+
+DEEPSEEK_API_KEY = _env("DEEPSEEK_API_KEY") or _env("DeepSeek_API_KEY")
+DEEPSEEK_MODEL = _env("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_BASE_URL = _env("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+DEEPSEEK_TIMEOUT_S = int(_env("DEEPSEEK_TIMEOUT_S", "180"))
 DEEPSEEK_PER_CALL_DELAY_S = 1.0
 DEEPSEEK_HOLD_ADVISOR_TAG = "deepseek_advisor"
 DEEPSEEK_SELF_GATED_OPEN_SOURCES = {"deepseek_explore", "deepseek_predict"}
@@ -114,7 +123,7 @@ class DeepSeekPositionAdvisor:
         self, prompt: str, *, hold_mode: bool = False,
     ) -> Optional[dict]:
         if not DEEPSEEK_API_KEY:
-            logger.warning("[DeepSeek顾问] DEEPSEEK_API_KEY 未配置,跳过")
+            logger.warning("[DeepSeek顾问] DEEPSEEK_API_KEY 未配置，无法调用开仓/持仓顾问")
             return None
         try:
             from openai import OpenAI
