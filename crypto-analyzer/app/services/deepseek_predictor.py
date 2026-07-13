@@ -158,11 +158,6 @@ def _connect():
 def _get_predict_symbols(conn) -> List[str]:
     """从 candidate_pool_snapshot 全量取 symbol；缓存不可用时回退盈利 TOP50."""
     banned = set()
-    try:
-        from app.services.trading_gates import load_blacklist_level3_symbols
-        banned = load_blacklist_level3_symbols(conn)
-    except Exception:
-        banned = set()
 
     rows = _get_candidate_pool_cached()
     if rows:
@@ -648,6 +643,8 @@ def _open_simulated_position(
 
     entry_reason = (catalyst or 'deepseek_predict')[:180]
     from app.services.paper_limit_entry import create_paper_limit_order
+    from app.services.trading_gates import get_paper_margin_usd
+    paper_margin = get_paper_margin_usd(symbol, conn)
     open_fail: list = []
     position_id = create_paper_limit_order(
         conn,
@@ -656,7 +653,7 @@ def _open_simulated_position(
         ref_price=price,
         source=PREDICT_SOURCE,
         leverage=PREDICT_LEVERAGE,
-        margin=PREDICT_MARGIN_USD,
+        margin=paper_margin,
         stop_loss_pct=get_ai_position_sl_pct(),
         take_profit_pct=get_ai_position_tp_pct(),
         entry_signal_type='deepseek_predict',

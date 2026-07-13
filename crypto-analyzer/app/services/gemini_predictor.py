@@ -695,6 +695,8 @@ def _open_simulated_position(
 
     entry_reason = (catalyst or 'gemini_predict')[:180]
     from app.services.paper_limit_entry import create_paper_limit_order
+    from app.services.trading_gates import get_paper_margin_usd
+    paper_margin = get_paper_margin_usd(symbol, conn)
     position_id = create_paper_limit_order(
         conn,
         symbol=symbol,
@@ -702,7 +704,7 @@ def _open_simulated_position(
         ref_price=price,
         source=PREDICT_SOURCE,
         leverage=PREDICT_LEVERAGE,
-        margin=PREDICT_MARGIN_USD,
+        margin=paper_margin,
         stop_loss_pct=get_ai_position_sl_pct(),
         take_profit_pct=get_ai_position_tp_pct(),
         entry_signal_type='gemini_predict',

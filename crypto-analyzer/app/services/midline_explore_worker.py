@@ -259,6 +259,7 @@ def _open_limit_order(
 ) -> Optional[int]:
     from app.services.paper_open_gate import gate_simulated_open
     from app.services.paper_limit_entry import create_paper_limit_order
+    from app.services.trading_gates import get_paper_margin_usd
 
     allowed, _ = gate_simulated_open(
         symbol, side, price, source,
@@ -273,6 +274,7 @@ def _open_limit_order(
 
     hold_deadline = utc_now_naive() + timedelta(minutes=MIDLINE_HOLD_MINUTES)
     reason = f"midline score={score:.0f} " + json.dumps(signal_detail, ensure_ascii=False)[:120]
+    paper_margin = get_paper_margin_usd(symbol, conn)
     return create_paper_limit_order(
         conn,
         symbol=symbol,
@@ -280,7 +282,7 @@ def _open_limit_order(
         ref_price=price,
         source=source,
         leverage=MIDLINE_LEVERAGE,
-        margin=MIDLINE_MARGIN_USD,
+        margin=paper_margin,
         stop_loss_pct=MIDLINE_SL_PCT,
         take_profit_pct=MIDLINE_TP_PCT,
         entry_signal_type=source,

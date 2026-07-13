@@ -1333,6 +1333,8 @@ def _open_simulated_position(
     entry_reason += f" | SL={get_ai_position_sl_pct()}% TP={get_ai_position_tp_pct()}% lev={EXPLORE_LEVERAGE}x hold={get_ai_position_hold_hours()}h"
 
     from app.services.paper_limit_entry import create_paper_limit_order
+    from app.services.trading_gates import get_paper_margin_usd
+    paper_margin = get_paper_margin_usd(symbol, conn)
     return create_paper_limit_order(
         conn,
         symbol=symbol,
@@ -1340,7 +1342,7 @@ def _open_simulated_position(
         ref_price=price,
         source=EXPLORE_SOURCE,
         leverage=EXPLORE_LEVERAGE,
-        margin=EXPLORE_MARGIN_USD,
+        margin=paper_margin,
         stop_loss_pct=get_ai_position_sl_pct(),
         take_profit_pct=get_ai_position_tp_pct(),
         entry_signal_type='gemini_explore',

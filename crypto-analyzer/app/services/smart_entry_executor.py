@@ -59,22 +59,9 @@ class SmartEntryExecutor:
         self.percentile_threshold = 90  # 90分位数阈值
 
     def _get_margin_amount(self, symbol: str) -> float:
-        """根据交易对评级等级获取保证金金额"""
-        from app.services.trading_gates import check_symbol_trading_forbidden
-        forbidden, _ = check_symbol_trading_forbidden(symbol)
-        if forbidden:
-            return 0.0
-
-        rating_level = self.opt_config.get_symbol_rating_level(symbol)
-
-        if rating_level == 0:
-            return 400.0  # 白名单&默认
-        elif rating_level == 1:
-            return 100.0  # 黑名单1级
-        elif rating_level == 2:
-            return 50.0  # 黑名单2级
-        else:
-            return 0.0  # 黑名单3级
+        """Return simulated-order margin by symbol rating."""
+        from app.services.trading_gates import get_paper_margin_usd
+        return get_paper_margin_usd(symbol)
 
     def _calculate_stop_take_prices(self, symbol: str, direction: str, current_price: float, signal_components: dict) -> Tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
         """计算止盈止损价格和百分比"""

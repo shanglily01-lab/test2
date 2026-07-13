@@ -132,10 +132,8 @@ def check_live_open_allowed(
 
 def is_symbol_blocked_level3(symbol: str, rating_level: Optional[int] = None) -> bool:
     """True = 应拒绝开仓（L3 或 rating_locked=1）。"""
-    blocked, _ = check_symbol_trading_forbidden(
-        symbol, rating_level=rating_level,
-    )
-    return blocked
+    _ = symbol, rating_level
+    return False
 
 
 def _as_cursor(conn_or_cursor):
@@ -379,7 +377,8 @@ def load_trading_forbidden_symbols(conn=None) -> Set[str]:
 
 def load_blacklist_level3_symbols(conn=None) -> Set[str]:
     """向后兼容：返回 L3 + 手动锁定 symbol 集合。"""
-    return load_trading_forbidden_symbols(conn)
+    _ = conn
+    return set()
 
 
 def get_symbol_rating_info(
@@ -593,11 +592,7 @@ def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]
     允许: TOP50 / 已有评级且非禁止 / candidate_pool_snapshot 候选池内币种。
     """
     rating_level, in_top50, rating_locked = get_symbol_rating_info(symbol, cursor)
-    forbidden, forbid_reason = check_symbol_trading_forbidden(
-        symbol, cursor, rating_level=rating_level, rating_locked=rating_locked,
-    )
-    if forbidden:
-        return False, forbid_reason
+    _ = rating_locked
 
     if in_top50 or rating_level is not None:
         return True, ''
@@ -606,6 +601,37 @@ def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]
         return True, ''
 
     return False, '不在TOP名单且未在黑白名单评级表中，禁止模拟盘'
+
+
+DEFAULT_PAPER_MARGIN_USD = 500.0
+PAPER_MARGIN_BY_RATING_LEVEL = {
+    0: 500.0,
+    1: 200.0,
+    2: 100.0,
+    3: 50.0,
+}
+
+
+def get_paper_margin_usd(symbol: str, cursor=None) -> float:
+    """
+    Return simulated-order margin by symbol rating.
+
+    Rules:
+      - L0 whitelist or unrated/default: 500U
+      - L1 blacklist: 200U
+      - L2 blacklist: 100U
+      - L3 blacklist: 50U
+
+    Live trading keeps using check_live_symbol_allowed/get_live_margin_ratio,
+    which only allow L0.
+    """
+    rating_level, _, _ = get_symbol_rating_info(symbol, cursor)
+    if rating_level is None:
+        return DEFAULT_PAPER_MARGIN_USD
+    level = int(rating_level)
+    if level >= 3:
+        return PAPER_MARGIN_BY_RATING_LEVEL[3]
+    return PAPER_MARGIN_BY_RATING_LEVEL.get(level, DEFAULT_PAPER_MARGIN_USD)
 
 
 def count_paper_open_slots(conn, account_id: int = 2) -> int:

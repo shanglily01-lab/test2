@@ -1579,7 +1579,8 @@ class SmartTraderService:
             每批保证金金额（USDT）
         """
         _ = symbol  # 所有交易对统一
-        return 500.0
+        from app.services.trading_gates import get_paper_margin_usd
+        return get_paper_margin_usd(symbol)
 
     def validate_signal_timeframe(self, signal_components: dict, side: str, symbol: str) -> tuple:
         """
