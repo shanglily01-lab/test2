@@ -1324,7 +1324,7 @@ def _open_simulated_position(
         symbol, side, price, EXPLORE_SOURCE, catalyst,
         leverage=EXPLORE_LEVERAGE,
         sl_pct=get_ai_position_sl_pct(), tp_pct=get_ai_position_tp_pct(),
-        hold_hours=get_ai_position_hold_hours(), conn=conn,
+        hold_hours=get_ai_position_hold_hours(), account_id=EXPLORE_ACCOUNT_ID, conn=conn,
     )
     if not allowed:
         return None

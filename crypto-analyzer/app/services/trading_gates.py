@@ -706,6 +706,63 @@ def has_open_futures_position(conn, source: str, symbol: str, account_id: Option
         return False
 
 
+def has_open_futures_position_same_side(
+    conn,
+    symbol: str,
+    side: str,
+    account_id: Optional[int] = None,
+) -> tuple[bool, str]:
+    """跨 source 检查同币同方向是否已有 OPEN 仓或 PENDING 开仓单。"""
+    clean = futures_symbol_clean(symbol)
+    s = (side or "").strip().upper()
+    if s not in ("LONG", "SHORT"):
+        return False, ""
+    order_side = "OPEN_LONG" if s == "LONG" else "OPEN_SHORT"
+    try:
+        cur = conn.cursor()
+        sql = (
+            f"SELECT id, source FROM futures_positions "
+            f"WHERE LOWER(status)='open' "
+            f"AND position_side=%s "
+            f"AND {sql_rating_symbol_clean('symbol')} = %s"
+        )
+        params: list = [s, clean]
+        if account_id is not None:
+            sql += " AND account_id=%s"
+            params.append(account_id)
+        sql += " ORDER BY id DESC LIMIT 1"
+        cur.execute(sql, params)
+        row = cur.fetchone()
+        if row is not None:
+            pid = row.get("id") if isinstance(row, dict) else row[0]
+            src = row.get("source") if isinstance(row, dict) else row[1]
+            cur.close()
+            return True, f"same_symbol_side_open:{clean} {s} existing_position_id={pid} source={src}"
+
+        pending_sql = (
+            f"SELECT id, order_source FROM futures_orders "
+            f"WHERE status='PENDING' AND order_type='LIMIT' "
+            f"AND side=%s "
+            f"AND {sql_rating_symbol_clean('symbol')} = %s"
+        )
+        pending_params: list = [order_side, clean]
+        if account_id is not None:
+            pending_sql += " AND account_id=%s"
+            pending_params.append(account_id)
+        pending_sql += " ORDER BY id DESC LIMIT 1"
+        cur.execute(pending_sql, pending_params)
+        row = cur.fetchone()
+        cur.close()
+        if row is not None:
+            oid = row.get("id") if isinstance(row, dict) else row[0]
+            src = row.get("order_source") if isinstance(row, dict) else row[1]
+            return True, f"same_symbol_side_pending:{clean} {s} existing_order_id={oid} source={src}"
+        return False, ""
+    except Exception as e:
+        logger.warning(f"[trading_gates] 同币同方向去重检查失败 {symbol} {side}: {e}")
+        raise
+
+
 def sql_exclude_forbidden_symbols_filter(column: str = "symbol") -> str:
     """动态 SQL：排除 L3 与手动锁定 symbol 的 AND 子句。"""
     clean_col = sql_rating_symbol_clean(column)

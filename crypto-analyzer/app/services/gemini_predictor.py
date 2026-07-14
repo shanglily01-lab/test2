@@ -688,7 +688,7 @@ def _open_simulated_position(
         symbol, side, price, PREDICT_SOURCE, catalyst,
         leverage=PREDICT_LEVERAGE,
         sl_pct=get_ai_position_sl_pct(), tp_pct=get_ai_position_tp_pct(),
-        hold_hours=get_ai_position_hold_hours(), conn=conn,
+        hold_hours=get_ai_position_hold_hours(), account_id=PREDICT_ACCOUNT_ID, conn=conn,
     )
     if not allowed:
         return None, gate_reason or "开仓闸门拒绝"

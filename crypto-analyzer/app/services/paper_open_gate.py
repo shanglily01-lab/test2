@@ -31,6 +31,7 @@ def gate_simulated_open(
     sl_pct: Optional[float] = None,
     tp_pct: Optional[float] = None,
     hold_hours: Optional[float] = None,
+    account_id: int = 2,
     conn=None,
 ) -> Tuple[bool, str]:
     """
@@ -65,6 +66,7 @@ def gate_simulated_open(
         from app.services.trading_gates import (
             check_simulated_symbol_allowed,
             check_symbol_loss_cooldown,
+            has_open_futures_position_same_side,
         )
         allowed, reason = check_simulated_symbol_allowed(symbol, conn)
         if not allowed:
@@ -80,6 +82,14 @@ def gate_simulated_open(
                 f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {symbol_reason}"
             )
             return False, symbol_reason
+        duplicate, duplicate_reason = has_open_futures_position_same_side(
+            conn, symbol, side, account_id=account_id,
+        )
+        if duplicate:
+            logger.info(
+                f"[开仓闸门] 拒绝重复开仓 {symbol} {side} source={source}: {duplicate_reason}"
+            )
+            return False, duplicate_reason
     except Exception as e:
         logger.warning(f"[开仓闸门] {symbol} 基础币种闸门异常，拒绝开仓: {e}")
         return False, "symbol_gate_error"
