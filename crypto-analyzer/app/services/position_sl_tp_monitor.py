@@ -59,10 +59,25 @@ _AI_HARD_SLTP_ONLY_SOURCES = frozenset({
     'deepseek_explore', 'deepseek_predict',
 })
 # AI 轻量移动止盈：峰值价格收益 ≥3% 后，从峰值回撤 ≥1% 平仓
-_AI_TRAIL_TP_ACTIVATE = 0.03
-_AI_TRAIL_TP_PULLBACK = 0.01
-_AI_TRAIL_TP_ROI_ACTIVATE = 0.06
-_AI_TRAIL_TP_ROI_PULLBACK = 0.02
+_AI_TRAIL_TP_TIERS = (
+    (0.10, 0.03, 0.06),   # peak price >=10%, allow 3% pullback, keep >=6%
+    (0.05, 0.02, 0.03),   # peak price >=5%, allow 2% pullback, keep >=3%
+    (0.03, 0.012, 0.018), # peak price >=3%, allow 1.2% pullback, keep >=1.8%
+)
+_AI_TRAIL_TP_ROI_ACTIVATE = 0.12
+_AI_TRAIL_TP_ROI_PULLBACK = 0.04
+_AI_TRAIL_TP_MIN_PRICE_PEAK_FOR_ROI = 0.025
+_AI_SOFT_SL_GRACE_MIN = 15
+_AI_SOFT_SL_NO_FOLLOW_PEAK_PCT = 0.006
+_AI_SOFT_SL_NO_FOLLOW_LOSS_PCT = -0.012
+_AI_SOFT_SL_PROFIT_PEAK_PCT = 0.012
+_AI_SOFT_SL_PROFIT_TO_LOSS_PCT = -0.004
+_AI_SOFT_SL_MATURE_MIN = 30
+_AI_SOFT_SL_MATURE_LOSS_PCT = -0.018
+_AI_TREND_SL_MIN_AGE_MIN = 10
+_AI_TREND_SL_FAST_LOSS_PCT = -0.006
+_AI_TREND_SL_CONFIRM_LOSS_PCT = -0.008
+_AI_TREND_SL_CACHE_TTL_S = 60.0
 _MIDLINE_SOURCES = frozenset({
     'gemini_midline_long', 'gemini_midline_short',
     'deepseek_midline_long', 'deepseek_midline_short',
@@ -102,15 +117,70 @@ def _check_ai_trail_tp(pnl_pct: float, peak_pct: float, leverage: int = 1) -> Op
     pullback_pct = peak_pct - pnl_pct
     peak_roi = peak_pct * lev
     pullback_roi = pullback_pct * lev
-    price_trail = peak_pct >= _AI_TRAIL_TP_ACTIVATE and pullback_pct >= _AI_TRAIL_TP_PULLBACK
-    roi_trail = peak_roi >= _AI_TRAIL_TP_ROI_ACTIVATE and pullback_roi >= _AI_TRAIL_TP_ROI_PULLBACK
+    price_trail = False
+    tier_min_keep = None
+    for activate_pct, pullback_trigger, min_keep_pct in _AI_TRAIL_TP_TIERS:
+        if peak_pct >= activate_pct:
+            tier_min_keep = min_keep_pct
+            price_trail = (
+                pullback_pct >= pullback_trigger
+                and pnl_pct >= min_keep_pct
+            )
+            break
+    roi_trail = (
+        peak_pct >= _AI_TRAIL_TP_MIN_PRICE_PEAK_FOR_ROI
+        and peak_roi >= _AI_TRAIL_TP_ROI_ACTIVATE
+        and pullback_roi >= _AI_TRAIL_TP_ROI_PULLBACK
+        and tier_min_keep is not None
+        and pnl_pct >= tier_min_keep
+    )
     if price_trail or roi_trail:
         return (
             f"AI trail-tp(peak_price={peak_pct * 100:.2f}%, "
             f"drawdown_price={pullback_pct * 100:.2f}%, "
             f"peak_roi={peak_roi * 100:.2f}%, "
-            f"drawdown_roi={pullback_roi * 100:.2f}%, ai-trail-tp)"
+            f"drawdown_roi={pullback_roi * 100:.2f}%, "
+            f"min_keep_price={(tier_min_keep or 0) * 100:.2f}%, ai-trail-tp)"
         )
+    return None
+
+
+def _check_ai_soft_stop(
+    pnl_pct: float,
+    peak_pct: float,
+    age_s: float,
+    leverage: int = 1,
+) -> Optional[str]:
+    """Cut failed AI entries before the hard SL becomes the normal exit."""
+    age_min = age_s / 60.0
+    if age_min < _AI_SOFT_SL_GRACE_MIN:
+        return None
+
+    lev = max(int(leverage or 1), 1)
+    roi_pct = pnl_pct * lev
+    peak_roi = peak_pct * lev
+
+    if peak_pct >= _AI_SOFT_SL_PROFIT_PEAK_PCT and pnl_pct <= _AI_SOFT_SL_PROFIT_TO_LOSS_PCT:
+        return (
+            f"AI soft-sl(profit_to_loss, peak_price={peak_pct * 100:.2f}%, "
+            f"pnl_price={pnl_pct * 100:.2f}%, peak_roi={peak_roi * 100:.2f}%, "
+            f"roi={roi_pct * 100:.2f}%, age={age_min:.0f}m)"
+        )
+
+    if peak_pct < _AI_SOFT_SL_NO_FOLLOW_PEAK_PCT and pnl_pct <= _AI_SOFT_SL_NO_FOLLOW_LOSS_PCT:
+        return (
+            f"AI soft-sl(no_follow_through, peak_price={peak_pct * 100:.2f}%, "
+            f"pnl_price={pnl_pct * 100:.2f}%, roi={roi_pct * 100:.2f}%, "
+            f"age={age_min:.0f}m)"
+        )
+
+    if age_min >= _AI_SOFT_SL_MATURE_MIN and pnl_pct <= _AI_SOFT_SL_MATURE_LOSS_PCT:
+        return (
+            f"AI soft-sl(mature_loss, peak_price={peak_pct * 100:.2f}%, "
+            f"pnl_price={pnl_pct * 100:.2f}%, roi={roi_pct * 100:.2f}%, "
+            f"age={age_min:.0f}m)"
+        )
+
     return None
 
 
@@ -135,6 +205,7 @@ class PositionSLTPMonitor:
         self._cooldown_seconds = 10.0
         # peak_pnl_pct 内存映射：进程重启会丢，但一般持仓 <= 24h 影响可控
         self._peak_pnl_map: Dict[int, float] = {}
+        self._trend_exit_cache: Dict[int, tuple[float, Optional[str]]] = {}
         # disable_sl_tp_hold 开关缓存，避免每秒查 DB
         self._disable_cache: tuple[float, bool] = (0.0, False)
         self._disable_cache_ttl = 10.0
@@ -182,6 +253,7 @@ class PositionSLTPMonitor:
         # 清理已不在 open 列表的 peak 记录
         alive_pids = {int(p["id"]) for p in positions}
         self._peak_pnl_map = {k: v for k, v in self._peak_pnl_map.items() if k in alive_pids}
+        self._trend_exit_cache = {k: v for k, v in self._trend_exit_cache.items() if k in alive_pids}
 
         now = time.time()
         for pos in positions:
@@ -302,6 +374,43 @@ class PositionSLTPMonitor:
                     continue
 
                 if not _is_midline_source(src):
+                    trend_sl = self._check_ai_trend_exit(
+                        pid,
+                        symbol,
+                        side,
+                        pnl_pct,
+                        age_s,
+                        now,
+                    )
+                    if trend_sl:
+                        self._sync_peak_to_db(pid, new_peak * 100)
+                        logger.info(
+                            f"[AI trend-sl] pid={pid} {symbol} {side} source={src} "
+                            f"reason={trend_sl} price={price:.6f} peak={new_peak * 100:.2f}%"
+                        )
+                        self._cooldown[pid] = now + self._cooldown_seconds
+                        self._peak_pnl_map.pop(pid, None)
+                        self._trend_exit_cache.pop(pid, None)
+                        self._do_close(pid, symbol, side, trend_sl, price, now)
+                        continue
+
+                    soft_sl = _check_ai_soft_stop(
+                        pnl_pct,
+                        new_peak,
+                        age_s,
+                        int(pos.get("leverage") or 1),
+                    )
+                    if soft_sl:
+                        self._sync_peak_to_db(pid, new_peak * 100)
+                        logger.info(
+                            f"[AI soft-sl] pid={pid} {symbol} {side} source={src} "
+                            f"reason={soft_sl} price={price:.6f} peak={new_peak * 100:.2f}%"
+                        )
+                        self._cooldown[pid] = now + self._cooldown_seconds
+                        self._peak_pnl_map.pop(pid, None)
+                        self._do_close(pid, symbol, side, soft_sl, price, now)
+                        continue
+
                     trail_ai = _check_ai_trail_tp(
                         pnl_pct,
                         new_peak,
@@ -359,6 +468,111 @@ class PositionSLTPMonitor:
             self._cooldown[pid] = now + self._cooldown_seconds
             self._peak_pnl_map.pop(pid, None)
             self._do_close(pid, symbol, side, reason, trigger_price, now)
+
+    def _check_ai_trend_exit(
+        self,
+        pid: int,
+        symbol: str,
+        side: str,
+        pnl_pct: float,
+        age_s: float,
+        now: float,
+    ) -> Optional[str]:
+        """Exit losing AI positions when short-cycle price action invalidates the side."""
+        cached = self._trend_exit_cache.get(pid)
+        if cached and (now - cached[0]) < _AI_TREND_SL_CACHE_TTL_S:
+            return cached[1]
+
+        age_min = age_s / 60.0
+        if age_min < _AI_TREND_SL_MIN_AGE_MIN or pnl_pct >= 0:
+            self._trend_exit_cache[pid] = (now, None)
+            return None
+
+        try:
+            from app.services.binance_data_hub import get_global_data_hub
+
+            hub = get_global_data_hub()
+            if hub is None:
+                self._trend_exit_cache[pid] = (now, None)
+                return None
+            rows_5m = hub.get_klines_sync(
+                symbol, interval="5m", limit=5, allow_rest_fallback=False,
+            )
+            rows_15m = hub.get_klines_sync(
+                symbol, interval="15m", limit=4, allow_rest_fallback=False,
+            )
+        except Exception as e:
+            logger.debug(f"[AI trend-sl] {symbol} kline fetch failed: {e}")
+            self._trend_exit_cache[pid] = (now, None)
+            return None
+
+        s5 = self._summarize_against_klines(rows_5m, side)
+        s15 = self._summarize_against_klines(rows_15m, side)
+        reason = None
+
+        if pnl_pct <= _AI_TREND_SL_FAST_LOSS_PCT and (
+            s5["trail_against"] >= 3
+            or (s5["against"] >= 4 and s5["against"] > s5["for"])
+        ):
+            reason = (
+                f"AI trend-sl(5m_invalid, pnl_price={pnl_pct * 100:.2f}%, "
+                f"5m_against={s5['against']}/{s5['total']}, "
+                f"5m_trail={s5['trail_against']}, age={age_min:.0f}m)"
+            )
+        elif pnl_pct <= _AI_TREND_SL_CONFIRM_LOSS_PCT and (
+            s15["trail_against"] >= 2
+            or (s15["against"] >= 3 and s15["against"] > s15["for"])
+        ):
+            reason = (
+                f"AI trend-sl(15m_invalid, pnl_price={pnl_pct * 100:.2f}%, "
+                f"15m_against={s15['against']}/{s15['total']}, "
+                f"15m_trail={s15['trail_against']}, age={age_min:.0f}m)"
+            )
+
+        self._trend_exit_cache[pid] = (now, reason)
+        return reason
+
+    @staticmethod
+    def _summarize_against_klines(rows: list, side: str) -> Dict[str, int]:
+        side_u = (side or "").upper()
+        total = 0
+        against = 0
+        favor = 0
+        trail_against = 0
+        for row in rows or []:
+            try:
+                open_px = float(row.get("open") or row.get("open_price") or 0)
+                close_px = float(row.get("close") or row.get("close_price") or 0)
+            except Exception:
+                continue
+            if open_px <= 0 or close_px <= 0:
+                continue
+            total += 1
+            is_against = close_px < open_px if side_u == "LONG" else close_px > open_px
+            if is_against:
+                against += 1
+            else:
+                favor += 1
+
+        for row in reversed(rows or []):
+            try:
+                open_px = float(row.get("open") or row.get("open_price") or 0)
+                close_px = float(row.get("close") or row.get("close_price") or 0)
+            except Exception:
+                break
+            if open_px <= 0 or close_px <= 0:
+                break
+            is_against = close_px < open_px if side_u == "LONG" else close_px > open_px
+            if not is_against:
+                break
+            trail_against += 1
+
+        return {
+            "total": total,
+            "against": against,
+            "for": favor,
+            "trail_against": trail_against,
+        }
 
     def _is_disable_sl_tp_hold(self) -> bool:
         """读 system_settings.disable_sl_tp_hold，10s 缓存避免每秒查 DB"""
