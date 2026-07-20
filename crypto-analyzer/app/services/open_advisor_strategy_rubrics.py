@@ -615,8 +615,10 @@ def validate_open_advisor_approval(
     k15_all = ctx.get("klines_15m") or []
     k1h = _recent_klines(k1h_all, OPEN_KLINE_1H_RECENT_BARS)
     k15 = _recent_klines(k15_all, OPEN_KLINE_15M_BARS)
+    k15_recent = _recent_klines(k15_all, OPEN_KLINE_15M_RECENT_BARS)
     score_1h = _score_klines_for_side(k1h, s)
     score_15m = _score_klines_for_side(k15, s)
+    score_15m_recent = _score_klines_for_side(k15_recent, s)
     rsi = ctx.get("rsi_14_1h")
     b7h = ctx.get("below_7d_high_pct")
     a7l = ctx.get("above_7d_low_pct")
@@ -642,6 +644,21 @@ def validate_open_advisor_approval(
             return False, f"SHORT RSI(1h)={r:.1f}且贴近7日低点，追空风险过大，二次复核拒绝"
 
     if profile.key in ("explore", "predict"):
+        if score_15m_recent["for"] <= 1 and score_15m_recent["against"] >= 3:
+            return (
+                False,
+                f"{profile.title_zh} 15m近结构反向占优({score_15m_recent['summary']})，二次复核拒绝",
+            )
+        if score_15m_recent["trail_against"] >= 2 and score_15m_recent["against"] > score_15m_recent["for"]:
+            return (
+                False,
+                f"{profile.title_zh} 15m近端连续反向({score_15m_recent['summary']})，二次复核拒绝",
+            )
+        if score_15m["for"] < score_15m["against"] and score_15m_recent["for"] <= score_15m_recent["against"]:
+            return (
+                False,
+                f"{profile.title_zh} 15m整体与近端均不支持{s}({score_15m['summary']} / {score_15m_recent['summary']})，二次复核拒绝",
+            )
         if score_15m["against"] >= 4 and score_15m["for"] <= 1:
             return (
                 False,

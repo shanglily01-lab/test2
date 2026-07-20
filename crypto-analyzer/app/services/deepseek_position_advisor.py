@@ -386,7 +386,9 @@ class DeepSeekPositionAdvisor:
                     pct = (current_price - entry) / entry * 100
                 else:
                     pct = (entry - current_price) / entry * 100
-                roi = pct * int(pos["leverage"])
+                leverage = int(pos["leverage"])
+                roi = pct * leverage
+                peak_roi = max(float(pos.get("max_profit_pct") or 0.0) * leverage, roi)
 
                 k15 = helper._recent_klines(ctx.get("klines_15m", []), HOLD_15M_BARS)
                 k5 = helper._recent_klines(ctx.get("klines_5m", []), HOLD_5M_BARS)
@@ -401,7 +403,7 @@ class DeepSeekPositionAdvisor:
                     roi, action, reason, pos["position_side"], s15, s1h, s5,
                 )
                 action, reason = helper._temper_profitable_hold(
-                    roi, action, reason, pos["position_side"], s15, s1h,
+                    roi, action, reason, pos["position_side"], s15, s1h, peak_roi,
                 )
                 action, reason = helper._temper_premature_sell(
                     roi, action, reason, pos["position_side"], s15, s1h, s5,

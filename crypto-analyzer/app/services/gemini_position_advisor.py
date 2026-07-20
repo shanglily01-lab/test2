@@ -56,6 +56,16 @@ HOLD_LOSS_STRICT_ROI = -1.0     # 保证金 ROI ≤ -1%：严格审查 15m+量�
 HOLD_LOSS_MILD_ROI = -5.0       # 保证金 ROI %，轻微亏损
 HOLD_LOSS_MODERATE_ROI = -12.0  # 中度亏损
 HOLD_LOSS_SEVERE_ROI = -15.0    # 严重亏损（近策略 SL）
+HOLD_PEAK_ROI_GIVEBACK_SELL = 5.0
+HOLD_NO_FOLLOW_PEAK_ROI = 1.5
+HOLD_NO_FOLLOW_SELL_ROI = -8.0
+HOLD_RISK_REASON_TAGS = (
+    "risk_guard",
+    "profit_to_loss",
+    "profit_giveback",
+    "no_follow",
+    "mature_loss",
+)
 
 # DeepSeek/GPT 持仓顾问 system（与 user prompt 中文 reason 一致）
 HOLD_ADVISOR_JSON_SYSTEM_ZH = (
@@ -515,8 +525,40 @@ class GeminiPositionAdvisor:
         side: str,
         s15: dict,
         s1h: dict,
+        peak_roi_pct: float = 0.0,
     ) -> Tuple[str, str]:
         """Tighten profitable holds once ROI is meaningful and 15m weakens."""
+        peak_roi_pct = max(float(peak_roi_pct or 0.0), roi_pct)
+        peak_drawdown = peak_roi_pct - roi_pct
+
+        if (
+            action in ('hold', 'observe')
+            and peak_roi_pct >= HOLD_PEAK_ROI_GIVEBACK_SELL
+            and roi_pct <= HOLD_LOSS_STRICT_ROI
+        ):
+            action = 'sell'
+            override = (
+                f"risk_guard:profit_to_loss peak_roi={peak_roi_pct:.1f}% "
+                f"drawdown={peak_drawdown:.1f}%"
+            )
+            reason = f"{reason[:80]}|guard:{override}"[:200]
+            logger.info(f"[GeminiAdvisor] profit giveback guard -> sell ({override})")
+            return action, reason
+
+        if (
+            action == 'hold'
+            and peak_roi_pct < HOLD_NO_FOLLOW_PEAK_ROI
+            and roi_pct <= HOLD_NO_FOLLOW_SELL_ROI
+        ):
+            action = 'sell'
+            override = (
+                f"risk_guard:no_follow peak_roi<{HOLD_NO_FOLLOW_PEAK_ROI:.1f}% "
+                f"roi={roi_pct:.1f}%"
+            )
+            reason = f"{reason[:80]}|guard:{override}"[:200]
+            logger.info(f"[GeminiAdvisor] no-follow loss guard -> sell ({override})")
+            return action, reason
+
         if action != 'hold' or roi_pct < HOLD_PROFIT_TEMPER_ROI:
             return action, reason
 
@@ -554,8 +596,18 @@ class GeminiPositionAdvisor:
         s5 = s5 or {}
         s15_for = s15.get("for", 0)
         s15_against = s15.get("against", 0)
+        reason_l = (reason or "").lower()
+
+        if any(tag in reason_l for tag in HOLD_RISK_REASON_TAGS):
+            return action, reason
 
         severe_loss_confirmed = (
+            roi_pct <= HOLD_LOSS_MODERATE_ROI
+            and (
+                s15_against >= 3
+                or s15.get("trail_against", 0) >= 2
+            )
+        ) or (
             roi_pct <= HOLD_LOSS_SEVERE_ROI
             and (
                 s15_against >= 4
@@ -1187,7 +1239,9 @@ class GeminiPositionAdvisor:
                     pct = (current_price - entry) / entry * 100
                 else:
                     pct = (entry - current_price) / entry * 100
-                roi = pct * int(pos['leverage'])
+                leverage = int(pos['leverage'])
+                roi = pct * leverage
+                peak_roi = max(float(pos.get('max_profit_pct') or 0.0) * leverage, roi)
 
                 k15 = self._recent_klines(ctx.get('klines_15m', []), HOLD_15M_BARS)
                 k5 = self._recent_klines(ctx.get('klines_5m', []), HOLD_5M_BARS)
@@ -1202,7 +1256,7 @@ class GeminiPositionAdvisor:
                     roi, action, reason, pos['position_side'], s15, s1h, s5,
                 )
                 action, reason = self._temper_profitable_hold(
-                    roi, action, reason, pos['position_side'], s15, s1h,
+                    roi, action, reason, pos['position_side'], s15, s1h, peak_roi,
                 )
                 action, reason = self._temper_premature_sell(
                     roi, action, reason, pos['position_side'], s15, s1h, s5,
