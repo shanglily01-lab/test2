@@ -6,7 +6,7 @@ DeepSeek 预测 worker (v1 — 2026-05-29)
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
-  - margin    = 500U
+  - margin    = 1000U default paper margin, rating-adjusted by trading_gates
   - leverage  = 5x
   - hold     = 2 小时
   - SL       = 2%
@@ -126,7 +126,7 @@ PREDICT_MARGIN_USD = 500.0
 PREDICT_LEVERAGE = 5
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'deepseek_predict'
-PREDICT_CANDIDATE_LIMIT = 500
+PREDICT_CANDIDATE_LIMIT = 50
 PREDICT_TOP_N_FALLBACK = 50
 
 # 数据新鲜度门槛
@@ -153,23 +153,24 @@ def _connect():
 
 
 # ============================================================
-# 数据查询 — 候选池 (全量, 非 TOP50 截断)
+# 数据查询 — 候选池 (技术评分截断, 非全量送模)
 # ============================================================
 def _get_predict_symbols(conn) -> List[str]:
-    """从 candidate_pool_snapshot 全量取 symbol；缓存不可用时回退盈利 TOP50."""
+    """从 candidate_pool_snapshot 取技术评分 TOP N；缓存不可用时回退盈利 TOP50。"""
     banned = set()
 
     rows = _get_candidate_pool_cached()
     if rows:
-        from app.services.ai_explore_prompt import select_all_symbols_from_pool
+        from app.services.ai_explore_prompt import select_llm_symbols_from_pool
 
-        symbols = select_all_symbols_from_pool(
-            rows[:PREDICT_CANDIDATE_LIMIT],
+        symbols = select_llm_symbols_from_pool(
+            rows,
             banned=banned,
+            max_symbols=PREDICT_CANDIDATE_LIMIT,
         )
         if symbols:
             logger.info(
-                f"[DeepSeek预测] 从 candidate_pool_snapshot 全量获取 {len(symbols)} 个 symbol"
+                f"[DeepSeek预测] 从 candidate_pool_snapshot 技术评分 TOP{PREDICT_CANDIDATE_LIMIT} 获取 {len(symbols)} 个 symbol"
             )
             return symbols
 

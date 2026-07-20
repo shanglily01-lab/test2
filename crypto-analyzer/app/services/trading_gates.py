@@ -603,12 +603,12 @@ def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]
     return False, '不在TOP名单且未在黑白名单评级表中，禁止模拟盘'
 
 
-DEFAULT_PAPER_MARGIN_USD = 500.0
+DEFAULT_PAPER_MARGIN_USD = 1000.0
 PAPER_MARGIN_BY_RATING_LEVEL = {
-    0: 500.0,
-    1: 200.0,
-    2: 100.0,
-    3: 50.0,
+    0: 1000.0,
+    1: 400.0,
+    2: 200.0,
+    3: 100.0,
 }
 
 
@@ -617,10 +617,10 @@ def get_paper_margin_usd(symbol: str, cursor=None) -> float:
     Return simulated-order margin by symbol rating.
 
     Rules:
-      - L0 whitelist or unrated/default: 500U
-      - L1 blacklist: 200U
-      - L2 blacklist: 100U
-      - L3 blacklist: 50U
+      - L0 whitelist or unrated/default: 1000U
+      - L1 blacklist: 400U
+      - L2 blacklist: 200U
+      - L3 blacklist: 100U
 
     Live trading keeps using check_live_symbol_allowed/get_live_margin_ratio,
     which only allow L0.

@@ -6,7 +6,7 @@ Gemini 预测 worker (v2 — 2026-05-29)
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
-  - margin    = 500U
+  - margin    = 1000U default paper margin, rating-adjusted by trading_gates
   - leverage  = 5x
   - hold     = 2 小时
   - SL       = 2%

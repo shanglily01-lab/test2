@@ -6,7 +6,7 @@ DeepSeek 探索 worker (v1 — 2026-05-28)
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
-  - margin    = 500U
+  - margin    = 1000U default paper margin, rating-adjusted by trading_gates
   - leverage  = 5x
   - hold     = 2 小时
   - SL       = 2%

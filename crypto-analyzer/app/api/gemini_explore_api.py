@@ -169,7 +169,7 @@ def status():
                 "closed_positions_30d": closed_30d,
                 "max_positions": _params["max_positions"],
                 "params": {
-                    "margin_usd": 500,
+                    "margin_usd": 1000,
                     "leverage": 3,
                     "hold_hours": _params["hold_hours"],
                     "sl_pct": _params["sl_pct"],
