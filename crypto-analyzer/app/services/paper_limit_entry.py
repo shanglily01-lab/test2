@@ -41,7 +41,7 @@ PAPER_LIMIT_MIN_FILL_AGE_SEC = 60
 # 超时处理：expire=放弃(取消) | convert_market=转市价成交
 PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE = "expire"
 PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET = "convert_market"
-DEFAULT_PAPER_LIMIT_TIMEOUT_ACTION = PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE
+DEFAULT_PAPER_LIMIT_TIMEOUT_ACTION = PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET
 
 
 def _clamp_offset_pct(pct: float, *, strategy_override: bool = False) -> float:
@@ -50,9 +50,9 @@ def _clamp_offset_pct(pct: float, *, strategy_override: bool = False) -> float:
 
 
 def is_paper_limit_entry_enabled() -> bool:
-    """模拟盘限价开仓总开关 (system_settings.paper_limit_entry_enabled，默认开)。"""
+    """模拟盘限价开仓总开关 (system_settings.paper_limit_entry_enabled，默认关)。"""
     from app.services.data_cache_service import get_setting
-    val = get_setting("paper_limit_entry_enabled", "1")
+    val = get_setting("paper_limit_entry_enabled", "0")
     return str(val).strip().lower() in ("1", "true", "yes")
 
 
@@ -93,7 +93,9 @@ def get_paper_limit_timeout_action() -> str:
     ).strip().lower()
     if raw in ("convert_market", "market", "convert"):
         return PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET
-    return PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE
+    if raw == PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE:
+        return PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE
+    return DEFAULT_PAPER_LIMIT_TIMEOUT_ACTION
 
 
 def calc_paper_limit_price(

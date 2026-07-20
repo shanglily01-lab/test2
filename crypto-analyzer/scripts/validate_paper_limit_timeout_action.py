@@ -30,13 +30,13 @@ def test_timeout_action_getter() -> None:
         get_paper_limit_timeout_action,
     )
 
-    if DEFAULT_PAPER_LIMIT_TIMEOUT_ACTION != PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE:
-        _fail("默认应为 expire")
+    if DEFAULT_PAPER_LIMIT_TIMEOUT_ACTION != PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET:
+        _fail("默认应为 convert_market")
         return
 
     cases = [
         ("expire", PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE),
-        ("", PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE),
+        ("", PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET),
         ("convert_market", PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET),
         ("market", PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET),
         ("convert", PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET),
@@ -99,17 +99,16 @@ def test_executor_timeout_branches() -> None:
             "app.services.futures_limit_order_executor.get_paper_limit_timeout_action",
             return_value=PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET,
         ):
-            with patch.object(executor, "_get_price", return_value=__import__("decimal").Decimal("99")):
-                cursor.fetchall.return_value = [dict(order, elapsed_seconds=31 * 60)]
-                executor.check_and_execute_limit_orders()
-                if not engine.fill_paper_limit_order.called:
-                    _fail("convert_market 未调用 fill_paper_limit_order(at_market=True)")
+            cursor.fetchall.return_value = [dict(order, elapsed_seconds=31 * 60)]
+            executor.check_and_execute_limit_orders()
+            if not engine.fill_paper_limit_order.called:
+                _fail("convert_market 未调用 fill_paper_limit_order(at_market=True)")
+            else:
+                _, kwargs = engine.fill_paper_limit_order.call_args
+                if not kwargs.get("at_market"):
+                    _fail("转市价未传 at_market=True")
                 else:
-                    _, kwargs = engine.fill_paper_limit_order.call_args
-                    if not kwargs.get("at_market"):
-                        _fail("转市价未传 at_market=True")
-                    else:
-                        _ok("convert_market 调用 fill_paper_limit_order(at_market=True)")
+                    _ok("convert_market 调用 fill_paper_limit_order(at_market=True)")
 
         engine.reset_mock()
         with patch(
