@@ -659,13 +659,8 @@ def count_paper_open_slots(conn, account_id: int = 2) -> int:
 
 
 def check_max_positions_allowed(conn, account_id: int = 2) -> tuple[bool, str]:
-    """检查模拟盘是否未达 max_positions 上限。"""
-    from app.services.system_settings_loader import get_max_positions
-    max_pos = get_max_positions()
-    used = count_paper_open_slots(conn, account_id)
-    if used >= max_pos:
-        return False, f"已达最大持仓 {used}/{max_pos}"
-    return True, ""
+    """模拟盘开仓数量不设总上限；只保留方向/顾问/去重等质量闸门。"""
+    return True, "max_positions disabled"
 
 
 def has_open_futures_position(conn, source: str, symbol: str, account_id: Optional[int] = None) -> bool:

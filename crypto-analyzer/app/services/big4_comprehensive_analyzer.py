@@ -50,7 +50,7 @@ DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 PROVIDER_CONFIG = {
     "gemini": {
         "setting_key": "gemini_big4_analysis_enabled",
-        "default_enabled": "1",
+        "default_enabled": "0",
         "model": GEMINI_MODEL,
     },
     "deepseek": {

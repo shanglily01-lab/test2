@@ -1487,16 +1487,7 @@ class UnifiedDataScheduler:
         _run_deepseek_position_advisor()
         logger.info("  ✓ deepseek_position_advisor - 每 15 分钟 (后台线程；每仓 15min 复审)")
 
-        # Big4 综合行情 LLM 分析 — 每 2h (Gemini + DeepSeek)
-        def _run_gemini_big4_analysis():
-            def wrapper():
-                try:
-                    from app.services.big4_comprehensive_analyzer import run_big4_analysis_round
-                    run_big4_analysis_round("gemini", triggered_by="scheduler")
-                except Exception as e:
-                    logger.error(f"[Gemini Big4分析] 调度异常: {e}", exc_info=True)
-            threading.Thread(target=wrapper, daemon=True, name="GeminiBig4Analysis").start()
-
+        # Big4 综合行情 LLM 分析 — 每 2h (DeepSeek only; Gemini Big4 disabled)
         def _run_deepseek_big4_analysis():
             def wrapper():
                 try:
@@ -1506,11 +1497,9 @@ class UnifiedDataScheduler:
                     logger.error(f"[DeepSeek Big4分析] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="DeepSeekBig4Analysis").start()
 
-        schedule.every(2).hours.do(_run_gemini_big4_analysis)
-        schedule.every(10).minutes.do(_run_gemini_big4_analysis)
         schedule.every(2).hours.do(_run_deepseek_big4_analysis)
         schedule.every(10).minutes.do(_run_deepseek_big4_analysis)
-        logger.info("  ✓ big4_analysis - Gemini/DeepSeek 每 2h + 10min 轮询 (worker 内 2h 防重)")
+        logger.info("  ✓ big4_analysis - DeepSeek 每 2h + 10min 轮询 (worker 内 2h 防重；Gemini Big4 已停用)")
 
         # Gemini 市场情绪 + 川普分析 - 每 8h 调一次
         def _run_gemini_sentiment():
@@ -1743,7 +1732,6 @@ class UnifiedDataScheduler:
                     logger.error(f"[{name}] 启动补跑检查失败: {e}", exc_info=True)
             threading.Thread(target=_run, daemon=True, name=f"PredictCatchup_{name}").start()
 
-        _launch_ai_init_task("GeminiBig4",   "app.services.big4_comprehensive_analyzer", "run_big4_analysis_round_gemini", 28)
         _launch_ai_init_task("DeepSeekBig4", "app.services.big4_comprehensive_analyzer", "run_big4_analysis_round_deepseek", 95)
         _launch_ai_init_task("Gemini情绪",   "app.services.gemini_sentiment_analyzer","run_sentiment_round", 25)
         _launch_ai_init_task("DeepSeek探索","app.services.deepseek_explore_worker",  "run_explore_round", 90)
