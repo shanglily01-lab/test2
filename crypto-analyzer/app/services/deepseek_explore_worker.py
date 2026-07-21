@@ -78,6 +78,7 @@ DEEPSEEK_TIMEOUT_S = int(os.getenv("DEEPSEEK_TIMEOUT_S", "180"))
 
 DEEPSEEK_SOURCE = 'deepseek_explore'
 DEEPSEEK_EXPLORE_UNIVERSE_LIMIT = 2000
+DEEPSEEK_EXPLORE_BATCH_SIZE = 50
 
 # ── data_cache 层: 尝试从缓存快速读取, 失败时回退到主库 ──
 _DATA_CACHE_AVAILABLE = False
@@ -441,6 +442,13 @@ def _build_full_universe_from_cache(conn, current_size: int = 0) -> Optional[dic
         logger.info(f"[DeepSeek探索] 全量候选池黑名单3级过滤: {before - len(cached)} 个交易对")
     universe = _build_universe_from_cache(cached)
     return universe or None
+
+
+def _batched_universe(universe: dict, size: int) -> List[dict]:
+    items = list(universe.items())
+    if size <= 0:
+        return [dict(items)]
+    return [dict(items[i:i + size]) for i in range(0, len(items), size)]
 
 
 def _build_universe_from_cache(cached_rows: List[Dict]) -> dict:
@@ -1365,13 +1373,30 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
         else:
             logger.info(f"[DeepSeek探索] 历史: 样本不足 ({historical_stats['total_trades']}笔)")
 
-        # 3d. 调 DeepSeek
-        deepseek_response, call_err = _call_deepseek_explore(
-            universe, global_ctx, historical_stats,
-        )
-        if deepseek_response is None:
+        # 3d. 调 DeepSeek: 全交易对覆盖，但分批送模，避免单个巨型 prompt 失败
+        responses: List[dict] = []
+        failed_batches = 0
+        last_call_err = ""
+        batches = _batched_universe(universe, DEEPSEEK_EXPLORE_BATCH_SIZE)
+        for idx, batch_universe in enumerate(batches, start=1):
+            keys = list(batch_universe.keys())
+            logger.info(
+                f"[DeepSeek探索] 调用批次 {idx}/{len(batches)}: "
+                f"{len(batch_universe)} symbols ({keys[0]}..{keys[-1]})"
+            )
+            deepseek_response, call_err = _call_deepseek_explore(
+                batch_universe, global_ctx, historical_stats,
+            )
+            if deepseek_response is None:
+                failed_batches += 1
+                last_call_err = call_err or "DeepSeek 调用失败"
+                logger.error(f"[DeepSeek探索] 批次 {idx} DeepSeek 调用失败: {last_call_err}")
+                continue
+            responses.append(deepseek_response)
+
+        if not responses:
             elapsed = time.time() - t0
-            err_msg = (call_err or "DeepSeek 调用失败")[:500]
+            err_msg = (last_call_err or "DeepSeek 全部批次调用失败")[:500]
             run_id = _insert_run(
                 conn, asof_utc, universe_size, '', elapsed,
                 'error', err_msg, triggered_by,
@@ -1379,17 +1404,29 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             logger.error(f"[DeepSeek探索] DeepSeek 调用失败: {err_msg}")
             return run_id
 
-        summary_zh = (deepseek_response.get('summary_zh') or '')[:1000]
-        verdicts = deepseek_response.get('verdicts') or []
+        summary_zh = " | ".join(
+            (r.get('summary_zh') or '')[:180]
+            for r in responses
+            if r.get('summary_zh')
+        )[:1000]
+        verdicts: List[dict] = []
+        prompt_parts: List[str] = []
+        raw_parts: List[str] = []
+        for idx, r in enumerate(responses, start=1):
+            verdicts.extend(r.get('verdicts') or [])
+            if r.get('_prompt'):
+                prompt_parts.append(f"\n\n--- batch {idx} ---\n{r.get('_prompt')}")
+            if r.get('_raw_response'):
+                raw_parts.append(f"\n\n--- batch {idx} ---\n{r.get('_raw_response')}")
         logger.info(
-            f"[DeepSeek探索] deepseek 返回 verdicts={len(verdicts)}, "
-            f"summary={summary_zh[:80]}"
+            f"[DeepSeek探索] deepseek 批量返回 verdicts={len(verdicts)}, "
+            f"成功批次={len(responses)} 失败批次={failed_batches} summary={summary_zh[:80]}"
         )
 
         # 4. 写 run 记录
         elapsed = time.time() - t0
-        prompt_text = deepseek_response.get('_prompt')
-        raw_response = deepseek_response.get('_raw_response')
+        prompt_text = ''.join(prompt_parts) or None
+        raw_response = ''.join(raw_parts) or None
         run_id = _insert_run(
             conn, asof_utc, universe_size, summary_zh, elapsed,
             'ok', None, triggered_by, prompt_text, raw_response,

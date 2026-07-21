@@ -127,6 +127,7 @@ PREDICT_LEVERAGE = 5
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'deepseek_predict'
 DEEPSEEK_UNIVERSE_SYMBOL_LIMIT = 2000
+DEEPSEEK_PREDICT_BATCH_SIZE = 50
 
 # 数据新鲜度门槛
 PREDICT_PRICE_FRESH_MIN = 20
@@ -163,12 +164,10 @@ def _get_predict_symbols(conn) -> List[str]:
     except Exception:
         banned = set()
 
-    from app.services.trading_gates import sql_exclude_level3_filter
-    _l3 = sql_exclude_level3_filter("symbol")
     with conn.cursor() as cur:
         cur.execute(
             f"SELECT symbol FROM price_stats_24h "
-            f"WHERE symbol LIKE '%%/USDT' {_l3} "
+            f"WHERE symbol LIKE '%%/USDT' "
             f"ORDER BY quote_volume_24h DESC LIMIT %s",
             (DEEPSEEK_UNIVERSE_SYMBOL_LIMIT,),
         )
@@ -205,6 +204,12 @@ def _get_current_price(conn, symbol: str) -> Optional[float]:
     from app.utils.futures_price import get_futures_trade_price
 
     return get_futures_trade_price(conn, symbol, log_tag="DeepSeek预测")
+
+
+def _batched(items: List[Any], size: int) -> List[List[Any]]:
+    if size <= 0:
+        return [items]
+    return [items[i:i + size] for i in range(0, len(items), size)]
 
 
 # ============================================================
@@ -858,22 +863,50 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         global_ctx = _build_global_context(conn)
         logger.info(f"[DeepSeek预测] 全局: Big4={global_ctx.get('big4_signal')}")
 
-        # 5. 调 DeepSeek
-        ds_response = _call_deepseek_predict(symbols_data, global_ctx)
-        if ds_response is None:
+        # 5. 调 DeepSeek: 全交易对覆盖，但分批送模，避免单个巨型 prompt 失败
+        responses: List[dict] = []
+        failed_batches = 0
+        for idx, batch in enumerate(_batched(symbols_data, DEEPSEEK_PREDICT_BATCH_SIZE), start=1):
+            logger.info(
+                f"[DeepSeek预测] 调用批次 {idx}: "
+                f"{len(batch)} symbols ({batch[0]['symbol']}..{batch[-1]['symbol']})"
+            )
+            resp = _call_deepseek_predict(batch, global_ctx)
+            if resp is None:
+                failed_batches += 1
+                logger.error(f"[DeepSeek预测] 批次 {idx} DeepSeek 调用失败, 继续下一批")
+                continue
+            responses.append(resp)
+
+        if not responses:
             elapsed = time.time() - t0
-            _insert_run(conn, asof_utc, len(symbols_data), '', elapsed, 'error', 'DeepSeek 调用失败', triggered_by)
+            _insert_run(conn, asof_utc, len(symbols_data), '', elapsed, 'error', 'DeepSeek 全部批次调用失败', triggered_by)
             logger.error("[DeepSeek预测] DeepSeek 调用失败, 本轮结束")
             return None
 
-        summary_zh = (ds_response.get('summary_zh') or '')[:1000]
-        verdicts = ds_response.get('verdicts') or []
-        logger.info(f"[DeepSeek预测] DeepSeek 返回 verdicts={len(verdicts)}, summary={summary_zh[:80]}")
+        summary_zh = " | ".join(
+            (r.get('summary_zh') or '')[:180]
+            for r in responses
+            if r.get('summary_zh')
+        )[:1000]
+        verdicts: List[dict] = []
+        prompt_parts: List[str] = []
+        raw_parts: List[str] = []
+        for idx, r in enumerate(responses, start=1):
+            verdicts.extend(r.get('verdicts') or [])
+            if r.get('_prompt'):
+                prompt_parts.append(f"\n\n--- batch {idx} ---\n{r.get('_prompt')}")
+            if r.get('_raw_response'):
+                raw_parts.append(f"\n\n--- batch {idx} ---\n{r.get('_raw_response')}")
+        logger.info(
+            f"[DeepSeek预测] DeepSeek 批量返回 verdicts={len(verdicts)}, "
+            f"成功批次={len(responses)} 失败批次={failed_batches} summary={summary_zh[:80]}"
+        )
 
         # 6. 写 run 记录
         elapsed = time.time() - t0
-        prompt_text = ds_response.get('_prompt')
-        raw_response = ds_response.get('_raw_response')
+        prompt_text = ''.join(prompt_parts) or None
+        raw_response = ''.join(raw_parts) or None
         run_id = _insert_run(
             conn, asof_utc, len(symbols_data), summary_zh, elapsed,
             'ok', None, triggered_by, prompt_text, raw_response,
