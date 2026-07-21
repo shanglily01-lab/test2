@@ -77,6 +77,7 @@ DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_TIMEOUT_S = int(os.getenv("DEEPSEEK_TIMEOUT_S", "180"))
 
 DEEPSEEK_SOURCE = 'deepseek_explore'
+DEEPSEEK_EXPLORE_UNIVERSE_LIMIT = 2000
 
 # ── data_cache 层: 尝试从缓存快速读取, 失败时回退到主库 ──
 _DATA_CACHE_AVAILABLE = False
@@ -94,7 +95,7 @@ except ImportError:
     pass
 
 
-def _try_candidate_pool(min_volume: float = 1000000, limit: int = 100) -> Optional[List[Dict]]:
+def _try_candidate_pool(min_volume: float = 1000000, limit: int = DEEPSEEK_EXPLORE_UNIVERSE_LIMIT) -> Optional[List[Dict]]:
     """尝试从 data_cache.candidate_pool_snapshot 读取候选池, 失败返回 None."""
     if not _DATA_CACHE_AVAILABLE:
         return None
@@ -398,7 +399,7 @@ def _build_universe(conn) -> dict:
     from app.services.trading_gates import load_blacklist_level3_symbols
     _level3_set = load_blacklist_level3_symbols(conn)
 
-    cached = _try_candidate_pool(min_volume=1000000, limit=200)
+    cached = _try_candidate_pool(min_volume=0, limit=DEEPSEEK_EXPLORE_UNIVERSE_LIMIT)
     if cached:
         before = len(cached)
         cached = [r for r in cached if futures_symbol_clean(r['symbol']) not in _level3_set]
@@ -417,6 +418,29 @@ def _build_universe(conn) -> dict:
         "回退 kline_data 多层 JOIN (较慢, 请耐心等待)"
     )
     return _build_universe_fallback(conn, _level3_set)
+
+
+def _build_full_universe_from_cache(conn, current_size: int = 0) -> Optional[dict]:
+    """DeepSeek 专用：从 candidate_pool_snapshot 取全量交易对，避免共享包/送模 TopN 截断。"""
+    from app.services.trading_gates import load_blacklist_level3_symbols
+
+    cached = _try_candidate_pool(
+        min_volume=0,
+        limit=DEEPSEEK_EXPLORE_UNIVERSE_LIMIT,
+    )
+    if not cached or len(cached) <= current_size:
+        return None
+
+    level3_set = load_blacklist_level3_symbols(conn)
+    before = len(cached)
+    cached = [
+        r for r in cached
+        if futures_symbol_clean(r["symbol"]) not in level3_set
+    ]
+    if len(cached) < before:
+        logger.info(f"[DeepSeek探索] 全量候选池黑名单3级过滤: {before - len(cached)} 个交易对")
+    universe = _build_universe_from_cache(cached)
+    return universe or None
 
 
 def _build_universe_from_cache(cached_rows: List[Dict]) -> dict:
@@ -846,7 +870,12 @@ def _call_deepseek_explore(
         logger.error("[DeepSeek探索] DEEPSEEK_API_KEY 未设置")
         return None, "DEEPSEEK_API_KEY 未设置"
 
-    prompt, llm_meta = build_explore_prompt(universe, global_ctx, historical_stats)
+    prompt, llm_meta = build_explore_prompt(
+        universe,
+        global_ctx,
+        historical_stats,
+        max_symbols=max(len(universe), 1),
+    )
     logger.info(
         f"[DeepSeek探索] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens), "
         f"送模 {llm_meta['llm_symbol_count']}/{llm_meta['universe_total']} symbols"
@@ -1273,6 +1302,14 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             conn, "DeepSeek探索", allow_rebuild=allow_rebuild,
         )
         universe_size = len(universe)
+        full_universe = _build_full_universe_from_cache(conn, current_size=universe_size)
+        if full_universe:
+            logger.info(
+                f"[DeepSeek探索] 使用全量 candidate_pool universe: "
+                f"{universe_size} → {len(full_universe)} sym"
+            )
+            universe = full_universe
+            universe_size = len(universe)
         logger.info(
             f"[DeepSeek探索] universe_size={universe_size} "
             f"({'共用包' if from_shared else '现场构建'})"

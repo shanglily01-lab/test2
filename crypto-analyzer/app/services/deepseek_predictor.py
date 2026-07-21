@@ -90,7 +90,7 @@ def _get_candidate_pool_cached() -> List[Dict]:
     pool = _candidate_pool_memo.get("pool") or []
     if pool and now - float(_candidate_pool_memo.get("ts") or 0.0) < _CANDIDATE_POOL_TTL_S:
         return pool
-    pool = get_candidate_pool(min_volume=0, limit=500)
+    pool = get_candidate_pool(min_volume=0, limit=DEEPSEEK_UNIVERSE_SYMBOL_LIMIT)
     _candidate_pool_memo["ts"] = now
     _candidate_pool_memo["pool"] = pool
     return pool
@@ -126,8 +126,7 @@ PREDICT_MARGIN_USD = 500.0
 PREDICT_LEVERAGE = 5
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'deepseek_predict'
-PREDICT_CANDIDATE_LIMIT = 50
-PREDICT_TOP_N_FALLBACK = 50
+DEEPSEEK_UNIVERSE_SYMBOL_LIMIT = 2000
 
 # 数据新鲜度门槛
 PREDICT_PRICE_FRESH_MIN = 20
@@ -153,39 +152,52 @@ def _connect():
 
 
 # ============================================================
-# 数据查询 — 候选池 (技术评分截断, 非全量送模)
+# 数据查询 — 候选池 (全量送模, 非 TOP50 截断)
 # ============================================================
 def _get_predict_symbols(conn) -> List[str]:
-    """从 candidate_pool_snapshot 取技术评分 TOP N；缓存不可用时回退盈利 TOP50。"""
+    """从 price_stats_24h 全量取 /USDT symbol；缓存仅作备用。"""
     banned = set()
-
-    rows = _get_candidate_pool_cached()
-    if rows:
-        from app.services.ai_explore_prompt import select_llm_symbols_from_pool
-
-        symbols = select_llm_symbols_from_pool(
-            rows,
-            banned=banned,
-            max_symbols=PREDICT_CANDIDATE_LIMIT,
-        )
-        if symbols:
-            logger.info(
-                f"[DeepSeek预测] 从 candidate_pool_snapshot 技术评分 TOP{PREDICT_CANDIDATE_LIMIT} 获取 {len(symbols)} 个 symbol"
-            )
-            return symbols
+    try:
+        from app.services.trading_gates import load_blacklist_level3_symbols
+        banned = load_blacklist_level3_symbols(conn)
+    except Exception:
+        banned = set()
 
     from app.services.trading_gates import sql_exclude_level3_filter
     _l3 = sql_exclude_level3_filter("symbol")
     with conn.cursor() as cur:
         cur.execute(
-            f"SELECT symbol FROM top_performing_symbols "
-            f"WHERE 1=1 {_l3} "
-            f"ORDER BY rank_score ASC LIMIT %s",
-            (PREDICT_TOP_N_FALLBACK,),
+            f"SELECT symbol FROM price_stats_24h "
+            f"WHERE symbol LIKE '%%/USDT' {_l3} "
+            f"ORDER BY quote_volume_24h DESC LIMIT %s",
+            (DEEPSEEK_UNIVERSE_SYMBOL_LIMIT,),
         )
-        symbols = [r['symbol'] for r in cur.fetchall()]
-        logger.warning(f"[DeepSeek预测] candidate_pool 不可用, 回退 top_performing_symbols {len(symbols)} 个")
-        return symbols
+        symbols = []
+        seen = set()
+        for r in cur.fetchall():
+            sym = futures_symbol_rating_canonical(r["symbol"])
+            clean = sym.replace("/", "")
+            if not sym or _is_excluded(sym) or clean in banned or clean in seen:
+                continue
+            seen.add(clean)
+            symbols.append(sym)
+        if symbols:
+            logger.info(f"[DeepSeek预测] 从 price_stats_24h 全量池获取 {len(symbols)} 个 symbol")
+            return symbols
+
+    rows = _get_candidate_pool_cached()
+    if rows:
+        from app.services.ai_explore_prompt import select_all_symbols_from_pool
+
+        symbols = select_all_symbols_from_pool(
+            rows,
+            banned=banned,
+            limit=DEEPSEEK_UNIVERSE_SYMBOL_LIMIT,
+        )
+        if symbols:
+            logger.warning(f"[DeepSeek预测] price_stats_24h 不可用, 回退 candidate_pool 全量 {len(symbols)} 个")
+            return symbols
+    return []
 
 
 def _get_current_price(conn, symbol: str) -> Optional[float]:

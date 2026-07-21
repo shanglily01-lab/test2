@@ -503,16 +503,24 @@ def build_explore_prompt_zh(
 ) -> Tuple[str, Dict[str, Any]]:
     """Chinese main explore prompt (A/B benchmark only)."""
     universe_list, meta = prepare_universe_for_llm(universe, max_symbols=max_symbols)
+    if meta.get("llm_symbols_truncated"):
+        llm_universe_note = (
+            f"本列表为全池 {meta['universe_total']} 个中按 **技术面评分** "
+            f"(中等波动+RSI/7d+流动性，非单纯|24h|极端) 取 TOP {meta['llm_symbol_count']}，"
+            f"仅对这些 symbol 输出 verdict (其余忽略)."
+        )
+    else:
+        llm_universe_note = (
+            f"本列表为当前候选全池 {meta['universe_total']} 个 symbol，"
+            f"不设固定数量上限；请对所有达到高质量开仓标准的 symbol 输出 verdict，"
+            f"其余明确不满足方向/量价/风险条件的可忽略。"
+        )
     compact = {"ensure_ascii": False, "separators": (",", ":"), "default": str}
     prompt = EXPLORE_PROMPT_TEMPLATE.format(
         global_context_json=json.dumps(global_ctx, **compact),
         universe_json=json.dumps(universe_list, **compact),
         historical_stats_json=json.dumps(historical_stats, **compact),
-        llm_universe_note=(
-            f"本列表为全池 {meta['universe_total']} 个中按 **技术面评分** "
-            f"(中等波动+RSI/7d+流动性，非单纯|24h|极端) 取 TOP {meta['llm_symbol_count']}，"
-            f"仅对这些 symbol 输出 verdict (其余忽略)."
-        ),
+        llm_universe_note=llm_universe_note,
         **_sl_tp_prompt_kwargs(),
     )
     return prompt, meta
