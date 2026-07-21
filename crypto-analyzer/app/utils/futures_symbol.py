@@ -48,7 +48,7 @@ def futures_symbol_rating_variants(symbol: str) -> List[str]:
 
 def sql_rating_symbol_clean(column: str = "symbol") -> str:
     """SQL 表达式: 将 symbol 列规范为无斜杠大写，用于跨格式匹配。"""
-    return f"REPLACE(UPPER({column}), '/', '')"
+    return f"(REPLACE(UPPER({column}), '/', '') COLLATE utf8mb4_unicode_ci)"
 
 
 def sql_rating_l3_clean_subquery(min_level: int = 3) -> str:
