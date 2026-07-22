@@ -38,6 +38,10 @@ SYMBOL_LOSS_TRADE_LIMIT = 3
 SYMBOL_LOSS_NET_PNL_LIMIT = -120.0
 SOURCE_SYMBOL_LOSS_TRADE_LIMIT = 2
 SOURCE_SYMBOL_LOSS_NET_PNL_LIMIT = -100.0
+SOURCE_SIDE_PERFORMANCE_HOURS = 72
+SOURCE_SIDE_PERFORMANCE_MIN_TRADES = 20
+SOURCE_SIDE_MIN_WIN_RATE = 35.0
+SOURCE_SIDE_NET_PNL_LIMIT = -300.0
 
 def _coerce_bool(value, default: bool) -> bool:
     if value is None:
@@ -639,18 +643,18 @@ def count_paper_open_slots(conn, account_id: int = 2) -> int:
     try:
         cur = conn.cursor()
         cur.execute(
-            "SELECT COUNT(*) FROM futures_positions "
+            "SELECT COUNT(*) AS cnt FROM futures_positions "
             "WHERE account_id=%s AND LOWER(status)='open'",
             (account_id,),
         )
-        pos_cnt = int((cur.fetchone() or [0])[0] or 0)
+        pos_cnt = int(_row_get(cur.fetchone(), "cnt", 0, 0) or 0)
         cur.execute(
-            "SELECT COUNT(*) FROM futures_orders "
+            "SELECT COUNT(*) AS cnt FROM futures_orders "
             "WHERE account_id=%s AND status='PENDING' AND order_type='LIMIT' "
             "AND side IN ('OPEN_LONG','OPEN_SHORT')",
             (account_id,),
         )
-        pending_cnt = int((cur.fetchone() or [0])[0] or 0)
+        pending_cnt = int(_row_get(cur.fetchone(), "cnt", 0, 0) or 0)
         cur.close()
         return pos_cnt + pending_cnt
     except Exception as e:
@@ -659,8 +663,74 @@ def count_paper_open_slots(conn, account_id: int = 2) -> int:
 
 
 def check_max_positions_allowed(conn, account_id: int = 2) -> tuple[bool, str]:
-    """模拟盘开仓数量不设总上限；只保留方向/顾问/去重等质量闸门。"""
-    return True, "max_positions disabled"
+    """Enforce the paper account slot cap from system_settings.max_positions."""
+    try:
+        from app.services.system_settings_loader import get_max_positions
+
+        max_positions = int(get_max_positions())
+    except Exception as e:
+        logger.warning(f"[trading_gates] read max_positions failed: {e}")
+        max_positions = 50
+
+    if max_positions <= 0:
+        return True, "max_positions disabled"
+
+    used_slots = count_paper_open_slots(conn, account_id)
+    if used_slots >= max_positions:
+        return False, f"paper_slots_full:{used_slots}/{max_positions}"
+    return True, f"paper_slots:{used_slots}/{max_positions}"
+
+
+def check_source_side_performance_allowed(
+    conn,
+    source: str,
+    side: str,
+    account_id: int = 2,
+) -> tuple[bool, str]:
+    """Block a source+side after clear short-term win-rate decay."""
+    src = _normalize_source(source)
+    s = (side or "").strip().upper()
+    if not src or s not in ("LONG", "SHORT"):
+        return True, ""
+
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT
+              COUNT(*) AS trades,
+              SUM(CASE WHEN realized_pnl > 0 THEN 1 ELSE 0 END) AS wins,
+              COALESCE(SUM(realized_pnl), 0) AS pnl
+            FROM futures_positions
+            WHERE account_id=%s
+              AND source=%s
+              AND position_side=%s
+              AND status='closed'
+              AND close_time >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL %s HOUR)
+              AND realized_pnl IS NOT NULL
+            """,
+            (account_id, src, s, SOURCE_SIDE_PERFORMANCE_HOURS),
+        )
+        row = cur.fetchone() or {}
+        cur.close()
+    except Exception as e:
+        logger.warning(f"[trading_gates] source-side performance check failed {src} {s}: {e}")
+        return False, "source_side_performance_error"
+
+    trades = int(_row_get(row, "trades", 0, 0) or 0)
+    if trades < SOURCE_SIDE_PERFORMANCE_MIN_TRADES:
+        return True, ""
+
+    wins = int(_row_get(row, "wins", 1, 0) or 0)
+    pnl = float(_row_get(row, "pnl", 2, 0) or 0)
+    win_rate = wins / trades * 100.0 if trades else 0.0
+    if win_rate < SOURCE_SIDE_MIN_WIN_RATE or pnl <= SOURCE_SIDE_NET_PNL_LIMIT:
+        return (
+            False,
+            f"source_side_circuit_breaker:{src} {s} {SOURCE_SIDE_PERFORMANCE_HOURS}h "
+            f"trades={trades} win_rate={win_rate:.1f}% pnl={pnl:.2f}U",
+        )
+    return True, ""
 
 
 def has_open_futures_position(conn, source: str, symbol: str, account_id: Optional[int] = None) -> bool:
