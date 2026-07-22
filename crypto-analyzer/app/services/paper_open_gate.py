@@ -65,7 +65,6 @@ def gate_simulated_open(
     try:
         from app.services.trading_gates import (
             check_simulated_symbol_allowed,
-            check_source_side_performance_allowed,
             check_symbol_loss_cooldown,
             has_open_futures_position_same_side,
         )
@@ -83,14 +82,6 @@ def gate_simulated_open(
                 f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {symbol_reason}"
             )
             return False, symbol_reason
-        perf_allowed, perf_reason = check_source_side_performance_allowed(
-            conn, source, side, account_id=account_id,
-        )
-        if not perf_allowed:
-            logger.info(
-                f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {perf_reason}"
-            )
-            return False, perf_reason
         duplicate, duplicate_reason = has_open_futures_position_same_side(
             conn, symbol, side, account_id=account_id,
         )
