@@ -24,10 +24,7 @@ LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
     "gemini_predict",
     "deepseek_explore",
     "deepseek_predict",
-    "gemini_midline_long",
-    "gemini_midline_short",
-    "deepseek_midline_long",
-    "deepseek_midline_short",
+    # 中线 v2（midline_long/short）暂不实盘 — REQUIREMENTS §7.2
 })
 
 SYMBOL_STOP_LOSS_COOLDOWN_HOURS = 4

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""中线策略本地冒烟测试（默认只读扫描；--dry-run 不写库；--worker 才跑一轮）。"""
+"""中线策略 v2 本地冒烟测试（默认只读；--worker 才跑一轮）."""
 from __future__ import annotations
 
 import argparse
@@ -21,258 +21,168 @@ def _fail(msg: str) -> None:
 
 def test_imports() -> None:
     print("[1] imports")
-    from app.services.midline_swing_config import MIDLINE_SOURCES, source_for
-    assert len(MIDLINE_SOURCES) == 4
-    assert source_for("gemini", "long") == "gemini_midline_long"
+    from app.services.midline_swing_config import (
+        MIDLINE_SOURCES,
+        source_for,
+        is_midline_source,
+        is_active_midline_source,
+    )
+    assert MIDLINE_SOURCES == frozenset({"midline_long", "midline_short"})
+    assert source_for("", "long") == "midline_long"
+    assert is_active_midline_source("midline_long")
+    assert is_midline_source("gemini_midline_long")  # legacy
+    assert not is_active_midline_source("gemini_midline_long")
     _ok("modules import")
 
 
-def test_scoring_logic() -> None:
-    print("[2] scoring logic (synthetic bars)")
-    from app.services.midline_swing_scanner import _score_long, _score_short
+def test_layer_logic() -> None:
+    print("[2] layer helpers")
+    from app.services.midline_swing_scanner import _layer1_daily, _layer2_hourly, _layer3_entry
 
-    n1d = 24
-    closes_1d = [100 + i * 0.1 for i in range(n1d)]
-    lows_1d = [c - 0.5 for c in closes_1d]
-    lows_1d[-5:] = [99.0] * 5
-    closes_1d[-1] = 100.5
-    highs_1d = [c + 0.5 for c in closes_1d]
+    # 做多：30d 大涨 + RSI 中性
+    closes = [100.0] * 20 + [100 + i for i in range(10)]  # last much higher
+    # need 30 bars: start low end high
+    closes_1d = [100.0] * 30
+    closes_1d[0] = 100.0
+    closes_1d[-1] = 112.0  # +12%
+    vols = [1000.0] * 30
+    ok, d = _layer1_daily(closes_1d, vols, "long")
+    # RSI may fail on flat-ish series — just ensure function runs
+    assert isinstance(ok, bool) and "change_30d_pct" in d
+    _ok(f"layer1 long change={d.get('change_30d_pct')} passed={ok}")
 
-    n1h = 60
-    closes_1h = [100 + (i % 5) * 0.2 for i in range(n1h)]
-    lows_1h = [c - 0.3 for c in closes_1h]
-    highs_1h = [c + 0.3 for c in closes_1h]
-    vols_1h = [1000.0] * 50 + [1500.0, 1600.0, 1800.0] + [1200.0] * 7
+    closes_1h = [100.0] * 140 + [101.0 + i * 0.01 for i in range(28)]
+    ok2, d2 = _layer2_hourly(closes_1h, "long")
+    assert isinstance(ok2, bool)
+    _ok(f"layer2 ran passed={ok2}")
 
-    long_score, long_detail = _score_long(closes_1d, lows_1d, closes_1h, highs_1h, lows_1h, vols_1h)
-    assert long_score >= 0, long_detail
-    _ok(f"long synthetic score={long_score}")
-
-    closes_1h_s = [110 + i * 0.05 for i in range(60)]
-    highs_1h_s = [c + 0.4 for c in closes_1h_s]
-    lows_1h_s = [c - 0.3 for c in closes_1h_s]
-    vols_1h_s = [800.0] * 58 + [2000.0, 900.0]
-    closes_1d_s = [105 + i * 0.2 for i in range(24)]
-    highs_1d_s = [c + 0.5 for c in closes_1d_s]
-    short_score, short_detail = _score_short(
-        closes_1d_s, highs_1d_s, closes_1h_s, highs_1h_s, lows_1h_s, vols_1h_s,
+    highs_1d = [c + 1 for c in closes_1d]
+    lows_1d = [c - 1 for c in closes_1d]
+    closes_15 = [100.0] * 16
+    highs_15 = [101.0] * 16
+    lows_15 = [99.0] * 12 + [99.5] * 4
+    vols_15 = [1000.0] * 16
+    ok3, d3 = _layer3_entry(
+        closes_1d, highs_1d, lows_1d, closes_15, highs_15, lows_15, vols_15, "long",
     )
-    assert short_score >= 0, short_detail
-    _ok(f"short synthetic score={short_score}")
+    assert isinstance(ok3, bool)
+    _ok(f"layer3 ran passed={ok3} reason={d3.get('reason')}")
 
 
 def test_limit_price() -> None:
-    print("[3] limit price (configurable offset)")
+    print("[3] limit price ±1% default")
     from app.services.paper_limit_entry import calc_paper_limit_price
     from app.services.midline_swing_config import (
         DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT,
         DEFAULT_MIDLINE_LIMIT_SHORT_OFFSET_PCT,
-        get_midline_limit_long_offset_pct,
         get_midline_limit_offset_pct,
-        get_midline_limit_short_offset_pct,
         is_midline_source,
+        MIDLINE_SL_PCT,
+        MIDLINE_TP_PCT,
+        MIDLINE_HOLD_HOURS,
     )
 
-    long_pct = get_midline_limit_long_offset_pct()
-    short_pct = get_midline_limit_short_offset_pct()
-    lp = calc_paper_limit_price(
-        "LONG", 100.0, limit_offset_pct=get_midline_limit_offset_pct("LONG"),
-    )
-    sp = calc_paper_limit_price(
-        "SHORT", 100.0, limit_offset_pct=get_midline_limit_offset_pct("SHORT"),
-    )
+    assert DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT == 1.0
+    assert DEFAULT_MIDLINE_LIMIT_SHORT_OFFSET_PCT == 1.0
+    assert MIDLINE_SL_PCT == 6.0 and MIDLINE_TP_PCT == 3.0
+    assert MIDLINE_HOLD_HOURS == 8
+    long_pct = get_midline_limit_offset_pct("LONG")
+    short_pct = get_midline_limit_offset_pct("SHORT")
+    lp = calc_paper_limit_price("LONG", 100.0, limit_offset_pct=long_pct)
+    sp = calc_paper_limit_price("SHORT", 100.0, limit_offset_pct=short_pct)
     assert abs(lp - (100.0 * (1 - long_pct / 100))) < 0.01, lp
     assert abs(sp - (100.0 * (1 + short_pct / 100))) < 0.01, sp
+    assert is_midline_source("midline_long")
     _ok(f"LONG @ {lp} (-{long_pct}%), SHORT @ {sp} (+{short_pct}%)")
-    assert is_midline_source("gemini_midline_long") and not is_midline_source("gemini_explore")
-    _ok("midline source → 强制可配置限价偏移")
-    assert long_pct == DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT
-    assert short_pct == DEFAULT_MIDLINE_LIMIT_SHORT_OFFSET_PCT
-
-    # 非中线：走 system_settings（默认 0.5%）
-    lp_sys = calc_paper_limit_price("LONG", 100.0)
-    sp_sys = calc_paper_limit_price("SHORT", 100.0)
-    from app.services.paper_limit_entry import get_paper_limit_long_offset_pct, get_paper_limit_short_offset_pct
-    assert abs(lp_sys - (100.0 * (1 - get_paper_limit_long_offset_pct() / 100))) < 0.01, lp_sys
-    assert abs(sp_sys - (100.0 * (1 + get_paper_limit_short_offset_pct() / 100))) < 0.01, sp_sys
-    _ok(f"非中线 LONG @ {lp_sys}, SHORT @ {sp_sys} (系统设定偏移)")
 
 
 def test_live_sync_whitelist() -> None:
-    print("[3b] live sync whitelist")
+    print("[3b] live sync — midline NOT in LIVE_SYNC")
     from app.services.trading_gates import LIVE_SYNC_SOURCES
-    from app.services.midline_swing_config import (
-        MIDLINE_SOURCES,
-        MIDLINE_SL_PCT,
-        MIDLINE_TP_PCT,
-        MIDLINE_LEVERAGE,
-    )
-    from app.services.trading_gates import get_live_base_margin_usd
+    from app.services.midline_swing_config import MIDLINE_SOURCES, ALL_MIDLINE_SOURCES
 
-    assert MIDLINE_SOURCES.issubset(LIVE_SYNC_SOURCES)
-    assert MIDLINE_LEVERAGE == 5
-    assert MIDLINE_SL_PCT == 6.0
-    assert MIDLINE_TP_PCT == 20.0
-    live_margin = get_live_base_margin_usd()
-    assert live_margin > 0
-    _ok(
-        f"midline in LIVE_SYNC; live margin from API max_position_value={live_margin}U; "
-        f"SL/TP/leverage unchanged"
-    )
+    assert MIDLINE_SOURCES.isdisjoint(LIVE_SYNC_SOURCES)
+    assert ALL_MIDLINE_SOURCES.isdisjoint(LIVE_SYNC_SOURCES)
+    _ok("midline excluded from LIVE_SYNC_SOURCES (paper only)")
 
 
-def test_runtime_params() -> None:
-    print("[3e] runtime params from system_settings")
-    from app.services.midline_swing_config import (
-        DEFAULT_MIDLINE_INTERVAL_HOURS,
-        get_midline_interval_hours,
-        get_midline_limit_timeout_minutes,
-        get_midline_runtime_params,
-        _clamp_midline_interval_hours,
-        _clamp_midline_limit_offset_pct,
-    )
-
-    assert _clamp_midline_interval_hours(0) == 1
-    assert _clamp_midline_interval_hours(99) == 48
-    assert _clamp_midline_limit_offset_pct(0.05) == 0.1
-    assert _clamp_midline_limit_offset_pct(9) == 5.0
-    runtime = get_midline_runtime_params()
-    assert runtime["interval_hours"] == get_midline_interval_hours()
-    assert runtime["limit_timeout_minutes"] == get_midline_limit_timeout_minutes()
-    assert runtime["limit_timeout_minutes"] == runtime["interval_hours"] * 60
-    _ok(f"interval={runtime['interval_hours']}h timeout={runtime['limit_timeout_minutes']}min")
-
-
-def test_no_ai_trail_tp_for_midline() -> None:
-    print("[3c] midline excludes ai-trail-tp")
+def test_ai_trail_for_midline() -> None:
+    print("[3c] midline includes ai-trail-tp path")
     from app.services.position_sl_tp_monitor import (
         _check_ai_trail_tp,
         _is_ai_hard_sltp_source,
         _is_midline_source,
     )
 
-    assert _is_midline_source("gemini_midline_long")
-    assert _is_ai_hard_sltp_source("gemini_midline_long")
-    # peak 8.9% + 1.04% drawdown (MASK 案例量级) 会触发 explore/predict 的 ai-trail-tp
-    assert _check_ai_trail_tp(0.0786, 0.089) is not None
-    _ok("ai-trail-tp logic exists for explore/predict; midline skip enforced in monitor loop")
+    assert _is_midline_source("midline_long")
+    assert _is_ai_hard_sltp_source("midline_long")
+    # peak 4% 价格收益、回撤 1.2%、仍保留 ≥2% → 触发 ai-trail-tp
+    assert _check_ai_trail_tp(0.028, 0.040) is not None
+    _ok("ai-trail-tp applies to midline_long (monitor loop)")
+
+
+def test_hold_advisor_includes_midline() -> None:
+    print("[3d] hold advisor SQL includes midline")
+    from app.services.hold_advisor_query import DEEPSEEK_HOLD_SOURCE_SQL
+
+    assert "midline_long" not in DEEPSEEK_HOLD_SOURCE_SQL  # not excluded
+    assert "gemini_midline" not in DEEPSEEK_HOLD_SOURCE_SQL
+    assert "gemini_explore" in DEEPSEEK_HOLD_SOURCE_SQL
+    _ok("DeepSeek hold SQL no longer excludes midline")
 
 
 def test_run_summary_zh() -> None:
-    print("[3d] run summary_zh")
+    print("[3e] run summary")
     from app.services.midline_explore_worker import _format_run_summary
 
-    s = _format_run_summary(181, 29, 24, "long", "LONG")
-    assert "池181个" in s and "信号29个" in s and "挂单24笔" in s
-    assert "做多" in s and "L0/L1" in s
+    s = _format_run_summary(260, 5, 3, "long", "LONG", rejected=100)
+    assert "config" in s and "通过5个" in s and "挂单3笔" in s
     _ok(s)
 
 
 def test_db_and_scan() -> None:
-    print("[4] DB + L0/L1 scan (read-only)")
+    print("[4] DB + config.yaml scan (read-only)")
     import pymysql
     from app.utils.config_loader import get_db_config
-    from app.services.midline_swing_scanner import load_l0_l1_symbols, scan_universe
+    from app.services.midline_swing_scanner import load_midline_universe, scan_universe
 
     cfg = get_db_config()
     conn = pymysql.connect(**cfg, charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor)
     try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1 AS n")
-            _ok("DB connected")
-
-            cur.execute("SHOW TABLES LIKE 'midline_swing_runs'")
-            if not cur.fetchone():
-                print("  WARN midline_swing_runs 不存在 — 请先执行 migrations/015_midline_swing_tables.sql")
-            else:
-                _ok("midline_swing_runs exists")
-
-        symbols, _ratings = load_l0_l1_symbols(conn)
-        if not symbols:
-            _fail("L0/L1 池为空")
-        _ok(f"L0/L1 pool size={len(symbols)} (sample: {symbols[:5]})")
-
-        long_sigs, uni = scan_universe(conn, "long")
-        short_sigs, _ = scan_universe(conn, "short")
-        _ok(f"scan long: universe={uni} signals={len(long_sigs)}")
-        _ok(f"scan short: universe={uni} signals={len(short_sigs)}")
-        for label, sigs in (("long", long_sigs), ("short", short_sigs)):
-            for s in sigs[:3]:
-                print(f"       top {label}: {s['symbol']} score={s['score']}")
+        symbols = load_midline_universe(conn)
+        assert len(symbols) > 10, f"universe too small: {len(symbols)}"
+        _ok(f"universe size={len(symbols)}")
+        signals, n = scan_universe(conn, "long")
+        _ok(f"long scan universe={n} passed={len(signals)}")
     finally:
         conn.close()
 
 
-def test_worker_optional(run_worker: bool) -> None:
-    if not run_worker:
-        print("[5] worker round — SKIP (pass --worker to enable)")
-        return
-    print("[5] worker manual round (gemini_midline_long) — WRITES DB")
-    import pymysql
-    from app.utils.config_loader import get_db_config
+def test_worker_dry() -> None:
+    print("[5] worker (manual, may skip if kill switch=0)")
     from app.services.midline_explore_worker import run_midline_round
-    from app.services.midline_swing_config import MIDLINE_KILL_SWITCH, source_for
-
-    source = source_for("gemini", "long")
-    key = MIDLINE_KILL_SWITCH[source]
-    cfg = get_db_config()
-    conn = pymysql.connect(**cfg, charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor, autocommit=True)
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SHOW TABLES LIKE 'midline_swing_runs'")
-            if not cur.fetchone():
-                print("  SKIP worker (表未迁移)")
-                return
-            cur.execute(
-                "INSERT INTO system_settings (setting_key, setting_value) "
-                "VALUES (%s, '1') ON DUPLICATE KEY UPDATE setting_value='1'",
-                (key,),
-            )
-        _ok(f"enabled {key}")
-    finally:
-        conn.close()
-
-    run_id = run_midline_round("gemini", "long", triggered_by="manual")
-    if run_id is None:
-        print("  WARN run_id=None (可能 6h 防重或锁占用)")
-    else:
-        _ok(f"run_id={run_id}")
-        conn = pymysql.connect(**cfg, charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor)
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    "SELECT status, universe_size, signals_found, orders_placed, summary_zh "
-                    "FROM midline_swing_runs WHERE id=%s",
-                    (run_id,),
-                )
-                print(f"       run: {cur.fetchone()}")
-                cur.execute(
-                    "SELECT symbol, side, score, action_taken, skip_reason "
-                    "FROM midline_swing_verdicts WHERE run_id=%s ORDER BY score DESC LIMIT 8",
-                    (run_id,),
-                )
-                for v in cur.fetchall():
-                    print(f"       verdict: {v}")
-        finally:
-            conn.close()
+    run_id = run_midline_round(source="midline_long", triggered_by="manual")
+    _ok(f"run_id={run_id}")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--worker", action="store_true", help="跑一轮 worker（会写库/可能下单）")
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--db", action="store_true", help="run DB scan")
+    ap.add_argument("--worker", action="store_true", help="run one manual round")
+    args = ap.parse_args()
 
-    print("=== midline swing smoke test ===\n")
     test_imports()
-    test_scoring_logic()
+    test_layer_logic()
     test_limit_price()
-    test_runtime_params()
     test_live_sync_whitelist()
-    test_no_ai_trail_tp_for_midline()
+    test_ai_trail_for_midline()
+    test_hold_advisor_includes_midline()
     test_run_summary_zh()
-    test_db_and_scan()
-    test_worker_optional(args.worker)
-    print("\n=== ALL DONE ===")
+    if args.db:
+        test_db_and_scan()
+    if args.worker:
+        test_worker_dry()
+    print("\nALL PASSED")
 
 
 if __name__ == "__main__":

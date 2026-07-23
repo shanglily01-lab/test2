@@ -1,14 +1,29 @@
-"""中线做多/做空 — L0/L1 标的池 + 24×1D / 60×1H 量化扫描与 LLM universe 构建."""
+"""中线 v2 扫描 — config.yaml 标的池 + 30×1d / ~1w×1h / 4h×15m 三层 AND.
+
+权威需求: docs/REQUIREMENTS_LOGIC_ZH.md §7.2.4
+"""
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
-from app.services.midline_swing_config import MIDLINE_MIN_SIGNAL_SCORE
 from app.services.securities_filter import is_security
 from app.utils.futures_symbol import futures_symbol_clean, futures_symbol_rating_canonical
+
+# 默认硬规则（二期可调参）
+DAILY_TREND_PCT = 8.0
+DAILY_RSI_LONG = (40.0, 70.0)
+DAILY_RSI_SHORT = (30.0, 60.0)
+DAILY_VOL_RATIO_MIN = 0.7
+H1_RSI_LONG_MIN = 45.0
+H1_RSI_SHORT_MAX = 55.0
+RANGE_BOTTOM_PCT = 0.20
+RANGE_TOP_PCT = 0.80
+ATR_SHRINK_RATIO = 0.85
+VOL_SHRINK_RATIO = 0.75
 
 
 def _rsi(closes: List[float], period: int = 14) -> Optional[float]:
@@ -30,41 +45,63 @@ def _rsi(closes: List[float], period: int = 14) -> Optional[float]:
     return 100 - 100 / (1 + rs)
 
 
-def _rsi_series(closes: List[float], period: int = 14) -> List[float]:
-    out: List[float] = []
-    for end in range(period + 1, len(closes) + 1):
-        v = _rsi(closes[:end], period)
-        if v is not None:
-            out.append(v)
+def load_config_yaml_symbols() -> List[str]:
+    """从 config.yaml 读 U 本位交易对，转成 BTCUSDT 格式."""
+    try:
+        import yaml
+    except ImportError:
+        logger.error("[中线扫描] 缺少 PyYAML")
+        return []
+
+    config_path = Path(__file__).resolve().parents[2] / "config.yaml"
+    if not config_path.exists():
+        logger.error(f"[中线扫描] 配置不存在: {config_path}")
+        return []
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f) or {}
+    raw = config.get("symbols") or []
+    out: List[str] = []
+    seen = set()
+    for s in raw:
+        if not isinstance(s, str):
+            continue
+        s = s.strip()
+        if not s.endswith("/USDT"):
+            continue
+        binance = s.replace("/", "")
+        canon = futures_symbol_rating_canonical(binance)
+        clean = futures_symbol_clean(canon)
+        if not clean or clean in seen or is_security(canon):
+            continue
+        seen.add(clean)
+        out.append(canon)
     return out
 
 
-def load_l0_l1_symbols(conn) -> List[str]:
-    """仅 L0 白名单 + L1 黑名单1级；未评级排除。"""
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT symbol, rating_level FROM trading_symbol_rating
-            WHERE rating_level IN (0, 1)
-              AND COALESCE(rating_locked, 0) = 0
-            ORDER BY rating_level ASC, symbol ASC
-            """
-        )
-        rows = cur.fetchall()
-    symbols = []
-    ratings: Dict[str, int] = {}
-    seen = set()
-    for row in rows:
-        sym = futures_symbol_rating_canonical(
-            row["symbol"] if isinstance(row, dict) else row[0]
-        )
-        rl = int(row.get("rating_level") if isinstance(row, dict) else row[1])
+def load_midline_universe(conn) -> List[str]:
+    """config.yaml 全集，排除 L3/锁定等禁止交易标的."""
+    symbols = load_config_yaml_symbols()
+    try:
+        from app.services.trading_gates import load_trading_forbidden_symbols
+        banned = load_trading_forbidden_symbols(conn) or set()
+    except Exception as e:
+        logger.warning(f"[中线扫描] 读禁止列表失败: {e}")
+        banned = set()
+
+    banned_clean = {futures_symbol_clean(futures_symbol_rating_canonical(b)) for b in banned}
+    filtered = []
+    for sym in symbols:
         clean = futures_symbol_clean(sym)
-        if clean and clean not in seen and not is_security(sym):
-            seen.add(clean)
-            symbols.append(sym)
-            ratings[sym] = rl
-    return symbols, ratings
+        if clean and clean not in banned_clean:
+            filtered.append(sym)
+    return filtered
+
+
+# 兼容旧名
+def load_l0_l1_symbols(conn):
+    """已废弃：返回 (symbols, {})，实际为 config.yaml 池."""
+    return load_midline_universe(conn), {}
 
 
 def _fetch_klines(cur, symbol: str, timeframe: str, limit: int) -> List[Dict]:
@@ -90,173 +127,299 @@ def _bar_floats(rows: List[Dict]) -> Tuple[List[float], List[float], List[float]
     return closes, highs, lows, vols
 
 
-def _score_long(closes_1d, lows_1d, closes_1h, highs_1h, lows_1h, vols_1h) -> Tuple[float, Dict[str, Any]]:
-    detail: Dict[str, Any] = {}
-    score = 0.0
-    n1d = len(closes_1d)
-    n1h = len(closes_1h)
-    if n1d < 20 or n1h < 30:
-        return 0.0, {"error": "insufficient_klines"}
+def _layer1_daily(
+    closes_1d: List[float],
+    vols_1d: List[float],
+    profile: str,
+) -> Tuple[bool, Dict[str, Any]]:
+    detail: Dict[str, Any] = {"layer": "daily_30d"}
+    if len(closes_1d) < 30:
+        detail["reason"] = "insufficient_1d"
+        return False, detail
 
-    low_20d = min(lows_1d[-20:])
-    last_close_1d = closes_1d[-1]
-    dist_low_pct = (last_close_1d - low_20d) / low_20d * 100 if low_20d > 0 else 999
-    detail["dist_from_20d_low_pct"] = round(dist_low_pct, 2)
-    if dist_low_pct <= 8:
-        score += 25
-        detail["near_20d_low"] = True
+    c0, c1 = closes_1d[-30], closes_1d[-1]
+    if c0 <= 0:
+        detail["reason"] = "bad_price"
+        return False, detail
+    change_pct = (c1 - c0) / c0 * 100.0
+    detail["change_30d_pct"] = round(change_pct, 2)
 
-    recent_5_low = min(lows_1d[-5:])
-    prior_low = min(lows_1d[-20:-5]) if n1d >= 20 else min(lows_1d[:-5])
-    stabilized = recent_5_low >= prior_low * 0.995
-    detail["stabilized"] = stabilized
-    if stabilized:
-        score += 15
+    rsi = _rsi(closes_1d, 14)
+    detail["rsi_1d"] = round(rsi, 1) if rsi is not None else None
 
-    rsi_vals = _rsi_series(closes_1h, 14)
-    rsi_now = rsi_vals[-1] if rsi_vals else None
-    rsi_min_recent = min(rsi_vals[-20:]) if len(rsi_vals) >= 20 else (min(rsi_vals) if rsi_vals else None)
-    detail["rsi_1h"] = round(rsi_now, 1) if rsi_now is not None else None
-    detail["rsi_1h_min_20"] = round(rsi_min_recent, 1) if rsi_min_recent is not None else None
-    if (
-        rsi_now is not None
-        and rsi_min_recent is not None
-        and rsi_min_recent < 38
-        and 38 <= rsi_now <= 55
-    ):
-        score += 20
-        detail["rsi_recovery"] = True
+    if len(vols_1d) >= 30:
+        vol_recent = sum(vols_1d[-10:]) / 10
+        vol_prior = sum(vols_1d[-30:-10]) / 20
+        vol_ratio = (vol_recent / vol_prior) if vol_prior > 0 else 0.0
+    else:
+        vol_ratio = 0.0
+    detail["vol_ratio_10_20"] = round(vol_ratio, 3)
 
-    if n1h >= 10:
-        hl = lows_1h[-10:]
-        higher_lows = sum(1 for i in range(1, len(hl)) if hl[i] >= hl[i - 1] * 0.998)
-        detail["higher_lows_10h"] = higher_lows
-        if higher_lows >= 6:
-            score += 15
+    if vol_ratio < DAILY_VOL_RATIO_MIN:
+        detail["reason"] = "daily_vol_dry"
+        return False, detail
 
-    if n1h >= 13:
-        vol_recent = sum(vols_1h[-3:]) / 3
-        vol_prior = sum(vols_1h[-13:-3]) / 10
-        bull_bars = sum(1 for i in range(-3, 0) if closes_1h[i] >= closes_1h[i - 1])
-        detail["vol_recent_avg"] = round(vol_recent, 4)
-        detail["vol_prior_avg"] = round(vol_prior, 4)
-        detail["bull_bars_3h"] = bull_bars
-        if vol_prior > 0 and vol_recent > vol_prior * 1.2 and bull_bars >= 2:
-            score += 25
-            detail["volume_breakout"] = True
+    if profile == "long":
+        if change_pct < DAILY_TREND_PCT:
+            detail["reason"] = "daily_not_bullish"
+            return False, detail
+        if rsi is None or not (DAILY_RSI_LONG[0] <= rsi <= DAILY_RSI_LONG[1]):
+            detail["reason"] = "daily_rsi_out"
+            return False, detail
+    else:
+        if change_pct > -DAILY_TREND_PCT:
+            detail["reason"] = "daily_not_bearish"
+            return False, detail
+        if rsi is None or not (DAILY_RSI_SHORT[0] <= rsi <= DAILY_RSI_SHORT[1]):
+            detail["reason"] = "daily_rsi_out"
+            return False, detail
 
-    detail["score"] = round(score, 1)
-    return score, detail
+    detail["passed"] = True
+    return True, detail
 
 
-def _score_short(closes_1d, highs_1d, closes_1h, highs_1h, lows_1h, vols_1h) -> Tuple[float, Dict[str, Any]]:
-    detail: Dict[str, Any] = {}
-    score = 0.0
-    n1d = len(closes_1d)
-    n1h = len(closes_1h)
-    if n1d < 20 or n1h < 30:
-        return 0.0, {"error": "insufficient_klines"}
+def _layer2_hourly(
+    closes_1h: List[float],
+    profile: str,
+) -> Tuple[bool, Dict[str, Any]]:
+    detail: Dict[str, Any] = {"layer": "hourly_1w"}
+    if len(closes_1h) < 168:
+        detail["reason"] = "insufficient_1h"
+        return False, detail
 
-    high_20d = max(highs_1d[-20:])
-    last_close_1d = closes_1d[-1]
-    dist_high_pct = (high_20d - last_close_1d) / high_20d * 100 if high_20d > 0 else 999
-    detail["dist_from_20d_high_pct"] = round(dist_high_pct, 2)
-    if dist_high_pct <= 5:
-        score += 25
-        detail["near_20d_high"] = True
+    ma_24 = sum(closes_1h[-24:]) / 24
+    ma_168 = sum(closes_1h[-168:]) / 168
+    detail["ma24"] = round(ma_24, 8)
+    detail["ma168"] = round(ma_168, 8)
+    detail["ma_bias_pct"] = round((ma_24 - ma_168) / ma_168 * 100, 3) if ma_168 > 0 else None
 
-    rsi_vals = _rsi_series(closes_1h, 14)
-    rsi_now = rsi_vals[-1] if rsi_vals else None
-    rsi_peak_5 = max(rsi_vals[-5:]) if len(rsi_vals) >= 5 else rsi_now
-    detail["rsi_1h"] = round(rsi_now, 1) if rsi_now is not None else None
-    detail["rsi_1h_peak_5"] = round(rsi_peak_5, 1) if rsi_peak_5 is not None else None
-    if (
-        rsi_now is not None
-        and rsi_peak_5 is not None
-        and rsi_peak_5 > 68
-        and (rsi_peak_5 - rsi_now) >= 5
-    ):
-        score += 25
-        detail["rsi_exhaustion"] = True
+    rsi = _rsi(closes_1h, 14)
+    detail["rsi_1h"] = round(rsi, 1) if rsi is not None else None
 
-    if n1h >= 10:
-        hh = highs_1h[-10:]
-        weakening = sum(1 for i in range(1, len(hh)) if hh[i] <= hh[i - 1] * 1.002)
-        detail["weakening_highs_10h"] = weakening
-        if weakening >= 6:
-            score += 15
+    if profile == "long":
+        if ma_24 < ma_168:
+            detail["reason"] = "h1_ma_not_bullish"
+            return False, detail
+        if rsi is None or rsi < H1_RSI_LONG_MIN:
+            detail["reason"] = "h1_rsi_low"
+            return False, detail
+    else:
+        if ma_24 > ma_168:
+            detail["reason"] = "h1_ma_not_bearish"
+            return False, detail
+        if rsi is None or rsi > H1_RSI_SHORT_MAX:
+            detail["reason"] = "h1_rsi_high"
+            return False, detail
 
-    if n1h >= 5:
-        last_vol = vols_1h[-1]
-        avg_vol_10 = sum(vols_1h[-11:-1]) / 10 if n1h >= 11 else sum(vols_1h[:-1]) / max(n1h - 1, 1)
-        bearish = closes_1h[-1] < closes_1h[-2]
-        upper_wick = (
-            (highs_1h[-1] - max(closes_1h[-1], closes_1h[-2]))
-            / highs_1h[-1]
-            * 100
-            if highs_1h[-1] > 0
-            else 0
-        )
-        detail["last_vol"] = round(last_vol, 4)
-        detail["avg_vol_10"] = round(avg_vol_10, 4)
-        detail["bearish_bar"] = bearish
-        detail["upper_wick_pct"] = round(upper_wick, 2)
-        vol_climax = avg_vol_10 > 0 and last_vol > avg_vol_10 * 1.5
-        if vol_climax and (bearish or upper_wick > 1.5):
-            score += 35
-            detail["volume_climax_bearish"] = True
+    detail["passed"] = True
+    return True, detail
 
-    detail["score"] = round(score, 1)
-    return score, detail
+
+def _layer3_entry(
+    closes_1d: List[float],
+    highs_1d: List[float],
+    lows_1d: List[float],
+    closes_15m: List[float],
+    highs_15m: List[float],
+    lows_15m: List[float],
+    vols_15m: List[float],
+    profile: str,
+) -> Tuple[bool, Dict[str, Any]]:
+    detail: Dict[str, Any] = {"layer": "entry_15m"}
+    if len(closes_1d) < 30 or len(closes_15m) < 16:
+        detail["reason"] = "insufficient_15m_or_1d"
+        return False, detail
+
+    hi_30 = max(highs_1d[-30:])
+    lo_30 = min(lows_1d[-30:])
+    last = closes_1d[-1]
+    span = hi_30 - lo_30
+    if span <= 0:
+        detail["reason"] = "flat_range"
+        return False, detail
+    pos = (last - lo_30) / span
+    detail["range_pos"] = round(pos, 3)
+    detail["range_low"] = lo_30
+    detail["range_high"] = hi_30
+
+    # 近 4 根 vs 前 12 根 波幅
+    def _ranges(h, l, start, end):
+        return [h[i] - l[i] for i in range(start, end)]
+
+    n = len(highs_15m)
+    recent_r = _ranges(highs_15m, lows_15m, n - 4, n)
+    prior_r = _ranges(highs_15m, lows_15m, n - 16, n - 4)
+    avg_recent = sum(recent_r) / 4
+    avg_prior = sum(prior_r) / 12 if prior_r else 0
+    shrink = (avg_recent / avg_prior) if avg_prior > 0 else 9.0
+    detail["range_shrink"] = round(shrink, 3)
+
+    vol_recent = sum(vols_15m[-4:]) / 4
+    vol_prior = sum(vols_15m[-16:-4]) / 12
+    vol_ratio = (vol_recent / vol_prior) if vol_prior > 0 else 9.0
+    detail["vol_shrink"] = round(vol_ratio, 3)
+
+    last3 = closes_15m[-3:]
+    if profile == "long":
+        if pos > RANGE_BOTTOM_PCT:
+            detail["reason"] = "not_near_low"
+            return False, detail
+        if shrink > ATR_SHRINK_RATIO:
+            detail["reason"] = "not_stabilized_range"
+            return False, detail
+        # 近 3 根不创新低
+        if min(lows_15m[-3:]) < min(lows_15m[-6:-3]) * 0.999:
+            # 更严：近 3 收盘不创新低
+            pass
+        if last3[-1] < min(last3[:-1]):
+            detail["reason"] = "still_making_lower_close"
+            return False, detail
+    else:
+        if pos < RANGE_TOP_PCT:
+            detail["reason"] = "not_near_high"
+            return False, detail
+        if vol_ratio > VOL_SHRINK_RATIO:
+            detail["reason"] = "not_volume_shrink"
+            return False, detail
+        if last3[-1] > max(last3[:-1]):
+            detail["reason"] = "still_making_higher_close"
+            return False, detail
+
+    detail["passed"] = True
+    return True, detail
+
+
+def evaluate_symbol(
+    cur,
+    symbol: str,
+    profile: str,
+) -> Dict[str, Any]:
+    """评估单币；返回含 passed / reason / layers / ref_price 的明细."""
+    profile = profile.strip().lower()
+    side = "LONG" if profile == "long" else "SHORT"
+    out: Dict[str, Any] = {
+        "symbol": symbol,
+        "side": side,
+        "passed": False,
+        "reason": None,
+        "score": 0.0,
+        "ref_price": None,
+        "layers": {},
+    }
+
+    rows_1d = _fetch_klines(cur, symbol, "1d", 35)
+    rows_1h = _fetch_klines(cur, symbol, "1h", 180)
+    rows_15m = _fetch_klines(cur, symbol, "15m", 24)
+
+    if len(rows_1d) < 30:
+        out["reason"] = "insufficient_1d"
+        return out
+    if len(rows_1h) < 168:
+        out["reason"] = "insufficient_1h"
+        return out
+    if len(rows_15m) < 16:
+        out["reason"] = "insufficient_15m"
+        return out
+
+    c1d, h1d, l1d, v1d = _bar_floats(rows_1d)
+    c1h, _, _, _ = _bar_floats(rows_1h)
+    c15, h15, l15, v15 = _bar_floats(rows_15m)
+    out["ref_price"] = c15[-1]
+
+    ok1, d1 = _layer1_daily(c1d, v1d, profile)
+    out["layers"]["daily"] = d1
+    if not ok1:
+        out["reason"] = d1.get("reason") or "layer1_fail"
+        return out
+
+    ok2, d2 = _layer2_hourly(c1h, profile)
+    out["layers"]["hourly"] = d2
+    if not ok2:
+        out["reason"] = d2.get("reason") or "layer2_fail"
+        return out
+
+    ok3, d3 = _layer3_entry(c1d, h1d, l1d, c15, h15, l15, v15, profile)
+    out["layers"]["entry"] = d3
+    if not ok3:
+        out["reason"] = d3.get("reason") or "layer3_fail"
+        return out
+
+    out["passed"] = True
+    out["reason"] = None
+    out["score"] = 100.0
+    out["signal_detail"] = {
+        "daily": d1,
+        "hourly": d2,
+        "entry": d3,
+        "change_30d_pct": d1.get("change_30d_pct"),
+        "rsi_1d": d1.get("rsi_1d"),
+        "rsi_1h": d2.get("rsi_1h"),
+        "range_pos": d3.get("range_pos"),
+        "vol_shrink": d3.get("vol_shrink"),
+        "range_shrink": d3.get("range_shrink"),
+    }
+    return out
 
 
 def scan_universe(
     conn,
     profile: str,
-    min_score: float = MIDLINE_MIN_SIGNAL_SCORE,
+    *,
+    include_rejects: bool = False,
 ) -> Tuple[List[Dict[str, Any]], int]:
     """
-    扫描 L0/L1 池，返回按 score 降序的信号列表。
-    profile: 'long' | 'short'
+    扫描 config.yaml 池。
+    默认只返回通过三层的信号；include_rejects=True 时返回全部（机会分析落库用）。
     """
-    symbols, _ = load_l0_l1_symbols(conn)
+    symbols = load_midline_universe(conn)
     universe_size = len(symbols)
-    signals: List[Dict[str, Any]] = []
+    results: List[Dict[str, Any]] = []
     profile_l = profile.strip().lower()
 
     with conn.cursor() as cur:
         for symbol in symbols:
             try:
-                rows_1d = _fetch_klines(cur, symbol, "1d", 24)
-                rows_1h = _fetch_klines(cur, symbol, "1h", 60)
-                if len(rows_1d) < 20 or len(rows_1h) < 30:
-                    continue
-                c1d, h1d, l1d, _ = _bar_floats(rows_1d)
-                c1h, h1h, l1h, v1h = _bar_floats(rows_1h)
-                if profile_l == "long":
-                    score, detail = _score_long(c1d, l1d, c1h, h1h, l1h, v1h)
-                    side = "LONG"
-                elif profile_l == "short":
-                    score, detail = _score_short(c1d, h1d, c1h, h1h, l1h, v1h)
-                    side = "SHORT"
-                else:
-                    raise ValueError(f"unknown profile {profile}")
-                if score < min_score:
-                    continue
-                signals.append({
-                    "symbol": symbol,
-                    "side": side,
-                    "score": score,
-                    "signal_detail": detail,
-                    "ref_price": c1h[-1],
-                })
+                ev = evaluate_symbol(cur, symbol, profile_l)
+                if ev["passed"]:
+                    results.append({
+                        "symbol": ev["symbol"],
+                        "side": ev["side"],
+                        "score": float(ev["score"]),
+                        "signal_detail": ev.get("signal_detail") or ev.get("layers") or {},
+                        "ref_price": ev.get("ref_price"),
+                        "passed": True,
+                        "reason": None,
+                    })
+                elif include_rejects:
+                    results.append({
+                        "symbol": ev["symbol"],
+                        "side": ev["side"],
+                        "score": 0.0,
+                        "signal_detail": {
+                            "layers": ev.get("layers") or {},
+                            "reason": ev.get("reason"),
+                        },
+                        "ref_price": ev.get("ref_price"),
+                        "passed": False,
+                        "reason": ev.get("reason"),
+                    })
             except Exception as e:
                 logger.debug(f"[中线扫描] {symbol} 跳过: {e}")
+                if include_rejects:
+                    results.append({
+                        "symbol": symbol,
+                        "side": "LONG" if profile_l == "long" else "SHORT",
+                        "score": 0.0,
+                        "signal_detail": {"error": str(e)},
+                        "ref_price": None,
+                        "passed": False,
+                        "reason": "eval_error",
+                    })
                 continue
 
-    signals.sort(key=lambda x: x["score"], reverse=True)
-    return signals, universe_size
+    results.sort(key=lambda x: (0 if x.get("passed") else 1, -float(x.get("score") or 0)))
+    return results, universe_size
 
 
 def signal_detail_json(detail: Dict[str, Any]) -> str:
-    return json.dumps(detail, ensure_ascii=False)
+    return json.dumps(detail, ensure_ascii=False, default=str)

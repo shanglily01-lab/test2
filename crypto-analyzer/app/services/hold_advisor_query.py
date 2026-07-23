@@ -12,11 +12,10 @@ HOLD_MIN_MINUTES = 15
 HOLD_ADVISOR_MAX_PER_TICK = 50
 HOLD_REVIEW_INTERVAL_MINUTES = 15
 
+# Gemini 监管 explore/predict；其余（含中线 v2 midline_*）由 DeepSeek 监管
 DEEPSEEK_HOLD_SOURCE_SQL = (
     "AND LOWER(fp.source) NOT IN ("
-    "'gemini_explore', 'gemini_predict', "
-    "'gemini_midline_long', 'gemini_midline_short', "
-    "'deepseek_midline_long', 'deepseek_midline_short'"
+    "'gemini_explore', 'gemini_predict'"
     ")"
 )
 GEMINI_HOLD_SOURCE_SQL = (

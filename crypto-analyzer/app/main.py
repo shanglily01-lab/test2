@@ -1749,17 +1749,20 @@ async def futures_review_page(request: Request):
 
 @app.get("/gemini_explore")
 async def gemini_explore_page(request: Request):
-    """
-    Gemini 探索页面 (红黑天鹅 + 模拟单)
-    """
-    return await _serve_desktop_template(request, "gemini_explore.html", "Gemini explore page not found")
+    """原 Gemini 探索页已改造为中线策略页（REQUIREMENTS §7.2）."""
+    return await _serve_desktop_template(request, "midline_strategy.html", "Midline strategy page not found")
+
+
+@app.get("/midline_strategy")
+async def midline_strategy_page(request: Request):
+    return await _serve_desktop_template(request, "midline_strategy.html", "Midline strategy page not found")
 
 
 @app.get("/gemini_predict")
 async def gemini_predict_page():
-    """Gemini 预测页面 (与 gemini_explore 同模板, 默认打开预测 Tab)."""
+    """Gemini 预测入口：探索页已改中线，暂导向 DeepSeek 预测 Tab."""
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/gemini_explore?tab=predict")
+    return RedirectResponse(url="/deepseek_explore?tab=predict")
 
 
 @app.get("/deepseek_explore")

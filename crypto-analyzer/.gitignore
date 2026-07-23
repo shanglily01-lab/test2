@@ -58,6 +58,9 @@ data/*.xlsx
 !migrations/020_midline_runtime_settings.sql
 !migrations/021_remove_trend_btc_settings.sql
 !migrations/022_position_stats_floating_pnl.sql
+!migrations/024_throttle_coin_scores_event.sql
+!migrations/025_disable_coin_scores.sql
+!migrations/026_midline_v2_settings.sql
 
 # 系统文件
 .DS_Store

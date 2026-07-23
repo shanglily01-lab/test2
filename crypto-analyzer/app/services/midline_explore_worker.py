@@ -1,4 +1,4 @@
-"""中线做多/做空 — 调度 worker（Gemini / DeepSeek 四路量化扫描，不调用 LLM）。"""
+"""中线 v2 worker — midline_long / midline_short 独立量化扫描（非 LLM）."""
 from __future__ import annotations
 
 import json
@@ -17,11 +17,12 @@ from app.services.midline_swing_config import (
     MIDLINE_HOLD_MINUTES,
     MIDLINE_KILL_SWITCH,
     MIDLINE_LEVERAGE,
-    MIDLINE_MARGIN_USD,
     MIDLINE_SL_PCT,
     MIDLINE_TP_PCT,
     get_midline_interval_hours,
     get_midline_limit_timeout_minutes,
+    is_active_midline_source,
+    profile_for_source,
     profile_side,
     source_for,
 )
@@ -30,10 +31,8 @@ from app.utils.futures_symbol import futures_symbol_rating_canonical
 from app.utils.position_time import utc_now_naive
 
 _locks: Dict[str, threading.Lock] = {
-    "gemini:long": threading.Lock(),
-    "gemini:short": threading.Lock(),
-    "deepseek:long": threading.Lock(),
-    "deepseek:short": threading.Lock(),
+    "long": threading.Lock(),
+    "short": threading.Lock(),
 }
 
 
@@ -64,6 +63,17 @@ def _is_enabled(cur, source: str) -> bool:
         return False
     raw = _read_setting(cur, key, "0").strip().lower()
     return raw in ("1", "true", "yes", "on")
+
+
+def _ensure_kill_switches(conn) -> None:
+    """确保 v2 kill switch 行存在（默认 0）."""
+    with conn.cursor() as cur:
+        for key in MIDLINE_KILL_SWITCH.values():
+            cur.execute(
+                "INSERT IGNORE INTO system_settings (setting_key, setting_value) "
+                "VALUES (%s, '0')",
+                (key,),
+            )
 
 
 def _last_ok_within_hours(conn, source: str, hours: int) -> bool:
@@ -119,18 +129,21 @@ def _has_open_or_pending(conn, symbol: str, side: str, source: str) -> bool:
         return cur.fetchone() is not None
 
 
-def _has_midline_position_on_symbol(conn, symbol: str, teacher: str) -> bool:
-    """同教师任一中线策略已持仓该 symbol 则跳过（避免多空叠仓）。"""
+def _has_any_midline_position_on_symbol(conn, symbol: str) -> bool:
+    """任一中线 source（含旧四路）已持仓该 symbol 则跳过."""
     symbol = futures_symbol_rating_canonical(symbol)
-    prefix = f"{teacher}_midline_%"
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT 1 FROM futures_positions
-            WHERE account_id=%s AND symbol=%s AND source LIKE %s AND status='open'
+            WHERE account_id=%s AND symbol=%s AND status='open'
+              AND (
+                source IN ('midline_long', 'midline_short')
+                OR source LIKE '%%_midline_%%'
+              )
             LIMIT 1
             """,
-            (MIDLINE_ACCOUNT_ID, symbol, prefix),
+            (MIDLINE_ACCOUNT_ID, symbol),
         )
         return cur.fetchone() is not None
 
@@ -168,11 +181,11 @@ def _format_run_summary(
     orders_placed: int,
     profile: str,
     side: str,
+    rejected: int = 0,
 ) -> str:
-    """量化扫描轮次摘要（写入 summary_zh）。"""
     profile_cn = "做多" if profile == "long" else "做空"
     return (
-        f"池{universe_size}个 L0/L1 | 信号{signals_count}个 | "
+        f"池{universe_size}个 config | 通过{signals_count}个 | 拒绝{rejected}个 | "
         f"挂单{orders_placed}笔 | {profile_cn} {side}"
     )
 
@@ -263,7 +276,7 @@ def _open_limit_order(
 
     allowed, _ = gate_simulated_open(
         symbol, side, price, source,
-        catalyst=f"midline score={score:.0f}",
+        catalyst="midline_v2_pass",
         leverage=MIDLINE_LEVERAGE,
         sl_pct=MIDLINE_SL_PCT, tp_pct=MIDLINE_TP_PCT,
         hold_hours=MIDLINE_HOLD_MINUTES / 60.0,
@@ -273,7 +286,7 @@ def _open_limit_order(
         return None
 
     hold_deadline = utc_now_naive() + timedelta(minutes=MIDLINE_HOLD_MINUTES)
-    reason = f"midline score={score:.0f} " + json.dumps(signal_detail, ensure_ascii=False)[:120]
+    reason = "midline_v2 " + json.dumps(signal_detail, ensure_ascii=False)[:140]
     paper_margin = get_paper_margin_usd(symbol, conn)
     return create_paper_limit_order(
         conn,
@@ -298,20 +311,28 @@ def _open_limit_order(
 
 
 def run_midline_round(
-    teacher: str,
-    profile: str,
+    teacher: str = "",
+    profile: str = "",
     triggered_by: str = "scheduler",
+    source: Optional[str] = None,
 ) -> Optional[int]:
     """
-    跑一轮中线策略。teacher: gemini|deepseek；profile: long|short。
-    成功返回 run_id，跳过返回 None。
+    跑一轮中线策略。
+    优先用 source=midline_long|midline_short；或 profile=long|short。
+    teacher 参数保留兼容，已忽略。
     """
-    teacher = teacher.strip().lower()
-    profile = profile.strip().lower()
-    source = source_for(teacher, profile)
+    if source:
+        source = source.strip().lower()
+        if not is_active_midline_source(source):
+            logger.warning(f"[中线] 非法 source={source}")
+            return None
+        profile = profile_for_source(source)
+    else:
+        profile = (profile or "long").strip().lower()
+        source = source_for(teacher or "", profile)
+
     side = profile_side(profile)
-    lock_key = f"{teacher}:{profile}"
-    lock = _locks[lock_key]
+    lock = _locks[profile]
 
     if not lock.acquire(blocking=False):
         logger.warning(f"[中线/{source}] 上一轮还未结束, 跳过")
@@ -324,6 +345,7 @@ def run_midline_round(
     try:
         conn = _connect()
         try:
+            _ensure_kill_switches(conn)
             with conn.cursor() as cur:
                 if not _is_enabled(cur, source):
                     logger.info(f"[中线/{source}] kill switch=0, 跳过")
@@ -338,19 +360,36 @@ def run_midline_round(
                 return None
 
             run_id = _insert_run(conn, source, asof_utc, "partial", triggered_by)
-            conn.commit()
 
-            signals, universe_size = scan_universe(conn, profile)
+            # 全量评估（含拒绝）便于机会分析页
+            all_rows, universe_size = scan_universe(conn, profile, include_rejects=True)
+            signals = [r for r in all_rows if r.get("passed")]
+            rejected = len(all_rows) - len(signals)
             orders_placed = 0
 
             from app.services.trading_gates import check_max_positions_allowed
 
+            # 先落拒绝（限制数量避免爆表：每轮最多记 80 条拒绝 + 全部通过）
+            reject_budget = 80
+            for row in all_rows:
+                if row.get("passed"):
+                    continue
+                if reject_budget <= 0:
+                    break
+                reject_budget -= 1
+                _insert_verdict(
+                    conn, run_id, source, row["symbol"], side, 0.0,
+                    row.get("signal_detail") or {},
+                    "skipped_signal", None,
+                    (row.get("reason") or "layer_fail")[:255],
+                )
+
             for sig in signals:
                 symbol = sig["symbol"]
                 score = float(sig["score"])
-                detail = sig["signal_detail"]
+                detail = sig.get("signal_detail") or {}
 
-                if _has_midline_position_on_symbol(conn, symbol, teacher):
+                if _has_any_midline_position_on_symbol(conn, symbol):
                     _insert_verdict(
                         conn, run_id, source, symbol, side, score, detail,
                         "skipped_dedup", None, "同symbol已有中线持仓",
@@ -390,12 +429,12 @@ def run_midline_round(
                 else:
                     _insert_verdict(
                         conn, run_id, source, symbol, side, score, detail,
-                        "skipped_order_fail", None, "限价单创建失败",
+                        "skipped_order_fail", None, "限价单创建失败或闸门拒绝",
                     )
 
             elapsed = time.time() - t0
             summary = _format_run_summary(
-                universe_size, len(signals), orders_placed, profile, side,
+                universe_size, len(signals), orders_placed, profile, side, rejected,
             )
             _finish_run(
                 conn, run_id,
@@ -406,7 +445,6 @@ def run_midline_round(
                 status="ok",
                 summary_zh=summary,
             )
-            conn.commit()
             logger.info(f"[中线/{source}] === 一轮结束 run_id={run_id} {summary} elapsed={elapsed:.1f}s")
             return run_id
         finally:
@@ -423,7 +461,6 @@ def run_midline_round(
                         elapsed_s=time.time() - t0, status="error",
                         summary_zh="", error_msg=str(e),
                     )
-                    conn.commit()
             finally:
                 conn.close()
         except Exception:
@@ -434,10 +471,9 @@ def run_midline_round(
 
 
 def run_all_midline_scheduled(triggered_by: str = "scheduler") -> None:
-    """调度入口：依次尝试 4 个策略槽位。"""
-    for teacher in ("gemini", "deepseek"):
-        for profile in ("long", "short"):
-            try:
-                run_midline_round(teacher, profile, triggered_by=triggered_by)
-            except Exception as e:
-                logger.error(f"[中线] {teacher}/{profile} 调度异常: {e}", exc_info=True)
+    """调度入口：依次尝试 midline_long / midline_short."""
+    for profile in ("long", "short"):
+        try:
+            run_midline_round(profile=profile, triggered_by=triggered_by)
+        except Exception as e:
+            logger.error(f"[中线] {profile} 调度异常: {e}", exc_info=True)

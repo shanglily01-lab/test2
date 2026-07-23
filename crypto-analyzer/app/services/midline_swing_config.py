@@ -1,17 +1,25 @@
-"""中线做多/做空策略 — 常量与 source 命名."""
+"""中线做多/做空策略 v2 — 常量与 source 命名.
+
+权威需求: docs/REQUIREMENTS_LOGIC_ZH.md §7.2
+"""
 from __future__ import annotations
 
 from typing import Dict, Tuple
 
-MIDLINE_HOLD_DAYS = 15
-MIDLINE_HOLD_MINUTES = MIDLINE_HOLD_DAYS * 24 * 60
+# 持仓 8 小时
+MIDLINE_HOLD_HOURS = 8
+MIDLINE_HOLD_MINUTES = MIDLINE_HOLD_HOURS * 60
+# 向后兼容旧字段名（API 勿再当「天」用）
+MIDLINE_HOLD_DAYS = MIDLINE_HOLD_HOURS / 24.0
+
 MIDLINE_LEVERAGE = 5
 MIDLINE_MARGIN_USD = 500.0
-# 限价偏移默认：做多 = 市价 −3%，做空 = 市价 +3%（可通过 system_settings 调整）
-DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT = 3.0
-DEFAULT_MIDLINE_LIMIT_SHORT_OFFSET_PCT = 3.0
-DEFAULT_MIDLINE_INTERVAL_HOURS = 6
-# 向后兼容：模块级常量 = 默认值
+
+# 限价偏移默认：做多 = 市价 −1%，做空 = 市价 +1%
+DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT = 1.0
+DEFAULT_MIDLINE_LIMIT_SHORT_OFFSET_PCT = 1.0
+DEFAULT_MIDLINE_INTERVAL_HOURS = 4
+
 MIDLINE_LIMIT_LONG_OFFSET_PCT = DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT
 MIDLINE_LIMIT_SHORT_OFFSET_PCT = DEFAULT_MIDLINE_LIMIT_SHORT_OFFSET_PCT
 MIDLINE_LIMIT_OFFSET_PCT = MIDLINE_LIMIT_LONG_OFFSET_PCT
@@ -26,35 +34,54 @@ MIDLINE_SETTING_LIMIT_LONG_OFFSET_PCT = "midline_limit_long_offset_pct"
 MIDLINE_SETTING_LIMIT_SHORT_OFFSET_PCT = "midline_limit_short_offset_pct"
 
 MIDLINE_SL_PCT = 6.0
-MIDLINE_TP_PCT = 20.0
-MIDLINE_MIN_SIGNAL_SCORE = 55.0
+MIDLINE_TP_PCT = 3.0
 MIDLINE_ACCOUNT_ID = 2
 
+# v2 独立量化 source（不再挂教师名）
 MIDLINE_SOURCES = frozenset({
+    "midline_long",
+    "midline_short",
+})
+
+# 旧四路：仍识别为中线（SmartExit 排除 / 硬 SLTP / 存量仓），但不再调度
+LEGACY_MIDLINE_SOURCES = frozenset({
     "gemini_midline_long",
     "gemini_midline_short",
     "deepseek_midline_long",
     "deepseek_midline_short",
 })
 
-# (teacher, profile) -> source
-MIDLINE_SOURCE_MAP: Dict[Tuple[str, str], str] = {
-    ("gemini", "long"): "gemini_midline_long",
-    ("gemini", "short"): "gemini_midline_short",
-    ("deepseek", "long"): "deepseek_midline_long",
-    ("deepseek", "short"): "deepseek_midline_short",
+ALL_MIDLINE_SOURCES = MIDLINE_SOURCES | LEGACY_MIDLINE_SOURCES
+
+# profile -> source
+MIDLINE_PROFILE_SOURCE: Dict[str, str] = {
+    "long": "midline_long",
+    "short": "midline_short",
 }
 
-# source -> system_settings kill switch key
+# 兼容旧 (teacher, profile) 调用 → 映射到 v2 source
+MIDLINE_SOURCE_MAP: Dict[Tuple[str, str], str] = {
+    ("gemini", "long"): "midline_long",
+    ("gemini", "short"): "midline_short",
+    ("deepseek", "long"): "midline_long",
+    ("deepseek", "short"): "midline_short",
+    ("", "long"): "midline_long",
+    ("", "short"): "midline_short",
+}
+
 MIDLINE_KILL_SWITCH: Dict[str, str] = {
-    "gemini_midline_long": "gemini_midline_long_enabled",
-    "gemini_midline_short": "gemini_midline_short_enabled",
-    "deepseek_midline_long": "deepseek_midline_long_enabled",
-    "deepseek_midline_short": "deepseek_midline_short_enabled",
+    "midline_long": "midline_long_enabled",
+    "midline_short": "midline_short_enabled",
 }
 
 
 def is_midline_source(source: str) -> bool:
+    """含 v2 + 旧四路（存量仓仍按中线规则管理）."""
+    return (source or "").strip().lower() in ALL_MIDLINE_SOURCES
+
+
+def is_active_midline_source(source: str) -> bool:
+    """仅 v2 可新开仓的 source."""
     return (source or "").strip().lower() in MIDLINE_SOURCES
 
 
@@ -82,7 +109,6 @@ def get_midline_interval_hours() -> int:
 
 
 def get_midline_limit_long_offset_pct() -> float:
-    """做多限价偏移百分点（市价 −N%）。"""
     from app.services.system_settings_loader import get_setting
     raw = get_setting(
         MIDLINE_SETTING_LIMIT_LONG_OFFSET_PCT,
@@ -92,7 +118,6 @@ def get_midline_limit_long_offset_pct() -> float:
 
 
 def get_midline_limit_short_offset_pct() -> float:
-    """做空限价偏移百分点（市价 +N%）。"""
     from app.services.system_settings_loader import get_setting
     raw = get_setting(
         MIDLINE_SETTING_LIMIT_SHORT_OFFSET_PCT,
@@ -102,12 +127,10 @@ def get_midline_limit_short_offset_pct() -> float:
 
 
 def get_midline_limit_timeout_minutes() -> int:
-    """限价单超时（分钟），与执行周期一致。"""
     return get_midline_interval_hours() * 60
 
 
 def get_midline_runtime_params() -> dict:
-    """Web/API 展示用运行时参数。"""
     long_pct = get_midline_limit_long_offset_pct()
     short_pct = get_midline_limit_short_offset_pct()
     interval = get_midline_interval_hours()
@@ -117,11 +140,13 @@ def get_midline_runtime_params() -> dict:
         "limit_short_offset_pct": short_pct,
         "limit_offset_pct": long_pct,
         "limit_timeout_minutes": interval * 60,
+        "hold_hours": MIDLINE_HOLD_HOURS,
+        "sl_pct": MIDLINE_SL_PCT,
+        "tp_pct": MIDLINE_TP_PCT,
     }
 
 
 def get_midline_limit_offset_pct(side: str) -> float:
-    """中线限价偏移：LONG −N% / SHORT +N%（可配置）。"""
     return (
         get_midline_limit_long_offset_pct()
         if (side or "").upper() == "LONG"
@@ -130,7 +155,6 @@ def get_midline_limit_offset_pct(side: str) -> float:
 
 
 def calc_midline_limit_price(side: str, ref_price: float) -> float:
-    """按中线可配置偏移规则计算限价."""
     from app.services.paper_limit_entry import calc_paper_limit_price
     return calc_paper_limit_price(
         side,
@@ -140,13 +164,17 @@ def calc_midline_limit_price(side: str, ref_price: float) -> float:
 
 
 def midline_source_sql_not_in(column: str = "source") -> str:
-    """SQL 片段：排除四路中线 source（供 SmartExit / 健康检查等）."""
-    quoted = ", ".join(f"'{s}'" for s in sorted(MIDLINE_SOURCES))
+    """SQL 片段：排除全部中线 source（含旧四路）."""
+    quoted = ", ".join(f"'{s}'" for s in sorted(ALL_MIDLINE_SOURCES))
     return f"LOWER({column}) NOT IN ({quoted})"
 
 
 def source_for(teacher: str, profile: str) -> str:
-    key = (teacher.strip().lower(), profile.strip().lower())
+    """兼容旧 teacher/profile 调用；teacher 可忽略，仅看 profile."""
+    profile_l = profile.strip().lower()
+    if profile_l in MIDLINE_PROFILE_SOURCE:
+        return MIDLINE_PROFILE_SOURCE[profile_l]
+    key = ((teacher or "").strip().lower(), profile_l)
     if key not in MIDLINE_SOURCE_MAP:
         raise ValueError(f"unknown midline teacher/profile: {teacher}/{profile}")
     return MIDLINE_SOURCE_MAP[key]
@@ -159,3 +187,10 @@ def profile_side(profile: str) -> str:
     if p == "short":
         return "SHORT"
     raise ValueError(f"unknown profile: {profile}")
+
+
+def profile_for_source(source: str) -> str:
+    s = (source or "").strip().lower()
+    if s.endswith("_short") or s == "midline_short":
+        return "short"
+    return "long"

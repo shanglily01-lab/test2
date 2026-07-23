@@ -78,14 +78,6 @@
 <button onclick="switchTab('predict')" id="tab-predict-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
       <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">auto_graph</span>DeepSeek 预测
     </button>
-    <button onclick="switchTab('midline-long')" id="tab-midline-long-btn" title="L0/L1 量化扫描 · 非 LLM · 不经顾问"
-      class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
-      <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">trending_up</span>中线做多（量化）
-    </button>
-    <button onclick="switchTab('midline-short')" id="tab-midline-short-btn" title="L0/L1 量化扫描 · 非 LLM · 不经顾问"
-      class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
-      <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">trending_down</span>中线做空（量化）
-    </button>
     <button onclick="switchTab('big4')" id="tab-big4-btn" class="px-6 py-3 text-sm font-medium border-b-2 border-transparent text-on-surface-variant hover:text-on-surface transition-colors">
       <span class="material-symbols-outlined text-[16px] align-text-bottom mr-1">candlestick_chart</span>Big4 综合行情
     </button>
@@ -245,9 +237,6 @@
 </section>
 
 </div><!-- /tab-explore -->
-
-<div id="tab-midline-long" class="hidden"></div>
-<div id="tab-midline-short" class="hidden"></div>
 
 <!-- ============================================================ -->
 <!-- TAB: DeepSeek 预测 -->
@@ -808,7 +797,7 @@ function toggleVerdicts(runId) {
 // TAB SWITCHING
 // ============================================================
 function switchTab(tab) {
-  ['explore', 'predict', 'big4', 'midline-long', 'midline-short'].forEach(function(id) {
+  ['explore', 'predict', 'big4'].forEach(function(id) {
     var el = document.getElementById('tab-' + id);
     if (el) el.classList.toggle('hidden', id !== tab);
     var btn = document.getElementById('tab-' + id + '-btn');
@@ -823,9 +812,6 @@ function switchTab(tab) {
   if (tab === 'big4' && !window._big4Loaded) {
     window._big4Loaded = true;
     Big4AnalysisTab.loadAll({ api: '/api/deepseek-big4-analysis' });
-  }
-  if (tab === 'midline-long' || tab === 'midline-short') {
-    if (typeof MidlineSwingTab !== 'undefined') MidlineSwingTab.onTabShow(tab);
   }
 }
 // ============================================================
@@ -1093,15 +1079,13 @@ explorePoll.register(function () {
 // URL ?tab= 直达 — 在 big4_analysis_tab.js 加载后执行 (见下方 script)
 </script>
 <script src="/static/js/big4_analysis_tab.js"></script>
-<script src="/static/js/midline_swing_tab.js?v=4"></script>
 <script>
-MidlineSwingTab.init({ teacher: 'deepseek' });
 Big4AnalysisTab.init({ api: '/api/deepseek-big4-analysis' });
 (function(){
   var tab = new URLSearchParams(window.location.search).get('tab');
   if (tab === 'predict') switchTab('predict');
   else if (tab === 'big4') switchTab('big4');
-  else if (tab === 'midline-long' || tab === 'midline-short') switchTab(tab);
+  else if (tab === 'midline-long' || tab === 'midline-short') window.location.href = '/gemini_explore';
   else if (tab) switchTab(tab);
 })();
 explorePoll.register(function () {

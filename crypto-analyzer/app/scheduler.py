@@ -1421,7 +1421,7 @@ class UnifiedDataScheduler:
             threading.Thread(target=wrapper, daemon=True, name="MidlineSwing").start()
 
         schedule.every(10).minutes.do(_run_midline_swing)
-        logger.info("  ✓ midline_swing - 每10min轮询 (周期由 midline_interval_hours 控制)")
+        logger.info("  ✓ midline_swing v2 - 每10min轮询 (默认周期 4h, midline_interval_hours)")
 
         # Gemini 持仓顾问 - 监管 gemini_explore/gemini_predict 模拟仓，满 15min 后每 15min 复查
         def _run_gemini_position_advisor():

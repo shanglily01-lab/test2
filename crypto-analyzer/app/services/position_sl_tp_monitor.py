@@ -79,13 +79,21 @@ _AI_TREND_SL_FAST_LOSS_PCT = -0.006
 _AI_TREND_SL_CONFIRM_LOSS_PCT = -0.008
 _AI_TREND_SL_CACHE_TTL_S = 60.0
 _MIDLINE_SOURCES = frozenset({
+    'midline_long', 'midline_short',
     'gemini_midline_long', 'gemini_midline_short',
     'deepseek_midline_long', 'deepseek_midline_short',
 })
 
 
 def _is_midline_source(src: str) -> bool:
-    return (src or "").strip().lower() in _MIDLINE_SOURCES
+    s = (src or "").strip().lower()
+    if s in _MIDLINE_SOURCES:
+        return True
+    try:
+        from app.services.midline_swing_config import is_midline_source
+        return is_midline_source(s)
+    except Exception:
+        return False
 # 硬 TP 开仓保护：避免 entry 价与 monitor 市价源不一致时秒平（SL 仍立即生效）
 _AI_TP_GRACE_MIN = 5
 
@@ -342,7 +350,7 @@ class PositionSLTPMonitor:
             trigger_price = price
 
             # ────────────────────────────────────────────────────────────────
-            # AI 探索/预测：硬 SL/TP + 轻量 ai-trail-tp（中线仅硬 SL/TP，无 ai-trail-tp）
+            # AI / 中线：硬 SL/TP；探索/预测另有 trend/soft；中线亦启用 ai-trail-tp
             # ────────────────────────────────────────────────────────────────
             src = pos.get('source') or ''
             if _is_ai_hard_sltp_source(src):
@@ -411,20 +419,21 @@ class PositionSLTPMonitor:
                         self._do_close(pid, symbol, side, soft_sl, price, now)
                         continue
 
-                    trail_ai = _check_ai_trail_tp(
-                        pnl_pct,
-                        new_peak,
-                        int(pos.get("leverage") or 1),
+                # ai-trail-tp：探索/预测 + 中线 v2
+                trail_ai = _check_ai_trail_tp(
+                    pnl_pct,
+                    new_peak,
+                    int(pos.get("leverage") or 1),
+                )
+                if trail_ai:
+                    self._sync_peak_to_db(pid, new_peak * 100)
+                    logger.info(
+                        f"[AI trail-tp] pid={pid} {symbol} {side} source={src} "
+                        f"reason={trail_ai} price={price:.6f} peak={new_peak * 100:.2f}%"
                     )
-                    if trail_ai:
-                        self._sync_peak_to_db(pid, new_peak * 100)
-                        logger.info(
-                            f"[AI trail-tp] pid={pid} {symbol} {side} source={src} "
-                            f"reason={trail_ai} price={price:.6f} peak={new_peak * 100:.2f}%"
-                        )
-                        self._cooldown[pid] = now + self._cooldown_seconds
-                        self._peak_pnl_map.pop(pid, None)
-                        self._do_close(pid, symbol, side, trail_ai, price, now)
+                    self._cooldown[pid] = now + self._cooldown_seconds
+                    self._peak_pnl_map.pop(pid, None)
+                    self._do_close(pid, symbol, side, trail_ai, price, now)
                 continue
 
             # 1. 新规则（受 disable_sl_tp_hold 控制）
