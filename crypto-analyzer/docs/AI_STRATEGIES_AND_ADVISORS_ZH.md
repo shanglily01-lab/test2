@@ -132,7 +132,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 4.1 职责
 
-每 4 小时对 TOP50 给出 4h 方向概率（bullish/bearish），达标则开模拟单；**不走探索的事件叙事**，但共用 catalyst 技术门槛。
+每 `max_hold_hours`（固定槽）对技术面 **TOP50** 给出方向概率（bullish/bearish），达标则开模拟单；**不走探索的事件叙事**，但共用 catalyst 技术门槛。DeepSeek/Gemini 均读 `candidate_pool_snapshot` 技术面截断，**禁止** `price_stats_24h` 全市场扫库。
 
 ### 4.2 代码入口
 

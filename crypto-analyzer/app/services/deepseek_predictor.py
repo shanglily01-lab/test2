@@ -126,7 +126,10 @@ PREDICT_MARGIN_USD = 500.0
 PREDICT_LEVERAGE = 5
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'deepseek_predict'
-DEEPSEEK_UNIVERSE_SYMBOL_LIMIT = 2000
+# 与主探索 / Gemini 预测对齐：技术面 TOP，禁止 price_stats 全市场扫库
+PREDICT_CANDIDATE_LIMIT = 500
+PREDICT_TOP_N = 50
+DEEPSEEK_UNIVERSE_SYMBOL_LIMIT = PREDICT_CANDIDATE_LIMIT  # candidate_pool 缓存上限
 DEEPSEEK_PREDICT_BATCH_SIZE = 50
 
 # 数据新鲜度门槛
@@ -149,14 +152,32 @@ def _connect():
         charset='utf8mb4',
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=True,
+        connect_timeout=10,
+        read_timeout=120,
+        write_timeout=60,
     )
 
 
 # ============================================================
-# 数据查询 — 候选池 (全量送模, 非 TOP50 截断)
+# 数据查询 — 候选池 (技术面 TOP, 与 Gemini/探索一致; 禁止 price_stats 全市场)
 # ============================================================
+def _filter_predict_symbols(symbols: List[str], limit: int) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for raw in symbols:
+        sym = futures_symbol_rating_canonical(raw)
+        clean = sym.replace("/", "")
+        if not sym or _is_excluded(sym) or clean in seen:
+            continue
+        seen.add(clean)
+        out.append(sym)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def _get_predict_symbols(conn) -> List[str]:
-    """从 price_stats_24h 全量取 /USDT symbol；缓存仅作备用。"""
+    """从 candidate_pool 按技术面取 TOP N；禁止 price_stats 全量（530+ 会拖垮单连接）。"""
     banned = set()
     try:
         from app.services.trading_gates import load_blacklist_level3_symbols
@@ -164,40 +185,44 @@ def _get_predict_symbols(conn) -> List[str]:
     except Exception:
         banned = set()
 
-    with conn.cursor() as cur:
-        cur.execute(
-            f"SELECT symbol FROM price_stats_24h "
-            f"WHERE symbol LIKE '%%/USDT' "
-            f"ORDER BY quote_volume_24h DESC LIMIT %s",
-            (DEEPSEEK_UNIVERSE_SYMBOL_LIMIT,),
-        )
-        symbols = []
-        seen = set()
-        for r in cur.fetchall():
-            sym = futures_symbol_rating_canonical(r["symbol"])
-            clean = sym.replace("/", "")
-            if not sym or _is_excluded(sym) or clean in banned or clean in seen:
-                continue
-            seen.add(clean)
-            symbols.append(sym)
-        if symbols:
-            logger.info(f"[DeepSeek预测] 从 price_stats_24h 全量池获取 {len(symbols)} 个 symbol")
-            return symbols
-
     rows = _get_candidate_pool_cached()
     if rows:
-        from app.services.ai_explore_prompt import select_all_symbols_from_pool
+        from app.services.ai_explore_prompt import select_llm_symbols_from_pool
 
-        symbols = select_all_symbols_from_pool(
-            rows,
+        raw_symbols = select_llm_symbols_from_pool(
+            rows[:PREDICT_CANDIDATE_LIMIT],
             banned=banned,
-            limit=DEEPSEEK_UNIVERSE_SYMBOL_LIMIT,
+            max_symbols=PREDICT_TOP_N,
+        )
+        symbols = _filter_predict_symbols(raw_symbols, PREDICT_TOP_N)
+        if symbols:
+            logger.info(
+                f"[DeepSeek预测] 从 candidate_pool_snapshot 技术面 TOP 获取 "
+                f"{len(symbols)} 个 symbol"
+            )
+            return symbols
+
+    from app.services.trading_gates import sql_exclude_level3_filter
+
+    _l3 = sql_exclude_level3_filter("symbol")
+    with conn.cursor() as cur:
+        cur.execute(
+            f"SELECT symbol FROM top_performing_symbols "
+            f"WHERE 1=1 {_l3} "
+            f"ORDER BY rank_score ASC LIMIT %s",
+            (PREDICT_TOP_N,),
+        )
+        symbols = _filter_predict_symbols(
+            [r["symbol"] for r in cur.fetchall()],
+            PREDICT_TOP_N,
         )
         if symbols:
-            logger.warning(f"[DeepSeek预测] price_stats_24h 不可用, 回退 candidate_pool 全量 {len(symbols)} 个")
+            logger.warning(
+                f"[DeepSeek预测] candidate_pool 不可用, 回退 top_performing_symbols "
+                f"{len(symbols)} 个"
+            )
             return symbols
     return []
-
 
 def _get_current_price(conn, symbol: str) -> Optional[float]:
     """实时取当前价 (U 本位 mark 优先), 用于开仓."""
@@ -805,15 +830,8 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
             if not due:
                 logger.info(f"[DeepSeek预测] {due_reason}, 跳过 (triggered_by={triggered_by})")
                 return None
-
-            if not manual:
-                predict_claim_next_slot(
-                    conn_chk,
-                    strategy_key='deepseek_predict',
-                    next_due_key=DEEPSEEK_PREDICT_NEXT_DUE_KEY,
-                    now=asof_utc,
-                    log_tag='DeepSeek预测',
-                )
+            # 注意: 不在此处 claim。先把候选池/symbol 数据建完再认领，
+            # 避免 MySQL 超时等早期失败烧掉本槽并空转到下一周期。
     except Exception as e:
         logger.error(f"[DeepSeek预测] 调度检查失败, 保守跳过: {e}")
         return None
@@ -840,10 +858,24 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
 
         logger.info(f"[DeepSeek预测] 预测候选池获取到 {len(predict_symbols)} 个 symbol")
 
-        # 3. 构建每个 symbol 的数据
+        # 3. 构建每个 symbol 的数据（优先 candidate_pool 缓存，避免全市场 kline 扫库）
         symbols_data = []
         failed_symbols = []
-        for sym in predict_symbols:
+        cache_hits = 0
+        for i, sym in enumerate(predict_symbols):
+            if i and i % 20 == 0:
+                try:
+                    conn.ping(reconnect=True)
+                except Exception as ping_err:
+                    logger.warning(f"[DeepSeek预测] DB ping 失败, 重连: {ping_err}")
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                    conn = _connect()
+            cached = _try_candidate(sym)
+            if cached and cached.get("current_price"):
+                cache_hits += 1
             data = _build_symbol_data(conn, sym)
             if data and data['current_price']:
                 symbols_data.append(data)
@@ -853,11 +885,30 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         if failed_symbols:
             logger.warning(f"[DeepSeek预测] {len(failed_symbols)} 个 symbol 数据获取失败: {failed_symbols[:5]}...")
 
+        logger.info(
+            f"[DeepSeek预测] symbol 数据就绪 {len(symbols_data)}/{len(predict_symbols)} "
+            f"(cache_hits={cache_hits})"
+        )
+
         if not symbols_data:
             logger.warning("[DeepSeek预测] 所有 symbol 数据获取失败, 跳过")
             elapsed = time.time() - t0
             _insert_run(conn, asof_utc, len(predict_symbols), '', elapsed, 'skipped', '所有symbol数据获取失败', triggered_by)
             return None
+
+        # 数据就绪后再认领下一槽，早期失败可立即由 5min 轮询重试
+        if not manual:
+            try:
+                predict_claim_next_slot(
+                    conn,
+                    strategy_key='deepseek_predict',
+                    next_due_key=DEEPSEEK_PREDICT_NEXT_DUE_KEY,
+                    now=asof_utc,
+                    log_tag='DeepSeek预测',
+                )
+            except Exception as claim_err:
+                logger.error(f"[DeepSeek预测] 认领 next_due 失败, 中止本轮避免双跑: {claim_err}")
+                return None
 
         # 4. 全局上下文
         global_ctx = _build_global_context(conn)
@@ -1090,9 +1141,17 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         logger.error(f"[DeepSeek预测] 一轮异常: {e}", exc_info=True)
         try:
             elapsed = time.time() - t0
+            try:
+                conn.ping(reconnect=True)
+            except Exception:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = _connect()
             _insert_run(conn, asof_utc, 0, '', elapsed, 'error', str(e)[:480], triggered_by)
-        except Exception:
-            pass
+        except Exception as insert_err:
+            logger.error(f"[DeepSeek预测] 异常后写 error run 仍失败: {insert_err}")
         return None
     finally:
         try:
