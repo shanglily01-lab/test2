@@ -96,8 +96,8 @@
 
 **主探索/预测 prompt 与门槛** (`ai_explore_prompt.py`, commit `162d8d5b`):
 - LLM 候选池: `prepare_universe_for_llm` **技术面评分 TOP50**，非 |24h| 极端排序
-- 开仓置信度: `EXPLORE_CONFIDENCE_THRESHOLD` / `PREDICT_CONFIDENCE_THRESHOLD` = **0.60**（与 prompt 校准表一致）
-- catalyst 硬门槛: `explore_catalyst_technical_ok`（多周期 K 线 + 量化技术位；禁单根 1h / 纯涨跌幅）
+- 开仓置信度: `EXPLORE_CONFIDENCE_THRESHOLD` / `PREDICT_CONFIDENCE_THRESHOLD` = **0.75**；catalyst 须过文案门槛 + **真实 15m OHLC** 方向复核
+- catalyst 硬门槛: `explore_catalyst_technical_ok`（文案 + **真实 15m OHLC** 方向复核；禁单根 15m / 纯涨跌幅）
 - 预测同样走 catalyst gate → `skipped_weak_catalyst`
 - 回归: `scripts/validate_explore_predict_prompts.py`
 
@@ -146,7 +146,7 @@
 
 ### 主探索 (`*_explore`)
 - 每 **4h** + 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
-- SL **3%** / TP **5%** / **4h** / 5x / 500U；conf≥**0.60** + `explore_catalyst_technical_ok`
+- SL **3%** / TP **5%** / **max_hold_hours** / 5x / 500U；conf≥**0.75** + `explore_catalyst_technical_ok`（含 15m OHLC）
 - **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：`gemini_explore`、`deepseek_explore`（+ L0 白名单等 symbol 闸门）
 
 ### 主预测 (`*_predict`)

@@ -974,6 +974,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
             tech_ok, tech_reason = explore_catalyst_technical_ok(
                 catalyst, data_signal, sym_data_for_catalyst_gate(sym_row),
                 category=category,
+                side=side,
             )
             if not tech_ok:
                 verdict_rows.append((

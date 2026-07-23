@@ -904,7 +904,7 @@ def _call_deepseek_explore(
                     "content": (
                         "你是专业的加密货币合约交易分析师。只能输出合法 JSON，不要输出 Markdown 或解释。"
                         "重点校准：质量优先。只有 15m 趋势、量能、RSI 与空间都支持时，"
-                        "才给 bullish/bearish 0.70~0.74；边界单、追高追空单应 skip。"
+                        "才给 bullish/bearish 0.75+；边界单、追高追空单应 skip。"
                     ),
                 },
                 {"role": "user", "content": prompt},
@@ -1477,6 +1477,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             tech_ok, tech_reason = explore_catalyst_technical_ok(
                 catalyst, data_signal, resolve_futures_universe_item(universe, symbol),
                 category=category,
+                side=side,
             )
             if not tech_ok:
                 verdict_rows.append((
