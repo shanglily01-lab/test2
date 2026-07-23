@@ -163,18 +163,28 @@ def _ai_round_is_due(
     slot = scheduled_slot_for_now(strategy_key, now)
     period_s = get_ai_round_interval_seconds()
 
-    if now < slot:
-        remain_s = (slot - now).total_seconds()
-        return False, (
-            f"未到点 剩余 {remain_s / 60:.0f}min "
-            f"(slot={slot.isoformat()} UTC, 锚点21:30北京, 周期{get_ai_round_interval_hours()}h)"
-        )
-
     with conn.cursor() as cur:
         last_ok = _last_ok_run_at(cur, runs_table)
-        needs_run = (not last_ok) or (last_ok < slot)
-
         next_due = _read_setting_dt(cur, next_due_key)
+
+        if now < slot:
+            # 当前周期槽位未到：若上一槽已完成则等待；若上一槽漏跑则逾期补跑
+            # （修复：07:30~08:45 之间把漏掉的 05:45 挡成「未到点」）
+            prev_slot = slot - timedelta(seconds=period_s)
+            prev_done = bool(last_ok and last_ok >= prev_slot)
+            if prev_done:
+                remain_s = (slot - now).total_seconds()
+                return False, (
+                    f"未到点 剩余 {remain_s / 60:.0f}min "
+                    f"(slot={slot.isoformat()} UTC, 锚点21:30北京, "
+                    f"周期{get_ai_round_interval_hours()}h)"
+                )
+            # 上一槽未完成 → 走逾期补跑（不受「未到本槽」拦截）
+            needs_run = True
+            slot = prev_slot
+        else:
+            needs_run = (not last_ok) or (last_ok < slot)
+
         if next_due and now < next_due and not needs_run:
             remain_s = (next_due - now).total_seconds()
             return False, (

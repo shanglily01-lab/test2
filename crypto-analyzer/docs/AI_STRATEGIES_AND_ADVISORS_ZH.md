@@ -143,6 +143,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 | GPT | `gpt_predictor.run_predict_round` | `gpt_predict_next_due_utc` |
 
 启动补跑：+45s / +50s / +55s（**勿用 scheduler_init 跑预测**）。
+固定槽 `now < 本槽` 时：若上一槽尚无 ok，须**逾期补跑**（勿只报「未到点」挡死漏槽）。
 
 ### 4.3 参数与门槛
 
