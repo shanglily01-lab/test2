@@ -1365,7 +1365,7 @@ class UnifiedDataScheduler:
         schedule.every(2).hours.do(_run_gemini_explore)
         # 兜底: every(N).hours 在 restart 后从 0 计时, 易错过周期; 10min 轮询由 worker 2h 防重
         schedule.every(10).minutes.do(_run_gemini_explore)
-        logger.info("  ✓ gemini_explore - 固定槽 21:30北京 +0, 每2h + 10min轮询")
+        logger.info("  ✓ gemini_explore - 距上次ok+max_hold_hours, 每2h + 10min轮询")
 
         # DeepSeek 探索 - 每 2h 调一轮 DeepSeek 检测短时方向异动, 模拟开仓
         # kill switch = system_settings.deepseek_explore_enabled
@@ -1380,7 +1380,7 @@ class UnifiedDataScheduler:
 
         schedule.every(2).hours.do(_run_deepseek_explore)
         schedule.every(10).minutes.do(_run_deepseek_explore)
-        logger.info("  ✓ deepseek_explore - 固定槽 22:30北京 +1h, 每2h + 10min轮询")
+        logger.info("  ✓ deepseek_explore - 距上次ok+max_hold_hours, 每2h + 10min轮询")
 
         # DeepSeek 预测 - 每 2h 调一次 DeepSeek 预测 TOP50 方向
         def _run_deepseek_predict():
@@ -1394,7 +1394,7 @@ class UnifiedDataScheduler:
 
         schedule.every(2).hours.do(_run_deepseek_predict)
         schedule.every(5).minutes.do(_run_deepseek_predict)
-        logger.info("  ✓ deepseek_predict - 固定槽 22:45北京 +1h15, 每2h + 5min轮询")
+        logger.info("  ✓ deepseek_predict - 距上次ok+max_hold_hours, 每2h + 5min轮询")
 
         # Gemini 预测 - 每 2h 调一次 Gemini 预测 TOP50 方向
         def _run_gemini_predict():
@@ -1408,7 +1408,7 @@ class UnifiedDataScheduler:
 
         schedule.every(2).hours.do(_run_gemini_predict)
         schedule.every(5).minutes.do(_run_gemini_predict)
-        logger.info("  ✓ gemini_predict - 固定槽 21:45北京 +15min, 每2h + 5min轮询")
+        logger.info("  ✓ gemini_predict - 距上次ok+max_hold_hours, 每2h + 5min轮询")
 
         # 中线做多/做空（Gemini + DeepSeek，量化扫描，每 6h）
         def _run_midline_swing():

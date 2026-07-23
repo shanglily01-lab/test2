@@ -84,63 +84,115 @@ def test_schedule_interval_matches_hold_hours() -> None:
             _ok("持仓时长与 AI 调度周期共用 max_hold_hours=6")
 
 
-def test_slot_math_respects_interval() -> None:
+def test_interval_from_last_ok() -> None:
+    """距上次成功 + max_hold_hours；不足则未到点，超过则 due."""
     from app.services.ai_predict_schedule import (
-        _period_base_for_now,
+        next_due_after,
         next_scheduled_slot,
-        scheduled_slot_for_now,
+        predict_round_is_due,
     )
 
-    anchor = datetime(2024, 1, 1, 13, 30)
+    class _Cur:
+        def __init__(self, last_ok, next_due):
+            self._last_ok = last_ok
+            self._next_due = next_due
+            self._mode = None
+
+        def execute(self, sql, params=None):
+            _ = params
+            if "MAX(asof_utc)" in sql:
+                self._mode = "last_ok"
+            else:
+                self._mode = "next_due"
+
+        def fetchone(self):
+            if self._mode == "last_ok":
+                return {"last_at": self._last_ok}
+            return {"setting_value": self._next_due}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class _Conn:
+        def __init__(self, last_ok, next_due=None):
+            self._last_ok = last_ok
+            self._next_due = (
+                next_due.strftime("%Y-%m-%dT%H:%M:%S") if next_due else None
+            )
+
+        def cursor(self):
+            return _Cur(self._last_ok, self._next_due)
+
+    last_ok = datetime(2026, 7, 22, 18, 53, 0)
 
     def _run_for_hours(hours: int) -> None:
-        with patch("app.services.system_settings_loader.get_setting", return_value=str(hours)):
-            # 周期中点：period base 应为锚点
-            mid = anchor + timedelta(hours=hours // 2, minutes=15)
-            base = _period_base_for_now(mid)
-            if base != anchor:
-                _fail(f"{hours}h: period_base({mid})={base}, want {anchor}")
+        with patch(
+            "app.services.system_settings_loader.get_setting", return_value=str(hours)
+        ):
+            want = last_ok + timedelta(hours=hours)
+            got = next_due_after(last_ok)
+            if got != want:
+                _fail(f"{hours}h: next_due_after={got}, want {want}")
+                return
+            compat = next_scheduled_slot("deepseek_predict", last_ok)
+            if compat != want:
+                _fail(f"{hours}h: next_scheduled_slot={compat}, want {want}")
                 return
 
-            slot = scheduled_slot_for_now("gemini_explore", anchor + timedelta(minutes=30))
-            if slot != anchor:
-                _fail(f"{hours}h: gemini_explore slot={slot}, want {anchor}")
+            conn = _Conn(last_ok)
+            before = want - timedelta(minutes=10)
+            due, reason = predict_round_is_due(
+                conn,
+                strategy_key="deepseek_predict",
+                runs_table="deepseek_predict_runs",
+                next_due_key="deepseek_predict_next_due_utc",
+                now=before,
+            )
+            if due or "距上次成功不足" not in reason:
+                _fail(f"{hours}h: before due={due} reason={reason}")
                 return
 
-            after = anchor + timedelta(hours=1)
-            nxt = next_scheduled_slot("gemini_explore", after)
-            want_next = anchor + timedelta(hours=hours)
-            if nxt != want_next:
-                _fail(f"{hours}h: next_slot after {after} = {nxt}, want {want_next}")
+            after = want + timedelta(minutes=5)
+            due2, reason2 = predict_round_is_due(
+                conn,
+                strategy_key="deepseek_predict",
+                runs_table="deepseek_predict_runs",
+                next_due_key="deepseek_predict_next_due_utc",
+                now=after,
+            )
+            if not due2:
+                _fail(f"{hours}h: after not due reason={reason2}")
                 return
 
-            # 最小周期 2h：最大 offset 75min 仍落在单周期内
-            if hours == 2:
-                ds_pred = scheduled_slot_for_now(
-                    "deepseek_predict", anchor + timedelta(minutes=10)
-                )
-                want_ds = anchor + timedelta(minutes=75)
-                if ds_pred != want_ds:
-                    _fail(f"2h: deepseek_predict slot={ds_pred}, want {want_ds}")
-                    return
+            # 无 ok → 立即 due（即使 next_due 在未来）
+            conn2 = _Conn(None, next_due=after + timedelta(hours=hours))
+            due3, reason3 = predict_round_is_due(
+                conn2,
+                strategy_key="deepseek_predict",
+                runs_table="deepseek_predict_runs",
+                next_due_key="deepseek_predict_next_due_utc",
+                now=after,
+            )
+            if not due3 or "无成功记录" not in reason3:
+                _fail(f"{hours}h: no-ok due={due3} reason={reason3}")
+                return
 
-            _ok(f"槽位计算 interval={hours}h 通过")
+            _ok(f"间隔调度 interval={hours}h 通过")
 
-    for h in (2, 4, 8):
+    for h in (2, 3, 4, 8):
         _run_for_hours(h)
 
 
-def test_strategy_offsets_within_min_period() -> None:
+def test_strategy_offsets_compat_constant() -> None:
     from app.services.ai_predict_schedule import STRATEGY_SCHEDULE_OFFSETS
 
-    max_offset_min = max(STRATEGY_SCHEDULE_OFFSETS.values())
-    min_period_min = 2 * 60
-    if max_offset_min >= min_period_min:
-        _fail(
-            f"策略错峰最大 {max_offset_min}min >= 最小调度周期 {min_period_min}min"
-        )
+    if "deepseek_predict" not in STRATEGY_SCHEDULE_OFFSETS:
+        _fail("STRATEGY_SCHEDULE_OFFSETS 缺少 deepseek_predict")
     else:
-        _ok(f"四策略错峰最大 {max_offset_min}min 落在 2h 周期内")
+        _ok("STRATEGY_SCHEDULE_OFFSETS 兼容常量仍在")
 
 
 def test_api_clamp_logic() -> None:
@@ -217,8 +269,8 @@ def main() -> int:
     test_no_hardcoded_ai_interval_constants()
     test_loader_clamp_2_to_8()
     test_schedule_interval_matches_hold_hours()
-    test_slot_math_respects_interval()
-    test_strategy_offsets_within_min_period()
+    test_interval_from_last_ok()
+    test_strategy_offsets_compat_constant()
     test_api_clamp_logic()
     test_api_source_uses_loader()
     test_templates_hold_hours_2_to_8()

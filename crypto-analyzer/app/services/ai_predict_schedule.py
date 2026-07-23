@@ -1,10 +1,9 @@
-"""Gemini / DeepSeek 探索+预测 — 统一固定时刻调度.
+"""Gemini / DeepSeek 探索+预测 — 距上次成功 + max_hold_hours 调度.
 
 调度周期: system_settings.max_hold_hours（2~8h，与持仓时长共用）。
-锚点: 北京时间 21:30 (= UTC 13:30), 每 N 小时一轮.
-Gemini / DeepSeek 错开 1 小时; 同教师探索/预测再错开 15 分钟:
-  gemini_explore +0,   gemini_predict +15,
-  deepseek_explore +60, deepseek_predict +75  (北京 22:30 / 22:45)
+规则: 距上次 status='ok' 的 asof_utc ≥ 周期小时数则 due；无成功记录则立即 due。
+error/skipped 不推迟下一轮。认领 next_due = now + 周期（防短窗重复认领）；
+若已超过周期仍未 ok，needs_run 覆盖 next_due，允许 5/10min 轮询重试。
 
 调度器 5/10 分钟轮询 + worker 内 next_due 认领防重。
 """
@@ -19,48 +18,37 @@ from app.services.system_settings_loader import get_max_hold_hours
 
 PREDICT_SCHEDULE_POLL_MINUTES = 5
 
-# 固定锚点 UTC 13:30 = 北京时间 21:30
-SCHEDULE_ANCHOR_HOUR_UTC = 13
-SCHEDULE_ANCHOR_MINUTE_UTC = 30
-GEMINI_DEEPSEEK_STAGGER_HOURS = 1
-SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN = 15
-_SCHEDULE_ANCHOR_BASE = datetime(2024, 1, 1, SCHEDULE_ANCHOR_HOUR_UTC, SCHEDULE_ANCHOR_MINUTE_UTC)
-
 GEMINI_EXPLORE_NEXT_DUE_KEY = "gemini_explore_next_due_utc"
 DEEPSEEK_EXPLORE_NEXT_DUE_KEY = "deepseek_explore_next_due_utc"
 GEMINI_PREDICT_NEXT_DUE_KEY = "gemini_predict_next_due_utc"
 DEEPSEEK_PREDICT_NEXT_DUE_KEY = "deepseek_predict_next_due_utc"
 
-_GEMINI_OFFSET = 0
-_DEEPSEEK_OFFSET = GEMINI_DEEPSEEK_STAGGER_HOURS * 60
-
+# 兼容旧校验/文档引用（错峰已不再参与 due；保留常量避免外部 import 崩）
+GEMINI_DEEPSEEK_STAGGER_HOURS = 1
+SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN = 15
 STRATEGY_SCHEDULE_OFFSETS: Dict[str, int] = {
-    "gemini_explore": _GEMINI_OFFSET,
-    "gemini_predict": _GEMINI_OFFSET + SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN,
-    "deepseek_explore": _DEEPSEEK_OFFSET,
-    "deepseek_predict": _DEEPSEEK_OFFSET + SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN,
+    "gemini_explore": 0,
+    "gemini_predict": SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN,
+    "deepseek_explore": GEMINI_DEEPSEEK_STAGGER_HOURS * 60,
+    "deepseek_predict": GEMINI_DEEPSEEK_STAGGER_HOURS * 60
+    + SAME_TEACHER_EXPLORE_PREDICT_GAP_MIN,
+}
+
+_AI_RUNS_TABLES: Dict[str, str] = {
+    "gemini_explore": "gemini_explore_runs",
+    "gemini_predict": "gemini_predict_runs",
+    "deepseek_explore": "deepseek_explore_runs",
+    "deepseek_predict": "deepseek_predict_runs",
 }
 
 
 def get_ai_round_interval_hours() -> int:
-    """AI 探索/预测固定槽位周期（小时），读 max_hold_hours。"""
+    """AI 探索/预测调度周期（小时），读 max_hold_hours。"""
     return get_max_hold_hours()
 
 
 def get_ai_round_interval_seconds() -> int:
     return get_ai_round_interval_hours() * 3600
-
-
-def _offset_label(offset_min: int) -> str:
-    if offset_min <= 0:
-        return "+0min"
-    if offset_min % 60 == 0:
-        h = offset_min // 60
-        return f"+{h}h"
-    h, m = divmod(offset_min, 60)
-    if h:
-        return f"+{h}h{m}min"
-    return f"+{offset_min}min"
 
 
 def _parse_utc_naive(value: str) -> Optional[datetime]:
@@ -105,45 +93,35 @@ def _last_ok_run_at(cur, runs_table: str) -> Optional[datetime]:
     return last_at
 
 
-def _period_base_for_now(now: datetime) -> datetime:
-    """当前调度周期起点 (共享锚点 13:30 UTC, 不含策略 offset)."""
-    if now < _SCHEDULE_ANCHOR_BASE:
-        return _SCHEDULE_ANCHOR_BASE
-    elapsed_s = (now - _SCHEDULE_ANCHOR_BASE).total_seconds()
-    period_s = get_ai_round_interval_seconds()
-    n = int(elapsed_s // period_s)
-    return _SCHEDULE_ANCHOR_BASE + timedelta(seconds=period_s * n)
-
-
-def _slot_in_period(period_base: datetime, strategy_key: str) -> datetime:
-    offset_min = STRATEGY_SCHEDULE_OFFSETS[strategy_key]
-    return period_base + timedelta(minutes=offset_min)
+def next_due_after(
+    after: Optional[datetime] = None,
+    *,
+    now: Optional[datetime] = None,
+) -> datetime:
+    """after（通常 last_ok 或认领时刻）起算下一轮到期时刻；after 为空则 now."""
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    base = after or now
+    return base + timedelta(seconds=get_ai_round_interval_seconds())
 
 
 def scheduled_slot_for_now(
     strategy_key: str,
     now: Optional[datetime] = None,
 ) -> datetime:
-    """当前周期内该策略的固定槽位时刻 (UTC naive)."""
+    """兼容旧 API：无墙钟槽，返回 now（调用方应改用 last_ok 间隔）."""
     if strategy_key not in STRATEGY_SCHEDULE_OFFSETS:
         raise KeyError(f"unknown strategy_key: {strategy_key}")
-
-    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
-    return _slot_in_period(_period_base_for_now(now), strategy_key)
+    return now or datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def next_scheduled_slot(
     strategy_key: str,
     after: Optional[datetime] = None,
 ) -> datetime:
-    """after 之后的下一个固定槽位."""
-    after = after or datetime.now(timezone.utc).replace(tzinfo=None)
-    period_base = _period_base_for_now(after)
-    slot_this_period = _slot_in_period(period_base, strategy_key)
-    if after < slot_this_period:
-        return slot_this_period
-    next_base = period_base + timedelta(seconds=get_ai_round_interval_seconds())
-    return _slot_in_period(next_base, strategy_key)
+    """兼容旧 API：after + 周期（不再做墙钟对齐）."""
+    if strategy_key not in STRATEGY_SCHEDULE_OFFSETS:
+        raise KeyError(f"unknown strategy_key: {strategy_key}")
+    return next_due_after(after)
 
 
 def _ai_round_is_due(
@@ -156,60 +134,45 @@ def _ai_round_is_due(
     manual: bool = False,
     log_tag: str = "AI",
 ) -> Tuple[bool, str]:
+    _ = strategy_key
     if manual:
         return True, "manual"
 
     now = now or datetime.now(timezone.utc).replace(tzinfo=None)
-    slot = scheduled_slot_for_now(strategy_key, now)
     period_s = get_ai_round_interval_seconds()
+    period_h = get_ai_round_interval_hours()
 
     with conn.cursor() as cur:
         last_ok = _last_ok_run_at(cur, runs_table)
         next_due = _read_setting_dt(cur, next_due_key)
 
-        if now < slot:
-            # 当前周期槽位未到：若上一槽已完成则等待；若上一槽漏跑则逾期补跑
-            # （修复：07:30~08:45 之间把漏掉的 05:45 挡成「未到点」）
-            prev_slot = slot - timedelta(seconds=period_s)
-            prev_done = bool(last_ok and last_ok >= prev_slot)
-            if prev_done:
-                remain_s = (slot - now).total_seconds()
+        if last_ok:
+            earliest = last_ok + timedelta(seconds=period_s)
+            if now < earliest:
+                remain_s = (earliest - now).total_seconds()
                 return False, (
-                    f"未到点 剩余 {remain_s / 60:.0f}min "
-                    f"(slot={slot.isoformat()} UTC, 锚点21:30北京, "
-                    f"周期{get_ai_round_interval_hours()}h)"
+                    f"距上次成功不足 {period_h}h 剩余 {remain_s / 60:.0f}min "
+                    f"(last_ok={last_ok.isoformat()}, "
+                    f"下次={earliest.isoformat()} UTC)"
                 )
-            # 上一槽未完成 → 走逾期补跑（不受「未到本槽」拦截）
-            needs_run = True
-            slot = prev_slot
+            late_h = (now - earliest).total_seconds() / 3600
         else:
-            needs_run = (not last_ok) or (last_ok < slot)
+            # 无 ok：立即 due。若仅有未来 next_due（旧墙钟遗留）不挡补跑；
+            # 进程内 running lock 防并发。
+            late_h = None
+            earliest = now
+            _ = next_due
 
-        if next_due and now < next_due and not needs_run:
-            remain_s = (next_due - now).total_seconds()
-            return False, (
-                f"已认领 剩余 {remain_s / 3600:.2f}h "
-                f"(next_due={next_due.isoformat()})"
-            )
-
-        if last_ok and last_ok >= slot:
-            next_slot = slot + timedelta(seconds=period_s)
-            if now < next_slot:
-                remain_s = (next_slot - now).total_seconds()
-                return False, (
-                    f"本槽已完成 last_ok={last_ok.isoformat()} "
-                    f"下次 {next_slot.isoformat()} UTC "
-                    f"(剩余 {remain_s / 60:.0f}min)"
-                )
-
-    late_h = (now - slot).total_seconds() / 3600
-    if late_h >= 0.5:
+    if late_h is not None and late_h >= 0.5:
         return True, (
-            f"逾期补跑 slot={slot.isoformat()} UTC 迟到 {late_h:.1f}h"
+            f"逾期补跑 last_ok={(last_ok.isoformat() if last_ok else '无')} "
+            f"已过期 {late_h:.1f}h (周期{period_h}h)"
         )
+    if last_ok is None:
+        return True, f"无成功记录, 立即执行 (周期{period_h}h)"
     return True, (
-        f"固定槽 due slot={slot.isoformat()} UTC "
-        f"(锚点21:30北京, 周期{get_ai_round_interval_hours()}h)"
+        f"间隔到期 last_ok={last_ok.isoformat()} "
+        f"下次={earliest.isoformat()} UTC (周期{period_h}h)"
     )
 
 
@@ -224,7 +187,7 @@ def explore_round_is_due(
     log_tag: str = "Explore",
     interval_hours: Optional[float] = None,
 ) -> Tuple[bool, str]:
-    """主探索固定时刻防重 (interval_hours 保留兼容, 实际以锚点槽位 + max_hold_hours 为准)."""
+    """主探索：距上次 ok ≥ max_hold_hours（interval_hours 保留兼容，忽略）."""
     _ = interval_hours
     return _ai_round_is_due(
         conn,
@@ -247,7 +210,7 @@ def predict_round_is_due(
     manual: bool = False,
     log_tag: str = "Predict",
 ) -> Tuple[bool, str]:
-    """预测固定时刻防重."""
+    """主预测：距上次 ok ≥ max_hold_hours."""
     return _ai_round_is_due(
         conn,
         strategy_key=strategy_key,
@@ -267,9 +230,11 @@ def _claim_next_slot(
     now: Optional[datetime] = None,
     log_tag: str = "AI",
 ) -> datetime:
+    _ = strategy_key
     now = now or datetime.now(timezone.utc).replace(tzinfo=None)
-    next_due = next_scheduled_slot(strategy_key, now)
+    next_due = next_due_after(now, now=now)
     value = next_due.strftime("%Y-%m-%dT%H:%M:%S")
+    period_h = get_ai_round_interval_hours()
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -284,17 +249,11 @@ def _claim_next_slot(
             (
                 next_due_key,
                 value,
-                (
-                    f"{log_tag} 下一轮固定槽 UTC "
-                    f"(锚点21:30北京 {_offset_label(STRATEGY_SCHEDULE_OFFSETS[strategy_key])}, "
-                    f"周期{get_ai_round_interval_hours()}h)"
-                ),
+                f"{log_tag} 下一轮 UTC (距认领 +{period_h}h)",
             ),
         )
     logger.info(
-        f"[{log_tag}] 已认领固定槽, next_due_utc={value} "
-        f"(offset={_offset_label(STRATEGY_SCHEDULE_OFFSETS[strategy_key])}, "
-        f"周期={get_ai_round_interval_hours()}h)"
+        f"[{log_tag}] 已认领下一轮, next_due_utc={value} (周期={period_h}h)"
     )
     return next_due
 
@@ -347,18 +306,24 @@ def realign_stale_next_due_slots(
     now: Optional[datetime] = None,
     grace_seconds: int = 90,
 ) -> int:
-    """部署或 max_hold_hours 变更后修正偏远的 next_due。"""
+    """部署或 max_hold_hours 变更后：next_due 对齐为 last_ok+周期（无 ok 则 now）."""
     now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     period_s = get_ai_round_interval_seconds()
     threshold = period_s / 2 + grace_seconds
     fixed = 0
+    period_h = get_ai_round_interval_hours()
 
     with conn.cursor() as cur:
         for strategy_key, next_due_key in _AI_NEXT_DUE_KEYS.items():
             stored = _read_setting_dt(cur, next_due_key)
             if stored is None:
                 continue
-            canonical = next_scheduled_slot(strategy_key, now)
+            runs_table = _AI_RUNS_TABLES.get(strategy_key)
+            last_ok = _last_ok_run_at(cur, runs_table) if runs_table else None
+            canonical = next_due_after(last_ok, now=now) if last_ok else now
+            # 已逾期：校正到 now，避免墙钟遗留的未来 next_due 挡补跑
+            if last_ok and (now - last_ok).total_seconds() >= period_s:
+                canonical = now
             drift_s = abs((stored - canonical).total_seconds())
             if drift_s <= threshold:
                 continue
@@ -376,16 +341,12 @@ def realign_stale_next_due_slots(
                 (
                     next_due_key,
                     value,
-                    (
-                        f"{strategy_key} 下一轮固定槽 UTC "
-                        f"(锚点21:30北京 {_offset_label(STRATEGY_SCHEDULE_OFFSETS[strategy_key])}, "
-                        f"周期{get_ai_round_interval_hours()}h)"
-                    ),
+                    f"{strategy_key} 下一轮 UTC (last_ok+{period_h}h 间隔调度)",
                 ),
             )
             logger.info(
                 f"[AI调度校正] {strategy_key}: {stored.isoformat()} → {value} "
-                f"(drift={drift_s / 60:.0f}min, 周期={get_ai_round_interval_hours()}h)"
+                f"(drift={drift_s / 60:.0f}min, 周期={period_h}h)"
             )
             fixed += 1
     return fixed

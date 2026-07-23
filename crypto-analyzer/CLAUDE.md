@@ -68,11 +68,11 @@
 | data_cache.candidate_pool_snapshot | 每 **6 分钟** (行情+K线叙事) |
 | data_cache.explore_prepared_snapshot | 每 **15 分钟** (共用 universe，策略只读) |
 | data_cache.settings_cache | 每 1 分钟 |
-| Gemini 探索 | 每 **4h** + **10min 轮询** (worker 内 4h 防重) |
-| Gemini 预测 | 每 **4h 必跑** + **5min 轮询** (`system_settings.*_predict_next_due_utc`) |
-| DeepSeek 探索 | 每 **4h** + **10min 轮询** |
-| DeepSeek 预测 | 每 **4h 必跑** + **5min 轮询** (`deepseek_predict_next_due_utc`) |
-| GPT 探索/预测 | 同 Gemini/DeepSeek 节奏 + `gpt_*_next_due_utc` |
+| Gemini 探索 | 每 **2h** + **10min 轮询**；worker 距上次 ok ≥ **max_hold_hours** |
+| Gemini 预测 | 每 **2h** + **5min 轮询**；距上次 ok ≥ **max_hold_hours** + `gemini_predict_next_due_utc` |
+| DeepSeek 探索 | 同 Gemini 探索节奏 + `deepseek_explore_next_due_utc` |
+| DeepSeek 预测 | 同 Gemini 预测节奏 + `deepseek_predict_next_due_utc` |
+| GPT 探索/预测 | 同节奏 + `gpt_*_next_due_utc` |
 | **中线量化** ×4 | 每 **6h** + **10min 轮询** |
 | 战术探索 15 槽位 | 每 **15min** 轮询 (`tactical_explore_scheduler`) |
 | **持仓顾问** Gemini+DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent） |
@@ -85,9 +85,9 @@
 **生产 DB**: MariaDB 10.5（非 MySQL 8）；`INSERT ... ON DUPLICATE KEY UPDATE` 可用。
 
 **探索/预测别混淆「延时」**:
-- 正常: 探索 `上次成功距今 Xh < 4h` / 预测 `未到点 剩余 Xh (next_due=...)` — 防重，不是 scheduler 坏了。
-- 异常: `上一轮还未结束` 持续 >15min — 探索线程卡死或占锁（常因回退 `kline_data` 多层 JOIN）。
-- `schedule.every(N).hours` 在 **restart 后从 0 计时**；靠 **10min 轮询 + worker DB 防重** 补位。勿频繁 `systemctl restart crypto-scheduler`。
+- 正常: `距上次成功不足 Nh 剩余 Xmin (last_ok=..., 下次=...)` — 防重，不是 scheduler 坏了。
+- 异常: `上一轮还未结束` 持续 >15min — 探索/预测线程卡死或占锁。
+- `schedule.every(N).hours` 在 **restart 后从 0 计时**；靠 **5/10min 轮询 + worker 距上次 ok** 补位。勿频繁 `systemctl restart crypto-scheduler`。
 
 **candidate_pool_snapshot** (`data_cache_service.refresh_candidate_pool`):
 - **禁止** refresh 开头 `DELETE` 全表（会导致探索读空表 → 慢路径）。已改为 **UPSERT + 本轮结束后删下架币**。
@@ -145,12 +145,12 @@
 - 仅模拟仓；migration 009 / 017
 
 ### 主探索 (`*_explore`)
-- 每 **4h** + 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
+- 每 **max_hold_hours**（距上次 ok）+ 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
 - SL **3%** / TP **5%** / **max_hold_hours** / 5x / 500U；conf≥**0.75** + `explore_catalyst_technical_ok`（含 15m OHLC）
 - **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：`gemini_explore`、`deepseek_explore`（+ L0 白名单等 symbol 闸门）
 
 ### 主预测 (`*_predict`)
-- 每 **4h** + 5min 轮询 + `*_predict_next_due_utc`；kill switch（Gemini 预测默认 1）
+- 每 **max_hold_hours**（距上次 ok）+ 5min 轮询 + `*_predict_next_due_utc`；kill switch（Gemini 预测默认 1）
 - 同主探索持仓/SL/TP/门槛；**实盘**：`gemini_predict`、`deepseek_predict`（+ L0 白名单等 symbol 闸门）
 
 ### 中线做多/做空 (`*_midline_*`) [2026-06-21]

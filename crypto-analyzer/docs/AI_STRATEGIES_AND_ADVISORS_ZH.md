@@ -132,18 +132,18 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 4.1 职责
 
-每 `max_hold_hours`（固定槽）对技术面 **TOP50** 给出方向概率（bullish/bearish），达标则开模拟单；**不走探索的事件叙事**，但共用 catalyst 技术门槛。DeepSeek/Gemini 均读 `candidate_pool_snapshot` 技术面截断，**禁止** `price_stats_24h` 全市场扫库。
+每 `max_hold_hours`（**距上次 status=ok**）对技术面 **TOP50** 给出方向概率（bullish/bearish），达标则开模拟单；**不走探索的事件叙事**，但共用 catalyst 技术门槛。DeepSeek/Gemini 均读 `candidate_pool_snapshot` 技术面截断，**禁止** `price_stats_24h` 全市场扫库。
 
 ### 4.2 代码入口
 
 | 教师 | Worker | 调度 |
 |------|--------|------|
-| Gemini | `gemini_predictor.run_predict_round` | `every(4).hours` + `every(5).minutes` + `gemini_predict_next_due_utc` |
-| DeepSeek | `deepseek_predictor.run_predict_round` | `deepseek_predict_next_due_utc` |
+| Gemini | `gemini_predictor.run_predict_round` | `every(2).hours` + `every(5).minutes`；距上次 ok ≥ max_hold_hours + `gemini_predict_next_due_utc` |
+| DeepSeek | `deepseek_predictor.run_predict_round` | 同上 + `deepseek_predict_next_due_utc` |
 | GPT | `gpt_predictor.run_predict_round` | `gpt_predict_next_due_utc` |
 
 启动补跑：+45s / +50s / +55s（**勿用 scheduler_init 跑预测**）。
-固定槽 `now < 本槽` 时：若上一槽尚无 ok，须**逾期补跑**（勿只报「未到点」挡死漏槽）。
+**非墙钟槽**：满 `max_hold_hours` 即 due；无 ok 立即跑；进程锁防并发。
 
 ### 4.3 参数与门槛
 
@@ -398,7 +398,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | 现象 | 含义 |
 |------|------|
 | `上次成功距今 Xh < 4h, 跳过` | 正常防重 |
-| `未到点 剩余 Xh (next_due=...)` | 预测/GPT 探索正常 |
+| `距上次成功不足 Nh 剩余 Xmin` | 探索/预测正常防重 |
 | `上一轮还未结束` 持续 >15min | 异常：锁未释放或慢 SQL |
 | 仅 `一轮开始` 无 `一轮结束` | 异常：线程卡死 |
 
