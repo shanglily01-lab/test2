@@ -152,7 +152,10 @@ def _get_local_db_config() -> dict:
 
 def _connect():
     """短超时：避免单条 kline/慢查询把整轮拖死（历史 MySQL 2013）。"""
-    cfg = _get_local_db_config()
+    cfg = dict(_get_local_db_config() or {})
+    # get_db_config 可能已含 connect_timeout，避免关键字重复
+    for k in ("charset", "cursorclass", "autocommit", "connect_timeout", "read_timeout", "write_timeout"):
+        cfg.pop(k, None)
     return pymysql.connect(
         **cfg,
         charset='utf8mb4',
