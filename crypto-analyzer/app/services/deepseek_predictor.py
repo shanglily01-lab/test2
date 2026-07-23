@@ -126,11 +126,16 @@ PREDICT_MARGIN_USD = 500.0
 PREDICT_LEVERAGE = 5
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'deepseek_predict'
-# 与主探索 / Gemini 预测对齐：技术面 TOP，禁止 price_stats 全市场扫库
+# 全量扫描：白名单(L0)+黑名单1/2级+未评级；排除 L3/手动锁定。禁 price_stats/kline 全市场扫库。
 PREDICT_CANDIDATE_LIMIT = 500
-PREDICT_TOP_N = 50
-DEEPSEEK_UNIVERSE_SYMBOL_LIMIT = PREDICT_CANDIDATE_LIMIT  # candidate_pool 缓存上限
+PREDICT_TOP_N = 50  # 兼容旧校验/日志；选币不再按技术面 TOP 截断
+DEEPSEEK_UNIVERSE_SYMBOL_LIMIT = PREDICT_CANDIDATE_LIMIT
 DEEPSEEK_PREDICT_BATCH_SIZE = 50
+
+# 防卡死：软锁过期后允许抢占；建数硬时限（秒）
+# 全量约 10 批 × LLM timeout，软锁需大于最坏批次总时长
+PREDICT_LOCK_STALE_S = 25 * 60
+PREDICT_BUILD_DEADLINE_S = 120
 
 # 数据新鲜度门槛
 PREDICT_PRICE_FRESH_MIN = 20
@@ -146,6 +151,7 @@ def _get_local_db_config() -> dict:
 
 
 def _connect():
+    """短超时：避免单条 kline/慢查询把整轮拖死（历史 MySQL 2013）。"""
     cfg = _get_local_db_config()
     return pymysql.connect(
         **cfg,
@@ -153,13 +159,13 @@ def _connect():
         cursorclass=pymysql.cursors.DictCursor,
         autocommit=True,
         connect_timeout=10,
-        read_timeout=120,
-        write_timeout=60,
+        read_timeout=45,
+        write_timeout=30,
     )
 
 
 # ============================================================
-# 数据查询 — 候选池 (技术面 TOP, 与 Gemini/探索一致; 禁止 price_stats 全市场)
+# 数据查询 — 全量候选池（排除 L3/锁定；禁 price_stats/kline 扫库）
 # ============================================================
 def _filter_predict_symbols(symbols: List[str], limit: int) -> List[str]:
     out: List[str] = []
@@ -176,29 +182,37 @@ def _filter_predict_symbols(symbols: List[str], limit: int) -> List[str]:
     return out
 
 
-def _get_predict_symbols(conn) -> List[str]:
-    """从 candidate_pool 按技术面取 TOP N；禁止 price_stats 全量（530+ 会拖垮单连接）。"""
-    banned = set()
+def _load_predict_banned_symbols(conn) -> set:
+    """L3 + 手动锁定；不再扫描这些交易对。"""
     try:
-        from app.services.trading_gates import load_blacklist_level3_symbols
-        banned = load_blacklist_level3_symbols(conn)
-    except Exception:
-        banned = set()
+        from app.services.trading_gates import load_trading_forbidden_symbols
+        return load_trading_forbidden_symbols(conn) or set()
+    except Exception as e:
+        logger.warning(f"[DeepSeek预测] 读取禁止名单失败, 保守不额外过滤: {e}")
+        return set()
+
+
+def _get_predict_symbols(conn) -> List[str]:
+    """全量 candidate_pool：覆盖 L0/L1/L2/未评级；排除 L3 与 rating_locked。
+
+    只读缓存表，禁止 price_stats 全市场 + 逐币 kline 回退（易 MySQL 2013）。
+    """
+    banned = _load_predict_banned_symbols(conn)
 
     rows = _get_candidate_pool_cached()
     if rows:
-        from app.services.ai_explore_prompt import select_llm_symbols_from_pool
+        from app.services.ai_explore_prompt import select_all_symbols_from_pool
 
-        raw_symbols = select_llm_symbols_from_pool(
+        raw_symbols = select_all_symbols_from_pool(
             rows[:PREDICT_CANDIDATE_LIMIT],
             banned=banned,
-            max_symbols=PREDICT_TOP_N,
+            limit=PREDICT_CANDIDATE_LIMIT,
         )
-        symbols = _filter_predict_symbols(raw_symbols, PREDICT_TOP_N)
+        symbols = _filter_predict_symbols(raw_symbols, PREDICT_CANDIDATE_LIMIT)
         if symbols:
             logger.info(
-                f"[DeepSeek预测] 从 candidate_pool_snapshot 技术面 TOP 获取 "
-                f"{len(symbols)} 个 symbol"
+                f"[DeepSeek预测] 全量候选池(排除L3/锁定) 获取 {len(symbols)} 个 symbol "
+                f"(banned={len(banned)})"
             )
             return symbols
 
@@ -206,23 +220,33 @@ def _get_predict_symbols(conn) -> List[str]:
 
     _l3 = sql_exclude_level3_filter("symbol")
     with conn.cursor() as cur:
+        # 缓存不可用时回退评级表 L0/L1/L2（仍排除 L3/锁定），不做 TOP50
         cur.execute(
-            f"SELECT symbol FROM top_performing_symbols "
-            f"WHERE 1=1 {_l3} "
-            f"ORDER BY rank_score ASC LIMIT %s",
-            (PREDICT_TOP_N,),
+            f"SELECT symbol FROM trading_symbol_rating "
+            f"WHERE rating_level IN (0, 1, 2) "
+            f"AND COALESCE(rating_locked, 0) = 0 "
+            f"ORDER BY rating_level ASC, symbol ASC "
+            f"LIMIT %s",
+            (PREDICT_CANDIDATE_LIMIT,),
         )
-        symbols = _filter_predict_symbols(
-            [r["symbol"] for r in cur.fetchall()],
-            PREDICT_TOP_N,
-        )
+        rated = [r["symbol"] for r in cur.fetchall()]
+        if not rated:
+            cur.execute(
+                f"SELECT symbol FROM top_performing_symbols "
+                f"WHERE 1=1 {_l3} "
+                f"ORDER BY rank_score ASC LIMIT %s",
+                (PREDICT_CANDIDATE_LIMIT,),
+            )
+            rated = [r["symbol"] for r in cur.fetchall()]
+        symbols = _filter_predict_symbols(rated, PREDICT_CANDIDATE_LIMIT)
         if symbols:
             logger.warning(
-                f"[DeepSeek预测] candidate_pool 不可用, 回退 top_performing_symbols "
-                f"{len(symbols)} 个"
+                f"[DeepSeek预测] candidate_pool 不可用, 回退评级/TOP 表 "
+                f"{len(symbols)} 个 (仍排除 L3)"
             )
             return symbols
     return []
+
 
 def _get_current_price(conn, symbol: str) -> Optional[float]:
     """实时取当前价 (U 本位 mark 优先), 用于开仓."""
@@ -345,31 +369,41 @@ def _format_kline_narrative(k_rows: List[Dict], timeframe_label: str, max_lines:
 # ============================================================
 # 数据组装
 # ============================================================
-def _build_symbol_data(conn, symbol: str) -> Optional[Dict]:
+def _symbol_data_from_cache(symbol: str) -> Optional[Dict]:
+    """仅用 candidate_pool 缓存行组装；禁止回退扫 kline_data（易 2013 拖死整轮）。"""
+    cached = _try_candidate(symbol)
+    if not cached or not cached.get("current_price"):
+        return None
+    kline_narrative = {}
+    if cached.get("narrative_1h"):
+        kline_narrative["1h"] = cached["narrative_1h"]
+    if cached.get("narrative_15m"):
+        kline_narrative["15m"] = cached["narrative_15m"]
+    if cached.get("narrative_1d"):
+        kline_narrative["1d"] = cached["narrative_1d"]
+    return {
+        "symbol": symbol,
+        "current_price": float(cached["current_price"]) if cached.get("current_price") else None,
+        "change_24h": float(cached["change_24h"]) if cached.get("change_24h") else None,
+        "quote_volume_24h": float(cached["quote_volume_24h"]) if cached.get("quote_volume_24h") else None,
+        "funding_rate": float(cached["funding_rate"]) if cached.get("funding_rate") else None,
+        "kline_narrative": kline_narrative,
+        "rsi_14_1h": float(cached["rsi_14"]) if cached.get("rsi_14") else None,
+        "above_7d_low_pct": float(cached["above_7d_low_pct"]) if cached.get("above_7d_low_pct") else None,
+        "below_7d_high_pct": float(cached["below_7d_high_pct"]) if cached.get("below_7d_high_pct") else None,
+    }
+
+
+def _build_symbol_data(conn, symbol: str, *, allow_kline_fallback: bool = False) -> Optional[Dict]:
     """获取单个 symbol 的完整数据: K 线叙事 + 技术指标 + 当前价.
 
-    优先从 data_cache.candidate_pool_snapshot 读取.
+    默认只读 candidate_pool。allow_kline_fallback=True 才扫 kline（手动调试用）。
     """
-    cached = _try_candidate(symbol)
-    if cached and cached.get("current_price"):
-        kline_narrative = {}
-        if cached.get("narrative_1h"):
-            kline_narrative["1h"] = cached["narrative_1h"]
-        if cached.get("narrative_15m"):
-            kline_narrative["15m"] = cached["narrative_15m"]
-        if cached.get("narrative_1d"):
-            kline_narrative["1d"] = cached["narrative_1d"]
-        return {
-            "symbol": symbol,
-            "current_price": float(cached["current_price"]) if cached.get("current_price") else None,
-            "change_24h": float(cached["change_24h"]) if cached.get("change_24h") else None,
-            "quote_volume_24h": float(cached["quote_volume_24h"]) if cached.get("quote_volume_24h") else None,
-            "funding_rate": float(cached["funding_rate"]) if cached.get("funding_rate") else None,
-            "kline_narrative": kline_narrative,
-            "rsi_14_1h": float(cached["rsi_14"]) if cached.get("rsi_14") else None,
-            "above_7d_low_pct": float(cached["above_7d_low_pct"]) if cached.get("above_7d_low_pct") else None,
-            "below_7d_high_pct": float(cached["below_7d_high_pct"]) if cached.get("below_7d_high_pct") else None,
-        }
+    cached_data = _symbol_data_from_cache(symbol)
+    if cached_data is not None:
+        return cached_data
+    if not allow_kline_fallback:
+        return None
 
     from app.services.data_cache_service import _make_kline_narrative
 
@@ -518,7 +552,11 @@ def _call_deepseek_predict(symbols_data: List[Dict], global_ctx: dict) -> Option
 
     logger.info(f"[DeepSeek预测] prompt 长度 = {len(prompt)} chars (~{len(prompt) // 4} tokens)")
 
-    client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+    client = OpenAI(
+        api_key=DEEPSEEK_API_KEY,
+        base_url=DEEPSEEK_BASE_URL,
+        timeout=float(DEEPSEEK_TIMEOUT_S),
+    )
 
     t0 = time.time()
     try:
@@ -783,9 +821,44 @@ def _insert_verdicts(conn, run_id: int, verdict_rows: List[Tuple]) -> None:
 
 
 # ============================================================
-# 全局并发锁
+# 全局并发软锁（带过期抢占，避免「上一轮还未结束」永久卡死）
 # ============================================================
-_predict_running_lock = threading.Lock()
+_predict_guard = threading.Lock()
+_predict_run_gen = 0
+_predict_active_gen = 0
+_predict_running_since = 0.0
+
+
+def _try_enter_predict_round(triggered_by: str) -> Optional[int]:
+    """尝试进入一轮；成功返回 generation token，失败返回 None。"""
+    global _predict_run_gen, _predict_active_gen, _predict_running_since
+    with _predict_guard:
+        now = time.time()
+        if _predict_active_gen:
+            held = now - _predict_running_since
+            if held < PREDICT_LOCK_STALE_S:
+                logger.warning(
+                    f"[DeepSeek预测] 上一轮还未结束 (held={held:.0f}s), "
+                    f"跳过 (triggered_by={triggered_by})"
+                )
+                return None
+            logger.error(
+                f"[DeepSeek预测] 上一轮超时未释放 (held={held:.0f}s > "
+                f"{PREDICT_LOCK_STALE_S}s), 强制抢占以恢复调度 "
+                f"(triggered_by={triggered_by})"
+            )
+        _predict_run_gen += 1
+        _predict_active_gen = _predict_run_gen
+        _predict_running_since = now
+        return _predict_active_gen
+
+
+def _leave_predict_round(gen: int) -> None:
+    global _predict_active_gen, _predict_running_since
+    with _predict_guard:
+        if _predict_active_gen == gen:
+            _predict_active_gen = 0
+            _predict_running_since = 0.0
 
 
 # ============================================================
@@ -793,22 +866,21 @@ _predict_running_lock = threading.Lock()
 # ============================================================
 def run_predict_round(triggered_by: str = 'scheduler') -> Optional[int]:
     """跑一轮 DeepSeek 预测. 成功返回 run_id, 失败/跳过返回 None."""
-    if not _predict_running_lock.acquire(blocking=False):
-        logger.warning(f"[DeepSeek预测] 上一轮还未结束, 跳过 (triggered_by={triggered_by})")
+    gen = _try_enter_predict_round(triggered_by)
+    if gen is None:
         return None
     try:
         return _run_predict_round_body(triggered_by)
     finally:
-        try:
-            _predict_running_lock.release()
-        except Exception:
-            pass
+        _leave_predict_round(gen)
 
 
 def _run_predict_round_body(triggered_by: str) -> Optional[int]:
     t0 = time.time()
     asof_utc = datetime.now(timezone.utc).replace(tzinfo=None)
     manual = triggered_by == 'manual'
+    claimed = False
+    conn = None
 
     try:
         with _connect() as conn_chk:
@@ -831,7 +903,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                 logger.info(f"[DeepSeek预测] {due_reason}, 跳过 (triggered_by={triggered_by})")
                 return None
             # 注意: 不在此处 claim。先把候选池/symbol 数据建完再认领，
-            # 避免 MySQL 超时等早期失败烧掉本槽并空转到下一周期。
+            # 避免早期失败烧掉本槽并空转到下一周期。
     except Exception as e:
         logger.error(f"[DeepSeek预测] 调度检查失败, 保守跳过: {e}")
         return None
@@ -848,7 +920,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         return None
 
     try:
-        # 2. 获取预测候选池
+        # 2. 全量候选池（已排除 L3/锁定）
         predict_symbols = _get_predict_symbols(conn)
         if not predict_symbols:
             logger.warning("[DeepSeek预测] 预测候选池为空, 跳过")
@@ -858,42 +930,46 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
 
         logger.info(f"[DeepSeek预测] 预测候选池获取到 {len(predict_symbols)} 个 symbol")
 
-        # 3. 构建每个 symbol 的数据（优先 candidate_pool 缓存，避免全市场 kline 扫库）
+        # 预热 candidate_pool 缓存（一次读库）
+        _get_candidate_pool_cached()
+
+        # 3. 仅用缓存建数；禁止逐币扫 kline（历史 530 全量 + 回退 → MySQL 2013）
         symbols_data = []
         failed_symbols = []
         cache_hits = 0
+        build_deadline = t0 + PREDICT_BUILD_DEADLINE_S
         for i, sym in enumerate(predict_symbols):
-            if i and i % 20 == 0:
-                try:
-                    conn.ping(reconnect=True)
-                except Exception as ping_err:
-                    logger.warning(f"[DeepSeek预测] DB ping 失败, 重连: {ping_err}")
-                    try:
-                        conn.close()
-                    except Exception:
-                        pass
-                    conn = _connect()
-            cached = _try_candidate(sym)
-            if cached and cached.get("current_price"):
+            if time.time() >= build_deadline:
+                logger.warning(
+                    f"[DeepSeek预测] 建数超时 ({PREDICT_BUILD_DEADLINE_S}s), "
+                    f"已就绪 {len(symbols_data)}/{len(predict_symbols)}, 用已有数据继续"
+                )
+                break
+            data = _symbol_data_from_cache(sym)
+            if data and data.get("current_price"):
                 cache_hits += 1
-            data = _build_symbol_data(conn, sym)
-            if data and data['current_price']:
                 symbols_data.append(data)
             else:
                 failed_symbols.append(sym)
 
         if failed_symbols:
-            logger.warning(f"[DeepSeek预测] {len(failed_symbols)} 个 symbol 数据获取失败: {failed_symbols[:5]}...")
+            logger.warning(
+                f"[DeepSeek预测] {len(failed_symbols)} 个 symbol 缓存缺失(跳过kline回退): "
+                f"{failed_symbols[:5]}..."
+            )
 
         logger.info(
             f"[DeepSeek预测] symbol 数据就绪 {len(symbols_data)}/{len(predict_symbols)} "
-            f"(cache_hits={cache_hits})"
+            f"(cache_hits={cache_hits}, 无kline回退)"
         )
 
         if not symbols_data:
-            logger.warning("[DeepSeek预测] 所有 symbol 数据获取失败, 跳过")
+            logger.warning("[DeepSeek预测] 所有 symbol 缓存缺失, 跳过本轮（不认领，5min后重试）")
             elapsed = time.time() - t0
-            _insert_run(conn, asof_utc, len(predict_symbols), '', elapsed, 'skipped', '所有symbol数据获取失败', triggered_by)
+            _insert_run(
+                conn, asof_utc, len(predict_symbols), '', elapsed, 'skipped',
+                'candidate_pool缓存缺失', triggered_by,
+            )
             return None
 
         # 数据就绪后再认领下一槽，早期失败可立即由 5min 轮询重试
@@ -906,6 +982,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                     now=asof_utc,
                     log_tag='DeepSeek预测',
                 )
+                claimed = True
             except Exception as claim_err:
                 logger.error(f"[DeepSeek预测] 认领 next_due 失败, 中止本轮避免双跑: {claim_err}")
                 return None
@@ -914,7 +991,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         global_ctx = _build_global_context(conn)
         logger.info(f"[DeepSeek预测] 全局: Big4={global_ctx.get('big4_signal')}")
 
-        # 5. 调 DeepSeek: 全交易对覆盖，但分批送模，避免单个巨型 prompt 失败
+        # 5. 调 DeepSeek: TOP50 单批（或按 BATCH_SIZE 切）
         responses: List[dict] = []
         failed_batches = 0
         for idx, batch in enumerate(_batched(symbols_data, DEEPSEEK_PREDICT_BATCH_SIZE), start=1):
@@ -931,7 +1008,10 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
 
         if not responses:
             elapsed = time.time() - t0
-            _insert_run(conn, asof_utc, len(symbols_data), '', elapsed, 'error', 'DeepSeek 全部批次调用失败', triggered_by)
+            _insert_run(
+                conn, asof_utc, len(symbols_data), '', elapsed, 'error',
+                'DeepSeek 全部批次调用失败', triggered_by,
+            )
             logger.error("[DeepSeek预测] DeepSeek 调用失败, 本轮结束")
             return None
 
@@ -1134,7 +1214,8 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         logger.info(
             f"[DeepSeek预测] === 一轮结束 run_id={run_id} 开仓={orders_opened} "
             f"预测={predictions_made} 跳过={len(verdict_rows)-orders_opened} "
-            f"symbols={len(symbols_data)} 耗时={time.time()-t0:.1f}s ==="
+            f"symbols={len(symbols_data)} claimed={claimed} "
+            f"耗时={time.time()-t0:.1f}s ==="
         )
         return run_id
 
@@ -1142,23 +1223,27 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         logger.error(f"[DeepSeek预测] 一轮异常: {e}", exc_info=True)
         try:
             elapsed = time.time() - t0
-            try:
-                conn.ping(reconnect=True)
-            except Exception:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
+            if conn is None:
                 conn = _connect()
+            else:
+                try:
+                    conn.ping(reconnect=True)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                    conn = _connect()
             _insert_run(conn, asof_utc, 0, '', elapsed, 'error', str(e)[:480], triggered_by)
         except Exception as insert_err:
             logger.error(f"[DeepSeek预测] 异常后写 error run 仍失败: {insert_err}")
         return None
     finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 if __name__ == '__main__':

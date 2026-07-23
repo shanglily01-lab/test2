@@ -136,8 +136,8 @@ def check_live_open_allowed(
 
 def is_symbol_blocked_level3(symbol: str, rating_level: Optional[int] = None) -> bool:
     """True = 应拒绝开仓（L3 或 rating_locked=1）。"""
-    _ = symbol, rating_level
-    return False
+    forbidden, _ = check_symbol_trading_forbidden(symbol, rating_level=rating_level)
+    return forbidden
 
 
 def _as_cursor(conn_or_cursor):
@@ -381,8 +381,7 @@ def load_trading_forbidden_symbols(conn=None) -> Set[str]:
 
 def load_blacklist_level3_symbols(conn=None) -> Set[str]:
     """向后兼容：返回 L3 + 手动锁定 symbol 集合。"""
-    _ = conn
-    return set()
+    return load_trading_forbidden_symbols(conn)
 
 
 def get_symbol_rating_info(
@@ -596,7 +595,14 @@ def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]
     允许: TOP50 / 已有评级且非禁止 / candidate_pool_snapshot 候选池内币种。
     """
     rating_level, in_top50, rating_locked = get_symbol_rating_info(symbol, cursor)
-    _ = rating_locked
+    forbidden, forbid_reason = check_symbol_trading_forbidden(
+        symbol,
+        cursor,
+        rating_level=rating_level,
+        rating_locked=rating_locked,
+    )
+    if forbidden:
+        return False, forbid_reason
 
     if in_top50 or rating_level is not None:
         return True, ''

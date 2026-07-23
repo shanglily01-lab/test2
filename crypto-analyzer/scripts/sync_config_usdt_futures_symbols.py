@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""将币安 U 本位永续全部 TRADING 交易对写入 config.yaml symbols（供 WS K 线采集订阅）。"""
+"""将币安 U 本位永续 TRADING 交易对写入 config.yaml symbols（供 WS K 线采集订阅）。
+
+默认排除 trading_symbol_rating 中 L3 / rating_locked（禁止交易对不再写入配置）。
+"""
 from __future__ import annotations
 
 import argparse
@@ -10,6 +13,7 @@ import requests
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config.yaml"
+sys.path.insert(0, str(ROOT))
 
 
 def fetch_usdt_perpetuals() -> list[str]:
@@ -24,6 +28,34 @@ def fetch_usdt_perpetuals() -> list[str]:
         ):
             out.append(f"{s['baseAsset']}/USDT")
     return sorted(set(out))
+
+
+def load_forbidden_symbols() -> set[str]:
+    """L3 + rating_locked；DB 不可用时返回空集（不拦同步）。"""
+    try:
+        from app.utils.config_loader import get_db_config
+        from app.utils.futures_symbol import futures_symbol_clean
+        import pymysql
+
+        conn = pymysql.connect(
+            **get_db_config(),
+            charset="utf8mb4",
+            cursorclass=pymysql.cursors.DictCursor,
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT symbol FROM trading_symbol_rating "
+                    "WHERE rating_level >= 3 OR COALESCE(rating_locked, 0) = 1"
+                )
+                return {
+                    futures_symbol_clean(r["symbol"]) for r in cur.fetchall()
+                }
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"WARN: 读取禁止名单失败, 不同步过滤: {e}")
+        return set()
 
 
 def count_config_symbols() -> int:
@@ -44,16 +76,40 @@ def replace_symbols_in_config(symbols: list[str]) -> None:
 
     new_lines = lines[: start + 1]
     new_lines.extend(f"- {sym}" for sym in symbols)
+    # 保留 symbols 段之后的内容（若有）
+    end = start + 1
+    while end < len(lines) and lines[end].startswith("- "):
+        end += 1
+    new_lines.extend(lines[end:])
     CONFIG_PATH.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="只打印数量，不写文件")
+    parser.add_argument(
+        "--include-forbidden",
+        action="store_true",
+        help="包含 L3/锁定（默认排除）",
+    )
     args = parser.parse_args()
 
     symbols = fetch_usdt_perpetuals()
     print(f"币安 U 本位永续 TRADING: {len(symbols)} 个")
+
+    if not args.include_forbidden:
+        from app.utils.futures_symbol import futures_symbol_clean
+
+        forbidden = load_forbidden_symbols()
+        before = len(symbols)
+        symbols = [
+            s for s in symbols if futures_symbol_clean(s) not in forbidden
+        ]
+        print(
+            f"排除 L3/锁定: {before - len(symbols)} 个 "
+            f"(forbidden_db={len(forbidden)}), 剩余 {len(symbols)}"
+        )
+
     for check in ("TREE/USDT", "VANA/USDT", "BTC/USDT"):
         print(f"  {check}: {'YES' if check in symbols else 'NO'}")
 

@@ -132,7 +132,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 4.1 职责
 
-每 `max_hold_hours`（**距上次 status=ok**）对技术面 **TOP50** 给出方向概率（bullish/bearish），达标则开模拟单；**不走探索的事件叙事**，但共用 catalyst 技术门槛。DeepSeek/Gemini 均读 `candidate_pool_snapshot` 技术面截断，**禁止** `price_stats_24h` 全市场扫库。
+每 `max_hold_hours`（**距上次 status=ok**）给出方向概率（bullish/bearish），达标则开模拟单；**不走探索的事件叙事**，但共用 catalyst 技术门槛。Gemini 读技术面 TOP50；**DeepSeek 预测全量** candidate_pool（白名单 L0 / 黑名单 L1·L2 / 未评级，**排除 L3/锁定**），禁止 `price_stats`+kline 扫库；建数只读缓存；软锁过期可抢占。
 
 ### 4.2 代码入口
 
@@ -379,7 +379,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | `live_close_enabled` | **平仓**同步总开关（模拟平仓、持仓顾问 sell、引擎关仓） |
 | `live_top50_required` | 开仓：在 `top_performing_symbols`（每 4 小时刷新 TOP50）可开实仓 |
 | `live_whitelist_enabled` | 开仓：`rating_level=0` 可开实仓 |
-| `blacklist_level3_enabled` | L3 禁止开仓（多在开模拟前检查） |
+| `blacklist_level3_enabled` | **已废弃**（L3/锁定恒禁模拟+实盘；保留仅为兼容） |
 
 **开仓按 source 白名单**（`LIVE_SYNC_SOURCES`）：主探索/预测四路 + **四路中线**。GPT/战术/反转等只写模拟仓。
 
