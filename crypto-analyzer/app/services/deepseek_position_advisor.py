@@ -45,7 +45,7 @@ def _env(name: str, default: str = "") -> str:
 
 
 DEEPSEEK_API_KEY = _env("DEEPSEEK_API_KEY") or _env("DeepSeek_API_KEY")
-DEEPSEEK_MODEL = _env("DEEPSEEK_MODEL", "deepseek-chat")
+DEEPSEEK_MODEL = _env("DEEPSEEK_MODEL", "deepseek-v4-flash")
 DEEPSEEK_BASE_URL = _env("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_TIMEOUT_S = int(_env("DEEPSEEK_TIMEOUT_S", "180"))
 DEEPSEEK_PER_CALL_DELAY_S = 1.0
