@@ -179,16 +179,16 @@
 
 ### 6.4 模拟盘开仓闸门 check_simulated_symbol_allowed
 
-- **拒绝**：L3（`rating_level>=3`）、**手动锁定**（`rating_locked=1`）  
+- **拒绝**：L2+（`rating_level>=2`）、**手动锁定**（`rating_locked=1`）  
 - **允许**：TOP50 / 有评级且非禁止 / candidate_pool 内  
-- L3 与手动锁定：**模拟盘与实盘均禁止开仓**（`check_symbol_trading_forbidden`）  
+- L2+ 与手动锁定：**模拟盘与实盘均禁止开仓**（`check_symbol_trading_forbidden`）  
 - `blacklist_level3_enabled` 设置项**已废弃**（行为恒为启用，保留仅为兼容旧 UI）
 
 ### 6.5 实盘保证金
 
 - **主探索/预测**：`user_api_keys.max_position_value` × `get_live_margin_ratio(symbol)`  
 - **中线 v2**：本期**不实盘**；若日后加入 `LIVE_SYNC_SOURCES`，保证金同主探索（API `max_position_value` × 评级比例），杠杆/SL/TP 与模拟一致（SL **6%** / TP **3%**），且须过 L0 白名单闸门  
-- L0=1.0x，L2=0.125x，L1/L3 禁止实盘  
+- L0=1.0x；L1/L2/L3 禁止实盘（L2+ 同时禁止模拟）  
 
 ---
 
@@ -337,7 +337,7 @@
 
 - 探索读 `load_candidate_pool_for_explore()`（**禁止** pool 全表 DELETE）  
 - 主预测（Gemini）：`candidate_pool_snapshot` 技术面 **TOP50**；**禁止**对 `price_stats_24h` 全市场逐 symbol 回退扫 `kline_data`  
-- DeepSeek 预测：**全量** candidate_pool（覆盖白名单 L0 / 黑名单 L1·L2 / 未评级），**排除 L3 与 rating_locked**；建数**仅读**缓存（禁 kline 回退）；建数成功后再 claim；软锁 **25min** 过期可抢占；DB `read_timeout=45`；LLM 按批 50  
+- DeepSeek 预测：**全量** candidate_pool（覆盖白名单 L0 / 黑名单 L1 / 未评级），**排除 L2+ 与 rating_locked**；建数**仅读**缓存（禁 kline 回退）；建数成功后再 claim；软锁 **25min** 过期可抢占；DB `read_timeout=45`；LLM 按批 50  
 - 主探索/预测开仓：`explore_catalyst_technical_ok` 在文案门槛后，用真实 15m K 线做 OHLC 方向闸门（缺 K 线则拒）  
 - K 线叙事：1h = 24 根趋势 + 近 6 明细；15m = 16 根（4h）  
 
@@ -418,7 +418,7 @@ IP 封禁：`binance_rate_guard` + `logs/binance_ban_state.json`；封禁时 RES
 |------|----------|------|------|
 | L0 白名单 | 盈利≥300U 且 胜率≥40%，**或** 盈利≥100U 且 胜率≥45% | 可 | 可（须 L0） |
 | L1 | 盈利>50U 或 胜率>46%（非 L0） | 可 | 禁止 |
-| L2 | -100<盈利<0 或 胜率>44% | 可 | 禁止 |
+| L2 | -100<盈利<0 或 胜率>44% | **禁止** | 禁止 |
 | L3 | 盈利<-100U 且 胜率<44% | **禁止** | 禁止 |
 
 TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓必要条件（实盘看 L0）。
@@ -459,6 +459,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-27 | — | **L2 黑名单不再交易**：`check_symbol_trading_forbidden` 阈值 `rating_level>=2`（模拟+实盘均禁）；候选池/config 同步同步排除 |
 | 2026-07-27 | — | DeepSeek 主探索/预测 **LONG 加严**：conf≥0.82、RSI≤68、距7d高≥3%、24h≤12%、OHLC 顺向优势+2；SHORT 不变；开仓顾问 DeepSeek LONG 同口径预检 |
 | 2026-07-27 | — | 中线 v2.1 放宽入场硬规则（30d ±3%、量比 0.4、回踩/反抽区 40%、1h MA 容差）；修复「全市场 signals_found=0」无法开仓 |
 | 2026-07-24 | v4.1 | **中线策略 v2 落地（模拟）**：`midline_long/short`；停旧四路调度；独立 4h；config.yaml 池；±1%/SL6%/TP3%/8h；持仓顾问+ai-trail-tp；暂不 LIVE_SYNC；Gemini 探索页→中线机会分析；migration 026 |

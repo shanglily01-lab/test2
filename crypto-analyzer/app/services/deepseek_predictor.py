@@ -198,7 +198,7 @@ def _load_predict_banned_symbols(conn) -> set:
 
 
 def _get_predict_symbols(conn) -> List[str]:
-    """全量 candidate_pool：覆盖 L0/L1/L2/未评级；排除 L3 与 rating_locked。
+    """全量 candidate_pool：覆盖 L0/L1/未评级；排除 L2+/rating_locked。
 
     只读缓存表，禁止 price_stats 全市场 + 逐币 kline 回退（易 MySQL 2013）。
     """
@@ -216,7 +216,7 @@ def _get_predict_symbols(conn) -> List[str]:
         symbols = _filter_predict_symbols(raw_symbols, PREDICT_CANDIDATE_LIMIT)
         if symbols:
             logger.info(
-                f"[DeepSeek预测] 全量候选池(排除L3/锁定) 获取 {len(symbols)} 个 symbol "
+                f"[DeepSeek预测] 全量候选池(排除L2+/锁定) 获取 {len(symbols)} 个 symbol "
                 f"(banned={len(banned)})"
             )
             return symbols
@@ -225,10 +225,10 @@ def _get_predict_symbols(conn) -> List[str]:
 
     _l3 = sql_exclude_level3_filter("symbol")
     with conn.cursor() as cur:
-        # 缓存不可用时回退评级表 L0/L1/L2（仍排除 L3/锁定），不做 TOP50
+        # 缓存不可用时回退评级表 L0/L1（仍排除 L2+/锁定），不做 TOP50
         cur.execute(
             f"SELECT symbol FROM trading_symbol_rating "
-            f"WHERE rating_level IN (0, 1, 2) "
+            f"WHERE rating_level IN (0, 1) "
             f"AND COALESCE(rating_locked, 0) = 0 "
             f"ORDER BY rating_level ASC, symbol ASC "
             f"LIMIT %s",
@@ -714,8 +714,8 @@ def _open_simulated_position(
     symbol = futures_symbol_rating_canonical(symbol)
     from app.services.trading_gates import is_symbol_blocked_level3
     if is_symbol_blocked_level3(symbol):
-        logger.warning(f"[DeepSeek预测] {symbol} 黑名单3级, 禁止开仓模拟单")
-        return None, "黑名单3级，禁止开仓"
+        logger.warning(f"[DeepSeek预测] {symbol} 评级禁止开仓(L2+/锁定)")
+        return None, "评级禁止开仓(L2+/锁定)"
 
     from app.services.paper_open_gate import gate_simulated_open
     allowed, gate_reason = gate_simulated_open(
@@ -1157,7 +1157,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                     run_id, symbol, category, confidence,
                     catalyst, data_signal, risk_note,
                     price_at_pred, 'skipped_blacklist', None,
-                    "黑名单3级, 永久禁止交易",
+                    "评级禁止开仓(L2+/锁定)",
                 ))
                 predictions_made += 1
                 continue

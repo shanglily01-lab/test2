@@ -44,6 +44,26 @@ def test_gate_logic() -> None:
             _fail(f"L3 simulated open must be denied, got {reason!r}")
 
     with patch.object(
+        tg, "get_symbol_rating_info", return_value=(2, False, False)
+    ):
+        if not tg.is_symbol_blocked_level3("L2COIN/USDT"):
+            _fail("L2 should be blocked")
+        ok, reason = tg.check_simulated_symbol_allowed("L2COIN/USDT")
+        if ok:
+            _fail(f"L2 simulated open must be denied, got {reason!r}")
+        if "2" not in reason:
+            _fail(f"L2 deny reason should mention level 2, got {reason!r}")
+
+    with patch.object(
+        tg, "get_symbol_rating_info", return_value=(1, False, False)
+    ):
+        if tg.is_symbol_blocked_level3("L1COIN/USDT"):
+            _fail("L1 should still be allowed for paper (not in forbidden set)")
+        ok, _ = tg.check_simulated_symbol_allowed("L1COIN/USDT")
+        if not ok:
+            _fail("L1 simulated open must still be allowed")
+
+    with patch.object(
         tg, "get_symbol_rating_info", return_value=(1, False, True)
     ):
         if not tg.is_symbol_blocked_level3("BAR/USDT"):
@@ -60,6 +80,9 @@ def test_gate_logic() -> None:
         ok, _ = tg.check_simulated_symbol_allowed("BTC/USDT")
         if not ok:
             _fail("L0 simulated open must be allowed")
+
+    if getattr(tg, "TRADING_FORBIDDEN_MIN_RATING_LEVEL", None) != 2:
+        _fail("TRADING_FORBIDDEN_MIN_RATING_LEVEL must be 2")
 
     print("OK gate_logic")
 

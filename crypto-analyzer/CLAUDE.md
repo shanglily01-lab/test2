@@ -199,8 +199,8 @@
 | 等级 | 条件 | 保证金倍数 |
 |------|------|----------|
 | L0 (白名单) | 盈利 >= 300U **且** 胜率 >= 40%，或盈利 >= 100U **且** 胜率 >= 45% | 1.0x |
-| L1 (黑名单1级) | 盈利 > 50U **或** 胜率 > 46% | 0 (禁止实盘) |
-| L2 (黑名单2级) | -100 < 盈利 < 0 **或** 胜率 > 44% | 0.125x |
+| L1 (黑名单1级) | 盈利 > 50U **或** 胜率 > 46% | 0 (禁止实盘；模拟可) |
+| L2 (黑名单2级) | -100 < 盈利 < 0 **或** 胜率 > 44% | 0 (模拟+实盘均禁止) |
 | L3 (黑名单3级) | 盈利 < -100U **且** 胜率 < 44% | 0 (模拟+实盘均禁止) |
 
 优先级判断逻辑: L3(双条件最严重)→L0(双条件最优)→L1→L2→默认0。
@@ -220,7 +220,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 - **平仓总开关**: `system_settings.live_close_enabled` (1=开启；模拟平仓时同步交易所；持仓顾问 sell 亦受此规则)
 - **北京时间实盘开仓时段**: 仅 10:00-16:00、22:00-次日04:00 允许同步/直接开实盘；服务器 UTC 对应 02:00-08:00、14:00-20:00。模拟开仓不受该时段限制。
 - **废弃设置**（不再参与开仓判断）：`live_top50_required`、`live_whitelist_enabled` — 开仓仅认 **L0 白名单**
-- **黑名单限制**: L1/L2/L3 禁止实盘；**L3 与 `rating_locked` 手动锁定禁止模拟+实盘**（`check_symbol_trading_forbidden`）
+- **黑名单限制**: L1 禁止实盘；**L2/L3 与 `rating_locked` 手动锁定禁止模拟+实盘**（`check_symbol_trading_forbidden`，阈值 `rating_level>=2`）
 - 各闸门由 `trading_gates.check_live_open_allowed` / `should_sync_live_for_source` 统一读取，**不在 config.yaml**
 - 每账号 OPEN 上限 20 仓
 - 允许实盘的策略通过 `_sync_live()` / `_sync_to_live()` 同步到 BinanceFuturesEngine

@@ -95,7 +95,7 @@
         <div class="absolute right-[-10px] bottom-[-10px] opacity-10"><span class="material-symbols-outlined text-6xl text-status-orange">report_problem</span></div>
         <p class="text-gray-500 text-sm font-medium mb-1">黑名单2级</p>
         <h4 id="stat-2" class="text-3xl font-mono font-bold text-status-orange">--</h4>
-        <p class="text-[10px] text-gray-600 mt-2 flex items-center gap-1 uppercase tracking-wider"><span class="w-1.5 h-1.5 rounded-full bg-status-orange"></span>严格限制</p>
+        <p class="text-[10px] text-gray-600 mt-2 flex items-center gap-1 uppercase tracking-wider"><span class="w-1.5 h-1.5 rounded-full bg-status-orange"></span>禁止开仓</p>
       </div>
       <div class="bg-brand-surface p-6 rounded-xl border border-gray-800 relative overflow-hidden">
         <div class="absolute right-[-10px] bottom-[-10px] opacity-10"><span class="material-symbols-outlined text-6xl text-status-danger">cancel</span></div>
@@ -193,7 +193,7 @@ var editingSymbol = null;
 
 var LEVEL_ICONS  = ['check_circle','warning','report_problem','cancel'];
 var LEVEL_LABELS = ['白名单','黑名单1级','黑名单2级','永久禁止'];
-var LEVEL_DESCS  = ['正常可交易','保证金限制','严格限制','禁止开仓'];
+var LEVEL_DESCS  = ['正常可交易','保证金限制','禁止开仓','禁止开仓'];
 var LEVEL_COLORS = [
   { text:'text-status-success', border:'border-[#49f4c8]/20', bg:'bg-[#49f4c8]/5', hover:'hover:border-[#49f4c8]/50' },
   { text:'text-status-warning', border:'border-yellow-500/20', bg:'bg-yellow-500/5', hover:'hover:border-yellow-500/50' },

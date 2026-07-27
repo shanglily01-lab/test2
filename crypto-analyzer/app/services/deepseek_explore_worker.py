@@ -1106,8 +1106,8 @@ def _open_simulated_position(
     symbol = futures_symbol_rating_canonical(symbol)
     from app.services.trading_gates import is_symbol_blocked_level3
     if is_symbol_blocked_level3(symbol):
-        logger.warning(f"[DeepSeek探索] {symbol} 黑名单3级, 禁止开仓")
-        return None, "黑名单3级，禁止开仓"
+        logger.warning(f"[DeepSeek探索] {symbol} 评级禁止开仓(L2+/锁定)")
+        return None, "评级禁止开仓(L2+/锁定)"
 
     from app.services.paper_open_gate import gate_simulated_open
     allowed, gate_reason = gate_simulated_open(
@@ -1547,7 +1547,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                     run_id, symbol, db_category, confidence,
                     catalyst, data_signal, risk_note,
                     'skipped_blacklist', None,
-                    "黑名单3级, 永久禁止交易",
+                    "评级禁止开仓(L2+/锁定)",
                 ))
                 continue
 

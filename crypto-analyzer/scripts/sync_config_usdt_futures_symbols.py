@@ -31,7 +31,7 @@ def fetch_usdt_perpetuals() -> list[str]:
 
 
 def load_forbidden_symbols() -> set[str]:
-    """L3 + rating_locked；DB 不可用时返回空集（不拦同步）。"""
+    """L2+ + rating_locked；DB 不可用时返回空集（不拦同步）。"""
     try:
         from app.utils.config_loader import get_db_config
         from app.utils.futures_symbol import futures_symbol_clean
@@ -46,7 +46,7 @@ def load_forbidden_symbols() -> set[str]:
             with conn.cursor() as cur:
                 cur.execute(
                     "SELECT symbol FROM trading_symbol_rating "
-                    "WHERE rating_level >= 3 OR COALESCE(rating_locked, 0) = 1"
+                    "WHERE rating_level >= 2 OR COALESCE(rating_locked, 0) = 1"
                 )
                 return {
                     futures_symbol_clean(r["symbol"]) for r in cur.fetchall()

@@ -72,8 +72,12 @@ def _bool_setting(key: str, default: bool = True, cursor=None) -> bool:
 
 
 def is_blacklist_level3_enforced() -> bool:
-    """向后兼容：L3/手动锁定已恒禁模拟+实盘；此开关不再改变闸门行为。"""
+    """向后兼容：L2+/手动锁定已恒禁模拟+实盘；此开关不再改变闸门行为。"""
     return True
+
+
+# 评级达到此等级及以上 → 模拟+实盘均禁止开仓（含 L2）
+TRADING_FORBIDDEN_MIN_RATING_LEVEL = 2
 
 
 def is_live_top50_required() -> bool:
@@ -132,7 +136,7 @@ def check_live_open_allowed(
 
 
 def is_symbol_blocked_level3(symbol: str, rating_level: Optional[int] = None) -> bool:
-    """True = 应拒绝开仓（L3 或 rating_locked=1）。"""
+    """True = 应拒绝开仓（L2+ 或 rating_locked=1）。函数名保留兼容。"""
     forbidden, _ = check_symbol_trading_forbidden(symbol, rating_level=rating_level)
     return forbidden
 
@@ -347,7 +351,7 @@ def _symbol_in_candidate_pool(symbol: str) -> bool:
 
 
 def load_trading_forbidden_symbols(conn=None) -> Set[str]:
-    """返回禁止开仓 symbol 集合：L3 + rating_locked=1。"""
+    """返回禁止开仓 symbol 集合：L2+ + rating_locked=1。"""
     own_conn = conn is None
     try:
         if own_conn:
@@ -356,7 +360,8 @@ def load_trading_forbidden_symbols(conn=None) -> Set[str]:
         cur = conn.cursor()
         cur.execute(
             "SELECT symbol FROM trading_symbol_rating "
-            "WHERE rating_level >= 3 OR COALESCE(rating_locked, 0) = 1"
+            f"WHERE rating_level >= {int(TRADING_FORBIDDEN_MIN_RATING_LEVEL)} "
+            "OR COALESCE(rating_locked, 0) = 1"
         )
         rows = cur.fetchall()
         if own_conn:
@@ -377,7 +382,7 @@ def load_trading_forbidden_symbols(conn=None) -> Set[str]:
 
 
 def load_blacklist_level3_symbols(conn=None) -> Set[str]:
-    """向后兼容：返回 L3 + 手动锁定 symbol 集合。"""
+    """向后兼容：返回禁止开仓 symbol 集合（现为 L2+ + 手动锁定）。"""
     return load_trading_forbidden_symbols(conn)
 
 
@@ -453,7 +458,7 @@ def check_symbol_trading_forbidden(
     rating_locked: Optional[bool] = None,
 ) -> Tuple[bool, str]:
     """
-    L3 或 rating_locked=1 → 禁止模拟盘与实盘开仓（不依赖 blacklist_level3_enabled）。
+    L2+ 或 rating_locked=1 → 禁止模拟盘与实盘开仓（不依赖 blacklist_level3_enabled）。
 
     Returns: (forbidden, reason)
     """
@@ -465,7 +470,7 @@ def check_symbol_trading_forbidden(
             rating_locked = locked
     if rating_locked:
         return True, "交易对已手动锁定，禁止开仓"
-    if rating_level is not None and int(rating_level) >= 3:
+    if rating_level is not None and int(rating_level) >= TRADING_FORBIDDEN_MIN_RATING_LEVEL:
         return True, f"黑名单{int(rating_level)}级禁止交易"
     return False, ""
 
@@ -588,7 +593,7 @@ def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]
     """
     模拟盘开仓基础币种闸门。
 
-    拒绝: L3 / rating_locked=1。
+    拒绝: L2+ / rating_locked=1。
     允许: TOP50 / 已有评级且非禁止 / candidate_pool_snapshot 候选池内币种。
     """
     rating_level, in_top50, rating_locked = get_symbol_rating_info(symbol, cursor)
@@ -832,15 +837,16 @@ def has_open_futures_position_same_side(
 
 
 def sql_exclude_forbidden_symbols_filter(column: str = "symbol") -> str:
-    """动态 SQL：排除 L3 与手动锁定 symbol 的 AND 子句。"""
+    """动态 SQL：排除 L2+ 与手动锁定 symbol 的 AND 子句。"""
     clean_col = sql_rating_symbol_clean(column)
+    min_lv = int(TRADING_FORBIDDEN_MIN_RATING_LEVEL)
     return (
         f" AND {clean_col} NOT IN ("
         f"SELECT {sql_rating_symbol_clean('symbol')} FROM trading_symbol_rating "
-        f"WHERE rating_level >= 3 OR COALESCE(rating_locked, 0) = 1)"
+        f"WHERE rating_level >= {min_lv} OR COALESCE(rating_locked, 0) = 1)"
     )
 
 
 def sql_exclude_level3_filter(column: str = "symbol") -> str:
-    """向后兼容：排除 L3 + 手动锁定。"""
+    """向后兼容：排除禁止开仓名单（现为 L2+ + 手动锁定）。"""
     return sql_exclude_forbidden_symbols_filter(column)

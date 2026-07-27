@@ -680,8 +680,8 @@ def _open_simulated_position(
     # 黑名单3级防御性检查
     from app.services.trading_gates import is_symbol_blocked_level3
     if is_symbol_blocked_level3(symbol):
-        logger.warning(f"[Gemini预测] {symbol} 黑名单3级, 禁止开仓模拟单")
-        return None, "黑名单3级，禁止开仓"
+        logger.warning(f"[Gemini预测] {symbol} 评级禁止开仓(L2+/锁定)")
+        return None, "评级禁止开仓(L2+/锁定)"
 
     from app.services.paper_open_gate import gate_simulated_open
     allowed, gate_reason = gate_simulated_open(
@@ -1009,7 +1009,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                     run_id, symbol, category, confidence,
                     catalyst, data_signal, risk_note,
                     price_at_pred, 'skipped_blacklist', None,
-                    "黑名单3级, 永久禁止交易",
+                    "评级禁止开仓(L2+/锁定)",
                 ))
                 predictions_made += 1
                 continue
