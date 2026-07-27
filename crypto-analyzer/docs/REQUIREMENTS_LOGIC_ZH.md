@@ -157,10 +157,10 @@
 
 仅以下 source 可参与实盘开仓同步：
 
-- `gemini_explore`
-- `gemini_predict`
 - `deepseek_explore`
 - `deepseek_predict`
+
+**已下线（不再实盘、不再调度）**：`gemini_explore` / `gemini_predict`（系统配置开关已移除，DB 强制关闭）。
 
 **中线 v2**（`midline_long` / `midline_short`）：**暂不**加入白名单 → **仅模拟**（确认后再开实盘）。  
 落地时须从白名单**移除**旧四路 `gemini_midline_*` / `deepseek_midline_*`（若仍残留）。
@@ -462,6 +462,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-28 | — | **下线 Gemini 交易开关**：系统设置移除 Gemini 探索/预测；强制关闭 explore/predict/sentiment/顾问；scheduler 停调度；LIVE_SYNC 仅 DeepSeek；开仓/持仓顾问统一 DeepSeek |
 | 2026-07-28 | — | DeepSeek 探索/预测改扫 **仅 L0+L1**（拒全市场/未评级）省 token；DeepSeek soft-sl 加宽（grace45 / no_follow≥60m且亏≈2.2%）匹配开仓 thesis |
 | 2026-07-27 | — | 中线 v2 **退出持仓顾问**：仅硬 SL/TP + ai-trail-tp + 8h；避免顾问 15m 噪音闷杀波段仓 |
 | 2026-07-27 | — | **L2 黑名单不再交易**：`check_symbol_trading_forbidden` 阈值 `rating_level>=2`（模拟+实盘均禁）；候选池/config 同步同步排除 |

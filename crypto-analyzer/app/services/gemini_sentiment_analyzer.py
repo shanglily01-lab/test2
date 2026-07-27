@@ -504,7 +504,7 @@ def run_sentiment_round(triggered_by: str = "scheduler"):
         # 1. Kill switch 检查
         conn = _connect()
         with conn.cursor() as cur:
-            enabled = _read_setting(cur, "gemini_sentiment_enabled", "1")
+            enabled = _read_setting(cur, "gemini_sentiment_enabled", "0")
         if enabled != "1":
             logger.info("[情绪分析] 已禁用 (kill switch), 跳过本轮")
             return

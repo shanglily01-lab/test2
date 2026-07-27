@@ -68,15 +68,12 @@
 | data_cache.candidate_pool_snapshot | 每 **6 分钟** (行情+K线叙事) |
 | data_cache.explore_prepared_snapshot | 每 **15 分钟** (共用 universe，策略只读) |
 | data_cache.settings_cache | 每 1 分钟 |
-| Gemini 探索 | 每 **2h** + **10min 轮询**；worker 距上次 ok ≥ **max_hold_hours** |
-| Gemini 预测 | 每 **2h** + **5min 轮询**；距上次 ok ≥ **max_hold_hours** + `gemini_predict_next_due_utc` |
-| DeepSeek 探索 | 同 Gemini 探索节奏 + `deepseek_explore_next_due_utc` |
-| DeepSeek 预测 | 同 Gemini 预测节奏 + `deepseek_predict_next_due_utc` |
+| DeepSeek 探索 | 每 **2h** + **10min 轮询**；worker 距上次 ok ≥ **max_hold_hours** |
+| DeepSeek 预测 | 同 DeepSeek 探索节奏 + `deepseek_predict_next_due_utc` |
 | GPT 探索/预测 | 同节奏 + `gpt_*_next_due_utc` |
 | **中线 v2** `midline_long/short` | 每 **4h**（独立调度；需求见 REQUIREMENTS §7.2，待落地） |
-| 战术探索 15 槽位 | 每 **15min** 轮询 (`tactical_explore_scheduler`) |
-| **持仓顾问** Gemini+DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent） |
-| 市场情绪分析 | 每 **8 小时** |
+| **持仓顾问** DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent；含历史 gemini_*） |
+| 市场情绪分析 | **已下线**（原 Gemini 情绪） |
 | ETF 同步 | 每天 06:45 |
 | 金库同步 | 每天 07:30 |
 
@@ -105,7 +102,7 @@
 
 **预测 4h 保证**: 每 5min 轮询 + `gemini_predict_next_due_utc` / `deepseek_predict_next_due_utc` 认领窗口；启动后 +45s/+50s 补跑检查。勿用 `scheduler_init` 跑预测。进程锁在跳过时会释放。
 
-**启动 init 错峰** (`scheduler_init`): Gemini探索 +15s, 情绪 +25s, DeepSeek探索 +90s, GPT探索 +120s；预测补跑 +45s/+50s/+55s。
+**启动 init 错峰** (`scheduler_init`): DeepSeek探索 +90s；预测补跑 +50s；DeepSeek Big4 +95s。
 
 **生产 LLM prompt 语言 (2026-06-05)**: 主探索/预测/战术/反转/开仓顾问/持仓顾问 **中文**（`build_*_prompt()` → `*_zh`）；顾问 `reason` 中文；GPT 用 `GPT_JSON_SYSTEM_ZH`。完整说明见 `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md`。
 
@@ -148,12 +145,14 @@
 - 每 **max_hold_hours**（距上次 ok）+ 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
 - SL **3%** / TP **5%** / **max_hold_hours** / 5x / 500U；conf≥**0.75** + `explore_catalyst_technical_ok`（含 15m OHLC）；**DeepSeek LONG** 另≥**0.82** + RSI/7d/24h/`deepseek_long_entry_quality_ok`
 - **DeepSeek 选币**：仅 **L0+L1**（不扫未评级/全市场）
-- **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：`gemini_explore`、`deepseek_explore`（+ L0 白名单等 symbol 闸门）
+- **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：仅 `deepseek_explore`（+ L0 白名单等 symbol 闸门）
+- **Gemini 探索已下线**（系统配置无开关；不调度）
 
 ### 主预测 (`*_predict`)
-- 每 **max_hold_hours**（距上次 ok）+ 5min 轮询 + `*_predict_next_due_utc`；kill switch（Gemini 预测默认 1）
-- 同主探索持仓/SL/TP/门槛；**DeepSeek 仅扫 L0+L1**；**实盘**：`gemini_predict`、`deepseek_predict`（+ L0 白名单等 symbol 闸门）
+- 每 **max_hold_hours**（距上次 ok）+ 5min 轮询 + `*_predict_next_due_utc`；kill switch
+- 同主探索持仓/SL/TP/门槛；**DeepSeek 仅扫 L0+L1**；**实盘**：仅 `deepseek_predict`（+ L0）
 - **DeepSeek soft-sl**（`position_sl_tp_monitor`）：grace 45min；no_follow≥60min 且亏≈2.2%（匹配开仓 thesis）
+- **Gemini 预测已下线**
 
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 待落地】
 - **量化扫描**，非 LLM；标的 `config.yaml`；独立 **4h** 调度；旧四路 `*_midline_*` 停并移除
@@ -163,13 +162,13 @@
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.2
 
 ### 开仓 / 持仓顾问
-- 路由：`gemini_explore/predict` → Gemini；其余（**排除中线 v2**）→ DeepSeek；中线开仓/持仓顾问均 skip
+- 路由：统一 **DeepSeek**（Gemini 顾问已下线；历史 `gemini_*` 仓亦由 DeepSeek 监管）；中线开仓/持仓顾问均 skip
 - 持仓 tick：**15min**；每仓 15min；浮盈转亏 urgent 立即再审
 - 盈利 sell：ROI **≥+8%** 且 15m 明确转弱（反向≥4）；过早 sell 程序化拦截恢复严格
-- Prompt/rubric/**reason 中文**；开关 `*_position_advisor_enabled`
+- Prompt/rubric/**reason 中文**；开关 `deepseek_*_advisor_enabled`（系统设置「开仓/持仓顾问」）
 
 ### gemini_sentiment_analyzer (情绪)
-- 每 **8h**；`gemini_sentiment_enabled`（默认 1）；不下单
+- **已下线**（不调度；`gemini_sentiment_enabled` 强制 0）
 
 ## 校验脚本 (无 API)
 
@@ -215,7 +214,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 
 ## 实盘控制
 
-- **按 source 白名单**（`trading_gates.LIVE_SYNC_SOURCES`）：主探索/预测四路；GPT/战术/反转/smart_trader/**中线 v2** 只模拟
+- **按 source 白名单**（`trading_gates.LIVE_SYNC_SOURCES`）：仅 DeepSeek 探索/预测；GPT/战术/反转/smart_trader/**中线 v2**/已下线 Gemini 只模拟
 - **实盘开仓 symbol**：须 **L0 白名单**（`rating_level=0`）；L1/L2/L3 禁止实盘
 - **限价偏移**：中线 v2 **±1%** 固定；其他模拟限价读 `paper_limit_long/short_offset_pct`（系统设定）
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)

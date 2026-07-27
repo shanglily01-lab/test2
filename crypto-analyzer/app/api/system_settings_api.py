@@ -31,21 +31,39 @@ def _upsert_bool_setting(cursor, key: str, enabled: bool, description: str) -> N
 
 
 def _set_open_advisor_pair(cursor, enabled: bool) -> None:
-    desc_gemini = 'Gemini 模拟开仓顾问 (1=开仓前审核, reject 不开仓)'
+    """统一开仓顾问：仅 DeepSeek；Gemini 开仓顾问已下线。"""
     desc_deepseek = 'DeepSeek 模拟开仓顾问: 1=开仓前审核, 不通过则不开仓'
-    _upsert_bool_setting(cursor, 'gemini_open_advisor_enabled', enabled, desc_gemini)
     _upsert_bool_setting(cursor, 'deepseek_open_advisor_enabled', enabled, desc_deepseek)
+    _upsert_bool_setting(
+        cursor, 'gemini_open_advisor_enabled', False,
+        '已下线: Gemini 开仓顾问 (强制关闭)',
+    )
 
 
 def _set_position_advisor_pair(cursor, enabled: bool) -> None:
-    desc_gemini = (
-        'Gemini 模拟持仓顾问 (1=启用). Gemini主单 ≥15min 每15min hold/observe/sell'
-    )
+    """统一持仓顾问：仅 DeepSeek；Gemini 持仓顾问已下线。"""
     desc_deepseek = (
-        'DeepSeek 模拟持仓顾问: 非Gemini主单(含gpt_*) ≥15min 每15min hold/observe/sell'
+        'DeepSeek 模拟持仓顾问: 模拟仓 ≥15min 每15min hold/observe/sell'
     )
-    _upsert_bool_setting(cursor, 'gemini_position_advisor_enabled', enabled, desc_gemini)
     _upsert_bool_setting(cursor, 'deepseek_position_advisor_enabled', enabled, desc_deepseek)
+    _upsert_bool_setting(
+        cursor, 'gemini_position_advisor_enabled', False,
+        '已下线: Gemini 持仓顾问 (强制关闭)',
+    )
+
+
+def _force_retire_gemini_trading_switches(cursor) -> None:
+    """系统配置不再暴露 Gemini 探索/预测/情绪；DB 强制关闭防烧 token。"""
+    for key, desc in (
+        ('gemini_explore_enabled', '已下线: Gemini 探索 (强制关闭)'),
+        ('gemini_predict_enabled', '已下线: Gemini 预测 (强制关闭)'),
+        ('gemini_sentiment_enabled', '已下线: Gemini 情绪分析 (强制关闭)'),
+        ('gemini_big4_analysis_enabled', '已下线: Gemini Big4 (强制关闭)'),
+        ('gemini_swan_enabled', '已下线: Gemini 红黑天鹅 (强制关闭)'),
+        ('gemini_open_advisor_enabled', '已下线: Gemini 开仓顾问 (强制关闭)'),
+        ('gemini_position_advisor_enabled', '已下线: Gemini 持仓顾问 (强制关闭)'),
+    ):
+        _upsert_bool_setting(cursor, key, False, desc)
 
 
 class SystemSetting(BaseModel):
@@ -75,14 +93,15 @@ class TradingServicesUpdate(BaseModel):
     spot_trading_enabled: Optional[bool] = None      # 2026-05-23 现货交易开关
     spot_close_enabled: Optional[bool] = None         # 2026-05-23 现货自动卖出开关
     u_coin_style_enabled: Optional[bool] = None
-    gemini_explore_enabled: Optional[bool] = None   # 2026-05-27 Gemini 探索
-    gemini_predict_enabled: Optional[bool] = None   # 2026-05-27 Gemini 预测
+    # gemini_explore/predict 已下线：字段保留兼容旧客户端，写入时强制忽略并关闭
+    gemini_explore_enabled: Optional[bool] = None
+    gemini_predict_enabled: Optional[bool] = None
     deepseek_explore_enabled: Optional[bool] = None   # DeepSeek 探索
     deepseek_predict_enabled: Optional[bool] = None   # DeepSeek 预测
-    gemini_position_advisor_enabled: Optional[bool] = None  # 兼容；同步 DeepSeek
-    gemini_open_advisor_enabled: Optional[bool] = None      # 兼容；同步 DeepSeek
-    open_advisor_enabled: Optional[bool] = None             # 统一开仓顾问开关 (Gemini+DeepSeek)
-    position_advisor_enabled: Optional[bool] = None         # 统一持仓顾问开关 (Gemini+DeepSeek)
+    gemini_position_advisor_enabled: Optional[bool] = None  # 兼容；映射为 DeepSeek 持仓顾问
+    gemini_open_advisor_enabled: Optional[bool] = None      # 兼容；映射为 DeepSeek 开仓顾问
+    open_advisor_enabled: Optional[bool] = None             # 统一开仓顾问 (DeepSeek)
+    position_advisor_enabled: Optional[bool] = None         # 统一持仓顾问 (DeepSeek)
     smart_exit_enabled: Optional[bool] = None              # 智能平仓 (趋势反转/移动止盈/最优价等)
     blacklist_level3_enabled: Optional[bool] = None      # 黑名单3级禁止开仓
     live_top50_required: Optional[bool] = None           # TOP50 内可开实仓
@@ -439,6 +458,11 @@ async def get_trading_services():
         """)
 
         settings = cursor.fetchall()
+
+        # 下线 Gemini 交易/情绪开关：每次读配置时强制写回 0，防旧 DB 值继续烧 token
+        _force_retire_gemini_trading_switches(cursor)
+        conn.commit()
+
         cursor.close()
         conn.close()
 
@@ -449,12 +473,8 @@ async def get_trading_services():
             'spot_trading_enabled': 'spot_trading_enabled',
             'spot_close_enabled': 'spot_close_enabled',
             'u_coin_style_enabled': 'u_coin_style_enabled',
-            'gemini_explore_enabled': 'gemini_explore_enabled',
-            'gemini_predict_enabled': 'gemini_predict_enabled',
             'deepseek_explore_enabled': 'deepseek_explore_enabled',
             'deepseek_predict_enabled': 'deepseek_predict_enabled',
-            'gemini_position_advisor_enabled': 'gemini_position_advisor_enabled',
-            'gemini_open_advisor_enabled': 'gemini_open_advisor_enabled',
             'deepseek_position_advisor_enabled': 'deepseek_position_advisor_enabled',
             'deepseek_open_advisor_enabled': 'deepseek_open_advisor_enabled',
             'smart_exit_enabled': 'smart_exit_enabled',
@@ -472,11 +492,11 @@ async def get_trading_services():
             'spot_close_enabled': True,
             'u_coin_style_enabled': False,
             'gemini_explore_enabled': False,
-            'gemini_predict_enabled': True,
+            'gemini_predict_enabled': False,
             'deepseek_explore_enabled': False,
             'deepseek_predict_enabled': False,
-            'gemini_position_advisor_enabled': True,
-            'gemini_open_advisor_enabled': True,
+            'gemini_position_advisor_enabled': False,
+            'gemini_open_advisor_enabled': False,
             'deepseek_position_advisor_enabled': True,
             'deepseek_open_advisor_enabled': True,
             'smart_exit_enabled': False,
@@ -507,14 +527,13 @@ async def get_trading_services():
             from app.services.system_settings_loader import get_smart_exit_enabled
             result['smart_exit_enabled'] = get_smart_exit_enabled()
 
-        result['open_advisor_enabled'] = (
-            result['gemini_open_advisor_enabled']
-            and result['deepseek_open_advisor_enabled']
-        )
-        result['position_advisor_enabled'] = (
-            result['gemini_position_advisor_enabled']
-            and result['deepseek_position_advisor_enabled']
-        )
+        # Gemini 交易开关已下线：对外恒为 false
+        result['gemini_explore_enabled'] = False
+        result['gemini_predict_enabled'] = False
+        result['gemini_open_advisor_enabled'] = False
+        result['gemini_position_advisor_enabled'] = False
+        result['open_advisor_enabled'] = result['deepseek_open_advisor_enabled']
+        result['position_advisor_enabled'] = result['deepseek_position_advisor_enabled']
 
         return {
             'success': True,
@@ -543,6 +562,10 @@ async def update_trading_services(data: TradingServicesUpdate):
         cursor = conn.cursor()
 
         updates = []
+
+        # 每次保存均强制关闭已下线的 Gemini 交易/情绪开关
+        _force_retire_gemini_trading_switches(cursor)
+        updates.append("Gemini探索/预测/情绪/顾问: 已强制关闭(下线)")
 
         if data.usdt_futures_enabled is not None:
             value = '1' if data.usdt_futures_enabled else '0'
@@ -629,29 +652,7 @@ async def update_trading_services(data: TradingServicesUpdate):
             status = '启动' if data.u_coin_style_enabled else '暂停'
             updates.append(f"U本位破位策略: {status}")
 
-        if data.gemini_explore_enabled is not None:
-            value = '1' if data.gemini_explore_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('gemini_explore_enabled', %s, 'Gemini 探索开关 (1=启用, 0=禁用)', 'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            updates.append(f"Gemini探索: {'启用' if data.gemini_explore_enabled else '禁用'}")
-
-        if data.gemini_predict_enabled is not None:
-            value = '1' if data.gemini_predict_enabled else '0'
-            cursor.execute("""
-                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
-                VALUES ('gemini_predict_enabled', %s, 'Gemini 预测开关 (1=启用, 0=禁用)', 'web_ui', NOW())
-                ON DUPLICATE KEY UPDATE
-                    setting_value = VALUES(setting_value),
-                    updated_by = 'web_ui',
-                    updated_at = NOW()
-            """, (value,))
-            updates.append(f"Gemini预测: {'启用' if data.gemini_predict_enabled else '禁用'}")
+        # gemini_explore/predict 写入已忽略（由 _force_retire_gemini_trading_switches 关闭）
 
         if data.deepseek_explore_enabled is not None:
             value = '1' if data.deepseek_explore_enabled else '0'

@@ -16,7 +16,7 @@ crypto-scheduler (app/scheduler.py)
   └─ Gemini 情绪 (8h)
 
 crypto-scheduler (每 15min)
-  └─ Gemini + DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**排除** midline_*）
+  └─ DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**排除** midline_*；含历史 gemini_*）
 
 crypto-app-main
   └─ position_sl_tp_monitor (1s)：探索/预测/中线 v2 硬 SL/TP + ai-trail-tp；中线不参与 SmartExit
@@ -27,8 +27,8 @@ crypto-app-main
 
 | 类别 | 是否 LLM | 典型 source 前缀 | 实盘同步 |
 |------|----------|------------------|----------|
-| 主探索 | 是 | `gemini_explore` / `deepseek_explore` / `gpt_explore` | **`gemini_explore` / `deepseek_explore`**（+ L0 等闸门）；GPT 仅模拟 |
-| 主预测 | 是 | `*_predict` | `gemini_predict` / `deepseek_predict`（以 LIVE_SYNC 为准）；GPT 仅模拟 |
+| 主探索 | 是 | `deepseek_explore` / `gpt_explore`（**gemini_explore 已下线**） | **`deepseek_explore`**（+ L0）；GPT 仅模拟 |
+| 主预测 | 是 | `*_predict` | **`deepseek_predict`**（以 LIVE_SYNC 为准）；GPT 仅模拟；**gemini_predict 已下线** |
 | 顶空底多 | 是 | `*_reversal` | 否 |
 | 战术四策略 | 是 | `*_pullback` 等 | 否 |
 | **中线做多/做空 v2** | **否（量化）** | `midline_long` / `midline_short` | **否（暂不进 LIVE_SYNC）** |
@@ -388,7 +388,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | `live_whitelist_enabled` | 开仓：`rating_level=0` 可开实仓 |
 | `blacklist_level3_enabled` | **已废弃**（L2+/锁定恒禁模拟+实盘；保留仅为兼容） |
 
-**开仓按 source 白名单**（`LIVE_SYNC_SOURCES`）：主探索/预测四路。GPT/战术/反转/**中线 v2** 等只写模拟仓。
+**开仓按 source 白名单**（`LIVE_SYNC_SOURCES`）：仅 DeepSeek 探索/预测。GPT/战术/反转/**中线 v2**/已下线 Gemini 等只写模拟仓。
 
 **北京时间实盘开仓时段**：仅 **10:00-16:00**、**22:00-次日04:00** 允许同步/直接开实盘；服务器 UTC 对应 **02:00-08:00**、**14:00-20:00**。模拟开仓不受该时段限制。
 

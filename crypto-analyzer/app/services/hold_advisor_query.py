@@ -12,16 +12,15 @@ HOLD_MIN_MINUTES = 15
 HOLD_ADVISOR_MAX_PER_TICK = 50
 HOLD_REVIEW_INTERVAL_MINUTES = 15
 
-# Gemini 监管 explore/predict；DeepSeek 监管其余，但排除中线（硬 SL/TP + ai-trail-tp + 8h）
+# DeepSeek 监管全部 AI 模拟仓（含历史 gemini_*）；中线 v2 排除（硬 SL/TP + ai-trail-tp + 8h）
 from app.services.midline_swing_config import midline_source_sql_not_in
 
 DEEPSEEK_HOLD_SOURCE_SQL = (
-    "AND LOWER(fp.source) NOT IN ("
-    "'gemini_explore', 'gemini_predict'"
-    f") AND {midline_source_sql_not_in('fp.source')}"
+    f"AND {midline_source_sql_not_in('fp.source')}"
 )
+# 兼容旧调用；Gemini 持仓顾问已下线，恒空集
 GEMINI_HOLD_SOURCE_SQL = (
-    "AND LOWER(fp.source) IN ('gemini_explore', 'gemini_predict')"
+    "AND 1=0"
 )
 
 _DUE_SELECT = """

@@ -123,12 +123,14 @@ def test_ai_trail_for_midline() -> None:
 
 def test_hold_advisor_excludes_midline() -> None:
     print("[3d] hold advisor SQL excludes midline")
-    from app.services.hold_advisor_query import DEEPSEEK_HOLD_SOURCE_SQL
+    from app.services.hold_advisor_query import DEEPSEEK_HOLD_SOURCE_SQL, GEMINI_HOLD_SOURCE_SQL
 
     assert "midline_long" in DEEPSEEK_HOLD_SOURCE_SQL
     assert "midline_short" in DEEPSEEK_HOLD_SOURCE_SQL
-    assert "NOT IN" in DEEPSEEK_HOLD_SOURCE_SQL
-    assert "gemini_explore" in DEEPSEEK_HOLD_SOURCE_SQL
+    assert "NOT IN" in DEEPSEEK_HOLD_SOURCE_SQL  # midline_source_sql_not_in
+    # Gemini 持仓顾问已下线；DeepSeek SQL 不再排除 gemini_*
+    assert "gemini_explore" not in DEEPSEEK_HOLD_SOURCE_SQL
+    assert "1=0" in GEMINI_HOLD_SOURCE_SQL
     _ok("DeepSeek hold SQL excludes midline (hard SL/TP + trail + 8h only)")
 
 

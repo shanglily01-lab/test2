@@ -1,4 +1,4 @@
-﻿"""
+"""
 统一数据采集调度器
 整合所有数据源的采集任务，按照不同频率定时执行
 
@@ -1347,25 +1347,9 @@ class UnifiedDataScheduler:
         logger.info("  ✓ settings_cache - 每 1 分钟 (后台线程)")
 
         # ============================================================
-        # 9. Gemini 系列 — AI 交易任务
+        # 9. AI 系列 — DeepSeek 交易任务（Gemini 探索/预测/情绪已下线）
         # ============================================================
-        logger.info("\n  🤖 Gemini 系列: AI 交易任务")
-
-        # Gemini 探索 - 每 2h 调一轮 Gemini 检测方向异动, 模拟开仓
-        # kill switch = system_settings.gemini_explore_enabled
-        def _run_gemini_explore():
-            def wrapper():
-                try:
-                    from app.services.gemini_explore_worker import run_explore_round
-                    run_explore_round(triggered_by='scheduler')
-                except Exception as e:
-                    logger.error(f"[Gemini探索] 调度异常: {e}", exc_info=True)
-            threading.Thread(target=wrapper, daemon=True, name="GeminiExplore").start()
-
-        schedule.every(2).hours.do(_run_gemini_explore)
-        # 兜底: every(N).hours 在 restart 后从 0 计时, 易错过周期; 10min 轮询由 worker 2h 防重
-        schedule.every(10).minutes.do(_run_gemini_explore)
-        logger.info("  ✓ gemini_explore - 距上次ok+max_hold_hours, 每2h + 10min轮询")
+        logger.info("\n  🤖 AI 系列: DeepSeek 交易任务 (Gemini 探索/预测/情绪已停用)")
 
         # DeepSeek 探索 - 每 2h 调一轮 DeepSeek 检测短时方向异动, 模拟开仓
         # kill switch = system_settings.deepseek_explore_enabled
@@ -1382,7 +1366,7 @@ class UnifiedDataScheduler:
         schedule.every(10).minutes.do(_run_deepseek_explore)
         logger.info("  ✓ deepseek_explore - 距上次ok+max_hold_hours, 每2h + 10min轮询")
 
-        # DeepSeek 预测 - 每 2h 调一次 DeepSeek 预测 TOP50 方向
+        # DeepSeek 预测 - 每 2h 调一次 DeepSeek 预测 L0/L1 方向
         def _run_deepseek_predict():
             def wrapper():
                 try:
@@ -1396,21 +1380,7 @@ class UnifiedDataScheduler:
         schedule.every(5).minutes.do(_run_deepseek_predict)
         logger.info("  ✓ deepseek_predict - 距上次ok+max_hold_hours, 每2h + 5min轮询")
 
-        # Gemini 预测 - 每 2h 调一次 Gemini 预测 TOP50 方向
-        def _run_gemini_predict():
-            def wrapper():
-                try:
-                    from app.services.gemini_predictor import run_predict_round
-                    run_predict_round(triggered_by='scheduler')
-                except Exception as e:
-                    logger.error(f"[Gemini预测] 调度异常: {e}", exc_info=True)
-            threading.Thread(target=wrapper, daemon=True, name="GeminiPredict").start()
-
-        schedule.every(2).hours.do(_run_gemini_predict)
-        schedule.every(5).minutes.do(_run_gemini_predict)
-        logger.info("  ✓ gemini_predict - 距上次ok+max_hold_hours, 每2h + 5min轮询")
-
-        # 中线做多/做空（Gemini + DeepSeek，量化扫描，每 6h）
+        # 中线做多/做空 v2（量化扫描，非 LLM）
         def _run_midline_swing():
             def wrapper():
                 try:
@@ -1423,39 +1393,7 @@ class UnifiedDataScheduler:
         schedule.every(10).minutes.do(_run_midline_swing)
         logger.info("  ✓ midline_swing v2 - 每10min轮询 (默认周期 4h, midline_interval_hours)")
 
-        # Gemini 持仓顾问 - 监管 gemini_explore/gemini_predict 模拟仓，满 15min 后每 15min 复查
-        def _run_gemini_position_advisor():
-            if self._gemini_position_advisor_running:
-                logger.info("[Gemini持仓顾问] 上一轮仍在运行，跳过本轮")
-                return
-
-            def wrapper():
-                task_name = 'gemini_position_advisor'
-                self._gemini_position_advisor_running = True
-                try:
-                    from app.services.gemini_position_advisor import get_open_advisor
-                    stats = get_open_advisor().tick()
-                    self.task_stats[task_name]['count'] += 1
-                    self.task_stats[task_name]['last_run'] = datetime.now()
-                    self.task_stats[task_name]['last_error'] = None
-                    logger.info(f"[Gemini持仓顾问] 调度完成: {stats}")
-                except Exception as e:
-                    logger.error(f"[Gemini持仓顾问] 调度异常: {e}", exc_info=True)
-                    self.task_stats[task_name]['last_error'] = str(e)
-                finally:
-                    self._gemini_position_advisor_running = False
-
-            threading.Thread(
-                target=wrapper,
-                daemon=True,
-                name="GeminiPositionAdvisor",
-            ).start()
-
-        schedule.every(15).minutes.do(_run_gemini_position_advisor)
-        _run_gemini_position_advisor()
-        logger.info("  ✓ gemini_position_advisor - 每 15 分钟 (后台线程；每仓 15min 复审)")
-
-        # DeepSeek 持仓顾问 - 监管非 Gemini 主探索/预测模拟仓；scheduler 每 15min tick
+        # DeepSeek 持仓顾问 - 监管模拟仓；scheduler 每 15min tick
         def _run_deepseek_position_advisor():
             if self._deepseek_position_advisor_running:
                 logger.info("[DeepSeek持仓顾问] 上一轮仍在运行，跳过本轮")
@@ -1499,20 +1437,9 @@ class UnifiedDataScheduler:
 
         schedule.every(2).hours.do(_run_deepseek_big4_analysis)
         schedule.every(10).minutes.do(_run_deepseek_big4_analysis)
-        logger.info("  ✓ big4_analysis - DeepSeek 每 2h + 10min 轮询 (worker 内 2h 防重；Gemini Big4 已停用)")
+        logger.info("  ✓ big4_analysis - DeepSeek 每 2h + 10min 轮询 (worker 内 2h 防重；Gemini 已停用)")
 
-        # Gemini 市场情绪 + 川普分析 - 每 8h 调一次
-        def _run_gemini_sentiment():
-            def wrapper():
-                try:
-                    from app.services.gemini_sentiment_analyzer import run_sentiment_round
-                    run_sentiment_round(triggered_by='scheduler')
-                except Exception as e:
-                    logger.error(f"[Gemini情绪分析] 调度异常: {e}", exc_info=True)
-            threading.Thread(target=wrapper, daemon=True, name="GeminiSentiment").start()
-
-        schedule.every(8).hours.do(_run_gemini_sentiment)
-        logger.info("  ✓ gemini_sentiment - 每 8 小时 (后台线程, kill switch 默认 ON)")
+        logger.info("  ○ gemini_explore/predict/sentiment/position_advisor - 已下线 (不调度)")
 
         logger.info("\n所有定时任务设置完成")
 
@@ -1718,8 +1645,6 @@ class UnifiedDataScheduler:
                     logger.error(f"[{name}] 初始化运行失败: {e}", exc_info=True)
             threading.Thread(target=_run, daemon=True, name=f"AIInit_{name}").start()
 
-        _launch_ai_init_task("Gemini探索",   "app.services.gemini_explore_worker",   "run_explore_round", 15)
-        # 预测不走 scheduler_init；由 5min 轮询 + next_due 保证每 2h 至少一轮 (triggered_by=scheduler)
         def _launch_predict_catchup(name: str, module_path: str, func_name: str, delay_s: int):
             def _run():
                 import time
@@ -1733,9 +1658,7 @@ class UnifiedDataScheduler:
             threading.Thread(target=_run, daemon=True, name=f"PredictCatchup_{name}").start()
 
         _launch_ai_init_task("DeepSeekBig4", "app.services.big4_comprehensive_analyzer", "run_big4_analysis_round_deepseek", 95)
-        _launch_ai_init_task("Gemini情绪",   "app.services.gemini_sentiment_analyzer","run_sentiment_round", 25)
         _launch_ai_init_task("DeepSeek探索","app.services.deepseek_explore_worker",  "run_explore_round", 90)
-        _launch_predict_catchup("Gemini预测", "app.services.gemini_predictor", "run_predict_round", 45)
         _launch_predict_catchup("DeepSeek预测", "app.services.deepseek_predictor", "run_predict_round", 50)
 
         def _launch_rating_catchup(delay_s: int = 60):

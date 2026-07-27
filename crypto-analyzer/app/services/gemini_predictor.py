@@ -820,7 +820,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
     try:
         with _connect() as conn_chk:
             with conn_chk.cursor() as cur:
-                enabled_raw = _read_setting(cur, 'gemini_predict_enabled', '1').strip().lower()
+                enabled_raw = _read_setting(cur, 'gemini_predict_enabled', '0').strip().lower()
             if enabled_raw not in ('1', 'true', 'yes', 'on'):
                 logger.info(f"[Gemini预测] kill switch=0, 跳过 (triggered_by={triggered_by})")
                 return None

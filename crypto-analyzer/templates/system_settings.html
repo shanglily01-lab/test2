@@ -268,26 +268,8 @@
 <p class="cfg-l2-label">2.1 子策略</p>
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#00e676] text-xl shrink-0">auto_awesome</span>
-<div><div class="text-sm font-medium text-slate-200">Gemini 探索</div><p class="text-[11px] text-slate-500">每 2h 检测方向异动，模拟单持仓 2h · SL 2% / TP 3%</p></div>
-</div>
-<div id="geminiExploreToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
-<span class="material-symbols-outlined text-[#7c4dff] text-xl shrink-0">psychology</span>
-<div><div class="text-sm font-medium text-slate-200">Gemini 预测</div><p class="text-[11px] text-slate-500">每 12h 预测 TOP50 方向</p></div>
-</div>
-<div id="geminiPredictToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
-<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
-</div>
-</div>
-<div class="cfg-row">
-<div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#49f4c8] text-xl shrink-0">psychology</span>
-<div><div class="text-sm font-medium text-slate-200">DeepSeek 探索</div><p class="text-[11px] text-slate-500">每 2h 检测方向异动，模拟单持仓 2h · SL 2% / TP 3%</p></div>
+<div><div class="text-sm font-medium text-slate-200">DeepSeek 探索</div><p class="text-[11px] text-slate-500">每 2h 检测方向异动 · L0/L1 · SL/TP 读系统设定</p></div>
 </div>
 <div id="deepseekExploreToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
@@ -296,7 +278,7 @@
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#7c4dff] text-xl shrink-0">psychology</span>
-<div><div class="text-sm font-medium text-slate-200">DeepSeek 预测</div><p class="text-[11px] text-slate-500">每 2h 预测 TOP50 方向 · SL 2% / TP 3% / 持仓 2h</p></div>
+<div><div class="text-sm font-medium text-slate-200">DeepSeek 预测</div><p class="text-[11px] text-slate-500">每 2h 预测 L0/L1 方向 · SL/TP 读系统设定</p></div>
 </div>
 <div id="deepseekPredictToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
@@ -305,18 +287,18 @@
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#ff9500] text-xl shrink-0">visibility</span>
-<div><div class="text-sm font-medium text-slate-200">持仓顾问</div><p class="text-[11px] text-slate-500">Gemini + DeepSeek 模拟仓 ≥30min 每 15min hold/observe/sell</p></div>
+<div><div class="text-sm font-medium text-slate-200">持仓顾问</div><p class="text-[11px] text-slate-500">DeepSeek 监管模拟仓；满 15min 后每 15min hold/observe/sell</p></div>
 </div>
-<div id="geminiAdvisorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div id="positionAdvisorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
 </div>
 </div>
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#7c4dff] text-xl shrink-0">fact_check</span>
-<div><div class="text-sm font-medium text-slate-200">开仓顾问</div><p class="text-[11px] text-slate-500">Gemini + DeepSeek 模拟开仓前审核，reject 则不开仓</p></div>
+<div><div class="text-sm font-medium text-slate-200">开仓顾问</div><p class="text-[11px] text-slate-500">DeepSeek 模拟开仓前审核，reject 则不开仓</p></div>
 </div>
-<div id="geminiOpenAdvisorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div id="openAdvisorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
 <div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
 </div>
 </div>
@@ -433,7 +415,7 @@
 </div>
 <div class="mt-6 pt-5 border-t border-slate-800">
 <p class="cfg-l2-label mb-2">中线策略参数</p>
-<p class="text-[11px] text-slate-500 mb-4">Gemini/DeepSeek 中线做多/做空四路共用 · 独立于上方模拟盘默认限价（0.1~1%）</p>
+<p class="text-[11px] text-slate-500 mb-4">中线 v2（midline_long/short）专用 · 独立于上方模拟盘默认限价（0.1~1%）</p>
 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
 <div>
 <label class="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">执行周期 (小时)</label>
@@ -713,12 +695,10 @@
                 setToggle('usdtToggle', svc.usdt_futures_enabled !== false);
 
                 // 策略开关
-                setToggle('geminiExploreToggle', !!svc.gemini_explore_enabled);
-                setToggle('geminiPredictToggle', !!svc.gemini_predict_enabled);
                 setToggle('deepseekExploreToggle', !!svc.deepseek_explore_enabled);
                 setToggle('deepseekPredictToggle', !!svc.deepseek_predict_enabled);
-                setToggle('geminiAdvisorToggle', svc.position_advisor_enabled !== false);
-                setToggle('geminiOpenAdvisorToggle', svc.open_advisor_enabled !== false);
+                setToggle('positionAdvisorToggle', svc.position_advisor_enabled !== false);
+                setToggle('openAdvisorToggle', svc.open_advisor_enabled !== false);
                 setToggle('smartExitToggle', !!svc.smart_exit_enabled);
                 setToggle('liveWhitelistToggle', svc.live_whitelist_enabled !== false);
                 setToggle('spotTradingToggle',  !!svc.spot_trading_enabled);
@@ -914,28 +894,6 @@
             }
         });
 
-        // Gemini 探索
-        bindToggle('geminiExploreToggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { gemini_explore_enabled: enabled });
-                showToast('Gemini 探索已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
-        // Gemini 预测
-        bindToggle('geminiPredictToggle', async function (enabled) {
-            try {
-                await apiPut('/trading-services', { gemini_predict_enabled: enabled });
-                showToast('Gemini 预测已' + (enabled ? '开启' : '关闭'), false);
-            } catch (err) {
-                showToast('保存失败: ' + err.message, true);
-                return false;
-            }
-        });
-
         // DeepSeek 探索
         bindToggle('deepseekExploreToggle', async function (enabled) {
             try {
@@ -958,14 +916,14 @@
             }
         });
 
-        // 持仓顾问 / 开仓顾问 (Gemini + DeepSeek 联动)
-        bindToggle('geminiOpenAdvisorToggle', async function (enabled) {
+        // 持仓顾问 / 开仓顾问 (DeepSeek)
+        bindToggle('openAdvisorToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { open_advisor_enabled: enabled });
                 showToast('开仓顾问已' + (enabled ? '启用' : '禁用'));
             } catch (e) { showToast('保存失败: ' + e.message, true); }
         });
-        bindToggle('geminiAdvisorToggle', async function (enabled) {
+        bindToggle('positionAdvisorToggle', async function (enabled) {
             try {
                 await apiPut('/trading-services', { position_advisor_enabled: enabled });
                 showToast('持仓顾问已' + (enabled ? '开启 (可能触发实盘平仓!)' : '关闭'), false);

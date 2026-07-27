@@ -163,35 +163,21 @@ button,a,label,select { -webkit-tap-highlight-color:transparent; }
         <div class="settings-card rounded-2xl overflow-hidden">
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <div class="flex flex-col py-3 pr-4">
-                    <span class="text-sm font-medium">Gemini 探索</span>
-                    <span class="text-[10px] text-on-surface-variant mt-0.5">每 2h 探索/预测</span>
-                </div>
-                <div class="toggle-wrap"><div id="geminiExploreToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
-            </div>
-            <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
-                <div class="flex flex-col py-3 pr-4">
-                    <span class="text-sm font-medium">Gemini 预测</span>
-                    <span class="text-[10px] text-on-surface-variant mt-0.5">每 12h 预测 TOP50</span>
-                </div>
-                <div class="toggle-wrap"><div id="geminiPredictToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
-            </div>
-            <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
-                <div class="flex flex-col py-3 pr-4">
                     <span class="text-sm font-medium">DeepSeek 探索</span>
-                    <span class="text-[10px] text-on-surface-variant mt-0.5">每 2h 探索/预测</span>
+                    <span class="text-[10px] text-on-surface-variant mt-0.5">每 2h · L0/L1</span>
                 </div>
                 <div class="toggle-wrap"><div id="deepseekExploreToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <div class="flex flex-col py-3 pr-4">
                     <span class="text-sm font-medium">DeepSeek 预测</span>
-                    <span class="text-[10px] text-on-surface-variant mt-0.5">每 2h 预测 TOP50</span>
+                    <span class="text-[10px] text-on-surface-variant mt-0.5">每 2h · L0/L1</span>
                 </div>
                 <div class="toggle-wrap"><div id="deepseekPredictToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
             <div class="setting-row flex items-center justify-between px-4 border-b border-outline-variant/10">
                 <span class="text-sm font-medium">持仓顾问 <span class="text-[10px] text-red-400">(实盘可平仓)</span></span>
-                <div class="toggle-wrap"><div id="geminiAdvisorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
+                <div class="toggle-wrap"><div id="positionAdvisorToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200 touch-manipulation"><div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full shadow-[0_0_8px_rgba(73,244,200,0.5)] transition-all duration-200"></div></div></div>
             </div>
             <div class="setting-row flex items-center justify-between px-4">
                 <div class="flex flex-col py-3 pr-4">
@@ -495,11 +481,9 @@ async function loadAll() {
             setToggle('usdtToggle', d.usdt_futures_enabled);
             setToggle('liveToggle', d.live_trading_enabled);
             setToggle('liveCloseToggle', d.live_close_enabled !== false);
-            setToggle('geminiExploreToggle', d.gemini_explore_enabled);
-            setToggle('geminiPredictToggle', d.gemini_predict_enabled);
             setToggle('deepseekExploreToggle', d.deepseek_explore_enabled);
             setToggle('deepseekPredictToggle', d.deepseek_predict_enabled);
-            setToggle('geminiAdvisorToggle', d.position_advisor_enabled !== false);
+            setToggle('positionAdvisorToggle', d.position_advisor_enabled !== false);
             setToggle('smartExitToggle', d.smart_exit_enabled);
             setToggle('liveWhitelistToggle', d.live_whitelist_enabled !== false);
             setToggle('spotTradingToggle', d.spot_trading_enabled !== false);
@@ -536,11 +520,9 @@ async function save(type) {
             usdt_futures_enabled: getToggle('usdtToggle'),
             live_trading_enabled: getToggle('liveToggle'),
             live_close_enabled:   getToggle('liveCloseToggle'),
-            gemini_explore_enabled:  getToggle('geminiExploreToggle'),
-            gemini_predict_enabled:  getToggle('geminiPredictToggle'),
             deepseek_explore_enabled: getToggle('deepseekExploreToggle'),
             deepseek_predict_enabled: getToggle('deepseekPredictToggle'),
-            position_advisor_enabled: getToggle('geminiAdvisorToggle'),
+            position_advisor_enabled: getToggle('positionAdvisorToggle'),
             smart_exit_enabled: getToggle('smartExitToggle'),
             live_whitelist_enabled: getToggle('liveWhitelistToggle'),
             spot_trading_enabled: getToggle('spotTradingToggle'),
@@ -605,7 +587,7 @@ async function initLock() {
 }
 
 // 绑定所有 toggle 点击事件
-['usdtToggle','liveToggle','liveCloseToggle','geminiExploreToggle','geminiPredictToggle','deepseekExploreToggle','deepseekPredictToggle','uCoinStyleToggle','geminiAdvisorToggle','smartExitToggle','liveWhitelistToggle','spotTradingToggle'].forEach(id => bindToggle(id, 'services'));
+['usdtToggle','liveToggle','liveCloseToggle','deepseekExploreToggle','deepseekPredictToggle','uCoinStyleToggle','positionAdvisorToggle','smartExitToggle','liveWhitelistToggle','spotTradingToggle'].forEach(id => bindToggle(id, 'services'));
 ['longToggle','shortToggle'].forEach(id => bindToggle(id, 'direction', updateDirectionSummary));
 bindToggle('big4Toggle', 'big4');
 

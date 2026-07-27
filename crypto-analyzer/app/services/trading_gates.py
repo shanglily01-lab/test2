@@ -20,10 +20,9 @@ from app.utils.futures_symbol import (
 
 # 仅以下策略同步 Binance 实盘；其它 source 只走模拟仓
 LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
-    "gemini_explore",
-    "gemini_predict",
     "deepseek_explore",
     "deepseek_predict",
+    # gemini_explore / gemini_predict 已下线（系统配置不再提供开关）
     # 中线 v2（midline_long/short）暂不实盘 — REQUIREMENTS §7.2
 })
 
