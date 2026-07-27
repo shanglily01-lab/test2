@@ -156,12 +156,12 @@
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 待落地】
 - **量化扫描**，非 LLM；标的 `config.yaml`；独立 **4h** 调度；旧四路 `*_midline_*` 停并移除
 - 限价 **±1%**；超时 **4h**；持仓 **8h**；SL **6%** / TP **3%** / 5x / 500U
-- **跳过**开仓顾问；**接入**持仓顾问 + **ai-trail-tp**；**排除** SmartExit → `position_sl_tp_monitor`
+- **跳过**开仓顾问与持仓顾问；**接入** **ai-trail-tp**；**排除** SmartExit → `position_sl_tp_monitor`
 - **暂不实盘**（不进 `LIVE_SYNC_SOURCES`）；Web：原 Gemini 探索页整页改中线机会分析
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.2
 
 ### 开仓 / 持仓顾问
-- 路由：`gemini_explore/predict` → Gemini；其余（**含中线 v2**）→ DeepSeek；中线**开仓**仍 skip
+- 路由：`gemini_explore/predict` → Gemini；其余（**排除中线 v2**）→ DeepSeek；中线开仓/持仓顾问均 skip
 - 持仓 tick：**15min**；每仓 15min；浮盈转亏 urgent 立即再审
 - 盈利 sell：ROI **≥+8%** 且 15m 明确转弱（反向≥4）；过早 sell 程序化拦截恢复严格
 - Prompt/rubric/**reason 中文**；开关 `*_position_advisor_enabled`

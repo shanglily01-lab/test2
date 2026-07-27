@@ -5,7 +5,7 @@
 
 ## 1. 总览
 
-系统在三套 **教师模型**（Gemini、DeepSeek、GPT）上运行多类 **AI 策略**，另有独立 **中线量化**；统一走 **模拟仓**（`futures_positions.account_id=2`）。开仓前经 **开仓顾问** 审查（中线跳过）；持仓满 15 分钟后由 **持仓顾问** 每 **15min** 监管（浮盈转亏 urgent；**中线 v2 纳入**）。
+系统在三套 **教师模型**（Gemini、DeepSeek、GPT）上运行多类 **AI 策略**，另有独立 **中线量化**；统一走 **模拟仓**（`futures_positions.account_id=2`）。开仓前经 **开仓顾问** 审查（中线跳过）；持仓满 15 分钟后由 **持仓顾问** 每 **15min** 监管（浮盈转亏 urgent；**中线 v2 排除**，仅硬 SL/TP + ai-trail-tp + 8h）。
 
 ```text
 crypto-scheduler (app/scheduler.py)
@@ -16,7 +16,7 @@ crypto-scheduler (app/scheduler.py)
   └─ Gemini 情绪 (8h)
 
 crypto-scheduler (每 15min)
-  └─ Gemini + DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；含 midline_*）
+  └─ Gemini + DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**排除** midline_*）
 
 crypto-app-main
   └─ position_sl_tp_monitor (1s)：探索/预测/中线 v2 硬 SL/TP + ai-trail-tp；中线不参与 SmartExit
@@ -32,7 +32,7 @@ crypto-app-main
 | 顶空底多 | 是 | `*_reversal` | 否 |
 | 战术四策略 | 是 | `*_pullback` 等 | 否 |
 | **中线做多/做空 v2** | **否（量化）** | `midline_long` / `midline_short` | **否（暂不进 LIVE_SYNC）** |
-| 开仓/持仓顾问 | 是 | 开仓：中线跳过；持仓：中线由 DeepSeek 监管 | 持仓 sell：`live_close_enabled=1` 且有映射时平交易所 |
+| 开仓/持仓顾问 | 是 | 开仓：中线跳过；持仓：**排除**中线 | 持仓 sell：`live_close_enabled=1` 且有映射时平交易所 |
 | 情绪分析 | 是 | 不下单 | — |
 
 ---
@@ -237,7 +237,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 6.5.1 职责
 
-`config.yaml` 交易对 + **30×1d / ~1 周 1h / 近 4h×15m** 三层 AND 扫描，**不调用 LLM**。**跳过**开仓顾问；**接入**持仓顾问与 **ai-trail-tp**；**不参与** `SmartExitOptimizer`（`position_sl_tp_monitor`：硬 SL/TP、**8h** 到期、爆仓、ai-trail-tp）。
+`config.yaml` 交易对 + **30×1d / ~1 周 1h / 近 4h×15m** 三层 AND 扫描，**不调用 LLM**。**跳过**开仓顾问与**持仓顾问**；**接入** **ai-trail-tp**；**不参与** `SmartExitOptimizer`（`position_sl_tp_monitor`：硬 SL/TP、**8h** 到期、爆仓、ai-trail-tp）。
 
 旧四路 `gemini/deepseek_midline_*`：**停调度并移除**。
 
@@ -338,7 +338,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | 教师 | 类 | 监管 source |
 |------|-----|-------------|
 | Gemini | `gemini_position_advisor.GeminiPositionAdvisor.tick` | `gemini_explore` / `gemini_predict` |
-| DeepSeek | `deepseek_position_advisor` | 其他 source（**含** `midline_long` / `midline_short`） |
+| DeepSeek | `deepseek_position_advisor` | 其他 source（**排除** `midline_*` / 旧 `*_midline_*`） |
 
 `crypto-scheduler` 每 **15 分钟** 调用 Gemini / DeepSeek 两个 tick。
 

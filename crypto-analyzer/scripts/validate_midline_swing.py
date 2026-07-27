@@ -121,14 +121,15 @@ def test_ai_trail_for_midline() -> None:
     _ok("ai-trail-tp applies to midline_long (monitor loop)")
 
 
-def test_hold_advisor_includes_midline() -> None:
-    print("[3d] hold advisor SQL includes midline")
+def test_hold_advisor_excludes_midline() -> None:
+    print("[3d] hold advisor SQL excludes midline")
     from app.services.hold_advisor_query import DEEPSEEK_HOLD_SOURCE_SQL
 
-    assert "midline_long" not in DEEPSEEK_HOLD_SOURCE_SQL  # not excluded
-    assert "gemini_midline" not in DEEPSEEK_HOLD_SOURCE_SQL
+    assert "midline_long" in DEEPSEEK_HOLD_SOURCE_SQL
+    assert "midline_short" in DEEPSEEK_HOLD_SOURCE_SQL
+    assert "NOT IN" in DEEPSEEK_HOLD_SOURCE_SQL
     assert "gemini_explore" in DEEPSEEK_HOLD_SOURCE_SQL
-    _ok("DeepSeek hold SQL no longer excludes midline")
+    _ok("DeepSeek hold SQL excludes midline (hard SL/TP + trail + 8h only)")
 
 
 def test_run_summary_zh() -> None:
@@ -176,7 +177,7 @@ def main() -> None:
     test_limit_price()
     test_live_sync_whitelist()
     test_ai_trail_for_midline()
-    test_hold_advisor_includes_midline()
+    test_hold_advisor_excludes_midline()
     test_run_summary_zh()
     if args.db:
         test_db_and_scan()

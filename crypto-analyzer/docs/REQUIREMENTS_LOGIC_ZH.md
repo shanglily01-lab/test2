@@ -224,7 +224,7 @@
 | 标的池 | `config.yaml` 交易对全集（约 260）；保留证券过滤、L3/锁定禁止等既有闸门 |
 | 实盘 | **暂不** ∈ `LIVE_SYNC_SOURCES` → 仅模拟 `account_id=2` |
 | 开仓顾问 | **跳过**（`skip_open_advisor=True`） |
-| 持仓顾问 | **接入**（DeepSeek 持仓顾问监管 `midline_*`，不再排除中线） |
+| 持仓顾问 | **排除**（不做 DeepSeek/Gemini 持仓顾问；避免 15m 噪音闷杀 8h 波段） |
 | SmartExit | **排除**；平仓由 `position_sl_tp_monitor` |
 | 移动止盈 | **接入 ai-trail-tp**（peak 价格收益 ≥**3%** 后回撤 ≥**1%**） |
 | 旧策略 | **停调度并移除**：`gemini_midline_long/short`、`deepseek_midline_long/short` 及对应 kill switch / 探索页 Tab |
@@ -296,7 +296,7 @@
 | 硬 SL/TP | SL 6% / TP 3%，`position_sl_tp_monitor` |
 | 到期 | 持仓满 **8h** 平仓 |
 | ai-trail-tp | **启用**（与探索/预测相同阈值） |
-| 持仓顾问 | DeepSeek tick 监管；卖出受 `live_close_enabled` 约束（本期无实盘映射则仅平模拟） |
+| 持仓顾问 | **不监管**中线；仅硬 SL/TP + ai-trail-tp + 8h 到期 |
 | SmartExit | 不监控中线 source |
 
 ---
@@ -356,7 +356,7 @@
 
 **AI 轻量移动止盈**（`position_sl_tp_monitor.py`）：探索/预测及 **中线 v2**（`midline_long` / `midline_short`）在硬 SL/TP 之外，peak 价格收益 **≥3%** 后回撤 **≥1%** 程序化平仓（`ai-trail-tp`）；不走 early-sl/breakeven。
 
-开仓顾问：中线 v2 **跳过**。持仓顾问：中线 v2 **纳入** DeepSeek 监管（不再排除）。
+开仓顾问：中线 v2 **跳过**。持仓顾问：中线 v2 **排除**（仅硬 SL/TP + ai-trail-tp + 8h）。
 
 探索/预测：`gemini/deepseek/gpt_*_explore|predict` 在 worker 已用 **catalyst+data_signal** 过 `explore_catalyst_technical_ok` 后，开仓顾问**不再重复** catalyst 预检（`should_skip_upstream_catalyst_precheck`）；DeepSeek 同源 `deepseek_self_gated_open_skip_llm` 默认关闭，避免绕过 RSI/15m 二次复核。其它策略仍走 `precheck_open_advisor` + 可选 LLM。
 
@@ -459,6 +459,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-27 | — | 中线 v2 **退出持仓顾问**：仅硬 SL/TP + ai-trail-tp + 8h；避免顾问 15m 噪音闷杀波段仓 |
 | 2026-07-27 | — | **L2 黑名单不再交易**：`check_symbol_trading_forbidden` 阈值 `rating_level>=2`（模拟+实盘均禁）；候选池/config 同步同步排除 |
 | 2026-07-27 | — | DeepSeek 主探索/预测 **LONG 加严**：conf≥0.82、RSI≤68、距7d高≥3%、24h≤12%、OHLC 顺向优势+2；SHORT 不变；开仓顾问 DeepSeek LONG 同口径预检 |
 | 2026-07-27 | — | 中线 v2.1 放宽入场硬规则（30d ±3%、量比 0.4、回踩/反抽区 40%、1h MA 容差）；修复「全市场 signals_found=0」无法开仓 |

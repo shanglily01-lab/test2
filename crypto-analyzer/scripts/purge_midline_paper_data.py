@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT))
 import pymysql
 
 from app.services.midline_swing_config import (
+    ALL_MIDLINE_SOURCES,
     MIDLINE_ACCOUNT_ID,
     MIDLINE_KILL_SWITCH,
     MIDLINE_SOURCES,
@@ -59,7 +60,9 @@ def main() -> int:
     args = parser.parse_args()
     execute = args.execute
     account_id = args.account_id
-    sources = tuple(sorted(MIDLINE_SOURCES))
+    # v2 + 旧四路教师中线，一并清理
+    sources = tuple(sorted(ALL_MIDLINE_SOURCES))
+    kill_sources = tuple(sorted(MIDLINE_SOURCES))
     ph = _ph(len(sources))
 
     cfg = get_db_config()
@@ -76,7 +79,7 @@ def main() -> int:
 
             if not args.no_kill_switch:
                 print("\n[1] Kill Switch -> OFF")
-                for source in sources:
+                for source in kill_sources:
                     key = MIDLINE_KILL_SWITCH[source]
                     cur.execute(
                         "SELECT setting_value FROM system_settings WHERE setting_key=%s LIMIT 1",
@@ -269,7 +272,7 @@ def main() -> int:
             print(f"  midline_swing_verdicts deleted: {deleted_verdicts}")
             print(f"  midline_swing_runs deleted: {deleted_runs}")
             if not args.no_kill_switch:
-                print("  kill switches: 4 -> OFF")
+                print(f"  kill switches: {len(kill_sources)} -> OFF")
             print(f"  account #{account_id} total_equity refreshed")
             return 0
     except Exception as exc:
