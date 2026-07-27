@@ -1,4 +1,4 @@
-﻿"""开仓顾问 — 按 source 映射策略审核标准 + Big4/方向闸门文案."""
+"""开仓顾问 — 按 source 映射策略审核标准 + Big4/方向闸门文案."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -114,6 +114,8 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
             "上游已通过 catalyst 门槛；复核 **15m 价格趋势是否与 proposed side 一致**。\n"
             "**核对顺序**：① 15m 价格趋势（偏多/偏空）② 量价是否配合 ③ 近4~6根结构 ④ RSI(1h)辅证\n"
             "- **approve**：LONG 时 15m 趋势偏多/抬高且量价不背离；SHORT 时趋势偏空/走低且量价不背离。\n"
+            "- **LONG 加严**：拒追高（RSI1h>68 或 below_7d_high>-3% 或 24h>+12% 纯突破无回踩）；"
+            "须有回踩/支撑企稳或明确量价顺向优势，禁止连阳追新高。\n"
             "- **reject**：catalyst 方向与 side 矛盾；15m 表显示反向 K 线占优；仅 RSI/24h 无量价趋势；"
             "缩量假突破/放量反向。\n"
             "- 近 4 根 1h 仅交叉验证；**不得**用 1h/RSI 替代 15m 趋势定方向。"
@@ -128,6 +130,7 @@ _PROFILES: dict[str, OpenAdvisorStrategyProfile] = {
             "上游已通过 catalyst 门槛；核对 **15m 价格趋势**是否仍支持 proposed side。\n"
             "**核对顺序**：① 15m 趋势方向 ② 量价配合 ③ 近结构 ④ RSI(1h)辅证\n"
             "- **approve**：15m 趋势与 side 一致，量能能解释方向，无量价背离。\n"
+            "- **LONG 加严**：同探索 — 拒 RSI 过热、距 7d 高过近、24h 暴涨追突破；须回踩或顺向优势明确。\n"
             "- **reject**：15m 趋势与 side 矛盾；仅 RSI/24h 无量价趋势；15m 表反向占优。\n"
             "- 1h 保留作同窗口对照；**不得**用 1h/RSI 替代 15m 趋势定方向。"
         ),
@@ -555,6 +558,36 @@ def precheck_open_advisor(
         )
         if not tech_ok:
             return False, f"[{profile.title_zh}] catalyst 预检: {tech_reason}"
+
+    # DeepSeek 主探索/预测 LONG：与 worker 同口径硬闸（Gemini 不加此层，避免双边同时缩量）
+    src_l = (source or "").strip().lower()
+    if (
+        profile.key in ("explore", "predict")
+        and s == "LONG"
+        and src_l in ("deepseek_explore", "deepseek_predict")
+    ):
+        from app.services.ai_explore_prompt import (
+            DEEPSEEK_LONG_MAX_CHANGE_24H,
+            DEEPSEEK_LONG_MIN_ROOM_BELOW_7D_HIGH_PCT,
+            DEEPSEEK_LONG_RSI_MAX,
+        )
+        if rsi is not None and float(rsi) > DEEPSEEK_LONG_RSI_MAX:
+            return False, (
+                f"[DeepSeek LONG] RSI={float(rsi):.0f}>{DEEPSEEK_LONG_RSI_MAX:.0f}，预检驳回"
+            )
+        if b7h is not None and float(b7h) > -DEEPSEEK_LONG_MIN_ROOM_BELOW_7D_HIGH_PCT:
+            return False, (
+                f"[DeepSeek LONG] below_7d_high={float(b7h):.1f}% 距高点过近，预检驳回"
+            )
+        chg = ctx.get("change_24h")
+        if chg is not None:
+            try:
+                if float(chg) > DEEPSEEK_LONG_MAX_CHANGE_24H:
+                    return False, (
+                        f"[DeepSeek LONG] 24h={float(chg):.1f}% 暴涨追高，预检驳回"
+                    )
+            except (TypeError, ValueError):
+                pass
 
     if profile.key == "chase" and s == "LONG":
         if rsi is not None and float(rsi) > CHASE_RSI_MAX:

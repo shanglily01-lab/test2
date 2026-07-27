@@ -63,6 +63,12 @@ AI_ADVISOR_CHECK_INTERVAL_S = 900
 # 主探索/预测开仓置信度 (质量优先；0.75+ 才允许可交易结构，去掉 0.70~0.74 地板灌水)
 EXPLORE_CONFIDENCE_THRESHOLD = 0.75
 PREDICT_CONFIDENCE_THRESHOLD = 0.75
+# DeepSeek LONG 加严（2026-07 胜率：LONG≈31% 远差于 SHORT≈45%；拦追高/过热）
+DEEPSEEK_LONG_CONFIDENCE_THRESHOLD = 0.82
+DEEPSEEK_LONG_RSI_MAX = 68.0
+DEEPSEEK_LONG_MIN_ROOM_BELOW_7D_HIGH_PCT = 3.0  # below_7d_high_pct ≤ -3
+DEEPSEEK_LONG_MAX_CHANGE_24H = 12.0
+DEEPSEEK_LONG_OHLC_MIN_EDGE = 2  # 16 根顺向至少比反向多 2 根
 
 # 4h 交易窗口：16 根 15m = 4 根 1h（1 根 1h ≈ 4 根 15m）
 BARS_15M_4H_WINDOW = 16
@@ -555,6 +561,114 @@ def explore_catalyst_technical_ok(
     return True, ""
 
 
+def deepseek_long_entry_quality_ok(
+    confidence: float,
+    sym_data: Optional[dict] = None,
+    *,
+    catalyst: str = "",
+    data_signal: str = "",
+) -> Tuple[bool, str]:
+    """DeepSeek 探索/预测 LONG 专用质量闸门（SHORT 仍用通用 0.75 + catalyst）.
+
+    针对近 7 日模拟仓：LONG 早期 soft-sl / 硬 SL 主导亏损，多为追突破/近 7d 高。
+    """
+    try:
+        conf = float(confidence or 0)
+    except (TypeError, ValueError):
+        conf = 0.0
+    if conf < DEEPSEEK_LONG_CONFIDENCE_THRESHOLD:
+        return False, (
+            f"DeepSeek LONG conf={conf:.2f} < {DEEPSEEK_LONG_CONFIDENCE_THRESHOLD}"
+        )
+
+    sym = _as_sym_dict(sym_data)
+    tech = sym.get("tech") if isinstance(sym.get("tech"), dict) else {}
+    tech = tech or {}
+
+    rsi_raw = tech.get("rsi_14_1h")
+    if rsi_raw is None:
+        rsi_raw = sym.get("rsi_14_1h")
+    try:
+        if rsi_raw is not None and float(rsi_raw) > DEEPSEEK_LONG_RSI_MAX:
+            return False, (
+                f"DeepSeek LONG RSI1h={float(rsi_raw):.0f}>{DEEPSEEK_LONG_RSI_MAX:.0f} 过热拒做多"
+            )
+    except (TypeError, ValueError):
+        pass
+
+    b7h_raw = tech.get("below_7d_high_pct")
+    if b7h_raw is None:
+        b7h_raw = sym.get("below_7d_high_pct")
+    try:
+        if b7h_raw is not None:
+            b7h = float(b7h_raw)
+            if b7h > -DEEPSEEK_LONG_MIN_ROOM_BELOW_7D_HIGH_PCT:
+                return False, (
+                    f"DeepSeek LONG below_7d_high={b7h:.1f}% "
+                    f"距7d高<{DEEPSEEK_LONG_MIN_ROOM_BELOW_7D_HIGH_PCT:.0f}% 拒追高"
+                )
+    except (TypeError, ValueError):
+        pass
+
+    chg_raw = sym.get("change_24h")
+    try:
+        if chg_raw is not None and float(chg_raw) > DEEPSEEK_LONG_MAX_CHANGE_24H:
+            return False, (
+                f"DeepSeek LONG 24h={float(chg_raw):.1f}% "
+                f">{DEEPSEEK_LONG_MAX_CHANGE_24H:.0f}% 拒追涨"
+            )
+    except (TypeError, ValueError):
+        pass
+
+    text = f"{catalyst or ''} {data_signal or ''}"
+    chase_words = ("突破", "连阳", "追涨", "放量上攻", "新高")
+    pullback_words = ("回踩", "回调", "缩量回踩", "支撑", "企稳")
+    if any(w in text for w in chase_words) and not any(w in text for w in pullback_words):
+        try:
+            if b7h_raw is not None and float(b7h_raw) > -5.0:
+                return False, "DeepSeek LONG 追突破叙事且距7d高过近，须回踩结构"
+        except (TypeError, ValueError):
+            pass
+
+    ok_strict, reason_strict = _15m_ohlc_long_strict_ok(sym_data)
+    if not ok_strict:
+        return False, reason_strict
+    return True, ""
+
+
+def _15m_ohlc_long_strict_ok(sym_data: Optional[dict]) -> Tuple[bool, str]:
+    """LONG 额外要求 16 根顺向优势更明确（≥ reverse+2）."""
+    sym = _as_sym_dict(sym_data)
+    bars = _normalize_ohlc_bars(sym.get("klines_15m"))
+    if len(bars) < GATE_15M_RECENT_BARS:
+        symbol = (
+            sym.get("symbol")
+            or sym.get("pair")
+            or ((sym.get("tech") or {}).get("symbol") if isinstance(sym.get("tech"), dict) else None)
+            or ""
+        )
+        bars = _load_15m_ohlc_bars(str(symbol), BARS_15M_4H_WINDOW)
+    if len(bars) < GATE_15M_RECENT_BARS:
+        return False, "DeepSeek LONG 15m OHLC 不足，无法加严复核"
+
+    window = bars[-BARS_15M_4H_WINDOW:]
+    recent = bars[-GATE_15M_RECENT_BARS:]
+    score_all = _score_ohlc_for_side(window, "LONG")
+    score_recent = _score_ohlc_for_side(recent, "LONG")
+
+    if score_all["for"] < score_all["against"] + DEEPSEEK_LONG_OHLC_MIN_EDGE:
+        return False, (
+            f"DeepSeek LONG 15m 顺向优势不足 "
+            f"(需≥反向+{DEEPSEEK_LONG_OHLC_MIN_EDGE}; {score_all['summary']})"
+        )
+    if score_recent["for"] <= score_recent["against"]:
+        return False, (
+            f"DeepSeek LONG 近{GATE_15M_RECENT_BARS}根未明确偏多 "
+            f"({score_recent['summary']})"
+        )
+    return True, ""
+
+
 def sym_data_for_catalyst_gate(item: Optional[dict]) -> dict:
     """explore universe / predict symbols_data → explore_catalyst_technical_ok 统一结构."""
     sym = _as_sym_dict(item)
@@ -569,6 +683,7 @@ def sym_data_for_catalyst_gate(item: Optional[dict]) -> dict:
         "symbol": sym.get("symbol") or sym.get("pair") or "",
         "tech": tech,
         "kline_narrative": sym.get("kline_narrative") or {},
+        "change_24h": sym.get("change_24h"),
     }
     if sym.get("klines_15m"):
         out["klines_15m"] = sym.get("klines_15m")

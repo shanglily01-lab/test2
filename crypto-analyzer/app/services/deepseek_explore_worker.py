@@ -45,8 +45,10 @@ from app.services.ai_explore_prompt import (
     get_ai_position_tp_pct,
     EXPLORE_LLM_MAX_OUTPUT_TOKENS,
     EXPLORE_CONFIDENCE_THRESHOLD,
+    DEEPSEEK_LONG_CONFIDENCE_THRESHOLD,
     build_explore_prompt,
     explore_catalyst_technical_ok,
+    deepseek_long_entry_quality_ok,
     parse_explore_llm_json,
 )
 from app.services.ai_predict_schedule import (
@@ -1461,16 +1463,21 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             if not symbol:
                 continue
 
-            if category == 'bullish' and confidence >= EXPLORE_CONFIDENCE_THRESHOLD:
+            if category == 'bullish' and confidence >= DEEPSEEK_LONG_CONFIDENCE_THRESHOLD:
                 side = 'LONG'
             elif category == 'bearish' and confidence >= EXPLORE_CONFIDENCE_THRESHOLD:
                 side = 'SHORT'
             else:
+                need = (
+                    DEEPSEEK_LONG_CONFIDENCE_THRESHOLD
+                    if category == 'bullish'
+                    else EXPLORE_CONFIDENCE_THRESHOLD
+                )
                 verdict_rows.append((
                     run_id, symbol, db_category,
                     confidence, catalyst, data_signal, risk_note,
                     'skipped_confidence', None,
-                    f"category={category} confidence={confidence:.2f}",
+                    f"category={category} confidence={confidence:.2f} need>={need}",
                 ))
                 continue
 
@@ -1487,6 +1494,22 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 logger.info(f"[DeepSeek探索] {symbol} 跳过主观 catalyst: {tech_reason}")
                 continue
+
+            if side == 'LONG':
+                long_ok, long_reason = deepseek_long_entry_quality_ok(
+                    confidence,
+                    resolve_futures_universe_item(universe, symbol),
+                    catalyst=catalyst,
+                    data_signal=data_signal,
+                )
+                if not long_ok:
+                    verdict_rows.append((
+                        run_id, symbol, db_category, confidence,
+                        catalyst, data_signal, risk_note,
+                        'skipped_weak_catalyst', None, long_reason,
+                    ))
+                    logger.info(f"[DeepSeek探索] {symbol} LONG加严跳过: {long_reason}")
+                    continue
 
             if side == 'LONG' and not allow_long:
                 verdict_rows.append((

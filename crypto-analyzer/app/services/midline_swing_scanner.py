@@ -13,17 +13,22 @@ from loguru import logger
 from app.services.securities_filter import is_security
 from app.utils.futures_symbol import futures_symbol_clean, futures_symbol_rating_canonical
 
-# 默认硬规则（二期可调参）
-DAILY_TREND_PCT = 8.0
-DAILY_RSI_LONG = (40.0, 70.0)
-DAILY_RSI_SHORT = (30.0, 60.0)
-DAILY_VOL_RATIO_MIN = 0.7
-H1_RSI_LONG_MIN = 45.0
-H1_RSI_SHORT_MAX = 55.0
-RANGE_BOTTOM_PCT = 0.20
-RANGE_TOP_PCT = 0.80
-ATR_SHRINK_RATIO = 0.85
-VOL_SHRINK_RATIO = 0.75
+# 默认硬规则 v2.1（放宽：原 ±8% + 贴 20% 极值导致几乎永不开仓）
+# 目标：上涨趋势中的回踩做多 / 下跌趋势中的反抽做空
+DAILY_TREND_PCT = 3.0
+DAILY_RSI_LONG = (30.0, 78.0)
+DAILY_RSI_SHORT = (22.0, 70.0)
+DAILY_VOL_RATIO_MIN = 0.40
+H1_RSI_LONG_MIN = 35.0
+H1_RSI_SHORT_MAX = 65.0
+# 1h MA 允许小幅回撤（ma24 不低于 ma168 的 1.5%）
+H1_MA_PULLBACK_TOL = 0.015
+# 30d 区间：下 40% 做多 / 上 40% 做空；或贴近近 10 日高低
+RANGE_BOTTOM_PCT = 0.40
+RANGE_TOP_PCT = 0.60
+NEAR_10D_PCT = 0.05
+ATR_SHRINK_RATIO = 1.20
+VOL_SHRINK_RATIO = 1.05
 
 
 def _rsi(closes: List[float], period: int = 14) -> Optional[float]:
@@ -197,14 +202,15 @@ def _layer2_hourly(
     detail["rsi_1h"] = round(rsi, 1) if rsi is not None else None
 
     if profile == "long":
-        if ma_24 < ma_168:
+        # 允许小幅回踩：ma24 不低于 ma168*(1-tol)
+        if ma_168 <= 0 or ma_24 < ma_168 * (1.0 - H1_MA_PULLBACK_TOL):
             detail["reason"] = "h1_ma_not_bullish"
             return False, detail
         if rsi is None or rsi < H1_RSI_LONG_MIN:
             detail["reason"] = "h1_rsi_low"
             return False, detail
     else:
-        if ma_24 > ma_168:
+        if ma_168 <= 0 or ma_24 > ma_168 * (1.0 + H1_MA_PULLBACK_TOL):
             detail["reason"] = "h1_ma_not_bearish"
             return False, detail
         if rsi is None or rsi > H1_RSI_SHORT_MAX:
@@ -242,7 +248,13 @@ def _layer3_entry(
     detail["range_low"] = lo_30
     detail["range_high"] = hi_30
 
-    # 近 4 根 vs 前 12 根 波幅
+    low_10d = min(lows_1d[-10:])
+    high_10d = max(highs_1d[-10:])
+    near_10d_low = low_10d > 0 and last <= low_10d * (1.0 + NEAR_10D_PCT)
+    near_10d_high = high_10d > 0 and last >= high_10d * (1.0 - NEAR_10D_PCT)
+    detail["near_10d_low"] = near_10d_low
+    detail["near_10d_high"] = near_10d_high
+
     def _ranges(h, l, start, end):
         return [h[i] - l[i] for i in range(start, end)]
 
@@ -261,28 +273,23 @@ def _layer3_entry(
 
     last3 = closes_15m[-3:]
     if profile == "long":
-        if pos > RANGE_BOTTOM_PCT:
+        # 上涨趋势中的回踩：落在 30d 下 40%，或贴近近 10 日低点
+        if not (pos <= RANGE_BOTTOM_PCT or near_10d_low):
             detail["reason"] = "not_near_low"
             return False, detail
-        if shrink > ATR_SHRINK_RATIO:
-            detail["reason"] = "not_stabilized_range"
-            return False, detail
-        # 近 3 根不创新低
-        if min(lows_15m[-3:]) < min(lows_15m[-6:-3]) * 0.999:
-            # 更严：近 3 收盘不创新低
-            pass
-        if last3[-1] < min(last3[:-1]):
-            detail["reason"] = "still_making_lower_close"
+        # 企稳：波幅收敛，或近 3 收盘未持续创新低
+        stabilized = shrink <= ATR_SHRINK_RATIO or last3[-1] >= min(last3[:-1])
+        if not stabilized:
+            detail["reason"] = "not_stabilized"
             return False, detail
     else:
-        if pos < RANGE_TOP_PCT:
+        if not (pos >= RANGE_TOP_PCT or near_10d_high):
             detail["reason"] = "not_near_high"
             return False, detail
-        if vol_ratio > VOL_SHRINK_RATIO:
-            detail["reason"] = "not_volume_shrink"
-            return False, detail
-        if last3[-1] > max(last3[:-1]):
-            detail["reason"] = "still_making_higher_close"
+        # 高位缩量或滞涨：量比收敛，或近 3 收盘未持续创新高
+        stalled = vol_ratio <= VOL_SHRINK_RATIO or last3[-1] <= max(last3[:-1])
+        if not stalled:
+            detail["reason"] = "not_stalled_high"
             return False, detail
 
     detail["passed"] = True

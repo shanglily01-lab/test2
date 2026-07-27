@@ -370,7 +370,7 @@ def run_midline_round(
             from app.services.trading_gates import check_max_positions_allowed
 
             # 先落拒绝（限制数量避免爆表：每轮最多记 80 条拒绝 + 全部通过）
-            reject_budget = 80
+            reject_budget = 260
             for row in all_rows:
                 if row.get("passed"):
                     continue

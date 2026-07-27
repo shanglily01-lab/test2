@@ -146,7 +146,7 @@
 
 ### 主探索 (`*_explore`)
 - 每 **max_hold_hours**（距上次 ok）+ 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
-- SL **3%** / TP **5%** / **max_hold_hours** / 5x / 500U；conf≥**0.75** + `explore_catalyst_technical_ok`（含 15m OHLC）
+- SL **3%** / TP **5%** / **max_hold_hours** / 5x / 500U；conf≥**0.75** + `explore_catalyst_technical_ok`（含 15m OHLC）；**DeepSeek LONG** 另≥**0.82** + RSI/7d/24h/`deepseek_long_entry_quality_ok`
 - **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：`gemini_explore`、`deepseek_explore`（+ L0 白名单等 symbol 闸门）
 
 ### 主预测 (`*_predict`)

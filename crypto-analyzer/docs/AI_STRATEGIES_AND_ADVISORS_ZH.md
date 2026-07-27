@@ -66,6 +66,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 ### 2.3 共用硬门槛
 
 - **主探索/预测**：`explore_catalyst_technical_ok`（文案 + **真实 15m OHLC**）+ 置信度 ≥ **0.75**（`EXPLORE_CONFIDENCE_THRESHOLD` / `PREDICT_CONFIDENCE_THRESHOLD`）。
+- **DeepSeek LONG**：额外 `deepseek_long_entry_quality_ok`（conf≥**0.82**、RSI≤68、距7d高≥3%、拒追涨）；SHORT 仍 0.75。
 - **战术四策略**：`tactical_catalyst_ok` + 置信度 ≥ **0.55**。
 - **顶空底多**：`reversal_catalyst_technical_ok` + 置信度 ≥ **0.65**。
 - LLM 候选池：技术面评分 **TOP50**（`prepare_universe_for_llm`），非按 24h 涨跌幅排序。
@@ -147,7 +148,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 4.3 参数与门槛
 
-与主探索相同：**持仓读 `max_hold_hours`、SL/TP 读系统设定、5x、conf≥0.75、catalyst+OHLC gate**。弱 catalyst / OHLC 不支持 → `skipped_weak_catalyst`。
+与主探索相同：**持仓读 `max_hold_hours`、SL/TP 读系统设定、5x、conf≥0.75、catalyst+OHLC gate**；DeepSeek LONG 另走 `deepseek_long_entry_quality_ok`（conf≥0.82 等）。弱 catalyst / OHLC 不支持 → `skipped_weak_catalyst`。
 
 ### 4.4 Kill Switch
 
@@ -265,7 +266,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 非中线仍读 `system_settings.paper_limit_long/short_offset_pct`（默认 0.5%，Web 可调 0.1~1%）。
 
-信号默认硬规则、机会分析页字段：见 `REQUIREMENTS_LOGIC_ZH.md` §7.2.4–7.2.5。
+信号默认硬规则（v2.1 放宽回踩/反抽）、机会分析页字段：见 `REQUIREMENTS_LOGIC_ZH.md` §7.2.4–7.2.5。
 
 ### 6.5.4 实盘
 

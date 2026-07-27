@@ -44,7 +44,9 @@ from app.services.ai_explore_prompt import (
     get_ai_position_tp_pct,
     EXPLORE_LLM_MAX_OUTPUT_TOKENS,
     PREDICT_CONFIDENCE_THRESHOLD,
+    DEEPSEEK_LONG_CONFIDENCE_THRESHOLD,
     explore_catalyst_technical_ok,
+    deepseek_long_entry_quality_ok,
     parse_explore_llm_json,
     sym_data_for_catalyst_gate,
 )
@@ -1074,14 +1076,19 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                     price_at_pred = sd.get('current_price')
                     break
 
-            if category == 'bullish' and confidence >= PREDICT_CONFIDENCE_THRESHOLD:
+            if category == 'bullish' and confidence >= DEEPSEEK_LONG_CONFIDENCE_THRESHOLD:
                 side = 'LONG'
             elif category == 'bearish' and confidence >= PREDICT_CONFIDENCE_THRESHOLD:
                 side = 'SHORT'
             else:
-                skip_reason = f"category={category} confidence={confidence:.2f}"
-                if category in ('bullish', 'bearish') and confidence < PREDICT_CONFIDENCE_THRESHOLD:
-                    skip_reason = f"低置信度: conf={confidence:.2f} < {PREDICT_CONFIDENCE_THRESHOLD}"
+                need = (
+                    DEEPSEEK_LONG_CONFIDENCE_THRESHOLD
+                    if category == 'bullish'
+                    else PREDICT_CONFIDENCE_THRESHOLD
+                )
+                skip_reason = f"category={category} confidence={confidence:.2f} need>={need}"
+                if category in ('bullish', 'bearish') and confidence < need:
+                    skip_reason = f"低置信度: conf={confidence:.2f} < {need}"
                 verdict_rows.append((
                     run_id, symbol, category, confidence,
                     catalyst, data_signal, risk_note,
@@ -1112,6 +1119,23 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                 predictions_made += 1
                 logger.info(f"[DeepSeek预测] {symbol} 跳过弱 catalyst: {tech_reason}")
                 continue
+
+            if side == 'LONG':
+                long_ok, long_reason = deepseek_long_entry_quality_ok(
+                    confidence,
+                    sym_data_for_catalyst_gate(sym_row),
+                    catalyst=catalyst,
+                    data_signal=data_signal,
+                )
+                if not long_ok:
+                    verdict_rows.append((
+                        run_id, symbol, category, confidence,
+                        catalyst, data_signal, risk_note,
+                        price_at_pred, 'skipped_weak_catalyst', None, long_reason,
+                    ))
+                    predictions_made += 1
+                    logger.info(f"[DeepSeek预测] {symbol} LONG加严跳过: {long_reason}")
+                    continue
 
             if _big4_blocks(big4, side):
                 big4_warning = big4_conflict_risk_note(big4, side)

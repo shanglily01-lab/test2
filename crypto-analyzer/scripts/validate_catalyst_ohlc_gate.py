@@ -10,8 +10,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from app.services.ai_explore_prompt import (
+    DEEPSEEK_LONG_CONFIDENCE_THRESHOLD,
     EXPLORE_CONFIDENCE_THRESHOLD,
     PREDICT_CONFIDENCE_THRESHOLD,
+    deepseek_long_entry_quality_ok,
     explore_catalyst_technical_ok,
 )
 
@@ -136,6 +138,64 @@ def test_text_still_required() -> None:
         _ok(f"text gate still active: {reason}")
 
 
+def test_deepseek_long_quality() -> None:
+    if DEEPSEEK_LONG_CONFIDENCE_THRESHOLD != 0.82:
+        _fail(f"DeepSeek LONG conf want 0.82 got {DEEPSEEK_LONG_CONFIDENCE_THRESHOLD}")
+    else:
+        _ok("DeepSeek LONG conf = 0.82")
+
+    # Strong LONG OHLC: 12G + 4R → for=12 against=4 edge=8; last6 = 2G+4R? 
+    # Need last6 for > against: e.g. 10G + 2R + 4G → window for=14 against=2; last6=2R+4G for=4 against=2
+    bars = _bars("G" * 10 + "R" * 2 + "G" * 4)
+    good = {
+        "symbol": "FOO/USDT",
+        "klines_15m": bars,
+        "change_24h": 5.0,
+        "tech": {"rsi_14_1h": 55, "below_7d_high_pct": -5.0},
+    }
+    with patch(
+        "app.services.ai_explore_prompt._load_15m_ohlc_bars",
+        return_value=[],
+    ):
+        ok, reason = deepseek_long_entry_quality_ok(
+            0.85, good, catalyst="15m 回踩缩量企稳连阳放量", data_signal="",
+        )
+    if not ok:
+        _fail(f"good DeepSeek LONG should pass, got {reason!r}")
+    else:
+        _ok("DeepSeek LONG quality pass")
+
+    hot = dict(good)
+    hot["tech"] = {"rsi_14_1h": 72, "below_7d_high_pct": -5.0}
+    with patch(
+        "app.services.ai_explore_prompt._load_15m_ohlc_bars",
+        return_value=[],
+    ):
+        ok, reason = deepseek_long_entry_quality_ok(0.85, hot)
+    if ok:
+        _fail("RSI>68 should reject DeepSeek LONG")
+    else:
+        _ok(f"RSI hot rejected: {reason}")
+
+    near_high = dict(good)
+    near_high["tech"] = {"rsi_14_1h": 55, "below_7d_high_pct": -1.0}
+    with patch(
+        "app.services.ai_explore_prompt._load_15m_ohlc_bars",
+        return_value=[],
+    ):
+        ok, reason = deepseek_long_entry_quality_ok(0.85, near_high)
+    if ok:
+        _fail("near 7d high should reject DeepSeek LONG")
+    else:
+        _ok(f"near-high rejected: {reason}")
+
+    low_conf_ok, _ = deepseek_long_entry_quality_ok(0.78, good)
+    if low_conf_ok:
+        _fail("conf 0.78 should fail DeepSeek LONG")
+    else:
+        _ok("conf <0.82 rejected")
+
+
 def main() -> int:
     print("=== validate_catalyst_ohlc_gate ===\n")
     test_threshold()
@@ -143,6 +203,7 @@ def main() -> int:
     test_ohlc_accepts_aligned_long()
     test_ohlc_rejects_trail_against()
     test_text_still_required()
+    test_deepseek_long_quality()
     print()
     if FAILURES:
         print(f"FAILED: {len(FAILURES)}")
