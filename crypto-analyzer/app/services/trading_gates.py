@@ -381,6 +381,42 @@ def load_trading_forbidden_symbols(conn=None) -> Set[str]:
         return set()
 
 
+def load_l0_l1_scan_symbols(conn=None) -> Set[str]:
+    """DeepSeek 扫描池：白名单 L0 + 黑名单 1 级（未锁定）。
+
+    返回 clean symbol 集合（无斜杠）。未评级 / L2+ / rating_locked 均不入池，节省 LLM token。
+    """
+    own_conn = conn is None
+    try:
+        if own_conn:
+            db_config = get_db_config()
+            conn = pymysql.connect(
+                **db_config, charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor,
+            )
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT symbol FROM trading_symbol_rating "
+            "WHERE rating_level IN (0, 1) "
+            "AND COALESCE(rating_locked, 0) = 0"
+        )
+        rows = cur.fetchall()
+        if own_conn:
+            cur.close()
+            conn.close()
+        return {
+            futures_symbol_clean(r["symbol"] if isinstance(r, dict) else r[0])
+            for r in rows
+        }
+    except Exception as e:
+        logger.warning(f"[trading_gates] 读取 L0/L1 扫描名单失败: {e}")
+        if own_conn and conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        return set()
+
+
 def load_blacklist_level3_symbols(conn=None) -> Set[str]:
     """向后兼容：返回禁止开仓 symbol 集合（现为 L2+ + 手动锁定）。"""
     return load_trading_forbidden_symbols(conn)

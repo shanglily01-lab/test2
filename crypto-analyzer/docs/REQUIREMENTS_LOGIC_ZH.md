@@ -337,7 +337,8 @@
 
 - 探索读 `load_candidate_pool_for_explore()`（**禁止** pool 全表 DELETE）  
 - 主预测（Gemini）：`candidate_pool_snapshot` 技术面 **TOP50**；**禁止**对 `price_stats_24h` 全市场逐 symbol 回退扫 `kline_data`  
-- DeepSeek 预测：**全量** candidate_pool（覆盖白名单 L0 / 黑名单 L1 / 未评级），**排除 L2+ 与 rating_locked**；建数**仅读**缓存（禁 kline 回退）；建数成功后再 claim；软锁 **25min** 过期可抢占；DB `read_timeout=45`；LLM 按批 50  
+- DeepSeek 预测：**仅 L0 白名单 + L1**（`load_l0_l1_scan_symbols` ∩ `candidate_pool`），**不扫未评级/全市场**；建数**仅读**缓存（禁 kline 回退）；建数成功后再 claim；软锁 **25min** 过期可抢占；DB `read_timeout=45`；LLM 按批 50  
+- DeepSeek 探索：同样 **仅 L0/L1** 建 universe（`_build_l0_l1_universe_from_cache`），禁止扩成全市场  
 - 主探索/预测开仓：`explore_catalyst_technical_ok` 在文案门槛后，用真实 15m K 线做 OHLC 方向闸门（缺 K 线则拒）  
 - K 线叙事：1h = 24 根趋势 + 近 6 明细；15m = 16 根（4h）  
 
@@ -355,6 +356,8 @@
 | 持仓顾问决策 | 15m 表主审 | 浮盈 ROI≥**+8%** 且 15m **明确**转弱（反向≥4）→ 倾向 observe/sell；sell 须 15m 近 4 根确认反转 |
 
 **AI 轻量移动止盈**（`position_sl_tp_monitor.py`）：探索/预测及 **中线 v2**（`midline_long` / `midline_short`）在硬 SL/TP 之外，peak 价格收益 **≥3%** 后回撤 **≥1%** 程序化平仓（`ai-trail-tp`）；不走 early-sl/breakeven。
+
+**AI soft-sl**（同 monitor）：通用探索/预测 grace **15min**、no_follow 约 **-1.2%**。**DeepSeek** explore/predict 单独加宽以匹配 15m×4h 开仓 thesis：grace **45min**；no_follow 须 age≥**60min** 且价格亏≥**约 2.2%**；profit_to_loss / mature 亦更深更晚；硬 SL 仍兜底。
 
 开仓顾问：中线 v2 **跳过**。持仓顾问：中线 v2 **排除**（仅硬 SL/TP + ai-trail-tp + 8h）。
 
@@ -459,6 +462,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-28 | — | DeepSeek 探索/预测改扫 **仅 L0+L1**（拒全市场/未评级）省 token；DeepSeek soft-sl 加宽（grace45 / no_follow≥60m且亏≈2.2%）匹配开仓 thesis |
 | 2026-07-27 | — | 中线 v2 **退出持仓顾问**：仅硬 SL/TP + ai-trail-tp + 8h；避免顾问 15m 噪音闷杀波段仓 |
 | 2026-07-27 | — | **L2 黑名单不再交易**：`check_symbol_trading_forbidden` 阈值 `rating_level>=2`（模拟+实盘均禁）；候选池/config 同步同步排除 |
 | 2026-07-27 | — | DeepSeek 主探索/预测 **LONG 加严**：conf≥0.82、RSI≤68、距7d高≥3%、24h≤12%、OHLC 顺向优势+2；SHORT 不变；开仓顾问 DeepSeek LONG 同口径预检 |

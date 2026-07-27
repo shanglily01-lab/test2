@@ -30,7 +30,10 @@ import pymysql
 import pymysql.cursors
 from loguru import logger
 
-from app.utils.futures_symbol import futures_symbol_rating_canonical
+from app.utils.futures_symbol import (
+    futures_symbol_clean,
+    futures_symbol_rating_canonical,
+)
 from app.utils.position_time import utc_now_naive
 
 from app.services.ai_big4_prompt import (
@@ -128,14 +131,14 @@ PREDICT_MARGIN_USD = 500.0
 PREDICT_LEVERAGE = 5
 PREDICT_ACCOUNT_ID = 2
 PREDICT_SOURCE = 'deepseek_predict'
-# 全量扫描：白名单(L0)+黑名单1/2级+未评级；排除 L3/手动锁定。禁 price_stats/kline 全市场扫库。
+# 仅扫 L0 白名单 + L1；禁全市场/未评级。禁 price_stats/kline 全市场扫库。
 PREDICT_CANDIDATE_LIMIT = 500
-PREDICT_TOP_N = 50  # 兼容旧校验/日志；选币不再按技术面 TOP 截断
+PREDICT_TOP_N = 50  # 兼容旧校验/日志；选币按 L0/L1，非技术面 TOP
 DEEPSEEK_UNIVERSE_SYMBOL_LIMIT = PREDICT_CANDIDATE_LIMIT
 DEEPSEEK_PREDICT_BATCH_SIZE = 50
 
 # 防卡死：软锁过期后允许抢占；建数硬时限（秒）
-# 全量约 10 批 × LLM timeout，软锁需大于最坏批次总时长
+# L0/L1 池通常远小于全市场，软锁仍留足余量防多批 LLM
 PREDICT_LOCK_STALE_S = 25 * 60
 PREDICT_BUILD_DEADLINE_S = 120
 
@@ -170,7 +173,7 @@ def _connect():
 
 
 # ============================================================
-# 数据查询 — 全量候选池（排除 L3/锁定；禁 price_stats/kline 扫库）
+# 数据查询 — L0/L1 候选池（禁全量/未评级；禁 price_stats/kline 扫库）
 # ============================================================
 def _filter_predict_symbols(symbols: List[str], limit: int) -> List[str]:
     out: List[str] = []
@@ -187,22 +190,25 @@ def _filter_predict_symbols(symbols: List[str], limit: int) -> List[str]:
     return out
 
 
-def _load_predict_banned_symbols(conn) -> set:
-    """L3 + 手动锁定；不再扫描这些交易对。"""
+def _load_predict_scan_allowlist(conn) -> set:
+    """仅 L0 + L1（未锁定）；未评级与 L2+ 不扫。"""
     try:
-        from app.services.trading_gates import load_trading_forbidden_symbols
-        return load_trading_forbidden_symbols(conn) or set()
+        from app.services.trading_gates import load_l0_l1_scan_symbols
+        return load_l0_l1_scan_symbols(conn) or set()
     except Exception as e:
-        logger.warning(f"[DeepSeek预测] 读取禁止名单失败, 保守不额外过滤: {e}")
+        logger.warning(f"[DeepSeek预测] 读取 L0/L1 扫描名单失败: {e}")
         return set()
 
 
 def _get_predict_symbols(conn) -> List[str]:
-    """全量 candidate_pool：覆盖 L0/L1/未评级；排除 L2+/rating_locked。
+    """candidate_pool ∩ (L0 ∪ L1)：省 token，拒绝全市场/未评级扫描。
 
     只读缓存表，禁止 price_stats 全市场 + 逐币 kline 回退（易 MySQL 2013）。
     """
-    banned = _load_predict_banned_symbols(conn)
+    allowed = _load_predict_scan_allowlist(conn)
+    if not allowed:
+        logger.warning("[DeepSeek预测] L0/L1 扫描名单为空，本轮无候选")
+        return []
 
     rows = _get_candidate_pool_cached()
     if rows:
@@ -210,44 +216,38 @@ def _get_predict_symbols(conn) -> List[str]:
 
         raw_symbols = select_all_symbols_from_pool(
             rows[:PREDICT_CANDIDATE_LIMIT],
-            banned=banned,
+            banned=set(),
             limit=PREDICT_CANDIDATE_LIMIT,
         )
+        # 只保留评级允许的 L0/L1
+        raw_symbols = [
+            s for s in raw_symbols
+            if futures_symbol_clean(s) in allowed
+        ]
         symbols = _filter_predict_symbols(raw_symbols, PREDICT_CANDIDATE_LIMIT)
         if symbols:
             logger.info(
-                f"[DeepSeek预测] 全量候选池(排除L2+/锁定) 获取 {len(symbols)} 个 symbol "
-                f"(banned={len(banned)})"
+                f"[DeepSeek预测] L0/L1 候选池 获取 {len(symbols)} 个 symbol "
+                f"(allowlist={len(allowed)})"
             )
             return symbols
 
-    from app.services.trading_gates import sql_exclude_level3_filter
-
-    _l3 = sql_exclude_level3_filter("symbol")
     with conn.cursor() as cur:
-        # 缓存不可用时回退评级表 L0/L1（仍排除 L2+/锁定），不做 TOP50
+        # 缓存不可用时回退评级表 L0/L1
         cur.execute(
-            f"SELECT symbol FROM trading_symbol_rating "
-            f"WHERE rating_level IN (0, 1) "
-            f"AND COALESCE(rating_locked, 0) = 0 "
-            f"ORDER BY rating_level ASC, symbol ASC "
-            f"LIMIT %s",
+            "SELECT symbol FROM trading_symbol_rating "
+            "WHERE rating_level IN (0, 1) "
+            "AND COALESCE(rating_locked, 0) = 0 "
+            "ORDER BY rating_level ASC, symbol ASC "
+            "LIMIT %s",
             (PREDICT_CANDIDATE_LIMIT,),
         )
         rated = [r["symbol"] for r in cur.fetchall()]
-        if not rated:
-            cur.execute(
-                f"SELECT symbol FROM top_performing_symbols "
-                f"WHERE 1=1 {_l3} "
-                f"ORDER BY rank_score ASC LIMIT %s",
-                (PREDICT_CANDIDATE_LIMIT,),
-            )
-            rated = [r["symbol"] for r in cur.fetchall()]
         symbols = _filter_predict_symbols(rated, PREDICT_CANDIDATE_LIMIT)
         if symbols:
             logger.warning(
-                f"[DeepSeek预测] candidate_pool 不可用, 回退评级/TOP 表 "
-                f"{len(symbols)} 个 (仍排除 L3)"
+                f"[DeepSeek预测] candidate_pool 不可用, 回退评级表 L0/L1 "
+                f"{len(symbols)} 个"
             )
             return symbols
     return []
@@ -543,7 +543,7 @@ def _has_open_position(conn, symbol: str) -> bool:
 # DeepSeek 调用 (OpenAI-compatible)
 # ============================================================
 def _call_deepseek_predict(symbols_data: List[Dict], global_ctx: dict) -> Optional[dict]:
-    """调用 DeepSeek — 批量预测 candidate_pool 全量方向."""
+    """调用 DeepSeek — 批量预测 L0/L1 候选方向."""
     if not DEEPSEEK_API_KEY:
         logger.error("[DeepSeek预测] DEEPSEEK_API_KEY 未设置")
         return None
@@ -925,7 +925,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         return None
 
     try:
-        # 2. 全量候选池（已排除 L3/锁定）
+        # 2. L0/L1 候选池（拒全市场/未评级）
         predict_symbols = _get_predict_symbols(conn)
         if not predict_symbols:
             logger.warning("[DeepSeek预测] 预测候选池为空, 跳过")
@@ -938,7 +938,7 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
         # 预热 candidate_pool 缓存（一次读库）
         _get_candidate_pool_cached()
 
-        # 3. 仅用缓存建数；禁止逐币扫 kline（历史 530 全量 + 回退 → MySQL 2013）
+        # 3. 仅用缓存建数；禁止逐币扫 kline（历史全量扫库 → MySQL 2013）
         symbols_data = []
         failed_symbols = []
         cache_hits = 0

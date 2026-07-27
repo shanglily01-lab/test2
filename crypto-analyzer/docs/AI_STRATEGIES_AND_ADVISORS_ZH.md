@@ -105,6 +105,8 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 | SL / TP | **3% / 5%** |
 | source | `gemini_explore` / `deepseek_explore` / `gpt_explore` |
 
+**DeepSeek 探索选币**：仅 **L0 白名单 + L1**（`load_l0_l1_scan_symbols` ∩ candidate_pool），不扫未评级/全市场，节省 token。
+
 ### 3.5 Kill Switch（`system_settings`）
 
 | Key | 典型默认 |
@@ -133,7 +135,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 4.1 职责
 
-每 `max_hold_hours`（**距上次 status=ok**）给出方向概率（bullish/bearish），达标则开模拟单；**不走探索的事件叙事**，但共用 catalyst 技术门槛。Gemini 读技术面 TOP50；**DeepSeek 预测全量** candidate_pool（白名单 L0 / 黑名单 L1 / 未评级，**排除 L2+/锁定**），禁止 `price_stats`+kline 扫库；建数只读缓存；软锁过期可抢占。
+每 `max_hold_hours`（**距上次 status=ok**）给出方向概率（bullish/bearish），达标则开模拟单；**不走探索的事件叙事**，但共用 catalyst 技术门槛。Gemini 读技术面 TOP50；**DeepSeek 预测仅扫 L0 白名单 + L1**（不扫未评级/全市场），禁止 `price_stats`+kline 扫库；建数只读缓存；软锁过期可抢占。
 
 ### 4.2 代码入口
 
@@ -349,6 +351,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 - **盈利侧**：ROI≥**+8%** 且 15m **明确**转弱（反向≥4）→ 倾向 observe/sell；`_temper_premature_sell` 严格拦截过早 sell  
 - **亏损分档**（保证金 ROI%）：轻微 >-5%、中度 >-12%、严重 ≤-15%；深亏 `hold` 经 `_temper_losing_hold` 统计复核  
 - **程序化锁利**：探索/预测/中线 v2 `position_sl_tp_monitor` **ai-trail-tp**（peak 价格收益≥3%，回撤≥1%）
+- **DeepSeek soft-sl**：grace 45min；no_follow 须≥60min 且价格亏≈2.2%（匹配 15m×4h 开仓，避免早期闷杀）
 
 ### 8.4 sell 后果
 

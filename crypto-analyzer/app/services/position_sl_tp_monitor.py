@@ -74,6 +74,19 @@ _AI_SOFT_SL_PROFIT_PEAK_PCT = 0.012
 _AI_SOFT_SL_PROFIT_TO_LOSS_PCT = -0.004
 _AI_SOFT_SL_MATURE_MIN = 30
 _AI_SOFT_SL_MATURE_LOSS_PCT = -0.018
+# DeepSeek 开仓按 15m×4h 结构+catalyst；旧 soft-sl 15min/-1.2% 过早闷杀。
+# 给 thesis 时间，仅在更深亏损/更长持仓后软切，硬 SL(约3%)仍兜底。
+_DEEPSEEK_SOFT_SL_SOURCES = frozenset({
+    'deepseek_explore', 'deepseek_predict',
+})
+_DEEPSEEK_SOFT_SL_GRACE_MIN = 45
+_DEEPSEEK_SOFT_SL_NO_FOLLOW_MIN_AGE = 60
+_DEEPSEEK_SOFT_SL_NO_FOLLOW_PEAK_PCT = 0.008
+_DEEPSEEK_SOFT_SL_NO_FOLLOW_LOSS_PCT = -0.022
+_DEEPSEEK_SOFT_SL_PROFIT_PEAK_PCT = 0.015
+_DEEPSEEK_SOFT_SL_PROFIT_TO_LOSS_PCT = -0.008
+_DEEPSEEK_SOFT_SL_MATURE_MIN = 90
+_DEEPSEEK_SOFT_SL_MATURE_LOSS_PCT = -0.022
 _AI_TREND_SL_MIN_AGE_MIN = 10
 _AI_TREND_SL_FAST_LOSS_PCT = -0.006
 _AI_TREND_SL_CONFIRM_LOSS_PCT = -0.008
@@ -110,6 +123,10 @@ def _is_ai_hard_sltp_source(src: str) -> bool:
             if key in src:
                 return True
     return False
+
+
+def _is_deepseek_soft_sl_source(src: str) -> bool:
+    return (src or "").strip().lower() in _DEEPSEEK_SOFT_SL_SOURCES
 
 
 def _dynamic_trail_pullback(peak_pct: float) -> float:
@@ -158,31 +175,70 @@ def _check_ai_soft_stop(
     peak_pct: float,
     age_s: float,
     leverage: int = 1,
+    source: str = "",
 ) -> Optional[str]:
-    """Cut failed AI entries before the hard SL becomes the normal exit."""
+    """Cut failed AI entries before the hard SL becomes the normal exit.
+
+    DeepSeek explore/predict: 更长 grace / 更深 no-follow，匹配 15m×4h 开仓 thesis。
+    """
     age_min = age_s / 60.0
-    if age_min < _AI_SOFT_SL_GRACE_MIN:
+    deepseek = _is_deepseek_soft_sl_source(source)
+    grace = _DEEPSEEK_SOFT_SL_GRACE_MIN if deepseek else _AI_SOFT_SL_GRACE_MIN
+    if age_min < grace:
         return None
 
     lev = max(int(leverage or 1), 1)
     roi_pct = pnl_pct * lev
     peak_roi = peak_pct * lev
 
-    if peak_pct >= _AI_SOFT_SL_PROFIT_PEAK_PCT and pnl_pct <= _AI_SOFT_SL_PROFIT_TO_LOSS_PCT:
+    profit_peak = (
+        _DEEPSEEK_SOFT_SL_PROFIT_PEAK_PCT if deepseek else _AI_SOFT_SL_PROFIT_PEAK_PCT
+    )
+    profit_to_loss = (
+        _DEEPSEEK_SOFT_SL_PROFIT_TO_LOSS_PCT
+        if deepseek
+        else _AI_SOFT_SL_PROFIT_TO_LOSS_PCT
+    )
+    if peak_pct >= profit_peak and pnl_pct <= profit_to_loss:
         return (
             f"AI soft-sl(profit_to_loss, peak_price={peak_pct * 100:.2f}%, "
             f"pnl_price={pnl_pct * 100:.2f}%, peak_roi={peak_roi * 100:.2f}%, "
             f"roi={roi_pct * 100:.2f}%, age={age_min:.0f}m)"
         )
 
-    if peak_pct < _AI_SOFT_SL_NO_FOLLOW_PEAK_PCT and pnl_pct <= _AI_SOFT_SL_NO_FOLLOW_LOSS_PCT:
+    no_follow_peak = (
+        _DEEPSEEK_SOFT_SL_NO_FOLLOW_PEAK_PCT
+        if deepseek
+        else _AI_SOFT_SL_NO_FOLLOW_PEAK_PCT
+    )
+    no_follow_loss = (
+        _DEEPSEEK_SOFT_SL_NO_FOLLOW_LOSS_PCT
+        if deepseek
+        else _AI_SOFT_SL_NO_FOLLOW_LOSS_PCT
+    )
+    no_follow_age_ok = (
+        age_min >= _DEEPSEEK_SOFT_SL_NO_FOLLOW_MIN_AGE if deepseek else True
+    )
+    if (
+        no_follow_age_ok
+        and peak_pct < no_follow_peak
+        and pnl_pct <= no_follow_loss
+    ):
         return (
             f"AI soft-sl(no_follow_through, peak_price={peak_pct * 100:.2f}%, "
             f"pnl_price={pnl_pct * 100:.2f}%, roi={roi_pct * 100:.2f}%, "
             f"age={age_min:.0f}m)"
         )
 
-    if age_min >= _AI_SOFT_SL_MATURE_MIN and pnl_pct <= _AI_SOFT_SL_MATURE_LOSS_PCT:
+    mature_min = (
+        _DEEPSEEK_SOFT_SL_MATURE_MIN if deepseek else _AI_SOFT_SL_MATURE_MIN
+    )
+    mature_loss = (
+        _DEEPSEEK_SOFT_SL_MATURE_LOSS_PCT
+        if deepseek
+        else _AI_SOFT_SL_MATURE_LOSS_PCT
+    )
+    if age_min >= mature_min and pnl_pct <= mature_loss:
         return (
             f"AI soft-sl(mature_loss, peak_price={peak_pct * 100:.2f}%, "
             f"pnl_price={pnl_pct * 100:.2f}%, roi={roi_pct * 100:.2f}%, "
@@ -407,6 +463,7 @@ class PositionSLTPMonitor:
                         new_peak,
                         age_s,
                         int(pos.get("leverage") or 1),
+                        source=src,
                     )
                     if soft_sl:
                         self._sync_peak_to_db(pid, new_peak * 100)

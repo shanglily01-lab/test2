@@ -79,7 +79,8 @@ DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_TIMEOUT_S = int(os.getenv("DEEPSEEK_TIMEOUT_S", "180"))
 
 DEEPSEEK_SOURCE = 'deepseek_explore'
-DEEPSEEK_EXPLORE_UNIVERSE_LIMIT = 2000
+# 仅扫 L0 白名单 + L1 黑名单；上限防异常膨胀（不再全市场）
+DEEPSEEK_EXPLORE_UNIVERSE_LIMIT = 500
 DEEPSEEK_EXPLORE_BATCH_SIZE = 50
 
 # ── data_cache 层: 尝试从缓存快速读取, 失败时回退到主库 ──
@@ -423,25 +424,55 @@ def _build_universe(conn) -> dict:
     return _build_universe_fallback(conn, _level3_set)
 
 
-def _build_full_universe_from_cache(conn, current_size: int = 0) -> Optional[dict]:
-    """DeepSeek 专用：从 candidate_pool_snapshot 取全量交易对，避免共享包/送模 TopN 截断。"""
-    from app.services.trading_gates import load_blacklist_level3_symbols
+def _filter_universe_to_l0_l1(conn, universe: dict) -> dict:
+    """只保留 L0/L1（未锁定）；未评级与 L2+ 剔除。"""
+    from app.services.trading_gates import load_l0_l1_scan_symbols
+
+    allowed = load_l0_l1_scan_symbols(conn)
+    if not allowed:
+        logger.warning("[DeepSeek探索] L0/L1 扫描名单为空，universe 置空（拒全量扫描）")
+        return {}
+    before = len(universe or {})
+    out = {
+        sym: data
+        for sym, data in (universe or {}).items()
+        if futures_symbol_clean(sym) in allowed
+    }
+    logger.info(
+        f"[DeepSeek探索] L0/L1 过滤 universe: {before} → {len(out)} "
+        f"(allowlist={len(allowed)})"
+    )
+    return out
+
+
+def _build_l0_l1_universe_from_cache(conn) -> Optional[dict]:
+    """DeepSeek 专用：candidate_pool ∩ (L0 白名单 ∪ L1)，节省 token，拒绝全市场扫描。"""
+    from app.services.trading_gates import load_l0_l1_scan_symbols
+
+    allowed = load_l0_l1_scan_symbols(conn)
+    if not allowed:
+        logger.warning("[DeepSeek探索] L0/L1 扫描名单为空，无法从 cache 建池")
+        return None
 
     cached = _try_candidate_pool(
         min_volume=0,
         limit=DEEPSEEK_EXPLORE_UNIVERSE_LIMIT,
     )
-    if not cached or len(cached) <= current_size:
+    if not cached:
         return None
 
-    level3_set = load_blacklist_level3_symbols(conn)
     before = len(cached)
     cached = [
         r for r in cached
-        if futures_symbol_clean(r["symbol"]) not in level3_set
+        if futures_symbol_clean(r["symbol"]) in allowed
     ]
-    if len(cached) < before:
-        logger.info(f"[DeepSeek探索] 全量候选池黑名单3级过滤: {before - len(cached)} 个交易对")
+    cached = cached[:DEEPSEEK_EXPLORE_UNIVERSE_LIMIT]
+    logger.info(
+        f"[DeepSeek探索] L0/L1 候选池: cache={before} → keep={len(cached)} "
+        f"(allowlist={len(allowed)})"
+    )
+    if not cached:
+        return None
     universe = _build_universe_from_cache(cached)
     return universe or None
 
@@ -1312,17 +1343,19 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
             conn, "DeepSeek探索", allow_rebuild=allow_rebuild,
         )
         universe_size = len(universe)
-        full_universe = _build_full_universe_from_cache(conn, current_size=universe_size)
-        if full_universe:
+        l0l1_universe = _build_l0_l1_universe_from_cache(conn)
+        if l0l1_universe:
             logger.info(
-                f"[DeepSeek探索] 使用全量 candidate_pool universe: "
-                f"{universe_size} → {len(full_universe)} sym"
+                f"[DeepSeek探索] 使用 L0/L1 候选池 universe: "
+                f"{universe_size} → {len(l0l1_universe)} sym"
             )
-            universe = full_universe
-            universe_size = len(universe)
+            universe = l0l1_universe
+        else:
+            universe = _filter_universe_to_l0_l1(conn, universe)
+        universe_size = len(universe)
         logger.info(
             f"[DeepSeek探索] universe_size={universe_size} "
-            f"({'共用包' if from_shared else '现场构建'})"
+            f"(L0/L1 only; {'共用包兜底' if from_shared and not l0l1_universe else '评级∩cache'})"
         )
 
         if universe_size == 0:
