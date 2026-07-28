@@ -71,6 +71,9 @@
 | DeepSeek 探索 | 每 **2h** + **10min 轮询**；worker 距上次 ok ≥ **max_hold_hours** |
 | DeepSeek 预测 | 同 DeepSeek 探索节奏 + `deepseek_predict_next_due_utc` |
 | GPT 探索/预测 | 同节奏 + `gpt_*_next_due_utc` |
+| Gemini 探索 | —（已下线） | — |
+| DeepSeek 探索/预测 | 每2h + 10min/5min（**对照期保留**；INV-BRAIN-07 暂缓） | `deepseek_*_enabled` |
+| **REQ-BRAIN** `brain_swing` | 每 **2h** + **30min** 轮询 | `brain_swing_enabled`；启动 +75s |
 | **中线 v2** `midline_long/short` | 每 **4h**（独立调度；需求见 REQUIREMENTS §7.2，待落地） |
 | **持仓顾问** DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent；含历史 gemini_*） |
 | 市场情绪分析 | **已下线**（原 Gemini 情绪） |
@@ -154,7 +157,15 @@
 - **DeepSeek soft-sl**（`position_sl_tp_monitor`）：grace 45min；no_follow≥60min 且亏≈2.2%（匹配开仓 thesis）
 - **Gemini 预测已下线**
 
-### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 待落地】
+### 超级大脑主权层（REQ-BRAIN）【需求 2026-07-28 · 首版已落地 · 对照期】
+- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.3.1）
+- `brain_swing`：L0/L1；1H 近1周 + 15M 近1天；Big4 疲软不开
+- 近7日×4h 方向胜率 ≥55%；DeepSeek 确认开仓 / 可强制平
+- 防插针：影>实体×2；频繁则平均插针限价；超时取消（禁转市价）
+- **对照期**：DeepSeek 探索/预测自动开仓**暂保留**并行对比；结束后再执行 INV-BRAIN-07
+- 调度：BRAIN 每2h + 30min；`validate_brain_req.py`
+
+### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟】
 - **量化扫描**，非 LLM；标的 `config.yaml`；独立 **4h** 调度；旧四路 `*_midline_*` 停并移除
 - 限价 **±1%**；超时 **4h**；持仓 **8h**；SL **6%** / TP **3%** / 5x / 500U
 - **跳过**开仓顾问与持仓顾问；**接入** **ai-trail-tp**；**排除** SmartExit → `position_sl_tp_monitor`
@@ -179,6 +190,7 @@
 | `validate_open_advisor_rubrics.py` | 开仓/持仓顾问中文 rubric |
 | `benchmark_*_prompt_lang.py` | 主/战术/顾问 prompt 中英对照（无 API） |
 | `validate_tactical_explore_db.py` | 战术表结构 |
+| `validate_brain_req.py` | **REQ-BRAIN** 静态回归（无 API） |
 | `ai_win_rate_report.py` | **AI 按日胜率巡检** (见下) |
 
 ## AI 胜率 KPI (2026-05-31)

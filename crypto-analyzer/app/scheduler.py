@@ -1,4 +1,4 @@
-"""
+﻿"""
 统一数据采集调度器
 整合所有数据源的采集任务，按照不同频率定时执行
 
@@ -1347,12 +1347,25 @@ class UnifiedDataScheduler:
         logger.info("  ✓ settings_cache - 每 1 分钟 (后台线程)")
 
         # ============================================================
-        # 9. AI 系列 — DeepSeek 交易任务（Gemini 探索/预测/情绪已下线）
+        # 9. AI 系列 — REQ-BRAIN + DeepSeek 探索/预测并行（对照期）
         # ============================================================
-        logger.info("\n  🤖 AI 系列: DeepSeek 交易任务 (Gemini 探索/预测/情绪已停用)")
+        logger.info("\n  🤖 AI 系列: REQ-BRAIN + DeepSeek 探索/预测并行对照")
 
-        # DeepSeek 探索 - 每 2h 调一轮 DeepSeek 检测短时方向异动, 模拟开仓
-        # kill switch = system_settings.deepseek_explore_enabled
+        # REQ-BRAIN 超级大脑 — 每 2h + 30min 轮询
+        def _run_brain_swing():
+            def wrapper():
+                try:
+                    from app.services.brain_strategy_orchestrator import run_brain_round
+                    run_brain_round(triggered_by='scheduler')
+                except Exception as e:
+                    logger.error(f"[BRAIN] 调度异常: {e}", exc_info=True)
+            threading.Thread(target=wrapper, daemon=True, name="BrainSwing").start()
+
+        schedule.every(2).hours.do(_run_brain_swing)
+        schedule.every(30).minutes.do(_run_brain_swing)
+        logger.info("  ✓ brain_swing (REQ-BRAIN) - 每2h + 30min轮询")
+
+        # DeepSeek 探索 — 对照期保留自动开仓（INV-BRAIN-07 暂缓）
         def _run_deepseek_explore():
             def wrapper():
                 try:
@@ -1364,9 +1377,9 @@ class UnifiedDataScheduler:
 
         schedule.every(2).hours.do(_run_deepseek_explore)
         schedule.every(10).minutes.do(_run_deepseek_explore)
-        logger.info("  ✓ deepseek_explore - 距上次ok+max_hold_hours, 每2h + 10min轮询")
+        logger.info("  ✓ deepseek_explore - 距上次ok+max_hold_hours, 每2h + 10min轮询 (对照期)")
 
-        # DeepSeek 预测 - 每 2h 调一次 DeepSeek 预测 L0/L1 方向
+        # DeepSeek 预测
         def _run_deepseek_predict():
             def wrapper():
                 try:
@@ -1378,7 +1391,7 @@ class UnifiedDataScheduler:
 
         schedule.every(2).hours.do(_run_deepseek_predict)
         schedule.every(5).minutes.do(_run_deepseek_predict)
-        logger.info("  ✓ deepseek_predict - 距上次ok+max_hold_hours, 每2h + 5min轮询")
+        logger.info("  ✓ deepseek_predict - 距上次ok+max_hold_hours, 每2h + 5min轮询 (对照期)")
 
         # 中线做多/做空 v2（量化扫描，非 LLM）
         def _run_midline_swing():
@@ -1658,8 +1671,10 @@ class UnifiedDataScheduler:
             threading.Thread(target=_run, daemon=True, name=f"PredictCatchup_{name}").start()
 
         _launch_ai_init_task("DeepSeekBig4", "app.services.big4_comprehensive_analyzer", "run_big4_analysis_round_deepseek", 95)
-        _launch_ai_init_task("DeepSeek探索","app.services.deepseek_explore_worker",  "run_explore_round", 90)
+        _launch_ai_init_task("BrainSwing", "app.services.brain_strategy_orchestrator", "run_brain_round", 75)
+        _launch_ai_init_task("DeepSeek探索", "app.services.deepseek_explore_worker", "run_explore_round", 90)
         _launch_predict_catchup("DeepSeek预测", "app.services.deepseek_predictor", "run_predict_round", 50)
+        logger.info("  ✓ scheduler_init: BrainSwing +75s / DeepSeek探索 +90s / 预测补跑 +50s (对照期并行)")
 
         def _launch_rating_catchup(delay_s: int = 60):
             def _run():

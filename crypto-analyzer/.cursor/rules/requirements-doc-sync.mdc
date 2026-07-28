@@ -5,15 +5,15 @@ alwaysApply: true
 
 # 需求文档同步（强制）
 
-**权威需求文档**: `docs/REQUIREMENTS_LOGIC_ZH.md`（v4.0+）  
-**设计文档**: `design/需求文档.md` · `design/系统设计文档.md`  
-**AI 细节**: `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md`  
+**权威需求文档**: `docs/REQUIREMENTS_LOGIC_ZH.md`（v4.3.1+） 
+**设计文档**: `design/需求文档.md` · `design/系统设计文档.md` 
+**AI 细节**: `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md` 
 **项目上下文**: `CLAUDE.md` · `.cursor/rules/ai-strategies-advisors.mdc` · `.cursor/rules/scheduler-ai-ops.mdc`
 
 ## 改代码前
 
-1. 先读 REQUIREMENTS 对应章节（§4 实盘、§6 闸门、§7 限价、§9 顾问、§1 INV）。
-2. **禁止**违反 INV-01～INV-08；尤其 INV-01/02（实盘仅成交瞬间同步）。
+1. 先读 REQUIREMENTS 对应章节（§4 实盘、§6 闸门、§7 限价、**§7.3 REQ-BRAIN**、§9 顾问、§1 INV）。
+2. **禁止**违反 INV-01～INV-12；尤其 INV-01/02（实盘仅成交瞬间同步）与 INV-09～12（BRAIN 主权，落地后强制）。
 
 ## 改代码后（同一提交或紧随提交）
 

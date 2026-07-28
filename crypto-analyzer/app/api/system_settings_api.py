@@ -653,7 +653,7 @@ async def update_trading_services(data: TradingServicesUpdate):
             updates.append(f"U本位破位策略: {status}")
 
         # gemini_explore/predict 写入已忽略（由 _force_retire_gemini_trading_switches 关闭）
-
+        # DeepSeek 探索/预测：对照期可手动开关（INV-BRAIN-07 暂缓强制关）
         if data.deepseek_explore_enabled is not None:
             value = '1' if data.deepseek_explore_enabled else '0'
             cursor.execute("""

@@ -1,9 +1,10 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.1  
-**日期**: 2026-07-24  
+**版本**: v4.3.1  
+**日期**: 2026-07-28  
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
-> **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。
+> **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
+> **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。
 
 > 旧版 `design/需求文档.md`（v3.6）已过时，仅作历史参考。  
 > AI 策略细节补充见 `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md`，但**实盘同步、闸门、15m 判据以本文为准**。
@@ -18,6 +19,7 @@
 
 - 模拟/实盘开平仓路径、同步时机、闸门条件  
 - AI 探索/预测/顾问 prompt 门槛或判据  
+- **超级大脑主权层（REQ-BRAIN）**分析/战略/DeepSeek 顾问角色、防插针限价  
 - 调度频率、kill switch、进程职责  
 - K 线采集分工、data_cache 刷新逻辑  
 - 评级、TOP50、白名单规则  
@@ -47,6 +49,12 @@
 | **INV-06** | 5m/15m **仅 WS** 采集；fast_collector REST **仅** 1h/4h/1d | Binance IP ban |
 | **INV-07** | `futures_positions.open_time` / 限价成交时间用 **UTC naive**（`utc_now_naive()`） | 持仓时长错乱 |
 | **INV-08** | 开仓方向由 **15m 价格趋势 + 量价** 决定；1h/RSI/24h 仅辅证 | 方向误判 |
+| **INV-09** | **REQ-BRAIN**：无自有分析 `LONG/SHORT` + 近7日×4h 胜率≥**55%** + DeepSeek **明示认同** → 不得开仓；**禁止**机械抄 DeepSeek 自动开仓 | 负期望灌水 |
+| **INV-10** | **REQ-BRAIN**：Big4 疲软（动量弱且相对成交量很低、量价波动很小）→ 不得开仓 | 宏观逆势亏损 |
+| **INV-11** | **REQ-BRAIN**：影线>实体×2 计插针；频繁插针禁止市价，须平均插针限价；**限价超时必须取消** | 插针扫损 |
+| **INV-12** | **REQ-BRAIN**：大脑主张平 → 必须平（DS 反对则平并记分歧）；DeepSeek 主张平 → **坚决平** | 平仓权责混乱 |
+
+> INV-09～INV-12 约束设计与运行时；中线 v2（§7.2）为独立量化路径，不受 INV-09～11 开仓链约束，但仍受 INV-01～08。
 
 ---
 
@@ -299,12 +307,141 @@
 | 持仓顾问 | **不监管**中线；仅硬 SL/TP + ai-trail-tp + 8h 到期 |
 | SmartExit | 不监控中线 source |
 
+### 7.3 超级大脑主权层（REQ-BRAIN）【需求已确认 · 首版已落地】
+
+> **目标**：用系统自有采集数据对 **L0 + L1** 做行情与战略判断；DeepSeek **仅为顾问**，不得再作为唯一开仓大脑。  
+> **状态**：需求 v1.0 已确认；**首版代码已落地**；**对照期** DeepSeek 自动开仓暂保留并行对比（INV-BRAIN-07 暂缓）。阈值与 Big4 门槛可按 7 日样本再标定。  
+> **与 INV-08**：BRAIN 大方向看 **1H（近 1 周）**，入场结构看 **15M（近 1 天）**；15m 量价仍为入场结构硬约束，与 INV-08 一致并扩展 1H 定调。
+
+#### 7.3.1 不可变规则（INV-BRAIN）
+
+| ID | 规则 |
+|----|------|
+| **INV-BRAIN-01** | 无自有分析 `side∈{LONG,SHORT}` 不得开仓 |
+| **INV-BRAIN-02** | 近 **7 日**、同规则、信号后 **4h**「方向对就算赢」的实现胜率 `win_prob` **&lt; 55%** → 不得开仓 |
+| **INV-BRAIN-03** | Big4 **疲软**（动量弱，且相对成交量很低 → 量价波动很小）→ 不得开仓；须有足够量价波动（门槛用近 7 日数据标定） |
+| **INV-BRAIN-04** | 将大脑候选 + 数据摘要喂 DeepSeek 后：须 **明示认同同向** 才开仓；**不认同 / 无明确建议 → 不开仓** |
+| **INV-BRAIN-05** | **平仓**：大脑主张平 → 必须平（即便 DeepSeek 反对，仍平并**记录分歧**）；DeepSeek 主张平 → **坚决平** |
+| **INV-BRAIN-06** | 单根 K **影线长度 &gt; 实体长度 × 2** 计为有效插针；近 7 日插针**频繁** → **禁止市价开仓**，须按平均插针一侧挂限价；**限价超时必须取消**（禁止转市价） |
+| **INV-BRAIN-07** | **旧 DeepSeek 探索/预测自动开仓**：目标为全面暂停；**当前对照期暂缓**——与 `brain_swing` **并行开仓**，便于胜率/PnL 对比；对照结束后再强制关并停调度 |
+
+#### 7.3.2 标的与数据窗口
+
+| 项 | 约定 |
+|----|------|
+| 标的池 | 仅 **L0 白名单 + L1**（`rating_level∈{0,1}` 且未 `rating_locked`） |
+| **1H** | **大方向**；回看 **近 1 周** |
+| **15M** | **小波动 / 入场结构**；回看 **近 1 天** |
+| 辅证 | RSI(1h)、距 7d 高低、资金费率、量价叙事等（candidate_pool / kline 已采集） |
+| Big4 | 必须参与闸门：疲软不开；须量价波动；代币方向须与 Big4 **对齐** 才可 `LONG/SHORT`，否则 `FLAT` |
+
+**对齐默认**（实现可微调但须文档化）：
+
+- Big4 明确偏多 + 代币 1H/15M 偏多 → 可 `LONG`  
+- Big4 明确偏空 + 代币 1H/15M 偏空 → 可 `SHORT`  
+- 其余 → `FLAT`
+
+#### 7.3.3 自有分析输出（每币每轮）
+
+| 字段 | 含义 |
+|------|------|
+| `side` | `LONG` / `SHORT` / `FLAT` |
+| `win_prob` | 0–1，见 §7.3.5 |
+| `edge_score` | 可选内部打分 |
+| `rationale` | 依据摘要（1H/15M 结构、量价、RSI、7d、资金费、与 Big4 对齐说明） |
+| `big4_ok` | Big4 是否过可交易宏观门槛 |
+| `aligned` | 代币是否与 Big4 对齐 |
+| `wick_*` | 近 7 日插针频次/平均幅度/是否频繁（见 §7.3.6） |
+
+#### 7.3.4 开仓流程
+
+```text
+扫描 L0+L1
+  → 自有分析：side≠FLAT 且 big4_ok 且 aligned 且 win_prob≥0.55
+  → 防插针：频繁则计算平均插针限价；禁止市价
+  → 将「候选交易对 + 完整数据摘要」喂给 DeepSeek（顾问确认）
+  → DeepSeek 明示认同同向 → create_paper_limit_order（限价）
+  → 不认同 / 无明确建议 / 模糊 → 不开仓
+  → 限价超时 → 必须取消（INV-BRAIN-06）
+```
+
+**DeepSeek 开仓角色**：确认顾问（否决权 + 必须明示同意）。**不是**独自扫池开仓。
+
+**旧路径**：`deepseek_explore` / `deepseek_predict` **对照期暂保留自动开仓**（与 BRAIN 并行；INV-BRAIN-07 暂缓）。Gemini 探索/预测此前已下线。
+
+#### 7.3.5 胜率 55%（验收口径）
+
+| 项 | 约定 |
+|----|------|
+| 样本 | 近 **7 天**、L0/L1 |
+| 信号 | 自有分析当时给出看多或看空 |
+| 判定窗 | 信号后 **4 小时** |
+| 赢的定义 | **方向对就算赢**（价格相对信号/开仓参考价朝预测方向运动即为胜；**不要求**触及 TP） |
+| 开仓条件 | 该口径实现胜率 **≥ 55%**（`win_prob` 取该回测胜率或与之绑定的估计，须可解释、可回归） |
+
+#### 7.3.6 防插针与限价执行
+
+| 项 | 约定 |
+|----|------|
+| 有效插针 | 单根 K（建议主统计 **15M**，辅 **1H**）：**影线 &gt; 实体 × 2** |
+| 窗口 | 该代币 **近 7 日** 上/下影频次与平均幅度 |
+| 频繁 | 用近 7 日分布标定（实现时写死分位或次数阈值，须可回归） |
+| 频繁时 LONG | 挂在偏低侧（**平均下影**深度附近）限价接，**禁止市价** |
+| 频繁时 SHORT | 挂在偏高侧（**平均上影**高度附近）限价接，**禁止市价** |
+| 超时 | **必须取消**；禁止转市价、禁止追价硬接 |
+| 审计字段 | 开仓理由须含 `wick_freq`、`avg_wick_pct`、`limit_offset_used` |
+
+#### 7.3.7 平仓流程
+
+| 大脑决定 | DeepSeek 意见 | 行为 |
+|----------|---------------|------|
+| 平仓 | 认同平 / 主张平 | **平** |
+| 平仓 | 不同意（主张持有） | **仍按大脑平**，写入分歧日志 |
+| 持有 | 主张平 | **坚决平**（DeepSeek 强制平） |
+| 持有 | 认同持有 / 无意见 | **持有**（硬 SL/TP、ai-trail-tp、计划超时仍生效） |
+
+原则：大脑可主动平；DeepSeek 可 **强制平**；DeepSeek **不能**否决大脑的平仓。
+
+硬 SL/TP / ai-trail-tp / 计划持仓超时为安全网，与战略层并行（建议优先级：硬 SL → DeepSeek 强制平 / 大脑平 → trail / 超时）。
+
+#### 7.3.8 模块定位（落地后）
+
+| 模块 | 定位 |
+|------|------|
+| 自有分析引擎 + 战略层 | **主路径**（扫描、开平决策、防插针限价） |
+| DeepSeek | 开仓确认顾问；平仓可强制平 |
+| `deepseek_explore` / `deepseek_predict` 自动开仓 | **全面暂停** |
+| 中线 v2 §7.2 | **独立**量化路径，不并入 BRAIN 开仓链（除非另开需求） |
+| 硬 SL/TP / trail / 超时 | 安全网 |
+
+#### 7.3.9 实现路径（已落地）
+
+| 角色 | 路径 |
+|------|------|
+| 常量 / source | `app/services/brain_config.py`（`brain_swing`） |
+| 分析引擎 | `app/services/brain_market_analyzer.py`（1H/15M/Big4/对齐） |
+| 插针统计 | `app/services/brain_wick.py`（影线&gt;实体×2；频繁→平均插针限价） |
+| 胜率回测 | `app/services/brain_winrate.py`（近7日×4h 方向胜率，进程缓存30min） |
+| 战略/编排 | `app/services/brain_strategy_orchestrator.py`（开仓+翻转平仓） |
+| 调度 | `app/scheduler.py`：BRAIN 每2h + 30min；**对照期**仍调度 DeepSeek 探索/预测 |
+| DeepSeek 确认 | `gate_simulated_open` → DeepSeek 开仓顾问；`source=brain_swing` 不走同源跳过 |
+| 限价 | `paper_limit_entry.py`：brain 强制限价；`timeout_action=expire`；executor 禁转市价 |
+| 平仓 | 大脑翻转/Big4 疲软 → `brain_close`；DS sell 对 brain **不 temper**（坚决平）；`position_sl_tp_monitor` 硬 SL/TP+trail |
+| 旧路径（对照） | DeepSeek 探索/预测开仓**暂保留**；settings 可开关；对照结束后执行 INV-BRAIN-07 |
+| 回归 | `scripts/validate_brain_req.py` |
+
+**实盘**：`brain_swing` **未**加入 `LIVE_SYNC_SOURCES`（仅模拟）；另开确认后再加。
+
+**kill switch**：`system_settings.brain_swing_enabled`（默认视为开；显式 `0` 跳过）。
+
 ---
 
 ## 8. AI 主探索 / 主预测（REQ-AI-EP）
 
+> **与 REQ-BRAIN**：BRAIN 为主判路径；**对照期** DeepSeek 探索/预测仍可自动开仓做对比（INV-BRAIN-07 暂缓）。对照结束后应全面暂停，不得再以「DeepSeek 独自扫池开仓」为主路径。
+
 **Prompt**: `ai_explore_prompt.py` / `ai_predict_prompt.py`（中文生产）  
-**Worker**: `gemini/deepseek_*_explore_worker.py`、`gemini/deepseek_predictor.py`
+**Worker**: `gemini/deepseek_*_explore_worker.py`、`gemini/deepseek_predictor.py`（Gemini 交易已下线；DeepSeek 自动开仓待 BRAIN 落地时暂停）
 
 ### 8.1 调度
 
@@ -347,7 +484,7 @@
 ## 9. 开仓 / 持仓顾问（REQ-ADVISOR）
 
 **实现**: `open_advisor_strategy_rubrics.py`、`gemini_position_advisor.py`、`hold_advisor_query.py`  
-**路由**: `open_advisor_routing.py` — 探索/预测等按 source 选 rubric  
+**路由**: `open_advisor_routing.py` — 统一 DeepSeek；REQ-BRAIN 开仓确认=大脑候选包喂 DeepSeek（§7.3.4），平仓服从 §7.3.7
 
 | 类型 | 节奏 | 核心判据 |
 |------|------|----------|
@@ -454,6 +591,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-KLINE | `binance_ws_kline_collector.py`, `fast_collector_service.py` |
 | REQ-RATING | `update_top_performers.py` |
 | REQ-MIDLINE | `midline_swing_config.py`, `midline_swing_scanner.py`, `midline_explore_worker.py`（或 `midline_worker`）, `midline_swing_api.py`, 中线策略页 JS/模板, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
+| **REQ-BRAIN** | `brain_config` / `brain_wick` / `brain_market_analyzer` / `brain_winrate` / `brain_strategy_orchestrator`；`scheduler.py`；`paper_limit_entry` + executor expire；DS 自动开仓暂停；`validate_brain_req.py`；权威 §7.3 |
 | REQ-ST | `smart_trader_service.py` |
 
 ---
@@ -462,6 +600,9 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-28 | **v4.3.1** | **对照期**：暂缓 INV-BRAIN-07；DeepSeek 探索/预测自动开仓与 `brain_swing` 并行，便于对比分析 |
+| 2026-07-28 | **v4.3** | **REQ-BRAIN 首版落地**：`brain_*` 分析/胜率/编排；scheduler 2h+30min；DS 探索/预测自动开仓暂停；限价超时强制 cancel；大脑翻转平 + DS 坚决平；回归 `validate_brain_req.py` |
+| 2026-07-28 | **v4.2** | **新增 REQ-BRAIN §7.3（需求已确认·待落地）**：自有分析主判 L0/L1；Big4 疲软不开；近7日×4h 方向胜率≥55%；DeepSeek 仅确认开仓/可强制平；防插针（影>实体×2、频繁则平均插针限价、超时取消）；旧 DeepSeek 自动开仓全面暂停；INV-09～12 |
 | 2026-07-28 | — | **下线 Gemini 交易开关**：系统设置移除 Gemini 探索/预测；强制关闭 explore/predict/sentiment/顾问；scheduler 停调度；LIVE_SYNC 仅 DeepSeek；开仓/持仓顾问统一 DeepSeek |
 | 2026-07-28 | — | DeepSeek 探索/预测改扫 **仅 L0+L1**（拒全市场/未评级）省 token；DeepSeek soft-sl 加宽（grace45 / no_follow≥60m且亏≈2.2%）匹配开仓 thesis |
 | 2026-07-27 | — | 中线 v2 **退出持仓顾问**：仅硬 SL/TP + ai-trail-tp + 8h；避免顾问 15m 噪音闷杀波段仓 |
@@ -509,3 +650,4 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 - [ ] fill_time > 5min 的 NULL → SKIPPED  
 - [ ] 改动 scheduler 后只 restart `crypto-scheduler` 一次  
 - [ ] 改动 main/PaperSync 后 restart `crypto-app-main`  
+- [~] **REQ-BRAIN**：BRAIN 开仓链已落地；**对照期** DeepSeek 自动开仓暂保留；对照结束后执行 INV-BRAIN-07 全面暂停  

@@ -255,7 +255,28 @@ class FuturesLimitOrderExecutor:
                 limit_price = Decimal(str(order['price']))
                 elapsed = int(order.get('elapsed_seconds') or 0)
                 try:
-                    if get_paper_limit_timeout_action() == PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET:
+                    meta = parse_order_notes(order.get('notes'))
+                    src = str(
+                        order.get('order_source')
+                        or meta.get('entry_signal_type')
+                        or ""
+                    ).strip().lower()
+                    force_expire = False
+                    if str(meta.get('timeout_action') or '').strip().lower() == 'expire':
+                        force_expire = True
+                    else:
+                        try:
+                            from app.services.brain_config import is_brain_source
+                            force_expire = is_brain_source(src)
+                        except Exception:
+                            force_expire = src.startswith('brain_')
+                    timeout_action = (
+                        'expire' if force_expire else get_paper_limit_timeout_action()
+                    )
+                    if (
+                        timeout_action == PAPER_LIMIT_TIMEOUT_ACTION_CONVERT_MARKET
+                        and not force_expire
+                    ):
                         result = self.trading_engine.fill_paper_limit_order(
                             order, at_market=True,
                         )

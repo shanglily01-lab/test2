@@ -1,25 +1,31 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-07-24 · 中线 v2 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) §7.2 对齐（**已落地模拟仓**）  
-> **实盘同步 / 闸门 / 15m 定方向 / 限价偏移**：以 REQUIREMENTS 为准；本文侧重 AI/中线细节。
+> 文档版本：2026-07-28 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.3.1** 对齐  
+> **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
+> **中线 v2 §7.2**：已落地模拟仓。  
+> **实盘同步 / 闸门 / 15m 定方向 / 限价偏移 / BRAIN**：以 REQUIREMENTS 为准；本文侧重 AI/中线细节。
 
 ## 1. 总览
 
-系统在三套 **教师模型**（Gemini、DeepSeek、GPT）上运行多类 **AI 策略**，另有独立 **中线量化**；统一走 **模拟仓**（`futures_positions.account_id=2`）。开仓前经 **开仓顾问** 审查（中线跳过）；持仓满 15 分钟后由 **持仓顾问** 每 **15min** 监管（浮盈转亏 urgent；**中线 v2 排除**，仅硬 SL/TP + ai-trail-tp + 8h）。
+**主路径（已落地）**：REQ-BRAIN — 系统自有数据分析 L0/L1 → 战略开平 → DeepSeek 确认开仓 / 可强制平仓。  
+**并行已落地**：中线 v2（独立量化，跳过顾问）。  
+**旧路径**：Gemini 交易已下线；DeepSeek 探索/预测自动开仓 **对照期暂保留**（与 BRAIN 并行对比；INV-BRAIN-07 暂缓）。
+
+系统另保留 DeepSeek/GPT 等 LLM 模块代码供顾问确认与复盘；统一模拟仓 `account_id=2`。
 
 ```text
 crypto-scheduler (app/scheduler.py)
   ├─ data_cache: candidate_pool (6min) → explore_prepared (15min)
-  ├─ 主探索 ×3 / 主预测 ×3
-  ├─ 中线 v2（midline_long/short）— 独立 4h 扫描【待落地；移除旧 ×4 教师中线】
-  ├─ 战术探索 15 槽位 (5策略×3教师) + 15min 轮询
-  └─ Gemini 情绪 (8h)
+  ├─ REQ-BRAIN brain_swing（每2h + 30min；启动+75s）
+  ├─ DeepSeek 探索/预测自动开仓：对照期并行（INV-BRAIN-07 暂缓）
+  ├─ 中线 v2（midline_long/short）— 独立 4h 扫描
+  └─ （战术/情绪等按现网开关）
 
 crypto-scheduler (每 15min)
-  └─ DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**排除** midline_*；含历史 gemini_*）
+  └─ DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**排除** midline_*；brain 仓 DS sell 坚决平）
 
 crypto-app-main
-  └─ position_sl_tp_monitor (1s)：探索/预测/中线 v2 硬 SL/TP + ai-trail-tp；中线不参与 SmartExit
+  └─ position_sl_tp_monitor (1s)：探索/预测/brain/中线 v2 硬 SL/TP + ai-trail-tp；中线不参与 SmartExit
 
 任意模拟开仓
   └─ paper_open_gate.gate_simulated_open()
@@ -27,13 +33,23 @@ crypto-app-main
 
 | 类别 | 是否 LLM | 典型 source 前缀 | 实盘同步 |
 |------|----------|------------------|----------|
-| 主探索 | 是 | `deepseek_explore` / `gpt_explore`（**gemini_explore 已下线**） | **`deepseek_explore`**（+ L0）；GPT 仅模拟 |
-| 主预测 | 是 | `*_predict` | **`deepseek_predict`**（以 LIVE_SYNC 为准）；GPT 仅模拟；**gemini_predict 已下线** |
+| **超级大脑 BRAIN** | 量化主判 + DeepSeek 确认 | `brain_swing` | **另开确认**；未确认仅模拟 |
+| 主探索 | 是 | `deepseek_explore` / `gpt_explore`（gemini 已下线） | **对照期自动开仓保留**；GPT 仅模拟 |
+| 主预测 | 是 | `*_predict` | **对照期 deepseek_predict 自动开仓保留** |
 | 顶空底多 | 是 | `*_reversal` | 否 |
 | 战术四策略 | 是 | `*_pullback` 等 | 否 |
 | **中线做多/做空 v2** | **否（量化）** | `midline_long` / `midline_short` | **否（暂不进 LIVE_SYNC）** |
-| 开仓/持仓顾问 | 是 | 开仓：中线跳过；持仓：**排除**中线 | 持仓 sell：`live_close_enabled=1` 且有映射时平交易所 |
-| 情绪分析 | 是 | 不下单 | — |
+| 开仓/持仓顾问 | 是 | BRAIN：开仓=DS 确认；平仓=大脑主判+DS 可强制平；中线跳过 | 持仓 sell：`live_close_enabled=1` 且有映射时平交易所 |
+| 情绪分析 | 是 | 不下单（Gemini 情绪已下线） | — |
+
+### 1.1 REQ-BRAIN 要点（权威见 REQUIREMENTS §7.3）
+
+- 标的 L0+L1；1H 近 1 周定大方向，15M 近 1 天定结构  
+- Big4 疲软（动量弱 + 相对成交量很低 → 量价波动小）→ 不开  
+- 近 7 日×4h **方向对就算赢**，胜率 ≥55% 才开  
+- DeepSeek：开仓须明示认同；不认同/无建议不开；主张平 → 坚决平；反对大脑平 → 仍平并记分歧  
+- 插针：影线>实体×2；频繁则平均插针限价；超时必须取消  
+- 旧 DeepSeek 自动开仓全面暂停  
 
 ---
 

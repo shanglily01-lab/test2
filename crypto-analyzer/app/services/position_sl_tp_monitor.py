@@ -57,6 +57,7 @@ ENTRY_GRACE_MIN          = 45
 _AI_HARD_SLTP_ONLY_SOURCES = frozenset({
     'gemini_explore', 'gemini_predict',
     'deepseek_explore', 'deepseek_predict',
+    'brain_swing',
 })
 # AI 轻量移动止盈：峰值价格收益 ≥3% 后，从峰值回撤 ≥1% 平仓
 _AI_TRAIL_TP_TIERS = (
@@ -116,6 +117,13 @@ def _is_ai_hard_sltp_source(src: str) -> bool:
         return False
     if _is_midline_source(src):
         return True
+    try:
+        from app.services.brain_config import is_brain_source
+        if is_brain_source(src):
+            return True
+    except Exception:
+        if (src or "").startswith("brain_"):
+            return True
     if src in _AI_HARD_SLTP_ONLY_SOURCES:
         return True
     if src.startswith(("gemini_", "deepseek_")):
