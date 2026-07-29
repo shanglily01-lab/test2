@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>超级大脑策略 | Neural Obsidian</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  body { font-family: 'Manrope', sans-serif; }
+  h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .chip-on { background: rgba(73,244,200,0.15); color: #49f4c8; border: 1px solid rgba(73,244,200,0.3); }
+  .chip-off { background: rgba(168,171,178,0.1); color: #a8abb2; border: 1px solid rgba(168,171,178,0.2); }
+  .chip-warn { background: rgba(255,180,84,0.12); color: #ffb454; border: 1px solid rgba(255,180,84,0.25); }
+  .chip-long { background: rgba(73,244,200,0.12); color: #49f4c8; }
+  .chip-short { background: rgba(255,113,108,0.12); color: #ff716c; }
+  .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
+  .toggle input { display: none; }
+  .toggle .slider { position: absolute; cursor: pointer; top:0; left:0; right:0; bottom:0; background: #334155; border-radius: 12px; transition: .2s; }
+  .toggle .slider:before { position: absolute; content: ''; height: 18px; width: 18px; left: 3px; bottom: 3px; background: #ebeef5; border-radius: 50%; transition: .2s; }
+  .toggle input:checked + .slider { background: #49f4c8; }
+  .toggle input:checked + .slider:before { transform: translateX(20px); background: #002045; }
+</style>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "on-surface": "#ebeef5", "surface-container-low": "#0f1419",
+          "outline": "#72767c", "surface-container-highest": "#20262e",
+          "surface": "#0a0f14", "error": "#ff716c",
+          "on-surface-variant": "#a8abb2", "surface-container": "#151a20",
+          "outline-variant": "#44484e", "primary": "#49f4c8",
+          "background": "#0a0f14", "secondary": "#5b9eff",
+        },
+      },
+    },
+  }
+</script>
+</head>
+<body class="bg-surface text-on-surface">
+{% include "partials/desktop_sidebar.html" %}
+<main class="ml-[240px] min-h-screen">
+
+<header class="border-b border-outline-variant/10 px-8 py-5 flex items-center justify-between flex-wrap gap-4">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">超级大脑策略</h1>
+    <p class="text-[11px] text-on-surface-variant mt-1 tracking-wide">
+      REQ-BRAIN · L0/L1 · 1H定调 + 15M结构 · Big4闸门 · 胜率≥55% · DeepSeek确认开仓 · 限价防插针 · 仅模拟 · 对照期
+    </p>
+  </div>
+  <div class="flex items-center gap-3 flex-wrap">
+    <span id="live-chip" class="chip chip-off">暂不实盘</span>
+    <span id="compare-chip" class="chip chip-warn">对照期</span>
+    <button id="btn-run" class="px-3 py-1.5 rounded-lg bg-primary text-[#002045] text-xs font-semibold hover:opacity-90">手动跑一轮</button>
+    <button id="btn-refresh" class="px-3 py-1.5 rounded-lg bg-surface-container text-xs text-on-surface-variant hover:bg-surface-container-highest">刷新</button>
+  </div>
+</header>
+
+<section class="px-8 py-5 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant mb-1">策略开关</p>
+    <label class="toggle"><input type="checkbox" id="tog-enabled"/><span class="slider"></span></label>
+    <p class="text-[10px] text-on-surface-variant mt-2" id="stat-source">brain_swing</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant mb-1">Big4 闸门</p>
+    <p class="mono text-sm" id="p-big4">--</p>
+    <p class="text-[10px] text-on-surface-variant mt-1" id="p-big4-bias">bias --</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant mb-1">扫描节奏</p>
+    <p class="mono text-xl" id="p-interval">--</p>
+    <p class="text-[10px] text-on-surface-variant">小时 + 30min 轮询</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant mb-1">SL / TP</p>
+    <p class="mono text-sm" id="p-sltp">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant mb-1">持仓 / 杠杆</p>
+    <p class="mono text-sm" id="p-hold">--</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant mb-1">开仓 / 挂单</p>
+    <p class="mono text-sm" id="p-counts">--</p>
+  </div>
+</section>
+
+<section class="px-8 pb-4">
+  <div class="bg-surface-container rounded-xl p-4 grid md:grid-cols-2 gap-4 text-xs text-on-surface-variant leading-relaxed">
+    <div>
+      <h2 class="text-sm font-semibold text-on-surface mb-2">开仓链</h2>
+      <ol class="list-decimal pl-4 space-y-1">
+        <li>扫 L0+L1，自有分析定 LONG/SHORT（须与 Big4 对齐）</li>
+        <li>近 7 日×4h 方向胜率 ≥ 55%，edge 过门</li>
+        <li>插针频繁 → 平均影线限价，禁止市价；超时取消</li>
+        <li>DeepSeek 开仓顾问明示同向认同后挂限价</li>
+      </ol>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold text-on-surface mb-2">平仓权责</h2>
+      <ul class="list-disc pl-4 space-y-1">
+        <li>大脑翻转 / FLAT / Big4 疲软 → 强制平（DS 不能否决）</li>
+        <li>DeepSeek 主张平 → 坚决平（不 temper）</li>
+        <li>硬 SL/TP + ai-trail-tp + 计划持仓超时并行</li>
+        <li>对照期：DeepSeek 探索/预测仍可并行开仓对比</li>
+      </ul>
+    </div>
+  </div>
+  <p class="text-[10px] text-on-surface-variant mt-2 mono" id="status-msg"></p>
+</section>
+
+<section class="px-8 pb-10">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-sm font-semibold">BRAIN 持仓</h2>
+    <span class="text-[10px] text-on-surface-variant mono" id="pos-count">--</span>
+  </div>
+  <div class="overflow-x-auto rounded-xl border border-outline-variant/10">
+    <table class="w-full text-left text-xs">
+      <thead class="bg-surface-container text-on-surface-variant uppercase text-[10px]">
+        <tr>
+          <th class="px-3 py-2">ID</th>
+          <th class="px-3 py-2">Symbol</th>
+          <th class="px-3 py-2">方向</th>
+          <th class="px-3 py-2">状态</th>
+          <th class="px-3 py-2">入场</th>
+          <th class="px-3 py-2">浮盈/亏</th>
+          <th class="px-3 py-2">来源</th>
+          <th class="px-3 py-2">开仓时间</th>
+        </tr>
+      </thead>
+      <tbody id="pos-body" class="divide-y divide-outline-variant/10"></tbody>
+    </table>
+  </div>
+</section>
+
+</main>
+<script src="/static/js/brain_strategy_page.js?v=1"></script>
+</body></html>

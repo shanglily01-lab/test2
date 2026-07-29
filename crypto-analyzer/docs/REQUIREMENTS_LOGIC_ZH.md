@@ -1,7 +1,7 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.3.6  
-**日期**: 2026-07-28  
+**版本**: v4.3.7  
+**日期**: 2026-07-30  
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
 > **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。
@@ -434,6 +434,8 @@
 
 **kill switch**：`system_settings.brain_swing_enabled`（默认视为开；显式 `0` 跳过）。
 
+**Web**：侧栏「超级大脑策略」位于「中线策略」之上；路由 `/brain_strategy`；API `/api/brain-swing`（overview / toggle / positions / run）。
+
 ---
 
 ## 8. AI 主探索 / 主预测（REQ-AI-EP）
@@ -600,6 +602,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-30 | **v4.3.7** | Web：侧栏新增「超级大脑策略」`/brain_strategy`（位于中线之上）+ `/api/brain-swing` 概览/开关/持仓/手动跑一轮 |
 | 2026-07-28 | **v4.3.6** | 删除 `position_advisor_impl` 内 Gemini LLM client/`review_open` 死路径；移除重复模板 `gemini_advisor_reviews.html` |
 | 2026-07-28 | **v4.3.5** | 顾问审核写入抽到 `advisor_review_store`；`gemini_swan_worker`/`tick` 降为下线壳；SmartExit 仅初始化 DeepSeek 持仓顾问 |
 | 2026-07-28 | **v4.3.4** | 探索共用工具迁入 `explore_universe_utils`；顾问 API/页中性化 `advisor_api`/`advisor_reviews`；停注册 Gemini Big4 路由；DeepSeek 不再依赖 `gemini_swan_worker` |

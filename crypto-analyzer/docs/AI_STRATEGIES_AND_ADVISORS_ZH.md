@@ -1,6 +1,6 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-07-28 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.3.6** 对齐  
+> 文档版本：2026-07-30 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.3.7** 对齐  
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
 > **中线 v2 §7.2**：已落地模拟仓。  
 > **实盘同步 / 闸门 / 15m 定方向 / 限价偏移 / BRAIN**：以 REQUIREMENTS 为准；本文侧重 AI/中线细节。
@@ -50,6 +50,7 @@ crypto-app-main
 - DeepSeek：开仓须明示认同；不认同/无建议不开；主张平 → 坚决平；反对大脑平 → 仍平并记分歧  
 - 插针：影线>实体×2；频繁则平均插针限价；超时必须取消  
 - 旧 DeepSeek 自动开仓全面暂停  
+- **Web**：侧栏「超级大脑策略」`/brain_strategy`（位于中线策略之上）；API `/api/brain-swing`  
 
 ---
 

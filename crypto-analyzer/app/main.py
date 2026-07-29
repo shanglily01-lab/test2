@@ -1062,6 +1062,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 超级大脑策略 API
+try:
+    from app.api.brain_swing_api import router as brain_swing_router
+    app.include_router(brain_swing_router)
+    logger.info("[超级大脑策略] API路由已注册")
+except Exception as e:
+    logger.warning(f"[超级大脑策略] API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 中线做多/做空 API
 try:
     from app.api.midline_swing_api import router as midline_swing_router
@@ -1727,6 +1737,11 @@ async def gemini_explore_page(request: Request):
     """兼容旧入口：重定向到中线策略页。"""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/midline_strategy")
+
+
+@app.get("/brain_strategy")
+async def brain_strategy_page(request: Request):
+    return await _serve_desktop_template(request, "brain_strategy.html", "Brain strategy page not found")
 
 
 @app.get("/midline_strategy")
