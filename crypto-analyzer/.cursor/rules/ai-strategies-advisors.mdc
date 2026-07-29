@@ -1,0 +1,83 @@
+---
+description: AI 策略与顾问全貌 — 三教师、中线 v2、调度、门槛、顾问路由、实盘（2026-07-24）
+alwaysApply: true
+---
+
+# AI 策略与顾问记忆
+
+**权威需求**: `docs/REQUIREMENTS_LOGIC_ZH.md` · **AI 细节**: `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md`
+
+## 三教师与 source
+
+| 教师 | 主探索 | 主预测 | 反转 | 战术四策略 | 中线 |
+|------|--------|--------|------|------------|------|
+| Gemini | `gemini_explore` | `gemini_predict` | `gemini_reversal` | `gemini_pullback` 等 | —（旧 `gemini_midline_*` 待移除） |
+| DeepSeek | `deepseek_explore` | `deepseek_predict` | `deepseek_reversal` | `deepseek_*` | —（旧 `deepseek_midline_*` 待移除） |
+| GPT | `gpt_explore` | `gpt_predict` | `gpt_reversal` | `gpt_*` | — |
+| （独立量化） | — | — | — | — | `midline_long` / `midline_short` |
+
+## 中线 v2（量化，非 LLM）【§7.2 待落地】
+
+- 扫描: `midline_swing_scanner` · worker · **独立 4h** 调度（停旧四路）
+- **跳过**开仓顾问与持仓顾问 · **接入** **ai-trail-tp** · **排除** SmartExit → `position_sl_tp_monitor`
+- 限价 **±1%** · 4h 超时 · **8h** 持仓 · SL **6%** / TP **3%** · 5x · 500U
+- 标的：`config.yaml`；**暂不**进 `LIVE_SYNC_SOURCES`
+- Web：原 Gemini 探索页 → 中线策略/机会分析；DeepSeek 探索去中线 Tab
+- 非中线限价仍读 `system_settings.paper_limit_*_offset_pct`（0.1~1%）
+
+## 生产 prompt（中文，2026-06-05）
+
+- 主探索/预测/战术/反转 → `*_zh` 模板
+- 开/持仓顾问 → 中文 rubric + JSON `reason` 中文
+
+## 门槛速查
+
+| 类型 | conf | SL/TP | 持仓 |
+|------|------|-------|------|
+| 主探索/预测 | ≥0.75 + catalyst + 15m OHLC；**DeepSeek LONG** 另≥0.82+RSI/7d/24h/OHLC+2 | 系统 SL/TP | max_hold_hours |
+| 战术四策略 | ≥0.55 + tactical_catalyst | 3%/5% | 4h |
+| 顶空底多 | ≥0.65 + reversal catalyst | 3%/5% | 4h |
+| 中线 v2 | 三层 AND 硬规则 | 6%/3% | 8h |
+
+**DeepSeek 选币**：仅 **L0+L1**；**DeepSeek soft-sl**：grace45 / no_follow≥60m且≈-2.2%
+
+**REQ-BRAIN §7.3（首版已落地 · 对照期）**：`brain_swing` 每15s×5币轮询 L0/L1，发现即开；DS 确认/可强制平；插针限价超时 cancel；**DeepSeek 自动开仓暂保留并行对比**（INV-BRAIN-07 暂缓）；`validate_brain_req.py`
+
+## 顾问路由 (`open_advisor_routing.py`)
+
+| 类型 | Gemini | DeepSeek | 跳过 |
+|------|--------|----------|------|
+| 开仓 | — | 全部（非中线） | `midline_*` |
+| 持仓 | — | 全部（**排除** `midline_*`；含历史 gemini_*） | `midline_*` |
+
+- tick: scheduler **15min**；每仓 15min；浮盈转亏 urgent
+- 盈利 sell: ROI≥**+8%** + 15m 反向≥4；`_temper_premature_sell` 严格拦截过早 sell
+- **Gemini 探索/预测/情绪/顾问已下线**（系统配置无开关；LIVE_SYNC 仅 DeepSeek）
+
+## 调度要点
+
+- 主探索/预测: 距上次 ok ≥ max_hold_hours + 10min/5min 轮询；`partial` 非 `running`
+- 中线 v2: **4h** 独立
+- 战术: 15 槽位，15min 轮询
+- 持仓顾问: **15min** tick
+- 情绪: **8h**
+
+## AI 平仓（非 SmartExit）
+
+- `position_sl_tp_monitor`（main 1s）：探索/预测/**中线 v2** 硬 SL/TP + **ai-trail-tp**（peak≥3%，回撤≥1%）
+- 中线 **禁止** SmartExit
+
+## 实盘（`trading_gates.py`）
+
+**LIVE_SYNC_SOURCES**: 主探索/预测四路（**不含**中线 v2）
+
+| 动作 | 条件 |
+|------|------|
+| **开仓实盘** | `live_trading_enabled=1` → source 白名单 → **L0 白名单**（`rating_level=0`）→ 北京时段窗 |
+| **平仓实盘** | `live_close_enabled=1` → 按 `paper_position_id` 平映射仓 |
+
+PaperSync: 成交瞬间 SKIPPED/NULL；5min 窗；`sync_filled_order_now` 立即同步。
+
+## 回归
+
+`validate_explore_predict_prompts.py` · `validate_midline_swing.py` · `validate_open_advisor_rubrics.py` · `ai_win_rate_report.py`

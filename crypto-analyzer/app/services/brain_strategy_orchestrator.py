@@ -1,7 +1,8 @@
-"""REQ-BRAIN 战略编排 — Playbook 识别落库 → 分向胜率 → DeepSeek 确认限价开仓。"""
+"""REQ-BRAIN 战略编排 — L0/L1 轮询分析，发现机会立即下单。"""
 from __future__ import annotations
 
 import threading
+import time
 from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
@@ -13,13 +14,19 @@ from app.services.brain_config import (
     BARS_15M_WICK_7D,
     BARS_1H_WEEK,
     BRAIN_ACCOUNT_ID,
+    BRAIN_CLOSE_CHECK_EVERY_TICKS,
     BRAIN_ENABLED_KEY,
     BRAIN_HOLD_HOURS,
     BRAIN_LEVERAGE,
     BRAIN_LIMIT_TIMEOUT_MINUTES,
     BRAIN_MARGIN_USD,
+    BRAIN_POOL_REFRESH_EVERY_TICKS,
     BRAIN_SL_PCT,
     BRAIN_SOURCE,
+    BRAIN_SYMBOL_OPEN_COOLDOWN_MINUTES,
+    BRAIN_TICK_BATCH_SIZE,
+    BRAIN_TICK_INTERVAL_SECONDS,
+    BRAIN_TICK_MAX_OPENS,
     BRAIN_TP_PCT,
     TRADEABLE_PLAYBOOKS,
 )
@@ -43,6 +50,28 @@ from app.utils.position_time import utc_now_naive
 _lock = threading.Lock()
 _running = False
 
+# 进程内轮询状态（前端直播）
+_live: Dict[str, Any] = {
+    "mode": "round_robin",
+    "batch_size": BRAIN_TICK_BATCH_SIZE,
+    "interval_seconds": BRAIN_TICK_INTERVAL_SECONDS,
+    "pool": [],
+    "pool_size": 0,
+    "cursor": 0,
+    "laps": 0,
+    "tick_count": 0,
+    "analyzing": False,
+    "enabled": True,
+    "big4": {},
+    "last_tick_at": None,
+    "last_batch": [],
+    "last_error": None,
+    "stats": {"opportunities": 0, "opened": 0, "skipped": 0, "closed": 0},
+    "open_cooldown_until": {},  # symbol -> unix ts
+}
+_winrate_cache: Optional[Dict[str, Any]] = None
+_winrate_cache_ts: float = 0.0
+
 
 def _connect():
     cfg = get_db_config()
@@ -61,6 +90,57 @@ def _setting_enabled(cur, key: str, default: str = "1") -> bool:
         return str(default).strip().lower() in ("1", "true", "yes")
     val = row.get("setting_value") if isinstance(row, dict) else row[0]
     return str(val or default).strip().lower() in ("1", "true", "yes")
+
+
+def get_brain_live_status() -> Dict[str, Any]:
+    """前端轮询用快照（不含完整 pool 列表以减小 payload）。"""
+    snap = dict(_live)
+    pool = snap.get("pool") or []
+    cur = int(snap.get("cursor") or 0)
+    size = len(pool)
+    snap["pool"] = None
+    snap["pool_size"] = size
+    snap["cursor"] = cur
+    snap["progress_pct"] = round(100.0 * cur / size, 1) if size else 0.0
+    snap["next_symbols"] = pool[cur: cur + BRAIN_TICK_BATCH_SIZE] if size else []
+    if size and len(snap["next_symbols"]) < BRAIN_TICK_BATCH_SIZE:
+        snap["next_symbols"] = snap["next_symbols"] + pool[: BRAIN_TICK_BATCH_SIZE - len(snap["next_symbols"])]
+    # cooldown map may grow; only expose count
+    cd = snap.pop("open_cooldown_until", {}) or {}
+    snap["cooldown_symbols"] = len(cd)
+    return snap
+
+
+def _refresh_pool(conn) -> List[str]:
+    from app.services.trading_gates import load_l0_l1_scan_symbols
+    symbols = sorted(load_l0_l1_scan_symbols(conn))
+    _live["pool"] = symbols
+    _live["pool_size"] = len(symbols)
+    if _live["cursor"] >= len(symbols):
+        _live["cursor"] = 0
+    return symbols
+
+
+def _get_winrate(conn, symbols: List[str]) -> Dict[str, Any]:
+    global _winrate_cache, _winrate_cache_ts
+    now = time.time()
+    if _winrate_cache and now - _winrate_cache_ts < 30 * 60:
+        return _winrate_cache
+    _winrate_cache = compute_pool_winrate(conn, symbols, use_cache=True)
+    _winrate_cache_ts = now
+    return _winrate_cache
+
+
+def _in_open_cooldown(symbol: str) -> bool:
+    clean = futures_symbol_rating_canonical(symbol).replace("/", "")
+    until = (_live.get("open_cooldown_until") or {}).get(clean)
+    return bool(until and time.time() < float(until))
+
+
+def _mark_open_cooldown(symbol: str) -> None:
+    clean = futures_symbol_rating_canonical(symbol).replace("/", "")
+    cd = _live.setdefault("open_cooldown_until", {})
+    cd[clean] = time.time() + BRAIN_SYMBOL_OPEN_COOLDOWN_MINUTES * 60
 
 
 def _build_catalyst(playbook_row: Dict[str, Any], win_long: Optional[float], win_short: Optional[float]) -> str:
@@ -83,7 +163,6 @@ def _open_brain_limit(
     win_long: Optional[float],
     win_short: Optional[float],
 ) -> tuple:
-    """返回 (order_id|None, gate_reason|None)。"""
     from app.services.paper_open_gate import gate_simulated_open
     from app.services.paper_limit_entry import create_paper_limit_order
     from app.services.trading_gates import get_paper_margin_usd
@@ -151,7 +230,6 @@ def _open_brain_limit(
 
 
 def close_brain_positions_on_flip(conn, big4: Dict[str, Any]) -> Dict[str, int]:
-    """大脑主张平：持仓方向与当前分析冲突 / Big4 疲软 → 强制平（INV-BRAIN-05）。"""
     stats = {"checked": 0, "closed": 0, "errors": 0}
     with conn.cursor() as cur:
         cur.execute(
@@ -164,7 +242,6 @@ def close_brain_positions_on_flip(conn, big4: Dict[str, Any]) -> Dict[str, int]:
             (BRAIN_ACCOUNT_ID, BRAIN_SOURCE),
         )
         rows = list(cur.fetchall() or [])
-
     if not rows:
         return stats
 
@@ -190,17 +267,10 @@ def close_brain_positions_on_flip(conn, big4: Dict[str, Any]) -> Dict[str, int]:
             elif new_side != side and new_side in ("LONG", "SHORT"):
                 should_close = True
                 reason = f"brain_close:flip_to_{new_side}"
-
             if not should_close:
                 continue
-
-            logger.info(
-                f"[BRAIN平仓] id={pos['id']} {sym} {side} → {reason} "
-                f"(new={new_side} ds_disagree_ok)"
-            )
-            closed = helper._close_live_position(
-                pos, reason[:80], advisor_tag="brain_close",
-            )
+            logger.info(f"[BRAIN平仓] id={pos['id']} {sym} {side} → {reason}")
+            closed = helper._close_live_position(pos, reason[:80], advisor_tag="brain_close")
             if closed:
                 stats["closed"] += 1
             else:
@@ -211,178 +281,237 @@ def close_brain_positions_on_flip(conn, big4: Dict[str, Any]) -> Dict[str, int]:
     return stats
 
 
-def run_brain_round(triggered_by: str = "scheduler") -> Dict[str, Any]:
+def _analyze_one(
+    conn,
+    cur,
+    sym: str,
+    *,
+    big4: Dict[str, Any],
+    winrate: Dict[str, Any],
+    scan_round_id: Optional[int],
+    allow_open: bool,
+) -> Dict[str, Any]:
+    """分析单币：落库；过门则立即开仓。"""
+    rows_1h = _fetch_klines(cur, sym, "1h", BARS_1H_WEEK)
+    rows_15m = _fetch_klines(cur, sym, "15m", max(BARS_15M_DAY, BARS_15M_WICK_7D))
+    dirs = resolve_directional_win_probs(winrate, sym)
+    wl, ws = dirs.get("win_prob_long"), dirs.get("win_prob_short")
+    pb = classify_playbook(
+        rows_1h, rows_15m, big4=big4, win_prob_long=wl, win_prob_short=ws,
+    )
+    if pb.get("forbid_market") and pb.get("wick") and pb.get("side") in ("LONG", "SHORT"):
+        pb["limit_offset_pct"] = limit_offset_pct_from_wicks(pb["side"], pb.get("wick") or {})
+
+    side = (pb.get("side") or "FLAT").upper()
+    playbook = pb.get("playbook") or "D1"
+    price = pb.get("ref_price")
+    decision = "SKIPPED"
+    skip_reason = None
+    order_id = None
+    big4_ok = bool(big4.get("big4_ok"))
+
+    if not big4_ok:
+        skip_reason = "big4_weak"
+    elif playbook not in TRADEABLE_PLAYBOOKS or side not in ("LONG", "SHORT"):
+        skip_reason = f"playbook_{playbook}"
+    elif not price or float(price) <= 0:
+        skip_reason = "no_price"
+    elif _in_open_cooldown(sym):
+        skip_reason = "symbol_cooldown"
+    else:
+        ok_wp, wp_reason = directional_open_allowed(side, wl, ws)
+        if not ok_wp:
+            skip_reason = wp_reason
+        elif float(pb.get("edge_score") or 0) < 0.5:
+            skip_reason = "low_edge"
+        elif not pb.get("confirmed") and str(playbook).startswith("A"):
+            skip_reason = "unconfirmed"
+        elif not allow_open:
+            skip_reason = "tick_open_quota"
+        else:
+            # 发现机会 → 立即下单
+            order_id, gate_reason = _open_brain_limit(
+                conn,
+                symbol=sym,
+                side=side,
+                price=float(price),
+                playbook_row=pb,
+                win_long=wl,
+                win_short=ws,
+            )
+            if order_id:
+                decision = "OPENED"
+                _mark_open_cooldown(sym)
+                logger.info(
+                    f"[BRAIN即时开仓] {sym} {side} {playbook} order={order_id}"
+                )
+            else:
+                skip_reason = gate_reason or "ds_or_gate_reject"
+                _mark_open_cooldown(sym)  # 失败也冷却，避免连打 DS
+
+    try:
+        insert_opportunity(
+            conn,
+            scan_round_id=scan_round_id,
+            symbol=futures_symbol_rating_canonical(sym),
+            side=side,
+            playbook=playbook,
+            signals=list(pb.get("signals") or []),
+            evidence_summary=str(pb.get("evidence_summary") or ""),
+            ref_price=float(price) if price else None,
+            win_prob_long=wl,
+            win_prob_short=ws,
+            edge_score=float(pb.get("edge_score") or 0),
+            decision=decision,
+            skip_reason=skip_reason,
+            order_id=order_id,
+        )
+    except Exception as e:
+        logger.error(f"[BRAIN] 落库失败 {sym}: {e}")
+
+    return {
+        "symbol": futures_symbol_rating_canonical(sym),
+        "playbook": playbook,
+        "side": side,
+        "decision": decision,
+        "skip_reason": skip_reason,
+        "order_id": order_id,
+        "edge_score": pb.get("edge_score"),
+        "signals": (pb.get("signals") or [])[:8],
+        "win_prob_long": wl,
+        "win_prob_short": ws,
+        "evidence_summary": (pb.get("evidence_summary") or "")[:120],
+    }
+
+
+def run_brain_tick(triggered_by: str = "scheduler") -> Dict[str, Any]:
     """
-    一轮：全量 Playbook 识别落库 → 分向胜率门 → DS 确认开仓 → 翻转平仓。
+    轮询一批（默认 5）L0/L1：分析落库；过门则立即开仓。
+    scheduler 每 15 秒调用一次。
     """
     global _running
     summary: Dict[str, Any] = {
         "triggered_by": triggered_by,
+        "mode": "tick",
         "opened": 0,
         "skipped": 0,
-        "candidates": 0,
         "opportunities": 0,
         "closed": 0,
-        "scan_round_id": None,
+        "batch": [],
         "error": None,
     }
     if not _lock.acquire(blocking=False):
         summary["error"] = "busy"
-        logger.info("[BRAIN] 上一轮未结束，跳过")
         return summary
     _running = True
+    _live["analyzing"] = True
     conn = None
     round_id: Optional[int] = None
     try:
         conn = _connect()
         with conn.cursor() as cur:
-            if not _setting_enabled(cur, BRAIN_ENABLED_KEY, "1"):
+            enabled = _setting_enabled(cur, BRAIN_ENABLED_KEY, "1")
+            _live["enabled"] = enabled
+            if not enabled:
                 summary["error"] = "disabled"
-                logger.info(f"[BRAIN] kill switch {BRAIN_ENABLED_KEY}=0，跳过")
+                _live["last_error"] = "disabled"
                 return summary
             big4 = evaluate_big4_gate(cur)
+        _live["big4"] = {
+            "ok": bool(big4.get("big4_ok")),
+            "bias": big4.get("bias"),
+            "reason": big4.get("reason"),
+        }
 
-        close_stats = close_brain_positions_on_flip(conn, big4)
-        summary["closed"] = int(close_stats.get("closed") or 0)
+        tick_n = int(_live.get("tick_count") or 0) + 1
+        _live["tick_count"] = tick_n
 
-        from app.services.trading_gates import load_l0_l1_scan_symbols
-
-        symbols = sorted(load_l0_l1_scan_symbols(conn))
-        if not symbols:
+        if tick_n == 1 or tick_n % BRAIN_POOL_REFRESH_EVERY_TICKS == 0 or not _live.get("pool"):
+            _refresh_pool(conn)
+        pool: List[str] = list(_live.get("pool") or [])
+        if not pool:
             summary["error"] = "empty_l0_l1"
-            logger.warning("[BRAIN] L0/L1 池为空")
+            _live["last_error"] = "empty_l0_l1"
             return summary
+
+        if tick_n % BRAIN_CLOSE_CHECK_EVERY_TICKS == 1:
+            close_stats = close_brain_positions_on_flip(conn, big4)
+            summary["closed"] = int(close_stats.get("closed") or 0)
+            _live["stats"]["closed"] = int(_live["stats"].get("closed") or 0) + summary["closed"]
+
+        winrate = _get_winrate(conn, pool)
+        cursor = int(_live.get("cursor") or 0)
+        batch_size = BRAIN_TICK_BATCH_SIZE
+        batch_syms: List[str] = []
+        for i in range(batch_size):
+            batch_syms.append(pool[(cursor + i) % len(pool)])
+        new_cursor = (cursor + batch_size) % len(pool)
+        wrapped = new_cursor <= cursor and len(pool) > batch_size
+        if wrapped or (cursor + batch_size >= len(pool)):
+            # 完成一圈
+            if cursor + batch_size >= len(pool):
+                _live["laps"] = int(_live.get("laps") or 0) + 1
 
         round_id = start_scan_round(
             conn,
-            triggered_by=triggered_by,
-            universe_size=len(symbols),
+            triggered_by=f"tick:{triggered_by}",
+            universe_size=len(pool),
             big4_ok=bool(big4.get("big4_ok")),
             big4_bias=str(big4.get("bias") or "FLAT"),
         )
-        summary["scan_round_id"] = round_id
 
-        winrate = compute_pool_winrate(conn, symbols)
-        summary["winrate"] = {
-            "pool_win_prob": winrate.get("pool_win_prob"),
-            "pool_win_prob_long": winrate.get("pool_win_prob_long"),
-            "pool_win_prob_short": winrate.get("pool_win_prob_short"),
-            "pool_n": winrate.get("pool_n"),
-            "pass_gate": winrate.get("pass_gate"),
-        }
-
-        max_opens = 3
-        max_llm = 8
-        llm_calls = 0
-        big4_ok = bool(big4.get("big4_ok"))
-
+        opens_this_tick = 0
+        batch_results: List[Dict[str, Any]] = []
         with conn.cursor() as cur:
-            for sym in symbols:
-                rows_1h = _fetch_klines(cur, sym, "1h", BARS_1H_WEEK)
-                rows_15m = _fetch_klines(
-                    cur, sym, "15m", max(BARS_15M_DAY, BARS_15M_WICK_7D),
+            for sym in batch_syms:
+                allow_open = opens_this_tick < BRAIN_TICK_MAX_OPENS
+                row = _analyze_one(
+                    conn, cur, sym,
+                    big4=big4, winrate=winrate,
+                    scan_round_id=round_id,
+                    allow_open=allow_open,
                 )
-                dirs = resolve_directional_win_probs(winrate, sym)
-                wl, ws = dirs.get("win_prob_long"), dirs.get("win_prob_short")
-
-                pb = classify_playbook(
-                    rows_1h, rows_15m, big4=big4,
-                    win_prob_long=wl, win_prob_short=ws,
-                )
-                if pb.get("forbid_market") and pb.get("wick") and pb.get("side") in ("LONG", "SHORT"):
-                    pb["limit_offset_pct"] = limit_offset_pct_from_wicks(
-                        pb["side"], pb.get("wick") or {},
-                    )
-
-                side = (pb.get("side") or "FLAT").upper()
-                playbook = pb.get("playbook") or "D1"
-                price = pb.get("ref_price")
+                batch_results.append(row)
                 summary["opportunities"] += 1
-
-                decision = "SKIPPED"
-                skip_reason = None
-                order_id = None
-
-                if not big4_ok:
-                    skip_reason = "big4_weak"
-                elif playbook not in TRADEABLE_PLAYBOOKS or side not in ("LONG", "SHORT"):
-                    skip_reason = f"playbook_{playbook}"
-                elif not price or float(price) <= 0:
-                    skip_reason = "no_price"
+                if row.get("decision") == "OPENED":
+                    summary["opened"] += 1
+                    opens_this_tick += 1
                 else:
-                    ok_wp, wp_reason = directional_open_allowed(side, wl, ws)
-                    if not ok_wp:
-                        skip_reason = wp_reason
-                    elif float(pb.get("edge_score") or 0) < 0.5:
-                        skip_reason = "low_edge"
-                    elif not pb.get("confirmed") and playbook.startswith("A"):
-                        # 趋势类要求更高确认；冲击/破位已在 classifier 标 confirmed
-                        skip_reason = "unconfirmed"
-                    elif summary["opened"] >= max_opens or llm_calls >= max_llm:
-                        skip_reason = "round_quota"
-                    else:
-                        summary["candidates"] += 1
-                        llm_calls += 1
-                        order_id, gate_reason = _open_brain_limit(
-                            conn,
-                            symbol=sym,
-                            side=side,
-                            price=float(price),
-                            playbook_row=pb,
-                            win_long=wl,
-                            win_short=ws,
-                        )
-                        if order_id:
-                            decision = "OPENED"
-                            summary["opened"] += 1
-                            logger.info(
-                                f"[BRAIN开仓] OK {sym} {side} {playbook} order={order_id} "
-                                f"win_l={wl} win_s={ws}"
-                            )
-                        else:
-                            skip_reason = gate_reason or "ds_or_gate_reject"
-
-                if decision == "SKIPPED":
                     summary["skipped"] += 1
 
-                try:
-                    insert_opportunity(
-                        conn,
-                        scan_round_id=round_id,
-                        symbol=futures_symbol_rating_canonical(sym),
-                        side=side,
-                        playbook=playbook,
-                        signals=list(pb.get("signals") or []),
-                        evidence_summary=str(pb.get("evidence_summary") or ""),
-                        ref_price=float(price) if price else None,
-                        win_prob_long=wl,
-                        win_prob_short=ws,
-                        edge_score=float(pb.get("edge_score") or 0),
-                        decision=decision,
-                        skip_reason=skip_reason,
-                        order_id=order_id,
-                    )
-                except Exception as e:
-                    logger.error(f"[BRAIN] 落库失败 {sym}: {e}")
+        _live["cursor"] = new_cursor
+        _live["last_batch"] = batch_results
+        _live["last_tick_at"] = utc_now_naive().isoformat(sep=" ", timespec="seconds")
+        _live["last_error"] = None
+        st = _live["stats"]
+        st["opportunities"] = int(st.get("opportunities") or 0) + summary["opportunities"]
+        st["opened"] = int(st.get("opened") or 0) + summary["opened"]
+        st["skipped"] = int(st.get("skipped") or 0) + summary["skipped"]
+
+        summary["batch"] = batch_results
+        summary["cursor"] = new_cursor
+        summary["pool_size"] = len(pool)
+        summary["scan_round_id"] = round_id
 
         finish_scan_round(
             conn, round_id,
-            status="ok" if not summary.get("error") else "error",
+            status="ok",
             opportunities=summary["opportunities"],
             opened=summary["opened"],
             skipped=summary["skipped"],
             closed=summary["closed"],
-            summary=summary,
+            summary={"tick": True, "cursor": new_cursor, "batch": [b.get("symbol") for b in batch_results]},
         )
         logger.info(
-            f"[BRAIN] 一轮结束 round={round_id} opened={summary['opened']} "
-            f"opps={summary['opportunities']} skipped={summary['skipped']} "
-            f"closed={summary['closed']} by={triggered_by}"
+            f"[BRAIN tick] #{tick_n} cursor={new_cursor}/{len(pool)} "
+            f"opened={summary['opened']} skipped={summary['skipped']} "
+            f"batch={[b.get('symbol') for b in batch_results]}"
         )
         return summary
     except Exception as e:
         summary["error"] = str(e)[:200]
-        logger.error(f"[BRAIN] 一轮异常: {e}", exc_info=True)
+        _live["last_error"] = summary["error"]
+        logger.error(f"[BRAIN tick] 异常: {e}", exc_info=True)
         if conn and round_id:
             try:
                 finish_scan_round(
@@ -390,18 +519,22 @@ def run_brain_round(triggered_by: str = "scheduler") -> Dict[str, Any]:
                     opportunities=summary.get("opportunities") or 0,
                     opened=summary.get("opened") or 0,
                     skipped=summary.get("skipped") or 0,
-                    closed=summary.get("closed") or 0,
                     error_msg=summary["error"],
-                    summary=summary,
                 )
             except Exception:
                 pass
         return summary
     finally:
         _running = False
+        _live["analyzing"] = False
         _lock.release()
         if conn:
             try:
                 conn.close()
             except Exception:
                 pass
+
+
+def run_brain_round(triggered_by: str = "scheduler") -> Dict[str, Any]:
+    """兼容入口：执行一次 tick（启动补跑 / 手动「跑一轮」）。"""
+    return run_brain_tick(triggered_by=triggered_by)

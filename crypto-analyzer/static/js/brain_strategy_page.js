@@ -1,8 +1,9 @@
 /**
- * 超级大脑策略页 — 概览 / Playbook 机会 / 持仓 / 手动跑一轮
+ * 超级大脑策略页 — 实时轮询直播 / 机会 / 持仓
  */
 (function () {
   var API = '/api/brain-swing';
+  var liveTimer = null;
 
   function $(id) { return document.getElementById(id); }
 
@@ -49,9 +50,10 @@
         var b4 = d.big4 || {};
         $('tog-enabled').checked = !!d.enabled;
         $('stat-source').textContent = d.source || 'brain_swing';
-        $('p-interval').textContent = p.scan_interval_hours != null ? p.scan_interval_hours : '--';
-        $('p-sltp').textContent = 'SL ' + p.sl_pct + '% / TP ' + p.tp_pct + '%';
-        $('p-hold').textContent = p.hold_hours + 'h / ' + p.leverage + 'x / ' + p.margin_usd + 'U';
+        if (p.tick_batch_size) {
+          $('p-interval').textContent = p.tick_batch_size + '币 / ' + p.tick_interval_seconds + 's';
+        }
+        $('p-sltp').textContent = 'SL ' + p.sl_pct + '% / TP ' + p.tp_pct + '% · ' + p.hold_hours + 'h / ' + p.leverage + 'x';
         $('p-counts').textContent = '仓 ' + (d.open_positions || 0) + ' · 挂 ' + (d.pending_limits || 0);
         if (b4.ok) {
           $('p-big4').textContent = '可交易';
@@ -61,12 +63,86 @@
           $('p-big4').style.color = '#ff716c';
         }
         $('p-big4-bias').textContent = 'bias ' + (b4.bias || 'FLAT') + (b4.reason ? ' · ' + b4.reason : '');
-        toast('已刷新 · 30日已平 ' + (d.closed_positions_30d || 0), true);
       })
       .catch(function (e) {
         console.error(e);
         toast(String(e.message || e), false);
       });
+  }
+
+  function renderLiveBatch(batch) {
+    var body = $('live-batch-body');
+    if (!body) return;
+    body.innerHTML = '';
+    if (!batch || !batch.length) {
+      body.innerHTML = '<tr><td colspan="6" class="px-3 py-4 text-on-surface-variant">本批暂无结果</td></tr>';
+      return;
+    }
+    batch.forEach(function (r) {
+      var sigs = r.signals || [];
+      var decCls = r.decision === 'OPENED' ? 'text-primary font-semibold' : 'text-on-surface-variant';
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td class="px-3 py-2 mono">' + (r.symbol || '--') + '</td>' +
+        '<td class="px-3 py-2 mono font-semibold">' + (r.playbook || '--') + '</td>' +
+        '<td class="px-3 py-2">' + sideChip(r.side) + '</td>' +
+        '<td class="px-3 py-2 mono ' + decCls + '">' + (r.decision || '--') + '</td>' +
+        '<td class="px-3 py-2 mono text-[10px] max-w-[200px] truncate" title="' + sigs.join(',') + '">' +
+          (sigs.slice(0, 4).join(', ') || '--') + '</td>' +
+        '<td class="px-3 py-2 text-[10px] text-on-surface-variant max-w-[160px] truncate" title="' +
+          (r.skip_reason || r.evidence_summary || '') + '">' +
+          (r.skip_reason || '--') + '</td>';
+      body.appendChild(tr);
+    });
+  }
+
+  function loadLive() {
+    return fetch(API + '/live')
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.success) return;
+        var d = j.data || {};
+        var analyzing = !!d.analyzing;
+        var chip = $('live-analyzing');
+        if (chip) {
+          chip.textContent = analyzing ? '分析中' : (d.enabled === false ? '已关闭' : '轮询中');
+          chip.className = 'chip ' + (analyzing ? 'chip-on' : (d.enabled === false ? 'chip-off' : 'chip-warn'));
+        }
+        var size = d.pool_size || 0;
+        var cur = d.cursor || 0;
+        var pct = d.progress_pct != null ? d.progress_pct : (size ? (100 * cur / size) : 0);
+        if ($('p-progress')) $('p-progress').textContent = cur + ' / ' + size;
+        if ($('p-laps')) $('p-laps').textContent = '圈 ' + (d.laps || 0) + ' · tick ' + (d.tick_count || 0);
+        if ($('live-bar')) $('live-bar').style.width = Math.min(100, pct) + '%';
+        if ($('p-next')) {
+          var nxt = d.next_symbols || [];
+          $('p-next').textContent = nxt.length ? ('下批 ' + nxt.join(', ')) : '下批 --';
+        }
+        if ($('live-tick-at')) $('live-tick-at').textContent = d.last_tick_at ? ('上次 ' + d.last_tick_at) : '--';
+        renderLiveBatch(d.last_batch || []);
+        var st = d.stats || {};
+        if ($('live-stats')) {
+          $('live-stats').textContent =
+            '累计 识别 ' + (st.opportunities || 0) +
+            ' · 开仓 ' + (st.opened || 0) +
+            ' · 跳过 ' + (st.skipped || 0) +
+            ' · 平仓 ' + (st.closed || 0) +
+            (d.last_error ? (' · err ' + d.last_error) : '');
+        }
+        if (d.big4 && $('p-big4')) {
+          if (d.big4.ok) {
+            $('p-big4').textContent = '可交易';
+            $('p-big4').style.color = '#49f4c8';
+          } else if (d.big4.ok === false) {
+            $('p-big4').textContent = '疲软';
+            $('p-big4').style.color = '#ff716c';
+          }
+          if ($('p-big4-bias') && d.big4.bias) {
+            $('p-big4-bias').textContent = 'bias ' + d.big4.bias;
+          }
+        }
+      })
+      .catch(function (e) { console.error(e); });
   }
 
   function loadOpportunities() {
@@ -83,7 +159,7 @@
         if (!body) return;
         body.innerHTML = '';
         if (!rows.length) {
-          body.innerHTML = '<tr><td colspan="8" class="px-3 py-6 text-on-surface-variant">暂无机会记录 — 点「手动跑一轮」开始识别</td></tr>';
+          body.innerHTML = '<tr><td colspan="8" class="px-3 py-6 text-on-surface-variant">暂无机会记录 — 等待轮询</td></tr>';
           return;
         }
         rows.forEach(function (r) {
@@ -111,7 +187,6 @@
       })
       .catch(function (e) {
         console.error(e);
-        toast('机会加载失败: ' + (e.message || e), false);
       });
   }
 
@@ -142,8 +217,9 @@
         var openN = rows.filter(function (r) {
           return String(r.status || '').toUpperCase() === 'OPEN';
         }).length;
-        $('pos-count').textContent = openN + ' 开仓 / ' + rows.length + ' 条';
+        if ($('pos-count')) $('pos-count').textContent = openN + ' 开仓 / ' + rows.length + ' 条';
         var body = $('pos-body');
+        if (!body) return;
         body.innerHTML = '';
         if (!rows.length) {
           body.innerHTML = '<tr><td colspan="8" class="px-3 py-6 text-on-surface-variant">暂无 BRAIN 持仓</td></tr>';
@@ -165,30 +241,38 @@
           body.appendChild(tr);
         });
       })
-      .catch(function (e) {
-        console.error(e);
-        toast('持仓加载失败: ' + (e.message || e), false);
-      });
+      .catch(function (e) { console.error(e); });
   }
 
-  function refreshAll() {
+  function refreshSlow() {
     return Promise.all([loadOverview(), loadOpportunities(), loadPlaybookStats(), loadPositions()]);
   }
 
+  function startLivePoll() {
+    if (liveTimer) clearInterval(liveTimer);
+    loadLive();
+    liveTimer = setInterval(function () {
+      loadLive();
+    }, 5000);
+  }
+
   function bind() {
-    $('btn-refresh').addEventListener('click', function () { refreshAll(); });
+    $('btn-refresh').addEventListener('click', function () {
+      refreshSlow();
+      loadLive();
+    });
     if ($('sel-pb-filter')) $('sel-pb-filter').addEventListener('change', loadOpportunities);
     if ($('sel-dec-filter')) $('sel-dec-filter').addEventListener('change', loadOpportunities);
     $('btn-run').addEventListener('click', function () {
       var btn = $('btn-run');
       btn.disabled = true;
-      toast('正在启动一轮（全量识别+落库）…', true);
+      toast('触发一批轮询…', true);
       fetch(API + '/run', { method: 'POST' })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
         .then(function (res) {
           if (!res.ok || !res.j.success) throw new Error((res.j && (res.j.detail || res.j.message)) || 'run failed');
-          toast(res.j.message || '已启动', true);
-          setTimeout(refreshAll, 4000);
+          toast(res.j.message || '已触发', true);
+          setTimeout(function () { loadLive(); loadOpportunities(); loadOverview(); }, 2000);
         })
         .catch(function (e) { toast(String(e.message || e), false); })
         .finally(function () { btn.disabled = false; });
@@ -203,19 +287,27 @@
         .then(function (r) { return r.json(); })
         .then(function (j) {
           if (!j.success) throw new Error(j.detail || 'toggle failed');
-          toast(enabled ? '已开启 brain_swing' : '已关闭 brain_swing', true);
+          toast(enabled ? '已开启轮询' : '已关闭轮询', true);
+          loadLive();
         })
         .catch(function (e) {
           $('tog-enabled').checked = !enabled;
           toast(String(e.message || e), false);
         });
     });
+    // 机会表慢刷
+    setInterval(function () { loadOpportunities(); }, 20000);
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () { bind(); refreshAll(); });
+    document.addEventListener('DOMContentLoaded', function () {
+      bind();
+      refreshSlow();
+      startLivePoll();
+    });
   } else {
     bind();
-    refreshAll();
+    refreshSlow();
+    startLivePoll();
   }
 })();

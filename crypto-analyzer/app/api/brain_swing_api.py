@@ -18,6 +18,8 @@ from app.services.brain_config import (
     BRAIN_SCAN_INTERVAL_HOURS,
     BRAIN_SL_PCT,
     BRAIN_SOURCE,
+    BRAIN_TICK_BATCH_SIZE,
+    BRAIN_TICK_INTERVAL_SECONDS,
     BRAIN_TP_PCT,
     WIN_PROB_MIN,
 )
@@ -144,6 +146,9 @@ def overview():
                     "reason": big4.get("reason") or "",
                 },
                 "params": {
+                    "scan_mode": "round_robin",
+                    "tick_batch_size": BRAIN_TICK_BATCH_SIZE,
+                    "tick_interval_seconds": BRAIN_TICK_INTERVAL_SECONDS,
                     "scan_interval_hours": BRAIN_SCAN_INTERVAL_HOURS,
                     "poll_minutes": 30,
                     "hold_hours": BRAIN_HOLD_HOURS,
@@ -160,6 +165,18 @@ def overview():
         }
     except Exception as e:
         logger.error(f"[BRAIN API] /overview 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/live")
+def live_status():
+    """轮询直播状态：游标、本批结果、进度。"""
+    try:
+        from app.services.brain_strategy_orchestrator import get_brain_live_status
+        data = get_brain_live_status()
+        return {"success": True, "data": data}
+    except Exception as e:
+        logger.error(f"[BRAIN API] /live 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -268,11 +285,11 @@ def run_now():
 
     def _job():
         try:
-            from app.services.brain_strategy_orchestrator import run_brain_round
-            summary = run_brain_round(triggered_by="web_manual")
-            logger.info(f"[BRAIN API] 手动一轮结束: {summary}")
+            from app.services.brain_strategy_orchestrator import run_brain_tick
+            summary = run_brain_tick(triggered_by="web_manual")
+            logger.info(f"[BRAIN API] 手动 tick 结束: {summary}")
         except Exception as e:
-            logger.error(f"[BRAIN API] 手动一轮异常: {e}", exc_info=True)
+            logger.error(f"[BRAIN API] 手动 tick 异常: {e}", exc_info=True)
         finally:
             try:
                 _run_lock.release()
@@ -280,4 +297,4 @@ def run_now():
                 pass
 
     threading.Thread(target=_job, name="brain-swing-manual", daemon=True).start()
-    return {"success": True, "message": "已启动一轮超级大脑扫描（含 Playbook 全量落库）"}
+    return {"success": True, "message": "已触发一批轮询分析（5币，发现机会立即下单）"}

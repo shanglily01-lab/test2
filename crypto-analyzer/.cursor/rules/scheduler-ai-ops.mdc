@@ -1,0 +1,64 @@
+---
+description: crypto-scheduler 与 Gemini/DeepSeek 探索预测/中线 v2/持仓顾问运维（2026-07-24）
+alwaysApply: true
+---
+
+# Scheduler & AI Explore/Predict 运维记忆
+
+## 进程与日志
+
+- 服务: `crypto-scheduler` → `app/scheduler.py`
+- 应用日志: `logs/scheduler_$(date -u +%Y-%m-%d).log`（不是 journalctl 主输出）
+- AI SL/TP / ai-trail-tp: `crypto-app-main` → `position_sl_tp_monitor`（探索/预测/**中线 v2** 均含 ai-trail-tp；中线仍排除 SmartExit）
+- 部署后改 Python 必须 restart 对应 systemd（scheduler / main 分开）
+
+## 调度节奏
+
+| 任务 | schedule | 真正执行条件 |
+|------|----------|----------------|
+| candidate_pool | 每 6min | 后台线程 refresh |
+| Gemini/DeepSeek/GPT 探索 | 距上次 ok ≥ max_hold_hours + 10min 轮询 | worker 防重 |
+| Gemini/DeepSeek/GPT 预测 | 距上次 ok ≥ max_hold_hours + 5min 轮询 | `*_predict_next_due_utc` 认领 |
+| **REQ-BRAIN** | every(15).seconds（每批5币） | `brain_swing_enabled`；启动 +75s；发现即开；权威 §7.3 |
+| DeepSeek 探索/预测 | every(2).hours + 10min/5min（**对照期保留**） | INV-BRAIN-07 暂缓；结束后停 |
+| **中线 v2** | every(4).hours（独立；待落地） | `midline_long/short` kill switch；**移除**旧 ×4 `*_midline_*` |
+| 战术 15 槽位 | every(15).min | `tactical_explore_scheduler` |
+| **Gemini/DeepSeek 持仓顾问** | **every(15).min** | 每仓 15min；浮盈转亏 urgent；**排除** midline_* |
+| Gemini 情绪 | every(8).hours | `gemini_sentiment_enabled` |
+| TOP50 + 评级 | every(1).hours + every(15).min | `rating_refresh_next_due_utc` |
+| price_stats_24h | every(1).min | `GET_LOCK('price_stats_24h_refresh')` 防重 |
+| coin_scores EVENT | **已下线** | DROP EVENT+PROCEDURE（migration 025） |
+| scheduler_init | 启动一次 | 探索错峰 +15s/+90s/+120s；预测 +45s/+50s/+55s |
+
+> 确认前生产代码可能仍为旧中线 ×4（6h）。权威目标见 `REQUIREMENTS_LOGIC_ZH.md` §7.2。
+
+## 探索卡死根因（已修，勿回退）
+
+1. refresh 先 DELETE → UPSERT + `load_candidate_pool_for_explore()`
+2. gemini 进行中: `status='partial'`（无 `running`）
+3. 早期 return 必须释放 explore 锁
+4. 探索页首屏并行多 API 打满连接池 → `/bootstrap` 单请求 + 池大小 20
+5. coin_scores EVENT 扫 kline → **已下线**（migration 025 / ensure_db_runtime_guards DROP）
+
+## DeepSeek 预测漏槽/不开单（已修，勿回退）
+
+1. **禁止** `price_stats_24h` 全市场 + 逐币扫 `kline_data`（MySQL 2013）→ 读 `candidate_pool` ∩ **L0/L1**（`load_l0_l1_scan_symbols`）+ **缓存-only 建数**（拒未评级/全市场，省 token）
+2. 建数成功后再 `predict_claim_next_slot`（早期失败 5min 可重试）
+3. 进程软锁 **25min** 过期可抢占（防「上一轮还未结束」永久挡调度；多批 LLM）
+4. 症状：探索正常、`deepseek_predict_runs` 整天无新行、`next_due` 卡住 → grep `强制抢占|L0/L1|Lost connection`
+5. 部署后必须 `systemctl restart crypto-scheduler`；soft-sl 改动另 restart `crypto-app-main`
+
+## 限价与实盘
+
+- 中线 v2: ±1% 固定；4h 超时；`is_midline_source` 覆盖 `midline_long/short`
+- 非中线: `paper_limit_long/short_offset_pct` 系统设定
+- 成交: executor 500 笔/轮 + ticker 触价；FILLED 后 `sync_filled_order_now`
+- 中线 **不进** SmartExit；**暂不** LIVE_SYNC；对冲平仓跳过含中线 symbol
+
+## 改动文件（维护时）
+
+- `midline_swing_config.py` · `midline_explore_worker.py` · `midline_swing_scanner.py`
+- `paper_limit_entry.py` · `paper_limit_sync_service.py` · `position_sl_tp_monitor.py`
+- `gemini_position_advisor.py` · `hold_advisor_query.py` · `smart_exit_optimizer.py`（排除中线）
+- `data_cache_service.py` · `ai_explore_prompt.py` · `*_explore_worker.py` · `*_predictor.py`
+- `app/scheduler.py` · `docs/REQUIREMENTS_LOGIC_ZH.md`

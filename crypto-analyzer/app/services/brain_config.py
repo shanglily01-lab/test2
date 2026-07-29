@@ -54,7 +54,15 @@ BIG4_WEAK_REL_VOLUME = 0.55  # 近量 / 7日均量
 # kill switch
 BRAIN_ENABLED_KEY = "brain_swing_enabled"
 
-# 调度
+# 轮询扫描（L0+L1 约 100+ 币）：每批 5 个、间隔 15 秒，发现机会立即下单
+BRAIN_TICK_BATCH_SIZE = 5
+BRAIN_TICK_INTERVAL_SECONDS = 15
+BRAIN_SYMBOL_OPEN_COOLDOWN_MINUTES = 60
+BRAIN_TICK_MAX_OPENS = 2  # 单批最多触发几次 DS 开仓
+BRAIN_CLOSE_CHECK_EVERY_TICKS = 20  # ~5min 做一次翻转平仓检查
+BRAIN_POOL_REFRESH_EVERY_TICKS = 40  # ~10min 刷新 L0/L1 池
+
+# 兼容旧文档字段（全量轮已改为 tick）
 BRAIN_SCAN_INTERVAL_HOURS = 2
 
 

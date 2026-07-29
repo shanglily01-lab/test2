@@ -73,7 +73,7 @@
 | GPT 探索/预测 | 同节奏 + `gpt_*_next_due_utc` |
 | Gemini 探索 | —（已下线） | — |
 | DeepSeek 探索/预测 | 每2h + 10min/5min（**对照期保留**；INV-BRAIN-07 暂缓） | `deepseek_*_enabled` |
-| **REQ-BRAIN** `brain_swing` | 每 **2h** + **30min** 轮询 | `brain_swing_enabled`；启动 +75s |
+| **REQ-BRAIN** `brain_swing` | 每 **15s** 一批 **5** 币轮询 L0/L1 | `brain_swing_enabled`；启动 +75s；发现机会立即开仓 |
 | **中线 v2** `midline_long/short` | 每 **4h**（独立调度；需求见 REQUIREMENTS §7.2，待落地） |
 | **持仓顾问** DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent；含历史 gemini_*） |
 | 市场情绪分析 | **已下线**（原 Gemini 情绪） |
@@ -163,7 +163,8 @@
 - 分向胜率 ≥55% 且比反方向高≥5pp；DeepSeek 确认开仓 / 可强制平
 - 防插针：影>实体×2；频繁则平均插针限价；超时取消（禁转市价）
 - **对照期**：DeepSeek 探索/预测自动开仓**暂保留**并行对比；结束后再执行 INV-BRAIN-07
-- 调度：BRAIN 每2h + 30min；`validate_brain_req.py`
+- 调度：BRAIN **每15s** 一批5币轮询 L0/L1，发现即开；`validate_brain_req.py`；页 `/brain_strategy` 直播进度
+
 
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟】
 - **量化扫描**，非 LLM；标的 `config.yaml`；独立 **4h** 调度；旧四路 `*_midline_*` 停并移除

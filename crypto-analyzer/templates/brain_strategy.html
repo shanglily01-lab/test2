@@ -50,13 +50,14 @@
   <div>
     <h1 class="text-2xl font-bold tracking-tight">超级大脑策略</h1>
     <p class="text-[11px] text-on-surface-variant mt-1 tracking-wide">
-      REQ-BRAIN v2 · Playbook 全量打标落库 · 分向胜率 · DeepSeek确认 · 限价防插针 · 仅模拟 · 对照期
+      L0+L1 轮询 · 每批 5 币 / 15 秒 · Playbook 打标落库 · 发现机会立即限价开仓 · 仅模拟 · 对照期
     </p>
   </div>
   <div class="flex items-center gap-3 flex-wrap">
+    <span id="live-analyzing" class="chip chip-off">待机</span>
     <span id="live-chip" class="chip chip-off">暂不实盘</span>
     <span id="compare-chip" class="chip chip-warn">对照期</span>
-    <button id="btn-run" class="px-3 py-1.5 rounded-lg bg-primary text-[#002045] text-xs font-semibold hover:opacity-90">手动跑一轮</button>
+    <button id="btn-run" class="px-3 py-1.5 rounded-lg bg-primary text-[#002045] text-xs font-semibold hover:opacity-90">立即扫一批</button>
     <button id="btn-refresh" class="px-3 py-1.5 rounded-lg bg-surface-container text-xs text-on-surface-variant hover:bg-surface-container-highest">刷新</button>
   </div>
 </header>
@@ -73,17 +74,18 @@
     <p class="text-[10px] text-on-surface-variant mt-1" id="p-big4-bias">bias --</p>
   </div>
   <div class="bg-surface-container-low rounded-xl p-4">
-    <p class="text-[10px] uppercase text-on-surface-variant mb-1">扫描节奏</p>
-    <p class="mono text-xl" id="p-interval">--</p>
-    <p class="text-[10px] text-on-surface-variant">小时 + 30min 轮询</p>
+    <p class="text-[10px] uppercase text-on-surface-variant mb-1">轮询进度</p>
+    <p class="mono text-xl" id="p-progress">--</p>
+    <p class="text-[10px] text-on-surface-variant" id="p-laps">圈 -- · tick --</p>
+  </div>
+  <div class="bg-surface-container-low rounded-xl p-4">
+    <p class="text-[10px] uppercase text-on-surface-variant mb-1">批次节奏</p>
+    <p class="mono text-sm" id="p-interval">5币 / 15s</p>
+    <p class="text-[10px] text-on-surface-variant" id="p-next">下批 --</p>
   </div>
   <div class="bg-surface-container-low rounded-xl p-4">
     <p class="text-[10px] uppercase text-on-surface-variant mb-1">SL / TP</p>
     <p class="mono text-sm" id="p-sltp">--</p>
-  </div>
-  <div class="bg-surface-container-low rounded-xl p-4">
-    <p class="text-[10px] uppercase text-on-surface-variant mb-1">持仓 / 杠杆</p>
-    <p class="mono text-sm" id="p-hold">--</p>
   </div>
   <div class="bg-surface-container-low rounded-xl p-4">
     <p class="text-[10px] uppercase text-on-surface-variant mb-1">开仓 / 挂单</p>
@@ -92,25 +94,32 @@
 </section>
 
 <section class="px-8 pb-4">
-  <div class="bg-surface-container rounded-xl p-4 grid md:grid-cols-2 gap-4 text-xs text-on-surface-variant leading-relaxed">
-    <div>
-      <h2 class="text-sm font-semibold text-on-surface mb-2">开仓链</h2>
-      <ol class="list-decimal pl-4 space-y-1">
-        <li>扫 L0+L1，自有分析定 LONG/SHORT（须与 Big4 对齐）</li>
-        <li>近 7 日×4h 方向胜率 ≥ 55%，edge 过门</li>
-        <li>插针频繁 → 平均影线限价，禁止市价；超时取消</li>
-        <li>DeepSeek 开仓顾问明示同向认同后挂限价</li>
-      </ol>
+  <div class="bg-surface-container rounded-xl p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-sm font-semibold">实时分析（本批）</h2>
+      <span class="text-[10px] mono text-on-surface-variant" id="live-tick-at">--</span>
     </div>
-    <div>
-      <h2 class="text-sm font-semibold text-on-surface mb-2">平仓权责</h2>
-      <ul class="list-disc pl-4 space-y-1">
-        <li>大脑翻转 / FLAT / Big4 疲软 → 强制平（DS 不能否决）</li>
-        <li>DeepSeek 主张平 → 坚决平（不 temper）</li>
-        <li>硬 SL/TP + ai-trail-tp + 计划持仓超时并行</li>
-        <li>对照期：DeepSeek 探索/预测仍可并行开仓对比</li>
-      </ul>
+    <div class="w-full h-1.5 bg-surface-container-highest rounded mb-3 overflow-hidden">
+      <div id="live-bar" class="h-full bg-primary transition-all duration-500" style="width:0%"></div>
     </div>
+    <div class="overflow-x-auto rounded-lg border border-outline-variant/10">
+      <table class="w-full text-left text-xs">
+        <thead class="bg-surface-container-highest text-on-surface-variant uppercase text-[10px]">
+          <tr>
+            <th class="px-3 py-2">Symbol</th>
+            <th class="px-3 py-2">Playbook</th>
+            <th class="px-3 py-2">方向</th>
+            <th class="px-3 py-2">决策</th>
+            <th class="px-3 py-2">Signals</th>
+            <th class="px-3 py-2">原因</th>
+          </tr>
+        </thead>
+        <tbody id="live-batch-body" class="divide-y divide-outline-variant/10">
+          <tr><td colspan="6" class="px-3 py-4 text-on-surface-variant">等待 scheduler 首批 tick…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-[10px] text-on-surface-variant mt-2 mono" id="live-stats">累计 --</p>
   </div>
   <p class="text-[10px] text-on-surface-variant mt-2 mono" id="status-msg"></p>
 </section>
@@ -178,5 +187,5 @@
 </section>
 
 </main>
-<script src="/static/js/brain_strategy_page.js?v=2"></script>
+<script src="/static/js/brain_strategy_page.js?v=3"></script>
 </body></html>

@@ -1,6 +1,6 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.4.1  
+**版本**: v4.4.2  
 **日期**: 2026-07-30  
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
@@ -423,23 +423,23 @@
 | 分析引擎 | `app/services/brain_market_analyzer.py`（1H/15M/Big4/对齐） |
 | 插针统计 | `app/services/brain_wick.py`（影线&gt;实体×2；频繁→平均插针限价） |
 | 胜率回测 | `app/services/brain_winrate.py`（近7日×4h 方向胜率，进程缓存30min） |
-| 战略/编排 | `app/services/brain_strategy_orchestrator.py`（Playbook 全量落库 + 开仓 + 翻转平仓） |
+| 战略/编排 | `app/services/brain_strategy_orchestrator.py`（**轮询 tick**：每批5币；发现即开；`get_brain_live_status`） |
 | Playbook | `app/services/brain_playbook.py`（A/B/C/D 识别 + 信号字典） |
 | 机会落库 | `app/services/brain_opportunity_store.py`（`brain_scan_rounds` / `brain_opportunities`，启动时 CREATE IF NOT EXISTS） |
 | 分向胜率 | `app/services/brain_winrate.py`（`win_prob_long`/`win_prob_short` + 相对差≥5pp） |
-| 调度 | `app/scheduler.py`：BRAIN 每2h + 30min；**对照期**仍调度 DeepSeek 探索/预测 |
+| 调度 | `app/scheduler.py`：BRAIN **每15秒** `run_brain_tick`；**对照期**仍调度 DeepSeek 探索/预测 |
 | DeepSeek 确认 | `gate_simulated_open` → DeepSeek 开仓顾问；`source=brain_swing` 不走同源跳过 |
 | 限价 | `paper_limit_entry.py`：brain 强制限价；`timeout_action=expire`；executor 禁转市价 |
-| 平仓 | 大脑翻转/Big4 疲软 → `brain_close`；DS sell 对 brain **不 temper**（坚决平）；`position_sl_tp_monitor` 硬 SL/TP+trail |
+| 平仓 | 约每20 tick（~5min）翻转/Big4 检查 → `brain_close`；DS sell 对 brain **不 temper** |
 | 旧路径（对照） | DeepSeek 探索/预测开仓**暂保留**；settings 可开关；对照结束后执行 INV-BRAIN-07 |
-| Web / API | `/brain_strategy`；`/api/brain-swing`（overview / opportunities / playbook-stats / toggle / run） |
+| Web / API | `/brain_strategy`；`/api/brain-swing`（overview / **live** / opportunities / playbook-stats / toggle / run） |
 | 回归 | `scripts/validate_brain_req.py` |
 
 **实盘**：`brain_swing` **未**加入 `LIVE_SYNC_SOURCES`（仅模拟）；另开确认后再加。
 
 **kill switch**：`system_settings.brain_swing_enabled`（默认视为开；显式 `0` 跳过）。
 
-**Web**：侧栏「超级大脑策略」位于「中线策略」之上；路由 `/brain_strategy`；API `/api/brain-swing`（overview / toggle / positions / run）。
+**Web**：侧栏「超级大脑策略」；页面每 **5s** 拉 `/live` 直播游标进度与本批分析结果；发现机会立即下单（同币冷却 60min；单批最多 2 次 DS 开仓）。
 
 #### 7.3.10 BRAIN v2：机会识别与 Playbook 体系【需求已确认 · 首版已落地】
 
@@ -801,6 +801,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-30 | **v4.4.2** | **BRAIN 轮询直播**：scheduler 每15s一批5币扫 L0/L1；发现机会立即开仓；API `/live`；前端 5s 刷新进度 |
 | 2026-07-30 | **v4.4.1** | **BRAIN v2 首版落地**：`brain_playbook` / `brain_opportunity_store`；全量机会落库；分向胜率+相对差门；API opportunities/playbook-stats；页展示机会表 |
 | 2026-07-30 | **v4.4.0** | **BRAIN v2 需求**：Playbook 场景覆盖（A/B/C/D）+ 信号字典 + 全量机会落库 `brain_opportunities` + 分向胜率 + 场景仲裁 + 按标签评估报表；§7.3.10–7.3.15 |
 | 2026-07-30 | **v4.3.7** | Web：侧栏新增「超级大脑策略」`/brain_strategy`（位于中线之上）+ `/api/brain-swing` 概览/开关/持仓/手动跑一轮 |

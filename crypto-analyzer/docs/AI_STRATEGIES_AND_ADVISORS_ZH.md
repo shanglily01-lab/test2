@@ -1,6 +1,6 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-07-30 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.4.1** 对齐  
+> 文档版本：2026-07-30 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.4.2** 对齐  
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
 > **中线 v2 §7.2**：已落地模拟仓。  
 > **实盘同步 / 闸门 / 15m 定方向 / 限价偏移 / BRAIN**：以 REQUIREMENTS 为准；本文侧重 AI/中线细节。
@@ -16,7 +16,7 @@
 ```text
 crypto-scheduler (app/scheduler.py)
   ├─ data_cache: candidate_pool (6min) → explore_prepared (15min)
-  ├─ REQ-BRAIN brain_swing（每2h + 30min；启动+75s）
+  ├─ REQ-BRAIN brain_swing（每15s×5币轮询 L0/L1；发现即开；启动+75s）
   ├─ DeepSeek 探索/预测自动开仓：对照期并行（INV-BRAIN-07 暂缓）
   ├─ 中线 v2（midline_long/short）— 独立 4h 扫描
   └─ （战术/情绪等按现网开关）
@@ -58,7 +58,7 @@ crypto-app-main
 - 全量机会落库 `brain_opportunities`（含未开仓；影子 PnL 字段预留）  
 - 分向胜率：`win_prob_long` / `win_prob_short` 分列；绝对≥55% + 相对差≥5pp  
 - 评估报表：按 playbook 聚合（API `/api/brain-swing/playbook-stats`）  
-- 实现：`brain_playbook.py` · `brain_opportunity_store.py` · orchestrator 全量扫描落库  
+- 实现：`brain_playbook.py` · `brain_opportunity_store.py` · orchestrator **15s tick 轮询** · `/api/brain-swing/live`  
 
 ---
 

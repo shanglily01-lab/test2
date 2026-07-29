@@ -110,10 +110,18 @@ def test_executor_brain_expire() -> None:
 
 def test_scheduler_brain() -> None:
     src = (ROOT / "app/scheduler.py").read_text(encoding="utf-8")
-    if "brain_strategy_orchestrator" not in src:
-        _fail("scheduler 未注册 BRAIN")
+    if "run_brain_tick" not in src:
+        _fail("scheduler 未注册 BRAIN tick")
     else:
-        _ok("scheduler brain")
+        _ok("scheduler brain tick")
+    if "every(15).seconds" not in src and "every(15).second" not in src:
+        # schedule API is every(15).seconds
+        if "15).seconds" not in src:
+            _fail("scheduler 未按 15s 调度 BRAIN")
+        else:
+            _ok("scheduler 15s")
+    else:
+        _ok("scheduler 15s")
     if "run_explore_round" not in src or "DeepSeekExplore" not in src:
         _fail("scheduler 对照期应保留 DeepSeek 探索调度")
     else:
@@ -122,6 +130,20 @@ def test_scheduler_brain() -> None:
         _fail("scheduler 对照期应保留 DeepSeek 预测调度")
     else:
         _ok("scheduler DeepSeek predict (对照期)")
+
+
+def test_tick_config() -> None:
+    from app.services.brain_config import (
+        BRAIN_TICK_BATCH_SIZE,
+        BRAIN_TICK_INTERVAL_SECONDS,
+    )
+    assert BRAIN_TICK_BATCH_SIZE == 5
+    assert BRAIN_TICK_INTERVAL_SECONDS == 15
+    from app.services.brain_strategy_orchestrator import get_brain_live_status, run_brain_tick
+    snap = get_brain_live_status()
+    assert snap.get("batch_size") == 5
+    assert callable(run_brain_tick)
+    _ok("tick config + live status")
 
 
 def test_playbook_classify() -> None:
@@ -184,6 +206,7 @@ def main() -> int:
     test_winrate_forward()
     test_playbook_classify()
     test_directional_gate()
+    test_tick_config()
     test_ds_auto_open_available()
     test_paper_limit_brain_force()
     test_executor_brain_expire()
