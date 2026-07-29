@@ -11,8 +11,8 @@ BRAIN_MARGIN_USD = 500.0
 # 持仓/限价（与系统 AI 默认对齐；落地可再调）
 BRAIN_HOLD_HOURS = 4
 BRAIN_LIMIT_TIMEOUT_MINUTES = 30
-BRAIN_SL_PCT = 0.03
-BRAIN_TP_PCT = 0.05
+BRAIN_SL_PCT = 3.0   # 百分点：3.0=3%（engine / paper_limit_entry 均做 pct/100）
+BRAIN_TP_PCT = 5.0   # 百分点：5.0=5%
 # 测试期：True=直接市价开仓（INV-BRAIN-06 限价防插针暂缓）；恢复限价时改 False
 BRAIN_USE_MARKET_ENTRY = True
 

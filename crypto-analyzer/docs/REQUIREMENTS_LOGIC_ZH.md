@@ -1,11 +1,12 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.4.5  
+**版本**: v4.4.7  
 **日期**: 2026-07-30  
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
 > **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。  
-> **BRAIN v2 机会识别（§7.3.10–7.3.15）**：**首版已落地**。Playbook 场景覆盖 + 信号打标 + 全部机会落库 + 按标签评估策略优劣。
+> **BRAIN v2 机会识别（§7.3.10–7.3.15）**：**首版已落地**。Playbook 场景覆盖 + 信号打标 + 全部机会落库 + 按标签评估策略优劣。  
+> **BRAIN 平仓/持仓顾问（§7.3.16）**：**需求草案待确认**（须与开仓 Playbook 同口径；落地前勿改权责）。
 
 > 旧版 `design/需求文档.md`（v3.6）已过时，仅作历史参考。  
 > AI 策略细节补充见 `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md`，但**实盘同步、闸门、15m 判据以本文为准**。
@@ -336,6 +337,15 @@
 | 辅证 | RSI(1h)、距 7d 高低、资金费率、量价叙事等（candidate_pool / kline 已采集） |
 | Big4 | 必须参与闸门：疲软不开；须量价波动；代币方向须与 Big4 **对齐** 才可 `LONG/SHORT`，否则 `FLAT` |
 
+**模拟单参数**（`brain_config.py`；与 engine 一致用**百分点**）：
+
+| 参数 | 值 |
+|------|-----|
+| SL / TP | **止损 3%** / **止盈 5%**（`BRAIN_SL_PCT=3.0` / `BRAIN_TP_PCT=5.0`；**禁止**写成 `0.03`/`0.05`，否则 engine `pct/100` 会变成 0.03% 秒止损） |
+| 杠杆 / 保证金 | **5x** / **500U**（可被评级保证金倍数调整） |
+| 计划持仓 | **4h** |
+| 入场 | 测试期市价（`BRAIN_USE_MARKET_ENTRY`）；正式限价 + INV-BRAIN-06 |
+
 **对齐默认**（实现可微调但须文档化）：
 
 - Big4 明确偏多 + 代币 1H/15M 偏多 → 可 `LONG`  
@@ -392,18 +402,19 @@
 | 超时 | **必须取消**；禁止转市价、禁止追价硬接 |
 | 审计字段 | 开仓理由须含 `wick_freq`、`avg_wick_pct`、`limit_offset_used` |
 
-#### 7.3.7 平仓流程
+#### 7.3.7 平仓流程（摘要；细则见 §7.3.16）
 
 | 大脑决定 | DeepSeek 意见 | 行为 |
 |----------|---------------|------|
-| 平仓 | 认同平 / 主张平 | **平** |
+| 平仓（Playbook 失效 / Big4 疲软 / 方向翻转） | 认同平 / 主张平 | **平** |
 | 平仓 | 不同意（主张持有） | **仍按大脑平**，写入分歧日志 |
-| 持有 | 主张平 | **坚决平**（DeepSeek 强制平） |
+| 持有（thesis 仍成立） | 主张平 | **坚决平**（DeepSeek 强制平；须带 `brain_ds_force_close` 理由） |
 | 持有 | 认同持有 / 无意见 | **持有**（硬 SL/TP、ai-trail-tp、计划超时仍生效） |
 
-原则：大脑可主动平；DeepSeek 可 **强制平**；DeepSeek **不能**否决大脑的平仓。
+原则：大脑可主动平；DeepSeek 可 **强制平**；DeepSeek **不能**否决大脑的平仓。  
+**对齐开仓**：平仓主判须复用 §7.3.10–7.3.14 同一套 Playbook / 分向胜率 / Big4 口径，**禁止**仅用旧 `analyze_symbol` 扁平方向或通用探索持仓顾问 ROI 门槛单独闷杀（细则 §7.3.16）。
 
-硬 SL/TP / ai-trail-tp / 计划持仓超时为安全网，与战略层并行（建议优先级：硬 SL → DeepSeek 强制平 / 大脑平 → trail / 超时）。
+硬 SL/TP / ai-trail-tp / 计划持仓超时为安全网，与战略层并行（建议优先级：硬 SL → 大脑 Playbook 失效平 / DeepSeek 强制平 → trail / 超时）。
 
 #### 7.3.8 模块定位（落地后）
 
@@ -459,7 +470,7 @@
 | **L1 大环境** | Big4 是否允许交易 | 疲软或无方向 → FLAT |
 | **L2 场景识别** | 属于哪类 Playbook | playbook 标签 + signals 列表 |
 | **L3 方向胜率** | 该方向分向胜率是否过门 | win_prob_long / win_prob_short |
-| **L4 确认** | DeepSeek 明示同向 | opened / skipped |
+| **L4 入场执行** | 过闸后市价/限价开仓 | opened / skipped（**跳过开仓顾问**） |
 
 #### 7.3.11 Playbook 枚举（v1 基线）
 
@@ -634,6 +645,98 @@
 | 影子胜率远低于实开胜率 | DS 确认 / 闸门正在保护，维持不变 |
 | 样本 < 10 笔 | 不做结论，继续收集 |
 
+#### 7.3.16 BRAIN 平仓与持仓顾问（对齐开仓 Playbook）【需求草案 · 待确认】
+
+> **目标**：开仓用什么规则证明「可以开」，平仓就用**同一套规则的失效**证明「必须平」；DeepSeek 持仓顾问是辅助强制平通道，不是另一套探索仓 ROI 逻辑。  
+> **状态**：需求草案；确认后改代码（`close_brain_positions_on_flip` / `deepseek_position_advisor` / Playbook 再识别）并升为「已确认」。  
+> **现状缺口**：大脑平仓仍偏旧 `analyze_symbol` 翻转；DS 持仓顾问仍走通用 15m/ROI temper，对 brain 仅跳过 `_temper_premature_sell`。
+
+##### 7.3.16.1 不可变规则（INV-BRAIN-EXIT）
+
+| ID | 规则 |
+|----|------|
+| **INV-BRAIN-EXIT-01** | 平仓主判 = **开仓 thesis 失效**；须能指出：开仓时 `playbook` + `side` + 关键 `signals`，以及当前为何失效 |
+| **INV-BRAIN-EXIT-02** | 再评估口径与开仓相同：`classify_playbook` + 分向胜率门（§7.3.14）+ Big4（§7.3.2）；**禁止**仅用「1H 扁平 side≠持仓」或通用探索顾问 ROI+8% 单独定平 |
+| **INV-BRAIN-EXIT-03** | 大脑主张平 → **必须平**（即便 DS 主张 hold）；记分歧 |
+| **INV-BRAIN-EXIT-04** | DeepSeek 主张平 → **坚决平**（不 `_temper_premature_sell`）；理由前缀 `brain_ds_force_close:`；**建议**强制平也须对照 Playbook 失效或明确风险档（见下表），避免纯噪音 sell |
+| **INV-BRAIN-EXIT-05** | 硬 SL / 硬 TP / ai-trail-tp / 计划持仓到期 **始终生效**，不经顾问否决 |
+| **INV-BRAIN-EXIT-06** | 每次大脑平 / DS 强制平须落审计：`exit_reason`、当前 `playbook`、`signals`、与开仓 playbook 对比、`win_prob_*`、是否分歧 |
+
+##### 7.3.16.2 开仓 ↔ 平仓镜像表
+
+| 开仓条件（持有理由） | 失效 → 大脑主张平（`brain_close:*`） |
+|----------------------|--------------------------------------|
+| Big4 可交易且对齐 | `big4_weak` / 与持仓方向不对齐 |
+| 主 Playbook ∈ 可交易集合且方向 = 持仓 side | 现 Playbook ∈ {D1,D2} 或 side=FLAT |
+| 持仓方向与 Playbook 方向一致 | Playbook 方向 **翻转**到反方向（如 A1→A2），或仲裁结果反转 |
+| 分向胜率：持仓方向 ≥55% 且相对反方向 ≥5pp | 持仓方向胜率跌破门槛，**或**相对优势消失（两边接近） |
+| edge / confirmed（如 A 类需确认） | 原确认结构破坏（例：A1 的 HH/HL 破坏、回踩破前低） |
+| （冲击类 B）止跌/失败确认仍在 | B1 止跌失败再创新低；B2 反抽重新放量抬高结构等 **场景反转** |
+| （破位类 C）破位/假破确认仍在 | 假破变真破、或真破被收回导致 thesis 反转 |
+
+> **对称原则**：若「此刻用开仓规则重新扫该币」→ 不会再开**同方向**同 Playbook，则已有同向仓应倾向平仓（允许短冷却内不重复开）。
+
+##### 7.3.16.3 按 Playbook 的失效要点（v1）
+
+| 开仓 PB | 持仓 side | 优先失效信号（示例，落地写成可回归代码） |
+|---------|-----------|------------------------------------------|
+| A1 | LONG | `hh_hl` 破坏、跌破关键回踩低、`ema_bear_align`、15m 连续破前低 |
+| A2 | SHORT | `lh_ll` 破坏、放量收复、`ema_bull_align`、15m 连续破前高 |
+| B1 | LONG | 再创新低 + 反弹量能衰竭；或转入 B2 叙事 |
+| B2 | SHORT | 反抽放量抬高结构；或转入 B1/B4 |
+| B3 | SHORT | 滞涨失败后再度放量新高且站稳 |
+| B4 | LONG | 回踩跌破关键位且放量下跌 |
+| C1 | SHORT | 破位收回站稳（假破） |
+| C2 | LONG | 收回失败再破且收在区间下 |
+| C3 | LONG | 突破回踩失败跌破突破位 |
+| C4 | SHORT | 假突后重新放量站上并站稳 |
+
+未列出的组合：回退到 §7.3.16.2 通用镜像（D1/D2/FLAT/翻转/胜率门）。
+
+##### 7.3.16.4 决策优先级（持仓生命周期）
+
+```text
+1. 硬 SL → 立即平
+2. 硬 TP / ai-trail-tp / 计划持仓到期 → 平
+3. 大脑再识别（与开仓同引擎）：
+     thesis 失效 → brain_close:* 必须平
+     thesis 仍成立 → 持有（进入 4）
+4. DeepSeek 持仓顾问（仅 brain 仓）：
+     主张 sell → 坚决平（INV-BRAIN-EXIT-04）
+     主张 hold/observe → 不否决大脑；不单独因通用 ROI 门槛强平
+5. 否则继续持有
+```
+
+##### 7.3.16.5 DeepSeek 持仓顾问在 BRAIN 上的角色
+
+| 项 | 约定 |
+|----|------|
+| 是否监管 brain 仓 | **是**（与中线排除不同） |
+| Prompt / rubric | **BRAIN 专用**：输入须含开仓 `playbook`、`signals`、证据摘要、当前再识别结果、分向胜率；**禁止**只套探索仓「ROI≥+8% + 15m 反向≥4」作为唯一卖点 |
+| 强制平允许档 | ① 认同大脑失效；② 明确风险（接近硬 SL、结构已坏但大脑尚未扫到）；③ 严重浮亏且 1H/15M 均逆持仓 |
+| 禁止档 | 仅因短线 15m 噪音、或盈利未达探索仓 +8% 模板而 sell |
+| temper | **不**对 brain 的 sell 做 `_temper_premature_sell`；losing/profitable temper 可保留为日志辅助，但 **不能**否决大脑平仓 |
+| 调度 | 仍可 15min/仓；大脑再识别建议与 tick 对齐（持仓币优先扫，或 close_check 每 ~5min） |
+
+##### 7.3.16.6 实现路径（确认后落地）
+
+| 角色 | 路径 |
+|------|------|
+| 再识别 | `brain_playbook.classify_playbook` + `directional_open_allowed`（持仓方向） |
+| 大脑平仓 | 改造 `close_brain_positions_on_flip` → `close_brain_positions_on_thesis_break`（按 §7.3.16.2） |
+| 开仓快照 | 持仓/机会表保留开仓 `playbook`/`signals`（便于对比）；平仓写 `exit_reason` |
+| DS 顾问 | `deepseek_position_advisor`：brain 分支专用 prompt；`brain_ds_force_close` |
+| 安全网 | `position_sl_tp_monitor`：硬 SL/TP + **ai-trail-tp**（brain 已接入则保持） |
+| 回归 | 扩展 `validate_brain_req.py`：镜像表关键字 / 禁止通用 ROI 唯一卖点 |
+| Web | 持仓表展示开仓 playbook、最近再识别、exit 原因 |
+
+##### 7.3.16.7 待确认问题（评审勾选）
+
+- [ ] 大脑再识别频率：与 15s tick 顺带扫持仓币，还是独立每 5min？
+- [ ] 分向胜率跌破是否「立即平」还是「跌破 + 15m 确认」？
+- [ ] DS 强制平是否必须先有 Playbook 失效，还是允许「风险档」单独强制平？
+- [ ] 测试期市价开仓下，平仓是否一律市价（建议：**是**）？
+
 ---
 
 ## 8. AI 主探索 / 主预测（REQ-AI-EP）
@@ -684,7 +787,7 @@
 ## 9. 开仓 / 持仓顾问（REQ-ADVISOR）
 
 **实现**: `open_advisor_strategy_rubrics.py`、`position_advisor_impl.py`（经 `advisor_core`）、`hold_advisor_query.py`  
-**路由**: `open_advisor_routing.py` — 统一 DeepSeek；REQ-BRAIN 开仓确认=大脑候选包喂 DeepSeek（§7.3.4），平仓服从 §7.3.7
+**路由**: `open_advisor_routing.py` — 统一 DeepSeek；BRAIN **跳过开仓顾问**；平仓/持仓见 §7.3.7 + **§7.3.16**（Playbook 失效主判）
 
 | 类型 | 节奏 | 核心判据 |
 |------|------|----------|
@@ -793,6 +896,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-MIDLINE | `midline_swing_config.py`, `midline_swing_scanner.py`, `midline_explore_worker.py`（或 `midline_worker`）, `midline_swing_api.py`, 中线策略页 JS/模板, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
 | **REQ-BRAIN** | `brain_config` / `brain_wick` / `brain_market_analyzer` / `brain_winrate` / `brain_strategy_orchestrator`；`scheduler.py`；`paper_limit_entry` + executor expire；DS 自动开仓暂停；`validate_brain_req.py`；权威 §7.3 |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
+| **REQ-BRAIN-EXIT** | 平仓/持仓顾问对齐开仓 Playbook；§7.3.16（**需求草案待确认**） |
 | REQ-ST | `smart_trader_service.py` |
 
 ---
@@ -801,6 +905,8 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-30 | **v4.4.7** | **修复 BRAIN SL/TP 单位**：`BRAIN_SL_PCT/TP` 改为百分点 3.0/5.0（此前 0.03/0.05 被 engine `/100` 成 0.03% 秒止损） |
+| 2026-07-30 | **v4.4.6** | **BRAIN 平仓需求草案 §7.3.16**：平仓镜像开仓 Playbook/分向胜率/Big4；DS 持仓顾问专用 rubric；INV-BRAIN-EXIT；待确认后落地 |
 | 2026-07-30 | **v4.4.5** | **BRAIN 测试期市价开仓**：`BRAIN_USE_MARKET_ENTRY=True`；INV-BRAIN-06 限价防插针暂缓；OPENED 立即进持仓 |
 | 2026-07-30 | **v4.4.4** | **BRAIN 开仓跳过开仓顾问**（`brain_skip_advisor`）；INV-BRAIN-04 改为 Playbook 主判直挂限价；页内展示限价挂单（OPENED≠持仓）；API `/orders` |
 | 2026-07-30 | **v4.4.3** | 清理历史死代码：删除 Gemini/GPT/tactical 壳、未用 breakout/entry/optimizer 服务群、15 个一次性 diag 脚本；scheduler 去掉 gemini_position_advisor 计数 |

@@ -25,10 +25,15 @@ def _fail(msg: str) -> None:
 def test_imports_and_config() -> None:
     from app.services.brain_config import (
         BRAIN_SOURCE,
+        BRAIN_SL_PCT,
+        BRAIN_TP_PCT,
         WIN_PROB_MIN,
         is_brain_source,
     )
     assert WIN_PROB_MIN == 0.55
+    # 与 FuturesTradingEngine 一致：百分点（3.0=3%），禁止写成 0.03
+    assert BRAIN_SL_PCT >= 1.0, f"BRAIN_SL_PCT={BRAIN_SL_PCT} 疑似小数比例，应为百分点"
+    assert BRAIN_TP_PCT >= 1.0, f"BRAIN_TP_PCT={BRAIN_TP_PCT} 疑似小数比例，应为百分点"
     assert is_brain_source(BRAIN_SOURCE)
     assert is_brain_source("brain_long")
     assert not is_brain_source("deepseek_explore")
