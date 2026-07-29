@@ -198,7 +198,37 @@ def create_paper_limit_order(
         return None
 
     from app.services.midline_swing_config import is_midline_source, get_midline_limit_offset_pct
-    from app.services.brain_config import is_brain_source
+    from app.services.brain_config import is_brain_source, BRAIN_USE_MARKET_ENTRY
+
+    # BRAIN 测试期：直接市价（不经 PENDING 限价）
+    if is_brain_source(source) and BRAIN_USE_MARKET_ENTRY:
+        logger.info(
+            f"[市价开仓] {symbol} {side} source={source}: BRAIN_USE_MARKET_ENTRY=1"
+        )
+        return _open_paper_market_position(
+            conn,
+            symbol=symbol,
+            side=side,
+            ref_price=ref_price,
+            source=source,
+            leverage=leverage,
+            margin=margin,
+            quantity=quantity,
+            stop_loss_pct=stop_loss_pct,
+            take_profit_pct=take_profit_pct,
+            stop_loss_price=stop_loss_price,
+            take_profit_price=take_profit_price,
+            entry_signal_type=entry_signal_type,
+            entry_reason=entry_reason,
+            entry_score=entry_score,
+            max_hold_minutes=max_hold_minutes,
+            planned_close_time=planned_close_time,
+            signal_id=signal_id,
+            strategy_id=strategy_id,
+            account_id=account_id,
+            failure_reason=failure_reason,
+        )
+
     force_limit = is_midline_source(source) or is_brain_source(source)
 
     if not is_paper_limit_entry_enabled() and not force_limit:
@@ -469,7 +499,7 @@ def _open_paper_market_position(
         pos_id = result.get("position_id")
         logger.info(
             f"[市价开仓] {symbol} {side} @ {market_ref:.6g} "
-            f"qty={quantity} source={source} position_id={pos_id} (限价开关已关)"
+            f"qty={quantity} source={source} position_id={pos_id}"
         )
         return int(pos_id) if pos_id else None
     except Exception as e:

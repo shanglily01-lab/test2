@@ -93,11 +93,19 @@ def test_ds_auto_open_available() -> None:
 
 
 def test_paper_limit_brain_force() -> None:
+    from app.services.brain_config import BRAIN_USE_MARKET_ENTRY
+
     src = (ROOT / "app/services/paper_limit_entry.py").read_text(encoding="utf-8")
-    if "is_brain_source" not in src or "timeout_action" not in src:
-        _fail("paper_limit_entry 未接入 brain force_limit/timeout expire")
+    if BRAIN_USE_MARKET_ENTRY:
+        if "BRAIN_USE_MARKET_ENTRY" not in src or "_open_paper_market_position" not in src:
+            _fail("paper_limit_entry 测试期未走 BRAIN 市价")
+        else:
+            _ok("paper_limit_entry brain market (test)")
     else:
-        _ok("paper_limit_entry brain")
+        if "is_brain_source" not in src or "timeout_action" not in src:
+            _fail("paper_limit_entry 未接入 brain force_limit/timeout expire")
+        else:
+            _ok("paper_limit_entry brain limit")
 
 
 def test_executor_brain_expire() -> None:
@@ -119,6 +127,10 @@ def test_brain_skip_open_advisor() -> None:
         _fail("orchestrator 未 skip_open_advisor")
     else:
         _ok("orchestrator skip_open_advisor")
+    if "_open_brain_entry" not in orch:
+        _fail("orchestrator 缺少 _open_brain_entry")
+    else:
+        _ok("orchestrator _open_brain_entry")
 
 
 def test_scheduler_brain() -> None:

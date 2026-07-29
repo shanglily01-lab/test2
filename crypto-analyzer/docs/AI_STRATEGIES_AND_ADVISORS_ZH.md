@@ -7,7 +7,7 @@
 
 ## 1. 总览
 
-**主路径（已落地）**：REQ-BRAIN — Playbook 主判开仓（**跳过开仓顾问**）→ 限价挂单；DeepSeek 持仓可强制平。  
+**主路径（已落地）**：REQ-BRAIN — Playbook 主判开仓（**跳过开仓顾问**）→ **测试期市价**；DeepSeek 持仓可强制平。  
 **并行已落地**：中线 v2（独立量化，跳过顾问）。  
 **旧路径**：Gemini 交易已下线；DeepSeek 探索/预测自动开仓 **对照期暂保留**（与 BRAIN 并行对比；INV-BRAIN-07 暂缓）。
 
@@ -48,9 +48,10 @@ crypto-app-main
 - Big4 疲软（动量弱 + 相对成交量很低 → 量价波动小）→ 不开  
 - 近 7 日×4h **方向对就算赢**，胜率 ≥55% 才开  
 - DeepSeek：开仓**不经**开仓顾问；主张平 → 坚决平；反对大脑平 → 仍平并记分歧  
-- 插针：影线>实体×2；频繁则平均插针限价；超时必须取消  
+- **入场**：测试期 `BRAIN_USE_MARKET_ENTRY=True` 市价；正式恢复限价防插针（INV-BRAIN-06）  
+- 插针：影线>实体×2；频繁则平均插针限价；超时必须取消（市价测试期暂缓）  
 - 旧 DeepSeek 自动开仓：对照期暂保留；结束后 INV-BRAIN-07  
-- **Web**：`/brain_strategy`；API `/api/brain-swing`（含 `/orders` 限价挂单）  
+- **Web**：`/brain_strategy`；API `/api/brain-swing`（含 `/orders`）  
 
 **BRAIN v2（§7.3.10–7.3.15，首版已落地）**：  
 - Playbook 场景覆盖：趋势延续(A)、冲击反应(B)、破位/假破(C)、不可交易(D)  

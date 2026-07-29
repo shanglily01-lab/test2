@@ -1,6 +1,6 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.4.4  
+**版本**: v4.4.5  
 **日期**: 2026-07-30  
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
@@ -52,7 +52,7 @@
 | **INV-08** | 开仓方向由 **15m 价格趋势 + 量价** 决定；1h/RSI/24h 仅辅证 | 方向误判 |
 | **INV-09** | **REQ-BRAIN**：无自有 Playbook `LONG/SHORT` + 分向胜率门 → 不得开仓；BRAIN **跳过开仓顾问**；**禁止**机械抄 DeepSeek 自动开仓作为主权主路径 | 负期望灌水 |
 | **INV-10** | **REQ-BRAIN**：Big4 疲软（动量弱且相对成交量很低、量价波动很小）→ 不得开仓 | 宏观逆势亏损 |
-| **INV-11** | **REQ-BRAIN**：影线>实体×2 计插针；频繁插针禁止市价，须平均插针限价；**限价超时必须取消** | 插针扫损 |
+| **INV-11** | **REQ-BRAIN**：影线>实体×2 计插针；频繁插针禁止市价，须平均插针限价；**限价超时必须取消**（**测试期** `BRAIN_USE_MARKET_ENTRY` 暂缓） | 插针扫损 |
 | **INV-12** | **REQ-BRAIN**：大脑主张平 → 必须平（DS 反对则平并记分歧）；DeepSeek 主张平 → **坚决平** | 平仓权责混乱 |
 
 > INV-09～INV-12 约束设计与运行时；中线 v2（§7.2）为独立量化路径，不受 INV-09～11 开仓链约束，但仍受 INV-01～08。
@@ -321,9 +321,9 @@
 | **INV-BRAIN-01** | 无自有分析 `side∈{LONG,SHORT}` 不得开仓 |
 | **INV-BRAIN-02** | 近 **7 日**、同规则、信号后 **4h**「方向对就算赢」的实现胜率 `win_prob` **&lt; 55%** → 不得开仓 |
 | **INV-BRAIN-03** | Big4 **疲软**（动量弱，且相对成交量很低 → 量价波动很小）→ 不得开仓；须有足够量价波动（门槛用近 7 日数据标定） |
-| **INV-BRAIN-04** | **开仓**：自有 Playbook 主判通过后直接挂限价（**跳过开仓顾问**）；DeepSeek **不**否决开仓。**平仓**：DeepSeek 持仓顾问可强制平（见 INV-BRAIN-05） |
+| **INV-BRAIN-04** | **开仓**：自有 Playbook 主判通过后直接开仓（**跳过开仓顾问**）；DeepSeek **不**否决开仓。**平仓**：DeepSeek 持仓顾问可强制平（见 INV-BRAIN-05） |
 | **INV-BRAIN-05** | **平仓**：大脑主张平 → 必须平（即便 DeepSeek 反对，仍平并**记录分歧**）；DeepSeek 主张平 → **坚决平** |
-| **INV-BRAIN-06** | 单根 K **影线长度 &gt; 实体长度 × 2** 计为有效插针；近 7 日插针**频繁** → **禁止市价开仓**，须按平均插针一侧挂限价；**限价超时必须取消**（禁止转市价） |
+| **INV-BRAIN-06** | 单根 K **影线长度 &gt; 实体长度 × 2** 计为有效插针；近 7 日插针**频繁** → **禁止市价开仓**，须按平均插针一侧挂限价；**限价超时必须取消**（禁止转市价）。**测试期例外**：`BRAIN_USE_MARKET_ENTRY=True` 时暂缓，直接市价 |
 | **INV-BRAIN-07** | **旧 DeepSeek 探索/预测自动开仓**：目标为全面暂停；**当前对照期暂缓**——与 `brain_swing` **并行开仓**，便于胜率/PnL 对比；对照结束后再强制关并停调度 |
 
 #### 7.3.2 标的与数据窗口
@@ -359,15 +359,14 @@
 ```text
 扫描 L0+L1（轮询 tick）
   → Playbook 识别 + 分向胜率门 + 场景仲裁 → side≠FLAT
-  → 防插针：频繁则平均插针限价；禁止市价
   → 币种闸门 / 冷却 / 同向持仓去重（gate_simulated_open → brain_skip_advisor）
-  → create_paper_limit_order（限价；skip_open_advisor）
-  → OPENED = 已挂 PENDING 限价（成交前不在持仓表）
-  → 限价超时 → 必须取消（INV-BRAIN-06）
+  → 【测试期】create_paper_limit_order → 市价立即开仓（BRAIN_USE_MARKET_ENTRY=1；INV-BRAIN-06 暂缓）
+  → 【正式】防插针限价 + 超时取消（恢复 BRAIN_USE_MARKET_ENTRY=0）
+  → OPENED = 已成交持仓（市价）或已挂 PENDING 限价（正式）
 ```
 
-**DeepSeek 角色（v4.4.4）**：开仓 **不经**开仓顾问；持仓可 **强制平**。**不是**独自扫池开仓。  
-**可见性**：机会表 `OPENED` + `order_id`；页内「BRAIN 限价挂单」；成交后进「BRAIN 持仓」。
+**DeepSeek 角色（v4.4.4+）**：开仓 **不经**开仓顾问；持仓可 **强制平**。**不是**独自扫池开仓。  
+**可见性（测试期市价）**：机会表 `OPENED` + `order_id` 字段存 **position_id**；立即进「BRAIN 持仓」。
 
 **旧路径**：`deepseek_explore` / `deepseek_predict` **对照期暂保留自动开仓**（与 BRAIN 并行；INV-BRAIN-07 暂缓）。Gemini 探索/预测此前已下线。
 
@@ -430,7 +429,7 @@
 | 分向胜率 | `app/services/brain_winrate.py`（`win_prob_long`/`win_prob_short` + 相对差≥5pp） |
 | 调度 | `app/scheduler.py`：BRAIN **每15秒** `run_brain_tick`；**对照期**仍调度 DeepSeek 探索/预测 |
 | 开仓闸门 | `paper_open_gate.py`：`is_brain_source` → **`brain_skip_advisor`**（不经 DeepSeek 开仓顾问） |
-| 限价 | `paper_limit_entry.py`：brain 强制限价；`timeout_action=expire`；executor 禁转市价 |
+| 入场 | `brain_config.BRAIN_USE_MARKET_ENTRY`：**测试期 True=市价**；False=强制限价 + `timeout_action=expire`（INV-BRAIN-06） |
 | 平仓 | 约每20 tick（~5min）翻转/Big4 检查 → `brain_close`；DS sell 对 brain **不 temper** |
 | 旧路径（对照） | DeepSeek 探索/预测开仓**暂保留**；settings 可开关；对照结束后执行 INV-BRAIN-07 |
 | Web / API | `/brain_strategy`；`/api/brain-swing`（overview / **live** / **orders** / opportunities / playbook-stats / toggle / run） |
@@ -440,7 +439,7 @@
 
 **kill switch**：`system_settings.brain_swing_enabled`（默认视为开；显式 `0` 跳过）。
 
-**Web**：侧栏「超级大脑策略」；页面每 **5s** 拉 `/live`；机会表含 `order_id`；「BRAIN 限价挂单」展示 PENDING；成交后进持仓（同币冷却 60min；单批最多 2 次开仓）。
+**Web**：侧栏「超级大脑策略」；页面每 **5s** 拉 `/live`；测试期市价成交后立即进持仓（同币冷却 60min；单批最多 2 次开仓）。
 
 #### 7.3.10 BRAIN v2：机会识别与 Playbook 体系【需求已确认 · 首版已落地】
 
@@ -802,6 +801,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-30 | **v4.4.5** | **BRAIN 测试期市价开仓**：`BRAIN_USE_MARKET_ENTRY=True`；INV-BRAIN-06 限价防插针暂缓；OPENED 立即进持仓 |
 | 2026-07-30 | **v4.4.4** | **BRAIN 开仓跳过开仓顾问**（`brain_skip_advisor`）；INV-BRAIN-04 改为 Playbook 主判直挂限价；页内展示限价挂单（OPENED≠持仓）；API `/orders` |
 | 2026-07-30 | **v4.4.3** | 清理历史死代码：删除 Gemini/GPT/tactical 壳、未用 breakout/entry/optimizer 服务群、15 个一次性 diag 脚本；scheduler 去掉 gemini_position_advisor 计数 |
 | 2026-07-30 | **v4.4.2** | **BRAIN 轮询直播**：scheduler 每15s一批5币扫 L0/L1；发现机会立即开仓；API `/live`；前端 5s 刷新进度 |

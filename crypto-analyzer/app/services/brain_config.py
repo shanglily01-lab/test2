@@ -13,6 +13,8 @@ BRAIN_HOLD_HOURS = 4
 BRAIN_LIMIT_TIMEOUT_MINUTES = 30
 BRAIN_SL_PCT = 0.03
 BRAIN_TP_PCT = 0.05
+# 测试期：True=直接市价开仓（INV-BRAIN-06 限价防插针暂缓）；恢复限价时改 False
+BRAIN_USE_MARKET_ENTRY = True
 
 WIN_PROB_MIN = 0.55
 # 开仓方向胜率须比反方向至少高这么多（百分点，0.05=5pp）

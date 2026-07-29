@@ -153,7 +153,7 @@ def _build_catalyst(playbook_row: Dict[str, Any], win_long: Optional[float], win
     )[:900]
 
 
-def _open_brain_limit(
+def _open_brain_entry(
     conn,
     *,
     symbol: str,
@@ -163,6 +163,8 @@ def _open_brain_limit(
     win_long: Optional[float],
     win_short: Optional[float],
 ) -> tuple:
+    """开仓：测试期市价（BRAIN_USE_MARKET_ENTRY）；否则限价。返回 (order_or_position_id, err)。"""
+    from app.services.brain_config import BRAIN_USE_MARKET_ENTRY
     from app.services.paper_open_gate import gate_simulated_open
     from app.services.paper_limit_entry import create_paper_limit_order
     from app.services.trading_gates import get_paper_margin_usd
@@ -186,7 +188,7 @@ def _open_brain_limit(
     margin = get_paper_margin_usd(symbol, conn) or BRAIN_MARGIN_USD
     wick = playbook_row.get("wick") or {}
     offset = float(playbook_row.get("limit_offset_pct") or 0.5)
-    if playbook_row.get("forbid_market") and wick:
+    if playbook_row.get("forbid_market") and wick and not BRAIN_USE_MARKET_ENTRY:
         offset = limit_offset_pct_from_wicks(side, wick)
     detail = {
         "playbook": playbook_row.get("playbook"),
@@ -199,6 +201,7 @@ def _open_brain_limit(
         "wick": wick,
         "limit_offset_pct": offset,
         "forbid_market": playbook_row.get("forbid_market"),
+        "entry_mode": "market" if BRAIN_USE_MARKET_ENTRY else "limit",
     }
     fail: List[str] = []
     entry_score = win_long if side == "LONG" else win_short
@@ -225,7 +228,8 @@ def _open_brain_limit(
         failure_reason=fail,
     )
     if not order_id:
-        return None, (fail[0] if fail else "limit_order_failed")[:200]
+        mode = "market" if BRAIN_USE_MARKET_ENTRY else "limit"
+        return None, (fail[0] if fail else f"{mode}_order_failed")[:200]
     return order_id, None
 
 
@@ -329,8 +333,8 @@ def _analyze_one(
         elif not allow_open:
             skip_reason = "tick_open_quota"
         else:
-            # 发现机会 → 立即下单
-            order_id, gate_reason = _open_brain_limit(
+            # 发现机会 → 立即下单（测试期市价；见 BRAIN_USE_MARKET_ENTRY）
+            order_id, gate_reason = _open_brain_entry(
                 conn,
                 symbol=sym,
                 side=side,
@@ -343,7 +347,7 @@ def _analyze_one(
                 decision = "OPENED"
                 _mark_open_cooldown(sym)
                 logger.info(
-                    f"[BRAIN即时开仓] {sym} {side} {playbook} order={order_id}"
+                    f"[BRAIN即时开仓] {sym} {side} {playbook} id={order_id}"
                 )
             else:
                 skip_reason = gate_reason or "ds_or_gate_reject"
