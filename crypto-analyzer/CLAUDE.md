@@ -160,10 +160,10 @@
 ### 超级大脑主权层（REQ-BRAIN）【需求 2026-07-28 · 首版已落地 · 对照期 · v2 Playbook 2026-07-30】
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.4.1）
 - `brain_swing`：L0/L1；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
-- 分向胜率 ≥55% 且比反方向高≥5pp；DeepSeek 确认开仓 / 可强制平
+- 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；DeepSeek 持仓可强制平
 - 防插针：影>实体×2；频繁则平均插针限价；超时取消（禁转市价）
 - **对照期**：DeepSeek 探索/预测自动开仓**暂保留**并行对比；结束后再执行 INV-BRAIN-07
-- 调度：BRAIN **每15s** 一批5币轮询 L0/L1，发现即开；`validate_brain_req.py`；页 `/brain_strategy` 直播进度
+- 调度：BRAIN **每15s** 一批5币轮询 L0/L1，发现即开；`validate_brain_req.py`；页 `/brain_strategy` 直播进度 + 限价挂单
 
 
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟】

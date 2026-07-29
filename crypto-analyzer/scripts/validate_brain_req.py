@@ -108,6 +108,19 @@ def test_executor_brain_expire() -> None:
         _ok("executor brain expire")
 
 
+def test_brain_skip_open_advisor() -> None:
+    src = (ROOT / "app/services/paper_open_gate.py").read_text(encoding="utf-8")
+    if "brain_skip_advisor" not in src or "is_brain_source" not in src:
+        _fail("paper_open_gate 未跳过 BRAIN 开仓顾问")
+    else:
+        _ok("paper_open_gate brain_skip_advisor")
+    orch = (ROOT / "app/services/brain_strategy_orchestrator.py").read_text(encoding="utf-8")
+    if "skip_open_advisor=True" not in orch:
+        _fail("orchestrator 未 skip_open_advisor")
+    else:
+        _ok("orchestrator skip_open_advisor")
+
+
 def test_scheduler_brain() -> None:
     src = (ROOT / "app/scheduler.py").read_text(encoding="utf-8")
     if "run_brain_tick" not in src:
@@ -210,6 +223,7 @@ def main() -> int:
     test_ds_auto_open_available()
     test_paper_limit_brain_force()
     test_executor_brain_expire()
+    test_brain_skip_open_advisor()
     test_scheduler_brain()
     test_orchestrator_syntax()
     print()

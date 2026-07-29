@@ -7,7 +7,7 @@
 
 ## 1. 总览
 
-**主路径（已落地）**：REQ-BRAIN — 系统自有数据分析 L0/L1 → 战略开平 → DeepSeek 确认开仓 / 可强制平仓。  
+**主路径（已落地）**：REQ-BRAIN — Playbook 主判开仓（**跳过开仓顾问**）→ 限价挂单；DeepSeek 持仓可强制平。  
 **并行已落地**：中线 v2（独立量化，跳过顾问）。  
 **旧路径**：Gemini 交易已下线；DeepSeek 探索/预测自动开仓 **对照期暂保留**（与 BRAIN 并行对比；INV-BRAIN-07 暂缓）。
 
@@ -39,7 +39,7 @@ crypto-app-main
 | 顶空底多 | 是 | `*_reversal` | 否 |
 | 战术四策略 | 是 | `*_pullback` 等 | 否 |
 | **中线做多/做空 v2** | **否（量化）** | `midline_long` / `midline_short` | **否（暂不进 LIVE_SYNC）** |
-| 开仓/持仓顾问 | 是 | BRAIN：开仓=DS 确认；平仓=大脑主判+DS 可强制平；中线跳过 | 持仓 sell：`live_close_enabled=1` 且有映射时平交易所 |
+| 开仓/持仓顾问 | 是 | BRAIN：**跳过开仓顾问**；平仓=大脑主判+DS 可强制平；中线跳过 | 持仓 sell：`live_close_enabled=1` 且有映射时平交易所 |
 | 情绪分析 | 是 | 不下单（Gemini 情绪已下线） | — |
 
 ### 1.1 REQ-BRAIN 要点（权威见 REQUIREMENTS §7.3）
@@ -47,10 +47,10 @@ crypto-app-main
 - 标的 L0+L1；1H 近 1 周定大方向，15M 近 1 天定结构  
 - Big4 疲软（动量弱 + 相对成交量很低 → 量价波动小）→ 不开  
 - 近 7 日×4h **方向对就算赢**，胜率 ≥55% 才开  
-- DeepSeek：开仓须明示认同；不认同/无建议不开；主张平 → 坚决平；反对大脑平 → 仍平并记分歧  
+- DeepSeek：开仓**不经**开仓顾问；主张平 → 坚决平；反对大脑平 → 仍平并记分歧  
 - 插针：影线>实体×2；频繁则平均插针限价；超时必须取消  
-- 旧 DeepSeek 自动开仓全面暂停  
-- **Web**：侧栏「超级大脑策略」`/brain_strategy`（位于中线策略之上）；API `/api/brain-swing`
+- 旧 DeepSeek 自动开仓：对照期暂保留；结束后 INV-BRAIN-07  
+- **Web**：`/brain_strategy`；API `/api/brain-swing`（含 `/orders` 限价挂单）  
 
 **BRAIN v2（§7.3.10–7.3.15，首版已落地）**：  
 - Playbook 场景覆盖：趋势延续(A)、冲击反应(B)、破位/假破(C)、不可交易(D)  
@@ -321,6 +321,7 @@ gate_simulated_open (paper_open_gate.py)
 |-------------|--------|
 | `gemini_explore` / `gemini_predict` | 仅 Gemini |
 | `midline_long` / `midline_short`（及落地前残留旧 `*_midline_*`） | **跳过**（`skip_open_advisor=True`） |
+| `brain_swing`（及 `brain_*`） | **跳过**（`gate` → `brain_skip_advisor`；Playbook 主判） |
 | 其他 source | 仅 DeepSeek |
 
 ### 7.3 审查步骤（`open_advisor_strategy_rubrics.py`）

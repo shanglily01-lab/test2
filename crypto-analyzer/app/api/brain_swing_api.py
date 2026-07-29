@@ -202,6 +202,39 @@ def toggle(request: ToggleRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/orders")
+def pending_orders(limit: int = 50):
+    """BRAIN 限价挂单（未成交前在这里，不在持仓表）。"""
+    try:
+        limit = max(1, min(int(limit or 50), 200))
+        conn = _connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, symbol, side, order_type, status, price, quantity,
+                           executed_quantity, margin, order_source, entry_signal_type,
+                           notes, created_at, updated_at
+                    FROM futures_orders
+                    WHERE account_id=%s
+                      AND (order_source=%s OR order_source LIKE 'brain_%%')
+                    ORDER BY
+                      CASE WHEN status='PENDING' THEN 0 ELSE 1 END,
+                      COALESCE(updated_at, created_at) DESC
+                    LIMIT %s
+                    """,
+                    (BRAIN_ACCOUNT_ID, BRAIN_SOURCE, limit),
+                )
+                rows = [_serialize_row(r) for r in (cur.fetchall() or [])]
+        finally:
+            conn.close()
+        pending_n = sum(1 for r in rows if str(r.get("status") or "").upper() == "PENDING")
+        return {"success": True, "data": rows, "pending": pending_n}
+    except Exception as e:
+        logger.error(f"[BRAIN API] /orders 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/positions")
 def positions(limit: int = 50):
     try:

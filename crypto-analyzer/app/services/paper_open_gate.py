@@ -46,6 +46,7 @@ def gate_simulated_open(
         return False, reason
 
     from app.services.midline_swing_config import is_midline_source
+    from app.services.brain_config import is_brain_source
     if is_midline_source(source):
         try:
             from app.services.trading_gates import check_simulated_symbol_allowed
@@ -91,6 +92,13 @@ def gate_simulated_open(
     except Exception as e:
         logger.warning(f"[开仓闸门] {symbol} 基础币种闸门异常，拒绝开仓: {e}")
         return False, "symbol_gate_error"
+
+    # REQ-BRAIN：自有分析主判 + DS 仅持仓强制平；开仓不经开仓顾问
+    if is_brain_source(source):
+        logger.info(
+            f"[开仓闸门] {symbol} {side} source={source}: brain_skip_advisor"
+        )
+        return True, "brain_skip_advisor"
 
     try:
         providers = resolve_open_advisors(source)

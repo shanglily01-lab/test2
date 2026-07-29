@@ -152,12 +152,38 @@
           <th class="px-3 py-2">Playbook</th>
           <th class="px-3 py-2">方向</th>
           <th class="px-3 py-2">决策</th>
+          <th class="px-3 py-2">订单</th>
           <th class="px-3 py-2">胜率 L/S</th>
           <th class="px-3 py-2">Signals</th>
           <th class="px-3 py-2">原因</th>
         </tr>
       </thead>
       <tbody id="opp-body" class="divide-y divide-outline-variant/10"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="px-8 pb-6">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-sm font-semibold">BRAIN 限价挂单</h2>
+    <span class="text-[10px] text-on-surface-variant mono" id="ord-count">--</span>
+  </div>
+  <p class="text-[10px] text-on-surface-variant mb-2">OPENED = 已挂限价；成交后才进「持仓」。合约交易页「限价单」Tab 亦可查看。</p>
+  <div class="overflow-x-auto rounded-xl border border-outline-variant/10">
+    <table class="w-full text-left text-xs">
+      <thead class="bg-surface-container text-on-surface-variant uppercase text-[10px]">
+        <tr>
+          <th class="px-3 py-2">ID</th>
+          <th class="px-3 py-2">Symbol</th>
+          <th class="px-3 py-2">方向</th>
+          <th class="px-3 py-2">状态</th>
+          <th class="px-3 py-2">限价</th>
+          <th class="px-3 py-2">数量</th>
+          <th class="px-3 py-2">来源</th>
+          <th class="px-3 py-2">时间</th>
+        </tr>
+      </thead>
+      <tbody id="ord-body" class="divide-y divide-outline-variant/10"></tbody>
     </table>
   </div>
 </section>
@@ -187,5 +213,5 @@
 </section>
 
 </main>
-<script src="/static/js/brain_strategy_page.js?v=3"></script>
+<script src="/static/js/brain_strategy_page.js?v=5"></script>
 </body></html>

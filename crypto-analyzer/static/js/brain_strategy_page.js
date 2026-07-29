@@ -159,7 +159,7 @@
         if (!body) return;
         body.innerHTML = '';
         if (!rows.length) {
-          body.innerHTML = '<tr><td colspan="8" class="px-3 py-6 text-on-surface-variant">暂无机会记录 — 等待轮询</td></tr>';
+          body.innerHTML = '<tr><td colspan="9" class="px-3 py-6 text-on-surface-variant">暂无机会记录 — 等待轮询</td></tr>';
           return;
         }
         rows.forEach(function (r) {
@@ -176,6 +176,7 @@
             '<td class="px-3 py-2 mono font-semibold">' + (r.playbook || '--') + '</td>' +
             '<td class="px-3 py-2">' + sideChip(r.side) + '</td>' +
             '<td class="px-3 py-2 mono ' + decCls + '">' + (r.decision || '--') + '</td>' +
+            '<td class="px-3 py-2 mono">' + (r.order_id != null ? r.order_id : '--') + '</td>' +
             '<td class="px-3 py-2 mono">' + fmtPct(r.win_prob_long) + ' / ' + fmtPct(r.win_prob_short) + '</td>' +
             '<td class="px-3 py-2 mono text-[10px] max-w-[220px] truncate" title="' + sigs.join(',') + '">' +
               (sigs.slice(0, 4).join(', ') || '--') + '</td>' +
@@ -188,6 +189,43 @@
       .catch(function (e) {
         console.error(e);
       });
+  }
+
+  function loadOrders() {
+    return fetch(API + '/orders?limit=50')
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var rows = j.data || [];
+        var pending = j.pending != null ? j.pending : rows.filter(function (r) {
+          return String(r.status || '').toUpperCase() === 'PENDING';
+        }).length;
+        if ($('ord-count')) $('ord-count').textContent = pending + ' 挂单 / ' + rows.length + ' 条';
+        var body = $('ord-body');
+        if (!body) return;
+        body.innerHTML = '';
+        if (!rows.length) {
+          body.innerHTML = '<tr><td colspan="8" class="px-3 py-6 text-on-surface-variant">暂无限价单</td></tr>';
+          return;
+        }
+        rows.forEach(function (r) {
+          var st = String(r.status || '').toUpperCase();
+          var stCls = st === 'PENDING' ? 'text-primary' : 'text-on-surface-variant';
+          var sideRaw = String(r.side || '');
+          var sideShow = sideRaw.indexOf('SHORT') >= 0 ? 'SHORT' : (sideRaw.indexOf('LONG') >= 0 ? 'LONG' : sideRaw);
+          var tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td class="px-3 py-2 mono">' + r.id + '</td>' +
+            '<td class="px-3 py-2 mono">' + (r.symbol || '--') + '</td>' +
+            '<td class="px-3 py-2">' + sideChip(sideShow) + '</td>' +
+            '<td class="px-3 py-2 mono ' + stCls + '">' + (r.status || '--') + '</td>' +
+            '<td class="px-3 py-2 mono">' + fmtNum(r.price) + '</td>' +
+            '<td class="px-3 py-2 mono">' + fmtNum(r.quantity, 4) + '</td>' +
+            '<td class="px-3 py-2 mono">' + (r.order_source || '--') + '</td>' +
+            '<td class="px-3 py-2 mono">' + fmtTime(r.created_at) + '</td>';
+          body.appendChild(tr);
+        });
+      })
+      .catch(function (e) { console.error(e); });
   }
 
   function loadPlaybookStats() {
@@ -245,7 +283,7 @@
   }
 
   function refreshSlow() {
-    return Promise.all([loadOverview(), loadOpportunities(), loadPlaybookStats(), loadPositions()]);
+    return Promise.all([loadOverview(), loadOpportunities(), loadPlaybookStats(), loadOrders(), loadPositions()]);
   }
 
   function startLivePoll() {
@@ -272,7 +310,7 @@
         .then(function (res) {
           if (!res.ok || !res.j.success) throw new Error((res.j && (res.j.detail || res.j.message)) || 'run failed');
           toast(res.j.message || '已触发', true);
-          setTimeout(function () { loadLive(); loadOpportunities(); loadOverview(); }, 2000);
+          setTimeout(function () { loadLive(); loadOpportunities(); loadOrders(); loadOverview(); }, 2000);
         })
         .catch(function (e) { toast(String(e.message || e), false); })
         .finally(function () { btn.disabled = false; });
@@ -296,7 +334,7 @@
         });
     });
     // 机会表慢刷
-    setInterval(function () { loadOpportunities(); }, 20000);
+    setInterval(function () { loadOpportunities(); loadOrders(); }, 20000);
   }
 
   if (document.readyState === 'loading') {
