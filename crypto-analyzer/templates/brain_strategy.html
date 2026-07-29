@@ -50,7 +50,7 @@
   <div>
     <h1 class="text-2xl font-bold tracking-tight">超级大脑策略</h1>
     <p class="text-[11px] text-on-surface-variant mt-1 tracking-wide">
-      REQ-BRAIN · L0/L1 · 1H定调 + 15M结构 · Big4闸门 · 胜率≥55% · DeepSeek确认开仓 · 限价防插针 · 仅模拟 · 对照期
+      REQ-BRAIN v2 · Playbook 全量打标落库 · 分向胜率 · DeepSeek确认 · 限价防插针 · 仅模拟 · 对照期
     </p>
   </div>
   <div class="flex items-center gap-3 flex-wrap">
@@ -115,6 +115,44 @@
   <p class="text-[10px] text-on-surface-variant mt-2 mono" id="status-msg"></p>
 </section>
 
+<section class="px-8 pb-6">
+  <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+    <h2 class="text-sm font-semibold">机会识别（Playbook）</h2>
+    <div class="flex gap-2 items-center text-[11px]">
+      <select id="sel-pb-filter" class="bg-surface border border-outline-variant/30 rounded px-2 py-1 mono">
+        <option value="">全部 playbook</option>
+        <option>A1</option><option>A2</option>
+        <option>B1</option><option>B2</option><option>B3</option><option>B4</option>
+        <option>C1</option><option>C2</option><option>C3</option><option>C4</option>
+        <option>D1</option><option>D2</option>
+      </select>
+      <select id="sel-dec-filter" class="bg-surface border border-outline-variant/30 rounded px-2 py-1 mono">
+        <option value="">全部决策</option>
+        <option value="OPENED">OPENED</option>
+        <option value="SKIPPED">SKIPPED</option>
+      </select>
+    </div>
+  </div>
+  <div id="pb-stats" class="text-[11px] text-on-surface-variant mb-2 mono"></div>
+  <div class="overflow-x-auto rounded-xl border border-outline-variant/10 mb-6">
+    <table class="w-full text-left text-xs">
+      <thead class="bg-surface-container text-on-surface-variant uppercase text-[10px]">
+        <tr>
+          <th class="px-3 py-2">ID</th>
+          <th class="px-3 py-2">Symbol</th>
+          <th class="px-3 py-2">Playbook</th>
+          <th class="px-3 py-2">方向</th>
+          <th class="px-3 py-2">决策</th>
+          <th class="px-3 py-2">胜率 L/S</th>
+          <th class="px-3 py-2">Signals</th>
+          <th class="px-3 py-2">原因</th>
+        </tr>
+      </thead>
+      <tbody id="opp-body" class="divide-y divide-outline-variant/10"></tbody>
+    </table>
+  </div>
+</section>
+
 <section class="px-8 pb-10">
   <div class="flex items-center justify-between mb-3">
     <h2 class="text-sm font-semibold">BRAIN 持仓</h2>
@@ -140,5 +178,5 @@
 </section>
 
 </main>
-<script src="/static/js/brain_strategy_page.js?v=1"></script>
+<script src="/static/js/brain_strategy_page.js?v=2"></script>
 </body></html>

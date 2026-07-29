@@ -1,5 +1,5 @@
 /**
- * 超级大脑策略页 — 概览 / 开关 / 持仓 / 手动跑一轮
+ * 超级大脑策略页 — 概览 / Playbook 机会 / 持仓 / 手动跑一轮
  */
 (function () {
   var API = '/api/brain-swing';
@@ -23,6 +23,13 @@
     var n = Number(v);
     if (!isFinite(n)) return String(v);
     return n.toFixed(digits == null ? 4 : digits);
+  }
+
+  function fmtPct(v) {
+    if (v == null || v === '') return '--';
+    var n = Number(v);
+    if (!isFinite(n)) return '--';
+    return (n * 100).toFixed(1) + '%';
   }
 
   function sideChip(side) {
@@ -60,6 +67,71 @@
         console.error(e);
         toast(String(e.message || e), false);
       });
+  }
+
+  function loadOpportunities() {
+    var pb = ($('sel-pb-filter') && $('sel-pb-filter').value) || '';
+    var dec = ($('sel-dec-filter') && $('sel-dec-filter').value) || '';
+    var url = API + '/opportunities?limit=100';
+    if (pb) url += '&playbook=' + encodeURIComponent(pb);
+    if (dec) url += '&decision=' + encodeURIComponent(dec);
+    return fetch(url)
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var rows = j.data || [];
+        var body = $('opp-body');
+        if (!body) return;
+        body.innerHTML = '';
+        if (!rows.length) {
+          body.innerHTML = '<tr><td colspan="8" class="px-3 py-6 text-on-surface-variant">暂无机会记录 — 点「手动跑一轮」开始识别</td></tr>';
+          return;
+        }
+        rows.forEach(function (r) {
+          var sigs = r.signals;
+          if (typeof sigs === 'string') {
+            try { sigs = JSON.parse(sigs); } catch (e) { sigs = []; }
+          }
+          if (!Array.isArray(sigs)) sigs = [];
+          var tr = document.createElement('tr');
+          var decCls = r.decision === 'OPENED' ? 'text-primary' : 'text-on-surface-variant';
+          tr.innerHTML =
+            '<td class="px-3 py-2 mono">' + r.id + '</td>' +
+            '<td class="px-3 py-2 mono">' + (r.symbol || '--') + '</td>' +
+            '<td class="px-3 py-2 mono font-semibold">' + (r.playbook || '--') + '</td>' +
+            '<td class="px-3 py-2">' + sideChip(r.side) + '</td>' +
+            '<td class="px-3 py-2 mono ' + decCls + '">' + (r.decision || '--') + '</td>' +
+            '<td class="px-3 py-2 mono">' + fmtPct(r.win_prob_long) + ' / ' + fmtPct(r.win_prob_short) + '</td>' +
+            '<td class="px-3 py-2 mono text-[10px] max-w-[220px] truncate" title="' + sigs.join(',') + '">' +
+              (sigs.slice(0, 4).join(', ') || '--') + '</td>' +
+            '<td class="px-3 py-2 text-[10px] text-on-surface-variant max-w-[180px] truncate" title="' +
+              (r.skip_reason || r.evidence_summary || '') + '">' +
+              (r.skip_reason || (r.evidence_summary || '').slice(0, 40) || '--') + '</td>';
+          body.appendChild(tr);
+        });
+      })
+      .catch(function (e) {
+        console.error(e);
+        toast('机会加载失败: ' + (e.message || e), false);
+      });
+  }
+
+  function loadPlaybookStats() {
+    return fetch(API + '/playbook-stats?days=30')
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var rows = j.data || [];
+        var el = $('pb-stats');
+        if (!el) return;
+        if (!rows.length) {
+          el.textContent = '近30日暂无按 playbook 统计';
+          return;
+        }
+        el.textContent = rows.map(function (r) {
+          return r.playbook + ':' + r.identified +
+            '(开' + (r.opened || 0) + '/跳' + (r.skipped || 0) + ')';
+        }).join(' · ');
+      })
+      .catch(function () {});
   }
 
   function loadPositions() {
@@ -100,21 +172,23 @@
   }
 
   function refreshAll() {
-    return Promise.all([loadOverview(), loadPositions()]);
+    return Promise.all([loadOverview(), loadOpportunities(), loadPlaybookStats(), loadPositions()]);
   }
 
   function bind() {
     $('btn-refresh').addEventListener('click', function () { refreshAll(); });
+    if ($('sel-pb-filter')) $('sel-pb-filter').addEventListener('change', loadOpportunities);
+    if ($('sel-dec-filter')) $('sel-dec-filter').addEventListener('change', loadOpportunities);
     $('btn-run').addEventListener('click', function () {
       var btn = $('btn-run');
       btn.disabled = true;
-      toast('正在启动一轮…', true);
+      toast('正在启动一轮（全量识别+落库）…', true);
       fetch(API + '/run', { method: 'POST' })
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
         .then(function (res) {
           if (!res.ok || !res.j.success) throw new Error((res.j && (res.j.detail || res.j.message)) || 'run failed');
           toast(res.j.message || '已启动', true);
-          setTimeout(refreshAll, 2500);
+          setTimeout(refreshAll, 4000);
         })
         .catch(function (e) { toast(String(e.message || e), false); })
         .finally(function () { btn.disabled = false; });

@@ -216,6 +216,50 @@ def positions(limit: int = 50):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/opportunities")
+def opportunities(
+    limit: int = 80,
+    playbook: str = None,
+    decision: str = None,
+    scan_round_id: int = None,
+):
+    try:
+        from app.services.brain_opportunity_store import list_opportunities
+
+        conn = _connect()
+        try:
+            rows = list_opportunities(
+                conn,
+                limit=limit,
+                playbook=playbook or None,
+                decision=decision or None,
+                scan_round_id=scan_round_id,
+            )
+            rows = [_serialize_row(r) for r in rows]
+        finally:
+            conn.close()
+        return {"success": True, "data": rows, "count": len(rows)}
+    except Exception as e:
+        logger.error(f"[BRAIN API] /opportunities 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/playbook-stats")
+def playbook_stats_api(days: int = 30):
+    try:
+        from app.services.brain_opportunity_store import playbook_stats
+
+        conn = _connect()
+        try:
+            rows = [_serialize_row(r) for r in playbook_stats(conn, days=days)]
+        finally:
+            conn.close()
+        return {"success": True, "data": rows, "days": days}
+    except Exception as e:
+        logger.error(f"[BRAIN API] /playbook-stats 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/run")
 def run_now():
     """手动触发一轮 brain_swing（后台线程）。"""
@@ -236,4 +280,4 @@ def run_now():
                 pass
 
     threading.Thread(target=_job, name="brain-swing-manual", daemon=True).start()
-    return {"success": True, "message": "已启动一轮超级大脑扫描"}
+    return {"success": True, "message": "已启动一轮超级大脑扫描（含 Playbook 全量落库）"}

@@ -15,9 +15,27 @@ BRAIN_SL_PCT = 0.03
 BRAIN_TP_PCT = 0.05
 
 WIN_PROB_MIN = 0.55
+# 开仓方向胜率须比反方向至少高这么多（百分点，0.05=5pp）
+WIN_PROB_REL_EDGE = 0.05
 WINRATE_LOOKBACK_DAYS = 7
 WINRATE_FORWARD_HOURS = 4
 WINRATE_MIN_SAMPLES = 20
+WINRATE_SYMBOL_MIN_N = 5
+
+# Playbook v1（§7.3.11）
+TRADEABLE_PLAYBOOKS = frozenset({
+    "A1", "A2", "B1", "B2", "B3", "B4", "C1", "C2", "C3", "C4",
+})
+FLAT_PLAYBOOKS = frozenset({"D1", "D2"})
+PLAYBOOK_SIDE = {
+    "A1": "LONG", "B1": "LONG", "B4": "LONG", "C2": "LONG", "C3": "LONG",
+    "A2": "SHORT", "B2": "SHORT", "B3": "SHORT", "C1": "SHORT", "C4": "SHORT",
+    "D1": "FLAT", "D2": "FLAT",
+}
+
+# 冲击判定：近 N 根 15m 跌/涨幅相对 ATR
+CRASH_ATR_MULT = 2.5
+CRASH_LOOKBACK_BARS = 8
 
 # K 线窗口
 BARS_1H_WEEK = 168

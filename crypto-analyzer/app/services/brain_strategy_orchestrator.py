@@ -1,4 +1,4 @@
-"""REQ-BRAIN 战略编排 — L0/L1 扫描 → 自有分析 → 胜率 → DeepSeek 确认 → 限价开仓。"""
+"""REQ-BRAIN 战略编排 — Playbook 识别落库 → 分向胜率 → DeepSeek 确认限价开仓。"""
 from __future__ import annotations
 
 import threading
@@ -9,6 +9,9 @@ import pymysql
 from loguru import logger
 
 from app.services.brain_config import (
+    BARS_15M_DAY,
+    BARS_15M_WICK_7D,
+    BARS_1H_WEEK,
     BRAIN_ACCOUNT_ID,
     BRAIN_ENABLED_KEY,
     BRAIN_HOLD_HOURS,
@@ -18,10 +21,21 @@ from app.services.brain_config import (
     BRAIN_SL_PCT,
     BRAIN_SOURCE,
     BRAIN_TP_PCT,
-    WIN_PROB_MIN,
+    TRADEABLE_PLAYBOOKS,
 )
-from app.services.brain_market_analyzer import analyze_symbol, evaluate_big4_gate
-from app.services.brain_winrate import compute_pool_winrate, resolve_win_prob_for_symbol
+from app.services.brain_market_analyzer import analyze_symbol, evaluate_big4_gate, _fetch_klines
+from app.services.brain_opportunity_store import (
+    finish_scan_round,
+    insert_opportunity,
+    start_scan_round,
+)
+from app.services.brain_playbook import classify_playbook
+from app.services.brain_wick import limit_offset_pct_from_wicks
+from app.services.brain_winrate import (
+    compute_pool_winrate,
+    directional_open_allowed,
+    resolve_directional_win_probs,
+)
 from app.utils.config_loader import get_db_config
 from app.utils.futures_symbol import futures_symbol_rating_canonical
 from app.utils.position_time import utc_now_naive
@@ -49,18 +63,13 @@ def _setting_enabled(cur, key: str, default: str = "1") -> bool:
     return str(val or default).strip().lower() in ("1", "true", "yes")
 
 
-def _build_catalyst(analysis: Dict[str, Any], win_prob: float) -> str:
-    wick = analysis.get("wick") or {}
+def _build_catalyst(playbook_row: Dict[str, Any], win_long: Optional[float], win_short: Optional[float]) -> str:
     return (
-        f"[BRAIN] side={analysis.get('side')} win_prob={win_prob:.3f} "
-        f"edge={analysis.get('edge_score')} big4_ok={analysis.get('big4_ok')} "
-        f"aligned={analysis.get('aligned')} "
-        f"h1={analysis.get('h1')} m15={analysis.get('m15')} "
-        f"rsi={analysis.get('rsi_1h')} "
-        f"wick_ratio={wick.get('wick_ratio')} frequent={wick.get('frequent')} "
-        f"forbid_market={analysis.get('forbid_market')} "
-        f"limit_offset_pct={analysis.get('limit_offset_pct')} | "
-        f"{analysis.get('rationale') or ''}"
+        f"[BRAIN] playbook={playbook_row.get('playbook')} side={playbook_row.get('side')} "
+        f"edge={playbook_row.get('edge_score')} confirmed={playbook_row.get('confirmed')} "
+        f"win_l={win_long} win_s={win_short} "
+        f"signals={playbook_row.get('signals')} | "
+        f"{playbook_row.get('evidence_summary') or ''}"
     )[:900]
 
 
@@ -70,14 +79,16 @@ def _open_brain_limit(
     symbol: str,
     side: str,
     price: float,
-    analysis: Dict[str, Any],
-    win_prob: float,
-) -> Optional[int]:
+    playbook_row: Dict[str, Any],
+    win_long: Optional[float],
+    win_short: Optional[float],
+) -> tuple:
+    """返回 (order_id|None, gate_reason|None)。"""
     from app.services.paper_open_gate import gate_simulated_open
     from app.services.paper_limit_entry import create_paper_limit_order
     from app.services.trading_gates import get_paper_margin_usd
 
-    catalyst = _build_catalyst(analysis, win_prob)
+    catalyst = _build_catalyst(playbook_row, win_long, win_short)
     allowed, gate_reason = gate_simulated_open(
         symbol, side, price, BRAIN_SOURCE,
         catalyst=catalyst,
@@ -90,23 +101,28 @@ def _open_brain_limit(
     )
     if not allowed:
         logger.info(f"[BRAIN开仓] 闸门拒绝 {symbol} {side}: {gate_reason}")
-        return None
+        return None, str(gate_reason or "gate_reject")[:200]
 
     hold_deadline = utc_now_naive() + timedelta(hours=BRAIN_HOLD_HOURS)
     margin = get_paper_margin_usd(symbol, conn) or BRAIN_MARGIN_USD
+    wick = playbook_row.get("wick") or {}
+    offset = float(playbook_row.get("limit_offset_pct") or 0.5)
+    if playbook_row.get("forbid_market") and wick:
+        offset = limit_offset_pct_from_wicks(side, wick)
     detail = {
-        "win_prob": win_prob,
-        "edge_score": analysis.get("edge_score"),
-        "rationale": analysis.get("rationale"),
-        "big4_ok": analysis.get("big4_ok"),
-        "aligned": analysis.get("aligned"),
-        "wick": analysis.get("wick"),
-        "h1": analysis.get("h1"),
-        "m15": analysis.get("m15"),
-        "limit_offset_pct": analysis.get("limit_offset_pct"),
-        "forbid_market": analysis.get("forbid_market"),
+        "playbook": playbook_row.get("playbook"),
+        "signals": playbook_row.get("signals"),
+        "edge_score": playbook_row.get("edge_score"),
+        "win_prob_long": win_long,
+        "win_prob_short": win_short,
+        "evidence_summary": playbook_row.get("evidence_summary"),
+        "candidates": playbook_row.get("candidates"),
+        "wick": wick,
+        "limit_offset_pct": offset,
+        "forbid_market": playbook_row.get("forbid_market"),
     }
     fail: List[str] = []
+    entry_score = win_long if side == "LONG" else win_short
     order_id = create_paper_limit_order(
         conn,
         symbol=symbol,
@@ -117,21 +133,21 @@ def _open_brain_limit(
         margin=float(margin),
         stop_loss_pct=BRAIN_SL_PCT,
         take_profit_pct=BRAIN_TP_PCT,
-        entry_signal_type=BRAIN_SOURCE,
+        entry_signal_type=f"brain_{playbook_row.get('playbook')}",
         entry_reason=catalyst[:200],
-        entry_score=float(win_prob),
+        entry_score=float(entry_score or playbook_row.get("edge_score") or 0),
         signal_components=detail,
         max_hold_minutes=int(BRAIN_HOLD_HOURS * 60),
         planned_close_time=hold_deadline,
         account_id=BRAIN_ACCOUNT_ID,
         timeout_minutes=BRAIN_LIMIT_TIMEOUT_MINUTES,
-        limit_offset_pct=float(analysis.get("limit_offset_pct") or 0.5),
-        skip_open_advisor=True,  # 已在 gate_simulated_open 走 DeepSeek 确认
+        limit_offset_pct=offset,
+        skip_open_advisor=True,
         failure_reason=fail,
     )
     if not order_id:
-        logger.info(f"[BRAIN开仓] 限价失败 {symbol} {side}: {fail[:1]}")
-    return order_id
+        return None, (fail[0] if fail else "limit_order_failed")[:200]
+    return order_id, None
 
 
 def close_brain_positions_on_flip(conn, big4: Dict[str, Any]) -> Dict[str, int]:
@@ -153,9 +169,8 @@ def close_brain_positions_on_flip(conn, big4: Dict[str, Any]) -> Dict[str, int]:
         return stats
 
     from app.services.advisor_core import AdvisorPromptHelper
-    from app.utils.config_loader import get_db_config
 
-    helper = AdvisorPromptHelper(get_db_config())  # 复用取价/平仓工具方法
+    helper = AdvisorPromptHelper(get_db_config())
     for pos in rows:
         stats["checked"] += 1
         sym = futures_symbol_rating_canonical(pos["symbol"])
@@ -197,14 +212,18 @@ def close_brain_positions_on_flip(conn, big4: Dict[str, Any]) -> Dict[str, int]:
 
 
 def run_brain_round(triggered_by: str = "scheduler") -> Dict[str, Any]:
-    """跑一轮超级大脑：分析 → 胜率门 → DS 确认限价开仓 → 翻转平仓。"""
+    """
+    一轮：全量 Playbook 识别落库 → 分向胜率门 → DS 确认开仓 → 翻转平仓。
+    """
     global _running
     summary: Dict[str, Any] = {
         "triggered_by": triggered_by,
         "opened": 0,
         "skipped": 0,
         "candidates": 0,
+        "opportunities": 0,
         "closed": 0,
+        "scan_round_id": None,
         "error": None,
     }
     if not _lock.acquire(blocking=False):
@@ -213,6 +232,7 @@ def run_brain_round(triggered_by: str = "scheduler") -> Dict[str, Any]:
         return summary
     _running = True
     conn = None
+    round_id: Optional[int] = None
     try:
         conn = _connect()
         with conn.cursor() as cur:
@@ -225,11 +245,6 @@ def run_brain_round(triggered_by: str = "scheduler") -> Dict[str, Any]:
         close_stats = close_brain_positions_on_flip(conn, big4)
         summary["closed"] = int(close_stats.get("closed") or 0)
 
-        if not big4.get("big4_ok"):
-            summary["error"] = "big4_weak"
-            logger.info(f"[BRAIN] Big4 疲软不开仓: {big4.get('reason')}")
-            return summary
-
         from app.services.trading_gates import load_l0_l1_scan_symbols
 
         symbols = sorted(load_l0_l1_scan_symbols(conn))
@@ -238,73 +253,149 @@ def run_brain_round(triggered_by: str = "scheduler") -> Dict[str, Any]:
             logger.warning("[BRAIN] L0/L1 池为空")
             return summary
 
+        round_id = start_scan_round(
+            conn,
+            triggered_by=triggered_by,
+            universe_size=len(symbols),
+            big4_ok=bool(big4.get("big4_ok")),
+            big4_bias=str(big4.get("bias") or "FLAT"),
+        )
+        summary["scan_round_id"] = round_id
+
         winrate = compute_pool_winrate(conn, symbols)
         summary["winrate"] = {
             "pool_win_prob": winrate.get("pool_win_prob"),
+            "pool_win_prob_long": winrate.get("pool_win_prob_long"),
+            "pool_win_prob_short": winrate.get("pool_win_prob_short"),
             "pool_n": winrate.get("pool_n"),
             "pass_gate": winrate.get("pass_gate"),
         }
-        # 开仓门用单币（或池回退）win_prob≥55%；池整体不过门时仍允许单币达标者尝试
 
-        # 限制每轮开仓尝试，控制 DeepSeek 调用量
         max_opens = 3
         max_llm = 8
         llm_calls = 0
+        big4_ok = bool(big4.get("big4_ok"))
 
         with conn.cursor() as cur:
             for sym in symbols:
-                if summary["opened"] >= max_opens or llm_calls >= max_llm:
-                    break
-                analysis = analyze_symbol(cur, sym, big4=big4)
-                side = (analysis.get("side") or "FLAT").upper()
-                if side not in ("LONG", "SHORT"):
-                    continue
-                if not analysis.get("aligned") or not analysis.get("big4_ok"):
-                    continue
-
-                win_prob = resolve_win_prob_for_symbol(winrate, sym)
-                if win_prob is None or win_prob < WIN_PROB_MIN:
-                    summary["skipped"] += 1
-                    continue
-
-                # 单币胜率不足时已用池胜率；再要求 edge 不太差
-                if float(analysis.get("edge_score") or 0) < 0.15:
-                    summary["skipped"] += 1
-                    continue
-
-                price = analysis.get("ref_price")
-                if not price or float(price) <= 0:
-                    summary["skipped"] += 1
-                    continue
-
-                summary["candidates"] += 1
-                llm_calls += 1
-                order_id = _open_brain_limit(
-                    conn,
-                    symbol=sym,
-                    side=side,
-                    price=float(price),
-                    analysis=analysis,
-                    win_prob=float(win_prob),
+                rows_1h = _fetch_klines(cur, sym, "1h", BARS_1H_WEEK)
+                rows_15m = _fetch_klines(
+                    cur, sym, "15m", max(BARS_15M_DAY, BARS_15M_WICK_7D),
                 )
-                if order_id:
-                    summary["opened"] += 1
-                    logger.info(
-                        f"[BRAIN开仓] OK {sym} {side} order={order_id} "
-                        f"win_prob={win_prob:.3f} offset={analysis.get('limit_offset_pct')}"
+                dirs = resolve_directional_win_probs(winrate, sym)
+                wl, ws = dirs.get("win_prob_long"), dirs.get("win_prob_short")
+
+                pb = classify_playbook(
+                    rows_1h, rows_15m, big4=big4,
+                    win_prob_long=wl, win_prob_short=ws,
+                )
+                if pb.get("forbid_market") and pb.get("wick") and pb.get("side") in ("LONG", "SHORT"):
+                    pb["limit_offset_pct"] = limit_offset_pct_from_wicks(
+                        pb["side"], pb.get("wick") or {},
                     )
+
+                side = (pb.get("side") or "FLAT").upper()
+                playbook = pb.get("playbook") or "D1"
+                price = pb.get("ref_price")
+                summary["opportunities"] += 1
+
+                decision = "SKIPPED"
+                skip_reason = None
+                order_id = None
+
+                if not big4_ok:
+                    skip_reason = "big4_weak"
+                elif playbook not in TRADEABLE_PLAYBOOKS or side not in ("LONG", "SHORT"):
+                    skip_reason = f"playbook_{playbook}"
+                elif not price or float(price) <= 0:
+                    skip_reason = "no_price"
                 else:
+                    ok_wp, wp_reason = directional_open_allowed(side, wl, ws)
+                    if not ok_wp:
+                        skip_reason = wp_reason
+                    elif float(pb.get("edge_score") or 0) < 0.5:
+                        skip_reason = "low_edge"
+                    elif not pb.get("confirmed") and playbook.startswith("A"):
+                        # 趋势类要求更高确认；冲击/破位已在 classifier 标 confirmed
+                        skip_reason = "unconfirmed"
+                    elif summary["opened"] >= max_opens or llm_calls >= max_llm:
+                        skip_reason = "round_quota"
+                    else:
+                        summary["candidates"] += 1
+                        llm_calls += 1
+                        order_id, gate_reason = _open_brain_limit(
+                            conn,
+                            symbol=sym,
+                            side=side,
+                            price=float(price),
+                            playbook_row=pb,
+                            win_long=wl,
+                            win_short=ws,
+                        )
+                        if order_id:
+                            decision = "OPENED"
+                            summary["opened"] += 1
+                            logger.info(
+                                f"[BRAIN开仓] OK {sym} {side} {playbook} order={order_id} "
+                                f"win_l={wl} win_s={ws}"
+                            )
+                        else:
+                            skip_reason = gate_reason or "ds_or_gate_reject"
+
+                if decision == "SKIPPED":
                     summary["skipped"] += 1
 
+                try:
+                    insert_opportunity(
+                        conn,
+                        scan_round_id=round_id,
+                        symbol=futures_symbol_rating_canonical(sym),
+                        side=side,
+                        playbook=playbook,
+                        signals=list(pb.get("signals") or []),
+                        evidence_summary=str(pb.get("evidence_summary") or ""),
+                        ref_price=float(price) if price else None,
+                        win_prob_long=wl,
+                        win_prob_short=ws,
+                        edge_score=float(pb.get("edge_score") or 0),
+                        decision=decision,
+                        skip_reason=skip_reason,
+                        order_id=order_id,
+                    )
+                except Exception as e:
+                    logger.error(f"[BRAIN] 落库失败 {sym}: {e}")
+
+        finish_scan_round(
+            conn, round_id,
+            status="ok" if not summary.get("error") else "error",
+            opportunities=summary["opportunities"],
+            opened=summary["opened"],
+            skipped=summary["skipped"],
+            closed=summary["closed"],
+            summary=summary,
+        )
         logger.info(
-            f"[BRAIN] 一轮结束 opened={summary['opened']} "
-            f"candidates={summary['candidates']} skipped={summary['skipped']} "
+            f"[BRAIN] 一轮结束 round={round_id} opened={summary['opened']} "
+            f"opps={summary['opportunities']} skipped={summary['skipped']} "
             f"closed={summary['closed']} by={triggered_by}"
         )
         return summary
     except Exception as e:
         summary["error"] = str(e)[:200]
         logger.error(f"[BRAIN] 一轮异常: {e}", exc_info=True)
+        if conn and round_id:
+            try:
+                finish_scan_round(
+                    conn, round_id, status="error",
+                    opportunities=summary.get("opportunities") or 0,
+                    opened=summary.get("opened") or 0,
+                    skipped=summary.get("skipped") or 0,
+                    closed=summary.get("closed") or 0,
+                    error_msg=summary["error"],
+                    summary=summary,
+                )
+            except Exception:
+                pass
         return summary
     finally:
         _running = False

@@ -124,12 +124,51 @@ def test_scheduler_brain() -> None:
         _ok("scheduler DeepSeek predict (对照期)")
 
 
+def test_playbook_classify() -> None:
+    from app.services.brain_playbook import classify_playbook, extract_features
+
+    # synthetic rising 1h + 15m
+    rows_1h = []
+    for i in range(180):
+        p = 100 + i * 0.15
+        rows_1h.append({
+            "open_price": p - 0.05, "high_price": p + 0.2,
+            "low_price": p - 0.2, "close_price": p, "volume": 1000 + i,
+        })
+    rows_15m = []
+    for i in range(120):
+        p = 120 + i * 0.05
+        rows_15m.append({
+            "open_price": p - 0.02, "high_price": p + 0.08,
+            "low_price": p - 0.08, "close_price": p, "volume": 500,
+        })
+    big4 = {"big4_ok": True, "bias": "LONG"}
+    out = classify_playbook(rows_1h, rows_15m, big4=big4, win_prob_long=0.6, win_prob_short=0.4)
+    assert "playbook" in out and "signals" in out
+    assert isinstance(out["signals"], list)
+    _ok(f"playbook classify → {out['playbook']} side={out['side']} n_sig={len(out['signals'])}")
+
+
+def test_directional_gate() -> None:
+    from app.services.brain_winrate import directional_open_allowed
+
+    ok, reason = directional_open_allowed("LONG", 0.60, 0.50)
+    assert ok, reason
+    ok2, reason2 = directional_open_allowed("LONG", 0.56, 0.54)
+    assert not ok2 and "rel_edge" in reason2
+    ok3, _ = directional_open_allowed("SHORT", 0.40, 0.58)
+    assert ok3
+    _ok("directional_open_allowed")
+
+
 def test_orchestrator_syntax() -> None:
     for rel in (
         "app/services/brain_config.py",
         "app/services/brain_wick.py",
         "app/services/brain_market_analyzer.py",
         "app/services/brain_winrate.py",
+        "app/services/brain_playbook.py",
+        "app/services/brain_opportunity_store.py",
         "app/services/brain_strategy_orchestrator.py",
     ):
         path = ROOT / rel
@@ -143,6 +182,8 @@ def main() -> int:
     test_wick()
     test_trend_helpers()
     test_winrate_forward()
+    test_playbook_classify()
+    test_directional_gate()
     test_ds_auto_open_available()
     test_paper_limit_brain_force()
     test_executor_brain_expire()

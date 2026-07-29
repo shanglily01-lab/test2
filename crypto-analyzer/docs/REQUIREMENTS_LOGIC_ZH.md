@@ -1,10 +1,11 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.3.7  
+**版本**: v4.4.1  
 **日期**: 2026-07-30  
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
-> **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。
+> **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。  
+> **BRAIN v2 机会识别（§7.3.10–7.3.15）**：**首版已落地**。Playbook 场景覆盖 + 信号打标 + 全部机会落库 + 按标签评估策略优劣。
 
 > 旧版 `design/需求文档.md`（v3.6）已过时，仅作历史参考。  
 > AI 策略细节补充见 `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md`，但**实盘同步、闸门、15m 判据以本文为准**。
@@ -422,12 +423,16 @@
 | 分析引擎 | `app/services/brain_market_analyzer.py`（1H/15M/Big4/对齐） |
 | 插针统计 | `app/services/brain_wick.py`（影线&gt;实体×2；频繁→平均插针限价） |
 | 胜率回测 | `app/services/brain_winrate.py`（近7日×4h 方向胜率，进程缓存30min） |
-| 战略/编排 | `app/services/brain_strategy_orchestrator.py`（开仓+翻转平仓） |
+| 战略/编排 | `app/services/brain_strategy_orchestrator.py`（Playbook 全量落库 + 开仓 + 翻转平仓） |
+| Playbook | `app/services/brain_playbook.py`（A/B/C/D 识别 + 信号字典） |
+| 机会落库 | `app/services/brain_opportunity_store.py`（`brain_scan_rounds` / `brain_opportunities`，启动时 CREATE IF NOT EXISTS） |
+| 分向胜率 | `app/services/brain_winrate.py`（`win_prob_long`/`win_prob_short` + 相对差≥5pp） |
 | 调度 | `app/scheduler.py`：BRAIN 每2h + 30min；**对照期**仍调度 DeepSeek 探索/预测 |
 | DeepSeek 确认 | `gate_simulated_open` → DeepSeek 开仓顾问；`source=brain_swing` 不走同源跳过 |
 | 限价 | `paper_limit_entry.py`：brain 强制限价；`timeout_action=expire`；executor 禁转市价 |
 | 平仓 | 大脑翻转/Big4 疲软 → `brain_close`；DS sell 对 brain **不 temper**（坚决平）；`position_sl_tp_monitor` 硬 SL/TP+trail |
 | 旧路径（对照） | DeepSeek 探索/预测开仓**暂保留**；settings 可开关；对照结束后执行 INV-BRAIN-07 |
+| Web / API | `/brain_strategy`；`/api/brain-swing`（overview / opportunities / playbook-stats / toggle / run） |
 | 回归 | `scripts/validate_brain_req.py` |
 
 **实盘**：`brain_swing` **未**加入 `LIVE_SYNC_SOURCES`（仅模拟）；另开确认后再加。
@@ -435,6 +440,199 @@
 **kill switch**：`system_settings.brain_swing_enabled`（默认视为开；显式 `0` 跳过）。
 
 **Web**：侧栏「超级大脑策略」位于「中线策略」之上；路由 `/brain_strategy`；API `/api/brain-swing`（overview / toggle / positions / run）。
+
+#### 7.3.10 BRAIN v2：机会识别与 Playbook 体系【需求已确认 · 首版已落地】
+
+> **北极星**：只在做多胜率明显更好时做多，做空胜率明显更好时做空，没有很好把握则不开仓。盈利优先于开仓次数。  
+> **核心变化**：从「分析定方向 → 过门就开」升级为 **场景识别 → 打标 → 全部落库 → 开仓另判 → 按标签评估策略优劣** 的闭环。
+
+##### 总原则
+
+1. **识别要全**：扫描结果无论是否开仓，全部入库并打标。
+2. **开仓可以少**：标签在、单没开，也记录事后影子结果。
+3. **优劣只认结果**：按标签看期望值、胜率、盈亏比、样本是否够，指导保留/加强/淘汰。
+
+##### 四层决策
+
+| 层 | 问题 | 产出 |
+|----|------|------|
+| **L1 大环境** | Big4 是否允许交易 | 疲软或无方向 → FLAT |
+| **L2 场景识别** | 属于哪类 Playbook | playbook 标签 + signals 列表 |
+| **L3 方向胜率** | 该方向分向胜率是否过门 | win_prob_long / win_prob_short |
+| **L4 确认** | DeepSeek 明示同向 | opened / skipped |
+
+#### 7.3.11 Playbook 枚举（v1 基线）
+
+> 枚举为初始基线，后续可依据评估报表增删。场景不清 / 多空故事都能讲通 → 一律 FLAT。
+
+**趋势延续类**
+
+| ID | 名称 | 方向 | 一句话描述 |
+|----|------|------|------------|
+| **A1** | 多头趋势回踩 | LONG | 上升结构中缩量回踩再起（EMA 多头排列、HH/HL、15M 回踩不破前低、回调缩量） |
+| **A2** | 空头趋势反抽 | SHORT | 下降结构中缩量反抽再落（EMA 空头排列、LH/LL、15M 反抽不过前高、反弹缩量） |
+
+**冲击反应类**
+
+| ID | 名称 | 方向 | 一句话描述 |
+|----|------|------|------------|
+| **B1** | 暴跌放量反弹 | LONG | 急跌（短窗口跌幅 > N×ATR）→ 止跌（下影/15M 不再创新低）→ 反弹放量或量能回升 → 收回枢轴/EMA |
+| **B2** | 弱反抽失败 | SHORT | 下跌后出现反弹，但量价无力（缩量、不过前高/EMA、RSI 弱反）→ 跌破反抽起点再顺势空 |
+| **B3** | 暴涨滞涨回落 | SHORT | 急涨后长上影/放量滞涨 → 跌破短线枢轴 |
+| **B4** | 暴涨回踩有力 | LONG | 急涨后缩量回踩不破关键位 → 再度放量向上（健康回踩后趋势续） |
+
+**破位 / 假破类**
+
+| ID | 名称 | 方向 | 一句话描述 |
+|----|------|------|------------|
+| **C1** | 向下破位确认 | SHORT | 有效跌破平台/EMA 簇，回抽不过破位位，量能配合 |
+| **C2** | 向下假破吸筹 | LONG | 刺破后快速收回（收盘回区间内），下影长，后续 15M 抬高 |
+| **C3** | 向上突破确认 | LONG | 放量突破 + 回踩确认（不破突破位） |
+| **C4** | 向上假突多头陷阱 | SHORT | 突破后迅速跌回，上影/放量出货 |
+
+**不可交易**
+
+| ID | 名称 | 行为 | 条件 |
+|----|------|------|------|
+| **D1** | 震荡无边 | FLAT | EMA 纠缠、价格反复穿越、无结构 |
+| **D2** | 场景冲突 | FLAT | 多空故事都成立、1H 与 15M 方向打架、edge 与 win 方向不一致 |
+
+##### B1 / B2 详细条件（示例）
+
+**B1 暴跌放量反弹做多 — 必选清单**：
+
+1. 冲击：短窗口跌幅异常（15M/1H 相对 ATR 或近 N 根跌幅分位很高）
+2. 止跌：15M 不再创新低，或出现长下影止跌 K
+3. 量价：反弹阶段量能 ≥ 下跌末段或 ≥ 近均值（无力则观望 / 转 B2）
+4. 结构：收回暴跌启动后的某枢轴，或重新站上 15M EMA20
+5. 过滤：不是「第一根阴线就抄」；至少等止跌 + 一卷反弹确认
+6. 禁止 B1：阴跌无止跌、反弹完全缩量、Big4 仍在加速崩且代币创新低
+
+**B2 弱反抽失败做空 — 必选清单**：
+
+1. 先有下跌或处于下降结构（不是大涨中的第一次回调）
+2. 出现反抽，但「无力」≥ 2 条：缩量、涨幅浅、到不了前高/EMA60、RSI 反弹弱于价格、上影增多
+3. 失败确认：15M 跌破反抽起点或再次跌破 EMA20
+4. 禁止 B2：反抽明显放量且结构抬高（那是 B1/B4）；纯追跌无反抽
+
+#### 7.3.12 信号字典（v1 基线）
+
+> 每条机会从字典中选取匹配的 signal tag 组成 `signals[]` 数组。后续可扩展。
+
+| 类别 | signal tag | 含义 |
+|------|-----------|------|
+| **EMA** | `ema_bull_align` | 价格 > EMA20 > EMA60 |
+| | `ema_bear_align` | 价格 < EMA20 < EMA60 |
+| | `ema_reclaim` | 跌破后重新站回 EMA20 |
+| | `ema_reject` | 反抽到 EMA20/60 被打回 |
+| **结构** | `hh_hl` | 1H 高点/低点抬高 |
+| | `lh_ll` | 1H 高点/低点降低 |
+| | `15m_higher_low` | 15M 回调不破前低 |
+| | `15m_lower_high` | 15M 反抽不过前高 |
+| | `15m_stop_new_low` | 15M 不再创新低（止跌） |
+| **RSI** | `rsi_1h_healthy_long` | RSI(1H) 45~68（多头健康区） |
+| | `rsi_1h_healthy_short` | RSI(1H) 32~55（空头健康区） |
+| | `rsi_15m_turn_up` | 15M RSI 从超卖拐头向上 |
+| | `rsi_15m_turn_down` | 15M RSI 从超买拐头向下 |
+| | `rsi_extreme_high` | RSI > 72（过热警告） |
+| | `rsi_extreme_low` | RSI < 28（超跌警告） |
+| **量价** | `volume_expand_up` | 上涨段放量 |
+| | `volume_expand_down` | 下跌段放量 |
+| | `volume_shrink_pullback` | 回调/反抽缩量 |
+| | `volume_diverge_bull` | 价新低量萎缩（底背离） |
+| | `volume_diverge_bear` | 价新高量萎缩（顶背离） |
+| **冲击** | `crash_spike` | 短窗口急跌（> N×ATR） |
+| | `pump_spike` | 短窗口急涨（> N×ATR） |
+| | `long_lower_wick` | 长下影止跌 |
+| | `long_upper_wick` | 长上影滞涨 |
+| **破位** | `break_support` | 跌破支撑/平台 |
+| | `break_resistance` | 突破阻力 |
+| | `false_break_down` | 假跌破快速收回 |
+| | `false_break_up` | 假突破快速跌回 |
+| **Big4** | `big4_bull` | Big4 偏多 |
+| | `big4_bear` | Big4 偏空 |
+| | `big4_weak` | Big4 疲软 |
+| **其他** | `funding_crowded_long` | 费率极端正（多头拥挤） |
+| | `funding_crowded_short` | 费率极端负（空头拥挤） |
+| | `wick_frequent` | 近 7 日插针频繁 |
+| | `near_7d_high` | 靠近 7 日高（追顶风险） |
+| | `near_7d_low` | 靠近 7 日低（追底风险） |
+
+#### 7.3.13 机会落库（全量，含未开仓）
+
+> 每条识别到的机会一行；开仓与否、事后盈亏均在此表追溯。
+
+**表：`brain_opportunities`**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | PK AUTO_INCREMENT | |
+| `scan_round_id` | INT FK | 所属扫描轮次 |
+| `symbol` | VARCHAR | 交易对 |
+| `side` | ENUM('LONG','SHORT','FLAT') | |
+| `playbook` | VARCHAR(16) | A1 / B1 / C2 / D1 … |
+| `signals` | JSON | `["ema_bull_align","volume_shrink_pullback","15m_higher_low"]` |
+| `evidence_summary` | TEXT | 可读摘要（供 DS 确认/人工复盘） |
+| `ref_price` | DECIMAL(18,8) | 识别时参考价 |
+| `win_prob_long` | FLOAT | 该币近期做多分向胜率 |
+| `win_prob_short` | FLOAT | 该币近期做空分向胜率 |
+| `edge_score` | FLOAT | 综合打分 |
+| `decision` | ENUM('OPENED','SKIPPED') | 最终裁决 |
+| `skip_reason` | VARCHAR(200) | 若跳过：big4_weak / ds_reject / low_winprob / conflict… |
+| `order_id` | INT NULLABLE FK | 若开仓，关联 `futures_orders.id` |
+| `shadow_pnl_4h` | FLOAT NULLABLE | 不论是否开仓，4h 后按方向的影子盈亏% |
+| `actual_pnl` | FLOAT NULLABLE | 若开仓，实际盈亏 USD（平仓后回填） |
+| `exit_reason` | VARCHAR(100) NULLABLE | SL/TP/trail/ds_force/brain_flip/timeout… |
+| `created_at` | DATETIME | |
+
+**索引**：`(playbook, decision)`, `(symbol, created_at)`, `(scan_round_id)`
+
+#### 7.3.14 分向胜率与场景仲裁
+
+##### 分向胜率
+
+- 改现有 `win_prob` 为 **`win_prob_long` / `win_prob_short` 分列计算**（样本仍为近 7 日×4h）。
+- 开仓条件升级为：**绝对过线**（该方向 ≥ 55%，可后续上调至 58%）**且**比反方向至少高 **5 个百分点**。
+- 两边接近 / 样本不够 → **FLAT**。
+
+##### 场景仲裁
+
+同一币同一轮可能命中多个 Playbook（如 B1 + C2 都沾边），仲裁规则：
+
+1. 确认 K 是否已出现（未确认的场景优先级低）
+2. 与 1H 大方向是否冲突
+3. 分向胜率哪边更高
+4. 仍冲突 → **FLAT，不开**
+
+每条落库机会记录最终选定的 **唯一主 Playbook**。
+
+#### 7.3.15 策略评估报表
+
+> 按标签聚合，用盈利结果判断策略优劣。
+
+**维度**：按 `playbook`，或 `playbook + signal 组合`，或 `playbook + symbol`
+
+**指标**：
+
+| 指标 | 说明 |
+|------|------|
+| 识别次数 | 该标签命中多少次 |
+| 开仓次数 / 跳过次数 | |
+| 开仓胜率 | 真实开仓的胜率 |
+| 平均 PnL / 盈亏比 | |
+| 影子胜率 | 识别但未开仓的事后 4h 方向胜率 |
+| 影子 vs 实开差异 | 发现「该开没开」或「不该开却开了」 |
+| 近 7 天 / 近 30 天趋势 | |
+
+**迭代规则**（建议 INV 级）：
+
+| 条件 | 动作 |
+|------|------|
+| 某 Playbook 近 30 天开仓 ≥ 10 笔且胜率 ≥ 55% | 保留 / 可放宽参数 |
+| 某 Playbook 近 30 天开仓 ≥ 10 笔且胜率 < 40% | **淘汰或暂停**（禁止继续开仓） |
+| 影子胜率远高于实开胜率 | 排查 skip_reason 是否过严 |
+| 影子胜率远低于实开胜率 | DS 确认 / 闸门正在保护，维持不变 |
+| 样本 < 10 笔 | 不做结论，继续收集 |
 
 ---
 
@@ -594,6 +792,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-RATING | `update_top_performers.py` |
 | REQ-MIDLINE | `midline_swing_config.py`, `midline_swing_scanner.py`, `midline_explore_worker.py`（或 `midline_worker`）, `midline_swing_api.py`, 中线策略页 JS/模板, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
 | **REQ-BRAIN** | `brain_config` / `brain_wick` / `brain_market_analyzer` / `brain_winrate` / `brain_strategy_orchestrator`；`scheduler.py`；`paper_limit_entry` + executor expire；DS 自动开仓暂停；`validate_brain_req.py`；权威 §7.3 |
+| **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
 | REQ-ST | `smart_trader_service.py` |
 
 ---
@@ -602,6 +801,8 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-30 | **v4.4.1** | **BRAIN v2 首版落地**：`brain_playbook` / `brain_opportunity_store`；全量机会落库；分向胜率+相对差门；API opportunities/playbook-stats；页展示机会表 |
+| 2026-07-30 | **v4.4.0** | **BRAIN v2 需求**：Playbook 场景覆盖（A/B/C/D）+ 信号字典 + 全量机会落库 `brain_opportunities` + 分向胜率 + 场景仲裁 + 按标签评估报表；§7.3.10–7.3.15 |
 | 2026-07-30 | **v4.3.7** | Web：侧栏新增「超级大脑策略」`/brain_strategy`（位于中线之上）+ `/api/brain-swing` 概览/开关/持仓/手动跑一轮 |
 | 2026-07-28 | **v4.3.6** | 删除 `position_advisor_impl` 内 Gemini LLM client/`review_open` 死路径；移除重复模板 `gemini_advisor_reviews.html` |
 | 2026-07-28 | **v4.3.5** | 顾问审核写入抽到 `advisor_review_store`；`gemini_swan_worker`/`tick` 降为下线壳；SmartExit 仅初始化 DeepSeek 持仓顾问 |

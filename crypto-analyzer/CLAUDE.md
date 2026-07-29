@@ -157,10 +157,10 @@
 - **DeepSeek soft-sl**（`position_sl_tp_monitor`）：grace 45min；no_follow≥60min 且亏≈2.2%（匹配开仓 thesis）
 - **Gemini 预测已下线**（API / 页面 / worker 已移除）
 
-### 超级大脑主权层（REQ-BRAIN）【需求 2026-07-28 · 首版已落地 · 对照期】
-- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.3.1）
-- `brain_swing`：L0/L1；1H 近1周 + 15M 近1天；Big4 疲软不开
-- 近7日×4h 方向胜率 ≥55%；DeepSeek 确认开仓 / 可强制平
+### 超级大脑主权层（REQ-BRAIN）【需求 2026-07-28 · 首版已落地 · 对照期 · v2 Playbook 2026-07-30】
+- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.4.1）
+- `brain_swing`：L0/L1；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
+- 分向胜率 ≥55% 且比反方向高≥5pp；DeepSeek 确认开仓 / 可强制平
 - 防插针：影>实体×2；频繁则平均插针限价；超时取消（禁转市价）
 - **对照期**：DeepSeek 探索/预测自动开仓**暂保留**并行对比；结束后再执行 INV-BRAIN-07
 - 调度：BRAIN 每2h + 30min；`validate_brain_req.py`
