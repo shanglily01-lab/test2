@@ -15,6 +15,8 @@ from app.services.brain_config import (
     BARS_1H_WEEK,
     BRAIN_ACCOUNT_ID,
     BRAIN_CLOSE_CHECK_EVERY_TICKS,
+    BRAIN_CLOSE_MIN_HOLD_MINUTES,
+    BRAIN_CLOSE_ONLY_ON_FLIP,
     BRAIN_ENABLED_KEY,
     BRAIN_HOLD_HOURS,
     BRAIN_LEVERAGE,
@@ -28,9 +30,11 @@ from app.services.brain_config import (
     BRAIN_TICK_INTERVAL_SECONDS,
     BRAIN_TICK_MAX_OPENS,
     BRAIN_TP_PCT,
+    BRAIN_USE_MARKET_ENTRY,
+    FLAT_PLAYBOOKS,
     TRADEABLE_PLAYBOOKS,
 )
-from app.services.brain_market_analyzer import analyze_symbol, evaluate_big4_gate, _fetch_klines
+from app.services.brain_market_analyzer import evaluate_big4_gate, _fetch_klines
 from app.services.brain_opportunity_store import (
     finish_scan_round,
     insert_opportunity,
@@ -233,12 +237,36 @@ def _open_brain_entry(
     return order_id, None
 
 
+def _hold_minutes(pos: Dict[str, Any]) -> float:
+    raw = pos.get("open_time") or pos.get("created_at")
+    if not raw:
+        return 9999.0  # 无开仓时间则不做最短持仓保护
+    try:
+        if hasattr(raw, "timestamp"):
+            open_ts = raw.timestamp()
+        else:
+            from datetime import datetime
+            open_ts = datetime.strptime(str(raw)[:19], "%Y-%m-%d %H:%M:%S").timestamp()
+        return max(0.0, (time.time() - open_ts) / 60.0)
+    except Exception:
+        return 9999.0
+
+
 def close_brain_positions_on_flip(conn, big4: Dict[str, Any]) -> Dict[str, int]:
-    stats = {"checked": 0, "closed": 0, "errors": 0}
+    """战略平仓：Playbook 再识别（与开仓同口径）。
+
+    禁止再用旧 analyze_symbol 的「未对齐→FLAT」秒平（会开完几分钟就被 analysis_flat 砍掉）。
+    过渡规则（§7.3.16 落地前）：
+    - 开仓未满 BRAIN_CLOSE_MIN_HOLD_MINUTES：不战略平（硬 SL/TP 仍由 monitor）
+    - 默认仅在 Playbook 方向明确反转时平（BRAIN_CLOSE_ONLY_ON_FLIP）
+    - Big4 疲软：仅在过最短持仓后平
+    """
+    stats = {"checked": 0, "closed": 0, "skipped_grace": 0, "errors": 0}
     with conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id, symbol, position_side, entry_price, source, leverage
+            SELECT id, symbol, position_side, entry_price, source, leverage,
+                   open_time, created_at
             FROM futures_positions
             WHERE status='OPEN' AND account_id=%s
               AND (source=%s OR source LIKE 'brain_%%')
@@ -256,24 +284,40 @@ def close_brain_positions_on_flip(conn, big4: Dict[str, Any]) -> Dict[str, int]:
         stats["checked"] += 1
         sym = futures_symbol_rating_canonical(pos["symbol"])
         side = (pos.get("position_side") or "").upper()
+        held = _hold_minutes(pos)
         try:
+            if held < float(BRAIN_CLOSE_MIN_HOLD_MINUTES):
+                stats["skipped_grace"] += 1
+                continue
+
             with conn.cursor() as cur:
-                analysis = analyze_symbol(cur, sym, big4=big4)
-            new_side = (analysis.get("side") or "FLAT").upper()
+                rows_1h = _fetch_klines(cur, sym, "1h", BARS_1H_WEEK)
+                rows_15m = _fetch_klines(cur, sym, "15m", max(BARS_15M_DAY, BARS_15M_WICK_7D))
+            pb = classify_playbook(rows_1h, rows_15m, big4=big4)
+            new_side = (pb.get("side") or "FLAT").upper()
+            playbook = str(pb.get("playbook") or "D1")
+
             should_close = False
             reason = ""
             if not big4.get("big4_ok"):
                 should_close = True
                 reason = "brain_close:big4_weak"
-            elif new_side == "FLAT":
+            elif new_side in ("LONG", "SHORT") and new_side != side:
                 should_close = True
-                reason = "brain_close:analysis_flat"
-            elif new_side != side and new_side in ("LONG", "SHORT"):
+                reason = f"brain_close:flip_to_{new_side}_{playbook}"
+            elif not BRAIN_CLOSE_ONLY_ON_FLIP and (
+                playbook in FLAT_PLAYBOOKS or new_side == "FLAT"
+            ):
+                # 可选：D1/D2 失效平；默认关闭，避免噪音 FLAT 闷杀
                 should_close = True
-                reason = f"brain_close:flip_to_{new_side}"
+                reason = f"brain_close:playbook_{playbook}"
+
             if not should_close:
                 continue
-            logger.info(f"[BRAIN平仓] id={pos['id']} {sym} {side} → {reason}")
+            logger.info(
+                f"[BRAIN平仓] id={pos['id']} {sym} {side} hold={held:.0f}m "
+                f"pb={playbook}/{new_side} → {reason}"
+            )
             closed = helper._close_live_position(pos, reason[:80], advisor_tag="brain_close")
             if closed:
                 stats["closed"] += 1

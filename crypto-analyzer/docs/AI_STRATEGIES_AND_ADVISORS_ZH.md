@@ -49,7 +49,7 @@ crypto-app-main
 - 近 7 日×4h **方向对就算赢**，胜率 ≥55% 才开  
 - DeepSeek：开仓**不经**开仓顾问；主张平 → 坚决平；反对大脑平 → 仍平并记分歧  
 - **入场**：测试期 `BRAIN_USE_MARKET_ENTRY=True` 市价；正式恢复限价防插针（INV-BRAIN-06）  
-- **平仓（草案 §7.3.16）**：Playbook thesis 失效主判；DS 持仓可强制平；对齐开仓规则，待确认后落地  
+- **平仓/持仓（草案 §7.3.16 / REQ-BRAIN-HOLD）**：自有持仓顾问 + **动态 SL/TP** + **动态持仓时长**（不再固定 4h/3%/5%）；Playbook thesis 失效主判；待确认后落地  
 - 插针：影线>实体×2；频繁则平均插针限价；超时必须取消（市价测试期暂缓）  
 - 旧 DeepSeek 自动开仓：对照期暂保留；结束后 INV-BRAIN-07  
 - **Web**：`/brain_strategy`；API `/api/brain-swing`（含 `/orders`）  

@@ -136,6 +136,12 @@ def test_brain_skip_open_advisor() -> None:
         _fail("orchestrator 缺少 _open_brain_entry")
     else:
         _ok("orchestrator _open_brain_entry")
+    if 'brain_close:analysis_flat' in orch or 'reason = "brain_close:analysis_flat"' in orch:
+        _fail("orchestrator 仍用旧 analysis_flat 秒平")
+    elif "BRAIN_CLOSE_MIN_HOLD_MINUTES" not in orch or "classify_playbook" not in orch:
+        _fail("orchestrator 战略平仓未改 Playbook+最短持仓")
+    else:
+        _ok("orchestrator close playbook+grace")
 
 
 def test_scheduler_brain() -> None:

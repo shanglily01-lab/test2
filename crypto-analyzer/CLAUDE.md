@@ -158,12 +158,13 @@
 - **Gemini 预测已下线**（API / 页面 / worker 已移除）
 
 ### 超级大脑主权层（REQ-BRAIN）【需求 2026-07-28 · 首版已落地 · 对照期 · v2 Playbook 2026-07-30】
-- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.4.1）
+- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.4.8）
 - `brain_swing`：L0/L1；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
-- 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**测试期市价**（`BRAIN_USE_MARKET_ENTRY`）；DeepSeek 持仓可强制平
-- 防插针：影>实体×2；频繁则平均插针限价；超时取消（禁转市价）；**测试期 INV-BRAIN-06 暂缓**
+- 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**测试期市价**（`BRAIN_USE_MARKET_ENTRY`）
+- **持仓管理草案 §7.3.16**：自有持仓顾问 + 动态 SL/TP + 动态持仓时长（取消固定 4h/3%/5%；过渡 fallback 仍可用）
+- 防插针：影>实体×2；频繁则平均插针限价；超时取消；**测试期 INV-BRAIN-06 暂缓**
 - **对照期**：DeepSeek 探索/预测自动开仓**暂保留**并行对比；结束后再执行 INV-BRAIN-07
-- 调度：BRAIN **每15s** 一批5币轮询 L0/L1，发现即开；`validate_brain_req.py`；页 `/brain_strategy` 直播进度 + 持仓
+- 调度：BRAIN **每15s** 一批5币；`validate_brain_req.py`；页 `/brain_strategy`
 
 
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟】
@@ -175,8 +176,9 @@
 
 ### 开仓 / 持仓顾问
 - 路由：统一 **DeepSeek**（Gemini 顾问已下线；历史 `gemini_*` 仓亦由 DeepSeek 监管）；中线开仓/持仓顾问均 skip
+- **BRAIN**：开仓跳过顾问；持仓走 **§7.3.16 自有持仓管理**（草案；不进通用探索持仓顾问）
 - 持仓 tick：**15min**；每仓 15min；浮盈转亏 urgent 立即再审
-- 盈利 sell：ROI **≥+8%** 且 15m 明确转弱（反向≥4）；过早 sell 程序化拦截恢复严格
+- 盈利 sell（探索仓）：ROI **≥+8%** 且 15m 明确转弱（反向≥4）；过早 sell 程序化拦截恢复严格
 - Prompt/rubric/**reason 中文**；开关 `deepseek_*_advisor_enabled`（系统设置「开仓/持仓顾问」）
 
 ### gemini_sentiment_analyzer (情绪)

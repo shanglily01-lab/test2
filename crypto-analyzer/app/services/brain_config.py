@@ -61,8 +61,12 @@ BRAIN_TICK_BATCH_SIZE = 5
 BRAIN_TICK_INTERVAL_SECONDS = 15
 BRAIN_SYMBOL_OPEN_COOLDOWN_MINUTES = 60
 BRAIN_TICK_MAX_OPENS = 2  # 单批最多触发几次 DS 开仓
-BRAIN_CLOSE_CHECK_EVERY_TICKS = 20  # ~5min 做一次翻转平仓检查
+BRAIN_CLOSE_CHECK_EVERY_TICKS = 20  # ~5min 做一次 thesis 平仓检查
 BRAIN_POOL_REFRESH_EVERY_TICKS = 40  # ~10min 刷新 L0/L1 池
+# 开仓后最短持仓：期间不做 thesis/Big4 战略平（硬 SL/TP 仍生效）
+BRAIN_CLOSE_MIN_HOLD_MINUTES = 45
+# True=仅在 Playbook 方向明确反转时战略平；False=D1/D2 也可平（仍受最短持仓约束）
+BRAIN_CLOSE_ONLY_ON_FLIP = True
 
 # 兼容旧文档字段（全量轮已改为 tick）
 BRAIN_SCAN_INTERVAL_HOURS = 2
