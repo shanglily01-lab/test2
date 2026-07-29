@@ -1,7 +1,7 @@
 """Active explore worker shared helpers.
 
 Live DeepSeek / prepared-bundle paths import neutral names from here.
-Implementation: explore_worker_impl.py (legacy shim: gemini_explore_worker).
+Implementation: explore_worker_impl.py (via explore_worker_common).
 """
 from __future__ import annotations
 

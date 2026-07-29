@@ -114,11 +114,9 @@ class UnifiedDataScheduler:
             'correct_live_trades': {'count': 0, 'last_run': None, 'last_error': None},
             'deepseek_explore': {'count': 0, 'last_run': None, 'last_error': None},
             'deepseek_predict': {'count': 0, 'last_run': None, 'last_error': None},
-            'gemini_position_advisor': {'count': 0, 'last_run': None, 'last_error': None},
             'deepseek_position_advisor': {'count': 0, 'last_run': None, 'last_error': None},
             'paper_closed_live_sync': {'count': 0, 'last_run': None, 'last_error': None}
         }
-        self._gemini_position_advisor_running = False
         self._deepseek_position_advisor_running = False
         self._paper_closed_live_sync_running = False
 

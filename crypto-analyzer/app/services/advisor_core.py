@@ -1,7 +1,7 @@
 """Active advisor core facade.
 
 Live DeepSeek / BRAIN / smart-exit paths import neutral names from here.
-Implementation: position_advisor_impl.py (legacy shim: gemini_position_advisor).
+Implementation: position_advisor_impl.py (via advisor_core).
 """
 from __future__ import annotations
 

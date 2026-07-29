@@ -1,6 +1,6 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.4.2  
+**版本**: v4.4.3  
 **日期**: 2026-07-30  
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
@@ -801,6 +801,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-30 | **v4.4.3** | 清理历史死代码：删除 Gemini/GPT/tactical 壳、未用 breakout/entry/optimizer 服务群、15 个一次性 diag 脚本；scheduler 去掉 gemini_position_advisor 计数 |
 | 2026-07-30 | **v4.4.2** | **BRAIN 轮询直播**：scheduler 每15s一批5币扫 L0/L1；发现机会立即开仓；API `/live`；前端 5s 刷新进度 |
 | 2026-07-30 | **v4.4.1** | **BRAIN v2 首版落地**：`brain_playbook` / `brain_opportunity_store`；全量机会落库；分向胜率+相对差门；API opportunities/playbook-stats；页展示机会表 |
 | 2026-07-30 | **v4.4.0** | **BRAIN v2 需求**：Playbook 场景覆盖（A/B/C/D）+ 信号字典 + 全量机会落库 `brain_opportunities` + 分向胜率 + 场景仲裁 + 按标签评估报表；§7.3.10–7.3.15 |
