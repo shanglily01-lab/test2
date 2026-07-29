@@ -27,10 +27,10 @@ from app.services.data_cache_service import (
     _make_kline_narrative,
     _trend_desc_from_bars,
 )
-from app.services.gemini_swan_worker import (
+from app.services.explore_universe_utils import _read_setting
+from app.services.gemini_llm_config import (
     GEMINI_API_KEY,
     GEMINI_MODEL,
-    _read_setting,
 )
 
 BIG4_SYMBOLS: List[str] = [

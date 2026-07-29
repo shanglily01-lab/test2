@@ -1,6 +1,6 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-07-28 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.3.1** 对齐  
+> 文档版本：2026-07-28 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.3.6** 对齐  
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
 > **中线 v2 §7.2**：已落地模拟仓。  
 > **实盘同步 / 闸门 / 15m 定方向 / 限价偏移 / BRAIN**：以 REQUIREMENTS 为准；本文侧重 AI/中线细节。
@@ -74,7 +74,7 @@ crypto-app-main
 | 战术四策略 | `build_strategy_prompt()` → `build_strategy_prompt_zh()` | `ai_tactical_explore_prompts.py` |
 | 顶空底多 | `build_reversal_explore_prompt()` → 中文模板 | `ai_reversal_explore_prompt.py` |
 | 开仓顾问 | `build_open_advisor_prompt()` | 中文 rubric（三教师共用） |
-| 持仓顾问 | `GeminiPositionAdvisor._build_prompt()` | 中文；DeepSeek/GPT 继承 |
+| 持仓顾问 | `PositionAdvisorCore._build_prompt()`（`advisor_core`） | 中文；DeepSeek 继承 |
 | GPT system | `GPT_JSON_SYSTEM_ZH` | `gpt_*_worker` / 战术 GPT |
 
 A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
@@ -99,7 +99,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 | 教师 | Worker | 调度 |
 |------|--------|------|
-| Gemini | `gemini_explore_worker.run_explore_round` | `every(4).hours` + `every(10).minutes` |
+| Gemini | `explore_worker_impl.run_explore_round`（壳 `gemini_explore_worker`；已下线） | — |
 | DeepSeek | `deepseek_explore_worker.run_explore_round` | 同上 |
 | GPT | `gpt_explore_worker.run_explore_round` | 同上 + `gpt_explore_next_due_utc` |
 
@@ -142,8 +142,8 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 3.8 Web / API
 
-- 页面：`templates/gemini_explore.html`、`deepseek_explore.html`、`gpt_explore.html`
-- 手动：`POST /api/{gemini,deepseek,gpt}-explore/run-now`
+- 页面：Gemini 独立页面已下线；旧 `/gemini_explore` 兼容跳转到 `midline_strategy`，主页面为 `templates/deepseek_explore.html`
+- 手动：`POST /api/deepseek-explore/run-now`、`POST /api/gpt-explore/run-now`
 
 ---
 
@@ -157,7 +157,6 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 | 教师 | Worker | 调度 |
 |------|--------|------|
-| Gemini | `gemini_predictor.run_predict_round` | `every(2).hours` + `every(5).minutes`；距上次 ok ≥ max_hold_hours + `gemini_predict_next_due_utc` |
 | DeepSeek | `deepseek_predictor.run_predict_round` | 同上 + `deepseek_predict_next_due_utc` |
 | GPT | `gpt_predictor.run_predict_round` | `gpt_predict_next_due_utc` |
 
@@ -382,7 +381,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 
 ## 9. Gemini 市场情绪
 
-- **文件**：`gemini_sentiment_analyzer.run_sentiment_round`
+- **状态**：Gemini 情绪分析 API / 调度 / 独立页面均已下线
 - **调度**：**每 8 小时**（`scheduler.py`；非交易）
 - **开关**：`gemini_sentiment_enabled`（默认 1）
 - **表**：`gemini_sentiment_runs`
@@ -454,10 +453,14 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | `app/services/ai_reversal_explore_prompt.py` | 顶空底多 |
 | `app/services/ai_big4_prompt.py` | Big4 块 |
 | `app/services/explore_prepared_bundle.py` | 共享 universe |
+| `app/services/explore_worker_impl.py` | 探索共用实现（经 `explore_worker_common`；旧 `gemini_explore_worker` 为壳） |
+| `app/services/explore_universe_utils.py` | 探索 universe/setting 共用工具（原 `gemini_swan_worker` 抽出） |
+| `app/api/advisor_api.py` | 顾问审核 API（`/api/advisor`） |
 | `app/services/tactical_explore_scheduler.py` | 15 槽位调度 |
 | `app/services/paper_open_gate.py` | 开仓闸门 |
 | `app/services/open_advisor_strategy_rubrics.py` | 开仓 rubric |
-| `app/services/gemini_position_advisor.py` | 开仓审查 + 持仓监管（DeepSeek/GPT 复用逻辑） |
+| `app/services/advisor_review_store.py` | 顾问审核表通用写入 |
+| `app/services/position_advisor_impl.py` | 开仓/持仓顾问共享实现（经 `advisor_core`；旧 `gemini_position_advisor` 为壳） |
 | `smart_trader_service.py` | 顾问 tick + 部分 gate 调用 |
 
 英文对照文档：[AI_STRATEGIES_AND_ADVISORS_EN.md](./AI_STRATEGIES_AND_ADVISORS_EN.md)

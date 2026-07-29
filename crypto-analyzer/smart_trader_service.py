@@ -2896,7 +2896,7 @@ class SmartTraderService:
         last_config_reload = datetime.now()
         last_regime_check = datetime.now()  # 市场状态机检测（每小时一次）
         last_reconcile = datetime.now()     # 实盘持仓对账（每5分钟）
-        last_gemini_advisor = datetime.now() - timedelta(minutes=15)  # 启动后立即触发首次 Gemini 顾问
+        last_hold_advisor = datetime.now() - timedelta(minutes=15)  # 启动后立即触发首次持仓顾问
 
         while self.running:
             try:
@@ -2941,13 +2941,13 @@ class SmartTraderService:
                     last_reconcile = now
 
                 # 0.61. 持仓顾问 (每 15 min tick；DeepSeek；Gemini 顾问已下线)
-                if (now - last_gemini_advisor).total_seconds() >= 900:
+                if (now - last_hold_advisor).total_seconds() >= 900:
                     try:
                         if self.smart_exit_optimizer:
                             self.smart_exit_optimizer.deepseek_advisor_tick()
                     except Exception as _ge:
                         logger.warning(f"[持仓顾问] tick 异常: {_ge}")
-                    last_gemini_advisor = now
+                    last_hold_advisor = now
 
                 # 0.7. 🔒 提前检查交易开关（最高优先级）
                 # 如果U本位交易已关闭，直接跳过本轮所有扫描和开仓逻辑

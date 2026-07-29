@@ -5,7 +5,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 from loguru import logger
 
-# 与 gemini_position_advisor.HOLD_MIN_MINUTES 一致
+# 与 position_advisor_impl.HOLD_MIN_MINUTES 一致
 HOLD_MIN_MINUTES = 15
 
 # 每 15min tick 上限 (~3s/笔 → 约 2.5min，留足 scheduler 余量)

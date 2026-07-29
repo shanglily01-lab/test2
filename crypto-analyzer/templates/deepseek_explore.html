@@ -1085,7 +1085,7 @@ Big4AnalysisTab.init({ api: '/api/deepseek-big4-analysis' });
   var tab = new URLSearchParams(window.location.search).get('tab');
   if (tab === 'predict') switchTab('predict');
   else if (tab === 'big4') switchTab('big4');
-  else if (tab === 'midline-long' || tab === 'midline-short') window.location.href = '/gemini_explore';
+  else if (tab === 'midline-long' || tab === 'midline-short') window.location.href = '/midline_strategy';
   else if (tab) switchTab(tab);
 })();
 explorePoll.register(function () {

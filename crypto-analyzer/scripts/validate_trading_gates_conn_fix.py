@@ -114,7 +114,7 @@ def test_gate_simulated_open_with_conn() -> None:
     )
     try:
         with patch(
-            "app.services.gemini_position_advisor.GeminiPositionAdvisor.review_open",
+            "app.services.position_advisor_impl.PositionAdvisorCore.review_open",
             return_value=(True, "test_mock_approve"),
         ):
             allowed, reason = gate_simulated_open(

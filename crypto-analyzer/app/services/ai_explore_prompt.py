@@ -57,8 +57,8 @@ def _sl_tp_prompt_kwargs() -> Dict[str, str]:
         "tp_pct": _format_pct_label(tp),
         "hold_hours": str(hold),
     }
-# 模拟仓持仓顾问: 满 15min 后每 15min 轮询 (见 gemini_position_advisor.HOLD_MIN_MINUTES)
-AI_ADVISOR_MIN_HOLD_HOURS = 0.25  # 15min, 与 gemini_position_advisor.HOLD_MIN_MINUTES 一致
+# 模拟仓持仓顾问: 满 15min 后每 15min 轮询 (见 position_advisor_impl.HOLD_MIN_MINUTES)
+AI_ADVISOR_MIN_HOLD_HOURS = 0.25  # 15min, 与 position_advisor_impl.HOLD_MIN_MINUTES 一致
 AI_ADVISOR_CHECK_INTERVAL_S = 900
 # 主探索/预测开仓置信度 (质量优先；0.75+ 才允许可交易结构，去掉 0.70~0.74 地板灌水)
 EXPLORE_CONFIDENCE_THRESHOLD = 0.75

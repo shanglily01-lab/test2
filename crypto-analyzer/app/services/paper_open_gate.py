@@ -1,4 +1,4 @@
-"""模拟开仓前顾问闸门 — Gemini / DeepSeek 按 source 路由，其他策略双审."""
+"""模拟开仓前顾问闸门 — 统一 DeepSeek 开仓顾问."""
 from __future__ import annotations
 
 import threading
@@ -7,7 +7,6 @@ from typing import Optional, Tuple
 
 from loguru import logger
 
-from app.services.gemini_position_advisor import GEMINI_PER_CALL_DELAY_S
 from app.services.deepseek_position_advisor import DEEPSEEK_PER_CALL_DELAY_S
 from app.services.open_advisor_routing import resolve_open_advisors
 from app.services.securities_filter import is_security
@@ -16,7 +15,6 @@ _open_gate_lock = threading.Lock()
 _open_gate_waiting = 0
 
 _PROVIDER_DELAY = {
-    "gemini": GEMINI_PER_CALL_DELAY_S,
     "deepseek": DEEPSEEK_PER_CALL_DELAY_S,
 }
 
@@ -36,7 +34,7 @@ def gate_simulated_open(
 ) -> Tuple[bool, str]:
     """
     开仓前审核。返回 (允许开仓, 原因).
-    gemini_explore/gemini_predict 由 Gemini 审核，其余 source 由 DeepSeek 审核。
+    当前统一走 DeepSeek 开仓顾问；Gemini 相关主路由已下线，仅保留历史 source 兼容。
     顾问关闭时放行；顾问/API 异常时保守拒绝，避免故障静默开仓。
     """
     global _open_gate_waiting
@@ -110,21 +108,7 @@ def gate_simulated_open(
         try:
             last_reason = "approved"
             for provider in providers:
-                if provider == "gemini":
-                    from app.services.gemini_position_advisor import get_open_advisor
-                    allowed, reason = get_open_advisor().review_open(
-                        symbol=symbol,
-                        side=side,
-                        price=price,
-                        source=source,
-                        catalyst=catalyst,
-                        leverage=leverage,
-                        sl_pct=sl_pct,
-                        tp_pct=tp_pct,
-                        hold_hours=hold_hours,
-                        conn=conn,
-                    )
-                elif provider == "deepseek":
+                if provider == "deepseek":
                     from app.services.deepseek_position_advisor import get_deepseek_advisor
                     allowed, reason = get_deepseek_advisor().review_open(
                         symbol=symbol,
@@ -139,6 +123,7 @@ def gate_simulated_open(
                         conn=conn,
                     )
                 else:
+                    # Gemini 开仓顾问已下线；未知 provider 跳过
                     continue
                 if not allowed:
                     msg = f"{provider}: {reason}"

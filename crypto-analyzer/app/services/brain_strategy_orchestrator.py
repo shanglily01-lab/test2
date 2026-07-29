@@ -152,9 +152,10 @@ def close_brain_positions_on_flip(conn, big4: Dict[str, Any]) -> Dict[str, int]:
     if not rows:
         return stats
 
-    from app.services.gemini_position_advisor import GeminiPositionAdvisor
+    from app.services.advisor_core import AdvisorPromptHelper
+    from app.utils.config_loader import get_db_config
 
-    helper = GeminiPositionAdvisor()  # 复用取价/平仓工具方法
+    helper = AdvisorPromptHelper(get_db_config())  # 复用取价/平仓工具方法
     for pos in rows:
         stats["checked"] += 1
         sym = futures_symbol_rating_canonical(pos["symbol"])

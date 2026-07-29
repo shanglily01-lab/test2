@@ -233,7 +233,6 @@ def test_templates_hold_hours_2_to_8() -> None:
 
 def test_worker_imports_dynamic_interval() -> None:
     files_imports = {
-        "app/services/gemini_predictor.py": "get_ai_round_interval_hours",
         "app/services/deepseek_predictor.py": "get_ai_round_interval_hours",
     }
     for rel, sym in files_imports.items():
@@ -252,7 +251,6 @@ def test_syntax_parse() -> None:
         "app/services/ai_explore_prompt.py",
         "app/services/system_settings_loader.py",
         "app/api/system_settings_api.py",
-        "app/services/gemini_predictor.py",
         "scripts/validate_ai_schedule_hold_hours.py",
     ]
     for rel in paths:

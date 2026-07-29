@@ -155,7 +155,7 @@
 - 每 **max_hold_hours**（距上次 ok）+ 5min 轮询 + `*_predict_next_due_utc`；kill switch
 - 同主探索持仓/SL/TP/门槛；**DeepSeek 仅扫 L0+L1**；**实盘**：仅 `deepseek_predict`（+ L0）
 - **DeepSeek soft-sl**（`position_sl_tp_monitor`）：grace 45min；no_follow≥60min 且亏≈2.2%（匹配开仓 thesis）
-- **Gemini 预测已下线**
+- **Gemini 预测已下线**（API / 页面 / worker 已移除）
 
 ### 超级大脑主权层（REQ-BRAIN）【需求 2026-07-28 · 首版已落地 · 对照期】
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.3.1）
@@ -179,7 +179,7 @@
 - Prompt/rubric/**reason 中文**；开关 `deepseek_*_advisor_enabled`（系统设置「开仓/持仓顾问」）
 
 ### gemini_sentiment_analyzer (情绪)
-- **已下线**（不调度；`gemini_sentiment_enabled` 强制 0）
+- **已下线**（不调度；API / worker 已移除；`gemini_sentiment_enabled` 强制 0）
 
 ## 校验脚本 (无 API)
 

@@ -77,17 +77,15 @@ class SmartExitOptimizer:
         # key: "position_id:hour_checkpoint"，value: 首次触发该档位亏损的时间
         self._loss_onset_times: Dict[str, datetime] = {}
 
-        # === 模拟仓持仓顾问 ===
-        # 外部 (smart_trader / scheduler) 每 5 min 调 Gemini / DeepSeek tick。
-        # 中线四策略不参与 SmartExit 监控与持仓顾问；由 position_sl_tp_monitor 负责。
+        # === 模拟仓持仓顾问（DeepSeek）===
+        # 外部 (smart_trader / scheduler) 每 15 min 调 deepseek_advisor_tick。
+        # 中线不参与 SmartExit 监控与持仓顾问；由 position_sl_tp_monitor 负责。
+        # prompt/平仓工具由 DeepSeekAdvisor 内部持有 AdvisorPromptHelper。
         try:
-            from app.services.gemini_position_advisor import GeminiPositionAdvisor
             from app.services.deepseek_position_advisor import DeepSeekPositionAdvisor
-            self.gemini_advisor = GeminiPositionAdvisor(db_config)
             self.deepseek_advisor = DeepSeekPositionAdvisor(db_config)
-            logger.info("[SmartExit] Gemini / DeepSeek 持仓顾问已初始化")
+            logger.info("[SmartExit] DeepSeek 持仓顾问已初始化")
         except Exception as e:
-            self.gemini_advisor = None
             self.deepseek_advisor = None
             logger.warning(f"[SmartExit] 持仓顾问初始化失败: {e}")
 
@@ -1896,15 +1894,13 @@ class SmartExitOptimizer:
     # source 路由见 open_advisor_routing.py。
     # ════════════════════════════════════════════════════════════════
 
+    def primary_advisor_tick(self) -> dict:
+        """Gemini 持仓顾问已下线；保留空实现兼容旧调用。"""
+        return {'evaluated': 0, 'skipped': 0, 'note': 'gemini_hold_advisor_offline'}
+
     def gemini_advisor_tick(self) -> dict:
-        """触发 Gemini 持仓顾问扫描一次,返回统计 dict。失败不抛异常。"""
-        if not self.gemini_advisor:
-            return {'evaluated': 0, 'skipped': 0, 'note': 'advisor not initialized'}
-        try:
-            return self.gemini_advisor.tick()
-        except Exception as e:
-            logger.error(f"[SmartExit] gemini_advisor_tick 异常: {e}")
-            return {'evaluated': 0, 'errors': 1, 'note': str(e)}
+        """兼容旧名称。"""
+        return self.primary_advisor_tick()
 
     def deepseek_advisor_tick(self) -> dict:
         """触发 DeepSeek 持仓顾问扫描 deepseek_* 模拟仓."""

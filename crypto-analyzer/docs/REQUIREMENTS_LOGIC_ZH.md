@@ -1,6 +1,6 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.3.1  
+**版本**: v4.3.6  
 **日期**: 2026-07-28  
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
@@ -441,7 +441,7 @@
 > **与 REQ-BRAIN**：BRAIN 为主判路径；**对照期** DeepSeek 探索/预测仍可自动开仓做对比（INV-BRAIN-07 暂缓）。对照结束后应全面暂停，不得再以「DeepSeek 独自扫池开仓」为主路径。
 
 **Prompt**: `ai_explore_prompt.py` / `ai_predict_prompt.py`（中文生产）  
-**Worker**: `gemini/deepseek_*_explore_worker.py`、`gemini/deepseek_predictor.py`（Gemini 交易已下线；DeepSeek 自动开仓待 BRAIN 落地时暂停）
+**Worker**: `explore_worker_impl.py`（经 `explore_worker_common`；旧 `gemini_explore_worker` 为壳）、`deepseek_*_explore_worker.py`、`deepseek_predictor.py`（Gemini 交易已下线；DeepSeek 自动开仓对照期保留）
 
 ### 8.1 调度
 
@@ -483,7 +483,7 @@
 
 ## 9. 开仓 / 持仓顾问（REQ-ADVISOR）
 
-**实现**: `open_advisor_strategy_rubrics.py`、`gemini_position_advisor.py`、`hold_advisor_query.py`  
+**实现**: `open_advisor_strategy_rubrics.py`、`position_advisor_impl.py`（经 `advisor_core`）、`hold_advisor_query.py`  
 **路由**: `open_advisor_routing.py` — 统一 DeepSeek；REQ-BRAIN 开仓确认=大脑候选包喂 DeepSeek（§7.3.4），平仓服从 §7.3.7
 
 | 类型 | 节奏 | 核心判据 |
@@ -582,11 +582,11 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | 需求 ID | 主文件 |
 |---------|--------|
 | REQ-LIVE-OPEN | `paper_limit_sync_service.py`, `futures_trading_engine.py`, `system_settings_api.py` |
-| REQ-LIVE-CLOSE | `trading_gates.py`, `gemini_position_advisor.py`, `binance_futures_engine.py` |
+| REQ-LIVE-CLOSE | `trading_gates.py`, `position_advisor_impl.py`, `binance_futures_engine.py` |
 | REQ-GATES | `trading_gates.py` |
 | REQ-PAPER-OPEN | `paper_limit_entry.py`, `paper_open_gate.py` |
-| REQ-AI-EP | `ai_explore_prompt.py`, `ai_predict_prompt.py`, `*_explore_worker.py`, `*_predictor.py` |
-| REQ-ADVISOR | `open_advisor_strategy_rubrics.py`, `gemini_position_advisor.py`, `hold_advisor_query.py`, `position_sl_tp_monitor.py` |
+| REQ-AI-EP | `ai_explore_prompt.py`, `ai_predict_prompt.py`, `explore_worker_impl.py`, `explore_worker_common.py`, `*_explore_worker.py`, `*_predictor.py` |
+| REQ-ADVISOR | `open_advisor_strategy_rubrics.py`, `position_advisor_impl.py`, `advisor_core.py`, `hold_advisor_query.py`, `position_sl_tp_monitor.py` |
 | REQ-SCHED | `scheduler.py`, `data_cache_service.py` |
 | REQ-KLINE | `binance_ws_kline_collector.py`, `fast_collector_service.py` |
 | REQ-RATING | `update_top_performers.py` |
@@ -600,6 +600,11 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-28 | **v4.3.6** | 删除 `position_advisor_impl` 内 Gemini LLM client/`review_open` 死路径；移除重复模板 `gemini_advisor_reviews.html` |
+| 2026-07-28 | **v4.3.5** | 顾问审核写入抽到 `advisor_review_store`；`gemini_swan_worker`/`tick` 降为下线壳；SmartExit 仅初始化 DeepSeek 持仓顾问 |
+| 2026-07-28 | **v4.3.4** | 探索共用工具迁入 `explore_universe_utils`；顾问 API/页中性化 `advisor_api`/`advisor_reviews`；停注册 Gemini Big4 路由；DeepSeek 不再依赖 `gemini_swan_worker` |
+| 2026-07-28 | **v4.3.3** | 探索共用实现迁入中性 `explore_worker_impl.py`；`gemini_explore_worker.py` 降为兼容壳；活跃链路经 `explore_worker_common` |
+| 2026-07-28 | **v4.3.2** | 顾问实现迁入中性 `position_advisor_impl.py`；`gemini_position_advisor.py` 降为兼容壳；活跃链路经 `advisor_core` |
 | 2026-07-28 | **v4.3.1** | **对照期**：暂缓 INV-BRAIN-07；DeepSeek 探索/预测自动开仓与 `brain_swing` 并行，便于对比分析 |
 | 2026-07-28 | **v4.3** | **REQ-BRAIN 首版落地**：`brain_*` 分析/胜率/编排；scheduler 2h+30min；DS 探索/预测自动开仓暂停；限价超时强制 cancel；大脑翻转平 + DS 坚决平；回归 `validate_brain_req.py` |
 | 2026-07-28 | **v4.2** | **新增 REQ-BRAIN §7.3（需求已确认·待落地）**：自有分析主判 L0/L1；Big4 疲软不开；近7日×4h 方向胜率≥55%；DeepSeek 仅确认开仓/可强制平；防插针（影>实体×2、频繁则平均插针限价、超时取消）；旧 DeepSeek 自动开仓全面暂停；INV-09～12 |

@@ -5,7 +5,7 @@ alwaysApply: true
 
 # 需求文档同步（强制）
 
-**权威需求文档**: `docs/REQUIREMENTS_LOGIC_ZH.md`（v4.3.1+） 
+**权威需求文档**: `docs/REQUIREMENTS_LOGIC_ZH.md`（v4.3.6+） 
 **设计文档**: `design/需求文档.md` · `design/系统设计文档.md` 
 **AI 细节**: `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md` 
 **项目上下文**: `CLAUDE.md` · `.cursor/rules/ai-strategies-advisors.mdc` · `.cursor/rules/scheduler-ai-ops.mdc`

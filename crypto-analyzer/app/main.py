@@ -1052,16 +1052,6 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
-# 注册 Gemini 探索 API 路由
-try:
-    from app.api.gemini_explore_api import router as gemini_explore_router
-    app.include_router(gemini_explore_router)
-    logger.info("[Gemini探索] API路由已注册")
-except Exception as e:
-    logger.warning(f"[Gemini探索] API路由注册失败: {e}")
-    import traceback
-    traceback.print_exc()
-
 # 注册 DeepSeek 探索 API 路由
 try:
     from app.api.deepseek_explore_api import router as deepseek_explore_router
@@ -1092,26 +1082,13 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
-# 注册 Gemini 预测 API 路由
+# 注册 Big4 分析 API 路由
 try:
-    from app.api.gemini_predict_api import router as gemini_predict_router
-    app.include_router(gemini_predict_router)
-    logger.info("[Gemini预测] API路由已注册")
-except Exception as e:
-    logger.warning(f"[Gemini预测] API路由注册失败: {e}")
-    import traceback
-    traceback.print_exc()
-
-# 注册 Gemini 市场情绪 + 川普分析 API 路由
-try:
-    from app.api.gemini_sentiment_api import router as gemini_sentiment_router
-    app.include_router(gemini_sentiment_router)
-    from app.api.big4_analysis_api import gemini_big4_router, deepseek_big4_router
-    app.include_router(gemini_big4_router)
+    from app.api.big4_analysis_api import deepseek_big4_router
     app.include_router(deepseek_big4_router)
-    logger.info("[Gemini情绪分析] API路由已注册")
+    logger.info("[Big4分析] API路由已注册 (DeepSeek；Gemini Big4 已下线)")
 except Exception as e:
-    logger.warning(f"[Gemini情绪分析] API路由注册失败: {e}")
+    logger.warning(f"[Big4分析] API路由注册失败: {e}")
     import traceback
     traceback.print_exc()
 
@@ -1126,11 +1103,9 @@ except Exception as e:
     traceback.print_exc()
 
 try:
-    from app.api.gemini_advisor_api import router as gemini_advisor_router
-    from app.api.gemini_advisor_api import legacy_router as gemini_advisor_legacy_router
-    app.include_router(gemini_advisor_router)
-    app.include_router(gemini_advisor_legacy_router)
-    logger.info("[顾问审核] API路由已注册 (/api/advisor + 兼容 /api/gemini-advisor)")
+    from app.api.advisor_api import router as advisor_router
+    app.include_router(advisor_router)
+    logger.info("[顾问审核] API路由已注册 (/api/advisor)")
 except Exception as e:
     logger.warning(f"[顾问审核] API路由注册失败: {e}")
 
@@ -1749,8 +1724,9 @@ async def futures_review_page(request: Request):
 
 @app.get("/gemini_explore")
 async def gemini_explore_page(request: Request):
-    """原 Gemini 探索页已改造为中线策略页（REQUIREMENTS §7.2）."""
-    return await _serve_desktop_template(request, "midline_strategy.html", "Midline strategy page not found")
+    """兼容旧入口：重定向到中线策略页。"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/midline_strategy")
 
 
 @app.get("/midline_strategy")
@@ -1760,7 +1736,7 @@ async def midline_strategy_page(request: Request):
 
 @app.get("/gemini_predict")
 async def gemini_predict_page():
-    """Gemini 预测入口：探索页已改中线，暂导向 DeepSeek 预测 Tab."""
+    """兼容旧入口：Gemini 预测已下线，导向 DeepSeek 预测 Tab."""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/deepseek_explore?tab=predict")
 
@@ -1779,10 +1755,17 @@ async def ai_shadow_compare_page(request: Request):
     return await _serve_desktop_template(request, "ai_shadow_compare.html", "AI Shadow compare page not found")
 
 
+@app.get("/advisor_reviews")
+async def advisor_reviews_page(request: Request):
+    """顾问审核记录 — 开仓 / 持仓（当前以 DeepSeek / GPT 为主）。"""
+    return await _serve_desktop_template(request, "advisor_reviews.html", "Advisor reviews page not found")
+
+
 @app.get("/gemini_advisor_reviews")
-async def gemini_advisor_reviews_page(request: Request):
-    """顾问审核记录 — 开仓 / 持仓 (Gemini + DeepSeek)."""
-    return await _serve_desktop_template(request, "gemini_advisor_reviews.html", "Gemini advisor reviews page not found")
+async def gemini_advisor_reviews_page():
+    """兼容旧入口：Gemini 顾问审核页已更名。"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/advisor_reviews")
 
 
 @app.get("/deepseek_predict")

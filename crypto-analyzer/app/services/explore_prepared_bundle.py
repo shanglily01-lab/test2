@@ -17,11 +17,11 @@ import pymysql
 from loguru import logger
 
 from app.services.data_cache_service import DATA_CACHE_DB, _get_conn
-from app.services.gemini_explore_worker import (
-    _build_global_context,
-    _build_universe,
-    _connect,
-    _enrich_universe,
+from app.services.explore_worker_common import (
+    build_shared_global_context,
+    build_shared_universe,
+    connect_explore_db,
+    enrich_shared_universe,
 )
 
 # 略大于 15min 调度周期，容忍抖动
@@ -43,12 +43,12 @@ def rebuild_and_persist() -> dict:
     t0 = time.time()
     stat = {"status": "ok", "symbol_count": 0, "elapsed_s": 0.0}
     try:
-        with _connect() as conn:
-            universe = _build_universe(conn)
+        with connect_explore_db() as conn:
+            universe = build_shared_universe(conn)
             before = len(universe)
-            _enrich_universe(conn, universe, trust_pool_narratives=True)
+            enrich_shared_universe(conn, universe, trust_pool_narratives=True)
             after = len(universe)
-            global_ctx = _build_global_context(conn)
+            global_ctx = build_shared_global_context(conn)
         elapsed = time.time() - t0
         built_at = _utc_now_naive()
         _write_snapshot(universe, global_ctx, built_at, elapsed, "ok", None)
@@ -102,9 +102,9 @@ def get_explore_prepared_bundle(
 
     if allow_rebuild:
         logger.warning(f"[{log_tag}] 共用探索包缺失或过期, 现场构建 (应检查 scheduler)")
-        universe = _build_universe(conn)
-        _enrich_universe(conn, universe, trust_pool_narratives=True)
-        global_ctx = _build_global_context(conn)
+        universe = build_shared_universe(conn)
+        enrich_shared_universe(conn, universe, trust_pool_narratives=True)
+        global_ctx = build_shared_global_context(conn)
         return universe, global_ctx, False
 
     logger.warning(

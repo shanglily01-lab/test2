@@ -2,7 +2,7 @@
 DeepSeek 探索 worker (v1 — 2026-05-28)
 
 每 2h 调用 DeepSeek (OpenAI-compatible API) 检测加密货币短时方向异动,
-根据 verdict 直接开模拟单。(功能与 gemini_explore_worker 完全对齐)
+根据 verdict 直接开模拟单。(共享探索工具见 explore_worker_common / explore_worker_impl)
 
 仓位参数:
   - account_id = 2 (U本位模拟盘)
@@ -56,12 +56,12 @@ from app.services.ai_predict_schedule import (
     explore_claim_next_slot,
     explore_round_is_due,
 )
-from app.services.gemini_explore_worker import _get_current_price, _would_instant_tp
+from app.services.explore_worker_common import (
+    get_current_price_for_explore,
+    would_instant_tp_for_explore,
+)
 from app.utils.position_time import utc_now_naive
-from app.services.gemini_swan_worker import (
-    GEMINI_MODEL,
-    GEMINI_API_KEY,
-    GEMINI_TIMEOUT_S,
+from app.services.explore_universe_utils import (
     TOP_MOVER,
     TOP_FUNDING,
     MIN_QUOTE_VOLUME,
@@ -262,7 +262,7 @@ def _get_historical_stats(conn) -> dict:
 
 
 # ============================================================
-# 候选池采集（复用 gemini_explore_worker 的同名函数）
+# 候选池采集（复用 explore_worker_common 共享函数）
 # 为保持独立，进行代码拷贝
 # ============================================================
 def _fetch_movers_24h(cur, top_n: int):
@@ -1594,7 +1594,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
-            price = _get_current_price(conn, symbol, resolve_futures_universe_item(universe, symbol))
+            price = get_current_price_for_explore(conn, symbol, resolve_futures_universe_item(universe, symbol))
             if price is None or price <= 0:
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,
@@ -1607,7 +1607,7 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 tp_check = round(price * (1 + get_ai_position_tp_pct() / 100), 8)
             else:
                 tp_check = round(price * (1 - get_ai_position_tp_pct() / 100), 8)
-            instant, ref_px = _would_instant_tp(conn, symbol, side, tp_check)
+            instant, ref_px = would_instant_tp_for_explore(conn, symbol, side, tp_check)
             if instant:
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,

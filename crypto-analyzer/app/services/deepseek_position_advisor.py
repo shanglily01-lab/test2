@@ -12,8 +12,8 @@ from dotenv import dotenv_values
 from loguru import logger
 
 from app.services.deepseek_advisor_reviews import log_deepseek_advisor_review
-from app.services.gemini_position_advisor import (
-    GeminiPositionAdvisor,
+from app.services.advisor_core import (
+    AdvisorPromptHelper,
     HOLD_15M_BARS,
     HOLD_5M_BARS,
     HOLD_1H_BARS,
@@ -72,7 +72,7 @@ class DeepSeekPositionAdvisor:
 
     def __init__(self, db_config: dict):
         self.db_config = db_config
-        self._prompt_helper = GeminiPositionAdvisor(db_config)
+        self._prompt_helper = AdvisorPromptHelper(db_config)
         self._last_check_ts: Dict[int, float] = {}
 
     def _get_conn(self):

@@ -52,7 +52,7 @@ Do **not** `DELETE` the full `candidate_pool_snapshot` at refresh start (UPSERT 
 | Tactical four | `build_strategy_prompt()` → `build_strategy_prompt_en()` | `ai_tactical_explore_prompts.py` |
 | Reversal | `build_reversal_explore_prompt()` → EN | `ai_reversal_explore_prompt.py` |
 | Open advisor | `build_open_advisor_prompt()` → `build_gpt_open_advisor_prompt()` | `open_advisor_strategy_rubrics.py` |
-| Hold advisor | `GeminiPositionAdvisor._build_prompt()` | English; DeepSeek/GPT share structure |
+| Hold advisor | `PositionAdvisorCore._build_prompt()` (`advisor_core`) | English; DeepSeek shares structure |
 
 ZH builders and `scripts/benchmark_*_prompt_lang.py` remain for regression.
 
@@ -75,7 +75,7 @@ Every ~4h, pick event/structure setups from the candidate pool, output LONG/SHOR
 
 | Teacher | Worker | Schedule |
 |---------|--------|----------|
-| Gemini | `gemini_explore_worker.run_explore_round` | `every(4).hours` + `every(10).minutes` |
+| Gemini | `explore_worker_impl.run_explore_round` (shim `gemini_explore_worker`; offline) | — |
 | DeepSeek | `deepseek_explore_worker.run_explore_round` | Same |
 | GPT | `gpt_explore_worker.run_explore_round` | Same + `gpt_explore_next_due_utc` |
 
@@ -116,8 +116,8 @@ Init stagger: Gemini +15s, DeepSeek +90s, GPT +120s.
 
 ### 3.8 Web / API
 
-- Pages: `templates/gemini_explore.html`, `deepseek_explore.html`, `gpt_explore.html`
-- Manual: `POST /api/{gemini,deepseek,gpt}-explore/run-now`
+- Pages: the standalone Gemini page is retired; legacy `/gemini_explore` redirects to `midline_strategy`, while the active strategy page is `templates/deepseek_explore.html`
+- Manual: `POST /api/deepseek-explore/run-now`, `POST /api/gpt-explore/run-now`
 
 ---
 
@@ -131,7 +131,6 @@ Every 4h, 4h directional probability on TOP50; opens paper trades when threshold
 
 | Teacher | Worker | Schedule |
 |---------|--------|----------|
-| Gemini | `gemini_predictor.run_predict_round` | 4h + 5min poll + `gemini_predict_next_due_utc` |
 | DeepSeek | `deepseek_predictor.run_predict_round` | `deepseek_predict_next_due_utc` |
 | GPT | `gpt_predictor.run_predict_round` | `gpt_predict_next_due_utc` |
 
@@ -297,7 +296,7 @@ For OPEN paper positions held **≥15 minutes**, poll every **15 minutes/positio
 
 ## 9. Gemini Market Sentiment
 
-- **File**: `gemini_sentiment_analyzer.run_sentiment_round`
+- **Status**: Gemini sentiment API / scheduling / standalone page are retired
 - **Schedule**: **every 8 hours** (no trading)
 - **Switch**: `gemini_sentiment_enabled` (default 1)
 - **Table**: `gemini_sentiment_runs`
@@ -367,7 +366,7 @@ Logs: `logs/scheduler_YYYY-MM-DD.log`. After Python deploy: `sudo systemctl rest
 | `app/services/tactical_explore_scheduler.py` | 15-slot scheduler |
 | `app/services/paper_open_gate.py` | Pre-open gate |
 | `app/services/open_advisor_strategy_rubrics.py` | Open rubrics |
-| `app/services/gemini_position_advisor.py` | Open review + hold tick |
+| `app/services/position_advisor_impl.py` | Shared open/hold advisor impl (via `advisor_core`; legacy shim `gemini_position_advisor`) |
 | `smart_trader_service.py` | Hold advisor orchestration |
 
 Chinese reference: [AI_STRATEGIES_AND_ADVISORS_ZH.md](./AI_STRATEGIES_AND_ADVISORS_ZH.md)

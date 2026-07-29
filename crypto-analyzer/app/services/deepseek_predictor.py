@@ -54,7 +54,7 @@ from app.services.ai_explore_prompt import (
     sym_data_for_catalyst_gate,
 )
 from app.services.ai_predict_prompt import build_predict_prompt
-from app.services.gemini_swan_worker import (
+from app.services.explore_universe_utils import (
     _is_excluded,
     _read_setting,
 )
