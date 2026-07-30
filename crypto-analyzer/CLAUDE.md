@@ -158,10 +158,10 @@
 - **Gemini 预测已下线**（API / 页面 / worker 已移除）
 
 ### 超级大脑主权层（REQ-BRAIN）【需求 2026-07-28 · 首版已落地 · 对照期 · v2 Playbook 2026-07-30】
-- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.5.0）
+- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.5.2）
 - `brain_swing`：L0/L1；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
 - 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**测试期市价**（`BRAIN_USE_MARKET_ENTRY`）
-- **退出**：仅 **SL 5% / TP 8% / 持仓 6h**；关闭战略平仓与持仓顾问；不做 trail/soft/trend
+- **退出（v4.5.2）**：按币评估 SL/TP/hold（`brain_risk_params`；失败 fallback 5/8/6）+ `brain_trail_lock` / soft 无跟进；关战略平仓与持仓顾问；**不做**旧 ai-trail
 - 防插针：影>实体×2；频繁则平均插针限价；超时取消；**测试期 INV-BRAIN-06 暂缓**
 - **对照期**：DeepSeek 探索/预测自动开仓**暂保留**并行对比；结束后再执行 INV-BRAIN-07
 - 调度：BRAIN **每15s** 一批5币；`validate_brain_req.py`；页 `/brain_strategy`

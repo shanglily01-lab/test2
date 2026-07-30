@@ -1,13 +1,13 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-07-30 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.4.2** 对齐  
+> 文档版本：2026-07-31 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.2** 对齐  
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
 > **中线 v2 §7.2**：已落地模拟仓。  
 > **实盘同步 / 闸门 / 15m 定方向 / 限价偏移 / BRAIN**：以 REQUIREMENTS 为准；本文侧重 AI/中线细节。
 
 ## 1. 总览
 
-**主路径（已落地）**：REQ-BRAIN — Playbook 主判开仓（**跳过开仓顾问**）→ **测试期市价**；持仓仅 **SL5%/TP8%/6h**（无持仓顾问、无战略平）。  
+**主路径（已落地）**：REQ-BRAIN — Playbook 主判开仓（**跳过开仓顾问**）→ **测试期市价**；持仓按币评估 SL/TP/hold + 新版锁利/无跟进（§7.3.16；无持仓顾问、无战略平）。  
 **并行已落地**：中线 v2（独立量化，跳过顾问）。  
 **旧路径**：Gemini 交易已下线；DeepSeek 探索/预测自动开仓 **对照期暂保留**（与 BRAIN 并行对比；INV-BRAIN-07 暂缓）。
 
@@ -25,7 +25,7 @@ crypto-scheduler (每 15min)
   └─ DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**排除** midline_*；brain 仓 DS sell 坚决平）
 
 crypto-app-main
-  └─ position_sl_tp_monitor (1s)：探索/预测/brain/中线 v2 硬 SL/TP + ai-trail-tp；中线不参与 SmartExit
+  └─ position_sl_tp_monitor (1s)：探索/预测硬 SL/TP + ai-trail；brain：评估硬 SL/TP + brain_trail/soft；中线硬 SL/TP + ai-trail（不参与 SmartExit）
 
 任意模拟开仓
   └─ paper_open_gate.gate_simulated_open()
@@ -39,7 +39,7 @@ crypto-app-main
 | 顶空底多 | 是 | `*_reversal` | 否 |
 | 战术四策略 | 是 | `*_pullback` 等 | 否 |
 | **中线做多/做空 v2** | **否（量化）** | `midline_long` / `midline_short` | **否（暂不进 LIVE_SYNC）** |
-| 开仓/持仓顾问 | 是 | BRAIN：**跳过开仓与持仓顾问**；仅 SL/TP/6h；中线跳过 | 持仓 sell：`live_close_enabled=1` 且有映射时平交易所 |
+| 开仓/持仓顾问 | 是 | BRAIN：**跳过开仓与持仓顾问**；按币 SL/TP/hold + trail/soft；中线跳过 | 持仓 sell：`live_close_enabled=1` 且有映射时平交易所 |
 | 情绪分析 | 是 | 不下单（Gemini 情绪已下线） | — |
 
 ### 1.1 REQ-BRAIN 要点（权威见 REQUIREMENTS §7.3）
@@ -48,7 +48,7 @@ crypto-app-main
 - Big4 疲软（动量弱 + 相对成交量很低 → 量价波动小）→ 不开  
 - 近 7 日×4h **方向对就算赢**，胜率 ≥55% 才开  
 - DeepSeek：开仓**不经**开仓顾问；BRAIN 持仓**不经**持仓顾问  
-- **入场/退出**：测试期市价开仓；退出 **SL5% / TP8% / 持仓6h**  
+- **入场/退出（v4.5.2）**：测试期市价；按币评估 SL/TP/hold + `brain_trail_lock` / soft 无跟进（fallback 5/8/6）  
 - 插针：影线>实体×2；频繁则平均插针限价；超时必须取消（市价测试期暂缓）  
 - 旧 DeepSeek 自动开仓：对照期暂保留；结束后 INV-BRAIN-07  
 - **Web**：`/brain_strategy`；API `/api/brain-swing`（含 `/orders`）  
@@ -322,7 +322,7 @@ gate_simulated_open (paper_open_gate.py)
 |-------------|--------|
 | `gemini_explore` / `gemini_predict` | 仅 Gemini |
 | `midline_long` / `midline_short`（及落地前残留旧 `*_midline_*`） | **跳过**（`skip_open_advisor=True`） |
-| `brain_swing`（及 `brain_*`） | **跳过**开仓顾问；**跳过**持仓顾问（仅 SL5%/TP8%/6h） |
+| `brain_swing`（及 `brain_*`） | **跳过**开仓顾问；**跳过**持仓顾问（按币 SL/TP/hold + 新版 trail/soft） |
 | 其他 source | 仅 DeepSeek |
 
 ### 7.3 审查步骤（`open_advisor_strategy_rubrics.py`）

@@ -8,15 +8,36 @@ BRAIN_ACCOUNT_ID = 2
 BRAIN_LEVERAGE = 5
 BRAIN_MARGIN_USD = 500.0
 
-# 持仓：仅硬 SL/TP + 计划到期（不做战略平仓 / 持仓顾问 / trail）
+# 持仓：过渡 fallback（评估失败时）；正常由 brain_risk_params 按币评估
 BRAIN_HOLD_HOURS = 6
 BRAIN_LIMIT_TIMEOUT_MINUTES = 30
-BRAIN_SL_PCT = 5.0   # 百分点：5.0=5%
-BRAIN_TP_PCT = 8.0   # 百分点：8.0=8%
+BRAIN_SL_PCT = 5.0   # fallback 百分点
+BRAIN_TP_PCT = 8.0   # fallback 百分点
 # 测试期：True=直接市价开仓（INV-BRAIN-06 限价防插针暂缓）；恢复限价时改 False
 BRAIN_USE_MARKET_ENTRY = True
-# False=关闭 Playbook/Big4 战略平仓；只靠 SL/TP/6h 到期
+# False=关闭 Playbook/Big4 战略平仓
 BRAIN_STRATEGIC_CLOSE_ENABLED = False
+
+# 按币评估上下限（§7.3.16）
+BRAIN_SL_MIN_PCT = 1.5
+BRAIN_SL_MAX_PCT = 8.0
+BRAIN_TP_MIN_PCT = 2.0
+BRAIN_TP_MAX_PCT = 12.0
+BRAIN_HOLD_MIN_HOURS = 0.75  # 45min
+BRAIN_HOLD_MAX_HOURS = 8.0
+BRAIN_RR_MIN = 1.2
+
+# 程序化移动锁利（非 DeepSeek；非旧 ai-trail 常量路径）
+BRAIN_TRAIL_ENABLED = True
+# 无 per-pos meta 时的默认激活/回撤（价格%）
+BRAIN_TRAIL_ACTIVATE_PCT = 1.5
+BRAIN_TRAIL_PULLBACK_PCT = 0.8
+BRAIN_TRAIL_MIN_KEEP_PCT = 0.25
+# 无跟进早砍：持仓满 N 分钟、峰值过低且浮亏达线 → 平
+BRAIN_SOFT_NO_FOLLOW_ENABLED = True
+BRAIN_SOFT_NO_FOLLOW_MIN_AGE = 60  # minutes
+BRAIN_SOFT_NO_FOLLOW_MAX_PEAK_PCT = 0.5
+BRAIN_SOFT_NO_FOLLOW_LOSS_PCT = -1.5
 
 WIN_PROB_MIN = 0.55
 # 开仓方向胜率须比反方向至少高这么多（百分点，0.05=5pp）

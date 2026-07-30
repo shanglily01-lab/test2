@@ -156,14 +156,66 @@ def test_brain_skip_open_advisor() -> None:
     else:
         _ok("hold advisor excludes brain")
     mon = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
-    if "仅硬 SL/TP + 计划到期" not in mon and "BRAIN：仅硬" not in mon:
-        # accept either Chinese comment marker
-        if "is_brain_source as _brain_src" not in mon:
-            _fail("position_sl_tp_monitor 未对 BRAIN 跳过 trail/soft")
-        else:
-            _ok("monitor brain hard-only")
+    if "check_brain_trail_lock" not in mon or "brain_trail_exit" not in mon:
+        _fail("position_sl_tp_monitor 未接入 BRAIN 新版 trail")
+    elif "_check_ai_trail_tp" in mon and "if _is_brain" not in mon and "is_brain_source as _brain_src" not in mon:
+        _fail("monitor 可能对 BRAIN 误用旧 ai-trail")
     else:
-        _ok("monitor brain hard-only")
+        _ok("monitor brain trail (new, not old ai-trail)")
+    trail_mod = (ROOT / "app/services/brain_trail_exit.py").read_text(encoding="utf-8")
+    if "check_brain_trail_lock" not in trail_mod or "check_brain_soft_no_follow" not in trail_mod:
+        _fail("brain_trail_exit 缺 trail/soft")
+    else:
+        _ok("brain_trail_exit")
+    orch2 = (ROOT / "app/services/brain_strategy_orchestrator.py").read_text(encoding="utf-8")
+    if "evaluate_brain_risk_params" not in orch2 or "rows_15m=" not in orch2:
+        _fail("orchestrator 未接 brain_risk_params / rows_15m")
+    else:
+        _ok("orchestrator risk_params")
+
+
+def test_brain_risk_params() -> None:
+    from app.services.brain_risk_params import evaluate_brain_risk_params, atr_pct_from_rows
+    from app.services.brain_config import (
+        BRAIN_SL_MIN_PCT,
+        BRAIN_SL_MAX_PCT,
+        BRAIN_TP_MIN_PCT,
+        BRAIN_TP_MAX_PCT,
+        BRAIN_HOLD_MIN_HOURS,
+        BRAIN_HOLD_MAX_HOURS,
+        BRAIN_TRAIL_ENABLED,
+    )
+    assert BRAIN_TRAIL_ENABLED is True
+    rows = []
+    p = 100.0
+    for i in range(30):
+        p += 0.1
+        rows.append({
+            "open_price": p - 0.05,
+            "high_price": p + 0.8,
+            "low_price": p - 0.7,
+            "close_price": p,
+        })
+    atr = atr_pct_from_rows(rows)
+    assert atr is not None and atr > 0
+    out = evaluate_brain_risk_params(
+        playbook="B1", side="LONG", rows_15m=rows, win_prob=0.60, edge_score=0.7,
+    )
+    assert BRAIN_SL_MIN_PCT <= out["sl_pct"] <= BRAIN_SL_MAX_PCT
+    assert BRAIN_TP_MIN_PCT <= out["tp_pct"] <= BRAIN_TP_MAX_PCT
+    assert BRAIN_HOLD_MIN_HOURS <= out["hold_hours"] <= BRAIN_HOLD_MAX_HOURS
+    assert out["sl_pct"] >= 1.0 and out["tp_pct"] >= 1.0  # 百分点非小数比例
+    meta = out["risk_meta"]
+    assert 1.2 <= meta["trail_activate_pct"] <= 3.0
+    fb = evaluate_brain_risk_params(playbook="A1", side="LONG", rows_15m=[])
+    assert fb["risk_fallback"] is True
+    assert fb["sl_pct"] == 5.0 and fb["tp_pct"] == 8.0
+    from app.services.brain_trail_exit import check_brain_trail_lock, check_brain_soft_no_follow
+    assert check_brain_trail_lock(0.01, 0.01) is None  # 未激活
+    assert check_brain_trail_lock(0.012, 0.02, activate_pct=1.5, pullback_pct=0.8)  # 激活+回撤
+    assert check_brain_soft_no_follow(-0.02, 0.002, 3600)  # 60m 无跟进
+    assert check_brain_soft_no_follow(-0.02, 0.002, 600) is None  # 未满龄
+    _ok("brain_risk_params + trail_exit")
 
 
 def test_scheduler_brain() -> None:
@@ -244,6 +296,8 @@ def test_directional_gate() -> None:
 def test_orchestrator_syntax() -> None:
     for rel in (
         "app/services/brain_config.py",
+        "app/services/brain_risk_params.py",
+        "app/services/brain_trail_exit.py",
         "app/services/brain_wick.py",
         "app/services/brain_market_analyzer.py",
         "app/services/brain_winrate.py",
@@ -269,6 +323,7 @@ def main() -> int:
     test_paper_limit_brain_force()
     test_executor_brain_expire()
     test_brain_skip_open_advisor()
+    test_brain_risk_params()
     test_scheduler_brain()
     test_orchestrator_syntax()
     print()

@@ -445,14 +445,54 @@ class PositionSLTPMonitor:
                     self._do_close(pid, symbol, side, reason, trigger_price, now)
                     continue
 
-                # BRAIN：仅硬 SL/TP + 计划到期；不做 trend/soft/ai-trail
+                # BRAIN：硬 SL/TP 之后 → 新版锁利 / 无跟进早砍（不做旧 ai-trail/soft/trend）
                 try:
                     from app.services.brain_config import is_brain_source as _brain_src
-                    if _brain_src(src):
-                        continue
+                    _is_brain = _brain_src(src)
                 except Exception:
-                    if (src or "").startswith("brain_"):
+                    _is_brain = (src or "").startswith("brain_")
+                if _is_brain:
+                    from app.services.brain_trail_exit import (
+                        check_brain_soft_no_follow,
+                        check_brain_trail_lock,
+                    )
+                    # 按本笔硬 TP 推激活线（≈评估 TP×40%，夹 1.2~3），无 TP 则用 config 默认
+                    act_kw: dict = {}
+                    try:
+                        if tp is not None and entry_price > 0:
+                            tp_pct_pos = abs(float(tp) - entry_price) / entry_price * 100.0
+                            act = max(1.2, min(3.0, tp_pct_pos * 0.40))
+                            pull = max(0.6, min(1.5, max(0.6, act * 0.45)))
+                            act_kw = {
+                                "activate_pct": act,
+                                "pullback_pct": pull,
+                                "min_keep_pct": 0.25,
+                            }
+                    except Exception:
+                        act_kw = {}
+                    trail_br = check_brain_trail_lock(pnl_pct, new_peak, **act_kw)
+                    if trail_br:
+                        self._sync_peak_to_db(pid, new_peak * 100)
+                        logger.info(
+                            f"[BRAIN trail] pid={pid} {symbol} {side} "
+                            f"reason={trail_br} price={price:.6f}"
+                        )
+                        self._cooldown[pid] = now + self._cooldown_seconds
+                        self._peak_pnl_map.pop(pid, None)
+                        self._do_close(pid, symbol, side, trail_br, price, now)
                         continue
+                    soft_br = check_brain_soft_no_follow(pnl_pct, new_peak, age_s)
+                    if soft_br:
+                        self._sync_peak_to_db(pid, new_peak * 100)
+                        logger.info(
+                            f"[BRAIN soft] pid={pid} {symbol} {side} "
+                            f"reason={soft_br} price={price:.6f}"
+                        )
+                        self._cooldown[pid] = now + self._cooldown_seconds
+                        self._peak_pnl_map.pop(pid, None)
+                        self._do_close(pid, symbol, side, soft_br, price, now)
+                        continue
+                    continue
 
                 if not _is_midline_source(src):
                     trend_sl = self._check_ai_trend_exit(

@@ -167,34 +167,50 @@ def _open_brain_entry(
     playbook_row: Dict[str, Any],
     win_long: Optional[float],
     win_short: Optional[float],
+    rows_15m: Optional[List[Dict[str, Any]]] = None,
 ) -> tuple:
-    """开仓：测试期市价（BRAIN_USE_MARKET_ENTRY）；否则限价。返回 (order_or_position_id, err)。"""
+    """开仓：测试期市价；SL/TP/hold 由 brain_risk_params 按币评估。返回 (id, err)。"""
     from app.services.brain_config import BRAIN_USE_MARKET_ENTRY
+    from app.services.brain_risk_params import evaluate_brain_risk_params
     from app.services.paper_open_gate import gate_simulated_open
     from app.services.paper_limit_entry import create_paper_limit_order
     from app.services.trading_gates import get_paper_margin_usd
 
+    side_u = side.upper()
+    win_for_side = win_long if side_u == "LONG" else win_short
+    risk = evaluate_brain_risk_params(
+        playbook=str(playbook_row.get("playbook") or ""),
+        side=side_u,
+        rows_15m=rows_15m or [],
+        wick=playbook_row.get("wick") or {},
+        win_prob=float(win_for_side) if win_for_side is not None else None,
+        edge_score=float(playbook_row.get("edge_score") or 0) or None,
+    )
+    sl_pct = float(risk["sl_pct"])
+    tp_pct = float(risk["tp_pct"])
+    hold_hours = float(risk["hold_hours"])
+
     catalyst = _build_catalyst(playbook_row, win_long, win_short)
     allowed, gate_reason = gate_simulated_open(
-        symbol, side, price, BRAIN_SOURCE,
+        symbol, side_u, price, BRAIN_SOURCE,
         catalyst=catalyst,
         leverage=BRAIN_LEVERAGE,
-        sl_pct=BRAIN_SL_PCT,
-        tp_pct=BRAIN_TP_PCT,
-        hold_hours=float(BRAIN_HOLD_HOURS),
+        sl_pct=sl_pct,
+        tp_pct=tp_pct,
+        hold_hours=hold_hours,
         account_id=BRAIN_ACCOUNT_ID,
         conn=conn,
     )
     if not allowed:
-        logger.info(f"[BRAIN开仓] 闸门拒绝 {symbol} {side}: {gate_reason}")
+        logger.info(f"[BRAIN开仓] 闸门拒绝 {symbol} {side_u}: {gate_reason}")
         return None, str(gate_reason or "gate_reject")[:200]
 
-    hold_deadline = utc_now_naive() + timedelta(hours=BRAIN_HOLD_HOURS)
+    hold_deadline = utc_now_naive() + timedelta(hours=hold_hours)
     margin = get_paper_margin_usd(symbol, conn) or BRAIN_MARGIN_USD
     wick = playbook_row.get("wick") or {}
     offset = float(playbook_row.get("limit_offset_pct") or 0.5)
     if playbook_row.get("forbid_market") and wick and not BRAIN_USE_MARKET_ENTRY:
-        offset = limit_offset_pct_from_wicks(side, wick)
+        offset = limit_offset_pct_from_wicks(side_u, wick)
     detail = {
         "playbook": playbook_row.get("playbook"),
         "signals": playbook_row.get("signals"),
@@ -207,24 +223,40 @@ def _open_brain_entry(
         "limit_offset_pct": offset,
         "forbid_market": playbook_row.get("forbid_market"),
         "entry_mode": "market" if BRAIN_USE_MARKET_ENTRY else "limit",
+        "risk": risk.get("risk_meta"),
+        "sl_pct": sl_pct,
+        "tp_pct": tp_pct,
+        "hold_hours": hold_hours,
+        "risk_fallback": bool(risk.get("risk_fallback")),
     }
     fail: List[str] = []
-    entry_score = win_long if side == "LONG" else win_short
+    entry_score = win_long if side_u == "LONG" else win_short
+    if risk.get("risk_fallback"):
+        logger.warning(
+            f"[BRAIN风控] {symbol} {side_u} 评估失败，fallback "
+            f"SL={sl_pct}% TP={tp_pct}% hold={hold_hours}h"
+        )
+    else:
+        logger.info(
+            f"[BRAIN风控] {symbol} {side_u} pb={playbook_row.get('playbook')} "
+            f"SL={sl_pct}% TP={tp_pct}% hold={hold_hours}h "
+            f"atr={((risk.get('risk_meta') or {}).get('atr_pct'))}"
+        )
     order_id = create_paper_limit_order(
         conn,
         symbol=symbol,
-        side=side,
+        side=side_u,
         ref_price=price,
         source=BRAIN_SOURCE,
         leverage=BRAIN_LEVERAGE,
         margin=float(margin),
-        stop_loss_pct=BRAIN_SL_PCT,
-        take_profit_pct=BRAIN_TP_PCT,
+        stop_loss_pct=sl_pct,
+        take_profit_pct=tp_pct,
         entry_signal_type=f"brain_{playbook_row.get('playbook')}",
         entry_reason=catalyst[:200],
         entry_score=float(entry_score or playbook_row.get("edge_score") or 0),
         signal_components=detail,
-        max_hold_minutes=int(BRAIN_HOLD_HOURS * 60),
+        max_hold_minutes=int(hold_hours * 60),
         planned_close_time=hold_deadline,
         account_id=BRAIN_ACCOUNT_ID,
         timeout_minutes=BRAIN_LIMIT_TIMEOUT_MINUTES,
@@ -387,6 +419,7 @@ def _analyze_one(
                 playbook_row=pb,
                 win_long=wl,
                 win_short=ws,
+                rows_15m=rows_15m,
             )
             if order_id:
                 decision = "OPENED"
