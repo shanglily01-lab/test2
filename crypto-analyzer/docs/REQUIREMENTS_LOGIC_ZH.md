@@ -1,12 +1,12 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.4.9  
+**版本**: v4.5.0  
 **日期**: 2026-07-30  
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
 > **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。  
 > **BRAIN v2 机会识别（§7.3.10–7.3.15）**：**首版已落地**。Playbook 场景覆盖 + 信号打标 + 全部机会落库 + 按标签评估策略优劣。  
-> **BRAIN 持仓管理主权层（§7.3.16）**：**需求草案待确认** — 自有持仓顾问 + **动态 SL/TP** + **动态持仓时长**；不再绑定固定 4h / 3% / 5%。
+> **BRAIN 持仓（v4.5.0）**：**仅硬 SL 5% / TP 8% / 持仓 6h**；**关闭**战略平仓与持仓顾问；§7.3.16 动态持仓草案**暂缓**。
 
 > 旧版 `design/需求文档.md`（v3.6）已过时，仅作历史参考。  
 > AI 策略细节补充见 `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md`，但**实盘同步、闸门、15m 判据以本文为准**。
@@ -54,7 +54,7 @@
 | **INV-09** | **REQ-BRAIN**：无自有 Playbook `LONG/SHORT` + 分向胜率门 → 不得开仓；BRAIN **跳过开仓顾问**；**禁止**机械抄 DeepSeek 自动开仓作为主权主路径 | 负期望灌水 |
 | **INV-10** | **REQ-BRAIN**：Big4 疲软（动量弱且相对成交量很低、量价波动很小）→ 不得开仓 | 宏观逆势亏损 |
 | **INV-11** | **REQ-BRAIN**：影线>实体×2 计插针；频繁插针禁止市价，须平均插针限价；**限价超时必须取消**（**测试期** `BRAIN_USE_MARKET_ENTRY` 暂缓） | 插针扫损 |
-| **INV-12** | **REQ-BRAIN**：大脑主张平 → 必须平（DS 反对则平并记分歧）；DeepSeek 主张平 → **坚决平** | 平仓权责混乱 |
+| **INV-12** | **REQ-BRAIN（v4.5.0）**：持仓退出以仓上硬 SL/TP/计划到期为准；**不**经持仓顾问与战略翻转平仓为主路径 | 平仓权责混乱 |
 
 > INV-09～INV-12 约束设计与运行时；中线 v2（§7.2）为独立量化路径，不受 INV-09～11 开仓链约束，但仍受 INV-01～08。
 
@@ -322,8 +322,8 @@
 | **INV-BRAIN-01** | 无自有分析 `side∈{LONG,SHORT}` 不得开仓 |
 | **INV-BRAIN-02** | 近 **7 日**、同规则、信号后 **4h**「方向对就算赢」的实现胜率 `win_prob` **&lt; 55%** → 不得开仓 |
 | **INV-BRAIN-03** | Big4 **疲软**（动量弱，且相对成交量很低 → 量价波动很小）→ 不得开仓；须有足够量价波动（门槛用近 7 日数据标定） |
-| **INV-BRAIN-04** | **开仓**：自有 Playbook 主判通过后直接开仓（**跳过开仓顾问**）；DeepSeek **不**否决开仓。**平仓**：DeepSeek 持仓顾问可强制平（见 INV-BRAIN-05） |
-| **INV-BRAIN-05** | **平仓**：大脑主张平 → 必须平（即便 DeepSeek 反对，仍平并**记录分歧**）；DeepSeek 主张平 → **坚决平** |
+| **INV-BRAIN-04** | **开仓**：自有 Playbook 主判通过后直接开仓（**跳过开仓顾问**）。**平仓**：仅硬 SL/TP/计划到期（v4.5.0）；**不经**持仓顾问 |
+| **INV-BRAIN-05** | **平仓（v4.5.0）**：不以大脑战略翻转 / DeepSeek 持仓顾问为主路径；安全网为仓上 SL/TP 与计划持仓到期 |
 | **INV-BRAIN-06** | 单根 K **影线长度 &gt; 实体长度 × 2** 计为有效插针；近 7 日插针**频繁** → **禁止市价开仓**，须按平均插针一侧挂限价；**限价超时必须取消**（禁止转市价）。**测试期例外**：`BRAIN_USE_MARKET_ENTRY=True` 时暂缓，直接市价 |
 | **INV-BRAIN-07** | **旧 DeepSeek 探索/预测自动开仓**：目标为全面暂停；**当前对照期暂缓**——与 `brain_swing` **并行开仓**，便于胜率/PnL 对比；对照结束后再强制关并停调度 |
 
@@ -337,16 +337,15 @@
 | 辅证 | RSI(1h)、距 7d 高低、资金费率、量价叙事等（candidate_pool / kline 已采集） |
 | Big4 | 必须参与闸门：疲软不开；须量价波动；代币方向须与 Big4 **对齐** 才可 `LONG/SHORT`，否则 `FLAT` |
 
-**模拟单参数（过渡期）**（`brain_config.py`；与 engine 一致用**百分点**）：
+**模拟单参数**（`brain_config.py`；与 engine 一致用**百分点**）：
 
-| 参数 | 过渡默认 | 目标（§7.3.16） |
-|------|----------|-----------------|
-| SL / TP | 暂 **3% / 5%**（`BRAIN_SL_PCT=3.0` / `BRAIN_TP_PCT=5.0`；**禁止**写成 `0.03`/`0.05`） | **按 Playbook + 波动率动态设定**，开仓写入；持仓中可评估收紧/放宽（有上下限） |
-| 计划持仓 | 暂 **4h** | **按场景动态评估**计划到期；可延长/提前到期，有硬上限 |
-| 杠杆 / 保证金 | **5x** / **500U**（可被评级保证金倍数调整） | 本期仍固定（另开需求再动） |
-| 入场 | 测试期市价（`BRAIN_USE_MARKET_ENTRY`）；正式限价 + INV-BRAIN-06 | 同左 |
-
-> **§7.3.16 确认落地后**：开仓不得再写死「一律 4h + 3% + 5%」；过渡常量仅作安全兜底与未评估完成时的 fallback。
+| 参数 | 值 |
+|------|-----|
+| SL / TP | **止损 5%** / **止盈 8%**（`BRAIN_SL_PCT=5.0` / `BRAIN_TP_PCT=8.0`；**禁止**写成 `0.05`/`0.08`） |
+| 计划持仓 | **6h**（`planned_close_time`；到期由 `position_sl_tp_monitor` 平） |
+| 杠杆 / 保证金 | **5x** / **500U**（可被评级保证金倍数调整） |
+| 入场 | 测试期市价（`BRAIN_USE_MARKET_ENTRY`）；正式限价 + INV-BRAIN-06 |
+| 平仓路径 | **仅**硬 SL / 硬 TP / 6h 到期；**关闭**战略平仓（`BRAIN_STRATEGIC_CLOSE_ENABLED=0`）；**跳过**持仓顾问；**不做** ai-trail-tp / soft-sl / trend-sl |
 
 **对齐默认**（实现可微调但须文档化）：
 
@@ -404,16 +403,18 @@
 | 超时 | **必须取消**；禁止转市价、禁止追价硬接 |
 | 审计字段 | 开仓理由须含 `wick_freq`、`avg_wick_pct`、`limit_offset_used` |
 
-#### 7.3.7 平仓流程（摘要；细则见 §7.3.16）
+#### 7.3.7 平仓流程
 
-| 大脑决定 | BRAIN 持仓顾问 | 行为 |
-|----------|----------------|------|
-| 平仓（thesis 失效 / Big4 / 动态评估到期等） | 认同 / 反对 | **仍按大脑平**；反对则记分歧 |
-| 持有 | 主张平 | **坚决平**（顾问强制平） |
-| 持有 | 持有 / 观察 | **持有**（硬 SL/TP、动态 trail、计划到期仍生效） |
+| 机制 | 行为 |
+|------|------|
+| 硬 SL | 价格触及止损 **5%** → 平 |
+| 硬 TP | 价格触及止盈 **8%** → 平（开仓后短 TP grace 仍适用） |
+| 计划到期 | 持仓满 **6h** → `planned_close_time_expired` |
+| 战略平仓 | **关闭**（不再因 Playbook FLAT / Big4 / 翻转主动平） |
+| 持仓顾问 | **跳过**（与中线类似，不进 DeepSeek 持仓顾问） |
+| ai-trail / soft-sl / trend-sl | **不对 BRAIN 生效** |
 
-原则：大脑可主动平；**BRAIN 自有持仓顾问**可强制平；顾问 **不能**否决大脑平仓。  
-**对齐开仓**：平仓与持仓参数评估须复用 Playbook / 分向胜率 / Big4；**禁止**套用探索仓通用持仓顾问（ROI+8% 等）作为 BRAIN 主路径。
+原则：BRAIN 持仓期 **只认仓上 SL/TP/计划到期**；开仓仍跳过开仓顾问（Playbook 主判）。
 
 #### 7.3.8 模块定位（落地后）
 
@@ -438,18 +439,18 @@
 | 机会落库 | `app/services/brain_opportunity_store.py`（`brain_scan_rounds` / `brain_opportunities`，启动时 CREATE IF NOT EXISTS） |
 | 分向胜率 | `app/services/brain_winrate.py`（`win_prob_long`/`win_prob_short` + 相对差≥5pp） |
 | 调度 | `app/scheduler.py`：BRAIN **每15秒** `run_brain_tick`；**对照期**仍调度 DeepSeek 探索/预测 |
-| 开仓闸门 | `paper_open_gate.py`：`is_brain_source` → **`brain_skip_advisor`**（不经 DeepSeek 开仓顾问） |
-| 入场 | `brain_config.BRAIN_USE_MARKET_ENTRY`：**测试期 True=市价**；False=强制限价 + `timeout_action=expire`（INV-BRAIN-06） |
-| 平仓 | 约每20 tick（~5min）Playbook 再识别；**开仓后 ≥45min** 才战略平；默认仅方向反转才平（**禁用**旧 `analysis_flat`）；硬 SL/TP 立即生效 |
-| 旧路径（对照） | DeepSeek 探索/预测开仓**暂保留**；settings 可开关；对照结束后执行 INV-BRAIN-07 |
-| Web / API | `/brain_strategy`；`/api/brain-swing`（overview / **live** / **orders** / opportunities / playbook-stats / toggle / run） |
+| 开仓闸门 | `paper_open_gate.py`：`is_brain_source` → **`brain_skip_advisor`** |
+| 入场 | `BRAIN_USE_MARKET_ENTRY`：测试期市价；否则强制限价 + expire |
+| 持仓退出 | **仅** SL5% / TP8% / 持仓6h；`BRAIN_STRATEGIC_CLOSE_ENABLED=0`；持仓顾问 SQL/路由排除 brain；monitor 跳过 trail/soft/trend |
+| 旧路径（对照） | DeepSeek 探索/预测开仓**暂保留** |
+| Web / API | `/brain_strategy`；`/api/brain-swing` |
 | 回归 | `scripts/validate_brain_req.py` |
 
 **实盘**：`brain_swing` **未**加入 `LIVE_SYNC_SOURCES`（仅模拟）；另开确认后再加。
 
 **kill switch**：`system_settings.brain_swing_enabled`（默认视为开；显式 `0` 跳过）。
 
-**Web**：侧栏「超级大脑策略」；页面每 **5s** 拉 `/live`；测试期市价成交后立即进持仓（同币冷却 60min；单批最多 2 次开仓）。
+**Web**：侧栏「超级大脑策略」；页面每 **5s** 拉 `/live`；市价成交后立即进持仓（同币冷却 60min；单批最多 2 次开仓）。
 
 #### 7.3.10 BRAIN v2：机会识别与 Playbook 体系【需求已确认 · 首版已落地】
 
@@ -644,187 +645,18 @@
 | 影子胜率远低于实开胜率 | DS 确认 / 闸门正在保护，维持不变 |
 | 样本 < 10 笔 | 不做结论，继续收集 |
 
-#### 7.3.16 BRAIN 持仓管理主权层（自有持仓顾问 + 动态 SL/TP + 持仓时长）【需求草案 · 待确认】
+#### 7.3.16 BRAIN 持仓管理主权层【草案暂缓 · 被 v4.5.0 固定退出取代】
 
-> **目标**：BRAIN 持仓**自成体系**——开仓 Playbook 定 thesis，持仓期由 **BRAIN 持仓管理器**评估是否继续持有、是否调整 SL/TP、是否调整计划持仓时长；**不再**要求全市场固定「4 小时 + 止损 3% + 止盈 5%」。  
-> **状态**：需求草案；确认后落地并升为「已确认」。过渡期仍可用 3%/5%/4h 作 fallback。  
-> **与探索/中线边界**：  
-> - **禁止**把 `deepseek_position_advisor` 通用探索 rubric（ROI≥+8%、15m 反向≥4 等）当作 BRAIN 主持仓顾问。  
-> - **禁止**与中线一样「完全排除顾问」；BRAIN 要有**自己的**顾问/评估链路。  
-> - 硬安全网（绝对最大亏损、绝对最长持仓）仍由 `position_sl_tp_monitor` 执行写入仓的 SL/TP/计划到期。
+> **v4.5.0 决策**：生产 BRAIN **暂不**落地动态 SL/TP、动态持仓时长、自有持仓顾问。  
+> **现行**：§7.3.2 / §7.3.7 — SL **5%** / TP **8%** / 持仓 **6h**；无战略平仓、无持仓顾问。  
+> 下文保留为日后可选增强，**不得**覆盖现行固定退出规则。
 
-##### 7.3.16.0 范围与产物
+<details>
+<summary>历史草案原文（折叠，勿当现行）</summary>
 
-| 模块 | 职责 |
-|------|------|
-| **A. 开仓参数评估器** | 开仓瞬间：按 Playbook + 波动 + 分向胜率 → 输出 `sl_pct` / `tp_pct` / `hold_hours` / `planned_close_time` |
-| **B. 持仓再评估器** | 持仓中周期：再识别 Playbook；评估 thesis；可建议 **收紧/放宽 SL·TP**、**延长/缩短持仓**、**立即平仓** |
-| **C. BRAIN 持仓顾问** | 独立服务（可用 DeepSeek，但 **专用 prompt/rubric**）；输入 A/B 快照；输出 hold / sell / adjust；**不能**否决大脑强制平 |
-| **D. 执行与审计** | 写入/更新仓上 SL·TP·计划到期；平仓 `exit_reason`；机会/持仓表可追溯 |
+原 §7.3.16 动态持仓/顾问草案见 git 历史 v4.4.8；此处不再展开以免与现行冲突。
 
-##### 7.3.16.1 不可变规则（INV-BRAIN-HOLD）
-
-| ID | 规则 |
-|----|------|
-| **INV-BRAIN-HOLD-01** | BRAIN 仓 **必须**走自有持仓管理链路；**不得**依赖探索仓通用持仓顾问作为唯一决策 |
-| **INV-BRAIN-HOLD-02** | 开仓 SL/TP/计划持仓时长由 **评估器按场景给出**，禁止业务上「全仓写死 3%/5%/4h」（过渡 fallback 除外） |
-| **INV-BRAIN-HOLD-03** | SL/TP 单位为 **百分点**（如 `3.0`=3%）；与 `FuturesTradingEngine` 的 `pct/100` 一致；禁止小数比例 `0.03` |
-| **INV-BRAIN-HOLD-04** | 平仓主判优先 = **开仓 thesis 失效**（Playbook 镜像，见 §7.3.16.5）；须能指出开仓 PB/signals 与当前失效原因 |
-| **INV-BRAIN-HOLD-05** | 大脑主张平 → **必须平**（顾问反对也平，记分歧） |
-| **INV-BRAIN-HOLD-06** | BRAIN 持仓顾问主张平 → **坚决平**（理由前缀 `brain_hold_advisor_sell:`） |
-| **INV-BRAIN-HOLD-07** | 仓上硬 SL / 硬 TP / 计划到期 /（可选）ai-trail-tp **始终可平**，不经顾问否决 |
-| **INV-BRAIN-HOLD-08** | 动态调参须有 **绝对上下限**（防过宽爆仓、过窄秒止损、无限延期） |
-| **INV-BRAIN-HOLD-09** | 每次评估/调参/平仓落审计：playbook、signals、win_prob_*、sl/tp/hold 新旧值、`exit_reason` |
-
-##### 7.3.16.2 动态 SL / TP（开仓 + 持仓中）
-
-**原则**：止损覆盖「正常噪音」，止盈对齐「Playbook 目标波段」；随波动与胜率松紧，而不是统一 3/5。
-
-**开仓初值（建议公式框架，落地可调参）**：
-
-| 输入 | 用法 |
-|------|------|
-| Playbook 族 | A 趋势延续 / B 冲击 / C 破位 → 不同基准 SL·TP 档 |
-| 15m/1h ATR 或近 N 根波幅 | SL ≈ k×ATR（换算为价格 %）；TP ≈ m×ATR 或 R 倍数 |
-| 分向胜率 / edge | 胜率高 → 可略放宽 TP 或略收紧 SL；胜率贴门 → 更紧 SL、更短 hold |
-| 插针频繁 | SL 避开平均插针一侧（与 INV-BRAIN-06 精神一致）；禁止过近 |
-
-**按 Playbook 族的初值档（v1 基线，待标定）**：
-
-| 族 | 典型 SL 带（价格%） | 典型 TP 带（价格%） | 说明 |
-|----|---------------------|---------------------|------|
-| **A** 趋势延续 | 2.5% ~ 4.5% | 4% ~ 8% | 给回踩空间；TP 看下一结构位 |
-| **B** 冲击反应 | 2% ~ 4% | 3% ~ 7% | 失败快认错；成功抓一段反弹/回落 |
-| **C** 破位/假破 | 2% ~ 3.5% | 3% ~ 6% | 假破失败要快砍 |
-| **未知/贴门** | 用过渡 fallback 3% / 5% | 同左 | 样本不足时保守 |
-
-**绝对上下限（强制）**：
-
-| 项 | 下限 | 上限 |
-|----|------|------|
-| SL（价格%） | **≥ 1.0%**（防 tick 噪音秒止损） | **≤ 8.0%** |
-| TP（价格%） | **≥ 1.5%** | **≤ 12.0%** |
-| 风险回报 | 建议 TP/SL ≥ **1.2**（达不到则缩短 hold 或跳过开仓） |
-
-**持仓中调整（评估器可输出）**：
-
-| 动作 | 条件示例 | 约束 |
-|------|----------|------|
-| **收紧 SL**（上移多 / 下移空） | 已有浮盈、结构强化、或接近目标 | 不得宽于开仓 SL；不得触发「已越过现价」的即时止损（除非明确要市价平） |
-| **放宽 SL** | 仅当 thesis 仍成立且波动突增 | 不得超过绝对上限；须记审计；默认**少用** |
-| **下调 TP**（提前止盈位） | 动量衰减、分向胜率转弱但仍未失效 | 可与部分止盈策略并存（一期可只做全平） |
-| **上调 TP** | 趋势加速、Playbook 升档 | 不超过上限 |
-
-> 一期建议：**开仓动态定 SL/TP** + 持仓以「收紧 SL / 提前平」为主；「放宽 SL」默认关闭或极严。
-
-##### 7.3.16.3 动态持仓时长评估
-
-**原则**：持仓时间服务 Playbook 完成度，不是闹钟到点必砍；但必须有硬上限。
-
-| 阶段 | 行为 |
-|------|------|
-| **开仓** | 评估器给出 `hold_hours` → 写 `planned_close_time` / `max_hold_minutes` |
-| **持仓中** | 周期评估：thesis 仍在且靠近目标 → 可 **延长**；结构走完 / 胜率塌陷 / 时间衰减 → **缩短或立即平** |
-| **到期** | 到达 `planned_close_time` → `brain_hold_timeout` 平仓（除非评估器已改期且未超硬上限） |
-
-**按 Playbook 族的初值档（v1 基线）**：
-
-| 族 | 建议 hold | 说明 |
-|----|-----------|------|
-| **A** 趋势 | 3h ~ 8h | 给趋势展开时间 |
-| **B** 冲击 | 1h ~ 4h | 冲击反应快；拖久变震荡 |
-| **C** 破位 | 2h ~ 6h | 确认后一段跟进 |
-| **贴门/低 edge** | 1h ~ 2h | 短试错 |
-
-**绝对上下限（强制）**：
-
-| 项 | 值 |
-|----|-----|
-| 最短计划持仓 | **≥ 30min**（避免开完秒到期；与硬 SL 保护区分） |
-| 单次延长 | 每次 ≤ **2h**；须有评估理由 |
-| 硬上限 | 自开仓起 **≤ 12h**（到期必须平，无论 thesis） |
-| 最短再评估间隔 | ≥ **5min**（防抖动改期） |
-
-**时间衰减（建议）**：持有超过初值 hold 的 70% 仍无明显顺向进展（peak ROI 低 / 结构无推进）→ 评估器倾向缩短或平仓，而不是等到硬上限。
-
-##### 7.3.16.4 BRAIN 自有持仓顾问
-
-| 项 | 约定 |
-|----|------|
-| 定位 | **独立模块**（建议 `brain_hold_advisor.py` / `brain_position_manager.py`），不是探索 `deepseek_position_advisor` 的 if-brain 分支凑合 |
-| 路由 | `is_brain_source` → **只**进 BRAIN 持仓链路；通用 DS 持仓顾问 **跳过** brain 仓 |
-| 输入 | 开仓 playbook/signals/证据、当前再识别、动态 SL/TP/剩余持仓、ROI、1H/15M 摘要、Big4、分向胜率 |
-| 输出 | `hold` / `sell` / `observe`；可选 `suggest_sl` / `suggest_tp` / `suggest_hold_hours`（最终是否采纳由评估器规则闸门） |
-| 模型 | 可用 DeepSeek，但 **专用中文 rubric**；禁止探索仓「ROI≥+8% 才考虑卖」作为硬门槛 |
-| 强制平允许 | thesis 将坏未坏、接近硬 SL、严重逆势、时间衰减无进展 |
-| 禁止 | 纯 15m 噪音卖；无视 Playbook 的模板卖 |
-| 调度 | 建议每仓 **10~15min**；urgent：浮盈转亏、触及收紧后的预警带 |
-
-##### 7.3.16.5 开仓 ↔ 平仓镜像（thesis 失效）
-
-| 开仓条件（持有理由） | 失效 → 大脑主张平（`brain_close:*`） |
-|----------------------|--------------------------------------|
-| Big4 可交易且对齐 | `big4_weak` / 与持仓方向不对齐 |
-| 主 Playbook ∈ 可交易且方向 = 持仓 side | 现 Playbook ∈ {D1,D2} 或 side=FLAT |
-| 持仓方向与 Playbook 一致 | Playbook **翻转**到反方向或仲裁反转 |
-| 分向胜率过门 | 持仓方向胜率跌破或相对优势消失 |
-| edge / confirmed | 确认结构破坏 |
-| B/C 场景确认仍在 | 场景反转（B1↔B2、真破↔假破等） |
-
-**按 Playbook 失效要点（v1）**：
-
-| 开仓 PB | side | 优先失效信号 |
-|---------|------|--------------|
-| A1 | LONG | `hh_hl` 破坏、破回踩低、`ema_bear_align` |
-| A2 | SHORT | `lh_ll` 破坏、放量收复、`ema_bull_align` |
-| B1 | LONG | 再创新低 + 量能衰竭；转 B2 |
-| B2 | SHORT | 反抽放量抬高；转 B1/B4 |
-| B3 | SHORT | 再度放量新高站稳 |
-| B4 | LONG | 回踩破位放量跌 |
-| C1 | SHORT | 破位收回站稳 |
-| C2 | LONG | 收回失败再破 |
-| C3 | LONG | 回踩跌破突破位 |
-| C4 | SHORT | 假突后放量站稳 |
-
-##### 7.3.16.6 决策优先级（持仓生命周期）
-
-```text
-1. 硬 SL（仓上 stop_loss_price）→ 立即平
-2. 硬 TP / ai-trail-tp（若启用）→ 平
-3. 硬持仓上限 12h → 平
-4. 计划到期 planned_close_time（动态可改，但≤硬上限）→ 平
-5. 大脑再识别：thesis 失效 → brain_close:* 必须平
-6. BRAIN 持仓顾问：sell → 坚决平
-7. 评估器：建议收紧 SL/TP 或改 hold → 规则闸门后写回仓
-8. 否则继续持有
-```
-
-##### 7.3.16.7 实现路径（确认后落地）
-
-| 角色 | 建议路径 |
-|------|----------|
-| 常量/上下限 | `brain_config.py`：`BRAIN_SL_MIN/MAX`、`BRAIN_TP_MIN/MAX`、`BRAIN_HOLD_MIN/MAX_HOURS`；过渡 fallback 3/5/4 |
-| 开仓参数评估 | `brain_position_sizer.py`（或 `brain_risk_params.py`）：playbook+ATR → sl/tp/hold |
-| 持仓管理 | `brain_position_manager.py`：再识别 + 调参 + 到期/失效平仓 |
-| 持仓顾问 | `brain_hold_advisor.py`（DeepSeek 专用）；scheduler/main 独立 tick |
-| 开仓写入 | `brain_strategy_orchestrator` / `paper_limit_entry`：用评估器输出，不再写死常量（fallback 除外） |
-| 路由隔离 | `open_advisor_routing` / `hold_advisor_query`：**排除** brain 出通用 DS 持仓顾问 |
-| Monitor | `position_sl_tp_monitor`：继续执行仓上硬 SL/TP/计划到期；brain 可保留 ai-trail-tp |
-| 落库 | 开仓快照 playbook/signals/sl/tp/hold；评估日志表或 notes；`exit_reason` |
-| Web | `/brain_strategy` 持仓展示：动态 SL/TP、剩余持仓、最近评估、顾问结论 |
-| 回归 | `validate_brain_req.py`：单位百分点、上下限、brain 不进通用 hold advisor |
-
-##### 7.3.16.8 待确认问题（评审勾选）
-
-- [ ] 开仓动态 SL/TP：ATR 倍数方案 vs 纯 Playbook 分档表，一期选哪个？
-- [ ] 持仓中是否允许「放宽 SL」？（草案默认：**关闭或极严**）
-- [ ] ai-trail-tp：BRAIN 继续用探索同款 peak3%/回撤1%，还是按动态 TP 另定？
-- [ ] 顾问：仅规则引擎（无 LLM）一期能否上，还是必须上 DeepSeek 专用顾问？
-- [ ] 再评估频率：与 15s tick 顺带 vs 独立 5~15min？
-- [ ] 分向胜率跌破：立即平 vs 跌破 + 15m 确认？
-- [ ] 测试期平仓：一律市价？（建议：**是**）
-
----
+</details>
 
 ## 8. AI 主探索 / 主预测（REQ-AI-EP）
 
@@ -874,7 +706,7 @@
 ## 9. 开仓 / 持仓顾问（REQ-ADVISOR）
 
 **实现**: `open_advisor_strategy_rubrics.py`、`position_advisor_impl.py`（经 `advisor_core`）、`hold_advisor_query.py`  
-**路由**: `open_advisor_routing.py` — 探索等统一 DeepSeek；BRAIN **跳过开仓顾问**；BRAIN 持仓见 **§7.3.16**（自有持仓管理，不进通用探索持仓顾问）
+**路由**: `open_advisor_routing.py` — 探索等统一 DeepSeek；BRAIN **跳过开仓顾问与持仓顾问**；BRAIN 退出见 §7.3.7（仅 SL/TP/6h）
 
 | 类型 | 节奏 | 核心判据 |
 |------|------|----------|
@@ -983,7 +815,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-MIDLINE | `midline_swing_config.py`, `midline_swing_scanner.py`, `midline_explore_worker.py`（或 `midline_worker`）, `midline_swing_api.py`, 中线策略页 JS/模板, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
 | **REQ-BRAIN** | `brain_config` / `brain_wick` / `brain_market_analyzer` / `brain_winrate` / `brain_strategy_orchestrator`；`scheduler.py`；`paper_limit_entry` + executor expire；DS 自动开仓暂停；`validate_brain_req.py`；权威 §7.3 |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
-| **REQ-BRAIN-HOLD** | BRAIN 自有持仓管理：动态 SL/TP + 动态持仓时长 + 自有持仓顾问 + thesis 失效平仓；§7.3.16（**需求草案待确认**） |
+| **REQ-BRAIN-HOLD** | BRAIN 持仓退出：现行固定 SL5%/TP8%/6h；战略平仓与持仓顾问关闭；§7.3.16 动态草案暂缓 |
 | REQ-ST | `smart_trader_service.py` |
 
 ---
@@ -992,6 +824,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-07-30 | **v4.5.0** | **BRAIN 固定退出**：SL **5%** / TP **8%** / 持仓 **6h**；关闭战略平仓与持仓顾问；monitor 不做 trail/soft/trend；§7.3.16 动态草案暂缓 |
 | 2026-07-30 | **v4.4.9** | **修复 BRAIN 战略平秒砍**：禁用旧 `analyze_symbol→analysis_flat`；改 Playbook 再识别；开仓后 **45min** 内不做战略平（默认仅方向反转才平）；硬 SL/TP 仍立即生效 |
 | 2026-07-30 | **v4.4.8** | **BRAIN 持仓管理主权层草案 §7.3.16**：自有持仓顾问（隔离通用 DS）；开仓/持仓 **动态 SL·TP** 与 **动态持仓时长**（取消强制固定 4h/3%/5%，仅过渡 fallback）；INV-BRAIN-HOLD；绝对上下限 |
 | 2026-07-30 | **v4.4.7** | **修复 BRAIN SL/TP 单位**：`BRAIN_SL_PCT/TP` 改为百分点 3.0/5.0（此前 0.03/0.05 被 engine `/100` 成 0.03% 秒止损） |

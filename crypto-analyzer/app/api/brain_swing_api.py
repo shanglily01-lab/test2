@@ -159,7 +159,7 @@ def overview():
                     "limit_timeout_minutes": BRAIN_LIMIT_TIMEOUT_MINUTES,
                     "win_prob_min": WIN_PROB_MIN,
                     "universe": "L0+L1",
-                    "advisor": "跳过开仓顾问 / 持仓可强制平",
+                    "advisor": "跳过开仓/持仓顾问；仅 SL/TP/6h",
                 },
             },
         }

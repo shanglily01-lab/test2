@@ -25,6 +25,7 @@ from app.services.brain_config import (
     BRAIN_POOL_REFRESH_EVERY_TICKS,
     BRAIN_SL_PCT,
     BRAIN_SOURCE,
+    BRAIN_STRATEGIC_CLOSE_ENABLED,
     BRAIN_SYMBOL_OPEN_COOLDOWN_MINUTES,
     BRAIN_TICK_BATCH_SIZE,
     BRAIN_TICK_INTERVAL_SECONDS,
@@ -482,7 +483,7 @@ def run_brain_tick(triggered_by: str = "scheduler") -> Dict[str, Any]:
             _live["last_error"] = "empty_l0_l1"
             return summary
 
-        if tick_n % BRAIN_CLOSE_CHECK_EVERY_TICKS == 1:
+        if BRAIN_STRATEGIC_CLOSE_ENABLED and tick_n % BRAIN_CLOSE_CHECK_EVERY_TICKS == 1:
             close_stats = close_brain_positions_on_flip(conn, big4)
             summary["closed"] = int(close_stats.get("closed") or 0)
             _live["stats"]["closed"] = int(_live["stats"].get("closed") or 0) + summary["closed"]

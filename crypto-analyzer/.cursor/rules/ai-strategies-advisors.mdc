@@ -41,14 +41,14 @@ alwaysApply: true
 
 **DeepSeek 选币**：仅 **L0+L1**；**DeepSeek soft-sl**：grace45 / no_follow≥60m且≈-2.2%
 
-**REQ-BRAIN §7.3（首版已落地 · 对照期）**：`brain_swing` 每15s×5币轮询；跳过开仓顾问；测试期市价；**持仓管理草案 §7.3.16**：自有顾问+动态SL/TP+动态持仓时长（待确认）；DS 探索/预测对照期并行；`validate_brain_req.py`
+**REQ-BRAIN §7.3**：`brain_swing` 每15s×5币；跳过开仓顾问；测试期市价；退出 **仅 SL5%/TP8%/6h**（关战略平仓与持仓顾问）；DS 探索/预测对照期并行；`validate_brain_req.py`
 
 ## 顾问路由 (`open_advisor_routing.py`)
 
 | 类型 | Gemini | DeepSeek | 跳过 |
 |------|--------|----------|------|
 | 开仓 | — | 非中线/非 BRAIN | `midline_*` · `brain_*` |
-| 持仓 | — | 全部（**排除** `midline_*`；含历史 gemini_* / brain） | `midline_*` |
+| 持仓 | — | 非中线/非 BRAIN | `midline_*` · `brain_*` |
 
 - tick: scheduler **15min**；每仓 15min；浮盈转亏 urgent
 - 盈利 sell: ROI≥**+8%** + 15m 反向≥4；`_temper_premature_sell` 严格拦截过早 sell

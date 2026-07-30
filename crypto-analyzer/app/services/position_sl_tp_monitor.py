@@ -445,6 +445,15 @@ class PositionSLTPMonitor:
                     self._do_close(pid, symbol, side, reason, trigger_price, now)
                     continue
 
+                # BRAIN：仅硬 SL/TP + 计划到期；不做 trend/soft/ai-trail
+                try:
+                    from app.services.brain_config import is_brain_source as _brain_src
+                    if _brain_src(src):
+                        continue
+                except Exception:
+                    if (src or "").startswith("brain_"):
+                        continue
+
                 if not _is_midline_source(src):
                     trend_sl = self._check_ai_trend_exit(
                         pid,

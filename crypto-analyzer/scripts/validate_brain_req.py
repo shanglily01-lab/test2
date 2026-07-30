@@ -27,16 +27,23 @@ def test_imports_and_config() -> None:
         BRAIN_SOURCE,
         BRAIN_SL_PCT,
         BRAIN_TP_PCT,
+        BRAIN_HOLD_HOURS,
+        BRAIN_STRATEGIC_CLOSE_ENABLED,
         WIN_PROB_MIN,
         is_brain_source,
+        brain_source_sql_exclude,
     )
     assert WIN_PROB_MIN == 0.55
-    # 与 FuturesTradingEngine 一致：百分点（3.0=3%），禁止写成 0.03
+    assert BRAIN_SL_PCT == 5.0
+    assert BRAIN_TP_PCT == 8.0
+    assert BRAIN_HOLD_HOURS == 6
+    assert BRAIN_STRATEGIC_CLOSE_ENABLED is False
     assert BRAIN_SL_PCT >= 1.0, f"BRAIN_SL_PCT={BRAIN_SL_PCT} 疑似小数比例，应为百分点"
     assert BRAIN_TP_PCT >= 1.0, f"BRAIN_TP_PCT={BRAIN_TP_PCT} 疑似小数比例，应为百分点"
     assert is_brain_source(BRAIN_SOURCE)
     assert is_brain_source("brain_long")
     assert not is_brain_source("deepseek_explore")
+    assert "brain_%" in brain_source_sql_exclude("fp.source")
     _ok("brain_config")
 
 
@@ -136,12 +143,27 @@ def test_brain_skip_open_advisor() -> None:
         _fail("orchestrator 缺少 _open_brain_entry")
     else:
         _ok("orchestrator _open_brain_entry")
-    if 'brain_close:analysis_flat' in orch or 'reason = "brain_close:analysis_flat"' in orch:
-        _fail("orchestrator 仍用旧 analysis_flat 秒平")
-    elif "BRAIN_CLOSE_MIN_HOLD_MINUTES" not in orch or "classify_playbook" not in orch:
-        _fail("orchestrator 战略平仓未改 Playbook+最短持仓")
+    if "BRAIN_STRATEGIC_CLOSE_ENABLED" not in orch:
+        _fail("orchestrator 未接入战略平仓开关")
     else:
-        _ok("orchestrator close playbook+grace")
+        _ok("orchestrator strategic close gated")
+    from app.services.open_advisor_routing import should_use_deepseek_hold_advisor
+    assert should_use_deepseek_hold_advisor("brain_swing") is False
+    assert should_use_deepseek_hold_advisor("deepseek_explore") is True
+    hold_q = (ROOT / "app/services/hold_advisor_query.py").read_text(encoding="utf-8")
+    if "brain_source_sql_exclude" not in hold_q:
+        _fail("hold_advisor_query 未排除 BRAIN")
+    else:
+        _ok("hold advisor excludes brain")
+    mon = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
+    if "仅硬 SL/TP + 计划到期" not in mon and "BRAIN：仅硬" not in mon:
+        # accept either Chinese comment marker
+        if "is_brain_source as _brain_src" not in mon:
+            _fail("position_sl_tp_monitor 未对 BRAIN 跳过 trail/soft")
+        else:
+            _ok("monitor brain hard-only")
+    else:
+        _ok("monitor brain hard-only")
 
 
 def test_scheduler_brain() -> None:

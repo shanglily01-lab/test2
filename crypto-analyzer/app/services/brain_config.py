@@ -8,13 +8,15 @@ BRAIN_ACCOUNT_ID = 2
 BRAIN_LEVERAGE = 5
 BRAIN_MARGIN_USD = 500.0
 
-# 持仓/限价（与系统 AI 默认对齐；落地可再调）
-BRAIN_HOLD_HOURS = 4
+# 持仓：仅硬 SL/TP + 计划到期（不做战略平仓 / 持仓顾问 / trail）
+BRAIN_HOLD_HOURS = 6
 BRAIN_LIMIT_TIMEOUT_MINUTES = 30
-BRAIN_SL_PCT = 3.0   # 百分点：3.0=3%（engine / paper_limit_entry 均做 pct/100）
-BRAIN_TP_PCT = 5.0   # 百分点：5.0=5%
+BRAIN_SL_PCT = 5.0   # 百分点：5.0=5%
+BRAIN_TP_PCT = 8.0   # 百分点：8.0=8%
 # 测试期：True=直接市价开仓（INV-BRAIN-06 限价防插针暂缓）；恢复限价时改 False
 BRAIN_USE_MARKET_ENTRY = True
+# False=关闭 Playbook/Big4 战略平仓；只靠 SL/TP/6h 到期
+BRAIN_STRATEGIC_CLOSE_ENABLED = False
 
 WIN_PROB_MIN = 0.55
 # 开仓方向胜率须比反方向至少高这么多（百分点，0.05=5pp）
@@ -75,3 +77,8 @@ BRAIN_SCAN_INTERVAL_HOURS = 2
 def is_brain_source(source: str) -> bool:
     s = (source or "").strip().lower()
     return s in BRAIN_SOURCES or s.startswith("brain_")
+
+
+def brain_source_sql_exclude(column: str = "source") -> str:
+    """SQL 片段：排除全部 BRAIN source（持仓顾问等）。"""
+    return f"LOWER({column}) NOT LIKE 'brain_%'"
