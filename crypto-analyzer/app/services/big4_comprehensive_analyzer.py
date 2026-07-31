@@ -387,6 +387,7 @@ def _call_deepseek(prompt: str, *, strict: bool = False) -> Optional[str]:
         system_msg += " 上次输出错误地声称 K 线缺失；本次必须基于摘要中的数字重写。"
     try:
         client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+        from app.services.deepseek_api_utils import DEEPSEEK_DISABLE_THINKING_BODY
         resp = client.chat.completions.create(
             model=DEEPSEEK_MODEL,
             messages=[
@@ -397,6 +398,7 @@ def _call_deepseek(prompt: str, *, strict: bool = False) -> Optional[str]:
             max_tokens=8192,
             timeout=ANALYSIS_TIMEOUT_S,
             response_format={"type": "json_object"},
+            extra_body=DEEPSEEK_DISABLE_THINKING_BODY,
         )
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:

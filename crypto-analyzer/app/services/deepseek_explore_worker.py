@@ -929,6 +929,7 @@ def _call_deepseek_explore(
             api_key=DEEPSEEK_API_KEY,
             base_url=DEEPSEEK_BASE_URL,
         )
+        from app.services.deepseek_api_utils import DEEPSEEK_DISABLE_THINKING_BODY
         resp = client.chat.completions.create(
             model=DEEPSEEK_MODEL,
             messages=[
@@ -946,6 +947,7 @@ def _call_deepseek_explore(
             max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
             timeout=DEEPSEEK_TIMEOUT_S,
             response_format={"type": "json_object"},
+            extra_body=DEEPSEEK_DISABLE_THINKING_BODY,
         )
     except ImportError:
         logger.error("[DeepSeek探索] 缺 openai 库, 请 pip install openai")
@@ -954,9 +956,15 @@ def _call_deepseek_explore(
         logger.error(f"[DeepSeek探索] DeepSeek API 调用失败: {e}")
         return None, f"API: {e}"
 
-    text = (resp.choices[0].message.content or "").strip()
+    msg = resp.choices[0].message
+    text = (msg.content or "").strip()
     if not text:
-        logger.error("[DeepSeek探索] DeepSeek 返回空内容")
+        fr = getattr(resp.choices[0], "finish_reason", None)
+        rc_len = len(getattr(msg, "reasoning_content", None) or "")
+        logger.error(
+            f"[DeepSeek探索] DeepSeek 返回空内容 finish={fr} reasoning_len={rc_len} "
+            f"(V4 默认 thinking 易占满 token；须 extra_body thinking=disabled)"
+        )
         return None, "返回空内容"
     logger.info(f"[DeepSeek探索] deepseek 用时 {time.time()-t0:.1f}s, output_len={len(text)}")
 

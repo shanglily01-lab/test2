@@ -565,6 +565,7 @@ def _call_deepseek_predict(symbols_data: List[Dict], global_ctx: dict) -> Option
 
     t0 = time.time()
     try:
+        from app.services.deepseek_api_utils import DEEPSEEK_DISABLE_THINKING_BODY
         resp = client.chat.completions.create(
             model=DEEPSEEK_MODEL,
             messages=[
@@ -575,12 +576,20 @@ def _call_deepseek_predict(symbols_data: List[Dict], global_ctx: dict) -> Option
             max_tokens=EXPLORE_LLM_MAX_OUTPUT_TOKENS,
             timeout=DEEPSEEK_TIMEOUT_S,
             response_format={"type": "json_object"},
+            extra_body=DEEPSEEK_DISABLE_THINKING_BODY,
         )
     except Exception as e:
         logger.error(f"[DeepSeek预测] DeepSeek 调用失败: {e}")
         return None
 
     text = (resp.choices[0].message.content or "").strip()
+    if not text:
+        fr = getattr(resp.choices[0], "finish_reason", None)
+        rc_len = len(getattr(resp.choices[0].message, "reasoning_content", None) or "")
+        logger.error(
+            f"[DeepSeek预测] 返回空内容 finish={fr} reasoning_len={rc_len}"
+        )
+        return None
     logger.info(f"[DeepSeek预测] DeepSeek 用时 {time.time()-t0:.1f}s, output_len={len(text)}")
 
     parsed, parse_err = parse_explore_llm_json(text, "DeepSeek预测")

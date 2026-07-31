@@ -236,6 +236,7 @@ async def ask_ai(body: AskRequest):
             base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
             client = OpenAI(api_key=api_key, base_url=base_url)
+            from app.services.deepseek_api_utils import DEEPSEEK_DISABLE_THINKING_BODY
             resp = client.chat.completions.create(
                 model=model,
                 messages=[
@@ -246,6 +247,7 @@ async def ask_ai(body: AskRequest):
                 max_tokens=4096,
                 timeout=120,
                 response_format={"type": "json_object"},
+                extra_body=DEEPSEEK_DISABLE_THINKING_BODY,
             )
             answer_text = (resp.choices[0].message.content or "").strip()
 

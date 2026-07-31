@@ -136,6 +136,7 @@ class DeepSeekPositionAdvisor:
         text = ""
         try:
             client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+            from app.services.deepseek_api_utils import DEEPSEEK_DISABLE_THINKING_BODY
             resp = client.chat.completions.create(
                 model=DEEPSEEK_MODEL,
                 messages=[
@@ -146,8 +147,16 @@ class DeepSeekPositionAdvisor:
                 max_tokens=1024,
                 timeout=DEEPSEEK_TIMEOUT_S,
                 response_format={"type": "json_object"},
+                extra_body=DEEPSEEK_DISABLE_THINKING_BODY,
             )
             text = (resp.choices[0].message.content or "").strip()
+            if not text:
+                fr = getattr(resp.choices[0], "finish_reason", None)
+                logger.warning(
+                    f"[DeepSeek顾问] 返回空内容 finish={fr} "
+                    f"reasoning_len={len(getattr(resp.choices[0].message, 'reasoning_content', None) or '')}"
+                )
+                return None
             from app.services.ai_explore_prompt import _extract_llm_json_text, _try_parse_json
             parsed, _ = _try_parse_json(_extract_llm_json_text(text))
             if parsed is None:
