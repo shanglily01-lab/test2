@@ -18,6 +18,8 @@ from app.services.brain_config import (
     BRAIN_TP_MAX_PCT,
     BRAIN_TP_MIN_PCT,
     BRAIN_TP_PCT,
+    BRAIN_TRAIL_ACTIVATE_MAX_PCT,
+    BRAIN_TRAIL_ACTIVATE_MIN_PCT,
 )
 
 
@@ -124,9 +126,13 @@ def evaluate_brain_risk_params(
         if tp / sl < BRAIN_RR_MIN:
             hold = _clamp(hold * 0.7, BRAIN_HOLD_MIN_HOURS, BRAIN_HOLD_MAX_HOURS)
 
-    # 锁利激活线：评估 TP 的 40%，夹在 1.2%~3%
-    trail_activate = _clamp(tp * 0.40, 1.2, 3.0)
-    trail_pullback = _clamp(max(0.6, trail_activate * 0.45), 0.6, 1.5)
+    # 锁利激活：min(TP×40%, SL×50%)，夹在 1.0%~1.8%（宽仓也能在中等浮盈锁住）
+    trail_activate = _clamp(
+        min(tp * 0.40, sl * 0.50),
+        BRAIN_TRAIL_ACTIVATE_MIN_PCT,
+        BRAIN_TRAIL_ACTIVATE_MAX_PCT,
+    )
+    trail_pullback = _clamp(max(0.5, trail_activate * 0.45), 0.5, 1.0)
     trail_min_keep = 0.25  # 价格%，约保本+费缓冲
 
     meta = {

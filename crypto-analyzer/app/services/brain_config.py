@@ -18,10 +18,10 @@ BRAIN_USE_MARKET_ENTRY = True
 # False=关闭 Playbook/Big4 战略平仓
 BRAIN_STRATEGIC_CLOSE_ENABLED = False
 
-# 按币评估上下限（§7.3.16）
-BRAIN_SL_MIN_PCT = 1.5
+# 按币评估上下限（§7.3.16；v4.5.3 抬高 SL 地板，减少 1.5% 噪音扫损）
+BRAIN_SL_MIN_PCT = 2.5
 BRAIN_SL_MAX_PCT = 8.0
-BRAIN_TP_MIN_PCT = 2.0
+BRAIN_TP_MIN_PCT = 3.0
 BRAIN_TP_MAX_PCT = 12.0
 BRAIN_HOLD_MIN_HOURS = 0.75  # 45min
 BRAIN_HOLD_MAX_HOURS = 8.0
@@ -29,10 +29,12 @@ BRAIN_RR_MIN = 1.2
 
 # 程序化移动锁利（非 DeepSeek；非旧 ai-trail 常量路径）
 BRAIN_TRAIL_ENABLED = True
-# 无 per-pos meta 时的默认激活/回撤（价格%）
-BRAIN_TRAIL_ACTIVATE_PCT = 1.5
-BRAIN_TRAIL_PULLBACK_PCT = 0.8
+# 无 per-pos meta 时的默认激活/回撤（价格%）；上限 1.8 让中等浮盈可锁
+BRAIN_TRAIL_ACTIVATE_PCT = 1.2
+BRAIN_TRAIL_PULLBACK_PCT = 0.55
 BRAIN_TRAIL_MIN_KEEP_PCT = 0.25
+BRAIN_TRAIL_ACTIVATE_MIN_PCT = 1.0
+BRAIN_TRAIL_ACTIVATE_MAX_PCT = 1.8
 # 无跟进早砍：持仓满 N 分钟、峰值过低且浮亏达线 → 平
 BRAIN_SOFT_NO_FOLLOW_ENABLED = True
 BRAIN_SOFT_NO_FOLLOW_MIN_AGE = 60  # minutes

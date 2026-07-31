@@ -1,18 +1,47 @@
 """BRAIN 程序化移动锁利 / 无跟进早砍 — 非 DeepSeek、非旧 ai-trail 常量路径。"""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Tuple
 
 from app.services.brain_config import (
     BRAIN_SOFT_NO_FOLLOW_ENABLED,
     BRAIN_SOFT_NO_FOLLOW_LOSS_PCT,
     BRAIN_SOFT_NO_FOLLOW_MAX_PEAK_PCT,
     BRAIN_SOFT_NO_FOLLOW_MIN_AGE,
+    BRAIN_TRAIL_ACTIVATE_MAX_PCT,
+    BRAIN_TRAIL_ACTIVATE_MIN_PCT,
     BRAIN_TRAIL_ACTIVATE_PCT,
     BRAIN_TRAIL_ENABLED,
     BRAIN_TRAIL_MIN_KEEP_PCT,
     BRAIN_TRAIL_PULLBACK_PCT,
 )
+
+
+def trail_levels_from_sl_tp(sl_pct: float, tp_pct: float) -> Tuple[float, float, float]:
+    """由本笔 SL/TP（百分点）推激活/回撤/保本线（百分点）。"""
+    try:
+        sl_f = max(0.0, float(sl_pct))
+        tp_f = max(0.0, float(tp_pct))
+    except (TypeError, ValueError):
+        return (
+            float(BRAIN_TRAIL_ACTIVATE_PCT),
+            float(BRAIN_TRAIL_PULLBACK_PCT),
+            float(BRAIN_TRAIL_MIN_KEEP_PCT),
+        )
+    if sl_f <= 0 and tp_f <= 0:
+        return (
+            float(BRAIN_TRAIL_ACTIVATE_PCT),
+            float(BRAIN_TRAIL_PULLBACK_PCT),
+            float(BRAIN_TRAIL_MIN_KEEP_PCT),
+        )
+    raw = tp_f * 0.40 if tp_f > 0 else sl_f * 0.50
+    if sl_f > 0 and tp_f > 0:
+        raw = min(tp_f * 0.40, sl_f * 0.50)
+    elif sl_f > 0:
+        raw = sl_f * 0.50
+    act = max(BRAIN_TRAIL_ACTIVATE_MIN_PCT, min(BRAIN_TRAIL_ACTIVATE_MAX_PCT, raw))
+    pull = max(0.5, min(1.0, max(0.5, act * 0.45)))
+    return act, pull, float(BRAIN_TRAIL_MIN_KEEP_PCT)
 
 
 def check_brain_trail_lock(

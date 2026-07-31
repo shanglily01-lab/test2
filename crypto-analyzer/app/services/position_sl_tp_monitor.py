@@ -404,11 +404,26 @@ class PositionSLTPMonitor:
             else:
                 pnl_pct = (entry_price - price) / entry_price
 
-            # 更新 peak
-            prev_peak = self._peak_pnl_map.get(pid, 0.0)
+            # 更新 peak：内存 ∪ DB.max_profit_pct（重启后从库恢复，避免 trail/soft 丢峰）
+            db_peak = 0.0
+            try:
+                raw_peak = pos.get("max_profit_pct")
+                if raw_peak is not None:
+                    db_peak = max(0.0, float(raw_peak) / 100.0)
+            except (TypeError, ValueError):
+                db_peak = 0.0
+            prev_peak = max(self._peak_pnl_map.get(pid, 0.0), db_peak)
             new_peak = max(prev_peak, pnl_pct)
-            if new_peak != prev_peak:
+            if new_peak != self._peak_pnl_map.get(pid, 0.0):
                 self._peak_pnl_map[pid] = new_peak
+                # BRAIN：峰值抬高即落库，防 main 重启丢峰
+                try:
+                    from app.services.brain_config import is_brain_source as _brain_peak_src
+                    if _brain_peak_src(src):
+                        self._sync_peak_to_db(pid, new_peak * 100)
+                except Exception:
+                    if (src or "").startswith("brain_"):
+                        self._sync_peak_to_db(pid, new_peak * 100)
 
             reason: Optional[str] = None
             trigger_price = price
@@ -455,18 +470,25 @@ class PositionSLTPMonitor:
                     from app.services.brain_trail_exit import (
                         check_brain_soft_no_follow,
                         check_brain_trail_lock,
+                        trail_levels_from_sl_tp,
                     )
-                    # 按本笔硬 TP 推激活线（≈评估 TP×40%，夹 1.2~3），无 TP 则用 config 默认
+                    # 激活 = min(TP×40%, SL×50%) 夹 1.0~1.8；无 SL/TP 用 config 默认
                     act_kw: dict = {}
                     try:
-                        if tp is not None and entry_price > 0:
-                            tp_pct_pos = abs(float(tp) - entry_price) / entry_price * 100.0
-                            act = max(1.2, min(3.0, tp_pct_pos * 0.40))
-                            pull = max(0.6, min(1.5, max(0.6, act * 0.45)))
+                        if entry_price > 0 and (sl is not None or tp is not None):
+                            sl_pct_pos = (
+                                abs(float(sl) - entry_price) / entry_price * 100.0
+                                if sl is not None else 0.0
+                            )
+                            tp_pct_pos = (
+                                abs(float(tp) - entry_price) / entry_price * 100.0
+                                if tp is not None else 0.0
+                            )
+                            act, pull, keep = trail_levels_from_sl_tp(sl_pct_pos, tp_pct_pos)
                             act_kw = {
                                 "activate_pct": act,
                                 "pullback_pct": pull,
-                                "min_keep_pct": 0.25,
+                                "min_keep_pct": keep,
                             }
                     except Exception:
                         act_kw = {}
@@ -774,7 +796,7 @@ class PositionSLTPMonitor:
         sql = (
             "SELECT id, symbol, position_side, entry_price, leverage, "
             "       stop_loss_price, take_profit_price, liquidation_price, "
-            "       source, open_time, planned_close_time "
+            "       source, open_time, planned_close_time, max_profit_pct "
             "FROM futures_positions "
             "WHERE status='open' "
             "  AND (source LIKE %s) "

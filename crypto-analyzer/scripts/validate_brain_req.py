@@ -184,6 +184,8 @@ def test_brain_risk_params() -> None:
         BRAIN_HOLD_MIN_HOURS,
         BRAIN_HOLD_MAX_HOURS,
         BRAIN_TRAIL_ENABLED,
+        BRAIN_TRAIL_ACTIVATE_MIN_PCT,
+        BRAIN_TRAIL_ACTIVATE_MAX_PCT,
     )
     assert BRAIN_TRAIL_ENABLED is True
     rows = []
@@ -206,15 +208,30 @@ def test_brain_risk_params() -> None:
     assert BRAIN_HOLD_MIN_HOURS <= out["hold_hours"] <= BRAIN_HOLD_MAX_HOURS
     assert out["sl_pct"] >= 1.0 and out["tp_pct"] >= 1.0  # 百分点非小数比例
     meta = out["risk_meta"]
-    assert 1.2 <= meta["trail_activate_pct"] <= 3.0
+    assert BRAIN_TRAIL_ACTIVATE_MIN_PCT <= meta["trail_activate_pct"] <= BRAIN_TRAIL_ACTIVATE_MAX_PCT
+    from app.services.brain_config import BRAIN_SL_MIN_PCT as _slmin
+    assert _slmin >= 2.5
     fb = evaluate_brain_risk_params(playbook="A1", side="LONG", rows_15m=[])
     assert fb["risk_fallback"] is True
     assert fb["sl_pct"] == 5.0 and fb["tp_pct"] == 8.0
-    from app.services.brain_trail_exit import check_brain_trail_lock, check_brain_soft_no_follow
+    from app.services.brain_trail_exit import (
+        check_brain_trail_lock,
+        check_brain_soft_no_follow,
+        trail_levels_from_sl_tp,
+    )
     assert check_brain_trail_lock(0.01, 0.01) is None  # 未激活
-    assert check_brain_trail_lock(0.012, 0.02, activate_pct=1.5, pullback_pct=0.8)  # 激活+回撤
-    assert check_brain_soft_no_follow(-0.02, 0.002, 3600)  # 60m 无跟进
-    assert check_brain_soft_no_follow(-0.02, 0.002, 600) is None  # 未满龄
+    assert check_brain_trail_lock(0.012, 0.02, activate_pct=1.2, pullback_pct=0.55)
+    assert check_brain_soft_no_follow(-0.02, 0.002, 3600)
+    assert check_brain_soft_no_follow(-0.02, 0.002, 600) is None
+    act8, _, _ = trail_levels_from_sl_tp(8.0, 12.0)
+    assert act8 <= 1.8  # 宽仓激活上限，中等浮盈可锁
+    act_tight, _, _ = trail_levels_from_sl_tp(2.5, 3.0)
+    assert 1.0 <= act_tight <= 1.8
+    mon = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
+    if "max_profit_pct" not in mon or "db_peak" not in mon:
+        _fail("monitor 未从 DB 恢复 peak")
+    else:
+        _ok("monitor peak restore from DB")
     _ok("brain_risk_params + trail_exit")
 
 
