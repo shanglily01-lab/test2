@@ -1,12 +1,12 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.3  
-**日期**: 2026-07-31  
+**版本**: v4.5.4  
+**日期**: 2026-08-01  
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
 > **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。  
 > **BRAIN v2 机会识别（§7.3.10–7.3.15）**：**已落地且开仓机会判定视为相对客观**；退出/风控见 §7.3.16。  
-> **BRAIN 退出（§7.3.16 / REQ-BRAIN-RISK · v4.5.3）**：按币评估 SL/TP/hold；硬 SL/TP + 计划到期 + `brain_trail_lock` / soft；SL 地板 **2.5%**；trail 激活 **min(TP×40%,SL×50%) 夹 1.0~1.8%**；monitor **从 DB 恢复并回写 peak**。
+> **BRAIN 退出（§7.3.16 / REQ-BRAIN-RISK · v4.5.4）**：按币评估 SL/TP/hold；硬 SL/TP + 计划到期 + `brain_trail_lock`；**关闭** `brain_soft_no_follow`（高胜率亏钱：均亏≈均赢×2）；SL 地板 2.5%；trail 激活夹 1.0~1.8%；peak 落库/恢复。
 
 > 旧版 `design/需求文档.md`（v3.6）已过时，仅作历史参考。  
 > AI 策略细节补充见 `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md`，但**实盘同步、闸门、15m 判据以本文为准**。
@@ -323,7 +323,7 @@
 | **INV-BRAIN-02** | 近 **7 日**、同规则、信号后 **4h**「方向对就算赢」的实现胜率 `win_prob` **&lt; 55%** → 不得开仓 |
 | **INV-BRAIN-03** | Big4 **疲软**（动量弱，且相对成交量很低 → 量价波动很小）→ 不得开仓；须有足够量价波动（门槛用近 7 日数据标定） |
 | **INV-BRAIN-04** | **开仓**：自有 Playbook 主判通过后直接开仓（**跳过开仓顾问**）。**平仓**：硬 SL/TP + 按币计划到期 + 新版程序化锁利/无跟进早砍（§7.3.16）；**不经**持仓顾问 |
-| **INV-BRAIN-05** | **平仓**：不以大脑战略翻转 / DeepSeek 持仓顾问为主路径；安全网为仓上评估 SL/TP、计划到期与 `brain_trail_lock` / `brain_soft_no_follow` |
+| **INV-BRAIN-05** | **平仓**：不以大脑战略翻转 / DeepSeek 持仓顾问为主路径；安全网为仓上评估 SL/TP、计划到期与 `brain_trail_lock`（soft 无跟进 v4.5.4 关闭） |
 | **INV-BRAIN-06** | 单根 K **影线长度 &gt; 实体长度 × 2** 计为有效插针；近 7 日插针**频繁** → **禁止市价开仓**，须按平均插针一侧挂限价；**限价超时必须取消**（禁止转市价）。**测试期例外**：`BRAIN_USE_MARKET_ENTRY=True` 时暂缓，直接市价 |
 | **INV-BRAIN-07** | **旧 DeepSeek 探索/预测自动开仓**：目标为全面暂停；**当前对照期暂缓**——与 `brain_swing` **并行开仓**，便于胜率/PnL 对比；对照结束后再强制关并停调度 |
 
@@ -345,7 +345,7 @@
 | 计划持仓 | **按币评估** hold（约 0.75–8h）；失败才 fallback **6h** |
 | 杠杆 / 保证金 | **5x** / **500U** |
 | 入场 | 测试期市价（`BRAIN_USE_MARKET_ENTRY`） |
-| 平仓路径 | 硬 SL/TP → `brain_trail_lock` → `brain_soft_no_follow` → 计划到期；关战略平仓；跳过 DeepSeek 持仓顾问；**禁止**旧 ai-trail/soft/trend |
+| 平仓路径 | 硬 SL/TP → `brain_trail_lock` → 计划到期；**soft 无跟进关闭**；关战略平仓；跳过 DeepSeek 持仓顾问；**禁止**旧 ai-trail/soft/trend |
 
 **对齐默认**（实现可微调但须文档化）：
 
@@ -410,7 +410,7 @@
 | 硬 SL | 触及本笔评估写出的 `stop_loss_price` → 平 |
 | 硬 TP | 触及本笔评估写出的 `take_profit_price` → 平（开仓后短 TP grace 仍适用） |
 | 程序化锁利 | `brain_trail_lock`：峰值达激活线（**min(本笔 TP×40%, SL×50%)**，夹 **1.0%~1.8%**）后，回撤达线 → 平；peak 以内存∪`max_profit_pct` 为准并回写 DB |
-| 无跟进早砍 | `brain_soft_no_follow`：持仓≥60min、峰值≤0.5% 且浮亏≤−1.5% → 平 |
+| 无跟进早砍 | **关闭**（`BRAIN_SOFT_NO_FOLLOW_ENABLED=False`；v4.5.4：高胜率仍亏钱主因） |
 | 计划到期 | 达本笔 `planned_close_time`（评估 hold，≤8h）→ `planned_close_time_expired` |
 | 战略平仓 | **关闭**（不再因 Playbook FLAT / Big4 / 翻转主动平） |
 | 持仓顾问 | **跳过**（不进 DeepSeek 持仓顾问） |
@@ -680,7 +680,7 @@
 | 未激活 | 浮盈 &lt; 激活线 | 硬 SL；可选 soft 无跟进 |
 | 激活 | 峰值 ≥ **min(本笔 TP×40%, SL×50%)**（夹 1.0%~1.8%） | 进入锁利 |
 | 锁利回撤 | 从 peak 回撤 ≥ ≈激活×45%（夹 0.5%~1.0%） | **市价平**（`brain_trail_lock`）；低于保本缓冲亦平防吐光 |
-| 无跟进 | ≥60min 且 peak≤0.5% 且 pnl≤−1.5%（peak=内存∪DB） | `brain_soft_no_follow` |
+| 无跟进 | **关闭**（代码保留；开关 False） | — |
 | 到期 | `planned_close_time` | 到期平 |
 
 **禁止**：BRAIN 走旧 `_check_ai_trail_tp` / soft-sl / trend-sl 常量路径。  
@@ -692,8 +692,8 @@
 1. 硬 SL → 平
 2. 硬 TP → 平
 3. brain_trail_lock → 平
-4. brain_soft_no_follow → 平
-5. planned_close_time → 平
+4. planned_close_time → 平
+5. brain_soft_no_follow — v4.5.4 关闭
 6. 战略翻转 / DeepSeek 持仓顾问 — 仍关 / 仍跳过
 ```
 
@@ -714,7 +714,7 @@
 - [x] 评估器一期：纯 **ATR×系数 + Playbook 分档**（历史同 PB 样本后续）
 - [x] 激活线：**min(TP×40%, SL×50%)** 夹 **1.0%~1.8%**（v4.5.3；宽仓中等浮盈可锁）
 - [x] 激活后：**回撤即平**（仍保留硬 TP 作为另一出口）
-- [x] soft 无跟进：**上，仅 BRAIN**；peak 须含 DB
+- [x] soft 无跟进：**v4.5.4 关闭**（实证：trail +618 / soft −329，均亏≈均赢×2）
 - [x] 探索/预测：**先只改 BRAIN**
 - [x] SL 地板：**2.5%**（v4.5.3；忌大批量 1.5% 扫损）
 ## 8. AI 主探索 / 主预测（REQ-AI-EP）
@@ -874,7 +874,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-MIDLINE | `midline_swing_config.py`, `midline_swing_scanner.py`, `midline_explore_worker.py`（或 `midline_worker`）, `midline_swing_api.py`, 中线策略页 JS/模板, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
 | **REQ-BRAIN** | `brain_config` / `brain_wick` / `brain_market_analyzer` / `brain_winrate` / `brain_strategy_orchestrator`；`scheduler.py`；`paper_limit_entry` + executor expire；DS 自动开仓暂停；`validate_brain_req.py`；权威 §7.3 |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
-| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | 按币评估 SL/TP/hold（地板 SL≥2.5%）+ trail≤1.8%激活 + soft + peak落库；§7.3.16（**v4.5.3**） |
+| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | 按币评估 SL/TP/hold + trail≤1.8%激活；**soft 关闭**；peak落库；§7.3.16（**v4.5.4**） |
 | REQ-ST | `smart_trader_service.py` |
 
 ---
@@ -883,6 +883,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-01 | **v4.5.4** | **关闭 BRAIN soft_no_follow**：日统计胜率66.7%仍亏——均赢+32/均亏-65；soft 单日−329 vs trail+618；亏损改交硬 SL |
 | 2026-07-31 | **v4.5.3** | **BRAIN 退出修刀**：SL 地板 2.5%/TP 地板 3%；trail 激活 min(TP×40%,SL×50%) 夹 1.0~1.8%；monitor 从 DB 恢复并回写 `max_profit_pct`（修重启丢峰导致 soft/trail 误判） |
 | 2026-07-31 | **v4.5.2** | **REQ-BRAIN-RISK 落地 §7.3.16**：`brain_risk_params` 按币写 SL/TP/hold；`brain_trail_exit` 锁利+无跟进；monitor 启用新规则、禁用旧 ai-trail；fallback 仍 5/8/6 |
 | 2026-07-31 | **v4.5.1** | **REQ-BRAIN-RISK 草案 §7.3.16**：开仓机会视为客观；瓶颈在退出——按代币评估 SL/TP/持仓时长；重做程序化移动锁利（非 DeepSeek 顾问）；明确旧 ai-trail「赚过又亏」问题；生产仍暂用 5%/8%/6h 过渡 |

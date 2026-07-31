@@ -221,8 +221,9 @@ def test_brain_risk_params() -> None:
     )
     assert check_brain_trail_lock(0.01, 0.01) is None  # 未激活
     assert check_brain_trail_lock(0.012, 0.02, activate_pct=1.2, pullback_pct=0.55)
-    assert check_brain_soft_no_follow(-0.02, 0.002, 3600)
-    assert check_brain_soft_no_follow(-0.02, 0.002, 600) is None
+    from app.services.brain_config import BRAIN_SOFT_NO_FOLLOW_ENABLED
+    assert BRAIN_SOFT_NO_FOLLOW_ENABLED is False
+    assert check_brain_soft_no_follow(-0.02, 0.002, 3600) is None  # 开关关
     act8, _, _ = trail_levels_from_sl_tp(8.0, 12.0)
     assert act8 <= 1.8  # 宽仓激活上限，中等浮盈可锁
     act_tight, _, _ = trail_levels_from_sl_tp(2.5, 3.0)

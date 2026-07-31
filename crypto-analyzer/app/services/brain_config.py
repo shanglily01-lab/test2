@@ -35,9 +35,10 @@ BRAIN_TRAIL_PULLBACK_PCT = 0.55
 BRAIN_TRAIL_MIN_KEEP_PCT = 0.25
 BRAIN_TRAIL_ACTIVATE_MIN_PCT = 1.0
 BRAIN_TRAIL_ACTIVATE_MAX_PCT = 1.8
-# 无跟进早砍：持仓满 N 分钟、峰值过低且浮亏达线 → 平
-BRAIN_SOFT_NO_FOLLOW_ENABLED = True
-BRAIN_SOFT_NO_FOLLOW_MIN_AGE = 60  # minutes
+# 无跟进早砍：v4.5.4 关闭——高胜率仍亏钱主因（均亏≈均赢×2；soft 单日拖累大于 trail 增益的「净」）
+# 亏损改交给硬 SL；trail 继续锁利
+BRAIN_SOFT_NO_FOLLOW_ENABLED = False
+BRAIN_SOFT_NO_FOLLOW_MIN_AGE = 60  # minutes（保留参数，开关重开时用）
 BRAIN_SOFT_NO_FOLLOW_MAX_PEAK_PCT = 0.5
 BRAIN_SOFT_NO_FOLLOW_LOSS_PCT = -1.5
 
