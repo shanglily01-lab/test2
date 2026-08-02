@@ -22,7 +22,9 @@ from app.services.brain_config import (
     BRAIN_LEVERAGE,
     BRAIN_LIMIT_TIMEOUT_MINUTES,
     BRAIN_MARGIN_USD,
+    BRAIN_MIN_EDGE_SCORE,
     BRAIN_POOL_REFRESH_EVERY_TICKS,
+    BRAIN_REQUIRE_CONFIRMED_PREFIXES,
     BRAIN_SL_PCT,
     BRAIN_SOURCE,
     BRAIN_STRATEGIC_CLOSE_ENABLED,
@@ -403,9 +405,13 @@ def _analyze_one(
         ok_wp, wp_reason = directional_open_allowed(side, wl, ws)
         if not ok_wp:
             skip_reason = wp_reason
-        elif float(pb.get("edge_score") or 0) < 0.5:
+        elif float(pb.get("edge_score") or 0) < BRAIN_MIN_EDGE_SCORE:
             skip_reason = "low_edge"
-        elif not pb.get("confirmed") and str(playbook).startswith("A"):
+        elif (
+            not pb.get("confirmed")
+            and str(playbook).startswith(BRAIN_REQUIRE_CONFIRMED_PREFIXES)
+        ):
+            # A/B 须 confirmed，压低「不跟进」timeout 入场
             skip_reason = "unconfirmed"
         elif not allow_open:
             skip_reason = "tick_open_quota"

@@ -41,7 +41,7 @@ alwaysApply: true
 
 **DeepSeek 选币**：仅 **L0+L1**；**DeepSeek soft-sl**：grace45 / no_follow≥60m且≈-2.2%
 
-**REQ-BRAIN §7.3**：`brain_swing` 每15s×5币；跳过开仓顾问；测试期市价；退出 **按币 SL≥2.5% + trail≤1.8%激活 + soft + peak落库**（关战略平仓与持仓顾问；不做旧 ai-trail）；DS 探索/预测对照期并行；`validate_brain_req.py`
+**REQ-BRAIN §7.3**：`brain_swing` 每15s×5币；跳过开仓顾问；测试期市价；入场 **edge≥0.75** + A/B confirmed（**B2/C1 暂不开**）；退出 **按币 SL≥2.5% + trail≤1.0%激活**（soft 关；peak落库；不做旧 ai-trail）；DS 探索/预测对照期并行；`validate_brain_req.py`
 
 ## 顾问路由 (`open_advisor_routing.py`)
 

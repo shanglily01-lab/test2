@@ -28,7 +28,10 @@ def test_imports_and_config() -> None:
         BRAIN_SL_PCT,
         BRAIN_TP_PCT,
         BRAIN_HOLD_HOURS,
+        BRAIN_MIN_EDGE_SCORE,
+        BRAIN_REQUIRE_CONFIRMED_PREFIXES,
         BRAIN_STRATEGIC_CLOSE_ENABLED,
+        TRADEABLE_PLAYBOOKS,
         WIN_PROB_MIN,
         is_brain_source,
         brain_source_sql_exclude,
@@ -38,6 +41,11 @@ def test_imports_and_config() -> None:
     assert BRAIN_TP_PCT == 8.0
     assert BRAIN_HOLD_HOURS == 6
     assert BRAIN_STRATEGIC_CLOSE_ENABLED is False
+    assert BRAIN_MIN_EDGE_SCORE == 0.75
+    assert BRAIN_REQUIRE_CONFIRMED_PREFIXES == ("A", "B")
+    assert "B2" not in TRADEABLE_PLAYBOOKS
+    assert "C1" not in TRADEABLE_PLAYBOOKS
+    assert "A1" in TRADEABLE_PLAYBOOKS and "B1" in TRADEABLE_PLAYBOOKS
     assert BRAIN_SL_PCT >= 1.0, f"BRAIN_SL_PCT={BRAIN_SL_PCT} 疑似小数比例，应为百分点"
     assert BRAIN_TP_PCT >= 1.0, f"BRAIN_TP_PCT={BRAIN_TP_PCT} 疑似小数比例，应为百分点"
     assert is_brain_source(BRAIN_SOURCE)

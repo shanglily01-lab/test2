@@ -52,9 +52,16 @@ WINRATE_FORWARD_HOURS = 4
 WINRATE_MIN_SAMPLES = 20
 WINRATE_SYMBOL_MIN_N = 5
 
+# 入场收紧（v4.5.6）：少开「不跟进」/timeout 仓；保证金仍走评级 L0=1000U，不改
+# 近24h 反事实：edge≥0.75 → 笔数约 105→61、PnL +456→+587，主要砍掉低 edge timeout
+BRAIN_MIN_EDGE_SCORE = 0.75
+# A/B 须 15m 结构确认（confirmed）；C 族仍可未确认过门（样本少，靠 edge）
+BRAIN_REQUIRE_CONFIRMED_PREFIXES = ("A", "B")
+
 # Playbook v1（§7.3.11）
+# B2（弱反抽失败）timeout 率过高；C1（向下破位）近样本负期望 → 仍识别打标，暂不开仓
 TRADEABLE_PLAYBOOKS = frozenset({
-    "A1", "A2", "B1", "B2", "B3", "B4", "C1", "C2", "C3", "C4",
+    "A1", "A2", "B1", "B3", "B4", "C2", "C3", "C4",
 })
 FLAT_PLAYBOOKS = frozenset({"D1", "D2"})
 PLAYBOOK_SIDE = {
