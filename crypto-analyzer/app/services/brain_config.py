@@ -29,12 +29,14 @@ BRAIN_RR_MIN = 1.2
 
 # 程序化移动锁利（非 DeepSeek；非旧 ai-trail 常量路径）
 BRAIN_TRAIL_ENABLED = True
-# 无 per-pos meta 时的默认激活/回撤（价格%）；上限 1.8 让中等浮盈可锁
-BRAIN_TRAIL_ACTIVATE_PCT = 1.2
-BRAIN_TRAIL_PULLBACK_PCT = 0.55
+# 激活 = min(TP×40%, SL×25%)，夹在 MIN~MAX；MAX=1.0 让峰≈1.1% 的宽仓也能锁（v4.5.5）
+BRAIN_TRAIL_ACTIVATE_PCT = 1.0
+BRAIN_TRAIL_PULLBACK_PCT = 0.45
 BRAIN_TRAIL_MIN_KEEP_PCT = 0.25
-BRAIN_TRAIL_ACTIVATE_MIN_PCT = 1.0
-BRAIN_TRAIL_ACTIVATE_MAX_PCT = 1.8
+BRAIN_TRAIL_ACTIVATE_MIN_PCT = 0.8
+BRAIN_TRAIL_ACTIVATE_MAX_PCT = 1.0
+BRAIN_TRAIL_SL_FRAC = 0.25  # 相对本笔 SL
+BRAIN_TRAIL_TP_FRAC = 0.40  # 相对本笔 TP
 # 无跟进早砍：v4.5.4 关闭——高胜率仍亏钱主因（均亏≈均赢×2；soft 单日拖累大于 trail 增益的「净」）
 # 亏损改交给硬 SL；trail 继续锁利
 BRAIN_SOFT_NO_FOLLOW_ENABLED = False

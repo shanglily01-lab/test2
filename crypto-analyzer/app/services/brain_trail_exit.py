@@ -14,11 +14,17 @@ from app.services.brain_config import (
     BRAIN_TRAIL_ENABLED,
     BRAIN_TRAIL_MIN_KEEP_PCT,
     BRAIN_TRAIL_PULLBACK_PCT,
+    BRAIN_TRAIL_SL_FRAC,
+    BRAIN_TRAIL_TP_FRAC,
 )
 
 
 def trail_levels_from_sl_tp(sl_pct: float, tp_pct: float) -> Tuple[float, float, float]:
-    """由本笔 SL/TP（百分点）推激活/回撤/保本线（百分点）。"""
+    """由本笔 SL/TP（百分点）推激活/回撤/保本线（百分点）。
+
+    激活 = min(TP×tp_frac, SL×sl_frac)，夹在 [MIN, MAX]；
+    宽 SL（如 8%）时上限 1.0%，峰≈1.1% 即可锁利。
+    """
     try:
         sl_f = max(0.0, float(sl_pct))
         tp_f = max(0.0, float(tp_pct))
@@ -34,13 +40,14 @@ def trail_levels_from_sl_tp(sl_pct: float, tp_pct: float) -> Tuple[float, float,
             float(BRAIN_TRAIL_PULLBACK_PCT),
             float(BRAIN_TRAIL_MIN_KEEP_PCT),
         )
-    raw = tp_f * 0.40 if tp_f > 0 else sl_f * 0.50
-    if sl_f > 0 and tp_f > 0:
-        raw = min(tp_f * 0.40, sl_f * 0.50)
-    elif sl_f > 0:
-        raw = sl_f * 0.50
+    cands = []
+    if tp_f > 0:
+        cands.append(tp_f * BRAIN_TRAIL_TP_FRAC)
+    if sl_f > 0:
+        cands.append(sl_f * BRAIN_TRAIL_SL_FRAC)
+    raw = min(cands) if cands else float(BRAIN_TRAIL_ACTIVATE_PCT)
     act = max(BRAIN_TRAIL_ACTIVATE_MIN_PCT, min(BRAIN_TRAIL_ACTIVATE_MAX_PCT, raw))
-    pull = max(0.5, min(1.0, max(0.5, act * 0.45)))
+    pull = max(0.4, min(0.8, max(0.4, act * 0.45)))
     return act, pull, float(BRAIN_TRAIL_MIN_KEEP_PCT)
 
 

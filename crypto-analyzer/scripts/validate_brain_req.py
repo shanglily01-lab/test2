@@ -220,14 +220,15 @@ def test_brain_risk_params() -> None:
         trail_levels_from_sl_tp,
     )
     assert check_brain_trail_lock(0.01, 0.01) is None  # 未激活
-    assert check_brain_trail_lock(0.012, 0.02, activate_pct=1.2, pullback_pct=0.55)
+    assert check_brain_trail_lock(0.012, 0.02, activate_pct=1.0, pullback_pct=0.45)
     from app.services.brain_config import BRAIN_SOFT_NO_FOLLOW_ENABLED
     assert BRAIN_SOFT_NO_FOLLOW_ENABLED is False
     assert check_brain_soft_no_follow(-0.02, 0.002, 3600) is None  # 开关关
-    act8, _, _ = trail_levels_from_sl_tp(8.0, 12.0)
-    assert act8 <= 1.8  # 宽仓激活上限，中等浮盈可锁
+    act8, pull8, _ = trail_levels_from_sl_tp(8.0, 12.0)
+    assert act8 <= 1.0  # 宽仓激活≤1.0%，峰1.1%可锁
+    assert check_brain_trail_lock(0.006, 0.011, activate_pct=act8, pullback_pct=pull8)
     act_tight, _, _ = trail_levels_from_sl_tp(2.5, 3.0)
-    assert 1.0 <= act_tight <= 1.8
+    assert BRAIN_TRAIL_ACTIVATE_MIN_PCT <= act_tight <= BRAIN_TRAIL_ACTIVATE_MAX_PCT
     mon = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
     if "max_profit_pct" not in mon or "db_peak" not in mon:
         _fail("monitor 未从 DB 恢复 peak")

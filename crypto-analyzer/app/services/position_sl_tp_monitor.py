@@ -472,7 +472,7 @@ class PositionSLTPMonitor:
                         check_brain_trail_lock,
                         trail_levels_from_sl_tp,
                     )
-                    # 激活 = min(TP×40%, SL×50%) 夹 1.0~1.8；无 SL/TP 用 config 默认
+                    # 激活 = min(TP×40%, SL×25%) 夹 0.8~1.0；无 SL/TP 用 config 默认
                     act_kw: dict = {}
                     try:
                         if entry_price > 0 and (sl is not None or tp is not None):
