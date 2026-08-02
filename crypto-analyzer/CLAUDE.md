@@ -161,7 +161,7 @@
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.5.3）
 - `brain_swing`：L0/L1；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
 - 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**测试期市价**（`BRAIN_USE_MARKET_ENTRY`）
-- **退出（v4.5.4）**：按币评估 SL/TP/hold（地板 SL≥2.5%/TP≥3%；失败 fallback 5/8/6）+ trail 激活≤1.8%；**soft 关闭**；peak 落库/恢复；关战略平仓与持仓顾问；**不做**旧 ai-trail
+- **退出（v4.5.5）**：按币评估 SL/TP/hold（地板 SL≥2.5%/TP≥3%；失败 fallback 5/8/6）+ trail 激活 **≤1.0%**（SL×25%）；**soft 关闭**；peak 落库/恢复；关战略平仓与持仓顾问；**不做**旧 ai-trail
 - 防插针：影>实体×2；频繁则平均插针限价；超时取消；**测试期 INV-BRAIN-06 暂缓**
 - **对照期**：DeepSeek 探索/预测自动开仓**暂保留**并行对比；结束后再执行 INV-BRAIN-07
 - 调度：BRAIN **每15s** 一批5币；`validate_brain_req.py`；页 `/brain_strategy`
