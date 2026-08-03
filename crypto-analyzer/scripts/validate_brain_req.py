@@ -37,7 +37,7 @@ def test_imports_and_config() -> None:
         brain_source_sql_exclude,
     )
     assert WIN_PROB_MIN == 0.55
-    assert BRAIN_SL_PCT == 5.0
+    assert BRAIN_SL_PCT == 4.5
     assert BRAIN_TP_PCT == 8.0
     assert BRAIN_HOLD_HOURS == 6
     assert BRAIN_STRATEGIC_CLOSE_ENABLED is False
@@ -221,7 +221,7 @@ def test_brain_risk_params() -> None:
     assert _slmin >= 2.5
     fb = evaluate_brain_risk_params(playbook="A1", side="LONG", rows_15m=[])
     assert fb["risk_fallback"] is True
-    assert fb["sl_pct"] == 5.0 and fb["tp_pct"] == 8.0
+    assert fb["sl_pct"] == 4.5 and fb["tp_pct"] == 8.0
     from app.services.brain_trail_exit import (
         check_brain_trail_lock,
         check_brain_soft_no_follow,
@@ -229,14 +229,30 @@ def test_brain_risk_params() -> None:
     )
     assert check_brain_trail_lock(0.01, 0.01) is None  # 未激活
     assert check_brain_trail_lock(0.012, 0.02, activate_pct=1.0, pullback_pct=0.45)
-    from app.services.brain_config import BRAIN_SOFT_NO_FOLLOW_ENABLED
-    assert BRAIN_SOFT_NO_FOLLOW_ENABLED is False
-    assert check_brain_soft_no_follow(-0.02, 0.002, 3600) is None  # 开关关
+    from app.services.brain_config import (
+        BRAIN_SOFT_NO_FOLLOW_ENABLED,
+        BRAIN_SL_MAX_PCT,
+        BRAIN_SOFT_NO_FOLLOW_MIN_AGE,
+        BRAIN_SOFT_NO_FOLLOW_LOSS_PCT,
+    )
+    assert BRAIN_SL_MAX_PCT == 4.5
+    assert BRAIN_SOFT_NO_FOLLOW_ENABLED is True
+    assert BRAIN_SOFT_NO_FOLLOW_MIN_AGE == 45
+    assert BRAIN_SOFT_NO_FOLLOW_LOSS_PCT == -1.2
+    # 45min 未到 → 不砍；到时 + 峰低 + 浮亏够深 → 砍
+    assert check_brain_soft_no_follow(-0.015, 0.002, 40 * 60) is None
+    assert check_brain_soft_no_follow(-0.015, 0.002, 45 * 60)
+    assert check_brain_soft_no_follow(-0.015, 0.008, 60 * 60) is None  # 峰已过高
     act8, pull8, _ = trail_levels_from_sl_tp(8.0, 12.0)
     assert act8 <= 1.0  # 宽仓激活≤1.0%，峰1.1%可锁
     assert check_brain_trail_lock(0.006, 0.011, activate_pct=act8, pullback_pct=pull8)
     act_tight, _, _ = trail_levels_from_sl_tp(2.5, 3.0)
     assert BRAIN_TRAIL_ACTIVATE_MIN_PCT <= act_tight <= BRAIN_TRAIL_ACTIVATE_MAX_PCT
+    # 新开仓 SL 不得再评估到 8%
+    wide = evaluate_brain_risk_params(
+        playbook="A1", side="LONG", atr_pct=5.0, win_prob=0.70, edge_score=0.8,
+    )
+    assert wide["sl_pct"] <= BRAIN_SL_MAX_PCT
     mon = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
     if "max_profit_pct" not in mon or "db_peak" not in mon:
         _fail("monitor 未从 DB 恢复 peak")

@@ -11,7 +11,7 @@ BRAIN_MARGIN_USD = 500.0
 # 持仓：过渡 fallback（评估失败时）；正常由 brain_risk_params 按币评估
 BRAIN_HOLD_HOURS = 6
 BRAIN_LIMIT_TIMEOUT_MINUTES = 30
-BRAIN_SL_PCT = 5.0   # fallback 百分点
+BRAIN_SL_PCT = 4.5  # fallback 百分点（与 SL 上限对齐；v4.5.7）
 BRAIN_TP_PCT = 8.0   # fallback 百分点
 # 测试期：True=直接市价开仓（INV-BRAIN-06 限价防插针暂缓）；恢复限价时改 False
 BRAIN_USE_MARKET_ENTRY = True
@@ -20,7 +20,8 @@ BRAIN_STRATEGIC_CLOSE_ENABLED = False
 
 # 按币评估上下限（§7.3.16；v4.5.3 抬高 SL 地板，减少 1.5% 噪音扫损）
 BRAIN_SL_MIN_PCT = 2.5
-BRAIN_SL_MAX_PCT = 8.0
+# v4.5.7：上限 8%→4.5%，避免宽 SL 扛到大亏（如 1000RATS -440）；trail 仍锁峰≈1%
+BRAIN_SL_MAX_PCT = 4.5
 BRAIN_TP_MIN_PCT = 3.0
 BRAIN_TP_MAX_PCT = 12.0
 BRAIN_HOLD_MIN_HOURS = 0.75  # 45min
@@ -37,12 +38,12 @@ BRAIN_TRAIL_ACTIVATE_MIN_PCT = 0.8
 BRAIN_TRAIL_ACTIVATE_MAX_PCT = 1.0
 BRAIN_TRAIL_SL_FRAC = 0.25  # 相对本笔 SL
 BRAIN_TRAIL_TP_FRAC = 0.40  # 相对本笔 TP
-# 无跟进早砍：v4.5.4 关闭——高胜率仍亏钱主因（均亏≈均赢×2；soft 单日拖累大于 trail 增益的「净」）
-# 亏损改交给硬 SL；trail 继续锁利
-BRAIN_SOFT_NO_FOLLOW_ENABLED = False
-BRAIN_SOFT_NO_FOLLOW_MIN_AGE = 60  # minutes（保留参数，开关重开时用）
+# 无跟进早砍（v4.5.7 重开）：胜率好但盈利差主因是「扛到硬 SL」——近24h 硬 SL 9 笔≈-1339U，
+# 多数峰<0.5% 却持仓 1h+ 才打满 2.5%~8%。比 v4.5.4 更早更浅：45min / 峰≤0.5% / 浮亏≤-1.2%
+BRAIN_SOFT_NO_FOLLOW_ENABLED = True
+BRAIN_SOFT_NO_FOLLOW_MIN_AGE = 45  # minutes
 BRAIN_SOFT_NO_FOLLOW_MAX_PEAK_PCT = 0.5
-BRAIN_SOFT_NO_FOLLOW_LOSS_PCT = -1.5
+BRAIN_SOFT_NO_FOLLOW_LOSS_PCT = -1.2
 
 WIN_PROB_MIN = 0.55
 # 开仓方向胜率须比反方向至少高这么多（百分点，0.05=5pp）
