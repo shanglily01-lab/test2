@@ -173,6 +173,8 @@ def test_brain_skip_open_advisor() -> None:
     trail_mod = (ROOT / "app/services/brain_trail_exit.py").read_text(encoding="utf-8")
     if "check_brain_trail_lock" not in trail_mod or "check_brain_soft_no_follow" not in trail_mod:
         _fail("brain_trail_exit 缺 trail/soft")
+    elif "check_brain_max_loss_usd" not in trail_mod:
+        _fail("brain_trail_exit 缺 max_loss_usd")
     else:
         _ok("brain_trail_exit")
     orch2 = (ROOT / "app/services/brain_strategy_orchestrator.py").read_text(encoding="utf-8")
@@ -234,15 +236,26 @@ def test_brain_risk_params() -> None:
         BRAIN_SL_MAX_PCT,
         BRAIN_SOFT_NO_FOLLOW_MIN_AGE,
         BRAIN_SOFT_NO_FOLLOW_LOSS_PCT,
+        BRAIN_SOFT_NO_FOLLOW_MAX_PEAK_PCT,
+        BRAIN_MAX_LOSS_USD,
     )
     assert BRAIN_SL_MAX_PCT == 4.5
     assert BRAIN_SOFT_NO_FOLLOW_ENABLED is True
-    assert BRAIN_SOFT_NO_FOLLOW_MIN_AGE == 45
+    assert BRAIN_SOFT_NO_FOLLOW_MIN_AGE == 30
     assert BRAIN_SOFT_NO_FOLLOW_LOSS_PCT == -1.2
-    # 45min 未到 → 不砍；到时 + 峰低 + 浮亏够深 → 砍
-    assert check_brain_soft_no_follow(-0.015, 0.002, 40 * 60) is None
-    assert check_brain_soft_no_follow(-0.015, 0.002, 45 * 60)
+    assert BRAIN_SOFT_NO_FOLLOW_MAX_PEAK_PCT == 0.75
+    assert BRAIN_MAX_LOSS_USD == 80.0
+    from app.services.brain_trail_exit import check_brain_max_loss_usd
+    # 30min 未到 → 不砍；到时 + 峰低 + 浮亏够深 → 砍
+    assert check_brain_soft_no_follow(-0.015, 0.002, 25 * 60) is None
+    assert check_brain_soft_no_follow(-0.015, 0.002, 30 * 60)
     assert check_brain_soft_no_follow(-0.015, 0.008, 60 * 60) is None  # 峰已过高
+    assert check_brain_max_loss_usd(-79.9) is None
+    assert check_brain_max_loss_usd(-80.0)
+    assert check_brain_max_loss_usd(-225.0)
+    mon2 = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
+    if "check_brain_max_loss_usd" not in mon2:
+        _fail("monitor 未接入 brain_max_loss_usd")
     act8, pull8, _ = trail_levels_from_sl_tp(8.0, 12.0)
     assert act8 <= 1.0  # 宽仓激活≤1.0%，峰1.1%可锁
     assert check_brain_trail_lock(0.006, 0.011, activate_pct=act8, pullback_pct=pull8)

@@ -441,6 +441,35 @@ class PositionSLTPMonitor:
                         age_s = (utc_now_naive() - open_time).total_seconds()
                         in_tp_grace = age_s < _AI_TP_GRACE_MIN * 60
 
+                # BRAIN 美元熔断：先于硬 SL，避免 2.5% 地板打满必亏 >100U（1000×5）
+                try:
+                    from app.services.brain_config import is_brain_source as _brain_usd_src
+                    _is_brain_usd = _brain_usd_src(src)
+                except Exception:
+                    _is_brain_usd = (src or "").startswith("brain_")
+                if _is_brain_usd:
+                    from app.services.brain_trail_exit import check_brain_max_loss_usd
+                    try:
+                        lev = float(pos.get("leverage") or 5) or 5.0
+                        margin = float(pos.get("margin") or 0)
+                        if margin <= 0:
+                            qty = float(pos.get("quantity") or 0)
+                            margin = abs(qty * entry_price) / lev if lev > 0 else 0.0
+                        u_pnl = margin * lev * pnl_pct
+                    except (TypeError, ValueError):
+                        u_pnl = 0.0
+                    usd_br = check_brain_max_loss_usd(u_pnl)
+                    if usd_br:
+                        self._sync_peak_to_db(pid, new_peak * 100)
+                        logger.info(
+                            f"[BRAIN max_loss] pid={pid} {symbol} {side} "
+                            f"reason={usd_br} price={price:.6f} pnl_pct={pnl_pct * 100:.2f}%"
+                        )
+                        self._cooldown[pid] = now + self._cooldown_seconds
+                        self._peak_pnl_map.pop(pid, None)
+                        self._do_close(pid, symbol, side, usd_br, price, now)
+                        continue
+
                 trig = self._check_trigger(side, price, sl, tp)
                 if trig:
                     reason, trigger_price = trig
@@ -794,7 +823,7 @@ class PositionSLTPMonitor:
 
     def _fetch_open_positions(self) -> List[Dict[str, Any]]:
         sql = (
-            "SELECT id, symbol, position_side, entry_price, leverage, "
+            "SELECT id, symbol, position_side, entry_price, leverage, margin, quantity, "
             "       stop_loss_price, take_profit_price, liquidation_price, "
             "       source, open_time, planned_close_time, max_profit_pct "
             "FROM futures_positions "

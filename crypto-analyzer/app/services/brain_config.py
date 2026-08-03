@@ -38,12 +38,15 @@ BRAIN_TRAIL_ACTIVATE_MIN_PCT = 0.8
 BRAIN_TRAIL_ACTIVATE_MAX_PCT = 1.0
 BRAIN_TRAIL_SL_FRAC = 0.25  # 相对本笔 SL
 BRAIN_TRAIL_TP_FRAC = 0.40  # 相对本笔 TP
-# 无跟进早砍（v4.5.7 重开）：胜率好但盈利差主因是「扛到硬 SL」——近24h 硬 SL 9 笔≈-1339U，
-# 多数峰<0.5% 却持仓 1h+ 才打满 2.5%~8%。比 v4.5.4 更早更浅：45min / 峰≤0.5% / 浮亏≤-1.2%
+# 无跟进早砍（v4.5.7 重开；v4.5.8 放宽峰）：30min / 峰≤0.75% / 浮亏≤-1.2%
+# 峰 0.5→0.75：避免「峰 0.7% 未激活 trail 又躲过 soft」最终打满硬 SL（如 BROCCOLI -145）
 BRAIN_SOFT_NO_FOLLOW_ENABLED = True
-BRAIN_SOFT_NO_FOLLOW_MIN_AGE = 45  # minutes
-BRAIN_SOFT_NO_FOLLOW_MAX_PEAK_PCT = 0.5
+BRAIN_SOFT_NO_FOLLOW_MIN_AGE = 30  # minutes
+BRAIN_SOFT_NO_FOLLOW_MAX_PEAK_PCT = 0.75
 BRAIN_SOFT_NO_FOLLOW_LOSS_PCT = -1.2
+# 美元熔断（v4.5.8）：浮亏 ≤ -80U 立即平。1000U×5×2.5%≈125U，硬 SL 打满必破 100U；
+# soft/% 止损拦不住插针跳空时，用金额封顶（单跳过大仍可能一次滑过，但多数路径可压住）
+BRAIN_MAX_LOSS_USD = 80.0
 
 WIN_PROB_MIN = 0.55
 # 开仓方向胜率须比反方向至少高这么多（百分点，0.05=5pp）

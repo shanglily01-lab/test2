@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Optional, Tuple
 
 from app.services.brain_config import (
+    BRAIN_MAX_LOSS_USD,
     BRAIN_SOFT_NO_FOLLOW_ENABLED,
     BRAIN_SOFT_NO_FOLLOW_LOSS_PCT,
     BRAIN_SOFT_NO_FOLLOW_MAX_PEAK_PCT,
@@ -99,4 +100,18 @@ def check_brain_soft_no_follow(
             f"brain_soft_no_follow(age={age_s / 60:.0f}m, "
             f"peak={peak_pct * 100:.2f}%, pnl={pnl_pct * 100:.2f}%)"
         )
+    return None
+
+
+def check_brain_max_loss_usd(unrealized_usd: float) -> Optional[str]:
+    """浮亏美元熔断：≤ -BRAIN_MAX_LOSS_USD → 平（与硬 SL/% soft 互补）。"""
+    try:
+        lim = float(BRAIN_MAX_LOSS_USD)
+        u = float(unrealized_usd)
+    except (TypeError, ValueError):
+        return None
+    if lim <= 0:
+        return None
+    if u <= -abs(lim):
+        return f"brain_max_loss_usd(u_pnl={u:.2f}, lim={-abs(lim):.0f})"
     return None
