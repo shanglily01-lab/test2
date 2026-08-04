@@ -1,12 +1,12 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.8  
-**日期**: 2026-08-03  
+**版本**: v4.5.9  
+**日期**: 2026-08-04  
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
 > **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。  
 > **BRAIN v2 机会识别（§7.3.10–7.3.15）**：**已落地且开仓机会判定视为相对客观**；退出/风控见 §7.3.16。  
-> **BRAIN 退出（§7.3.16 / REQ-BRAIN-RISK · v4.5.8）**：硬 SL/TP（SL **2.5~4.5%**）+ trail + soft（**30min** / 峰≤**0.75%** / ≤**-1.2%**）+ **美元熔断 -80U**（先于硬 SL）；peak 落库/恢复。  
+> **BRAIN 退出（§7.3.16 / REQ-BRAIN-RISK · v4.5.9）**：浮亏≥**20U** 且 **5m 持续逆势无反转** → `brain_5m_adverse` 早撤；另有 soft / **-80U** 熔断 / 硬 SL；trail 锁利。  
 > **BRAIN 入场收紧（v4.5.6）**：`edge_score≥0.75`；A/B 须 `confirmed`；**B2/C1 暂不开仓**（仍识别打标）；保证金仍 L0=1000U（不改）。
 
 > 旧版 `design/需求文档.md`（v3.6）已过时，仅作历史参考。  
@@ -346,7 +346,7 @@
 | 计划持仓 | **按币评估** hold（约 0.75–8h）；失败才 fallback **6h** |
 | 杠杆 / 保证金 | **5x** / 模拟按评级（L0 常见 **1000U**） |
 | 入场 | 测试期市价（`BRAIN_USE_MARKET_ENTRY`） |
-| 平仓路径 | **美元熔断 -80U** → 硬 SL/TP → `brain_trail_lock` → **soft 无跟进** → 计划到期；关战略平仓；跳过 DeepSeek 持仓顾问；**禁止**旧 ai-trail/soft/trend |
+| 平仓路径 | **5m 逆势早撤（亏≥20U）** → **美元熔断 -80U** → 硬 SL/TP → `brain_trail_lock` → **soft 无跟进** → 计划到期；关战略平仓；跳过 DeepSeek 持仓顾问；**禁止**旧 ai-trail/soft/trend |
 
 **对齐默认**（实现可微调但须文档化）：
 
@@ -415,6 +415,7 @@
 |------|------|
 | 硬 SL | 触及本笔评估写出的 `stop_loss_price` → 平 |
 | 硬 TP | 触及本笔评估写出的 `take_profit_price` → 平（开仓后短 TP grace 仍适用） |
+| 5m 逆势早撤 | 浮亏 ≥ **20U** 且近 5m **持续逆势无反转**（近端连续 ≥3 根逆势，或近窗 4/5 逆势）→ `brain_5m_adverse`（极端行情连续反向很少收回） |
 | 美元熔断 | 浮亏 ≤ **-80U** → `brain_max_loss_usd`（**先于**硬 SL；压住 1000U×5×2.5%≈125U 打满） |
 | 程序化锁利 | `brain_trail_lock`：峰值达激活线（**min(本笔 TP×40%, SL×25%)**，夹 **0.8%~1.0%**）后，回撤达线 → 平；peak 以内存∪`max_profit_pct` 为准并回写 DB |
 | 无跟进早砍 | **开启**（v4.5.8）：持仓 ≥**30min** 且峰值 ≤**0.75%** 且价格浮亏 ≤**-1.2%** → `brain_soft_no_follow` |
@@ -696,16 +697,17 @@
 ##### 7.3.16.4 决策优先级（BRAIN 持仓生命周期）
 
 ```text
-1. brain_max_loss_usd（浮亏≤-80U）→ 平
-2. 硬 SL → 平
-3. 硬 TP → 平
-4. brain_trail_lock → 平
-5. brain_soft_no_follow → 平（30min / 峰≤0.75% / 浮亏≤-1.2%）
-6. planned_close_time → 平
-7. 战略翻转 / DeepSeek 持仓顾问 — 仍关 / 仍跳过
+1. brain_5m_adverse（亏≥20U + 5m 持续逆势无反转）→ 平
+2. brain_max_loss_usd（浮亏≤-80U）→ 平
+3. 硬 SL → 平
+4. 硬 TP → 平
+5. brain_trail_lock → 平
+6. brain_soft_no_follow → 平（30min / 峰≤0.75% / 浮亏≤-1.2%）
+7. planned_close_time → 平
+8. 战略翻转 / DeepSeek 持仓顾问 — 仍关 / 仍跳过
 ```
 
-（实现上 monitor 先判计划到期；BRAIN 在硬 SL 前判美元熔断，再硬 SL/TP，再 trail/soft。）
+（实现上 monitor 先判计划到期；BRAIN 在硬 SL 前判 5m 逆势与美元熔断，再硬 SL/TP，再 trail/soft。）
 
 ##### 7.3.16.5 实现路径（已落地）
 
@@ -724,6 +726,7 @@
 - [x] 激活后：**回撤即平**（仍保留硬 TP 作为另一出口）
 - [x] soft 无跟进：**v4.5.8**（30min / 峰≤0.75% / 浮亏≤-1.2%）
 - [x] **美元熔断 -80U**（v4.5.8；先于硬 SL，针对 >100U 大亏）
+- [x] **5m 逆势早撤**（v4.5.9；亏≥20U + 连续逆势无反转）
 - [x] SL 上限：**4.5%**（v4.5.7；原 8% 易出 -400U 级单笔）
 - [x] 探索/预测：**先只改 BRAIN**
 - [x] SL 地板：**2.5%**（v4.5.3；忌大批量 1.5% 扫损）
@@ -884,7 +887,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-MIDLINE | `midline_swing_config.py`, `midline_swing_scanner.py`, `midline_explore_worker.py`（或 `midline_worker`）, `midline_swing_api.py`, 中线策略页 JS/模板, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
 | **REQ-BRAIN** | `brain_config` / `brain_wick` / `brain_market_analyzer` / `brain_winrate` / `brain_strategy_orchestrator`；`scheduler.py`；`paper_limit_entry` + executor expire；DS 自动开仓暂停；`validate_brain_req.py`；权威 §7.3 |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
-| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | SL **2.5~4.5%**；trail≤1.0%；soft 30min/峰0.75%/-1.2%；**美元熔断 -80U**；§7.3.16（**v4.5.8**） |
+| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | SL **2.5~4.5%**；trail；soft；**-80U** 熔断；**5m 逆势早撤（亏≥20U）**；§7.3.16（**v4.5.9**） |
 | REQ-ST | `smart_trader_service.py` |
 
 ---
@@ -893,6 +896,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-04 | **v4.5.9** | **5m 逆势早撤**：浮亏≥20U 且 5m 持续逆势无反转 → `brain_5m_adverse`；极端行情连续反向很少收回，不必等 soft/-80 |
 | 2026-08-03 | **v4.5.8** | **压住 >100U 大亏**：美元熔断 **-80U**（先于硬 SL）；soft 提前到 30min、峰门槛 0.75%（修峰≈0.7% 躲 soft 打满 SL） |
 | 2026-08-03 | **v4.5.7** | **止损滞后修刀**：重开 soft（45min/峰≤0.5%/浮亏≤-1.2%）；SL 上限 8%→**4.5%**；针对胜率好却被硬 SL 大亏吃光 |
 | 2026-08-02 | **v4.5.6** | **BRAIN 入场收紧**：`edge≥0.75`；A/B 须 `confirmed`；**B2/C1 暂不开仓**（仍打标）；少开 timeout/不跟进仓；**保证金仍 L0=1000U** |

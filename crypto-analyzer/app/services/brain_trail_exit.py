@@ -4,6 +4,9 @@ from __future__ import annotations
 from typing import Optional, Tuple
 
 from app.services.brain_config import (
+    BRAIN_ADVERSE_5M_ENABLED,
+    BRAIN_ADVERSE_5M_MIN_LOSS_USD,
+    BRAIN_ADVERSE_5M_TRAIL_MIN,
     BRAIN_MAX_LOSS_USD,
     BRAIN_SOFT_NO_FOLLOW_ENABLED,
     BRAIN_SOFT_NO_FOLLOW_LOSS_PCT,
@@ -115,3 +118,37 @@ def check_brain_max_loss_usd(unrealized_usd: float) -> Optional[str]:
     if u <= -abs(lim):
         return f"brain_max_loss_usd(u_pnl={u:.2f}, lim={-abs(lim):.0f})"
     return None
+
+
+def check_brain_5m_adverse(
+    unrealized_usd: float,
+    *,
+    trail_against: int,
+    against: int,
+    favor: int,
+    total: int,
+) -> Optional[str]:
+    """浮亏≥20U 且 5m 持续逆势、未见反转 → 早撤。
+
+    trail_against：从最新往回数的连续逆势 K 数；against/favor/total 为近窗统计。
+    """
+    if not BRAIN_ADVERSE_5M_ENABLED:
+        return None
+    try:
+        u = float(unrealized_usd)
+        trail = int(trail_against or 0)
+        ag = int(against or 0)
+        fav = int(favor or 0)
+        tot = int(total or 0)
+    except (TypeError, ValueError):
+        return None
+    if u > -abs(float(BRAIN_ADVERSE_5M_MIN_LOSS_USD)):
+        return None
+    continuous = trail >= int(BRAIN_ADVERSE_5M_TRAIL_MIN)
+    majority = tot >= 4 and ag >= 4 and ag > fav
+    if not (continuous or majority):
+        return None
+    return (
+        f"brain_5m_adverse(u_pnl={u:.2f}, trail={trail}, "
+        f"against={ag}/{tot}, favor={fav})"
+    )

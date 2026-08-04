@@ -175,6 +175,8 @@ def test_brain_skip_open_advisor() -> None:
         _fail("brain_trail_exit 缺 trail/soft")
     elif "check_brain_max_loss_usd" not in trail_mod:
         _fail("brain_trail_exit 缺 max_loss_usd")
+    elif "check_brain_5m_adverse" not in trail_mod:
+        _fail("brain_trail_exit 缺 5m_adverse")
     else:
         _ok("brain_trail_exit")
     orch2 = (ROOT / "app/services/brain_strategy_orchestrator.py").read_text(encoding="utf-8")
@@ -253,9 +255,24 @@ def test_brain_risk_params() -> None:
     assert check_brain_max_loss_usd(-79.9) is None
     assert check_brain_max_loss_usd(-80.0)
     assert check_brain_max_loss_usd(-225.0)
+    from app.services.brain_trail_exit import check_brain_5m_adverse
+    from app.services.brain_config import (
+        BRAIN_ADVERSE_5M_ENABLED,
+        BRAIN_ADVERSE_5M_MIN_LOSS_USD,
+        BRAIN_ADVERSE_5M_TRAIL_MIN,
+    )
+    assert BRAIN_ADVERSE_5M_ENABLED is True
+    assert BRAIN_ADVERSE_5M_MIN_LOSS_USD == 20.0
+    assert BRAIN_ADVERSE_5M_TRAIL_MIN == 3
+    assert check_brain_5m_adverse(-15.0, trail_against=5, against=5, favor=0, total=5) is None
+    assert check_brain_5m_adverse(-25.0, trail_against=2, against=2, favor=3, total=5) is None
+    assert check_brain_5m_adverse(-25.0, trail_against=3, against=3, favor=2, total=5)
+    assert check_brain_5m_adverse(-25.0, trail_against=1, against=4, favor=1, total=5)
     mon2 = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
     if "check_brain_max_loss_usd" not in mon2:
         _fail("monitor 未接入 brain_max_loss_usd")
+    if "_check_brain_5m_adverse_exit" not in mon2 or "brain_5m_adverse" not in mon2:
+        _fail("monitor 未接入 brain_5m_adverse")
     act8, pull8, _ = trail_levels_from_sl_tp(8.0, 12.0)
     assert act8 <= 1.0  # 宽仓激活≤1.0%，峰1.1%可锁
     assert check_brain_trail_lock(0.006, 0.011, activate_pct=act8, pullback_pct=pull8)

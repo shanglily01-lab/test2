@@ -448,6 +448,7 @@ class PositionSLTPMonitor:
                 except Exception:
                     _is_brain_usd = (src or "").startswith("brain_")
                 if _is_brain_usd:
+                    from app.services.brain_config import BRAIN_ADVERSE_5M_MIN_LOSS_USD
                     from app.services.brain_trail_exit import check_brain_max_loss_usd
                     try:
                         lev = float(pos.get("leverage") or 5) or 5.0
@@ -458,6 +459,22 @@ class PositionSLTPMonitor:
                         u_pnl = margin * lev * pnl_pct
                     except (TypeError, ValueError):
                         u_pnl = 0.0
+                    # 浮亏≥20U：5m 持续逆势无反转 → 方向已反，早撤（先于 -80 熔断）
+                    if u_pnl <= -abs(float(BRAIN_ADVERSE_5M_MIN_LOSS_USD)):
+                        adv_br = self._check_brain_5m_adverse_exit(
+                            pid, symbol, side, u_pnl, now,
+                        )
+                        if adv_br:
+                            self._sync_peak_to_db(pid, new_peak * 100)
+                            logger.info(
+                                f"[BRAIN 5m_adverse] pid={pid} {symbol} {side} "
+                                f"reason={adv_br} price={price:.6f}"
+                            )
+                            self._cooldown[pid] = now + self._cooldown_seconds
+                            self._peak_pnl_map.pop(pid, None)
+                            self._trend_exit_cache.pop(pid, None)
+                            self._do_close(pid, symbol, side, adv_br, price, now)
+                            continue
                     usd_br = check_brain_max_loss_usd(u_pnl)
                     if usd_br:
                         self._sync_peak_to_db(pid, new_peak * 100)
@@ -642,6 +659,82 @@ class PositionSLTPMonitor:
             self._cooldown[pid] = now + self._cooldown_seconds
             self._peak_pnl_map.pop(pid, None)
             self._do_close(pid, symbol, side, reason, trigger_price, now)
+
+    def _check_brain_5m_adverse_exit(
+        self,
+        pid: int,
+        symbol: str,
+        side: str,
+        unrealized_usd: float,
+        now: float,
+    ) -> Optional[str]:
+        """BRAIN：浮亏≥20U 后看 5m 持续逆势；无反转则早撤。"""
+        from app.services.brain_config import BRAIN_ADVERSE_5M_BARS, BRAIN_ADVERSE_5M_CACHE_TTL_S
+        from app.services.brain_trail_exit import check_brain_5m_adverse
+
+        cached = self._trend_exit_cache.get(pid)
+        # 仅复用「已判定应平」；None 不缓存拦截，避免逆势刚成形时被 20s 空缓存挡住
+        if cached and cached[1] and (now - cached[0]) < float(BRAIN_ADVERSE_5M_CACHE_TTL_S):
+            return cached[1]
+
+        rows = self._fetch_5m_klines(symbol, int(BRAIN_ADVERSE_5M_BARS))
+        if not rows:
+            self._trend_exit_cache[pid] = (now, None)
+            return None
+        s5 = self._summarize_against_klines(rows, side)
+        reason = check_brain_5m_adverse(
+            unrealized_usd,
+            trail_against=s5["trail_against"],
+            against=s5["against"],
+            favor=s5["for"],
+            total=s5["total"],
+        )
+        self._trend_exit_cache[pid] = (now, reason)
+        return reason
+
+    def _fetch_5m_klines(self, symbol: str, limit: int = 5) -> list:
+        """优先 DataHub 5m；失败回退 DB kline_data。"""
+        rows = None
+        try:
+            from app.services.binance_data_hub import get_global_data_hub
+
+            hub = get_global_data_hub()
+            if hub is not None:
+                rows = hub.get_klines_sync(
+                    symbol, interval="5m", limit=limit, allow_rest_fallback=False,
+                )
+        except Exception as e:
+            logger.debug(f"[BRAIN 5m] DataHub kline fail {symbol}: {e}")
+        if rows:
+            return list(rows)
+        try:
+            from app.utils.futures_symbol import futures_symbol_kline_keys
+
+            keys = futures_symbol_kline_keys(symbol)
+            conn = pymysql.connect(**_db_cfg())
+            try:
+                with conn.cursor() as c:
+                    placeholders = ",".join(["%s"] * len(keys))
+                    c.execute(
+                        f"""
+                        SELECT open_price, high_price, low_price, close_price, volume
+                        FROM kline_data
+                        WHERE symbol IN ({placeholders})
+                          AND timeframe='5m'
+                          AND exchange='binance_futures'
+                        ORDER BY `timestamp` DESC
+                        LIMIT %s
+                        """,
+                        tuple(keys) + (int(limit),),
+                    )
+                    db_rows = c.fetchall() or []
+            finally:
+                conn.close()
+            # DB 是新→旧，summarize 需要旧→新
+            return list(reversed(db_rows))
+        except Exception as e:
+            logger.debug(f"[BRAIN 5m] DB kline fail {symbol}: {e}")
+            return []
 
     def _check_ai_trend_exit(
         self,

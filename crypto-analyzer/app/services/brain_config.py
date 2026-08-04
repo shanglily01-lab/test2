@@ -47,6 +47,13 @@ BRAIN_SOFT_NO_FOLLOW_LOSS_PCT = -1.2
 # 美元熔断（v4.5.8）：浮亏 ≤ -80U 立即平。1000U×5×2.5%≈125U，硬 SL 打满必破 100U；
 # soft/% 止损拦不住插针跳空时，用金额封顶（单跳过大仍可能一次滑过，但多数路径可压住）
 BRAIN_MAX_LOSS_USD = 80.0
+# 5m 逆势早撤（v4.5.9）：极端行情连续反向很少收回——浮亏≥20U 后看 5m；
+# 近端连续逆势（无反转阳/阴）→ 方向已反，提前撤离，不必等到 soft/-80
+BRAIN_ADVERSE_5M_ENABLED = True
+BRAIN_ADVERSE_5M_MIN_LOSS_USD = 20.0
+BRAIN_ADVERSE_5M_BARS = 5
+BRAIN_ADVERSE_5M_TRAIL_MIN = 3  # 近端连续 ≥3 根 5m 逆势（≈15min）
+BRAIN_ADVERSE_5M_CACHE_TTL_S = 20
 
 WIN_PROB_MIN = 0.55
 # 开仓方向胜率须比反方向至少高这么多（百分点，0.05=5pp）
