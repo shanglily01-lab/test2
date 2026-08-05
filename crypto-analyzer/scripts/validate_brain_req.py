@@ -45,7 +45,10 @@ def test_imports_and_config() -> None:
     assert BRAIN_REQUIRE_CONFIRMED_PREFIXES == ("A", "B")
     assert "B2" not in TRADEABLE_PLAYBOOKS
     assert "C1" not in TRADEABLE_PLAYBOOKS
+    assert "A2" not in TRADEABLE_PLAYBOOKS  # v4.5.11 暂暂停空头趋势反抽
     assert "A1" in TRADEABLE_PLAYBOOKS and "B1" in TRADEABLE_PLAYBOOKS
+    from app.services.brain_config import BRAIN_MIN_EDGE_SCORE_SHORT
+    assert BRAIN_MIN_EDGE_SCORE_SHORT == 0.90
     assert BRAIN_SL_PCT >= 1.0, f"BRAIN_SL_PCT={BRAIN_SL_PCT} 疑似小数比例，应为百分点"
     assert BRAIN_TP_PCT >= 1.0, f"BRAIN_TP_PCT={BRAIN_TP_PCT} 疑似小数比例，应为百分点"
     assert is_brain_source(BRAIN_SOURCE)
@@ -258,12 +261,13 @@ def test_brain_risk_params() -> None:
         BRAIN_ADVERSE_5M_TRAIL_MIN,
     )
     assert BRAIN_ADVERSE_5M_ENABLED is True
-    assert BRAIN_ADVERSE_5M_MIN_LOSS_USD == 20.0
-    assert BRAIN_ADVERSE_5M_TRAIL_MIN == 3
+    assert BRAIN_ADVERSE_5M_MIN_LOSS_USD == 40.0
+    assert BRAIN_ADVERSE_5M_TRAIL_MIN == 4
     assert check_brain_5m_adverse(-15.0, trail_against=5, against=5, favor=0, total=5) is None
-    assert check_brain_5m_adverse(-25.0, trail_against=2, against=2, favor=3, total=5) is None
-    assert check_brain_5m_adverse(-25.0, trail_against=3, against=3, favor=2, total=5)
-    assert check_brain_5m_adverse(-25.0, trail_against=1, against=4, favor=1, total=5)
+    assert check_brain_5m_adverse(-25.0, trail_against=4, against=4, favor=1, total=5) is None  # 未到 40U
+    assert check_brain_5m_adverse(-45.0, trail_against=3, against=3, favor=2, total=5) is None  # 连续不足
+    assert check_brain_5m_adverse(-45.0, trail_against=4, against=4, favor=1, total=5)
+    assert check_brain_5m_adverse(-45.0, trail_against=1, against=4, favor=1, total=5)
     mon2 = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
     if "check_brain_max_loss_usd" not in mon2:
         _fail("monitor 未接入 brain_max_loss_usd")

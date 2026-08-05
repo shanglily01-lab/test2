@@ -23,6 +23,7 @@ from app.services.brain_config import (
     BRAIN_LIMIT_TIMEOUT_MINUTES,
     BRAIN_MARGIN_USD,
     BRAIN_MIN_EDGE_SCORE,
+    BRAIN_MIN_EDGE_SCORE_SHORT,
     BRAIN_POOL_REFRESH_EVERY_TICKS,
     BRAIN_REQUIRE_CONFIRMED_PREFIXES,
     BRAIN_SL_PCT,
@@ -405,37 +406,43 @@ def _analyze_one(
         ok_wp, wp_reason = directional_open_allowed(side, wl, ws)
         if not ok_wp:
             skip_reason = wp_reason
-        elif float(pb.get("edge_score") or 0) < BRAIN_MIN_EDGE_SCORE:
-            skip_reason = "low_edge"
-        elif (
-            not pb.get("confirmed")
-            and str(playbook).startswith(BRAIN_REQUIRE_CONFIRMED_PREFIXES)
-        ):
-            # A/B 须 confirmed，压低「不跟进」timeout 入场
-            skip_reason = "unconfirmed"
-        elif not allow_open:
-            skip_reason = "tick_open_quota"
         else:
-            # 发现机会 → 立即下单（测试期市价；见 BRAIN_USE_MARKET_ENTRY）
-            order_id, gate_reason = _open_brain_entry(
-                conn,
-                symbol=sym,
-                side=side,
-                price=float(price),
-                playbook_row=pb,
-                win_long=wl,
-                win_short=ws,
-                rows_15m=rows_15m,
+            min_edge = (
+                BRAIN_MIN_EDGE_SCORE_SHORT
+                if side == "SHORT"
+                else BRAIN_MIN_EDGE_SCORE
             )
-            if order_id:
-                decision = "OPENED"
-                _mark_open_cooldown(sym)
-                logger.info(
-                    f"[BRAIN即时开仓] {sym} {side} {playbook} id={order_id}"
-                )
+            if float(pb.get("edge_score") or 0) < min_edge:
+                skip_reason = "low_edge"
+            elif (
+                not pb.get("confirmed")
+                and str(playbook).startswith(BRAIN_REQUIRE_CONFIRMED_PREFIXES)
+            ):
+                # A/B 须 confirmed，压低「不跟进」timeout 入场
+                skip_reason = "unconfirmed"
+            elif not allow_open:
+                skip_reason = "tick_open_quota"
             else:
-                skip_reason = gate_reason or "ds_or_gate_reject"
-                _mark_open_cooldown(sym)  # 失败也冷却，避免连打 DS
+                # 发现机会 → 立即下单（测试期市价；见 BRAIN_USE_MARKET_ENTRY）
+                order_id, gate_reason = _open_brain_entry(
+                    conn,
+                    symbol=sym,
+                    side=side,
+                    price=float(price),
+                    playbook_row=pb,
+                    win_long=wl,
+                    win_short=ws,
+                    rows_15m=rows_15m,
+                )
+                if order_id:
+                    decision = "OPENED"
+                    _mark_open_cooldown(sym)
+                    logger.info(
+                        f"[BRAIN即时开仓] {sym} {side} {playbook} id={order_id}"
+                    )
+                else:
+                    skip_reason = gate_reason or "ds_or_gate_reject"
+                    _mark_open_cooldown(sym)  # 失败也冷却，避免连打 DS
 
     try:
         insert_opportunity(

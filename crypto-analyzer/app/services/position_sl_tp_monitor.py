@@ -459,7 +459,7 @@ class PositionSLTPMonitor:
                         u_pnl = margin * lev * pnl_pct
                     except (TypeError, ValueError):
                         u_pnl = 0.0
-                    # 浮亏≥20U：5m 持续逆势无反转 → 方向已反，早撤（先于 -80 熔断）
+                    # 浮亏≥40U：5m 持续逆势无反转 → 方向已反，早撤（先于 -80 熔断）
                     if u_pnl <= -abs(float(BRAIN_ADVERSE_5M_MIN_LOSS_USD)):
                         adv_br = self._check_brain_5m_adverse_exit(
                             pid, symbol, side, u_pnl, now,
@@ -668,7 +668,7 @@ class PositionSLTPMonitor:
         unrealized_usd: float,
         now: float,
     ) -> Optional[str]:
-        """BRAIN：浮亏≥20U 后看 5m 持续逆势；无反转则早撤。"""
+        """BRAIN：浮亏≥40U 后看 5m 持续逆势；无反转则早撤。"""
         from app.services.brain_config import BRAIN_ADVERSE_5M_BARS, BRAIN_ADVERSE_5M_CACHE_TTL_S
         from app.services.brain_trail_exit import check_brain_5m_adverse
 

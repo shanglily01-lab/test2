@@ -128,7 +128,7 @@ def check_brain_5m_adverse(
     favor: int,
     total: int,
 ) -> Optional[str]:
-    """浮亏≥20U 且 5m 持续逆势、未见反转 → 早撤。
+    """浮亏≥40U 且 5m 持续逆势、未见反转 → 早撤（v4.5.11）。
 
     trail_against：从最新往回数的连续逆势 K 数；against/favor/total 为近窗统计。
     """

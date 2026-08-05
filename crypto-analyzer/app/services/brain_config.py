@@ -46,12 +46,12 @@ BRAIN_SOFT_NO_FOLLOW_LOSS_PCT = -1.2
 # 美元熔断（v4.5.8）：浮亏 ≤ -80U 立即平。1000U×5×2.5%≈125U，硬 SL 打满必破 100U；
 # soft/% 止损拦不住插针跳空时，用金额封顶（单跳过大仍可能一次滑过，但多数路径可压住）
 BRAIN_MAX_LOSS_USD = 80.0
-# 5m 逆势早撤（v4.5.9）：极端行情连续反向很少收回——浮亏≥20U 后看 5m；
-# 近端连续逆势（无反转阳/阴）→ 方向已反，提前撤离，不必等到 soft/-80
+# 5m 逆势早撤（v4.5.11 收紧）：期望值优先——20U+3 根开火过勤（近半仓、胜率砸到~37%）
+# 改为亏≥40U 且近端连续 ≥4 根 5m 逆势（≈20min）才认「方向已反」
 BRAIN_ADVERSE_5M_ENABLED = True
-BRAIN_ADVERSE_5M_MIN_LOSS_USD = 20.0
+BRAIN_ADVERSE_5M_MIN_LOSS_USD = 40.0
 BRAIN_ADVERSE_5M_BARS = 5
-BRAIN_ADVERSE_5M_TRAIL_MIN = 3  # 近端连续 ≥3 根 5m 逆势（≈15min）
+BRAIN_ADVERSE_5M_TRAIL_MIN = 4
 BRAIN_ADVERSE_5M_CACHE_TTL_S = 20
 
 WIN_PROB_MIN = 0.55
@@ -62,16 +62,16 @@ WINRATE_FORWARD_HOURS = 4
 WINRATE_MIN_SAMPLES = 20
 WINRATE_SYMBOL_MIN_N = 5
 
-# 入场收紧（v4.5.6）：少开「不跟进」/timeout 仓；保证金仍走评级 L0=1000U，不改
-# 近24h 反事实：edge≥0.75 → 笔数约 105→61、PnL +456→+587，主要砍掉低 edge timeout
+# 入场（v4.5.11 期望值优先）：LONG edge≥0.75；SHORT edge≥0.90（近3日空头拖累主因）
 BRAIN_MIN_EDGE_SCORE = 0.75
+BRAIN_MIN_EDGE_SCORE_SHORT = 0.90
 # A/B 须 15m 结构确认（confirmed）；C 族仍可未确认过门（样本少，靠 edge）
 BRAIN_REQUIRE_CONFIRMED_PREFIXES = ("A", "B")
 
 # Playbook v1（§7.3.11）
-# B2（弱反抽失败）timeout 率过高；C1（向下破位）近样本负期望 → 仍识别打标，暂不开仓
+# B2/C1 暂不开；A2（空头趋势反抽）近样本量大且期望差 → v4.5.11 暂不开仓（仍识别打标）
 TRADEABLE_PLAYBOOKS = frozenset({
-    "A1", "A2", "B1", "B3", "B4", "C2", "C3", "C4",
+    "A1", "B1", "B3", "B4", "C2", "C3", "C4",
 })
 FLAT_PLAYBOOKS = frozenset({"D1", "D2"})
 PLAYBOOK_SIDE = {
