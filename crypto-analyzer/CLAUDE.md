@@ -162,7 +162,7 @@
 - `brain_swing`：L0/L1；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
 - 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**测试期市价**（`BRAIN_USE_MARKET_ENTRY`）
 - **入场收紧（v4.5.6）**：`edge≥0.75`；A/B 须 `confirmed`；**B2/C1 暂不开仓**；保证金仍 L0=1000U
-- **退出（v4.5.9）**：亏≥**20U** + **5m 持续逆势无反转** → 早撤；另 soft / **-80U** / 硬 SL；trail 锁利；peak 落库
+- **退出（v4.5.10）**：亏≥**20U** + **5m 逆势无反转** → 早撤；**-80U**；硬 SL；trail；**soft 关**
 - 防插针：影>实体×2；频繁则平均插针限价；超时取消；**测试期 INV-BRAIN-06 暂缓**
 - **对照期**：DeepSeek 探索/预测自动开仓**暂保留**并行对比；结束后再执行 INV-BRAIN-07
 - 调度：BRAIN **每15s** 一批5币；`validate_brain_req.py`；页 `/brain_strategy`

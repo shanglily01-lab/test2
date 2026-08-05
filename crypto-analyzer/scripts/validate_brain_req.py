@@ -242,16 +242,12 @@ def test_brain_risk_params() -> None:
         BRAIN_MAX_LOSS_USD,
     )
     assert BRAIN_SL_MAX_PCT == 4.5
-    assert BRAIN_SOFT_NO_FOLLOW_ENABLED is True
-    assert BRAIN_SOFT_NO_FOLLOW_MIN_AGE == 30
-    assert BRAIN_SOFT_NO_FOLLOW_LOSS_PCT == -1.2
-    assert BRAIN_SOFT_NO_FOLLOW_MAX_PEAK_PCT == 0.75
+    assert BRAIN_SOFT_NO_FOLLOW_ENABLED is False
     assert BRAIN_MAX_LOSS_USD == 80.0
     from app.services.brain_trail_exit import check_brain_max_loss_usd
-    # 30min 未到 → 不砍；到时 + 峰低 + 浮亏够深 → 砍
-    assert check_brain_soft_no_follow(-0.015, 0.002, 25 * 60) is None
-    assert check_brain_soft_no_follow(-0.015, 0.002, 30 * 60)
-    assert check_brain_soft_no_follow(-0.015, 0.008, 60 * 60) is None  # 峰已过高
+    # soft 关闭：即使满足旧条件也不砍
+    assert check_brain_soft_no_follow(-0.015, 0.002, 30 * 60) is None
+    assert check_brain_soft_no_follow(-0.02, 0.002, 3600) is None
     assert check_brain_max_loss_usd(-79.9) is None
     assert check_brain_max_loss_usd(-80.0)
     assert check_brain_max_loss_usd(-225.0)

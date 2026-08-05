@@ -38,10 +38,9 @@ BRAIN_TRAIL_ACTIVATE_MIN_PCT = 0.8
 BRAIN_TRAIL_ACTIVATE_MAX_PCT = 1.0
 BRAIN_TRAIL_SL_FRAC = 0.25  # 相对本笔 SL
 BRAIN_TRAIL_TP_FRAC = 0.40  # 相对本笔 TP
-# 无跟进早砍（v4.5.7 重开；v4.5.8 放宽峰）：30min / 峰≤0.75% / 浮亏≤-1.2%
-# 峰 0.5→0.75：避免「峰 0.7% 未激活 trail 又躲过 soft」最终打满硬 SL（如 BROCCOLI -145）
-BRAIN_SOFT_NO_FOLLOW_ENABLED = True
-BRAIN_SOFT_NO_FOLLOW_MIN_AGE = 30  # minutes
+# 无跟进早砍：v4.5.10 关闭——有 5m 逆势早撤后 soft 重叠且更深（均约 -50U），堆笔数拖垮 PnL
+BRAIN_SOFT_NO_FOLLOW_ENABLED = False
+BRAIN_SOFT_NO_FOLLOW_MIN_AGE = 30  # minutes（保留参数，开关重开时用）
 BRAIN_SOFT_NO_FOLLOW_MAX_PEAK_PCT = 0.75
 BRAIN_SOFT_NO_FOLLOW_LOSS_PCT = -1.2
 # 美元熔断（v4.5.8）：浮亏 ≤ -80U 立即平。1000U×5×2.5%≈125U，硬 SL 打满必破 100U；
