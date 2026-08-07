@@ -1,12 +1,12 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.11  
-**日期**: 2026-08-06  
+**版本**: v4.5.12  
+**日期**: 2026-08-08  
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
 > **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。  
 > **BRAIN v2 机会识别（§7.3.10–7.3.15）**：**已落地且开仓机会判定视为相对客观**；退出/风控见 §7.3.16。  
-> **BRAIN 纠正版（v4.5.11 · 期望值优先）**：**暂停 A2**；SHORT edge≥**0.90**；5m 早撤改为亏≥**40U**+连续**4**根；soft 仍关；-80U / trail / 硬 SL 保留。  
+> **BRAIN KPI（v4.5.12）**：**盈利优先**（胜率不作优化目标）。**A1 豁免 5m 早撤**（只靠 -80U / trail / 硬 SL）；其它 Playbook 仍 40U+4 根；暂停 A2；SHORT edge≥0.90；soft 关。  
 > **BRAIN 入场收紧（v4.5.6+）**：LONG `edge≥0.75`；A/B 须 `confirmed`；**B2/C1/A2 暂不开仓**（仍识别打标）；保证金仍 L0=1000U（不改）。
 
 > 旧版 `design/需求文档.md`（v3.6）已过时，仅作历史参考。  
@@ -415,7 +415,7 @@
 |------|------|
 | 硬 SL | 触及本笔评估写出的 `stop_loss_price` → 平 |
 | 硬 TP | 触及本笔评估写出的 `take_profit_price` → 平（开仓后短 TP grace 仍适用） |
-| 5m 逆势早撤 | 浮亏 ≥ **40U** 且近 5m **持续逆势无反转**（近端连续 ≥**4** 根逆势，或近窗 4/5 逆势）→ `brain_5m_adverse`（v4.5.11 收紧，避免 20U+3 根误砍） |
+| 5m 逆势早撤 | 浮亏 ≥ **40U** 且近 5m **持续逆势无反转**（连续 ≥**4** 根或近窗 4/5）→ `brain_5m_adverse`。**A1 豁免**（v4.5.12：盈利 KPI，波段交给 -80/trail/硬 SL） |
 | 美元熔断 | 浮亏 ≤ **-80U** → `brain_max_loss_usd`（**先于**硬 SL；压住 1000U×5×2.5%≈125U 打满） |
 | 程序化锁利 | `brain_trail_lock`：峰值达激活线（**min(本笔 TP×40%, SL×25%)**，夹 **0.8%~1.0%**）后，回撤达线 → 平；peak 以内存∪`max_profit_pct` 为准并回写 DB |
 | 无跟进早砍 | **关闭**（`BRAIN_SOFT_NO_FOLLOW_ENABLED=False`；v4.5.10） |
@@ -697,7 +697,7 @@
 ##### 7.3.16.4 决策优先级（BRAIN 持仓生命周期）
 
 ```text
-1. brain_5m_adverse（亏≥40U + 5m 连续≥4 根逆势无反转）→ 平
+1. brain_5m_adverse（非 A1；亏≥40U + 5m 连续≥4 根）→ 平
 2. brain_max_loss_usd（浮亏≤-80U）→ 平
 3. 硬 SL → 平
 4. 硬 TP → 平
@@ -707,7 +707,7 @@
 8. 战略翻转 / DeepSeek 持仓顾问 — 仍关 / 仍跳过
 ```
 
-（实现上 monitor 先判计划到期；BRAIN 在硬 SL 前判 5m 逆势与美元熔断，再硬 SL/TP，再 trail；soft 关。）
+（A1：跳过步骤 1，直接 2–7。盈利优先，避免 5m 误砍波段。）
 
 ##### 7.3.16.5 实现路径（已落地）
 
@@ -726,8 +726,9 @@
 - [x] 激活后：**回撤即平**（仍保留硬 TP 作为另一出口）
 - [x] soft 无跟进：**关闭**
 - [x] **美元熔断 -80U**
-- [x] **5m 逆势早撤**：**v4.5.11** 亏≥40U + 连续≥4 根（原 20U+3 过勤）
-- [x] **暂停 A2** + SHORT edge≥0.90（v4.5.11 期望值优先）
+- [x] **5m 逆势早撤**：**v4.5.12 A1 豁免**；其它仍 40U+4 根
+- [x] **暂停 A2** + SHORT edge≥0.90（v4.5.11）
+- [x] **KPI=盈利**（胜率不作优化目标；v4.5.12）
 - [x] SL 上限：**4.5%**（v4.5.7；原 8% 易出 -400U 级单笔）
 - [x] 探索/预测：**先只改 BRAIN**
 - [x] SL 地板：**2.5%**（v4.5.3；忌大批量 1.5% 扫损）
@@ -888,7 +889,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-MIDLINE | `midline_swing_config.py`, `midline_swing_scanner.py`, `midline_explore_worker.py`（或 `midline_worker`）, `midline_swing_api.py`, 中线策略页 JS/模板, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
 | **REQ-BRAIN** | `brain_config` / `brain_wick` / `brain_market_analyzer` / `brain_winrate` / `brain_strategy_orchestrator`；`scheduler.py`；`paper_limit_entry` + executor expire；DS 自动开仓暂停；`validate_brain_req.py`；权威 §7.3 |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
-| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | 暂停 **A2**；SHORT edge≥0.90；5m≥**40U**/4根；-80U；trail；soft 关；§7.3（**v4.5.11**） |
+| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **A1 豁免 5m**；其它 40U/4根；-80U；trail；soft 关；暂停 A2；§7.3（**v4.5.12**） |
 | REQ-ST | `smart_trader_service.py` |
 
 ---
@@ -897,6 +898,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-08 | **v4.5.12** | **盈利 KPI**：**A1 豁免 5m 早撤**（只靠 -80/trail/硬 SL）；胜率不作优化目标；其它 Playbook 仍 40U+4 根 |
 | 2026-08-06 | **v4.5.11** | **期望值优先纠正**：暂停 **A2**；SHORT edge≥**0.90**；5m 早撤 **40U+4根**（原20U+3过勤砸胜率）；soft 仍关 |
 | 2026-08-05 | **v4.5.10** | **关闭 BRAIN soft**：有 5m 早撤后 soft 重叠且更深（均约-50U），堆笔拖垮；保留 5m / -80U / trail / 硬 SL |
 | 2026-08-04 | **v4.5.9** | **5m 逆势早撤**：浮亏≥20U 且 5m 持续逆势无反转 → `brain_5m_adverse`；极端行情连续反向很少收回，不必等 soft/-80 |

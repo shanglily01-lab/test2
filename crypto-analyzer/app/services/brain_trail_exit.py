@@ -6,6 +6,7 @@ from typing import Optional, Tuple
 from app.services.brain_config import (
     BRAIN_ADVERSE_5M_ENABLED,
     BRAIN_ADVERSE_5M_MIN_LOSS_USD,
+    BRAIN_ADVERSE_5M_SKIP_PLAYBOOKS,
     BRAIN_ADVERSE_5M_TRAIL_MIN,
     BRAIN_MAX_LOSS_USD,
     BRAIN_SOFT_NO_FOLLOW_ENABLED,
@@ -127,12 +128,16 @@ def check_brain_5m_adverse(
     against: int,
     favor: int,
     total: int,
+    playbook: str | None = None,
 ) -> Optional[str]:
-    """浮亏≥40U 且 5m 持续逆势、未见反转 → 早撤（v4.5.11）。
+    """浮亏≥40U 且 5m 持续逆势、未见反转 → 早撤。
 
-    trail_against：从最新往回数的连续逆势 K 数；against/favor/total 为近窗统计。
+    A1 等 BRAIN_ADVERSE_5M_SKIP_PLAYBOOKS 豁免（盈利 KPI，波段交给 -80/trail/硬SL）。
     """
     if not BRAIN_ADVERSE_5M_ENABLED:
+        return None
+    pb = (playbook or "").strip().upper().replace("BRAIN_", "")
+    if pb in BRAIN_ADVERSE_5M_SKIP_PLAYBOOKS:
         return None
     try:
         u = float(unrealized_usd)
@@ -150,5 +155,5 @@ def check_brain_5m_adverse(
         return None
     return (
         f"brain_5m_adverse(u_pnl={u:.2f}, trail={trail}, "
-        f"against={ag}/{tot}, favor={fav})"
+        f"against={ag}/{tot}, favor={fav}, pb={pb or '?'})"
     )

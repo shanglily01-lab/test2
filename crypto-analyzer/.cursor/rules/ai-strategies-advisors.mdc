@@ -41,7 +41,7 @@ alwaysApply: true
 
 **DeepSeek 选币**：仅 **L0+L1**；**DeepSeek soft-sl**：grace45 / no_follow≥60m且≈-2.2%
 
-**REQ-BRAIN §7.3**：每15s×5币；**暂停 A2**；LONG edge≥0.75 / SHORT≥0.90；退出 **5m(≥40U/4根)** / **-80U** / trail（soft 关）；`validate_brain_req.py`
+**REQ-BRAIN §7.3**：盈利 KPI；暂停 A2；**A1 豁免 5m**；其它 5m(≥40U/4根) / -80U / trail（soft 关）；`validate_brain_req.py`
 
 ## 顾问路由 (`open_advisor_routing.py`)
 

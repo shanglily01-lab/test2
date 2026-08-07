@@ -263,11 +263,20 @@ def test_brain_risk_params() -> None:
     assert BRAIN_ADVERSE_5M_ENABLED is True
     assert BRAIN_ADVERSE_5M_MIN_LOSS_USD == 40.0
     assert BRAIN_ADVERSE_5M_TRAIL_MIN == 4
+    from app.services.brain_config import BRAIN_ADVERSE_5M_SKIP_PLAYBOOKS
+    assert "A1" in BRAIN_ADVERSE_5M_SKIP_PLAYBOOKS
     assert check_brain_5m_adverse(-15.0, trail_against=5, against=5, favor=0, total=5) is None
     assert check_brain_5m_adverse(-25.0, trail_against=4, against=4, favor=1, total=5) is None  # 未到 40U
     assert check_brain_5m_adverse(-45.0, trail_against=3, against=3, favor=2, total=5) is None  # 连续不足
     assert check_brain_5m_adverse(-45.0, trail_against=4, against=4, favor=1, total=5)
     assert check_brain_5m_adverse(-45.0, trail_against=1, against=4, favor=1, total=5)
+    # A1 豁免：即使深度逆势也不 5m 早撤
+    assert check_brain_5m_adverse(
+        -45.0, trail_against=5, against=5, favor=0, total=5, playbook="A1"
+    ) is None
+    assert check_brain_5m_adverse(
+        -45.0, trail_against=5, against=5, favor=0, total=5, playbook="brain_A1"
+    ) is None
     mon2 = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
     if "check_brain_max_loss_usd" not in mon2:
         _fail("monitor 未接入 brain_max_loss_usd")

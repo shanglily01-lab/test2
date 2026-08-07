@@ -46,13 +46,14 @@ BRAIN_SOFT_NO_FOLLOW_LOSS_PCT = -1.2
 # 美元熔断（v4.5.8）：浮亏 ≤ -80U 立即平。1000U×5×2.5%≈125U，硬 SL 打满必破 100U；
 # soft/% 止损拦不住插针跳空时，用金额封顶（单跳过大仍可能一次滑过，但多数路径可压住）
 BRAIN_MAX_LOSS_USD = 80.0
-# 5m 逆势早撤（v4.5.11 收紧）：期望值优先——20U+3 根开火过勤（近半仓、胜率砸到~37%）
-# 改为亏≥40U 且近端连续 ≥4 根 5m 逆势（≈20min）才认「方向已反」
+# 5m 逆势早撤（v4.5.11 收紧；v4.5.12：A1 豁免——盈利 KPI，勿为胜率误砍波段）
+# 亏≥40U 且近端连续 ≥4 根 5m 逆势（≈20min）才认「方向已反」；A1 只靠 -80/trail/硬SL
 BRAIN_ADVERSE_5M_ENABLED = True
 BRAIN_ADVERSE_5M_MIN_LOSS_USD = 40.0
 BRAIN_ADVERSE_5M_BARS = 5
 BRAIN_ADVERSE_5M_TRAIL_MIN = 4
 BRAIN_ADVERSE_5M_CACHE_TTL_S = 20
+BRAIN_ADVERSE_5M_SKIP_PLAYBOOKS = frozenset({"A1"})
 
 WIN_PROB_MIN = 0.55
 # 开仓方向胜率须比反方向至少高这么多（百分点，0.05=5pp）

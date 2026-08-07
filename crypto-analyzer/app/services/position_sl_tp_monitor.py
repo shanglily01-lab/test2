@@ -459,10 +459,12 @@ class PositionSLTPMonitor:
                         u_pnl = margin * lev * pnl_pct
                     except (TypeError, ValueError):
                         u_pnl = 0.0
-                    # 浮亏≥40U：5m 持续逆势无反转 → 方向已反，早撤（先于 -80 熔断）
+                    # 浮亏≥40U：5m 持续逆势无反转 → 早撤（A1 豁免，见 SKIP_PLAYBOOKS）
                     if u_pnl <= -abs(float(BRAIN_ADVERSE_5M_MIN_LOSS_USD)):
+                        pb_raw = pos.get("entry_signal_type") or ""
+                        playbook = str(pb_raw).replace("brain_", "").replace("BRAIN_", "")
                         adv_br = self._check_brain_5m_adverse_exit(
-                            pid, symbol, side, u_pnl, now,
+                            pid, symbol, side, u_pnl, now, playbook=playbook,
                         )
                         if adv_br:
                             self._sync_peak_to_db(pid, new_peak * 100)
@@ -667,10 +669,19 @@ class PositionSLTPMonitor:
         side: str,
         unrealized_usd: float,
         now: float,
+        playbook: str = "",
     ) -> Optional[str]:
-        """BRAIN：浮亏≥40U 后看 5m 持续逆势；无反转则早撤。"""
-        from app.services.brain_config import BRAIN_ADVERSE_5M_BARS, BRAIN_ADVERSE_5M_CACHE_TTL_S
+        """BRAIN：浮亏≥40U 后看 5m 持续逆势；A1 豁免；无反转则早撤。"""
+        from app.services.brain_config import (
+            BRAIN_ADVERSE_5M_BARS,
+            BRAIN_ADVERSE_5M_CACHE_TTL_S,
+            BRAIN_ADVERSE_5M_SKIP_PLAYBOOKS,
+        )
         from app.services.brain_trail_exit import check_brain_5m_adverse
+
+        pb = (playbook or "").strip().upper().replace("BRAIN_", "")
+        if pb in BRAIN_ADVERSE_5M_SKIP_PLAYBOOKS:
+            return None
 
         cached = self._trend_exit_cache.get(pid)
         # 仅复用「已判定应平」；None 不缓存拦截，避免逆势刚成形时被 20s 空缓存挡住
@@ -688,6 +699,7 @@ class PositionSLTPMonitor:
             against=s5["against"],
             favor=s5["for"],
             total=s5["total"],
+            playbook=pb,
         )
         self._trend_exit_cache[pid] = (now, reason)
         return reason
@@ -918,7 +930,7 @@ class PositionSLTPMonitor:
         sql = (
             "SELECT id, symbol, position_side, entry_price, leverage, margin, quantity, "
             "       stop_loss_price, take_profit_price, liquidation_price, "
-            "       source, open_time, planned_close_time, max_profit_pct "
+            "       source, open_time, planned_close_time, max_profit_pct, entry_signal_type "
             "FROM futures_positions "
             "WHERE status='open' "
             "  AND (source LIKE %s) "
