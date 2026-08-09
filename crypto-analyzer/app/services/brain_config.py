@@ -45,7 +45,7 @@ BRAIN_SOFT_NO_FOLLOW_MAX_PEAK_PCT = 0.75
 BRAIN_SOFT_NO_FOLLOW_LOSS_PCT = -1.2
 # 美元熔断（v4.5.8）：浮亏 ≤ -80U 立即平。1000U×5×2.5%≈125U，硬 SL 打满必破 100U；
 # soft/% 止损拦不住插针跳空时，用金额封顶（单跳过大仍可能一次滑过，但多数路径可压住）
-BRAIN_MAX_LOSS_USD = 80.0
+BRAIN_MAX_LOSS_USD = 60.0
 # 5m 逆势早撤（v4.5.11 收紧；v4.5.12：A1 豁免——盈利 KPI，勿为胜率误砍波段）
 # 亏≥40U 且近端连续 ≥4 根 5m 逆势（≈20min）才认「方向已反」；A1 只靠 -80/trail/硬SL
 BRAIN_ADVERSE_5M_ENABLED = True
@@ -70,9 +70,11 @@ BRAIN_MIN_EDGE_SCORE_SHORT = 0.90
 BRAIN_REQUIRE_CONFIRMED_PREFIXES = ("A", "B")
 
 # Playbook v1（§7.3.11）
-# B2/C1 暂不开；A2（空头趋势反抽）近样本量大且期望差 → v4.5.11 暂不开仓（仍识别打标）
+# 2026-08-09 data review: A1 LONG is the only mature positive-EV bucket.
+# Keep the other playbooks classified and persisted for shadow statistics, but
+# pause their auto-open path until each bucket has enough recent positive EV.
 TRADEABLE_PLAYBOOKS = frozenset({
-    "A1", "B1", "B3", "B4", "C2", "C3", "C4",
+    "A1",
 })
 FLAT_PLAYBOOKS = frozenset({"D1", "D2"})
 PLAYBOOK_SIDE = {

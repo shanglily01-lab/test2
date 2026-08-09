@@ -43,10 +43,7 @@ def test_imports_and_config() -> None:
     assert BRAIN_STRATEGIC_CLOSE_ENABLED is False
     assert BRAIN_MIN_EDGE_SCORE == 0.75
     assert BRAIN_REQUIRE_CONFIRMED_PREFIXES == ("A", "B")
-    assert "B2" not in TRADEABLE_PLAYBOOKS
-    assert "C1" not in TRADEABLE_PLAYBOOKS
-    assert "A2" not in TRADEABLE_PLAYBOOKS  # v4.5.11 暂暂停空头趋势反抽
-    assert "A1" in TRADEABLE_PLAYBOOKS and "B1" in TRADEABLE_PLAYBOOKS
+    assert TRADEABLE_PLAYBOOKS == frozenset({"A1"})  # 2026-08-09: only mature positive-EV bucket auto-opens
     from app.services.brain_config import BRAIN_MIN_EDGE_SCORE_SHORT
     assert BRAIN_MIN_EDGE_SCORE_SHORT == 0.90
     assert BRAIN_SL_PCT >= 1.0, f"BRAIN_SL_PCT={BRAIN_SL_PCT} 疑似小数比例，应为百分点"
@@ -281,13 +278,13 @@ def test_brain_risk_params() -> None:
     )
     assert BRAIN_SL_MAX_PCT == 4.5
     assert BRAIN_SOFT_NO_FOLLOW_ENABLED is False
-    assert BRAIN_MAX_LOSS_USD == 80.0
+    assert BRAIN_MAX_LOSS_USD == 60.0
     from app.services.brain_trail_exit import check_brain_max_loss_usd
     # soft 关闭：即使满足旧条件也不砍
     assert check_brain_soft_no_follow(-0.015, 0.002, 30 * 60) is None
     assert check_brain_soft_no_follow(-0.02, 0.002, 3600) is None
-    assert check_brain_max_loss_usd(-79.9) is None
-    assert check_brain_max_loss_usd(-80.0)
+    assert check_brain_max_loss_usd(-59.9) is None
+    assert check_brain_max_loss_usd(-60.0)
     assert check_brain_max_loss_usd(-225.0)
     from app.services.brain_trail_exit import check_brain_5m_adverse
     from app.services.brain_config import (
