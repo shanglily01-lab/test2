@@ -17,6 +17,12 @@ from app.services.api_key_service import get_api_key_service
 from app.services.binance_data_hub import get_global_data_hub
 from app.utils.position_time import utc_now_naive
 from app.services.midline_swing_config import is_midline_source
+from app.services.brain_config import is_brain_source
+
+
+def _is_smart_exit_excluded_source(source: str) -> bool:
+    """中线/BRAIN 由各自持仓监控规则负责，禁止进入旧 SmartExit。"""
+    return is_midline_source(source) or is_brain_source(source)
 
 
 class SmartExitOptimizer:
@@ -114,9 +120,9 @@ class SmartExitOptimizer:
             return
 
         position = await self._get_position(position_id)
-        if position and is_midline_source(position.get("source") or ""):
+        if position and _is_smart_exit_excluded_source(position.get("source") or ""):
             logger.info(
-                f"[SmartExit] 跳过中线持仓监控 id={position_id} "
+                f"[SmartExit] 跳过独立风控持仓 id={position_id} "
                 f"source={position.get('source')}"
             )
             return
@@ -179,9 +185,10 @@ class SmartExitOptimizer:
                     logger.info(f"持仓 {position_id} 已关闭 (status={position['status']})，停止监控")
                     break
 
-                if is_midline_source(position.get("source") or ""):
+                if _is_smart_exit_excluded_source(position.get("source") or ""):
                     logger.info(
-                        f"[SmartExit] 中线持仓 {position_id} {position.get('symbol')} "
+                        f"[SmartExit] 独立风控持仓 {position_id} {position.get('symbol')} "
+                        f"source={position.get('source')} "
                         f"不参与 SmartExit，停止监控"
                     )
                     break

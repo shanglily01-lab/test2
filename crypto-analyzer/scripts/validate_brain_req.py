@@ -118,6 +118,7 @@ def test_ds_auto_open_available() -> None:
 def test_paper_limit_brain_force() -> None:
     from app.services.brain_config import BRAIN_USE_MARKET_ENTRY
 
+    assert BRAIN_USE_MARKET_ENTRY is False  # INV-BRAIN-06 正式启用防插针限价
     src = (ROOT / "app/services/paper_limit_entry.py").read_text(encoding="utf-8")
     if BRAIN_USE_MARKET_ENTRY:
         if "BRAIN_USE_MARKET_ENTRY" not in src or "_open_paper_market_position" not in src:
@@ -137,6 +138,40 @@ def test_executor_brain_expire() -> None:
         _fail("executor 未强制 brain expire")
     else:
         _ok("executor brain expire")
+
+
+def test_cross_service_safety_guards() -> None:
+    smart_exit = (ROOT / "app/services/smart_exit_optimizer.py").read_text(encoding="utf-8")
+    smart_service = (ROOT / "smart_trader_service.py").read_text(encoding="utf-8")
+    engine = (ROOT / "app/trading/futures_trading_engine.py").read_text(encoding="utf-8")
+
+    if "_is_smart_exit_excluded_source" not in smart_exit or "is_brain_source" not in smart_exit:
+        _fail("SmartExit 未统一排除 BRAIN")
+    elif "brain_source_sql_exclude" not in smart_service:
+        _fail("smart_trader SmartExit 查询未排除 BRAIN")
+    else:
+        _ok("SmartExit excludes BRAIN")
+
+    fill_guards = (
+        "_revalidate_paper_limit_fill",
+        "check_simulated_symbol_allowed",
+        "check_symbol_loss_cooldown",
+        "check_max_positions_allowed",
+        "check_source_side_performance_allowed",
+    )
+    if not all(token in engine for token in fill_guards):
+        _fail("限价成交前未完整重跑安全闸门")
+    elif "_expire_paper_limit_fill_claim" not in engine:
+        _fail("成交闸门拒绝后未终止订单")
+    else:
+        _ok("paper limit fill-time gates")
+
+    if "FOR UPDATE" not in engine or "autocommit=False" not in engine:
+        _fail("模拟平仓未使用事务行锁")
+    elif "WHERE id = %s AND status = 'open'" not in engine:
+        _fail("模拟平仓原子更新缺 status 条件")
+    else:
+        _ok("close_position atomic/idempotent")
 
 
 def test_brain_skip_open_advisor() -> None:
@@ -386,6 +421,9 @@ def test_orchestrator_syntax() -> None:
         "app/services/brain_playbook.py",
         "app/services/brain_opportunity_store.py",
         "app/services/brain_strategy_orchestrator.py",
+        "app/services/smart_exit_optimizer.py",
+        "app/trading/futures_trading_engine.py",
+        "smart_trader_service.py",
     ):
         path = ROOT / rel
         ast.parse(path.read_text(encoding="utf-8"))
@@ -404,6 +442,7 @@ def main() -> int:
     test_ds_auto_open_available()
     test_paper_limit_brain_force()
     test_executor_brain_expire()
+    test_cross_service_safety_guards()
     test_brain_skip_open_advisor()
     test_brain_risk_params()
     test_scheduler_brain()

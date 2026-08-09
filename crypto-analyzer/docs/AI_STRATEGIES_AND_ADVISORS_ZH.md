@@ -1,6 +1,6 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-07-31 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.3** 对齐  
+> 文档版本：2026-08-09 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.13** 对齐
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
 > **中线 v2 §7.2**：已落地模拟仓。  
 > **实盘同步 / 闸门 / 15m 定方向 / 限价偏移 / BRAIN**：以 REQUIREMENTS 为准；本文侧重 AI/中线细节。
@@ -22,10 +22,10 @@ crypto-scheduler (app/scheduler.py)
   └─ （战术/情绪等按现网开关）
 
 crypto-scheduler (每 15min)
-  └─ DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**排除** midline_*；brain 仓 DS sell 坚决平）
+  └─ DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**排除** midline_* 与 brain_*）
 
 crypto-app-main
-  └─ position_sl_tp_monitor (1s)：探索/预测硬 SL/TP + ai-trail；brain：评估硬 SL/TP + brain_trail/soft；中线硬 SL/TP + ai-trail（不参与 SmartExit）
+  └─ position_sl_tp_monitor (1s)：探索/预测硬 SL/TP + ai-trail；brain：评估硬 SL/TP + 5m/-80/trail/到期；中线硬 SL/TP + ai-trail（中线/BRAIN 均不参与 SmartExit）
 
 任意模拟开仓
   └─ paper_open_gate.gate_simulated_open()
@@ -48,8 +48,9 @@ crypto-app-main
 - Big4 疲软（动量弱 + 相对成交量很低 → 量价波动小）→ 不开  
 - 近 7 日×4h **方向对就算赢**，胜率 ≥55% 才开  
 - DeepSeek：开仓**不经**开仓顾问；BRAIN 持仓**不经**持仓顾问  
-- **入场/退出（v4.5.3）**：测试期市价；按币评估 SL≥2.5%/TP≥3% + trail 激活≤1.8% + soft；peak 落库/恢复（fallback 5/8/6）  
-- 插针：影线>实体×2；频繁则平均插针限价；超时必须取消（市价测试期暂缓）  
+- **入场/退出（v4.5.13）**：强制防插针限价；按币评估 SL 2.5~4.5% / TP 3~12%；5m/-80U/trail/到期，soft 关闭；peak 落库/恢复
+- 插针：影线>实体×2；频繁则按平均插针偏移；限价超时必须取消，禁止转市价
+- BRAIN 不经开仓/持仓顾问且全面排除 SmartExit；限价触价后、成交前重跑安全闸门
 - 旧 DeepSeek 自动开仓：对照期暂保留；结束后 INV-BRAIN-07  
 - **Web**：`/brain_strategy`；API `/api/brain-swing`（含 `/orders`）  
 

@@ -27,6 +27,7 @@ from app.services.signal_blacklist_checker import SignalBlacklistChecker
 from app.services.signal_score_v2_service import SignalScoreV2Service
 from app.services.big4_regime_monitor import Big4RegimeMonitor
 from app.services.midline_swing_config import is_midline_source, midline_source_sql_not_in
+from app.services.brain_config import is_brain_source, brain_source_sql_exclude
 
 # 加载环境变量
 load_dotenv()
@@ -2679,13 +2680,14 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # 查询开仓持仓（中线策略由 position_sl_tp_monitor 监管，不纳入 SmartExit）
+            # 中线/BRAIN 由各自 position_sl_tp_monitor 规则监管，不纳入 SmartExit
             cursor.execute(f"""
                 SELECT id, symbol, position_side
                 FROM futures_positions
                 WHERE status = 'open'
                 AND account_id = %s
                 AND {midline_source_sql_not_in('source')}
+                AND {brain_source_sql_exclude('source')}
             """, (self.account_id,))
 
             positions = cursor.fetchall()
@@ -2713,7 +2715,7 @@ class SmartTraderService:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # 获取 DB 中 open 持仓（SmartExit 仅监控非中线）
+            # 获取 DB 中 open 持仓（SmartExit 排除中线与 BRAIN）
             cursor.execute(f"""
                 SELECT id, source
                 FROM futures_positions
@@ -2722,15 +2724,15 @@ class SmartTraderService:
             """, (self.account_id,))
             db_rows = cursor.fetchall()
             db_position_ids = set()
-            midline_monitor_ids = set()
+            excluded_monitor_ids = set()
             for row in db_rows:
                 pid, src = row[0], (row[1] or "")
-                if is_midline_source(src):
-                    midline_monitor_ids.add(pid)
+                if is_midline_source(src) or is_brain_source(src):
+                    excluded_monitor_ids.add(pid)
                 else:
                     db_position_ids.add(pid)
 
-            # 检查超时未平仓持仓并执行兜底平仓（不含中线 15 天仓）
+            # 检查超时未平仓持仓并执行兜底平仓（排除中线/BRAIN 独立风控仓）
             cursor.execute(f"""
                 SELECT id, symbol, position_side
                 FROM futures_positions
@@ -2739,6 +2741,7 @@ class SmartTraderService:
                 AND planned_close_time IS NOT NULL
                 AND NOW() > planned_close_time
                 AND {midline_source_sql_not_in('source')}
+                AND {brain_source_sql_exclude('source')}
             """, (self.account_id,))
             timeout_rows = cursor.fetchall()
             timeout_count = len(timeout_rows)
@@ -2769,10 +2772,10 @@ class SmartTraderService:
 
             monitoring_ids = set(self.smart_exit_optimizer.monitoring_tasks.keys())
 
-            # 在DB中但未被监控的非中线持仓 → 补充启动
+            # 在DB中但未被监控的普通持仓 → 补充启动
             to_add = db_position_ids - monitoring_ids
-            # DB 已关仓 / 中线仓仍在监控 → 停止
-            to_remove = (monitoring_ids - db_position_ids) | (midline_monitor_ids & monitoring_ids)
+            # DB 已关仓 / 中线或 BRAIN 仍在监控 → 停止
+            to_remove = (monitoring_ids - db_position_ids) | (excluded_monitor_ids & monitoring_ids)
 
             for pid in to_add:
                 try:
@@ -2841,6 +2844,7 @@ class SmartTraderService:
                 WHERE status = 'open'
                 AND account_id = %s
                 AND {midline_source_sql_not_in('source')}
+                AND {brain_source_sql_exclude('source')}
                 ORDER BY id ASC
             """, (self.account_id,))
 

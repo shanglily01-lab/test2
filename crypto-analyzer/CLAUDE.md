@@ -73,7 +73,7 @@
 | GPT 探索/预测 | 同节奏 + `gpt_*_next_due_utc` |
 | Gemini 探索 | —（已下线） | — |
 | DeepSeek 探索/预测 | 每2h + 10min/5min（**对照期保留**；INV-BRAIN-07 暂缓） | `deepseek_*_enabled` |
-| **REQ-BRAIN** `brain_swing` | 每 **15s** 一批 **5** 币轮询 L0/L1 | `brain_swing_enabled`；启动 +75s；发现机会立即开仓 |
+| **REQ-BRAIN** `brain_swing` | 每 **15s** 一批 **5** 币轮询 L0/L1 | `brain_swing_enabled`；启动 +75s；发现机会挂防插针限价 |
 | **中线 v2** `midline_long/short` | 每 **4h**（独立调度；需求见 REQUIREMENTS §7.2，待落地） |
 | **持仓顾问** DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent；含历史 gemini_*） |
 | 市场情绪分析 | **已下线**（原 Gemini 情绪） |
@@ -158,12 +158,13 @@
 - **Gemini 预测已下线**（API / 页面 / worker 已移除）
 
 ### 超级大脑主权层（REQ-BRAIN）【需求 2026-07-28 · 首版已落地 · 对照期 · v2 Playbook 2026-07-30】
-- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.5.12）
+- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.5.13）
 - `brain_swing`：L0/L1；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
-- 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**测试期市价**（`BRAIN_USE_MARKET_ENTRY`）
+- 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**强制防插针限价**（`BRAIN_USE_MARKET_ENTRY=False`），超时取消
 - **入场（v4.5.11）**：LONG edge≥0.75；SHORT≥**0.90**；A/B confirmed；**暂停 A2/B2/C1**；保证金仍 L0=1000U
 - **退出（v4.5.12 · 盈利 KPI）**：**A1 豁免 5m**；其它 5m（≥40U/4根）；**-80U**；硬 SL；trail；**soft 关**
-- 防插针：影>实体×2；频繁则平均插针限价；超时取消；**测试期 INV-BRAIN-06 暂缓**
+- **执行隔离（v4.5.13）**：BRAIN 排除 SmartExit；限价成交前重跑安全闸门；模拟平仓事务行锁幂等
+- 防插针：影>实体×2；频繁则平均插针限价；超时取消；**INV-BRAIN-06 已正式启用**
 - **对照期**：DeepSeek 探索/预测自动开仓**暂保留**并行对比；结束后再执行 INV-BRAIN-07
 - 调度：BRAIN **每15s** 一批5币；`validate_brain_req.py`；页 `/brain_strategy`
 

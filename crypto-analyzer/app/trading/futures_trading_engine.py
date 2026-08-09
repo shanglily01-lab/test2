@@ -936,6 +936,58 @@ class FuturesTradingEngine:
             (order_id,),
         )
 
+    def _expire_paper_limit_fill_claim(
+        self, cursor, order_id: str, reason: str,
+    ) -> None:
+        """成交瞬间安全闸门拒绝：终止已认领订单，禁止后续重试成交。"""
+        cursor.execute(
+            """
+            UPDATE futures_orders
+            SET status='EXPIRED', cancellation_reason=%s,
+                canceled_at=NOW(), updated_at=NOW()
+            WHERE order_id=%s AND status='FILLING'
+            """,
+            (f"fill_gate:{reason}"[:500], order_id),
+        )
+
+    def _revalidate_paper_limit_fill(
+        self,
+        *,
+        symbol: str,
+        position_side: str,
+        source: str,
+        account_id: int,
+    ) -> Tuple[bool, str]:
+        """PENDING→FILLED 前重跑不可绕过的模拟盘安全闸门。"""
+        from app.services.trading_gates import (
+            check_max_positions_allowed,
+            check_simulated_symbol_allowed,
+            check_source_side_performance_allowed,
+            check_symbol_loss_cooldown,
+            has_open_futures_position_same_side,
+        )
+
+        checks = [
+            check_simulated_symbol_allowed(symbol, self.connection),
+            check_symbol_loss_cooldown(
+                symbol, self.connection, account_id=account_id, source=source,
+            ),
+        ]
+        duplicate, duplicate_reason = has_open_futures_position_same_side(
+            self.connection, symbol, position_side, account_id=account_id,
+        )
+        checks.append((not duplicate, duplicate_reason))
+        checks.append(check_max_positions_allowed(self.connection, account_id))
+        checks.append(
+            check_source_side_performance_allowed(
+                self.connection, source, position_side, account_id,
+            )
+        )
+        for allowed, reason in checks:
+            if not allowed:
+                return False, str(reason or "fill_gate_rejected")
+        return True, ""
+
     def _recalc_sl_tp_for_market_fill(
         self,
         entry_price: Decimal,
@@ -1050,6 +1102,25 @@ class FuturesTradingEngine:
             signal_id = order.get('signal_id')
             strategy_id = order.get('strategy_id')
             meta = parse_order_notes(order.get('notes'))
+            fill_allowed, fill_reject_reason = self._revalidate_paper_limit_fill(
+                symbol=symbol,
+                position_side=position_side,
+                source=source,
+                account_id=account_id,
+            )
+            if not fill_allowed:
+                self._expire_paper_limit_fill_claim(
+                    cursor, pending_order_id, fill_reject_reason,
+                )
+                logger.warning(
+                    f"[成交闸门] 拒绝并过期 {symbol} {position_side} "
+                    f"source={source} order={pending_order_id}: {fill_reject_reason}"
+                )
+                return {
+                    'success': False,
+                    'message': f'成交闸门拒绝: {fill_reject_reason}',
+                    'fill_gate_rejected': True,
+                }
             if at_market:
                 entry_reason = meta.get('entry_reason') or '手动转市价单'
             else:
@@ -1284,15 +1355,19 @@ class FuturesTradingEngine:
             database=self.db_config.get('database', 'binance-data'),
             charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor,
-            autocommit=True
+            autocommit=False
         )
 
         cursor = connection.cursor()
 
         try:
-            # 1. 获取持仓信息（使用新连接确保获取最新数据）
+            # 1. 原子认领：锁住 OPEN 行直到平仓账务提交，阻止并发重复平仓/重复记账
             cursor.execute(
-                """SELECT * FROM futures_positions WHERE id = %s AND status = 'open'""",
+                """
+                SELECT * FROM futures_positions
+                WHERE id = %s AND status = 'open'
+                FOR UPDATE
+                """,
                 (position_id,)
             )
             position = cursor.fetchone()
@@ -1495,10 +1570,12 @@ class FuturesTradingEngine:
                 SET status = 'closed', close_time = %s,
                     realized_pnl = %s, notes = %s,
                     mark_price = %s, unrealized_pnl_pct = %s
-                WHERE id = %s""",
+                WHERE id = %s AND status = 'open'""",
                 (utc_now_naive(), float(realized_pnl), notes_reason,
                  float(current_price), profit_pct_at_close, position_id)
             )
+            if cursor.rowcount != 1:
+                raise RuntimeError(f"持仓 {position_id} 平仓原子更新失败")
 
             # 释放全部保证金（模拟盘不维护 frozen_balance）
             released_margin = margin
@@ -1747,6 +1824,7 @@ class FuturesTradingEngine:
                                                 ),
                                             )
                                             upd_cur.close()
+                                            connection.commit()
                                         else:
                                             err = live_result.get('error', '未知错误')
                                             logger.error(

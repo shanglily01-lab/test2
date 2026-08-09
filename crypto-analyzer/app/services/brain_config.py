@@ -13,8 +13,8 @@ BRAIN_HOLD_HOURS = 6
 BRAIN_LIMIT_TIMEOUT_MINUTES = 30
 BRAIN_SL_PCT = 4.5  # fallback 百分点（与 SL 上限对齐；v4.5.7）
 BRAIN_TP_PCT = 8.0   # fallback 百分点
-# 测试期：True=直接市价开仓（INV-BRAIN-06 限价防插针暂缓）；恢复限价时改 False
-BRAIN_USE_MARKET_ENTRY = True
+# 正式防插针：BRAIN 强制限价；频繁插针按平均影线偏移，超时只取消不转市价
+BRAIN_USE_MARKET_ENTRY = False
 # False=关闭 Playbook/Big4 战略平仓
 BRAIN_STRATEGIC_CLOSE_ENABLED = False
 
