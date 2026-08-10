@@ -1,13 +1,13 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-08-09 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.13** 对齐
+> 文档版本：2026-08-11 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.14** 对齐
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
 > **中线 v2 §7.2**：已落地模拟仓。  
 > **实盘同步 / 闸门 / 15m 定方向 / 限价偏移 / BRAIN**：以 REQUIREMENTS 为准；本文侧重 AI/中线细节。
 
 ## 1. 总览
 
-**主路径（已落地）**：REQ-BRAIN — **盈利 KPI**；暂停 A2；LONG≥0.75 / SHORT≥0.90；**A1 豁免 5m**，其它 5m(40U/4根) + -80U + trail（soft 关；§7.3）。  
+**主路径（已落地）**：REQ-BRAIN — **盈利 KPI**；A1 主力 + A2/C1 受控空头试点；LONG≥0.75 / SHORT≥0.90（C1 放量破位≥0.80）；Big4 SHORT 时阻断 A1 追多、A2/C1 才可试空；**A1 豁免 5m**，其它 5m(40U/4根) + -80U + trail（soft 关；§7.3）。  
 **并行已落地**：中线 v2（独立量化，跳过顾问）。  
 **旧路径**：Gemini 交易已下线；DeepSeek 探索/预测自动开仓 **对照期暂保留**（与 BRAIN 并行对比；INV-BRAIN-07 暂缓）。
 
@@ -48,7 +48,7 @@ crypto-app-main
 - Big4 疲软（动量弱 + 相对成交量很低 → 量价波动小）→ 不开  
 - 近 7 日×4h **方向对就算赢**，胜率 ≥55% 才开  
 - DeepSeek：开仓**不经**开仓顾问；BRAIN 持仓进入 DeepSeek 持仓顾问复核  
-- **入场/退出（v4.5.13）**：强制防插针限价；按币评估 SL 2.5~4.5% / TP 3~12%；5m/-80U/trail/到期，soft 关闭；peak 落库/恢复
+- **入场/退出（v4.5.14）**：强制防插针限价；按币评估 SL 2.5~4.5% / TP 3~12%；A2/C1 仅 Big4 SHORT 顺势小仓试点；5m/-80U/trail/到期，soft 关闭；peak 落库/恢复
 - 插针：影线>实体×2；频繁则按平均插针偏移；限价超时必须取消，禁止转市价
 - BRAIN 不经开仓顾问且全面排除 SmartExit；限价触价后、成交前重跑安全闸门
 - 旧 DeepSeek 自动开仓：对照期暂保留；结束后 INV-BRAIN-07  

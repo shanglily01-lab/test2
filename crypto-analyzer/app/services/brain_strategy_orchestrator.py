@@ -21,11 +21,13 @@ from app.services.brain_config import (
     BRAIN_HOLD_HOURS,
     BRAIN_LEVERAGE,
     BRAIN_LIMIT_TIMEOUT_MINUTES,
+    BRAIN_LONG_BLOCK_WHEN_BIG4_SHORT,
     BRAIN_MARGIN_USD,
     BRAIN_MIN_EDGE_SCORE,
     BRAIN_MIN_EDGE_SCORE_SHORT,
     BRAIN_POOL_REFRESH_EVERY_TICKS,
     BRAIN_REQUIRE_CONFIRMED_PREFIXES,
+    BRAIN_SHORT_BIG4_BIAS_REQUIRED,
     BRAIN_SL_PCT,
     BRAIN_SOURCE,
     BRAIN_STRATEGIC_CLOSE_ENABLED,
@@ -36,6 +38,8 @@ from app.services.brain_config import (
     BRAIN_TP_PCT,
     BRAIN_USE_MARKET_ENTRY,
     FLAT_PLAYBOOKS,
+    PLAYBOOK_MARGIN_MULTIPLIER,
+    PLAYBOOK_MIN_EDGE_SCORE,
     TRADEABLE_PLAYBOOKS,
 )
 from app.services.brain_market_analyzer import evaluate_big4_gate, _fetch_klines
@@ -210,12 +214,14 @@ def _open_brain_entry(
 
     hold_deadline = utc_now_naive() + timedelta(hours=hold_hours)
     margin = get_paper_margin_usd(symbol, conn) or BRAIN_MARGIN_USD
+    playbook = str(playbook_row.get("playbook") or "")
+    margin *= float(PLAYBOOK_MARGIN_MULTIPLIER.get(playbook, 1.0))
     wick = playbook_row.get("wick") or {}
     offset = float(playbook_row.get("limit_offset_pct") or 0.5)
     if playbook_row.get("forbid_market") and wick and not BRAIN_USE_MARKET_ENTRY:
         offset = limit_offset_pct_from_wicks(side_u, wick)
     detail = {
-        "playbook": playbook_row.get("playbook"),
+        "playbook": playbook,
         "signals": playbook_row.get("signals"),
         "edge_score": playbook_row.get("edge_score"),
         "win_prob_long": win_long,
@@ -230,6 +236,8 @@ def _open_brain_entry(
         "sl_pct": sl_pct,
         "tp_pct": tp_pct,
         "hold_hours": hold_hours,
+        "margin": float(margin),
+        "margin_multiplier": float(PLAYBOOK_MARGIN_MULTIPLIER.get(playbook, 1.0)),
         "risk_fallback": bool(risk.get("risk_fallback")),
     }
     fail: List[str] = []
@@ -255,7 +263,7 @@ def _open_brain_entry(
         margin=float(margin),
         stop_loss_pct=sl_pct,
         take_profit_pct=tp_pct,
-        entry_signal_type=f"brain_{playbook_row.get('playbook')}",
+        entry_signal_type=f"brain_{playbook}",
         entry_reason=catalyst[:200],
         entry_score=float(entry_score or playbook_row.get("edge_score") or 0),
         signal_components=detail,
@@ -393,11 +401,16 @@ def _analyze_one(
     skip_reason = None
     order_id = None
     big4_ok = bool(big4.get("big4_ok"))
+    big4_bias = str(big4.get("bias") or "FLAT").upper()
 
     if not big4_ok:
         skip_reason = "big4_weak"
     elif playbook not in TRADEABLE_PLAYBOOKS or side not in ("LONG", "SHORT"):
         skip_reason = f"playbook_{playbook}"
+    elif side == "LONG" and BRAIN_LONG_BLOCK_WHEN_BIG4_SHORT and big4_bias == "SHORT":
+        skip_reason = "big4_short_blocks_long"
+    elif side == "SHORT" and BRAIN_SHORT_BIG4_BIAS_REQUIRED and big4_bias != "SHORT":
+        skip_reason = "short_needs_big4_short"
     elif not price or float(price) <= 0:
         skip_reason = "no_price"
     elif _in_open_cooldown(sym):
@@ -407,11 +420,12 @@ def _analyze_one(
         if not ok_wp:
             skip_reason = wp_reason
         else:
-            min_edge = (
+            default_min_edge = (
                 BRAIN_MIN_EDGE_SCORE_SHORT
                 if side == "SHORT"
                 else BRAIN_MIN_EDGE_SCORE
             )
+            min_edge = float(PLAYBOOK_MIN_EDGE_SCORE.get(str(playbook), default_min_edge))
             if float(pb.get("edge_score") or 0) < min_edge:
                 skip_reason = "low_edge"
             elif (

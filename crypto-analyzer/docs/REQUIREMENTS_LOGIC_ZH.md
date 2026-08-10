@@ -1,13 +1,13 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.13
-**日期**: 2026-08-09
+**版本**: v4.5.14
+**日期**: 2026-08-11
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
 > **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。  
 > **BRAIN v2 机会识别（§7.3.10–7.3.15）**：**已落地且开仓机会判定视为相对客观**；退出/风控见 §7.3.16。  
-> **BRAIN KPI（v4.5.12）**：**盈利优先**（胜率不作优化目标）。**A1 豁免 5m 早撤**（只靠 -80U / trail / 硬 SL）；其它 Playbook 仍 40U+4 根；暂停 A2；SHORT edge≥0.90；soft 关。  
-> **BRAIN 入场收紧（v4.5.6+）**：LONG `edge≥0.75`；A/B 须 `confirmed`；**B2/C1/A2 暂不开仓**（仍识别打标）；保证金仍 L0=1000U（不改）。
+> **BRAIN KPI（v4.5.14）**：**盈利优先**（胜率不作优化目标）。**A1 豁免 5m 早撤**（只靠 -80U / trail / 硬 SL）；其它 Playbook 仍 40U+4 根；A2/C1 受控空头试点；SHORT edge≥0.90（C1 放量破位≥0.80）；soft 关。  
+> **BRAIN 入场收紧（v4.5.14）**：LONG `edge≥0.75`；A/B 须 `confirmed`；Big4 `SHORT` 时阻断 A1 追多；A2/C1 仅 Big4 `SHORT` 顺势试空且缩小保证金；B2 仍不开仓（继续识别打标）。
 > **BRAIN 执行隔离（v4.5.13）**：恢复防插针限价（`BRAIN_USE_MARKET_ENTRY=False`，超时只取消）；BRAIN 全面排除 SmartExit；限价成交前重跑安全闸门；模拟平仓事务行锁保证幂等。
 
 > 旧版 `design/需求文档.md`（v3.6）已过时，仅作历史参考。  
@@ -374,7 +374,7 @@
   → Playbook 识别 + 分向胜率门 + 场景仲裁 → side≠FLAT
   → edge：LONG ≥0.75；SHORT ≥0.90（否则 low_edge）
   → A/B Playbook 须 confirmed，否则 unconfirmed
-  → playbook ∈ TRADEABLE（**A2/B2/C1 暂排除**，仍落库打标）
+  → playbook ∈ TRADEABLE（A1 + A2/C1 受控试点；B2 等仍落库打标）
   → 币种闸门 / 冷却 / 同向持仓去重（gate_simulated_open → brain_skip_advisor）
   → create_paper_limit_order → 防插针限价（BRAIN_USE_MARKET_ENTRY=0）
   → 触价后重跑成交安全闸门；拒绝即 EXPIRED
@@ -382,7 +382,7 @@
   → OPENED = 已挂 PENDING 限价；成交后才生成持仓
 ```
 
-**入场（v4.5.11 期望值优先）**：**暂停 A2**（近样本量大、期望差）；SHORT edge 抬到 **0.90**；LONG 仍 0.75；**不改**保证金。常量见 `brain_config.py`。
+**入场（v4.5.14 受控补空）**：A1 仍为主力；A2/C1 作为小仓空头试点，仅在 Big4 `SHORT` 顺势时允许，且继续经过分向胜率、相对胜率差、edge、confirmed、冷却和账户闸门。SHORT edge 默认 **0.90**，C1 仅放量破位（edge≥**0.80**）可试点；A2 保证金×0.50，C1×0.35；B2 仍不开仓。常量见 `brain_config.py`。
 
 **DeepSeek 角色**：BRAIN 开仓不经开仓顾问；持仓进入 DeepSeek 持仓顾问做保留/观察/卖出复核。程序化 SL/TP、美元熔断、trail 与计划到期仍是兜底路径。
 **可见性（限价）**：机会表 `OPENED` 表示已创建 PENDING 限价单；触价成交后才进入「BRAIN 持仓」。
@@ -729,7 +729,7 @@
 - [x] soft 无跟进：**关闭**
 - [x] **美元熔断 -80U**
 - [x] **5m 逆势早撤**：**v4.5.12 A1 豁免**；其它仍 40U+4 根
-- [x] **暂停 A2** + SHORT edge≥0.90（v4.5.11）
+- [x] **受控补空**：A2/C1 仅 Big4 SHORT 顺势小仓试点；B2 继续影子；A1 在 Big4 SHORT 下不追多（v4.5.14）
 - [x] **KPI=盈利**（胜率不作优化目标；v4.5.12）
 - [x] SL 上限：**4.5%**（v4.5.7；原 8% 易出 -400U 级单笔）
 - [x] 探索/预测：**先只改 BRAIN**
@@ -891,7 +891,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-MIDLINE | `midline_swing_config.py`, `midline_swing_scanner.py`, `midline_explore_worker.py`（或 `midline_worker`）, `midline_swing_api.py`, 中线策略页 JS/模板, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
 | **REQ-BRAIN** | `brain_config` / `brain_wick` / `brain_market_analyzer` / `brain_winrate` / `brain_strategy_orchestrator`；`paper_limit_entry` + executor expire；`smart_exit_optimizer` 排除；`validate_brain_req.py`；权威 §7.3 |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
-| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **A1 豁免 5m**；其它 40U/4根；-80U；trail；soft 关；暂停 A2；§7.3（**v4.5.12**） |
+| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **A1 豁免 5m**；其它 40U/4根；-80U；trail；soft 关；A2/C1 受控补空；§7.3（**v4.5.14**） |
 | REQ-ST | `smart_trader_service.py` |
 
 ---
@@ -900,6 +900,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-11 | **v4.5.14** | **受控补空与偏空保护**：A2/C1 从影子改为小仓试点；A2/C1 必须 Big4 `SHORT` 顺势，A2 保证金×0.50、C1×0.35；Big4 `SHORT` 阻断 A1 追多；B2 继续只识别打标 |
 | 2026-08-09 | **v4.5.13** | **执行安全收口**：BRAIN 恢复防插针强制限价并超时取消；全面排除 SmartExit；PENDING 成交前重跑安全闸门；`close_position` 事务 `FOR UPDATE` + 条件更新，防并发重复平仓/记账 |
 | 2026-08-08 | **v4.5.12** | **盈利 KPI**：**A1 豁免 5m 早撤**（只靠 -80/trail/硬 SL）；胜率不作优化目标；其它 Playbook 仍 40U+4 根 |
 | 2026-08-06 | **v4.5.11** | **期望值优先纠正**：暂停 **A2**；SHORT edge≥**0.90**；5m 早撤 **40U+4根**（原20U+3过勤砸胜率）；soft 仍关 |

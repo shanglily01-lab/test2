@@ -30,6 +30,7 @@ def test_imports_and_config() -> None:
         BRAIN_HOLD_HOURS,
         BRAIN_MIN_EDGE_SCORE,
         BRAIN_REQUIRE_CONFIRMED_PREFIXES,
+        BRAIN_SHORT_BIG4_BIAS_REQUIRED,
         BRAIN_STRATEGIC_CLOSE_ENABLED,
         TRADEABLE_PLAYBOOKS,
         WIN_PROB_MIN,
@@ -43,9 +44,21 @@ def test_imports_and_config() -> None:
     assert BRAIN_STRATEGIC_CLOSE_ENABLED is False
     assert BRAIN_MIN_EDGE_SCORE == 0.75
     assert BRAIN_REQUIRE_CONFIRMED_PREFIXES == ("A", "B")
-    assert TRADEABLE_PLAYBOOKS == frozenset({"A1"})  # 2026-08-09: only mature positive-EV bucket auto-opens
-    from app.services.brain_config import BRAIN_MIN_EDGE_SCORE_SHORT
+    assert TRADEABLE_PLAYBOOKS == frozenset({"A1", "A2", "C1"})
+    from app.services.brain_config import (
+        BRAIN_LONG_BLOCK_WHEN_BIG4_SHORT,
+        BRAIN_MIN_EDGE_SCORE_SHORT,
+        PILOT_SHORT_PLAYBOOKS,
+        PLAYBOOK_MARGIN_MULTIPLIER,
+        PLAYBOOK_MIN_EDGE_SCORE,
+    )
     assert BRAIN_MIN_EDGE_SCORE_SHORT == 0.90
+    assert PILOT_SHORT_PLAYBOOKS == frozenset({"A2", "C1"})
+    assert PLAYBOOK_MIN_EDGE_SCORE["C1"] == 0.80
+    assert PLAYBOOK_MARGIN_MULTIPLIER["A2"] < 1.0
+    assert PLAYBOOK_MARGIN_MULTIPLIER["C1"] < PLAYBOOK_MARGIN_MULTIPLIER["A2"]
+    assert BRAIN_SHORT_BIG4_BIAS_REQUIRED is True
+    assert BRAIN_LONG_BLOCK_WHEN_BIG4_SHORT is True
     assert BRAIN_SL_PCT >= 1.0, f"BRAIN_SL_PCT={BRAIN_SL_PCT} 疑似小数比例，应为百分点"
     assert BRAIN_TP_PCT >= 1.0, f"BRAIN_TP_PCT={BRAIN_TP_PCT} 疑似小数比例，应为百分点"
     assert is_brain_source(BRAIN_SOURCE)
@@ -219,6 +232,16 @@ def test_brain_skip_open_advisor() -> None:
         _fail("orchestrator 未接 brain_risk_params / rows_15m")
     else:
         _ok("orchestrator risk_params")
+
+    if (
+        "big4_short_blocks_long" not in orch2
+        or "short_needs_big4_short" not in orch2
+        or "PLAYBOOK_MARGIN_MULTIPLIER" not in orch2
+        or "PLAYBOOK_MIN_EDGE_SCORE" not in orch2
+    ):
+        _fail("orchestrator 未完整接入 A2/C1 受控补空门控")
+    else:
+        _ok("orchestrator controlled short gates")
 
 
 def test_brain_risk_params() -> None:

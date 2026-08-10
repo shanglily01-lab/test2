@@ -70,12 +70,23 @@ BRAIN_MIN_EDGE_SCORE_SHORT = 0.90
 BRAIN_REQUIRE_CONFIRMED_PREFIXES = ("A", "B")
 
 # Playbook v1（§7.3.11）
-# 2026-08-09 data review: A1 LONG is the only mature positive-EV bucket.
-# Keep the other playbooks classified and persisted for shadow statistics, but
-# pause their auto-open path until each bucket has enough recent positive EV.
+# 2026-08-11 loss review: keep A1 as the core long bucket, but allow controlled
+# A2/C1 short pilots only when Big4 is SHORT and with smaller margin.
 TRADEABLE_PLAYBOOKS = frozenset({
     "A1",
+    "A2",
+    "C1",
 })
+PILOT_SHORT_PLAYBOOKS = frozenset({"A2", "C1"})
+PLAYBOOK_MIN_EDGE_SCORE = {
+    "C1": 0.80,  # only volume-confirmed breakdowns clear this score in v1.
+}
+PLAYBOOK_MARGIN_MULTIPLIER = {
+    "A2": 0.50,
+    "C1": 0.35,
+}
+BRAIN_SHORT_BIG4_BIAS_REQUIRED = True
+BRAIN_LONG_BLOCK_WHEN_BIG4_SHORT = True
 FLAT_PLAYBOOKS = frozenset({"D1", "D2"})
 PLAYBOOK_SIDE = {
     "A1": "LONG", "B1": "LONG", "B4": "LONG", "C2": "LONG", "C3": "LONG",
