@@ -1,7 +1,8 @@
 """开仓/持仓顾问路由.
 
 Gemini 探索/预测已下线：开仓/持仓顾问统一走 DeepSeek。
-中线 v2、BRAIN 由 SQL/路由排除，不进持仓顾问。
+中线 v2 由 SQL/路由排除，不进持仓顾问。
+BRAIN 跳过开仓顾问，但进入 DeepSeek 持仓顾问做 thesis 复核。
 """
 
 
@@ -34,18 +35,11 @@ def should_use_gemini_hold_advisor(source: str) -> bool:
 
 
 def should_use_deepseek_hold_advisor(source: str) -> bool:
-    """DeepSeek 持仓顾问：监管非中线、非 BRAIN 模拟仓（含历史 gemini_*）。"""
+    """DeepSeek 持仓顾问：监管非中线模拟仓（含 BRAIN 与历史 gemini_*）。"""
     try:
         from app.services.midline_swing_config import is_midline_source
         if is_midline_source(source):
             return False
     except Exception:
         pass
-    try:
-        from app.services.brain_config import is_brain_source
-        if is_brain_source(source):
-            return False
-    except Exception:
-        if (source or "").strip().lower().startswith("brain_"):
-            return False
     return True

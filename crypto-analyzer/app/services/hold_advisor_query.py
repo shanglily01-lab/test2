@@ -12,13 +12,13 @@ HOLD_MIN_MINUTES = 15
 HOLD_ADVISOR_MAX_PER_TICK = 50
 HOLD_REVIEW_INTERVAL_MINUTES = 15
 
-# DeepSeek 监管 AI 模拟仓；中线 v2 + BRAIN 排除（仅硬 SL/TP + 计划到期）
+# DeepSeek 监管 AI 模拟仓；中线 v2 排除（仅硬 SL/TP + 计划到期）。
+# BRAIN 仓位纳入持仓顾问复核：顾问只判断 thesis 是否保留，
+# 硬 SL/TP、美元熔断、trail 仍由 position_sl_tp_monitor 兜底。
 from app.services.midline_swing_config import midline_source_sql_not_in
-from app.services.brain_config import brain_source_sql_exclude
 
 DEEPSEEK_HOLD_SOURCE_SQL = (
     f"AND {midline_source_sql_not_in('fp.source')} "
-    f"AND {brain_source_sql_exclude('fp.source')}"
 )
 # 兼容旧调用；Gemini 持仓顾问已下线，恒空集
 GEMINI_HOLD_SOURCE_SQL = (
@@ -30,29 +30,31 @@ _DUE_SELECT = """
                fp.quantity, fp.leverage, fp.margin, fp.open_time, fp.source,
                fp.max_profit_pct,
                TIMESTAMPDIFF(MINUTE, fp.open_time, NOW()) / 60.0 AS hold_hours,
-               lr.last_hold_review,
-               lr2.roi_pct AS last_roi_pct
+               (
+                   SELECT MAX(r.created_at)
+                   FROM `{reviews_table}` r
+                   WHERE r.review_type = 'hold'
+                     AND r.position_id = fp.id
+               ) AS last_hold_review,
+               (
+                   SELECT r2.roi_pct
+                   FROM `{reviews_table}` r2
+                   WHERE r2.review_type = 'hold'
+                     AND r2.position_id = fp.id
+                   ORDER BY r2.created_at DESC
+                   LIMIT 1
+               ) AS last_roi_pct
         FROM futures_positions fp
-        LEFT JOIN (
-            SELECT position_id, MAX(created_at) AS last_hold_review
-            FROM `{reviews_table}`
-            WHERE review_type = 'hold' AND position_id IS NOT NULL
-            GROUP BY position_id
-        ) lr ON lr.position_id = fp.id
-        LEFT JOIN `{reviews_table}` lr2
-            ON lr2.position_id = fp.id
-           AND lr2.review_type = 'hold'
-           AND lr2.created_at = lr.last_hold_review
         WHERE fp.status = 'open'
           AND fp.account_id = 2
           AND TIMESTAMPDIFF(MINUTE, fp.open_time, NOW()) >= %s
-          AND (
-                lr.last_hold_review IS NULL
-                OR TIMESTAMPDIFF(MINUTE, lr.last_hold_review, NOW()) >= %s
-          )
           {source_sql}
-        ORDER BY lr.last_hold_review IS NULL DESC,
-                 lr.last_hold_review ASC,
+        HAVING (
+                last_hold_review IS NULL
+                OR TIMESTAMPDIFF(MINUTE, last_hold_review, NOW()) >= %s
+        )
+        ORDER BY last_hold_review IS NULL DESC,
+                 last_hold_review ASC,
                  fp.open_time ASC
         LIMIT %s
 """
@@ -124,29 +126,32 @@ def fetch_profit_flip_urgent_positions(
                fp.quantity, fp.leverage, fp.margin, fp.open_time, fp.source,
                fp.max_profit_pct,
                TIMESTAMPDIFF(MINUTE, fp.open_time, NOW()) / 60.0 AS hold_hours,
-               lr.last_hold_review,
-               lr2.roi_pct AS last_roi_pct
+               (
+                   SELECT MAX(r.created_at)
+                   FROM `{reviews_table}` r
+                   WHERE r.review_type = 'hold'
+                     AND r.position_id = fp.id
+               ) AS last_hold_review,
+               (
+                   SELECT r2.roi_pct
+                   FROM `{reviews_table}` r2
+                   WHERE r2.review_type = 'hold'
+                     AND r2.position_id = fp.id
+                   ORDER BY r2.created_at DESC
+                   LIMIT 1
+               ) AS last_roi_pct
         FROM futures_positions fp
-        INNER JOIN (
-            SELECT position_id, MAX(created_at) AS last_hold_review
-            FROM `{reviews_table}`
-            WHERE review_type = 'hold' AND position_id IS NOT NULL
-            GROUP BY position_id
-        ) lr ON lr.position_id = fp.id
-        INNER JOIN `{reviews_table}` lr2
-            ON lr2.position_id = fp.id
-           AND lr2.review_type = 'hold'
-           AND lr2.created_at = lr.last_hold_review
         WHERE fp.status = 'open'
           AND fp.account_id = 2
           AND TIMESTAMPDIFF(MINUTE, fp.open_time, NOW()) >= %s
-          AND (
-                IFNULL(lr2.roi_pct, 0) > 0
-                OR IFNULL(fp.max_profit_pct, 0) * GREATEST(IFNULL(fp.leverage, 1), 1) >= 3
-          )
-          AND TIMESTAMPDIFF(MINUTE, lr.last_hold_review, NOW()) < %s
           {source_sql}
-        ORDER BY lr.last_hold_review ASC
+        HAVING last_hold_review IS NOT NULL
+           AND (
+                IFNULL(last_roi_pct, 0) > 0
+                OR IFNULL(fp.max_profit_pct, 0) * GREATEST(IFNULL(fp.leverage, 1), 1) >= 3
+           )
+           AND TIMESTAMPDIFF(MINUTE, last_hold_review, NOW()) < %s
+        ORDER BY last_hold_review ASC
         LIMIT %s
     """
     params = (

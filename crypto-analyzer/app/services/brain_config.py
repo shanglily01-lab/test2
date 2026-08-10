@@ -126,5 +126,5 @@ def is_brain_source(source: str) -> bool:
 
 
 def brain_source_sql_exclude(column: str = "source") -> str:
-    """SQL 片段：排除全部 BRAIN source（持仓顾问等）。"""
+    """SQL 片段：排除全部 BRAIN source（SmartExit 等非 BRAIN 权责路径）。"""
     return f"LOWER({column}) NOT LIKE 'brain_%'"

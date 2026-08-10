@@ -22,7 +22,7 @@ crypto-scheduler (app/scheduler.py)
   └─ （战术/情绪等按现网开关）
 
 crypto-scheduler (每 15min)
-  └─ DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**排除** midline_* 与 brain_*）
+  └─ DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**排除** midline_*；覆盖 brain_*）
 
 crypto-app-main
   └─ position_sl_tp_monitor (1s)：探索/预测硬 SL/TP + ai-trail；brain：评估硬 SL/TP + 5m/-80/trail/到期；中线硬 SL/TP + ai-trail（中线/BRAIN 均不参与 SmartExit）
@@ -39,7 +39,7 @@ crypto-app-main
 | 顶空底多 | 是 | `*_reversal` | 否 |
 | 战术四策略 | 是 | `*_pullback` 等 | 否 |
 | **中线做多/做空 v2** | **否（量化）** | `midline_long` / `midline_short` | **否（暂不进 LIVE_SYNC）** |
-| 开仓/持仓顾问 | 是 | BRAIN：**跳过开仓与持仓顾问**；按币 SL/TP/hold + trail/soft；中线跳过 | 持仓 sell：`live_close_enabled=1` 且有映射时平交易所 |
+| 开仓/持仓顾问 | 是 | BRAIN：**跳过开仓顾问，纳入持仓顾问**；按币 SL/TP/hold + trail/soft 继续兜底；中线跳过 | 持仓 sell：`live_close_enabled=1` 且有映射时平交易所 |
 | 情绪分析 | 是 | 不下单（Gemini 情绪已下线） | — |
 
 ### 1.1 REQ-BRAIN 要点（权威见 REQUIREMENTS §7.3）
@@ -47,10 +47,10 @@ crypto-app-main
 - 标的 L0+L1；1H 近 1 周定大方向，15M 近 1 天定结构  
 - Big4 疲软（动量弱 + 相对成交量很低 → 量价波动小）→ 不开  
 - 近 7 日×4h **方向对就算赢**，胜率 ≥55% 才开  
-- DeepSeek：开仓**不经**开仓顾问；BRAIN 持仓**不经**持仓顾问  
+- DeepSeek：开仓**不经**开仓顾问；BRAIN 持仓进入 DeepSeek 持仓顾问复核  
 - **入场/退出（v4.5.13）**：强制防插针限价；按币评估 SL 2.5~4.5% / TP 3~12%；5m/-80U/trail/到期，soft 关闭；peak 落库/恢复
 - 插针：影线>实体×2；频繁则按平均插针偏移；限价超时必须取消，禁止转市价
-- BRAIN 不经开仓/持仓顾问且全面排除 SmartExit；限价触价后、成交前重跑安全闸门
+- BRAIN 不经开仓顾问且全面排除 SmartExit；限价触价后、成交前重跑安全闸门
 - 旧 DeepSeek 自动开仓：对照期暂保留；结束后 INV-BRAIN-07  
 - **Web**：`/brain_strategy`；API `/api/brain-swing`（含 `/orders`）  
 
@@ -323,7 +323,7 @@ gate_simulated_open (paper_open_gate.py)
 |-------------|--------|
 | `gemini_explore` / `gemini_predict` | 仅 Gemini |
 | `midline_long` / `midline_short`（及落地前残留旧 `*_midline_*`） | **跳过**（`skip_open_advisor=True`） |
-| `brain_swing`（及 `brain_*`） | **跳过**开仓顾问；**跳过**持仓顾问（按币 SL/TP/hold + 新版 trail/soft） |
+| `brain_swing`（及 `brain_*`） | **跳过**开仓顾问；持仓纳入 DeepSeek 顾问复核（按币 SL/TP/hold + 新版 trail/soft 仍兜底） |
 | 其他 source | 仅 DeepSeek |
 
 ### 7.3 审查步骤（`open_advisor_strategy_rubrics.py`）

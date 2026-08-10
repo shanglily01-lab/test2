@@ -191,13 +191,13 @@ def test_brain_skip_open_advisor() -> None:
     else:
         _ok("orchestrator strategic close gated")
     from app.services.open_advisor_routing import should_use_deepseek_hold_advisor
-    assert should_use_deepseek_hold_advisor("brain_swing") is False
+    assert should_use_deepseek_hold_advisor("brain_swing") is True
     assert should_use_deepseek_hold_advisor("deepseek_explore") is True
     hold_q = (ROOT / "app/services/hold_advisor_query.py").read_text(encoding="utf-8")
-    if "brain_source_sql_exclude" not in hold_q:
-        _fail("hold_advisor_query 未排除 BRAIN")
+    if "brain_source_sql_exclude" in hold_q:
+        _fail("hold_advisor_query 不应再排除 BRAIN")
     else:
-        _ok("hold advisor excludes brain")
+        _ok("hold advisor includes brain")
     mon = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
     if "check_brain_trail_lock" not in mon or "brain_trail_exit" not in mon:
         _fail("position_sl_tp_monitor 未接入 BRAIN 新版 trail")
