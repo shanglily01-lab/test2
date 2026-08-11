@@ -31,6 +31,9 @@ def test_imports_and_config() -> None:
         BRAIN_MIN_EDGE_SCORE,
         BRAIN_REQUIRE_CONFIRMED_PREFIXES,
         BRAIN_SHORT_BIG4_BIAS_REQUIRED,
+        BRAIN_SHORT_BIG4_FLAT_STRONG_OVERRIDE,
+        BRAIN_SHORT_FLAT_OVERRIDE_MIN_EDGE,
+        BRAIN_SHORT_FLAT_OVERRIDE_PLAYBOOKS,
         BRAIN_STRATEGIC_CLOSE_ENABLED,
         TRADEABLE_PLAYBOOKS,
         WIN_PROB_MIN,
@@ -58,6 +61,9 @@ def test_imports_and_config() -> None:
     assert PLAYBOOK_MARGIN_MULTIPLIER["A2"] < 1.0
     assert PLAYBOOK_MARGIN_MULTIPLIER["C1"] < PLAYBOOK_MARGIN_MULTIPLIER["A2"]
     assert BRAIN_SHORT_BIG4_BIAS_REQUIRED is True
+    assert BRAIN_SHORT_BIG4_FLAT_STRONG_OVERRIDE is True
+    assert BRAIN_SHORT_FLAT_OVERRIDE_MIN_EDGE >= 0.80
+    assert BRAIN_SHORT_FLAT_OVERRIDE_PLAYBOOKS == frozenset({"A2", "C1"})
     assert BRAIN_LONG_BLOCK_WHEN_BIG4_SHORT is True
     assert BRAIN_SL_PCT >= 1.0, f"BRAIN_SL_PCT={BRAIN_SL_PCT} 疑似小数比例，应为百分点"
     assert BRAIN_TP_PCT >= 1.0, f"BRAIN_TP_PCT={BRAIN_TP_PCT} 疑似小数比例，应为百分点"
@@ -236,12 +242,33 @@ def test_brain_skip_open_advisor() -> None:
     if (
         "big4_short_blocks_long" not in orch2
         or "short_needs_big4_short" not in orch2
+        or "_strong_token_short_override" not in orch2
         or "PLAYBOOK_MARGIN_MULTIPLIER" not in orch2
         or "PLAYBOOK_MIN_EDGE_SCORE" not in orch2
     ):
         _fail("orchestrator 未完整接入 A2/C1 受控补空门控")
     else:
         _ok("orchestrator controlled short gates")
+
+    from app.services.brain_strategy_orchestrator import _strong_token_short_override
+    strong_a2 = {
+        "playbook": "A2",
+        "confirmed": True,
+        "edge_score": 0.90,
+        "features": {"h1_side": "SHORT", "m15_side": "SHORT"},
+        "signals": ["ema_bear_align", "crash_spike"],
+    }
+    assert _strong_token_short_override(strong_a2, "FLAT")
+    assert not _strong_token_short_override(strong_a2, "LONG")
+    weak_pb = {
+        "playbook": "B2",
+        "confirmed": True,
+        "edge_score": 0.90,
+        "features": {"h1_side": "SHORT", "m15_side": "SHORT"},
+        "signals": ["break_support"],
+    }
+    assert not _strong_token_short_override(weak_pb, "FLAT")
+    _ok("strong token short override")
 
 
 def test_brain_risk_params() -> None:

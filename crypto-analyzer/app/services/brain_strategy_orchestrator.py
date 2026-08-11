@@ -27,7 +27,11 @@ from app.services.brain_config import (
     BRAIN_MIN_EDGE_SCORE_SHORT,
     BRAIN_POOL_REFRESH_EVERY_TICKS,
     BRAIN_REQUIRE_CONFIRMED_PREFIXES,
+    BRAIN_SHORT_BIG4_FLAT_STRONG_OVERRIDE,
     BRAIN_SHORT_BIG4_BIAS_REQUIRED,
+    BRAIN_SHORT_FLAT_OVERRIDE_MIN_EDGE,
+    BRAIN_SHORT_FLAT_OVERRIDE_PLAYBOOKS,
+    BRAIN_SHORT_FLAT_OVERRIDE_REQUIRED_SIGNALS,
     BRAIN_SL_PCT,
     BRAIN_SOURCE,
     BRAIN_STRATEGIC_CLOSE_ENABLED,
@@ -153,6 +157,26 @@ def _mark_open_cooldown(symbol: str) -> None:
     clean = futures_symbol_rating_canonical(symbol).replace("/", "")
     cd = _live.setdefault("open_cooldown_until", {})
     cd[clean] = time.time() + BRAIN_SYMBOL_OPEN_COOLDOWN_MINUTES * 60
+
+
+def _strong_token_short_override(playbook_row: Dict[str, Any], big4_bias: str) -> bool:
+    """Permit select A2/C1 shorts when Big4 is tradable but directionally FLAT."""
+    if not BRAIN_SHORT_BIG4_FLAT_STRONG_OVERRIDE:
+        return False
+    if (big4_bias or "FLAT").upper() != "FLAT":
+        return False
+    playbook = str(playbook_row.get("playbook") or "")
+    if playbook not in BRAIN_SHORT_FLAT_OVERRIDE_PLAYBOOKS:
+        return False
+    if not bool(playbook_row.get("confirmed")):
+        return False
+    if float(playbook_row.get("edge_score") or 0) < BRAIN_SHORT_FLAT_OVERRIDE_MIN_EDGE:
+        return False
+    features = playbook_row.get("features") or {}
+    if features.get("h1_side") != "SHORT" or features.get("m15_side") != "SHORT":
+        return False
+    signals = set(playbook_row.get("signals") or [])
+    return bool(signals & set(BRAIN_SHORT_FLAT_OVERRIDE_REQUIRED_SIGNALS))
 
 
 def _build_catalyst(playbook_row: Dict[str, Any], win_long: Optional[float], win_short: Optional[float]) -> str:
@@ -409,7 +433,12 @@ def _analyze_one(
         skip_reason = f"playbook_{playbook}"
     elif side == "LONG" and BRAIN_LONG_BLOCK_WHEN_BIG4_SHORT and big4_bias == "SHORT":
         skip_reason = "big4_short_blocks_long"
-    elif side == "SHORT" and BRAIN_SHORT_BIG4_BIAS_REQUIRED and big4_bias != "SHORT":
+    elif (
+        side == "SHORT"
+        and BRAIN_SHORT_BIG4_BIAS_REQUIRED
+        and big4_bias != "SHORT"
+        and not _strong_token_short_override(pb, big4_bias)
+    ):
         skip_reason = "short_needs_big4_short"
     elif not price or float(price) <= 0:
         skip_reason = "no_price"

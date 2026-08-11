@@ -87,6 +87,17 @@ PLAYBOOK_MARGIN_MULTIPLIER = {
 }
 BRAIN_SHORT_BIG4_BIAS_REQUIRED = True
 BRAIN_LONG_BLOCK_WHEN_BIG4_SHORT = True
+# Allow very strong token-level A2/C1 shorts when Big4 is tradable but only FLAT.
+# This is intentionally narrower than disabling the Big4 short gate: the symbol
+# must show its own 1h/15m short structure plus crash/breakdown evidence.
+BRAIN_SHORT_BIG4_FLAT_STRONG_OVERRIDE = True
+BRAIN_SHORT_FLAT_OVERRIDE_MIN_EDGE = 0.80
+BRAIN_SHORT_FLAT_OVERRIDE_PLAYBOOKS = frozenset({"A2", "C1"})
+BRAIN_SHORT_FLAT_OVERRIDE_REQUIRED_SIGNALS = frozenset({
+    "crash_spike",
+    "break_support",
+    "volume_expand_down",
+})
 FLAT_PLAYBOOKS = frozenset({"D1", "D2"})
 PLAYBOOK_SIDE = {
     "A1": "LONG", "B1": "LONG", "B4": "LONG", "C2": "LONG", "C3": "LONG",
