@@ -467,6 +467,7 @@ def test_brain_market_regime() -> None:
         BULL_TREND,
         CRASH_DOWN,
         LOW_VOL_NO_TRADE,
+        PANIC_REBOUND,
         TOKEN_DIVERGENCE,
         brain_open_regime_decision,
     )
@@ -518,6 +519,22 @@ def test_brain_market_regime() -> None:
         playbook="A1",
     )
     assert dec4.regime == LOW_VOL_NO_TRADE and dec4.margin_multiplier == 0
+
+    rebound_short = {
+        "side": "SHORT",
+        "playbook": "C1",
+        "confirmed": True,
+        "edge_score": 0.85,
+        "features": {"h1_side": "SHORT", "m15_side": "SHORT"},
+        "signals": ["crash_spike", "break_support", "long_lower_wick"],
+    }
+    dec5 = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "FLAT", "bull_count": 1, "bear_count": 1},
+        playbook_row=rebound_short,
+        side="SHORT",
+        playbook="C1",
+    )
+    assert dec5.regime == PANIC_REBOUND and dec5.margin_multiplier == 0
 
     _ok("brain_market_regime")
 

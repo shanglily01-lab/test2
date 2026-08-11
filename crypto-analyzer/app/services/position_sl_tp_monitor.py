@@ -388,6 +388,17 @@ class PositionSLTPMonitor:
                         except Exception:
                             is_brain_planned = planned_src.startswith("brain_")
                         if is_brain_planned:
+                            trig = self._check_trigger(side, price, sl, tp)
+                            if trig:
+                                close_reason, price = trig
+                                logger.warning(
+                                    f"[SL/TP Monitor] BRAIN planned到期前先触发硬SL/TP "
+                                    f"pid={pid} {symbol} {side} reason={close_reason}"
+                                )
+                                self._cooldown[pid] = now + self._cooldown_seconds
+                                self._peak_pnl_map.pop(pid, None)
+                                self._do_close(pid, symbol, side, close_reason, price, now)
+                                continue
                             recheck_reason = self._brain_planned_close_recheck(pos, price)
                             if recheck_reason is None:
                                 self._cooldown[pid] = now + self._cooldown_seconds

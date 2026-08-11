@@ -67,7 +67,7 @@ def classify_brain_regime(
     bull_n = int(big4.get("bull_count") or 0)
     bear_n = int(big4.get("bear_count") or 0)
 
-    if _panic_rebound(playbook_row) and str(playbook_row.get("side") or "").upper() == "LONG":
+    if _panic_rebound(playbook_row):
         return PANIC_REBOUND, "token_panic_rebound"
 
     if _token_crash(playbook_row):
@@ -163,4 +163,3 @@ def brain_open_regime_decision(
         return RegimeDecision(regime, f"regime_transition_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 
     return RegimeDecision(regime, f"regime_unknown_blocks_{side_u}_{pb}", "shadow_only", 0.0)
-
