@@ -47,6 +47,7 @@ from app.services.brain_config import (
     TRADEABLE_PLAYBOOKS,
 )
 from app.services.brain_market_analyzer import evaluate_big4_gate, _fetch_klines
+from app.services.brain_market_regime import brain_open_regime_decision
 from app.services.brain_opportunity_store import (
     finish_scan_round,
     insert_opportunity,
@@ -184,6 +185,7 @@ def _build_catalyst(playbook_row: Dict[str, Any], win_long: Optional[float], win
         f"[BRAIN] playbook={playbook_row.get('playbook')} side={playbook_row.get('side')} "
         f"edge={playbook_row.get('edge_score')} confirmed={playbook_row.get('confirmed')} "
         f"win_l={win_long} win_s={win_short} "
+        f"regime={playbook_row.get('regime')} exec={playbook_row.get('execution_mode')} "
         f"signals={playbook_row.get('signals')} | "
         f"{playbook_row.get('evidence_summary') or ''}"
     )[:900]
@@ -220,6 +222,12 @@ def _open_brain_entry(
     sl_pct = float(risk["sl_pct"])
     tp_pct = float(risk["tp_pct"])
     hold_hours = float(risk["hold_hours"])
+    regime = str(playbook_row.get("regime") or "")
+    execution_mode = str(playbook_row.get("execution_mode") or "")
+    if regime in ("CRASH_DOWN", "RANGE_CHOP", "TRANSITION"):
+        hold_hours = min(hold_hours, 2.0)
+    elif execution_mode in ("breakout_confirm_limit", "crash_probe_limit"):
+        hold_hours = min(hold_hours, 3.0)
 
     catalyst = _build_catalyst(playbook_row, win_long, win_short)
     allowed, gate_reason = gate_simulated_open(
@@ -239,7 +247,10 @@ def _open_brain_entry(
     hold_deadline = utc_now_naive() + timedelta(hours=hold_hours)
     margin = get_paper_margin_usd(symbol, conn) or BRAIN_MARGIN_USD
     playbook = str(playbook_row.get("playbook") or "")
-    margin *= float(PLAYBOOK_MARGIN_MULTIPLIER.get(playbook, 1.0))
+    playbook_margin_mult = float(PLAYBOOK_MARGIN_MULTIPLIER.get(playbook, 1.0))
+    regime_margin_mult = float(playbook_row.get("regime_margin_multiplier") or 1.0)
+    margin_multiplier = min(playbook_margin_mult, regime_margin_mult)
+    margin *= margin_multiplier
     wick = playbook_row.get("wick") or {}
     offset = float(playbook_row.get("limit_offset_pct") or 0.5)
     if playbook_row.get("forbid_market") and wick and not BRAIN_USE_MARKET_ENTRY:
@@ -256,12 +267,17 @@ def _open_brain_entry(
         "limit_offset_pct": offset,
         "forbid_market": playbook_row.get("forbid_market"),
         "entry_mode": "market" if BRAIN_USE_MARKET_ENTRY else "limit",
+        "regime": playbook_row.get("regime"),
+        "regime_reason": playbook_row.get("regime_reason"),
+        "execution_mode": playbook_row.get("execution_mode"),
         "risk": risk.get("risk_meta"),
         "sl_pct": sl_pct,
         "tp_pct": tp_pct,
         "hold_hours": hold_hours,
         "margin": float(margin),
-        "margin_multiplier": float(PLAYBOOK_MARGIN_MULTIPLIER.get(playbook, 1.0)),
+        "margin_multiplier": float(margin_multiplier),
+        "playbook_margin_multiplier": float(playbook_margin_mult),
+        "regime_margin_multiplier": float(regime_margin_mult),
         "risk_fallback": bool(risk.get("risk_fallback")),
     }
     fail: List[str] = []
@@ -420,6 +436,16 @@ def _analyze_one(
 
     side = (pb.get("side") or "FLAT").upper()
     playbook = pb.get("playbook") or "D1"
+    regime_decision = brain_open_regime_decision(
+        big4=big4,
+        playbook_row=pb,
+        side=side,
+        playbook=str(playbook),
+    )
+    pb["regime"] = regime_decision.regime
+    pb["regime_reason"] = regime_decision.reason
+    pb["execution_mode"] = regime_decision.execution_mode
+    pb["regime_margin_multiplier"] = regime_decision.margin_multiplier
     price = pb.get("ref_price")
     decision = "SKIPPED"
     skip_reason = None
@@ -427,7 +453,9 @@ def _analyze_one(
     big4_ok = bool(big4.get("big4_ok"))
     big4_bias = str(big4.get("bias") or "FLAT").upper()
 
-    if not big4_ok:
+    if regime_decision.margin_multiplier <= 0:
+        skip_reason = regime_decision.reason
+    elif not big4_ok:
         skip_reason = "big4_weak"
     elif playbook not in TRADEABLE_PLAYBOOKS or side not in ("LONG", "SHORT"):
         skip_reason = f"playbook_{playbook}"
@@ -437,6 +465,7 @@ def _analyze_one(
         side == "SHORT"
         and BRAIN_SHORT_BIG4_BIAS_REQUIRED
         and big4_bias != "SHORT"
+        and regime_decision.margin_multiplier <= 0
         and not _strong_token_short_override(pb, big4_bias)
     ):
         skip_reason = "short_needs_big4_short"

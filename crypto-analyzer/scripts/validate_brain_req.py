@@ -224,6 +224,10 @@ def test_brain_skip_open_advisor() -> None:
         _fail("monitor 可能对 BRAIN 误用旧 ai-trail")
     else:
         _ok("monitor brain trail (new, not old ai-trail)")
+    if "_brain_planned_close_recheck" not in mon or "brain_planned_recheck" not in mon:
+        _fail("monitor 未接入 BRAIN planned_close 到期复核")
+    else:
+        _ok("monitor brain planned_close recheck")
     trail_mod = (ROOT / "app/services/brain_trail_exit.py").read_text(encoding="utf-8")
     if "check_brain_trail_lock" not in trail_mod or "check_brain_soft_no_follow" not in trail_mod:
         _fail("brain_trail_exit 缺 trail/soft")
@@ -457,9 +461,71 @@ def test_directional_gate() -> None:
     _ok("directional_open_allowed")
 
 
+def test_brain_market_regime() -> None:
+    from app.services.brain_market_regime import (
+        BEAR_TREND,
+        BULL_TREND,
+        CRASH_DOWN,
+        LOW_VOL_NO_TRADE,
+        TOKEN_DIVERGENCE,
+        brain_open_regime_decision,
+    )
+
+    a1 = {
+        "side": "LONG",
+        "playbook": "A1",
+        "confirmed": True,
+        "edge_score": 0.90,
+        "features": {"h1_side": "LONG", "m15_side": "LONG"},
+        "signals": ["ema_bull_align", "hh_hl", "15m_higher_low"],
+    }
+    dec = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "LONG", "bull_count": 3, "bear_count": 0},
+        playbook_row=a1,
+        side="LONG",
+        playbook="A1",
+    )
+    assert dec.regime == BULL_TREND and dec.margin_multiplier > 0
+
+    dec2 = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "SHORT", "bull_count": 0, "bear_count": 3},
+        playbook_row=a1,
+        side="LONG",
+        playbook="A1",
+    )
+    assert dec2.regime == BEAR_TREND and dec2.margin_multiplier == 0
+
+    c1 = {
+        "side": "SHORT",
+        "playbook": "C1",
+        "confirmed": True,
+        "edge_score": 0.85,
+        "features": {"h1_side": "SHORT", "m15_side": "SHORT"},
+        "signals": ["crash_spike", "break_support", "volume_expand_down"],
+    }
+    dec3 = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "FLAT", "bull_count": 1, "bear_count": 1},
+        playbook_row=c1,
+        side="SHORT",
+        playbook="C1",
+    )
+    assert dec3.regime in (CRASH_DOWN, TOKEN_DIVERGENCE) and dec3.margin_multiplier > 0
+
+    dec4 = brain_open_regime_decision(
+        big4={"big4_ok": False, "bias": "FLAT", "reason": "big4_weak"},
+        playbook_row=a1,
+        side="LONG",
+        playbook="A1",
+    )
+    assert dec4.regime == LOW_VOL_NO_TRADE and dec4.margin_multiplier == 0
+
+    _ok("brain_market_regime")
+
+
 def test_orchestrator_syntax() -> None:
     for rel in (
         "app/services/brain_config.py",
+        "app/services/brain_market_regime.py",
         "app/services/brain_risk_params.py",
         "app/services/brain_trail_exit.py",
         "app/services/brain_wick.py",
@@ -468,6 +534,7 @@ def test_orchestrator_syntax() -> None:
         "app/services/brain_playbook.py",
         "app/services/brain_opportunity_store.py",
         "app/services/brain_strategy_orchestrator.py",
+        "app/services/position_sl_tp_monitor.py",
         "app/services/smart_exit_optimizer.py",
         "app/trading/futures_trading_engine.py",
         "smart_trader_service.py",
@@ -485,6 +552,7 @@ def main() -> int:
     test_winrate_forward()
     test_playbook_classify()
     test_directional_gate()
+    test_brain_market_regime()
     test_tick_config()
     test_ds_auto_open_available()
     test_paper_limit_brain_force()

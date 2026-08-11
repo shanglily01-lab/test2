@@ -381,6 +381,20 @@ class PositionSLTPMonitor:
                         pct = pct.replace(tzinfo=None)
                     if utc_now_naive() >= pct:
                         price = self._get_live_price(ws, symbol) or entry_price
+                        planned_src = pos.get("source") or ""
+                        try:
+                            from app.services.brain_config import is_brain_source as _is_brain_planned_src
+                            is_brain_planned = _is_brain_planned_src(planned_src)
+                        except Exception:
+                            is_brain_planned = planned_src.startswith("brain_")
+                        if is_brain_planned:
+                            recheck_reason = self._brain_planned_close_recheck(pos, price)
+                            if recheck_reason is None:
+                                self._cooldown[pid] = now + self._cooldown_seconds
+                                continue
+                            close_reason = recheck_reason
+                        else:
+                            close_reason = "planned_close_time_expired"
                         logger.warning(
                             f"[SL/TP Monitor] 计划平仓到期 pid={pid} {symbol} {side} "
                             f"planned={pct.strftime('%Y-%m-%d %H:%M:%S')}"
@@ -389,7 +403,7 @@ class PositionSLTPMonitor:
                         self._peak_pnl_map.pop(pid, None)
                         self._do_close(
                             pid, symbol, side,
-                            "planned_close_time_expired",
+                            close_reason,
                             price, now,
                         )
                         continue
@@ -925,6 +939,82 @@ class PositionSLTPMonitor:
                 f"pnl_pct={inner.get('pnl_pct')} "
                 f"exit_price={inner.get('exit_price') or inner.get('close_price')}"
             )
+
+    def _extend_brain_planned_close(self, pid: int, minutes: int, reason: str) -> None:
+        new_deadline = utc_now_naive() + _dt.timedelta(minutes=int(minutes))
+        try:
+            conn = pymysql.connect(**_db_cfg())
+            try:
+                with conn.cursor() as c:
+                    c.execute(
+                        """
+                        UPDATE futures_positions
+                        SET planned_close_time=%s, updated_at=UTC_TIMESTAMP()
+                        WHERE id=%s AND status='open'
+                        """,
+                        (new_deadline, int(pid)),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+            logger.info(
+                f"[SL/TP Monitor] BRAIN planned recheck hold pid={pid} "
+                f"extend={minutes}m reason={reason}"
+            )
+        except Exception as e:
+            logger.warning(f"[SL/TP Monitor] BRAIN extend planned close failed pid={pid}: {e}")
+
+    def _brain_planned_close_recheck(self, pos: Dict[str, Any], price: float) -> Optional[str]:
+        """Return close reason, or None when BRAIN thesis still allows holding."""
+        pid = int(pos["id"])
+        symbol = str(pos.get("symbol") or "")
+        side = str(pos.get("position_side") or "").upper()
+        entry_price = float(pos.get("entry_price") or 0)
+        entry_pb = str(pos.get("entry_signal_type") or "").replace("brain_", "").replace("BRAIN_", "")
+        if side not in ("LONG", "SHORT") or entry_price <= 0 or price <= 0:
+            return "brain_planned_recheck:bad_position"
+        pnl_pct = ((price - entry_price) / entry_price) if side == "LONG" else ((entry_price - price) / entry_price)
+
+        try:
+            from app.services.brain_config import BARS_15M_DAY, BARS_15M_WICK_7D, BARS_1H_WEEK
+            from app.services.brain_market_analyzer import _fetch_klines, evaluate_big4_gate
+            from app.services.brain_market_regime import classify_brain_regime
+            from app.services.brain_playbook import classify_playbook
+
+            conn = pymysql.connect(**_db_cfg())
+            try:
+                with conn.cursor() as c:
+                    big4 = evaluate_big4_gate(c)
+                    rows_1h = _fetch_klines(c, symbol, "1h", BARS_1H_WEEK)
+                    rows_15m = _fetch_klines(c, symbol, "15m", max(BARS_15M_DAY, BARS_15M_WICK_7D))
+                    pb = classify_playbook(rows_1h, rows_15m, big4=big4)
+            finally:
+                conn.close()
+        except Exception as e:
+            logger.warning(f"[SL/TP Monitor] BRAIN planned recheck failed pid={pid}: {e}")
+            return "brain_planned_recheck:error"
+
+        current_side = str(pb.get("side") or "FLAT").upper()
+        current_pb = str(pb.get("playbook") or "D1")
+        regime, regime_reason = classify_brain_regime(big4, pb)
+        thesis_ok = current_side == side and current_side in ("LONG", "SHORT")
+
+        if regime in ("LOW_VOL_NO_TRADE", "PANIC_REBOUND") and pnl_pct <= 0:
+            return f"brain_planned_recheck:{regime}:no_progress"
+        if side == "LONG" and regime in ("BEAR_TREND", "CRASH_DOWN", "TRANSITION"):
+            return f"brain_planned_recheck:{regime}:long_not_allowed"
+        if side == "SHORT" and regime in ("BULL_TREND", "PANIC_REBOUND"):
+            return f"brain_planned_recheck:{regime}:short_not_allowed"
+        if not thesis_ok:
+            return f"brain_planned_recheck:{regime}:{entry_pb}->{current_pb}_{current_side}"
+
+        extend_minutes = 30 if regime in ("RANGE_CHOP", "TRANSITION", "CRASH_DOWN") else 60
+        self._extend_brain_planned_close(
+            pid,
+            extend_minutes,
+            f"{regime}:{regime_reason}:{entry_pb}->{current_pb}:pnl={pnl_pct * 100:.2f}%",
+        )
+        return None
 
     def _fetch_open_positions(self) -> List[Dict[str, Any]]:
         sql = (
