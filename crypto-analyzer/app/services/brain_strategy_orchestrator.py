@@ -47,7 +47,10 @@ from app.services.brain_config import (
     TRADEABLE_PLAYBOOKS,
 )
 from app.services.brain_market_analyzer import evaluate_big4_gate, _fetch_klines
-from app.services.brain_market_regime import brain_open_regime_decision
+from app.services.brain_market_regime import (
+    brain_open_regime_decision,
+    evaluate_global_daily_regime,
+)
 from app.services.brain_opportunity_store import (
     finish_scan_round,
     insert_opportunity,
@@ -422,6 +425,7 @@ def _analyze_one(
     winrate: Dict[str, Any],
     scan_round_id: Optional[int],
     allow_open: bool,
+    global_regime: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """分析单币：落库；过门则立即开仓。"""
     rows_1h = _fetch_klines(cur, sym, "1h", BARS_1H_WEEK)
@@ -441,11 +445,14 @@ def _analyze_one(
         playbook_row=pb,
         side=side,
         playbook=str(playbook),
+        global_regime=global_regime,
     )
     pb["regime"] = regime_decision.regime
     pb["regime_reason"] = regime_decision.reason
     pb["execution_mode"] = regime_decision.execution_mode
     pb["regime_margin_multiplier"] = regime_decision.margin_multiplier
+    pb["global_regime"] = (global_regime or {}).get("global_regime")
+    pb["global_regime_reason"] = (global_regime or {}).get("reason")
     price = pb.get("ref_price")
     decision = "SKIPPED"
     skip_reason = None
@@ -548,6 +555,7 @@ def _analyze_one(
         "win_prob_long": wl,
         "win_prob_short": ws,
         "evidence_summary": (pb.get("evidence_summary") or "")[:120],
+        "global_regime": pb.get("global_regime"),
     }
 
 
@@ -584,10 +592,17 @@ def run_brain_tick(triggered_by: str = "scheduler") -> Dict[str, Any]:
                 _live["last_error"] = "disabled"
                 return summary
             big4 = evaluate_big4_gate(cur)
+            global_regime = evaluate_global_daily_regime(cur)
         _live["big4"] = {
             "ok": bool(big4.get("big4_ok")),
             "bias": big4.get("bias"),
             "reason": big4.get("reason"),
+        }
+        _live["global_regime"] = {
+            "name": global_regime.get("global_regime"),
+            "reason": global_regime.get("reason"),
+            "btc": global_regime.get("btc"),
+            "eth": global_regime.get("eth"),
         }
 
         tick_n = int(_live.get("tick_count") or 0) + 1
@@ -637,6 +652,7 @@ def run_brain_tick(triggered_by: str = "scheduler") -> Dict[str, Any]:
                     big4=big4, winrate=winrate,
                     scan_round_id=round_id,
                     allow_open=allow_open,
+                    global_regime=global_regime,
                 )
                 batch_results.append(row)
                 summary["opportunities"] += 1

@@ -1400,8 +1400,8 @@ class UnifiedDataScheduler:
                     logger.error(f"[中线策略] 调度异常: {e}", exc_info=True)
             threading.Thread(target=wrapper, daemon=True, name="MidlineSwing").start()
 
-        schedule.every(10).minutes.do(_run_midline_swing)
-        logger.info("  ✓ midline_swing v2 - 每10min轮询 (默认周期 4h, midline_interval_hours)")
+        schedule.every(15).minutes.do(_run_midline_swing)
+        logger.info("  ✓ midline_swing v2 - 每15min轮询 Top50 多周期趋势机会")
 
         # DeepSeek 持仓顾问 - 监管模拟仓；scheduler 每 15min tick
         def _run_deepseek_position_advisor():

@@ -6,7 +6,7 @@ eligible before win-rate, edge, cooldown, and account gates run.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 BULL_TREND = "BULL_TREND"
@@ -18,6 +18,13 @@ LOW_VOL_NO_TRADE = "LOW_VOL_NO_TRADE"
 TOKEN_DIVERGENCE = "TOKEN_DIVERGENCE"
 TRANSITION = "TRANSITION"
 
+GLOBAL_DAILY_BEAR_PROBE = "DAILY_BEAR_PROBE"
+GLOBAL_RELIEF_BOUNCE = "RELIEF_BOUNCE"
+GLOBAL_RANGE_DISTRIBUTION = "RANGE_DISTRIBUTION"
+GLOBAL_RANGE_ACCUMULATION = "RANGE_ACCUMULATION"
+GLOBAL_BULL_RECOVERY = "BULL_RECOVERY"
+GLOBAL_UNKNOWN = "GLOBAL_UNKNOWN"
+
 
 @dataclass(frozen=True)
 class RegimeDecision:
@@ -25,6 +32,118 @@ class RegimeDecision:
     reason: str
     execution_mode: str
     margin_multiplier: float = 1.0
+
+
+def _f(v: Any, default: float = 0.0) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _ema(values: List[float], period: int) -> Optional[float]:
+    if len(values) < period:
+        return None
+    k = 2.0 / (period + 1)
+    ema = sum(values[:period]) / period
+    for v in values[period:]:
+        ema = v * k + ema * (1 - k)
+    return ema
+
+
+def _pct(a: float, b: float) -> Optional[float]:
+    if a <= 0:
+        return None
+    return (b - a) / a * 100.0
+
+
+def _daily_stats(rows: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if len(rows) < 60:
+        return None
+    closes = [_f(r.get("close_price")) for r in rows if _f(r.get("close_price")) > 0]
+    highs = [_f(r.get("high_price")) for r in rows if _f(r.get("high_price")) > 0]
+    lows = [_f(r.get("low_price")) for r in rows if _f(r.get("low_price")) > 0]
+    if len(closes) < 60 or not highs or not lows:
+        return None
+    window = min(90, len(closes), len(highs), len(lows))
+    last = closes[-1]
+    hi = max(highs[-window:])
+    lo = min(lows[-window:])
+    pos = 0.5 if hi <= lo else (last - lo) / (hi - lo)
+    ema20 = _ema(closes, 20)
+    ema60 = _ema(closes, 60)
+    return {
+        "last": last,
+        "range_pos_90d": round(max(0.0, min(1.0, pos)), 4),
+        "change_7d_pct": _pct(closes[-8], last) if len(closes) >= 8 else None,
+        "change_30d_pct": _pct(closes[-31], last) if len(closes) >= 31 else None,
+        "change_90d_pct": _pct(closes[-91], last) if len(closes) >= 91 else None,
+        "ema20": ema20,
+        "ema60": ema60,
+        "ema_bear": bool(ema20 and ema60 and last < ema20 < ema60),
+        "ema_bull": bool(ema20 and ema60 and last > ema20 > ema60),
+    }
+
+
+def classify_global_daily_regime_from_rows(
+    btc_rows: List[Dict[str, Any]],
+    eth_rows: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """Classify the top-level daily regime before short-cycle BRAIN gates.
+
+    This layer captures the broad cycle bias: in a daily bear/probe phase, the
+    system should primarily sell failed rebounds and heavily discount ordinary
+    long continuation signals.
+    """
+    btc = _daily_stats(btc_rows)
+    eth = _daily_stats(eth_rows or [])
+    if not btc:
+        return {"global_regime": GLOBAL_UNKNOWN, "reason": "insufficient_btc_1d"}
+
+    pos = float(btc.get("range_pos_90d") or 0.5)
+    chg30 = float(btc.get("change_30d_pct") or 0.0)
+    chg90 = btc.get("change_90d_pct")
+    chg90_f = float(chg90 or 0.0)
+    chg7 = float(btc.get("change_7d_pct") or 0.0)
+    eth_confirms_bear = bool(
+        eth
+        and (float(eth.get("range_pos_90d") or 0.5) <= 0.50)
+        and (eth.get("ema_bear") or float(eth.get("change_30d_pct") or 0.0) <= -3.0)
+    )
+
+    if pos <= 0.40 and chg7 >= 4.0 and chg30 <= 0.0:
+        regime = GLOBAL_RELIEF_BOUNCE
+        reason = "btc_low_range_short_relief_bounce"
+    elif pos <= 0.45 and (btc.get("ema_bear") or chg30 <= -5.0 or chg90_f <= -8.0 or eth_confirms_bear):
+        regime = GLOBAL_DAILY_BEAR_PROBE
+        reason = "btc_near_90d_low_daily_bear_probe"
+    elif btc.get("ema_bull") and pos >= 0.55 and chg30 >= 5.0:
+        regime = GLOBAL_BULL_RECOVERY
+        reason = "btc_daily_bull_recovery"
+    elif pos >= 0.65 and chg30 <= 3.0:
+        regime = GLOBAL_RANGE_DISTRIBUTION
+        reason = "btc_upper_range_stalling"
+    elif pos <= 0.35 and abs(chg30) <= 8.0:
+        regime = GLOBAL_RANGE_ACCUMULATION
+        reason = "btc_lower_range_chop"
+    else:
+        regime = GLOBAL_UNKNOWN
+        reason = "btc_daily_mixed"
+
+    return {
+        "global_regime": regime,
+        "reason": reason,
+        "btc": btc,
+        "eth": eth,
+    }
+
+
+def evaluate_global_daily_regime(cur) -> Dict[str, Any]:
+    from app.services.brain_market_analyzer import _fetch_klines
+
+    btc_rows = _fetch_klines(cur, "BTCUSDT", "1d", 120)
+    eth_rows = _fetch_klines(cur, "ETHUSDT", "1d", 120)
+    return classify_global_daily_regime_from_rows(btc_rows, eth_rows)
 
 
 def _signals(playbook_row: Dict[str, Any]) -> Set[str]:
@@ -95,6 +214,7 @@ def brain_open_regime_decision(
     playbook_row: Dict[str, Any],
     side: str,
     playbook: str,
+    global_regime: Optional[Dict[str, Any]] = None,
 ) -> RegimeDecision:
     """Apply approved scenario allow-list for BRAIN openings."""
     side_u = (side or "").upper()
@@ -103,6 +223,59 @@ def brain_open_regime_decision(
     edge = float(playbook_row.get("edge_score") or 0)
     confirmed = bool(playbook_row.get("confirmed"))
     regime, why = classify_brain_regime(big4, playbook_row)
+    global_regime = global_regime or {}
+    global_name = str(global_regime.get("global_regime") or GLOBAL_UNKNOWN)
+
+    if global_name == GLOBAL_DAILY_BEAR_PROBE:
+        if side_u == "LONG":
+            return RegimeDecision(
+                regime,
+                f"global_daily_bear_probe_blocks_long:{regime}:{pb}",
+                "shadow_only",
+                0.0,
+            )
+        if side_u == "SHORT" and pb == "A2" and confirmed and edge >= 0.80:
+            return RegimeDecision(
+                regime,
+                f"global_daily_bear_probe_allows_failed_rebound_A2:{why}",
+                "pullback_limit",
+                0.75,
+            )
+        if (
+            side_u == "SHORT"
+            and pb == "C1"
+            and confirmed
+            and edge >= 0.80
+            and bool(sig & {"break_support", "volume_expand_down", "crash_spike"})
+        ):
+            return RegimeDecision(
+                regime,
+                f"global_daily_bear_probe_allows_breakdown_C1:{why}",
+                "breakout_confirm_limit",
+                0.50,
+            )
+        return RegimeDecision(
+            regime,
+            f"global_daily_bear_probe_blocks_{side_u}_{pb}",
+            "shadow_only",
+            0.0,
+        )
+
+    if global_name == GLOBAL_RELIEF_BOUNCE:
+        if side_u == "SHORT" and pb in {"A2", "C1"}:
+            return RegimeDecision(
+                regime,
+                f"global_relief_bounce_blocks_fresh_short:{regime}:{pb}",
+                "shadow_only",
+                0.0,
+            )
+        if side_u == "LONG" and pb == "A1" and confirmed and edge >= 0.95 and _strong_token_side(playbook_row, "LONG"):
+            return RegimeDecision(
+                regime,
+                "global_relief_bounce_allows_only_strong_A1",
+                "pullback_limit",
+                0.25,
+            )
 
     if regime == LOW_VOL_NO_TRADE:
         return RegimeDecision(regime, f"regime_low_vol_no_trade:{why}", "shadow_only", 0.0)

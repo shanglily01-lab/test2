@@ -29,6 +29,15 @@ RANGE_TOP_PCT = 0.60
 NEAR_10D_PCT = 0.05
 ATR_SHRINK_RATIO = 1.20
 VOL_SHRINK_RATIO = 1.05
+MIDLINE_TOP50_LIMIT = 50
+MIDLINE_BIG_SYMBOLS = ("BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT")
+TREND_WINDOWS = (
+    ("cycle", "大周期", 120, "1d"),
+    ("m3", "近3个月", 90, "1d"),
+    ("m1", "近1个月", 30, "1d"),
+    ("d7", "近7天", 7, "1d"),
+    ("d1", "最近1天", 96, "15m"),
+)
 
 
 def _rsi(closes: List[float], period: int = 14) -> Optional[float]:
@@ -424,6 +433,286 @@ def scan_universe(
                     })
                 continue
 
+    results.sort(key=lambda x: (0 if x.get("passed") else 1, -float(x.get("score") or 0)))
+    return results, universe_size
+
+
+def _ema(values: List[float], period: int) -> Optional[float]:
+    if len(values) < period:
+        return None
+    k = 2.0 / (period + 1)
+    ema = sum(values[:period]) / period
+    for v in values[period:]:
+        ema = v * k + ema * (1 - k)
+    return ema
+
+
+def _window_direction(closes: List[float], highs: List[float], lows: List[float]) -> Dict[str, Any]:
+    if len(closes) < 2:
+        return {"side": "FLAT", "score": 0.0, "reason": "insufficient"}
+    first, last = closes[0], closes[-1]
+    if first <= 0:
+        return {"side": "FLAT", "score": 0.0, "reason": "bad_price"}
+    change = (last - first) / first * 100.0
+    hi, lo = max(highs), min(lows)
+    pos = 0.5 if hi <= lo else (last - lo) / (hi - lo)
+    ema20 = _ema(closes, min(20, len(closes)))
+    side = "FLAT"
+    if change >= 3.0 and pos >= 0.45 and (ema20 is None or last >= ema20):
+        side = "LONG"
+    elif change <= -3.0 and pos <= 0.55 and (ema20 is None or last <= ema20):
+        side = "SHORT"
+    elif change >= 1.2 and pos >= 0.55:
+        side = "LONG"
+    elif change <= -1.2 and pos <= 0.45:
+        side = "SHORT"
+    score = min(1.0, abs(change) / 12.0 + abs(pos - 0.5))
+    return {
+        "side": side,
+        "score": round(score, 3),
+        "change_pct": round(change, 2),
+        "range_pos": round(pos, 3),
+        "last": round(last, 8),
+        "ema20": round(ema20, 8) if ema20 else None,
+    }
+
+
+def _fetch_window(cur, symbol: str, key: str) -> Tuple[List[float], List[float], List[float], List[float]]:
+    _, _, limit, timeframe = next(w for w in TREND_WINDOWS if w[0] == key)
+    rows = _fetch_klines(cur, symbol, timeframe, limit)
+    return _bar_floats(rows) if rows else ([], [], [], [])
+
+
+def load_midline_universe(conn) -> List[str]:
+    """Top50 liquid crypto universe. Market-cap rank can replace this query later."""
+    symbols: List[str] = []
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT symbol
+                FROM price_stats_24h
+                WHERE symbol LIKE '%%/USDT'
+                  AND quote_volume_24h IS NOT NULL
+                  AND quote_volume_24h > 0
+                ORDER BY quote_volume_24h DESC
+                LIMIT 120
+                """
+            )
+            for row in cur.fetchall() or []:
+                raw = row.get("symbol") if isinstance(row, dict) else row[0]
+                canon = futures_symbol_rating_canonical(str(raw or ""))
+                if canon and not is_security(canon):
+                    symbols.append(canon)
+    except Exception as e:
+        logger.warning(f"[中线扫描] 读取流动性Top50失败，回退config池: {e}")
+        symbols = load_config_yaml_symbols()
+
+    try:
+        from app.services.trading_gates import load_trading_forbidden_symbols
+        banned = load_trading_forbidden_symbols(conn) or set()
+    except Exception as e:
+        logger.warning(f"[中线扫描] 读取禁止交易名单失败: {e}")
+        banned = set()
+    banned_clean = {futures_symbol_clean(futures_symbol_rating_canonical(b)) for b in banned}
+
+    filtered: List[str] = []
+    seen = set()
+    for sym in symbols:
+        clean = futures_symbol_clean(sym)
+        if not clean or clean in seen or clean in banned_clean or is_security(sym):
+            continue
+        seen.add(clean)
+        filtered.append(sym)
+        if len(filtered) >= MIDLINE_TOP50_LIMIT:
+            break
+    return filtered
+
+
+def evaluate_global_trend_dimensions(cur) -> Dict[str, Any]:
+    dims = []
+    votes = {"LONG": 0.0, "SHORT": 0.0, "FLAT": 0.0}
+    for key, label, _, _ in TREND_WINDOWS:
+        coins = []
+        for sym in MIDLINE_BIG_SYMBOLS:
+            c, h, l, _ = _fetch_window(cur, sym, key)
+            if not c:
+                continue
+            d = _window_direction(c, h, l)
+            coins.append({"symbol": futures_symbol_rating_canonical(sym), **d})
+            votes[d["side"]] += max(0.1, float(d.get("score") or 0))
+        long_n = sum(1 for x in coins if x["side"] == "LONG")
+        short_n = sum(1 for x in coins if x["side"] == "SHORT")
+        side = "SHORT" if short_n >= 3 else "LONG" if long_n >= 3 else "FLAT"
+        dims.append({"key": key, "label": label, "side": side, "coins": coins})
+    bias = "SHORT" if votes["SHORT"] > votes["LONG"] * 1.15 else "LONG" if votes["LONG"] > votes["SHORT"] * 1.15 else "FLAT"
+    return {"bias": bias, "dimensions": dims, "votes": votes}
+
+
+def _entry_15m_opportunity(
+    closes_15m: List[float],
+    highs_15m: List[float],
+    lows_15m: List[float],
+    vols_15m: List[float],
+    side: str,
+) -> Tuple[bool, Dict[str, Any]]:
+    detail: Dict[str, Any] = {"layer": "entry_15m_opportunity"}
+    if len(closes_15m) < 32:
+        detail["reason"] = "insufficient_15m"
+        return False, detail
+    last = closes_15m[-1]
+    prev_hi = max(highs_15m[-32:-4])
+    prev_lo = min(lows_15m[-32:-4])
+    recent_hi = max(highs_15m[-4:])
+    recent_lo = min(lows_15m[-4:])
+    vol_recent = sum(vols_15m[-4:]) / 4
+    vol_prior = sum(vols_15m[-16:-4]) / 12 if len(vols_15m) >= 16 else vol_recent
+    vol_ratio = vol_recent / vol_prior if vol_prior > 0 else 1.0
+    detail.update({"prev_hi": round(prev_hi, 8), "prev_lo": round(prev_lo, 8), "vol_ratio": round(vol_ratio, 3)})
+    if side == "SHORT":
+        lower_high = recent_hi <= prev_hi * 1.002 and closes_15m[-1] <= max(closes_15m[-4:-1])
+        breakdown = last < prev_lo * 0.998
+        stalled = lower_high and vol_ratio <= 1.10
+        detail["setup"] = "failed_rebound_short" if stalled else "breakdown_short" if breakdown else "none"
+        ok = stalled or breakdown
+    else:
+        higher_low = recent_lo >= prev_lo * 0.998 and closes_15m[-1] >= min(closes_15m[-4:-1])
+        reclaim = last > prev_hi * 1.002
+        detail["setup"] = "support_rebound_long" if higher_low else "reclaim_long" if reclaim else "none"
+        ok = higher_low or reclaim
+    if not ok:
+        detail["reason"] = "no_15m_setup"
+        return False, detail
+    detail["passed"] = True
+    return True, detail
+
+
+def evaluate_symbol_multiperiod(
+    cur,
+    symbol: str,
+    profile: str,
+    global_trend: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    profile_l = profile.strip().lower()
+    side = "LONG" if profile_l == "long" else "SHORT"
+    out: Dict[str, Any] = {"symbol": symbol, "side": side, "passed": False, "reason": None, "score": 0.0, "ref_price": None}
+    dims: Dict[str, Any] = {}
+    c15 = h15 = l15 = v15 = []
+    for key, label, _, _ in TREND_WINDOWS:
+        c, h, l, v = _fetch_window(cur, symbol, key)
+        if not c:
+            out["reason"] = f"insufficient_{key}"
+            return out
+        dims[key] = {"label": label, **_window_direction(c, h, l)}
+        if key == "d1":
+            c15, h15, l15, v15 = c, h, l, v
+            out["ref_price"] = c15[-1]
+
+    global_bias = (global_trend or {}).get("bias") or "FLAT"
+    macro_side = dims["cycle"]["side"]
+    m3_side = dims["m3"]["side"]
+    m1_side = dims["m1"]["side"]
+    d7_side = dims["d7"]["side"]
+    d1_side = dims["d1"]["side"]
+    if side == "SHORT":
+        if global_bias == "LONG" and m3_side != "SHORT":
+            reason = "global_bull_blocks_short"
+            out.update({"reason": reason, "trend": dims})
+            return out
+        trend_ok = macro_side in ("SHORT", "FLAT") and m3_side in ("SHORT", "FLAT") and (m1_side == "SHORT" or d7_side == "SHORT")
+    else:
+        if global_bias == "SHORT" and not (d7_side == "SHORT" and d1_side == "LONG"):
+            reason = "global_bear_allows_only_support_rebound"
+            out.update({"reason": reason, "trend": dims})
+            return out
+        trend_ok = (m3_side == "LONG" and m1_side in ("LONG", "FLAT")) or (d7_side == "SHORT" and d1_side == "LONG")
+    if not trend_ok:
+        out.update({"reason": "trend_dimensions_not_aligned", "trend": dims})
+        return out
+
+    ok_entry, entry = _entry_15m_opportunity(c15, h15, l15, v15, side)
+    if not ok_entry:
+        out.update({"reason": entry.get("reason") or "entry_fail", "trend": dims, "entry": entry})
+        return out
+
+    score = 0.0
+    for key in ("cycle", "m3", "m1", "d7", "d1"):
+        d = dims[key]
+        score += 18 if d["side"] == side else 7 if d["side"] == "FLAT" else 0
+    score += 10
+    if side == "SHORT" and global_bias == "SHORT":
+        score += 8
+    if side == "LONG" and global_bias == "SHORT":
+        score *= 0.55
+    out.update({
+        "passed": score >= 62,
+        "reason": None if score >= 62 else "score_below_threshold",
+        "score": round(score, 1),
+        "trend": dims,
+        "entry": entry,
+        "signal_detail": {
+            "global_trend": global_trend,
+            "trend_dimensions": dims,
+            "entry": entry,
+            "setup": entry.get("setup"),
+        },
+    })
+    return out
+
+
+def scan_universe(
+    conn,
+    profile: str,
+    *,
+    include_rejects: bool = False,
+) -> Tuple[List[Dict[str, Any]], int]:
+    symbols = load_midline_universe(conn)
+    universe_size = len(symbols)
+    results: List[Dict[str, Any]] = []
+    profile_l = profile.strip().lower()
+
+    with conn.cursor() as cur:
+        global_trend = evaluate_global_trend_dimensions(cur)
+        for symbol in symbols:
+            try:
+                ev = evaluate_symbol_multiperiod(cur, symbol, profile_l, global_trend=global_trend)
+                if ev["passed"]:
+                    results.append({
+                        "symbol": ev["symbol"],
+                        "side": ev["side"],
+                        "score": float(ev["score"]),
+                        "signal_detail": ev.get("signal_detail") or {},
+                        "ref_price": ev.get("ref_price"),
+                        "passed": True,
+                        "reason": None,
+                    })
+                elif include_rejects:
+                    results.append({
+                        "symbol": ev["symbol"],
+                        "side": ev["side"],
+                        "score": float(ev.get("score") or 0),
+                        "signal_detail": {
+                            "global_trend": global_trend,
+                            "trend_dimensions": ev.get("trend") or {},
+                            "entry": ev.get("entry") or {},
+                            "reason": ev.get("reason"),
+                        },
+                        "ref_price": ev.get("ref_price"),
+                        "passed": False,
+                        "reason": ev.get("reason"),
+                    })
+            except Exception as e:
+                logger.debug(f"[中线扫描] {symbol} 跳过: {e}")
+                if include_rejects:
+                    results.append({
+                        "symbol": symbol,
+                        "side": "LONG" if profile_l == "long" else "SHORT",
+                        "score": 0.0,
+                        "signal_detail": {"error": str(e)},
+                        "ref_price": None,
+                        "passed": False,
+                        "reason": "eval_error",
+                    })
     results.sort(key=lambda x: (0 if x.get("passed") else 1, -float(x.get("score") or 0)))
     return results, universe_size
 

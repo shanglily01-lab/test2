@@ -466,10 +466,12 @@ def test_brain_market_regime() -> None:
         BEAR_TREND,
         BULL_TREND,
         CRASH_DOWN,
+        GLOBAL_DAILY_BEAR_PROBE,
         LOW_VOL_NO_TRADE,
         PANIC_REBOUND,
         TOKEN_DIVERGENCE,
         brain_open_regime_decision,
+        classify_global_daily_regime_from_rows,
     )
 
     a1 = {
@@ -535,6 +537,51 @@ def test_brain_market_regime() -> None:
         playbook="C1",
     )
     assert dec5.regime == PANIC_REBOUND and dec5.margin_multiplier == 0
+
+    def _daily_rows(closes):
+        return [
+            {
+                "open_price": c,
+                "high_price": c * 1.01,
+                "low_price": c * 0.99,
+                "close_price": c,
+                "volume": 1000,
+            }
+            for c in closes
+        ]
+
+    bear_closes = [100 - i * 0.45 for i in range(120)]
+    global_bear = classify_global_daily_regime_from_rows(
+        _daily_rows(bear_closes),
+        _daily_rows([80 - i * 0.35 for i in range(120)]),
+    )
+    assert global_bear["global_regime"] == GLOBAL_DAILY_BEAR_PROBE
+
+    dec6 = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "LONG", "bull_count": 3, "bear_count": 0},
+        playbook_row=a1,
+        side="LONG",
+        playbook="A1",
+        global_regime=global_bear,
+    )
+    assert dec6.margin_multiplier == 0 and "global_daily_bear_probe_blocks_long" in dec6.reason
+
+    a2 = {
+        "side": "SHORT",
+        "playbook": "A2",
+        "confirmed": True,
+        "edge_score": 0.86,
+        "features": {"h1_side": "SHORT", "m15_side": "SHORT"},
+        "signals": ["ema_bear_align", "lh_ll", "15m_lower_high"],
+    }
+    dec7 = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "FLAT", "bull_count": 1, "bear_count": 1},
+        playbook_row=a2,
+        side="SHORT",
+        playbook="A2",
+        global_regime=global_bear,
+    )
+    assert dec7.margin_multiplier > 0 and "failed_rebound_A2" in dec7.reason
 
     _ok("brain_market_regime")
 

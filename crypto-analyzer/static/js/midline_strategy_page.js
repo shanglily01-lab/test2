@@ -1,179 +1,133 @@
-/**
- * 中线策略页 — 机会分析 / 参数 / 持仓
- */
 (function () {
   var API = '/api/midline-swing';
-
   function $(id) { return document.getElementById(id); }
-
-  function toast(msg, ok) {
-    var el = $('params-msg');
-    if (!el) return;
-    el.textContent = msg;
-    el.style.color = ok ? '#49f4c8' : '#ff716c';
+  function cls(side) {
+    side = String(side || 'FLAT').toUpperCase();
+    return side === 'LONG' ? 'long' : side === 'SHORT' ? 'short' : 'flat';
   }
-
-  function fmtTime(v) {
-    if (!v) return '--';
-    return String(v).replace('T', ' ').slice(0, 19);
+  function chip(side) {
+    side = String(side || 'FLAT').toUpperCase();
+    return '<span class="chip ' + cls(side) + '">' + side + '</span>';
   }
-
-  function loadOverview() {
-    return fetch(API + '/overview')
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        if (!j.success) throw new Error(j.detail || 'overview failed');
-        var d = j.data;
-        var long = (d.sources || {}).midline_long || {};
-        var short = (d.sources || {}).midline_short || {};
-        $('tog-long').checked = !!long.enabled;
-        $('tog-short').checked = !!short.enabled;
-        $('stat-long-open').textContent = '持仓 ' + (long.open_positions || 0);
-        $('stat-short-open').textContent = '持仓 ' + (short.open_positions || 0);
-        var p = d.params || {};
-        $('p-interval').textContent = (p.interval_hours != null ? p.interval_hours : '--');
-        $('p-offset').textContent = '多−' + p.limit_long_offset_pct + '% / 空+' + p.limit_short_offset_pct + '%';
-        $('p-sltp').textContent = 'SL ' + d.sl_pct + '% / TP ' + d.tp_pct + '%';
-        $('p-hold').textContent = d.hold_hours + 'h / ' + d.leverage + 'x / ' + d.margin_usd + 'U';
-        $('inp-interval').value = p.interval_hours;
-        $('inp-long-off').value = p.limit_long_offset_pct;
-        $('inp-short-off').value = p.limit_short_offset_pct;
-      })
-      .catch(function (e) { console.error(e); toast(String(e), false); });
+  function fmt(v, suffix) {
+    if (v === null || v === undefined || v === '') return '--';
+    var n = Number(v);
+    if (Number.isFinite(n)) return n.toFixed(Math.abs(n) >= 10 ? 1 : 2) + (suffix || '');
+    return String(v);
   }
-
-  function loadRuns() {
-    return fetch(API + '/runs?limit=30')
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        var rows = (j.data || []);
-        var sel = $('sel-run');
-        var list = $('runs-list');
-        sel.innerHTML = '';
-        list.innerHTML = '';
-        rows.forEach(function (r, i) {
-          var opt = document.createElement('option');
-          opt.value = r.id;
-          opt.textContent = '#' + r.id + ' ' + r.source + ' ' + fmtTime(r.asof_utc) + ' ' + (r.status || '');
-          sel.appendChild(opt);
-          var div = document.createElement('div');
-          div.className = 'bg-surface-container-low rounded-lg px-3 py-2 cursor-pointer hover:bg-surface-container-highest';
-          div.textContent = '#' + r.id + ' ' + r.source + ' | 池' + r.universe_size + ' 信号' + r.signals_found + ' 挂单' + r.orders_placed + ' | ' + (r.summary_short || '');
-          div.onclick = function () { sel.value = r.id; loadVerdicts(); };
-          list.appendChild(div);
-          if (i === 0) sel.value = r.id;
-        });
-        if (rows.length) loadVerdicts();
-      });
+  function time(v) {
+    return v ? String(v).replace('T', ' ').slice(0, 19) : '--';
   }
-
-  function loadVerdicts() {
-    var runId = $('sel-run').value;
-    if (!runId) return;
-    var only = $('chk-passed-only').checked;
-    var url = API + '/verdicts?run_id=' + runId + '&limit=400';
-    if (only) url += '&only_passed=true';
-    fetch(url)
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        var rows = j.data || [];
-        $('run-summary').textContent = 'run #' + runId + ' · ' + rows.length + ' 条';
-        var tb = $('verdict-body');
-        tb.innerHTML = '';
-        rows.forEach(function (v) {
-          var tr = document.createElement('tr');
-          var chip = v.side === 'LONG' ? 'chip-long' : 'chip-short';
-          var detail = '';
-          try {
-            var sd = typeof v.signal_detail === 'string' ? JSON.parse(v.signal_detail) : (v.signal_detail || {});
-            if (sd.change_30d_pct != null) detail += '30d ' + sd.change_30d_pct + '% ';
-            if (sd.rsi_1d != null) detail += 'RSI1d ' + sd.rsi_1d + ' ';
-            if (sd.range_pos != null) detail += 'pos ' + sd.range_pos + ' ';
-            if (v.skip_reason) detail += v.skip_reason;
-            if (!detail && sd.reason) detail = sd.reason;
-          } catch (e) {
-            detail = v.skip_reason || '';
-          }
-          tr.innerHTML =
-            '<td class="px-3 py-2 mono">' + (v.symbol || '') + '</td>' +
-            '<td class="px-3 py-2"><span class="chip ' + chip + '">' + v.side + '</span></td>' +
-            '<td class="px-3 py-2 mono">' + (v.action_taken || '') + '</td>' +
-            '<td class="px-3 py-2 mono">' + (v.score != null ? v.score : '') + '</td>' +
-            '<td class="px-3 py-2 text-on-surface-variant">' + detail + '</td>';
-          tb.appendChild(tr);
-        });
-      });
+  function dimsText(dims) {
+    if (!dims) return '--';
+    var keys = ['cycle', 'm3', 'm1', 'd7', 'd1'];
+    return keys.map(function (k) {
+      var d = dims[k] || {};
+      return (d.label || k) + ':' + (d.side || 'FLAT');
+    }).join(' / ');
   }
-
-  function loadPositions() {
-    fetch(API + '/positions?status=open&limit=100')
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        var el = $('pos-open');
-        el.innerHTML = '';
-        (j.data || []).forEach(function (p) {
-          var div = document.createElement('div');
-          div.className = 'bg-surface-container-low rounded-lg px-3 py-2';
-          div.innerHTML =
-            '<span class="mono font-medium">' + p.symbol + '</span> ' +
-            '<span class="chip ' + (p.position_side === 'LONG' ? 'chip-long' : 'chip-short') + '">' + p.position_side + '</span> ' +
-            '<span class="text-on-surface-variant">' + (p.source || '') + '</span><br/>' +
-            '<span class="mono text-on-surface-variant">entry ' + p.entry_price + ' · margin ' + p.margin + '</span>';
-          el.appendChild(div);
-        });
-        if (!(j.data || []).length) el.innerHTML = '<p class="text-on-surface-variant">无持仓</p>';
-      });
+  function renderTrend(data) {
+    var grid = $('trend-grid');
+    grid.innerHTML = '';
+    ((data.trend || {}).dimensions || []).forEach(function (d) {
+      var coins = (d.coins || []).map(function (c) {
+        return '<div class="flex items-center justify-between gap-2 text-[11px] mono text-on-surface-variant">' +
+          '<span>' + c.symbol + '</span><span class="' + cls(c.side) + ' px-1.5 rounded">' + c.side + '</span>' +
+          '<span>' + fmt(c.change_pct, '%') + '</span></div>';
+      }).join('');
+      var div = document.createElement('div');
+      div.className = 'bg-surface-container-low rounded-lg border border-outline-variant/10 p-3 min-h-[170px]';
+      div.innerHTML =
+        '<div class="flex items-center justify-between mb-2">' +
+        '<h3 class="text-sm font-semibold">' + d.label + '</h3>' + chip(d.side) + '</div>' +
+        '<div class="space-y-1">' + coins + '</div>';
+      grid.appendChild(div);
+    });
   }
-
-  function bind() {
-    $('btn-refresh').onclick = function () {
-      loadOverview(); loadRuns(); loadPositions();
-    };
-    $('btn-run-all').onclick = function () {
-      fetch(API + '/run-now', { method: 'POST' })
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          toast(j.message || '已触发', true);
-          setTimeout(function () { loadRuns(); loadOverview(); }, 3000);
-        });
-    };
-    $('btn-save-params').onclick = function () {
-      var body = {
-        interval_hours: Number($('inp-interval').value),
-        limit_long_offset_pct: Number($('inp-long-off').value),
-        limit_short_offset_pct: Number($('inp-short-off').value),
-      };
-      fetch(API + '/params', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          if (!j.success) throw new Error(j.detail || 'save failed');
-          toast('参数已保存', true);
-          loadOverview();
-        })
-        .catch(function (e) { toast(String(e), false); });
-    };
-    function bindToggle(id, source) {
-      $(id).onchange = function () {
-        var enabled = $(id).checked;
-        fetch(API + '/toggle?source=' + source, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled: enabled }),
-        }).then(function () { toast(source + (enabled ? ' 已开启' : ' 已关闭'), true); });
-      };
+  function renderOpportunities(rows) {
+    var body = $('opportunity-body');
+    body.innerHTML = '';
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="6" class="px-3 py-8 text-center text-on-surface-variant">暂无可展示机会</td></tr>';
+      return;
     }
-    bindToggle('tog-long', 'midline_long');
-    bindToggle('tog-short', 'midline_short');
-    $('sel-run').onchange = loadVerdicts;
-    $('chk-passed-only').onchange = loadVerdicts;
+    rows.forEach(function (r) {
+      var sd = r.signal_detail || {};
+      var setup = sd.setup || (sd.entry || {}).setup || r.skip_reason || '--';
+      var dims = sd.trend_dimensions || {};
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td class="px-3 py-2 mono font-semibold">' + (r.symbol || '') + '</td>' +
+        '<td class="px-3 py-2">' + chip(r.side) + '</td>' +
+        '<td class="px-3 py-2 mono">' + (r.action_taken || '') + '</td>' +
+        '<td class="px-3 py-2 mono">' + fmt(r.score) + '</td>' +
+        '<td class="px-3 py-2 text-on-surface-variant">' + setup + '</td>' +
+        '<td class="px-3 py-2 text-on-surface-variant max-w-[520px]">' + dimsText(dims) + '</td>';
+      body.appendChild(tr);
+    });
   }
-
-  bind();
-  loadOverview();
-  loadRuns();
-  loadPositions();
+  function renderPositions(rows) {
+    var box = $('positions-list');
+    box.innerHTML = '';
+    if (!rows.length) {
+      box.innerHTML = '<p class="text-on-surface-variant">暂无中线持仓</p>';
+      return;
+    }
+    rows.forEach(function (p) {
+      var div = document.createElement('div');
+      div.className = 'bg-surface-container-low rounded-lg border border-outline-variant/10 px-3 py-2';
+      div.innerHTML =
+        '<div class="flex items-center justify-between"><span class="mono font-semibold">' + p.symbol + '</span>' +
+        chip(p.position_side) + '</div>' +
+        '<div class="mt-1 mono text-on-surface-variant">entry ' + fmt(p.entry_price) +
+        ' · pnl ' + fmt(p.unrealized_pnl, 'U') + ' · ' + time(p.open_time) + '</div>';
+      box.appendChild(div);
+    });
+  }
+  function renderUniverse(rows) {
+    var box = $('universe-list');
+    box.innerHTML = '';
+    rows.forEach(function (s) {
+      var span = document.createElement('span');
+      span.className = 'px-2 py-1 rounded bg-surface-container-low border border-outline-variant/10 text-on-surface-variant';
+      span.textContent = s;
+      box.appendChild(span);
+    });
+  }
+  function loadDashboard() {
+    return fetch(API + '/dashboard')
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j.success) throw new Error(j.detail || 'dashboard failed');
+        var d = j.data || {};
+        $('stat-bias').innerHTML = chip((d.trend || {}).bias);
+        $('stat-interval').textContent = (d.scan_interval_minutes || 15) + 'M';
+        $('stat-universe').textContent = d.universe_size || 0;
+        $('stat-opp').textContent = (d.opportunities || []).length;
+        $('stat-pos').textContent = (d.positions || []).length;
+        var runs = d.latest_runs || [];
+        $('last-run').textContent = runs.length ? runs.map(function (r) {
+          return r.source + ' #' + r.id + ' ' + time(r.asof_utc);
+        }).join(' | ') : '--';
+        renderTrend(d);
+        renderOpportunities(d.opportunities || []);
+        renderPositions(d.positions || []);
+        renderUniverse(d.universe || []);
+      })
+      .catch(function (e) {
+        console.error(e);
+        $('opportunity-body').innerHTML = '<tr><td colspan="6" class="px-3 py-8 text-center text-error">' + String(e) + '</td></tr>';
+      });
+  }
+  function runNow() {
+    $('btn-run').disabled = true;
+    fetch(API + '/run-now', { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function () { setTimeout(loadDashboard, 2500); })
+      .finally(function () { $('btn-run').disabled = false; });
+  }
+  $('btn-refresh').onclick = loadDashboard;
+  $('btn-run').onclick = runNow;
+  loadDashboard();
+  setInterval(loadDashboard, 60000);
 })();

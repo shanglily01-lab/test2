@@ -19,6 +19,7 @@ MIDLINE_MARGIN_USD = 500.0
 DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT = 1.0
 DEFAULT_MIDLINE_LIMIT_SHORT_OFFSET_PCT = 1.0
 DEFAULT_MIDLINE_INTERVAL_HOURS = 4
+MIDLINE_SCAN_INTERVAL_MINUTES = 15
 
 MIDLINE_LIMIT_LONG_OFFSET_PCT = DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT
 MIDLINE_LIMIT_SHORT_OFFSET_PCT = DEFAULT_MIDLINE_LIMIT_SHORT_OFFSET_PCT
@@ -127,7 +128,7 @@ def get_midline_limit_short_offset_pct() -> float:
 
 
 def get_midline_limit_timeout_minutes() -> int:
-    return get_midline_interval_hours() * 60
+    return max(30, MIDLINE_SCAN_INTERVAL_MINUTES * 2)
 
 
 def get_midline_runtime_params() -> dict:
@@ -136,6 +137,7 @@ def get_midline_runtime_params() -> dict:
     interval = get_midline_interval_hours()
     return {
         "interval_hours": interval,
+        "interval_minutes": MIDLINE_SCAN_INTERVAL_MINUTES,
         "limit_long_offset_pct": long_pct,
         "limit_short_offset_pct": short_pct,
         "limit_offset_pct": long_pct,

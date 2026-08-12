@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+import json
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
@@ -441,6 +442,109 @@ def list_positions(
         raise
     except Exception as e:
         logger.error(f"[中线 API] /positions 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+def _parse_json(v):
+    if not v:
+        return {}
+    if isinstance(v, dict):
+        return v
+    try:
+        return json.loads(v)
+    except Exception:
+        return {}
+
+
+@router.get("/dashboard")
+def dashboard():
+    """Multi-period trend dashboard + latest midline opportunities."""
+    try:
+        conn = _connect()
+        try:
+            with conn.cursor() as cur:
+                _ensure_settings(cur)
+                from app.services.midline_swing_config import MIDLINE_SCAN_INTERVAL_MINUTES
+                from app.services.midline_swing_scanner import (
+                    evaluate_global_trend_dimensions,
+                    load_midline_universe,
+                )
+
+                trend = evaluate_global_trend_dimensions(cur)
+                universe = load_midline_universe(conn)
+
+                cur.execute(
+                    """
+                    SELECT r.*
+                    FROM midline_swing_runs r
+                    JOIN (
+                      SELECT source, MAX(id) AS id
+                      FROM midline_swing_runs
+                      WHERE source IN ('midline_long','midline_short')
+                      GROUP BY source
+                    ) x ON x.id = r.id
+                    ORDER BY r.source
+                    """
+                )
+                latest_runs = cur.fetchall() or []
+                run_ids = [int(r["id"]) for r in latest_runs if r.get("id")]
+
+                opportunities = []
+                if run_ids:
+                    placeholders = ",".join(["%s"] * len(run_ids))
+                    cur.execute(
+                        f"""
+                        SELECT id, run_id, source, symbol, side, score, signal_detail,
+                               action_taken, order_id, position_id, skip_reason, created_at
+                        FROM midline_swing_verdicts
+                        WHERE run_id IN ({placeholders})
+                          AND (action_taken='limit_placed' OR score >= 55 OR skip_reason IS NULL)
+                        ORDER BY (action_taken='limit_placed') DESC, score DESC, id DESC
+                        LIMIT 80
+                        """,
+                        tuple(run_ids),
+                    )
+                    opportunities = cur.fetchall() or []
+
+                cur.execute(
+                    """
+                    SELECT id, symbol, position_side, leverage, quantity, entry_price,
+                           mark_price, margin, unrealized_pnl, unrealized_pnl_pct,
+                           open_time, planned_close_time, source
+                    FROM futures_positions
+                    WHERE source IN ('midline_long','midline_short')
+                      AND status='open' AND account_id=2
+                    ORDER BY open_time DESC LIMIT 80
+                    """
+                )
+                positions = cur.fetchall() or []
+        finally:
+            conn.close()
+
+        for row in opportunities:
+            row["symbol"] = futures_symbol_rating_canonical(row.get("symbol"))
+            row["signal_detail"] = _parse_json(row.get("signal_detail"))
+        for row in positions:
+            row["symbol"] = futures_symbol_rating_canonical(row.get("symbol"))
+
+        from app.services.midline_swing_config import MIDLINE_SCAN_INTERVAL_MINUTES
+
+        return {
+            "success": True,
+            "data": {
+                "scan_interval_minutes": MIDLINE_SCAN_INTERVAL_MINUTES,
+                "universe_mode": "local_liquidity_top50_crypto_only",
+                "universe_size": len(universe),
+                "universe": universe,
+                "trend": trend,
+                "latest_runs": latest_runs,
+                "opportunities": opportunities,
+                "positions": positions,
+                "params": get_midline_runtime_params(),
+                "live_sync": False,
+            },
+        }
+    except Exception as e:
+        logger.error(f"[中线 API] /dashboard failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

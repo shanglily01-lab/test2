@@ -17,9 +17,9 @@ from app.services.midline_swing_config import (
     MIDLINE_HOLD_MINUTES,
     MIDLINE_KILL_SWITCH,
     MIDLINE_LEVERAGE,
+    MIDLINE_SCAN_INTERVAL_MINUTES,
     MIDLINE_SL_PCT,
     MIDLINE_TP_PCT,
-    get_midline_interval_hours,
     get_midline_limit_timeout_minutes,
     is_active_midline_source,
     profile_for_source,
@@ -352,7 +352,7 @@ def run_midline_round(
                     return None
 
             manual = triggered_by == "manual"
-            interval_h = get_midline_interval_hours()
+            interval_h = max(1.0 / 60.0, MIDLINE_SCAN_INTERVAL_MINUTES / 60.0)
             if not manual and _last_ok_within_hours(conn, source, interval_h):
                 logger.info(
                     f"[中线/{source}] 上次成功距今 < {interval_h}h, 跳过"
