@@ -71,11 +71,11 @@ tailwind.config = {
   </section>
 
   <section class="px-8 pb-5">
-    <h2 class="text-sm font-semibold mb-3">大周期 5 维度方向判断</h2>
-    <div id="trend-grid" class="grid md:grid-cols-5 gap-3"></div>
+    <h2 class="text-sm font-semibold mb-3">趋势维度方向判断</h2>
+    <div id="trend-grid" class="grid md:grid-cols-3 xl:grid-cols-6 gap-3"></div>
   </section>
 
-  <section class="px-8 pb-5 grid xl:grid-cols-[1fr_360px] gap-4">
+  <section class="px-8 pb-5 grid xl:grid-cols-[1fr_390px] gap-4">
     <div>
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-sm font-semibold">最近可能的做空 / 做多机会</h2>
@@ -88,8 +88,10 @@ tailwind.config = {
               <th class="px-3 py-2">交易对</th>
               <th class="px-3 py-2">方向</th>
               <th class="px-3 py-2">动作</th>
+              <th class="px-3 py-2">未来4H</th>
               <th class="px-3 py-2">评分</th>
               <th class="px-3 py-2">机会类型</th>
+              <th class="px-3 py-2">订单参数</th>
               <th class="px-3 py-2">多周期摘要</th>
             </tr>
           </thead>
@@ -103,12 +105,16 @@ tailwind.config = {
         <div id="positions-list" class="space-y-2 text-xs"></div>
       </div>
       <div>
+        <h2 class="text-sm font-semibold mb-3">最近订单</h2>
+        <div id="orders-list" class="space-y-2 text-xs"></div>
+      </div>
+      <div>
         <h2 class="text-sm font-semibold mb-3">Top50 交易池</h2>
         <div id="universe-list" class="flex flex-wrap gap-1.5 text-[11px] mono"></div>
       </div>
     </aside>
   </section>
 </main>
-<script src="/static/js/midline_strategy_page.js?v=3"></script>
+<script src="/static/js/midline_strategy_page.js?v=4"></script>
 </body>
 </html>

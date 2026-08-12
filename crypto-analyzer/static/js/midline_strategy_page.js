@@ -27,11 +27,26 @@
   }
   function dimsText(dims) {
     if (!dims) return '--';
-    var keys = ['cycle', 'm3', 'm1', 'd7', 'd1'];
+    var keys = ['cycle', 'm3', 'm1', 'd7', 'd1', 'future_4h'];
     return keys.map(function (k) {
       var d = dims[k] || {};
       return (d.label || k) + ':' + (d.side || 'FLAT');
     }).join(' / ');
+  }
+  function orderText(order) {
+    if (!order) return '--';
+    return [
+      '@' + fmt(order.price),
+      'SL ' + fmt(order.stop_loss_price),
+      'TP ' + fmt(order.take_profit_price),
+      (order.max_hold_minutes ? '持仓 ' + fmt(Number(order.max_hold_minutes) / 60, 'h') : ''),
+      (order.timeout_minutes ? '有效 ' + order.timeout_minutes + 'm' : '')
+    ].filter(Boolean).join(' · ');
+  }
+  function futureText(f) {
+    if (!f || !f.side) return '--';
+    return chip(f.side) + '<div class="mt-1 mono text-[10px] text-on-surface-variant">' +
+      '4h ' + fmt(f.change_4h_pct, '%') + ' · 8h ' + fmt(f.change_8h_pct, '%') + '</div>';
   }
   function renderTrend(data) {
     var grid = $('trend-grid');
@@ -55,20 +70,23 @@
     var body = $('opportunity-body');
     body.innerHTML = '';
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="6" class="px-3 py-8 text-center text-on-surface-variant">暂无可展示机会</td></tr>';
+      body.innerHTML = '<tr><td colspan="8" class="px-3 py-8 text-center text-on-surface-variant">暂无可展示机会</td></tr>';
       return;
     }
     rows.forEach(function (r) {
       var sd = r.signal_detail || {};
       var setup = sd.setup || (sd.entry || {}).setup || r.skip_reason || '--';
       var dims = sd.trend_dimensions || {};
+      var f4h = sd.future_4h || {};
       var tr = document.createElement('tr');
       tr.innerHTML =
         '<td class="px-3 py-2 mono font-semibold">' + (r.symbol || '') + '</td>' +
         '<td class="px-3 py-2">' + chip(r.side) + '</td>' +
         '<td class="px-3 py-2 mono">' + (r.action_taken || '') + '</td>' +
+        '<td class="px-3 py-2">' + futureText(f4h) + '</td>' +
         '<td class="px-3 py-2 mono">' + fmt(r.score) + '</td>' +
         '<td class="px-3 py-2 text-on-surface-variant">' + setup + '</td>' +
+        '<td class="px-3 py-2 text-on-surface-variant max-w-[300px]">' + orderText(r.order) + '</td>' +
         '<td class="px-3 py-2 text-on-surface-variant max-w-[520px]">' + dimsText(dims) + '</td>';
       body.appendChild(tr);
     });
@@ -87,7 +105,34 @@
         '<div class="flex items-center justify-between"><span class="mono font-semibold">' + p.symbol + '</span>' +
         chip(p.position_side) + '</div>' +
         '<div class="mt-1 mono text-on-surface-variant">entry ' + fmt(p.entry_price) +
-        ' · pnl ' + fmt(p.unrealized_pnl, 'U') + ' · ' + time(p.open_time) + '</div>';
+        ' · pnl ' + fmt(p.unrealized_pnl, 'U') + '</div>' +
+        '<div class="mt-1 mono text-on-surface-variant">SL ' + fmt(p.stop_loss_price) +
+        ' · TP ' + fmt(p.take_profit_price) + '</div>' +
+        '<div class="mt-1 mono text-on-surface-variant">open ' + time(p.open_time) +
+        ' · hold until ' + time(p.planned_close_time) + '</div>';
+      box.appendChild(div);
+    });
+  }
+  function renderOrders(rows) {
+    var box = $('orders-list');
+    box.innerHTML = '';
+    if (!rows.length) {
+      box.innerHTML = '<p class="text-on-surface-variant">暂无订单</p>';
+      return;
+    }
+    rows.slice(0, 12).forEach(function (o) {
+      var side = String(o.side || '').replace('OPEN_', '');
+      var div = document.createElement('div');
+      div.className = 'bg-surface-container-low rounded-lg border border-outline-variant/10 px-3 py-2';
+      div.innerHTML =
+        '<div class="flex items-center justify-between gap-2"><span class="mono font-semibold">' + (o.symbol || '') + '</span>' +
+        chip(side) + '</div>' +
+        '<div class="mt-1 mono text-on-surface-variant">' + (o.status || '--') +
+        ' · @' + fmt(o.price) + ' · qty ' + fmt(o.quantity) + '</div>' +
+        '<div class="mt-1 mono text-on-surface-variant">SL ' + fmt(o.stop_loss_price) +
+        ' · TP ' + fmt(o.take_profit_price) + '</div>' +
+        '<div class="mt-1 mono text-on-surface-variant">created ' + time(o.created_at) +
+        ' · hold ' + (o.max_hold_minutes ? fmt(Number(o.max_hold_minutes) / 60, 'h') : '--') + '</div>';
       box.appendChild(div);
     });
   }
@@ -119,12 +164,13 @@
         renderTrend(d);
         renderOpportunities(d.opportunities || []);
         renderPositions(d.positions || []);
+        renderOrders(d.orders || []);
         renderUniverse(d.universe || []);
       })
       .catch(function (e) {
         console.error(e);
         setRunStatus('刷新失败: ' + String(e), true);
-        $('opportunity-body').innerHTML = '<tr><td colspan="6" class="px-3 py-8 text-center text-error">' + String(e) + '</td></tr>';
+        $('opportunity-body').innerHTML = '<tr><td colspan="8" class="px-3 py-8 text-center text-error">' + String(e) + '</td></tr>';
       });
   }
   function runNow() {

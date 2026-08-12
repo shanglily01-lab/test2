@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -31,6 +32,7 @@ ATR_SHRINK_RATIO = 1.20
 VOL_SHRINK_RATIO = 1.05
 MIDLINE_TOP50_LIMIT = 50
 MIDLINE_BIG_SYMBOLS = ("BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT")
+PLAIN_USDT_SYMBOL_RE = re.compile(r"^[A-Z0-9]{2,24}/USDT$")
 TREND_WINDOWS = (
     ("cycle", "大周期", 120, "1d"),
     ("m3", "近3个月", 90, "1d"),
@@ -38,6 +40,12 @@ TREND_WINDOWS = (
     ("d7", "近7天", 7, "1d"),
     ("d1", "最近1天", 96, "15m"),
 )
+FUTURE_4H_LABEL = "未来4小时"
+
+
+def _is_plain_usdt_symbol(symbol: str) -> bool:
+    """Only Binance-style crypto USDT pairs, e.g. BTC/USDT or 1000PEPE/USDT."""
+    return bool(PLAIN_USDT_SYMBOL_RE.fullmatch(futures_symbol_rating_canonical(symbol or "")))
 
 
 def _rsi(closes: List[float], period: int = 14) -> Optional[float]:
@@ -86,7 +94,7 @@ def load_config_yaml_symbols() -> List[str]:
         binance = s.replace("/", "")
         canon = futures_symbol_rating_canonical(binance)
         clean = futures_symbol_clean(canon)
-        if not clean or clean in seen or is_security(canon):
+        if not clean or clean in seen or not _is_plain_usdt_symbol(canon) or is_security(canon):
             continue
         seen.add(clean)
         out.append(canon)
@@ -477,6 +485,83 @@ def _window_direction(closes: List[float], highs: List[float], lows: List[float]
     }
 
 
+def _future_4h_direction(
+    closes_15m: List[float],
+    highs_15m: List[float],
+    lows_15m: List[float],
+    vols_15m: List[float],
+) -> Dict[str, Any]:
+    """Estimate next 4h directional bias from the latest 15m structure."""
+    if len(closes_15m) < 32:
+        return {"label": FUTURE_4H_LABEL, "side": "FLAT", "score": 0.0, "reason": "insufficient_15m"}
+
+    last = closes_15m[-1]
+    prev_4h = closes_15m[-17]
+    prev_8h = closes_15m[-33] if len(closes_15m) >= 33 else closes_15m[0]
+    if prev_4h <= 0 or prev_8h <= 0:
+        return {"label": FUTURE_4H_LABEL, "side": "FLAT", "score": 0.0, "reason": "bad_price"}
+
+    change_4h = (last - prev_4h) / prev_4h * 100.0
+    change_8h = (last - prev_8h) / prev_8h * 100.0
+    ema_fast = _ema(closes_15m[-32:], 8)
+    ema_slow = _ema(closes_15m[-32:], 21)
+    prev_hi = max(highs_15m[-32:-4])
+    prev_lo = min(lows_15m[-32:-4])
+    span = max(prev_hi - prev_lo, 0.0)
+    range_pos = 0.5 if span <= 0 else (last - prev_lo) / span
+    vol_recent = sum(vols_15m[-4:]) / 4 if len(vols_15m) >= 4 else 0.0
+    vol_prior = sum(vols_15m[-16:-4]) / 12 if len(vols_15m) >= 16 else vol_recent
+    vol_ratio = vol_recent / vol_prior if vol_prior > 0 else 1.0
+
+    long_score = 0.0
+    short_score = 0.0
+    if ema_fast is not None and ema_slow is not None:
+        if last >= ema_fast >= ema_slow:
+            long_score += 1.2
+        if last <= ema_fast <= ema_slow:
+            short_score += 1.2
+    if change_4h > 0.35:
+        long_score += min(1.4, change_4h / 1.5)
+    elif change_4h < -0.35:
+        short_score += min(1.4, abs(change_4h) / 1.5)
+    if change_8h > 0.6:
+        long_score += 0.8
+    elif change_8h < -0.6:
+        short_score += 0.8
+    if last > prev_hi * 1.001:
+        long_score += 1.0
+    if last < prev_lo * 0.999:
+        short_score += 1.0
+    if range_pos >= 0.68:
+        long_score += 0.4
+    elif range_pos <= 0.32:
+        short_score += 0.4
+    if vol_ratio >= 1.15:
+        if change_4h > 0:
+            long_score += 0.3
+        elif change_4h < 0:
+            short_score += 0.3
+
+    side = "FLAT"
+    diff = long_score - short_score
+    if diff >= 0.9:
+        side = "LONG"
+    elif diff <= -0.9:
+        side = "SHORT"
+    score = min(1.0, abs(diff) / 3.2)
+    return {
+        "label": FUTURE_4H_LABEL,
+        "side": side,
+        "score": round(score, 3),
+        "change_4h_pct": round(change_4h, 2),
+        "change_8h_pct": round(change_8h, 2),
+        "range_pos": round(range_pos, 3),
+        "vol_ratio": round(vol_ratio, 3),
+        "ema_fast": round(ema_fast, 8) if ema_fast else None,
+        "ema_slow": round(ema_slow, 8) if ema_slow else None,
+    }
+
+
 def _fetch_window(cur, symbol: str, key: str) -> Tuple[List[float], List[float], List[float], List[float]]:
     _, _, limit, timeframe = next(w for w in TREND_WINDOWS if w[0] == key)
     rows = _fetch_klines(cur, symbol, timeframe, limit)
@@ -502,7 +587,7 @@ def load_midline_universe(conn) -> List[str]:
             for row in cur.fetchall() or []:
                 raw = row.get("symbol") if isinstance(row, dict) else row[0]
                 canon = futures_symbol_rating_canonical(str(raw or ""))
-                if canon and not is_security(canon):
+                if canon and _is_plain_usdt_symbol(canon) and not is_security(canon):
                     symbols.append(canon)
     except Exception as e:
         logger.warning(f"[中线扫描] 读取流动性Top50失败，回退config池: {e}")
@@ -520,7 +605,13 @@ def load_midline_universe(conn) -> List[str]:
     seen = set()
     for sym in symbols:
         clean = futures_symbol_clean(sym)
-        if not clean or clean in seen or clean in banned_clean or is_security(sym):
+        if (
+            not clean
+            or clean in seen
+            or clean in banned_clean
+            or not _is_plain_usdt_symbol(sym)
+            or is_security(sym)
+        ):
             continue
         seen.add(clean)
         filtered.append(sym)
@@ -545,6 +636,20 @@ def evaluate_global_trend_dimensions(cur) -> Dict[str, Any]:
         short_n = sum(1 for x in coins if x["side"] == "SHORT")
         side = "SHORT" if short_n >= 3 else "LONG" if long_n >= 3 else "FLAT"
         dims.append({"key": key, "label": label, "side": side, "coins": coins})
+
+    future_coins = []
+    for sym in MIDLINE_BIG_SYMBOLS:
+        c, h, l, v = _fetch_window(cur, sym, "d1")
+        if not c:
+            continue
+        d = _future_4h_direction(c, h, l, v)
+        future_coins.append({"symbol": futures_symbol_rating_canonical(sym), **d})
+        votes[d["side"]] += max(0.1, float(d.get("score") or 0))
+    future_long_n = sum(1 for x in future_coins if x["side"] == "LONG")
+    future_short_n = sum(1 for x in future_coins if x["side"] == "SHORT")
+    future_side = "SHORT" if future_short_n >= 3 else "LONG" if future_long_n >= 3 else "FLAT"
+    dims.append({"key": "future_4h", "label": FUTURE_4H_LABEL, "side": future_side, "coins": future_coins})
+
     bias = "SHORT" if votes["SHORT"] > votes["LONG"] * 1.15 else "LONG" if votes["LONG"] > votes["SHORT"] * 1.15 else "FLAT"
     return {"bias": bias, "dimensions": dims, "votes": votes}
 
@@ -614,6 +719,15 @@ def evaluate_symbol_multiperiod(
     m1_side = dims["m1"]["side"]
     d7_side = dims["d7"]["side"]
     d1_side = dims["d1"]["side"]
+    future_4h = _future_4h_direction(c15, h15, l15, v15)
+    future_side = future_4h["side"]
+    if future_side != side:
+        out.update({
+            "reason": "future_4h_direction_mismatch",
+            "trend": dims,
+            "future_4h": future_4h,
+        })
+        return out
     if side == "SHORT":
         if global_bias == "LONG" and m3_side != "SHORT":
             reason = "global_bull_blocks_short"
@@ -649,10 +763,12 @@ def evaluate_symbol_multiperiod(
         "reason": None if score >= 62 else "score_below_threshold",
         "score": round(score, 1),
         "trend": dims,
+        "future_4h": future_4h,
         "entry": entry,
         "signal_detail": {
             "global_trend": global_trend,
             "trend_dimensions": dims,
+            "future_4h": future_4h,
             "entry": entry,
             "setup": entry.get("setup"),
         },
@@ -694,6 +810,7 @@ def scan_universe(
                         "signal_detail": {
                             "global_trend": global_trend,
                             "trend_dimensions": ev.get("trend") or {},
+                            "future_4h": ev.get("future_4h") or {},
                             "entry": ev.get("entry") or {},
                             "reason": ev.get("reason"),
                         },

@@ -455,6 +455,11 @@ def _parse_json(v):
         return {}
 
 
+def _parse_order_notes(v):
+    data = _parse_json(v)
+    return data if isinstance(data, dict) else {}
+
+
 @router.get("/dashboard")
 def dashboard():
     """Multi-period trend dashboard + latest midline opportunities."""
@@ -493,12 +498,19 @@ def dashboard():
                     placeholders = ",".join(["%s"] * len(run_ids))
                     cur.execute(
                         f"""
-                        SELECT id, run_id, source, symbol, side, score, signal_detail,
-                               action_taken, order_id, position_id, skip_reason, created_at
-                        FROM midline_swing_verdicts
-                        WHERE run_id IN ({placeholders})
-                          AND (action_taken='limit_placed' OR score >= 55 OR skip_reason IS NULL)
-                        ORDER BY (action_taken='limit_placed') DESC, score DESC, id DESC
+                        SELECT v.id, v.run_id, v.source, v.symbol, v.side, v.score, v.signal_detail,
+                               v.action_taken, v.order_id, v.position_id, v.skip_reason, v.created_at,
+                               o.order_id AS order_code, o.status AS order_status,
+                               o.order_type, o.price AS order_price, o.quantity AS order_quantity,
+                               o.margin AS order_margin, o.leverage AS order_leverage,
+                               o.stop_loss_price AS order_sl, o.take_profit_price AS order_tp,
+                               o.created_at AS order_created_at, o.fill_time AS order_fill_time,
+                               o.notes AS order_notes
+                        FROM midline_swing_verdicts v
+                        LEFT JOIN futures_orders o ON o.id = v.order_id
+                        WHERE v.run_id IN ({placeholders})
+                          AND (v.action_taken='limit_placed' OR v.score >= 55 OR v.skip_reason IS NULL)
+                        ORDER BY (v.action_taken='limit_placed') DESC, v.score DESC, v.id DESC
                         LIMIT 80
                         """,
                         tuple(run_ids),
@@ -507,8 +519,22 @@ def dashboard():
 
                 cur.execute(
                     """
+                    SELECT id, order_id, symbol, side, order_type, status, price, quantity,
+                           margin, total_value, leverage, stop_loss_price, take_profit_price,
+                           order_source, created_at, fill_time, canceled_at, notes
+                    FROM futures_orders
+                    WHERE order_source IN ('midline_long','midline_short')
+                      AND account_id=2
+                    ORDER BY created_at DESC LIMIT 80
+                    """
+                )
+                orders = cur.fetchall() or []
+
+                cur.execute(
+                    """
                     SELECT id, symbol, position_side, leverage, quantity, entry_price,
                            mark_price, margin, unrealized_pnl, unrealized_pnl_pct,
+                           stop_loss_price, take_profit_price,
                            open_time, planned_close_time, source
                     FROM futures_positions
                     WHERE source IN ('midline_long','midline_short')
@@ -523,6 +549,30 @@ def dashboard():
         for row in opportunities:
             row["symbol"] = futures_symbol_rating_canonical(row.get("symbol"))
             row["signal_detail"] = _parse_json(row.get("signal_detail"))
+            order_notes = _parse_order_notes(row.pop("order_notes", None))
+            row["order"] = {
+                "id": row.pop("order_id", None),
+                "order_code": row.pop("order_code", None),
+                "status": row.pop("order_status", None),
+                "order_type": row.pop("order_type", None),
+                "price": row.pop("order_price", None),
+                "quantity": row.pop("order_quantity", None),
+                "margin": row.pop("order_margin", None),
+                "leverage": row.pop("order_leverage", None),
+                "stop_loss_price": row.pop("order_sl", None),
+                "take_profit_price": row.pop("order_tp", None),
+                "created_at": row.pop("order_created_at", None),
+                "fill_time": row.pop("order_fill_time", None),
+                "planned_close_time": order_notes.get("planned_close_time"),
+                "max_hold_minutes": order_notes.get("max_hold_minutes"),
+                "timeout_minutes": order_notes.get("timeout_minutes"),
+            } if row.get("order_code") or row.get("order_id") else None
+        for row in orders:
+            row["symbol"] = futures_symbol_rating_canonical(row.get("symbol"))
+            notes = _parse_order_notes(row.pop("notes", None))
+            row["planned_close_time"] = notes.get("planned_close_time")
+            row["max_hold_minutes"] = notes.get("max_hold_minutes")
+            row["timeout_minutes"] = notes.get("timeout_minutes")
         for row in positions:
             row["symbol"] = futures_symbol_rating_canonical(row.get("symbol"))
 
@@ -538,6 +588,7 @@ def dashboard():
                 "trend": trend,
                 "latest_runs": latest_runs,
                 "opportunities": opportunities,
+                "orders": orders,
                 "positions": positions,
                 "params": get_midline_runtime_params(),
                 "live_sync": False,
