@@ -182,11 +182,13 @@ def _format_run_summary(
     profile: str,
     side: str,
     rejected: int = 0,
+    order_enabled: bool = True,
 ) -> str:
     profile_cn = "做多" if profile == "long" else "做空"
+    order_state = "开单开启" if order_enabled else "开单关闭，仅分析"
     return (
         f"池{universe_size}个 config | 通过{signals_count}个 | 拒绝{rejected}个 | "
-        f"挂单{orders_placed}笔 | {profile_cn} {side}"
+        f"挂单{orders_placed}笔 | {profile_cn} {side} | {order_state}"
     )
 
 
@@ -347,9 +349,9 @@ def run_midline_round(
         try:
             _ensure_kill_switches(conn)
             with conn.cursor() as cur:
-                if not _is_enabled(cur, source):
-                    logger.info(f"[中线/{source}] kill switch=0, 跳过")
-                    return None
+                order_enabled = _is_enabled(cur, source)
+                if not order_enabled:
+                    logger.info(f"[中线/{source}] 开关关闭，本轮仅刷新机会分析，不开单")
 
             manual = triggered_by == "manual"
             interval_h = max(1.0 / 60.0, MIDLINE_SCAN_INTERVAL_MINUTES / 60.0)
@@ -388,6 +390,13 @@ def run_midline_round(
                 symbol = sig["symbol"]
                 score = float(sig["score"])
                 detail = sig.get("signal_detail") or {}
+
+                if not order_enabled:
+                    _insert_verdict(
+                        conn, run_id, source, symbol, side, score, detail,
+                        "skipped_disabled", None, "中线开单开关关闭，仅展示机会",
+                    )
+                    continue
 
                 if _has_any_midline_position_on_symbol(conn, symbol):
                     _insert_verdict(
@@ -435,6 +444,7 @@ def run_midline_round(
             elapsed = time.time() - t0
             summary = _format_run_summary(
                 universe_size, len(signals), orders_placed, profile, side, rejected,
+                order_enabled=order_enabled,
             )
             _finish_run(
                 conn, run_id,

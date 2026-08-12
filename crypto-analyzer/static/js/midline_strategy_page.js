@@ -18,6 +18,13 @@
   function time(v) {
     return v ? String(v).replace('T', ' ').slice(0, 19) : '--';
   }
+  function setRunStatus(text, isError) {
+    var el = $('last-run');
+    if (!el) return;
+    el.textContent = text || '--';
+    el.classList.toggle('text-error', !!isError);
+    el.classList.toggle('text-primary', !isError && !!text && text !== '--');
+  }
   function dimsText(dims) {
     if (!dims) return '--';
     var keys = ['cycle', 'm3', 'm1', 'd7', 'd1'];
@@ -70,7 +77,7 @@
     var box = $('positions-list');
     box.innerHTML = '';
     if (!rows.length) {
-      box.innerHTML = '<p class="text-on-surface-variant">暂无中线持仓</p>';
+      box.innerHTML = '<p class="text-on-surface-variant">暂无持仓</p>';
       return;
     }
     rows.forEach(function (p) {
@@ -106,9 +113,9 @@
         $('stat-opp').textContent = (d.opportunities || []).length;
         $('stat-pos').textContent = (d.positions || []).length;
         var runs = d.latest_runs || [];
-        $('last-run').textContent = runs.length ? runs.map(function (r) {
+        setRunStatus(runs.length ? runs.map(function (r) {
           return r.source + ' #' + r.id + ' ' + time(r.asof_utc);
-        }).join(' | ') : '--';
+        }).join(' | ') : '--');
         renderTrend(d);
         renderOpportunities(d.opportunities || []);
         renderPositions(d.positions || []);
@@ -116,15 +123,32 @@
       })
       .catch(function (e) {
         console.error(e);
+        setRunStatus('刷新失败: ' + String(e), true);
         $('opportunity-body').innerHTML = '<tr><td colspan="6" class="px-3 py-8 text-center text-error">' + String(e) + '</td></tr>';
       });
   }
   function runNow() {
-    $('btn-run').disabled = true;
+    var btn = $('btn-run');
+    btn.disabled = true;
+    btn.classList.add('opacity-70', 'cursor-wait');
+    setRunStatus('已触发扫描，后台分析中...', false);
     fetch(API + '/run-now', { method: 'POST' })
-      .then(function (r) { return r.json(); })
-      .then(function () { setTimeout(loadDashboard, 2500); })
-      .finally(function () { $('btn-run').disabled = false; });
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.body.success) throw new Error((res.body || {}).detail || (res.body || {}).message || 'run-now failed');
+        setRunStatus(res.body.message || '已触发扫描，后台分析中...', false);
+        [2500, 7000, 15000, 30000, 60000].forEach(function (ms) {
+          setTimeout(loadDashboard, ms);
+        });
+      })
+      .catch(function (e) {
+        console.error(e);
+        setRunStatus('触发失败: ' + String(e), true);
+      })
+      .finally(function () {
+        btn.disabled = false;
+        btn.classList.remove('opacity-70', 'cursor-wait');
+      });
   }
   $('btn-refresh').onclick = loadDashboard;
   $('btn-run').onclick = runNow;

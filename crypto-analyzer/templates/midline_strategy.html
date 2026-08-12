@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>中线趋势雷达 | Neural Obsidian</title>
+<title>交易机会 | Neural Obsidian</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
@@ -34,7 +34,7 @@ tailwind.config = {
 <main class="ml-[240px] min-h-screen">
   <header class="border-b border-outline-variant/15 px-8 py-5 flex items-center justify-between gap-4 flex-wrap">
     <div>
-      <h1 class="text-2xl font-bold">中线趋势雷达</h1>
+      <h1 class="text-2xl font-bold">交易机会</h1>
       <p class="text-[11px] text-on-surface-variant mt-1">Top50 主流币池 · 多周期趋势裁判 · 15M 机会刷新 · 识别即限价开单</p>
     </div>
     <div class="flex gap-2">
@@ -65,7 +65,7 @@ tailwind.config = {
       <p id="stat-opp" class="mt-2 text-xl font-bold mono">--</p>
     </div>
     <div class="bg-surface-container-low p-4 rounded-lg border border-outline-variant/10">
-      <p class="text-[10px] text-on-surface-variant uppercase">中线持仓</p>
+      <p class="text-[10px] text-on-surface-variant uppercase">当前持仓</p>
       <p id="stat-pos" class="mt-2 text-xl font-bold mono">--</p>
     </div>
   </section>
@@ -99,7 +99,7 @@ tailwind.config = {
     </div>
     <aside class="space-y-4">
       <div>
-        <h2 class="text-sm font-semibold mb-3">当前中线持仓</h2>
+        <h2 class="text-sm font-semibold mb-3">当前持仓</h2>
         <div id="positions-list" class="space-y-2 text-xs"></div>
       </div>
       <div>
@@ -109,6 +109,6 @@ tailwind.config = {
     </aside>
   </section>
 </main>
-<script src="/static/js/midline_strategy_page.js?v=2"></script>
+<script src="/static/js/midline_strategy_page.js?v=3"></script>
 </body>
 </html>
