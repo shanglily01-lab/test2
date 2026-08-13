@@ -33,6 +33,35 @@
       return (d.label || k) + ':' + (d.side || 'FLAT');
     }).join(' / ');
   }
+  function setupLabel(setup) {
+    var labels = {
+      fresh_breakdown_short: '放量跌破支撑',
+      breakdown_short: '跌破支撑',
+      fresh_breakout_long: '放量突破阻力',
+      breakout_long: '突破阻力',
+      brain_A1_trend_continuation_long: 'BRAIN A1 趋势续涨',
+      brain_A2_failed_rebound_short: 'BRAIN A2 反抽转跌',
+      brain_C1_breakdown_short: 'BRAIN C1 向下破位',
+      brain_C3_breakout_long: 'BRAIN C3 向上突破'
+    };
+    return labels[setup] || setup || '--';
+  }
+  function setupText(sd, fallback) {
+    var entry = sd.entry || {};
+    var setup = sd.setup || entry.setup || fallback || '--';
+    var bits = [setupLabel(setup)];
+    if (entry.break_pct !== undefined) bits.push('破位 ' + fmt(entry.break_pct, '%'));
+    if (entry.playbook) bits.push(entry.playbook + ' edge ' + fmt(entry.edge_score));
+    if (entry.phase_range_pct !== undefined) bits.push('阶段区间 ' + fmt(entry.phase_range_pct, '%'));
+    if (entry.h1_side || entry.m15_side) bits.push('1H/' + (entry.h1_side || '--') + ' 15M/' + (entry.m15_side || '--'));
+    if (entry.change_1h_pct !== undefined) bits.push('1H ' + fmt(entry.change_1h_pct, '%'));
+    if (entry.change_4h_pct !== undefined) bits.push('4H ' + fmt(entry.change_4h_pct, '%'));
+    if (entry.vol_ratio !== undefined) bits.push('量比 ' + fmt(entry.vol_ratio));
+    if (entry.strong_break) bits.push('强破位');
+    if (entry.volume_ok === false) bits.push('量能一般');
+    if (entry.global_regime) bits.push(entry.global_regime);
+    return bits.join('<br><span class="mono text-[10px] text-on-surface-variant">') + (bits.length > 1 ? '</span>' : '');
+  }
   function orderText(order) {
     if (!order) return '--';
     return [
@@ -70,12 +99,11 @@
     var body = $('opportunity-body');
     body.innerHTML = '';
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="8" class="px-3 py-8 text-center text-on-surface-variant">暂无可展示机会</td></tr>';
+      body.innerHTML = '<tr><td colspan="8" class="px-3 py-8 text-center text-on-surface-variant">暂无可展示破位机会</td></tr>';
       return;
     }
     rows.forEach(function (r) {
       var sd = r.signal_detail || {};
-      var setup = sd.setup || (sd.entry || {}).setup || r.skip_reason || '--';
       var dims = sd.trend_dimensions || {};
       var f4h = sd.future_4h || {};
       var tr = document.createElement('tr');
@@ -85,7 +113,7 @@
         '<td class="px-3 py-2 mono">' + (r.action_taken || '') + '</td>' +
         '<td class="px-3 py-2">' + futureText(f4h) + '</td>' +
         '<td class="px-3 py-2 mono">' + fmt(r.score) + '</td>' +
-        '<td class="px-3 py-2 text-on-surface-variant">' + setup + '</td>' +
+        '<td class="px-3 py-2 text-on-surface-variant">' + setupText(sd, r.skip_reason) + '</td>' +
         '<td class="px-3 py-2 text-on-surface-variant max-w-[300px]">' + orderText(r.order) + '</td>' +
         '<td class="px-3 py-2 text-on-surface-variant max-w-[520px]">' + dimsText(dims) + '</td>';
       body.appendChild(tr);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>交易机会 | Neural Obsidian</title>
+<title>破位机会策略 | Neural Obsidian</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
@@ -34,8 +34,8 @@ tailwind.config = {
 <main class="ml-[240px] min-h-screen">
   <header class="border-b border-outline-variant/15 px-8 py-5 flex items-center justify-between gap-4 flex-wrap">
     <div>
-      <h1 class="text-2xl font-bold">交易机会</h1>
-      <p class="text-[11px] text-on-surface-variant mt-1">Top50 主流币池 · 多周期趋势裁判 · 15M 机会刷新 · 识别即限价开单</p>
+      <h1 class="text-2xl font-bold">破位机会策略</h1>
+      <p class="text-[11px] text-on-surface-variant mt-1">Top50 主流币池 · 大趋势定方向 · 阶段整理后 15M 放量破位 · 确认后挂限价单</p>
     </div>
     <div class="flex gap-2">
       <button id="btn-run" class="h-9 px-3 rounded bg-primary text-[#002045] text-xs font-bold inline-flex items-center gap-1">
@@ -78,7 +78,7 @@ tailwind.config = {
   <section class="px-8 pb-5 grid xl:grid-cols-[1fr_390px] gap-4">
     <div>
       <div class="flex items-center justify-between mb-3">
-        <h2 class="text-sm font-semibold">最近可能的做空 / 做多机会</h2>
+        <h2 class="text-sm font-semibold">大趋势里的阶段破位点</h2>
         <p id="last-run" class="text-[11px] text-on-surface-variant mono">--</p>
       </div>
       <div class="overflow-x-auto rounded-lg border border-outline-variant/10">
@@ -90,7 +90,7 @@ tailwind.config = {
               <th class="px-3 py-2">动作</th>
               <th class="px-3 py-2">未来4H</th>
               <th class="px-3 py-2">评分</th>
-              <th class="px-3 py-2">机会类型</th>
+              <th class="px-3 py-2">破位类型</th>
               <th class="px-3 py-2">订单参数</th>
               <th class="px-3 py-2">多周期摘要</th>
             </tr>
@@ -115,6 +115,6 @@ tailwind.config = {
     </aside>
   </section>
 </main>
-<script src="/static/js/midline_strategy_page.js?v=4"></script>
+<script src="/static/js/midline_strategy_page.js?v=5"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
-"""中线 v2 扫描 — config.yaml 标的池 + 30×1d / ~1w×1h / 4h×15m 三层 AND.
+"""破位机会扫描 — Top50 标的池 + 多周期趋势 + 15m 支撑/阻力破位.
 
-权威需求: docs/REQUIREMENTS_LOGIC_ZH.md §7.2.4
+保留 midline_* source / 表名仅为兼容历史订单、持仓和 API。
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from app.services.securities_filter import is_security
 from app.utils.futures_symbol import futures_symbol_clean, futures_symbol_rating_canonical
 
 # 默认硬规则 v2.1（放宽：原 ±8% + 贴 20% 极值导致几乎永不开仓）
-# 目标：上涨趋势中的回踩做多 / 下跌趋势中的反抽做空
+# 目标：趋势破位，不再使用旧中线的回踩/反抽入场。
 DAILY_TREND_PCT = 3.0
 DAILY_RSI_LONG = (30.0, 78.0)
 DAILY_RSI_SHORT = (22.0, 70.0)
@@ -33,6 +33,22 @@ VOL_SHRINK_RATIO = 1.05
 MIDLINE_TOP50_LIMIT = 50
 MIDLINE_BIG_SYMBOLS = ("BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT")
 PLAIN_USDT_SYMBOL_RE = re.compile(r"^[A-Z0-9]{2,24}/USDT$")
+BREAKOUT_LOOKBACK_15M = 32
+BREAKOUT_RECENT_BARS = 4
+BREAKDOWN_SUPPORT_BUFFER = 0.0015
+BREAKOUT_RESIST_BUFFER = 0.0015
+BREAKOUT_VOL_RATIO_MIN = 1.12
+BREAKDOWN_1H_DROP_MIN_PCT = 0.45
+BREAKOUT_1H_RISE_MIN_PCT = 0.45
+BREAKDOWN_4H_DROP_MIN_PCT = 0.80
+BREAKOUT_4H_RISE_MIN_PCT = 0.80
+PHASE_RANGE_MIN_PCT = 0.35
+PHASE_RANGE_MAX_PCT = 4.80
+PHASE_BREAK_MAX_4H_MOVE_PCT = 4.50
+PHASE_MAJOR_TREND_SCORE_MIN = 2.20
+PHASE_MAJOR_TREND_STRONG_SCORE = 3.20
+PHASE_OPPOSITE_SCORE_MAX = 2.50
+PHASE_STRONG_BREAK_PCT = 0.35
 TREND_WINDOWS = (
     ("cycle", "大周期", 120, "1d"),
     ("m3", "近3个月", 90, "1d"),
@@ -654,6 +670,60 @@ def evaluate_global_trend_dimensions(cur) -> Dict[str, Any]:
     return {"bias": bias, "dimensions": dims, "votes": votes}
 
 
+def _major_trend_context(
+    dims: Dict[str, Any],
+    global_bias: str,
+    side: str,
+) -> Tuple[bool, Dict[str, Any]]:
+    opposite = "SHORT" if side == "LONG" else "LONG"
+    key_sides = {k: (dims.get(k) or {}).get("side", "FLAT") for k in ("cycle", "m3", "m1", "d7", "d1")}
+    weights = {"cycle": 0.8, "m3": 1.4, "m1": 1.4, "d7": 1.1, "d1": 0.9}
+    trend_score = sum(weights[k] for k, v in key_sides.items() if v == side)
+    opposite_score = sum(weights[k] for k, v in key_sides.items() if v == opposite)
+    flat_score = sum(weights[k] for k, v in key_sides.items() if v == "FLAT")
+    if global_bias == side:
+        trend_score += 0.8
+    elif global_bias == opposite:
+        opposite_score += 0.8
+
+    core_trend_ok = key_sides["m3"] == side or key_sides["m1"] == side
+    short_cycle_pullback = key_sides["d1"] == opposite and key_sides["m1"] == side and key_sides["d7"] != opposite
+    strong_context = trend_score >= PHASE_MAJOR_TREND_STRONG_SCORE
+    detail = {
+        "layer": "major_trend_context",
+        "side": side,
+        "global_bias": global_bias,
+        "trend_score": round(trend_score, 2),
+        "opposite_score": round(opposite_score, 2),
+        "flat_score": round(flat_score, 2),
+        "core_trend_ok": core_trend_ok,
+        "short_cycle_pullback": short_cycle_pullback,
+        "dimension_sides": key_sides,
+    }
+
+    if not core_trend_ok:
+        detail["reason"] = "major_core_trend_missing"
+        return False, detail
+    if trend_score < PHASE_MAJOR_TREND_SCORE_MIN:
+        detail["reason"] = "major_trend_not_aligned"
+        return False, detail
+    if opposite_score > PHASE_OPPOSITE_SCORE_MAX and not strong_context:
+        detail["reason"] = "major_trend_too_mixed"
+        return False, detail
+    if key_sides["cycle"] == opposite and key_sides["m3"] != side:
+        detail["reason"] = "cycle_trend_opposes_phase"
+        return False, detail
+    if key_sides["d1"] == opposite and not short_cycle_pullback and not strong_context:
+        detail["reason"] = "latest_day_opposes_without_pullback_context"
+        return False, detail
+    if global_bias == opposite and not strong_context:
+        detail["reason"] = "global_trend_opposes_phase"
+        return False, detail
+
+    detail["passed"] = True
+    return True, detail
+
+
 def _entry_15m_opportunity(
     closes_15m: List[float],
     highs_15m: List[float],
@@ -662,31 +732,90 @@ def _entry_15m_opportunity(
     side: str,
 ) -> Tuple[bool, Dict[str, Any]]:
     detail: Dict[str, Any] = {"layer": "entry_15m_opportunity"}
-    if len(closes_15m) < 32:
+    if len(closes_15m) < BREAKOUT_LOOKBACK_15M:
         detail["reason"] = "insufficient_15m"
         return False, detail
     last = closes_15m[-1]
-    prev_hi = max(highs_15m[-32:-4])
-    prev_lo = min(lows_15m[-32:-4])
-    recent_hi = max(highs_15m[-4:])
-    recent_lo = min(lows_15m[-4:])
-    vol_recent = sum(vols_15m[-4:]) / 4
+    prev_hi = max(highs_15m[-BREAKOUT_LOOKBACK_15M:-BREAKOUT_RECENT_BARS])
+    prev_lo = min(lows_15m[-BREAKOUT_LOOKBACK_15M:-BREAKOUT_RECENT_BARS])
+    recent_hi = max(highs_15m[-BREAKOUT_RECENT_BARS:])
+    recent_lo = min(lows_15m[-BREAKOUT_RECENT_BARS:])
+    vol_recent = sum(vols_15m[-BREAKOUT_RECENT_BARS:]) / BREAKOUT_RECENT_BARS
     vol_prior = sum(vols_15m[-16:-4]) / 12 if len(vols_15m) >= 16 else vol_recent
     vol_ratio = vol_recent / vol_prior if vol_prior > 0 else 1.0
-    detail.update({"prev_hi": round(prev_hi, 8), "prev_lo": round(prev_lo, 8), "vol_ratio": round(vol_ratio, 3)})
+    prev_1h = closes_15m[-5]
+    prev_4h = closes_15m[-17]
+    change_1h = (last - prev_1h) / prev_1h * 100.0 if prev_1h > 0 else 0.0
+    change_4h = (last - prev_4h) / prev_4h * 100.0 if prev_4h > 0 else 0.0
+    break_down_pct = (prev_lo - last) / prev_lo * 100.0 if prev_lo > 0 else 0.0
+    break_up_pct = (last - prev_hi) / prev_hi * 100.0 if prev_hi > 0 else 0.0
+    phase_range_pct = (prev_hi - prev_lo) / last * 100.0 if last > 0 else 0.0
+    phase_range_ok = PHASE_RANGE_MIN_PCT <= phase_range_pct <= PHASE_RANGE_MAX_PCT
+    detail.update({
+        "prev_hi": round(prev_hi, 8),
+        "prev_lo": round(prev_lo, 8),
+        "recent_hi": round(recent_hi, 8),
+        "recent_lo": round(recent_lo, 8),
+        "vol_ratio": round(vol_ratio, 3),
+        "change_1h_pct": round(change_1h, 2),
+        "change_4h_pct": round(change_4h, 2),
+        "phase_range_pct": round(phase_range_pct, 2),
+    })
     if side == "SHORT":
-        lower_high = recent_hi <= prev_hi * 1.002 and closes_15m[-1] <= max(closes_15m[-4:-1])
-        breakdown = last < prev_lo * 0.998
-        stalled = lower_high and vol_ratio <= 1.10
-        detail["setup"] = "failed_rebound_short" if stalled else "breakdown_short" if breakdown else "none"
-        ok = stalled or breakdown
+        breakdown = last < prev_lo * (1.0 - BREAKDOWN_SUPPORT_BUFFER)
+        momentum_ok = change_1h <= -BREAKDOWN_1H_DROP_MIN_PCT or change_4h <= -BREAKDOWN_4H_DROP_MIN_PCT
+        volume_ok = vol_ratio >= BREAKOUT_VOL_RATIO_MIN
+        strong_break = break_down_pct >= PHASE_STRONG_BREAK_PCT
+        not_overextended = abs(change_4h) <= PHASE_BREAK_MAX_4H_MOVE_PCT or break_down_pct >= PHASE_STRONG_BREAK_PCT * 2.0
+        fresh_breakdown = (
+            breakdown
+            and phase_range_ok
+            and not_overextended
+            and momentum_ok
+            and (volume_ok or strong_break)
+        )
+        detail["setup"] = "fresh_breakdown_short" if fresh_breakdown else "breakdown_short" if breakdown else "none"
+        if breakdown:
+            detail["break_pct"] = round(break_down_pct, 3)
+        detail["momentum_ok"] = momentum_ok
+        detail["volume_ok"] = volume_ok
+        detail["strong_break"] = strong_break
+        detail["not_overextended"] = not_overextended
+        detail["fresh_breakout"] = fresh_breakdown
+        ok = fresh_breakdown
     else:
-        higher_low = recent_lo >= prev_lo * 0.998 and closes_15m[-1] >= min(closes_15m[-4:-1])
-        reclaim = last > prev_hi * 1.002
-        detail["setup"] = "support_rebound_long" if higher_low else "reclaim_long" if reclaim else "none"
-        ok = higher_low or reclaim
+        breakout = last > prev_hi * (1.0 + BREAKOUT_RESIST_BUFFER)
+        momentum_ok = change_1h >= BREAKOUT_1H_RISE_MIN_PCT or change_4h >= BREAKOUT_4H_RISE_MIN_PCT
+        volume_ok = vol_ratio >= BREAKOUT_VOL_RATIO_MIN
+        strong_break = break_up_pct >= PHASE_STRONG_BREAK_PCT
+        not_overextended = abs(change_4h) <= PHASE_BREAK_MAX_4H_MOVE_PCT or break_up_pct >= PHASE_STRONG_BREAK_PCT * 2.0
+        fresh_breakout = (
+            breakout
+            and phase_range_ok
+            and not_overextended
+            and momentum_ok
+            and (volume_ok or strong_break)
+        )
+        detail["setup"] = "fresh_breakout_long" if fresh_breakout else "breakout_long" if breakout else "none"
+        if breakout:
+            detail["break_pct"] = round(break_up_pct, 3)
+        detail["momentum_ok"] = momentum_ok
+        detail["volume_ok"] = volume_ok
+        detail["strong_break"] = strong_break
+        detail["not_overextended"] = not_overextended
+        detail["fresh_breakout"] = fresh_breakout
+        ok = fresh_breakout
     if not ok:
-        detail["reason"] = "no_15m_setup"
+        if detail.get("setup") in ("breakdown_short", "breakout_long"):
+            detail["reason"] = (
+                "phase_range_not_clean"
+                if not phase_range_ok else
+                "breakout_overextended_4h"
+                if not not_overextended else
+                "breakout_without_volume_or_momentum"
+            )
+        else:
+            detail["reason"] = "no_15m_setup"
         return False, detail
     detail["passed"] = True
     return True, detail
@@ -697,10 +826,24 @@ def evaluate_symbol_multiperiod(
     symbol: str,
     profile: str,
     global_trend: Optional[Dict[str, Any]] = None,
+    big4: Optional[Dict[str, Any]] = None,
+    global_regime: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     profile_l = profile.strip().lower()
     side = "LONG" if profile_l == "long" else "SHORT"
     out: Dict[str, Any] = {"symbol": symbol, "side": side, "passed": False, "reason": None, "score": 0.0, "ref_price": None}
+
+    from app.services.brain_playbook import classify_playbook
+
+    rows_1h = _fetch_klines(cur, symbol, "1h", 168)
+    rows_15m = _fetch_klines(cur, symbol, "15m", 672)
+    if len(rows_1h) < 60:
+        out["reason"] = "insufficient_1h"
+        return out
+    if len(rows_15m) < 50:
+        out["reason"] = "insufficient_15m"
+        return out
+
     dims: Dict[str, Any] = {}
     c15 = h15 = l15 = v15 = []
     for key, label, _, _ in TREND_WINDOWS:
@@ -714,63 +857,123 @@ def evaluate_symbol_multiperiod(
             out["ref_price"] = c15[-1]
 
     global_bias = (global_trend or {}).get("bias") or "FLAT"
-    macro_side = dims["cycle"]["side"]
-    m3_side = dims["m3"]["side"]
-    m1_side = dims["m1"]["side"]
-    d7_side = dims["d7"]["side"]
-    d1_side = dims["d1"]["side"]
     future_4h = _future_4h_direction(c15, h15, l15, v15)
-    future_side = future_4h["side"]
-    if future_side != side:
-        out.update({
-            "reason": "future_4h_direction_mismatch",
-            "trend": dims,
-            "future_4h": future_4h,
-        })
+
+    pb = classify_playbook(rows_1h, rows_15m, big4=big4 or {})
+    playbook = str(pb.get("playbook") or "D1")
+    pb_side = str(pb.get("side") or "FLAT").upper()
+    signals = set(pb.get("signals") or [])
+    features = pb.get("features") or {}
+    edge = float(pb.get("edge_score") or 0.0)
+    confirmed = bool(pb.get("confirmed"))
+    global_name = str((global_regime or {}).get("global_regime") or "GLOBAL_UNKNOWN")
+    big4_bias = str((big4 or {}).get("bias") or "FLAT").upper()
+    big4_ok = bool((big4 or {}).get("big4_ok", True))
+
+    allowed_playbooks = {"LONG": {"A1", "C3"}, "SHORT": {"A2", "C1"}}[side]
+    if pb_side != side:
+        out.update({"reason": f"playbook_side_{pb_side}", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
-    if side == "SHORT":
-        if global_bias == "LONG" and m3_side != "SHORT":
-            reason = "global_bull_blocks_short"
-            out.update({"reason": reason, "trend": dims})
-            return out
-        trend_ok = macro_side in ("SHORT", "FLAT") and m3_side in ("SHORT", "FLAT") and (m1_side == "SHORT" or d7_side == "SHORT")
-    else:
-        if global_bias == "SHORT" and not (d7_side == "SHORT" and d1_side == "LONG"):
-            reason = "global_bear_allows_only_support_rebound"
-            out.update({"reason": reason, "trend": dims})
-            return out
-        trend_ok = (m3_side == "LONG" and m1_side in ("LONG", "FLAT")) or (d7_side == "SHORT" and d1_side == "LONG")
-    if not trend_ok:
-        out.update({"reason": "trend_dimensions_not_aligned", "trend": dims})
+    if playbook not in allowed_playbooks:
+        out.update({"reason": f"playbook_{playbook}", "trend": dims, "future_4h": future_4h, "playbook": pb})
+        return out
+    if not big4_ok:
+        out.update({"reason": "big4_weak", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
 
-    ok_entry, entry = _entry_15m_opportunity(c15, h15, l15, v15, side)
-    if not ok_entry:
-        out.update({"reason": entry.get("reason") or "entry_fail", "trend": dims, "entry": entry})
+    has_break_signal = bool(signals & {"break_support", "break_resistance", "ema_reject", "ema_reclaim"})
+    has_volume_signal = bool(signals & {"volume_expand_down", "volume_expand_up", "crash_spike", "pump_spike"})
+    strong_token_side = features.get("h1_side") == side and features.get("m15_side") == side
+    trend_playbook = playbook in {"A1", "A2"}
+    breakout_playbook = playbook in {"C1", "C3"}
+
+    min_edge = 0.68 if breakout_playbook else 0.72
+    if side == "SHORT" and playbook == "C1":
+        min_edge = 0.70
+    if edge < min_edge:
+        out.update({"reason": "low_edge", "trend": dims, "future_4h": future_4h, "playbook": pb})
+        return out
+    if not confirmed:
+        out.update({"reason": "unconfirmed_playbook", "trend": dims, "future_4h": future_4h, "playbook": pb})
+        return out
+    if not (has_break_signal or has_volume_signal or strong_token_side):
+        out.update({"reason": "weak_phase_evidence", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
 
-    score = 0.0
-    for key in ("cycle", "m3", "m1", "d7", "d1"):
-        d = dims[key]
-        score += 18 if d["side"] == side else 7 if d["side"] == "FLAT" else 0
-    score += 10
-    if side == "SHORT" and global_bias == "SHORT":
-        score += 8
-    if side == "LONG" and global_bias == "SHORT":
-        score *= 0.55
+    if global_name == "DAILY_BEAR_PROBE" and side == "LONG":
+        out.update({"reason": "daily_bear_blocks_long", "trend": dims, "future_4h": future_4h, "playbook": pb})
+        return out
+    if global_name == "RELIEF_BOUNCE" and side == "SHORT" and not (playbook == "C1" and "break_support" in signals and "crash_spike" in signals):
+        out.update({"reason": "relief_bounce_blocks_fresh_short", "trend": dims, "future_4h": future_4h, "playbook": pb})
+        return out
+    if big4_bias in ("LONG", "SHORT") and big4_bias != side and not strong_token_side:
+        out.update({"reason": "big4_bias_opposes_symbol", "trend": dims, "future_4h": future_4h, "playbook": pb})
+        return out
+
+    setup = {
+        "A1": "brain_A1_trend_continuation_long",
+        "A2": "brain_A2_failed_rebound_short",
+        "C1": "brain_C1_breakdown_short",
+        "C3": "brain_C3_breakout_long",
+    }.get(playbook, playbook)
+    score = edge * 100.0
+    if confirmed:
+        score += 6
+    if breakout_playbook:
+        score += 5
+    if has_break_signal:
+        score += 4
+    if has_volume_signal:
+        score += 3
+    if strong_token_side:
+        score += 5
+    if big4_bias == side:
+        score += 4
+    if global_name in ("DAILY_BEAR_PROBE", "BULL_RECOVERY") and (
+        (side == "SHORT" and global_name == "DAILY_BEAR_PROBE")
+        or (side == "LONG" and global_name == "BULL_RECOVERY")
+    ):
+        score += 4
+
     out.update({
-        "passed": score >= 62,
-        "reason": None if score >= 62 else "score_below_threshold",
-        "score": round(score, 1),
+        "passed": score >= 72,
+        "reason": None if score >= 72 else "score_below_threshold",
+        "score": round(min(100.0, score), 1),
         "trend": dims,
         "future_4h": future_4h,
-        "entry": entry,
+        "playbook": pb,
         "signal_detail": {
+            "strategy": "brain_playbook_phase_break",
             "global_trend": global_trend,
+            "global_regime": global_regime,
             "trend_dimensions": dims,
             "future_4h": future_4h,
-            "entry": entry,
-            "setup": entry.get("setup"),
+            "playbook": {
+                "name": playbook,
+                "side": pb_side,
+                "edge_score": edge,
+                "confirmed": confirmed,
+                "signals": list(pb.get("signals") or []),
+                "candidates": pb.get("candidates") or [],
+                "evidence_summary": pb.get("evidence_summary"),
+                "features": features,
+            },
+            "entry": {
+                "setup": setup,
+                "playbook": playbook,
+                "edge_score": edge,
+                "confirmed": confirmed,
+                "h1_side": features.get("h1_side"),
+                "m15_side": features.get("m15_side"),
+                "rsi_1h": features.get("rsi_1h"),
+                "rsi_15m": features.get("rsi_15m"),
+                "has_break_signal": has_break_signal,
+                "has_volume_signal": has_volume_signal,
+                "strong_token_side": strong_token_side,
+                "big4_bias": big4_bias,
+                "global_regime": global_name,
+            },
+            "setup": setup,
         },
     })
     return out
@@ -789,9 +992,25 @@ def scan_universe(
 
     with conn.cursor() as cur:
         global_trend = evaluate_global_trend_dimensions(cur)
+        try:
+            from app.services.brain_market_analyzer import evaluate_big4_gate
+            from app.services.brain_market_regime import evaluate_global_daily_regime
+            big4 = evaluate_big4_gate(cur)
+            global_regime = evaluate_global_daily_regime(cur)
+        except Exception as e:
+            logger.warning(f"[破位机会] BRAIN 市场背景读取失败，降级为本页趋势背景: {e}")
+            big4 = {"big4_ok": True, "bias": (global_trend or {}).get("bias") or "FLAT"}
+            global_regime = {"global_regime": "GLOBAL_UNKNOWN", "reason": "fallback_global_trend"}
         for symbol in symbols:
             try:
-                ev = evaluate_symbol_multiperiod(cur, symbol, profile_l, global_trend=global_trend)
+                ev = evaluate_symbol_multiperiod(
+                    cur,
+                    symbol,
+                    profile_l,
+                    global_trend=global_trend,
+                    big4=big4,
+                    global_regime=global_regime,
+                )
                 if ev["passed"]:
                     results.append({
                         "symbol": ev["symbol"],
