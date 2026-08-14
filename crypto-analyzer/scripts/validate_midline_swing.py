@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""中线策略 v2 本地冒烟测试（默认只读；--worker 才跑一轮）."""
+"""Breakout opportunity local smoke tests; --worker runs one round."""
 from __future__ import annotations
 
 import argparse
@@ -21,6 +21,7 @@ def _fail(msg: str) -> None:
 
 def test_imports() -> None:
     print("[1] imports")
+    import app.services.midline_swing_scanner as scanner
     from app.services.midline_swing_config import (
         MIDLINE_SOURCES,
         source_for,
@@ -32,45 +33,68 @@ def test_imports() -> None:
     assert is_active_midline_source("midline_long")
     assert is_midline_source("gemini_midline_long")  # legacy
     assert not is_active_midline_source("gemini_midline_long")
+    assert not hasattr(scanner, "_layer1_daily")
+    assert not hasattr(scanner, "_layer2_hourly")
+    assert not hasattr(scanner, "_layer3_entry")
+    assert not hasattr(scanner, "evaluate_symbol")
     _ok("modules import")
 
 
-def test_layer_logic() -> None:
-    print("[2] layer helpers")
-    from app.services.midline_swing_scanner import _layer1_daily, _layer2_hourly, _layer3_entry
+def test_breakout_action_opportunity() -> None:
+    print("[2] 4h breakout action gate")
+    from app.services.midline_swing_scanner import _breakout_action_opportunity
 
-    # 做多：30d 大涨 + RSI 中性
-    closes = [100.0] * 20 + [100 + i for i in range(10)]  # last much higher
-    # need 30 bars: start low end high
-    closes_1d = [100.0] * 30
-    closes_1d[0] = 100.0
-    closes_1d[-1] = 112.0  # +12%
-    vols = [1000.0] * 30
-    ok, d = _layer1_daily(closes_1d, vols, "long")
-    # RSI may fail on flat-ish series — just ensure function runs
-    assert isinstance(ok, bool) and "change_30d_pct" in d
-    _ok(f"layer1 long change={d.get('change_30d_pct')} passed={ok}")
-
-    closes_1h = [100.0] * 140 + [101.0 + i * 0.01 for i in range(28)]
-    ok2, d2 = _layer2_hourly(closes_1h, "long")
-    assert isinstance(ok2, bool)
-    _ok(f"layer2 ran passed={ok2}")
-
-    highs_1d = [c + 1 for c in closes_1d]
-    lows_1d = [c - 1 for c in closes_1d]
-    closes_15 = [100.0] * 16
-    highs_15 = [101.0] * 16
-    lows_15 = [99.0] * 12 + [99.5] * 4
-    vols_15 = [1000.0] * 16
-    ok3, d3 = _layer3_entry(
-        closes_1d, highs_1d, lows_1d, closes_15, highs_15, lows_15, vols_15, "long",
+    c1 = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="C1",
+        edge=0.70,
+        confirmed=True,
+        signals={"break_support", "volume_expand_down"},
+        features={"h1_side": "SHORT", "m15_side": "SHORT", "ema_bear": True},
+        future_4h={"side": "SHORT", "score": 0.56},
+        big4_bias="SHORT",
+        global_name="BEAR_TREND",
+        entry_15m={"fresh_breakout": True},
     )
-    assert isinstance(ok3, bool)
-    _ok(f"layer3 ran passed={ok3} reason={d3.get('reason')}")
+    assert c1["should_open"] is True, c1
+
+    a2 = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="A2",
+        edge=0.72,
+        confirmed=True,
+        signals={"ema_reject", "15m_lower_high"},
+        features={
+            "h1_side": "SHORT",
+            "m15_side": "SHORT",
+            "ema_bear": True,
+            "vol_shrink_pullback": True,
+        },
+        future_4h={"side": "SHORT", "score": 0.52},
+        big4_bias="FLAT",
+        global_name="TOKEN_DIVERGENCE",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert a2["should_open"] is True, a2
+
+    blocked = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="C1",
+        edge=0.90,
+        confirmed=True,
+        signals={"break_support", "volume_expand_down"},
+        features={"h1_side": "SHORT", "m15_side": "SHORT", "ema_bear": True},
+        future_4h={"side": "FLAT", "score": 0.70},
+        big4_bias="SHORT",
+        global_name="BEAR_TREND",
+        entry_15m={"fresh_breakout": True},
+    )
+    assert blocked["should_open"] is False and blocked["reason"] == "future_4h_not_actionable"
+    _ok("A2/C1 open only when the 4h breakout opportunity is aligned")
 
 
 def test_limit_price() -> None:
-    print("[3] limit price ±1% default")
+    print("[3] limit price +/-1% default")
     from app.services.paper_limit_entry import calc_paper_limit_price
     from app.services.midline_swing_config import (
         DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT,
@@ -97,7 +121,7 @@ def test_limit_price() -> None:
 
 
 def test_live_sync_whitelist() -> None:
-    print("[3b] live sync — midline NOT in LIVE_SYNC")
+    print("[3b] live sync: midline NOT in LIVE_SYNC")
     from app.services.trading_gates import LIVE_SYNC_SOURCES
     from app.services.midline_swing_config import MIDLINE_SOURCES, ALL_MIDLINE_SOURCES
 
@@ -116,7 +140,7 @@ def test_ai_trail_for_midline() -> None:
 
     assert _is_midline_source("midline_long")
     assert _is_ai_hard_sltp_source("midline_long")
-    # peak 4% 价格收益、回撤 1.2%、仍保留 ≥2% → 触发 ai-trail-tp
+    # peak 4%, pullback 1.2%, still keeps >=2% profit: trigger ai-trail-tp
     assert _check_ai_trail_tp(0.028, 0.040) is not None
     _ok("ai-trail-tp applies to midline_long (monitor loop)")
 
@@ -128,7 +152,7 @@ def test_hold_advisor_excludes_midline() -> None:
     assert "midline_long" in DEEPSEEK_HOLD_SOURCE_SQL
     assert "midline_short" in DEEPSEEK_HOLD_SOURCE_SQL
     assert "NOT IN" in DEEPSEEK_HOLD_SOURCE_SQL  # midline_source_sql_not_in
-    # Gemini 持仓顾问已下线；DeepSeek SQL 不再排除 gemini_*
+    # Gemini hold advisor is retired; DeepSeek SQL no longer excludes gemini_*.
     assert "gemini_explore" not in DEEPSEEK_HOLD_SOURCE_SQL
     assert "1=0" in GEMINI_HOLD_SOURCE_SQL
     _ok("DeepSeek hold SQL excludes midline (hard SL/TP + trail + 8h only)")
@@ -139,7 +163,7 @@ def test_run_summary_zh() -> None:
     from app.services.midline_explore_worker import _format_run_summary
 
     s = _format_run_summary(260, 5, 3, "long", "LONG", rejected=100)
-    assert "config" in s and "通过5个" in s and "挂单3笔" in s
+    assert "config" in s and "5" in s and "3" in s and "LONG" in s
     _ok(s)
 
 
@@ -175,7 +199,7 @@ def main() -> None:
     args = ap.parse_args()
 
     test_imports()
-    test_layer_logic()
+    test_breakout_action_opportunity()
     test_limit_price()
     test_live_sync_whitelist()
     test_ai_trail_for_midline()
