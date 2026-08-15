@@ -246,7 +246,7 @@ def positions(limit: int = 50):
                     """
                     SELECT id, symbol, position_side, entry_price, mark_price, quantity,
                            leverage, unrealized_pnl, source, status,
-                           open_time, close_time, close_reason, created_at
+                           open_time, close_time, created_at
                     FROM futures_positions
                     WHERE account_id=%s
                       AND (source=%s OR source LIKE 'brain_%%')
@@ -291,6 +291,52 @@ def opportunities(
         return {"success": True, "data": rows, "count": len(rows)}
     except Exception as e:
         logger.error(f"[BRAIN API] /opportunities 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/opened-traces")
+def opened_traces(limit: int = 30):
+    """Recent BRAIN OPENED audit trail, including linked paper order status."""
+    try:
+        limit = max(1, min(int(limit or 30), 100))
+        conn = _connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                      b.id AS opportunity_id,
+                      b.created_at AS opportunity_created_at,
+                      b.symbol,
+                      b.side,
+                      b.playbook,
+                      b.edge_score,
+                      b.ref_price,
+                      b.order_id AS order_db_id,
+                      fo.order_id AS order_uid,
+                      fo.status AS order_status,
+                      fo.order_type,
+                      fo.price AS order_price,
+                      fo.quantity,
+                      fo.executed_quantity,
+                      fo.position_id,
+                      fo.fill_time,
+                      fo.updated_at AS order_updated_at
+                    FROM brain_opportunities b
+                    LEFT JOIN futures_orders fo
+                      ON fo.id = b.order_id
+                    WHERE b.decision='OPENED'
+                    ORDER BY b.id DESC
+                    LIMIT %s
+                    """,
+                    (limit,),
+                )
+                rows = [_serialize_row(r) for r in (cur.fetchall() or [])]
+        finally:
+            conn.close()
+        return {"success": True, "data": rows, "count": len(rows)}
+    except Exception as e:
+        logger.error(f"[BRAIN API] /opened-traces failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

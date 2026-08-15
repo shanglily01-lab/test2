@@ -191,6 +191,41 @@
       });
   }
 
+  function loadOpenedTraces() {
+    return fetch(API + '/opened-traces?limit=30')
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var rows = j.data || [];
+        if ($('opened-trace-count')) $('opened-trace-count').textContent = rows.length + ' rows';
+        var body = $('opened-trace-body');
+        if (!body) return;
+        body.innerHTML = '';
+        if (!rows.length) {
+          body.innerHTML = '<tr><td colspan="9" class="px-3 py-6 text-on-surface-variant">No OPENED traces yet</td></tr>';
+          return;
+        }
+        rows.forEach(function (r) {
+          var st = String(r.order_status || 'MISSING_ORDER').toUpperCase();
+          var stCls = st === 'FILLED' ? 'text-primary' : (st === 'PENDING' ? 'text-secondary' : 'text-on-surface-variant');
+          var filled = Number(r.executed_quantity || 0);
+          var qty = Number(r.quantity || 0);
+          var tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td class="px-3 py-2 mono">' + r.opportunity_id + '</td>' +
+            '<td class="px-3 py-2 mono">' + fmtTime(r.opportunity_created_at) + '</td>' +
+            '<td class="px-3 py-2 mono">' + (r.symbol || '--') + '</td>' +
+            '<td class="px-3 py-2 mono font-semibold">' + (r.playbook || '--') + '</td>' +
+            '<td class="px-3 py-2">' + sideChip(r.side) + '</td>' +
+            '<td class="px-3 py-2 mono">' + (r.order_db_id != null ? r.order_db_id : '--') + '</td>' +
+            '<td class="px-3 py-2 mono ' + stCls + '">' + st + '</td>' +
+            '<td class="px-3 py-2 mono">' + fmtNum(r.order_price || r.ref_price) + '</td>' +
+            '<td class="px-3 py-2 mono">' + fmtNum(filled, 4) + ' / ' + fmtNum(qty, 4) + '</td>';
+          body.appendChild(tr);
+        });
+      })
+      .catch(function (e) { console.error(e); });
+  }
+
   function loadOrders() {
     return fetch(API + '/orders?limit=50')
       .then(function (r) { return r.json(); })
@@ -283,7 +318,7 @@
   }
 
   function refreshSlow() {
-    return Promise.all([loadOverview(), loadOpportunities(), loadPlaybookStats(), loadOrders(), loadPositions()]);
+    return Promise.all([loadOverview(), loadOpenedTraces(), loadOpportunities(), loadPlaybookStats(), loadOrders(), loadPositions()]);
   }
 
   function startLivePoll() {
@@ -334,7 +369,7 @@
         });
     });
     // 机会表慢刷
-    setInterval(function () { loadOpportunities(); loadOrders(); }, 20000);
+    setInterval(function () { loadOpenedTraces(); loadOpportunities(); loadOrders(); }, 20000);
   }
 
   if (document.readyState === 'loading') {

@@ -125,6 +125,31 @@
 </section>
 
 <section class="px-8 pb-6">
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-sm font-semibold">Recent Opened Traces</h2>
+    <span class="text-[10px] text-on-surface-variant mono" id="opened-trace-count">--</span>
+  </div>
+  <div class="overflow-x-auto rounded-xl border border-outline-variant/10">
+    <table class="w-full text-left text-xs">
+      <thead class="bg-surface-container text-on-surface-variant uppercase text-[10px]">
+        <tr>
+          <th class="px-3 py-2">Opp ID</th>
+          <th class="px-3 py-2">Time</th>
+          <th class="px-3 py-2">Symbol</th>
+          <th class="px-3 py-2">Playbook</th>
+          <th class="px-3 py-2">Side</th>
+          <th class="px-3 py-2">Order</th>
+          <th class="px-3 py-2">Status</th>
+          <th class="px-3 py-2">Price</th>
+          <th class="px-3 py-2">Filled</th>
+        </tr>
+      </thead>
+      <tbody id="opened-trace-body" class="divide-y divide-outline-variant/10"></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="px-8 pb-6">
   <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
     <h2 class="text-sm font-semibold">机会识别（Playbook）</h2>
     <div class="flex gap-2 items-center text-[11px]">
@@ -213,5 +238,5 @@
 </section>
 
 </main>
-<script src="/static/js/brain_strategy_page.js?v=6"></script>
+<script src="/static/js/brain_strategy_page.js?v=7"></script>
 </body></html>
