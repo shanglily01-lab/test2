@@ -70,34 +70,28 @@ BRAIN_MIN_EDGE_SCORE_SHORT = 0.90
 BRAIN_REQUIRE_CONFIRMED_PREFIXES = ("A", "B")
 
 # Playbook v1（§7.3.11）
-# 2026-08-11 loss review: keep A1 as the core long bucket, but allow controlled
-# A2/C1 short pilots only when Big4 is SHORT and with smaller margin.
+# 2026-08-14 48h review: A2 produced churn losses in clear downtrends.
+# Keep A2 tagged for analysis only; only C1 breakdowns may open short.
 TRADEABLE_PLAYBOOKS = frozenset({
     "A1",
-    "A2",
+    "B3",
     "C1",
+    "C3",
+    "C4",
 })
-PILOT_SHORT_PLAYBOOKS = frozenset({"A2", "C1"})
+PILOT_SHORT_PLAYBOOKS = frozenset({"C1"})
 PLAYBOOK_MIN_EDGE_SCORE = {
+    "B3": 0.80,
     "C1": 0.80,  # only volume-confirmed breakdowns clear this score in v1.
+    "C3": 0.70,
+    "C4": 0.75,
 }
 PLAYBOOK_MARGIN_MULTIPLIER = {
-    "A2": 0.50,
+    "B3": 0.25,
     "C1": 0.35,
+    "C3": 0.50,
+    "C4": 0.25,
 }
-BRAIN_SHORT_BIG4_BIAS_REQUIRED = True
-BRAIN_LONG_BLOCK_WHEN_BIG4_SHORT = True
-# Allow very strong token-level A2/C1 shorts when Big4 is tradable but only FLAT.
-# This is intentionally narrower than disabling the Big4 short gate: the symbol
-# must show its own 1h/15m short structure plus crash/breakdown evidence.
-BRAIN_SHORT_BIG4_FLAT_STRONG_OVERRIDE = True
-BRAIN_SHORT_FLAT_OVERRIDE_MIN_EDGE = 0.80
-BRAIN_SHORT_FLAT_OVERRIDE_PLAYBOOKS = frozenset({"A2", "C1"})
-BRAIN_SHORT_FLAT_OVERRIDE_REQUIRED_SIGNALS = frozenset({
-    "crash_spike",
-    "break_support",
-    "volume_expand_down",
-})
 FLAT_PLAYBOOKS = frozenset({"D1", "D2"})
 PLAYBOOK_SIDE = {
     "A1": "LONG", "B1": "LONG", "B4": "LONG", "C2": "LONG", "C3": "LONG",
@@ -108,6 +102,9 @@ PLAYBOOK_SIDE = {
 # 冲击判定：近 N 根 15m 跌/涨幅相对 ATR
 CRASH_ATR_MULT = 2.5
 CRASH_LOOKBACK_BARS = 8
+BRAIN_IMPULSE_1H_BREAK_PCT = 0.8
+BRAIN_IMPULSE_1H_VOL_REL = 2.0
+BRAIN_EXHAUSTION_UPPER_WICK_MIN = 0.35
 
 # K 线窗口
 BARS_1H_WEEK = 168

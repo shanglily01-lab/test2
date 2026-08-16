@@ -255,7 +255,7 @@ def _breakout_action_opportunity(
         "entry_15m": entry_15m,
     }
 
-    if playbook_u not in {"A2", "C1", "C3"}:
+    if playbook_u not in {"A1", "A2", "C1", "C3"}:
         detail["reason"] = "not_breakout_playbook"
         return detail
     if not confirmed:
@@ -287,14 +287,30 @@ def _breakout_action_opportunity(
             "break_resistance": "break_resistance" in signals,
             "volume_expand_up": "volume_expand_up" in signals,
             "pump_spike": "pump_spike" in signals,
+            "h1_breakout_up": "h1_breakout_up" in signals,
+            "impulse_up": "impulse_up" in signals,
             "ema_reclaim": "ema_reclaim" in signals,
             "higher_low": "15m_higher_low" in signals,
             "ema_bull": bool(features.get("ema_bull")),
+            "hh_hl": bool(features.get("hh_hl")),
+            "volume_shrink_pullback": bool(features.get("vol_shrink_pullback")),
             "token_aligned": token_aligned,
             "entry_fresh": entry_fresh,
         }
-        structure_ok = evidence["break_resistance"] or entry_fresh
-        force_ok = evidence["volume_expand_up"] or evidence["pump_spike"] or evidence["token_aligned"]
+        if playbook_u == "A1":
+            structure_ok = (
+                (evidence["ema_bull"] and (evidence["hh_hl"] or evidence["higher_low"]))
+                or entry_fresh
+                or token_aligned
+            )
+            force_ok = (
+                (evidence["token_aligned"] and (evidence["volume_expand_up"] or evidence["volume_shrink_pullback"]))
+                or edge >= 0.90
+                or evidence["pump_spike"]
+            )
+        else:
+            structure_ok = evidence["break_resistance"] or evidence["h1_breakout_up"] or evidence["impulse_up"] or entry_fresh
+            force_ok = evidence["volume_expand_up"] or evidence["pump_spike"] or evidence["impulse_up"] or evidence["token_aligned"]
 
     detail["evidence"] = evidence
     if not structure_ok:
@@ -626,15 +642,35 @@ def evaluate_symbol_multiperiod(
     if playbook not in allowed_playbooks:
         out.update({"reason": f"playbook_{playbook}", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
-    if not big4_ok:
-        out.update({"reason": "big4_weak", "trend": dims, "future_4h": future_4h, "playbook": pb})
-        return out
-
     has_break_signal = bool(signals & {"break_support", "break_resistance", "ema_reject", "ema_reclaim"})
     has_volume_signal = bool(signals & {"volume_expand_down", "volume_expand_up", "crash_spike", "pump_spike"})
     strong_token_side = features.get("h1_side") == side and features.get("m15_side") == side
     trend_playbook = playbook in {"A1", "A2"}
     breakout_playbook = playbook in {"C1", "C3"}
+    weak_big4_long_override = (
+        not big4_ok
+        and side == "LONG"
+        and playbook in {"A1", "C3"}
+        and confirmed
+        and strong_token_side
+        and str(future_4h.get("side") or "FLAT").upper() == "LONG"
+        and float(future_4h.get("score") or 0.0) >= FUTURE_4H_OPPORTUNITY_SCORE_MIN
+        and edge >= (0.80 if playbook == "A1" else 0.85)
+    )
+    weak_big4_short_override = (
+        not big4_ok
+        and side == "SHORT"
+        and playbook == "C1"
+        and confirmed
+        and strong_token_side
+        and str(future_4h.get("side") or "FLAT").upper() == "SHORT"
+        and float(future_4h.get("score") or 0.0) >= FUTURE_4H_OPPORTUNITY_SCORE_MIN
+        and edge >= 0.80
+        and bool(signals & {"break_support", "volume_expand_down", "crash_spike"})
+    )
+    if not big4_ok and not (weak_big4_long_override or weak_big4_short_override):
+        out.update({"reason": "big4_weak", "trend": dims, "future_4h": future_4h, "playbook": pb})
+        return out
 
     min_edge = 0.68 if breakout_playbook else 0.72
     if side == "SHORT" and playbook == "C1":
@@ -649,7 +685,7 @@ def evaluate_symbol_multiperiod(
         out.update({"reason": "weak_phase_evidence", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
 
-    if global_name == "DAILY_BEAR_PROBE" and side == "LONG":
+    if global_name == "DAILY_BEAR_PROBE" and side == "LONG" and not weak_big4_long_override:
         out.update({"reason": "daily_bear_blocks_long", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
     if global_name == "RELIEF_BOUNCE" and side == "SHORT" and not (playbook == "C1" and "break_support" in signals and "crash_spike" in signals):

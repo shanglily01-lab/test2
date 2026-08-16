@@ -58,6 +58,40 @@ def test_breakout_action_opportunity() -> None:
     )
     assert c1["should_open"] is True, c1
 
+    a1 = _breakout_action_opportunity(
+        side="LONG",
+        playbook="A1",
+        edge=0.90,
+        confirmed=True,
+        signals={"15m_higher_low", "volume_shrink_pullback"},
+        features={
+            "h1_side": "LONG",
+            "m15_side": "LONG",
+            "ema_bull": True,
+            "hh_hl": True,
+            "vol_shrink_pullback": True,
+        },
+        future_4h={"side": "LONG", "score": 0.62},
+        big4_bias="FLAT",
+        global_name="TOKEN_DIVERGENCE",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert a1["should_open"] is True, a1
+
+    c3_h1 = _breakout_action_opportunity(
+        side="LONG",
+        playbook="C3",
+        edge=0.90,
+        confirmed=True,
+        signals={"h1_breakout_up", "impulse_up", "15m_higher_low"},
+        features={"h1_side": "LONG", "m15_side": "LONG"},
+        future_4h={"side": "LONG", "score": 0.60},
+        big4_bias="FLAT",
+        global_name="TOKEN_DIVERGENCE",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert c3_h1["should_open"] is True, c3_h1
+
     a2 = _breakout_action_opportunity(
         side="SHORT",
         playbook="A2",

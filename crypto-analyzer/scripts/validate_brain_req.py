@@ -30,10 +30,6 @@ def test_imports_and_config() -> None:
         BRAIN_HOLD_HOURS,
         BRAIN_MIN_EDGE_SCORE,
         BRAIN_REQUIRE_CONFIRMED_PREFIXES,
-        BRAIN_SHORT_BIG4_BIAS_REQUIRED,
-        BRAIN_SHORT_BIG4_FLAT_STRONG_OVERRIDE,
-        BRAIN_SHORT_FLAT_OVERRIDE_MIN_EDGE,
-        BRAIN_SHORT_FLAT_OVERRIDE_PLAYBOOKS,
         BRAIN_STRATEGIC_CLOSE_ENABLED,
         TRADEABLE_PLAYBOOKS,
         WIN_PROB_MIN,
@@ -47,24 +43,19 @@ def test_imports_and_config() -> None:
     assert BRAIN_STRATEGIC_CLOSE_ENABLED is False
     assert BRAIN_MIN_EDGE_SCORE == 0.75
     assert BRAIN_REQUIRE_CONFIRMED_PREFIXES == ("A", "B")
-    assert TRADEABLE_PLAYBOOKS == frozenset({"A1", "A2", "C1"})
+    assert TRADEABLE_PLAYBOOKS == frozenset({"A1", "B3", "C1", "C3", "C4"})
     from app.services.brain_config import (
-        BRAIN_LONG_BLOCK_WHEN_BIG4_SHORT,
         BRAIN_MIN_EDGE_SCORE_SHORT,
         PILOT_SHORT_PLAYBOOKS,
         PLAYBOOK_MARGIN_MULTIPLIER,
         PLAYBOOK_MIN_EDGE_SCORE,
     )
     assert BRAIN_MIN_EDGE_SCORE_SHORT == 0.90
-    assert PILOT_SHORT_PLAYBOOKS == frozenset({"A2", "C1"})
+    assert PILOT_SHORT_PLAYBOOKS == frozenset({"C1"})
     assert PLAYBOOK_MIN_EDGE_SCORE["C1"] == 0.80
-    assert PLAYBOOK_MARGIN_MULTIPLIER["A2"] < 1.0
-    assert PLAYBOOK_MARGIN_MULTIPLIER["C1"] < PLAYBOOK_MARGIN_MULTIPLIER["A2"]
-    assert BRAIN_SHORT_BIG4_BIAS_REQUIRED is True
-    assert BRAIN_SHORT_BIG4_FLAT_STRONG_OVERRIDE is True
-    assert BRAIN_SHORT_FLAT_OVERRIDE_MIN_EDGE >= 0.80
-    assert BRAIN_SHORT_FLAT_OVERRIDE_PLAYBOOKS == frozenset({"A2", "C1"})
-    assert BRAIN_LONG_BLOCK_WHEN_BIG4_SHORT is True
+    assert PLAYBOOK_MIN_EDGE_SCORE["C3"] == 0.70
+    assert PLAYBOOK_MARGIN_MULTIPLIER["C3"] < 1.0
+    assert PLAYBOOK_MARGIN_MULTIPLIER["B3"] < PLAYBOOK_MARGIN_MULTIPLIER["C1"]
     assert BRAIN_SL_PCT >= 1.0, f"BRAIN_SL_PCT={BRAIN_SL_PCT} 疑似小数比例，应为百分点"
     assert BRAIN_TP_PCT >= 1.0, f"BRAIN_TP_PCT={BRAIN_TP_PCT} 疑似小数比例，应为百分点"
     assert is_brain_source(BRAIN_SOURCE)
@@ -244,26 +235,46 @@ def test_brain_skip_open_advisor() -> None:
         _ok("orchestrator risk_params")
 
     if (
-        "big4_short_blocks_long" not in orch2
-        or "short_needs_big4_short" not in orch2
-        or "_strong_token_short_override" not in orch2
-        or "PLAYBOOK_MARGIN_MULTIPLIER" not in orch2
-        or "PLAYBOOK_MIN_EDGE_SCORE" not in orch2
+        "big4_short_blocks_long" in orch2
+        or "short_needs_big4_short" in orch2
+        or "_strong_token_short_override" in orch2
     ):
         _fail("orchestrator 未完整接入 A2/C1 受控补空门控")
     else:
         _ok("orchestrator controlled short gates")
 
-    from app.services.brain_strategy_orchestrator import _strong_token_short_override
-    strong_a2 = {
+    from app.services.brain_strategy_orchestrator import _fast_event_winprob_allowed, _strong_token_short_override
+    strong_c1 = {
+        "playbook": "C1",
+        "confirmed": True,
+        "edge_score": 0.90,
+        "features": {"h1_side": "SHORT", "m15_side": "SHORT"},
+        "signals": ["break_support", "volume_expand_down", "crash_spike"],
+    }
+    assert _strong_token_short_override(strong_c1, "FLAT")
+    assert not _strong_token_short_override(strong_c1, "LONG")
+    shadow_a2 = {
         "playbook": "A2",
         "confirmed": True,
         "edge_score": 0.90,
         "features": {"h1_side": "SHORT", "m15_side": "SHORT"},
         "signals": ["ema_bear_align", "crash_spike"],
     }
-    assert _strong_token_short_override(strong_a2, "FLAT")
-    assert not _strong_token_short_override(strong_a2, "LONG")
+    assert not _strong_token_short_override(shadow_a2, "FLAT")
+    c3 = {
+        "playbook": "C3",
+        "signals": ["h1_breakout_up", "impulse_up"],
+    }
+    ok_fast, reason_fast = _fast_event_winprob_allowed("LONG", c3, 0.48, 0.52)
+    assert ok_fast and "relaxed" in reason_fast
+    ok_bad, reason_bad = _fast_event_winprob_allowed("LONG", c3, 0.40, 0.58)
+    assert not ok_bad and "too_bad" in reason_bad
+    b3 = {
+        "playbook": "B3",
+        "signals": ["exhaustion_up", "long_upper_wick"],
+    }
+    ok_b3, _ = _fast_event_winprob_allowed("SHORT", b3, 0.52, 0.47)
+    assert ok_b3
     weak_pb = {
         "playbook": "B2",
         "confirmed": True,
@@ -272,7 +283,7 @@ def test_brain_skip_open_advisor() -> None:
         "signals": ["break_support"],
     }
     assert not _strong_token_short_override(weak_pb, "FLAT")
-    _ok("strong token short override")
+    _ok("strong token short override + fast-event winprob")
 
 
 def test_brain_risk_params() -> None:
@@ -449,6 +460,50 @@ def test_playbook_classify() -> None:
     _ok(f"playbook classify → {out['playbook']} side={out['side']} n_sig={len(out['signals'])}")
 
 
+def test_playbook_impulse_c3() -> None:
+    from app.services.brain_playbook import classify_playbook
+
+    impulse_1h = []
+    p = 100.0
+    for i in range(120):
+        if i == 119:
+            p = 104.0
+            vol = 9000
+        else:
+            p += 0.01
+            vol = 1000
+        impulse_1h.append({
+            "open_price": p - 0.05, "high_price": p + 0.1,
+            "low_price": p - 0.1, "close_price": p, "volume": vol,
+        })
+
+    impulse_15m = []
+    q = 100.0
+    for i in range(80):
+        if i >= 76:
+            q += 0.65
+            vol = 2500
+        else:
+            q += 0.01
+            vol = 500
+        impulse_15m.append({
+            "open_price": q - 0.03, "high_price": q + 0.08,
+            "low_price": q - 0.08, "close_price": q, "volume": vol,
+        })
+
+    out = classify_playbook(
+        impulse_1h,
+        impulse_15m,
+        big4={"big4_ok": False, "bias": "FLAT", "reason": "big4_weak"},
+        win_prob_long=0.6,
+        win_prob_short=0.4,
+    )
+    assert out["playbook"] == "C3", out
+    assert out["side"] == "LONG"
+    assert "impulse_up" in out["signals"]
+    _ok("playbook impulse C3")
+
+
 def test_directional_gate() -> None:
     from app.services.brain_winrate import directional_open_allowed
 
@@ -581,7 +636,41 @@ def test_brain_market_regime() -> None:
         playbook="A2",
         global_regime=global_bear,
     )
-    assert dec7.margin_multiplier > 0 and "failed_rebound_A2" in dec7.reason
+    assert dec7.margin_multiplier == 0 and "a2_shadow_only" in dec7.reason
+
+    c3_impulse = {
+        "side": "LONG",
+        "playbook": "C3",
+        "confirmed": True,
+        "edge_score": 0.95,
+        "features": {"h1_side": "LONG", "m15_side": "LONG"},
+        "signals": ["h1_breakout_up", "impulse_up", "pump_spike"],
+    }
+    dec8 = brain_open_regime_decision(
+        big4={"big4_ok": False, "bias": "FLAT", "reason": "big4_weak"},
+        playbook_row=c3_impulse,
+        side="LONG",
+        playbook="C3",
+        global_regime=global_bear,
+    )
+    assert dec8.margin_multiplier > 0 and "token_impulse_C3" in dec8.reason
+
+    b3_exhaustion = {
+        "side": "SHORT",
+        "playbook": "B3",
+        "confirmed": True,
+        "edge_score": 0.86,
+        "features": {"h1_side": "LONG", "m15_side": "SHORT"},
+        "signals": ["pump_spike", "long_upper_wick", "volume_diverge_bear", "exhaustion_up"],
+    }
+    dec9 = brain_open_regime_decision(
+        big4={"big4_ok": False, "bias": "FLAT", "reason": "big4_weak"},
+        playbook_row=b3_exhaustion,
+        side="SHORT",
+        playbook="B3",
+        global_regime=global_bear,
+    )
+    assert dec9.margin_multiplier > 0 and "exhaustion_B3" in dec9.reason
 
     _ok("brain_market_regime")
 
@@ -615,6 +704,7 @@ def main() -> int:
     test_trend_helpers()
     test_winrate_forward()
     test_playbook_classify()
+    test_playbook_impulse_c3()
     test_directional_gate()
     test_brain_market_regime()
     test_tick_config()

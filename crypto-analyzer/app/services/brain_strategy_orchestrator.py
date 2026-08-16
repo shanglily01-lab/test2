@@ -21,17 +21,11 @@ from app.services.brain_config import (
     BRAIN_HOLD_HOURS,
     BRAIN_LEVERAGE,
     BRAIN_LIMIT_TIMEOUT_MINUTES,
-    BRAIN_LONG_BLOCK_WHEN_BIG4_SHORT,
     BRAIN_MARGIN_USD,
     BRAIN_MIN_EDGE_SCORE,
     BRAIN_MIN_EDGE_SCORE_SHORT,
     BRAIN_POOL_REFRESH_EVERY_TICKS,
     BRAIN_REQUIRE_CONFIRMED_PREFIXES,
-    BRAIN_SHORT_BIG4_FLAT_STRONG_OVERRIDE,
-    BRAIN_SHORT_BIG4_BIAS_REQUIRED,
-    BRAIN_SHORT_FLAT_OVERRIDE_MIN_EDGE,
-    BRAIN_SHORT_FLAT_OVERRIDE_PLAYBOOKS,
-    BRAIN_SHORT_FLAT_OVERRIDE_REQUIRED_SIGNALS,
     BRAIN_SL_PCT,
     BRAIN_SOURCE,
     BRAIN_STRATEGIC_CLOSE_ENABLED,
@@ -163,24 +157,28 @@ def _mark_open_cooldown(symbol: str) -> None:
     cd[clean] = time.time() + BRAIN_SYMBOL_OPEN_COOLDOWN_MINUTES * 60
 
 
-def _strong_token_short_override(playbook_row: Dict[str, Any], big4_bias: str) -> bool:
-    """Permit select A2/C1 shorts when Big4 is tradable but directionally FLAT."""
-    if not BRAIN_SHORT_BIG4_FLAT_STRONG_OVERRIDE:
-        return False
-    if (big4_bias or "FLAT").upper() != "FLAT":
-        return False
+def _fast_event_winprob_allowed(
+    side: str,
+    playbook_row: Dict[str, Any],
+    win_long: Optional[float],
+    win_short: Optional[float],
+) -> tuple[bool, str]:
+    """Fast breakout/exhaustion events should not be muted by stale pool win-rate."""
+    side_u = (side or "").upper()
     playbook = str(playbook_row.get("playbook") or "")
-    if playbook not in BRAIN_SHORT_FLAT_OVERRIDE_PLAYBOOKS:
-        return False
-    if not bool(playbook_row.get("confirmed")):
-        return False
-    if float(playbook_row.get("edge_score") or 0) < BRAIN_SHORT_FLAT_OVERRIDE_MIN_EDGE:
-        return False
-    features = playbook_row.get("features") or {}
-    if features.get("h1_side") != "SHORT" or features.get("m15_side") != "SHORT":
-        return False
     signals = set(playbook_row.get("signals") or [])
-    return bool(signals & set(BRAIN_SHORT_FLAT_OVERRIDE_REQUIRED_SIGNALS))
+    is_fast_long = side_u == "LONG" and playbook == "C3" and bool(signals & {"impulse_up", "h1_breakout_up"})
+    is_fast_short = side_u == "SHORT" and playbook in {"B3", "C4"} and bool(
+        signals & {"exhaustion_up", "false_break_up", "long_upper_wick", "volume_diverge_bear"}
+    )
+    if not (is_fast_long or is_fast_short):
+        return False, "not_fast_event"
+
+    me = win_long if side_u == "LONG" else win_short
+    other = win_short if side_u == "LONG" else win_long
+    if me is not None and me < 0.45 and (other is None or other >= me + 0.10):
+        return False, "fast_event_winprob_too_bad"
+    return True, "fast_event_winprob_relaxed"
 
 
 def _build_catalyst(playbook_row: Dict[str, Any], win_long: Optional[float], win_short: Optional[float]) -> str:
@@ -457,31 +455,20 @@ def _analyze_one(
     decision = "SKIPPED"
     skip_reason = None
     order_id = None
-    big4_ok = bool(big4.get("big4_ok"))
-    big4_bias = str(big4.get("bias") or "FLAT").upper()
 
     if regime_decision.margin_multiplier <= 0:
         skip_reason = regime_decision.reason
-    elif not big4_ok:
-        skip_reason = "big4_weak"
     elif playbook not in TRADEABLE_PLAYBOOKS or side not in ("LONG", "SHORT"):
         skip_reason = f"playbook_{playbook}"
-    elif side == "LONG" and BRAIN_LONG_BLOCK_WHEN_BIG4_SHORT and big4_bias == "SHORT":
-        skip_reason = "big4_short_blocks_long"
-    elif (
-        side == "SHORT"
-        and BRAIN_SHORT_BIG4_BIAS_REQUIRED
-        and big4_bias != "SHORT"
-        and regime_decision.margin_multiplier <= 0
-        and not _strong_token_short_override(pb, big4_bias)
-    ):
-        skip_reason = "short_needs_big4_short"
     elif not price or float(price) <= 0:
         skip_reason = "no_price"
     elif _in_open_cooldown(sym):
         skip_reason = "symbol_cooldown"
     else:
         ok_wp, wp_reason = directional_open_allowed(side, wl, ws)
+        fast_wp_ok, fast_wp_reason = _fast_event_winprob_allowed(side, pb, wl, ws)
+        if not ok_wp and fast_wp_ok:
+            ok_wp, wp_reason = True, fast_wp_reason
         if not ok_wp:
             skip_reason = wp_reason
         else:

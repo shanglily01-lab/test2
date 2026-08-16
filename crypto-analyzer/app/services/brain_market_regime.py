@@ -167,6 +167,24 @@ def _token_crash(playbook_row: Dict[str, Any]) -> bool:
     return bool("crash_spike" in sig and ("volume_expand_down" in sig or "break_support" in sig))
 
 
+def _token_impulse_long(playbook_row: Dict[str, Any]) -> bool:
+    sig = _signals(playbook_row)
+    return bool(
+        "impulse_up" in sig
+        or ("h1_breakout_up" in sig and ("volume_expand_up" in sig or "break_resistance" in sig))
+        or ("break_resistance" in sig and "volume_expand_up" in sig)
+    )
+
+
+def _token_exhaustion_short(playbook_row: Dict[str, Any]) -> bool:
+    sig = _signals(playbook_row)
+    return bool(
+        "exhaustion_up" in sig
+        or ("false_break_up" in sig and ("long_upper_wick" in sig or "volume_expand_down" in sig))
+        or ("pump_spike" in sig and ("long_upper_wick" in sig or "volume_diverge_bear" in sig))
+    )
+
+
 def _panic_rebound(playbook_row: Dict[str, Any]) -> bool:
     sig = _signals(playbook_row)
     return bool("crash_spike" in sig and ("long_lower_wick" in sig or "15m_stop_new_low" in sig))
@@ -180,6 +198,11 @@ def classify_brain_regime(
     playbook_row = playbook_row or {}
     big4_ok = bool(big4.get("big4_ok"))
     if not big4_ok:
+        side = str(playbook_row.get("side") or "FLAT").upper()
+        if side == "LONG" and _token_impulse_long(playbook_row):
+            return TOKEN_DIVERGENCE, f"big4_weak_token_long_impulse:{big4.get('reason') or ''}"
+        if side == "SHORT" and _token_exhaustion_short(playbook_row):
+            return TOKEN_DIVERGENCE, f"big4_weak_token_short_exhaustion:{big4.get('reason') or ''}"
         return LOW_VOL_NO_TRADE, str(big4.get("reason") or "big4_weak")
 
     bias = str(big4.get("bias") or "FLAT").upper()
@@ -226,20 +249,28 @@ def brain_open_regime_decision(
     global_regime = global_regime or {}
     global_name = str(global_regime.get("global_regime") or GLOBAL_UNKNOWN)
 
+    if side_u == "SHORT" and pb == "A2":
+        return RegimeDecision(
+            regime,
+            f"a2_shadow_only_after_48h_loss_review:{why}",
+            "shadow_only",
+            0.0,
+        )
+
     if global_name == GLOBAL_DAILY_BEAR_PROBE:
         if side_u == "LONG":
+            if pb == "C3" and confirmed and edge >= 0.75 and _token_impulse_long(playbook_row):
+                return RegimeDecision(
+                    regime,
+                    f"global_daily_bear_probe_allows_token_impulse_C3:{why}",
+                    "pullback_limit",
+                    0.25,
+                )
             return RegimeDecision(
                 regime,
                 f"global_daily_bear_probe_blocks_long:{regime}:{pb}",
                 "shadow_only",
                 0.0,
-            )
-        if side_u == "SHORT" and pb == "A2" and confirmed and edge >= 0.80:
-            return RegimeDecision(
-                regime,
-                f"global_daily_bear_probe_allows_failed_rebound_A2:{why}",
-                "pullback_limit",
-                0.75,
             )
         if (
             side_u == "SHORT"
@@ -253,6 +284,13 @@ def brain_open_regime_decision(
                 f"global_daily_bear_probe_allows_breakdown_C1:{why}",
                 "breakout_confirm_limit",
                 0.50,
+            )
+        if side_u == "SHORT" and pb in {"B3", "C4"} and confirmed and edge >= 0.75 and _token_exhaustion_short(playbook_row):
+            return RegimeDecision(
+                regime,
+                f"global_daily_bear_probe_allows_exhaustion_{pb}:{why}",
+                "breakout_confirm_limit",
+                0.25,
             )
         return RegimeDecision(
             regime,
@@ -283,42 +321,48 @@ def brain_open_regime_decision(
     if regime == BULL_TREND:
         if side_u == "LONG" and pb == "A1":
             return RegimeDecision(regime, "regime_bull_allows_A1", "pullback_limit", 1.0)
+        if side_u == "LONG" and pb == "C3" and confirmed and _token_impulse_long(playbook_row):
+            return RegimeDecision(regime, "regime_bull_allows_C3_impulse", "pullback_limit", 0.50)
+        if side_u == "SHORT" and pb in {"B3", "C4"} and confirmed and edge >= 0.85 and _token_exhaustion_short(playbook_row):
+            return RegimeDecision(regime, f"regime_bull_allows_exhaustion_{pb}", "breakout_confirm_limit", 0.20)
         return RegimeDecision(regime, f"regime_bull_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 
     if regime == BEAR_TREND:
-        if side_u == "SHORT" and pb == "A2":
-            return RegimeDecision(regime, "regime_bear_allows_A2", "pullback_limit", 0.50)
         if side_u == "SHORT" and pb == "C1":
             return RegimeDecision(regime, "regime_bear_allows_C1_probe", "breakout_confirm_limit", 0.35)
+        if side_u == "SHORT" and pb in {"B3", "C4"} and confirmed and _token_exhaustion_short(playbook_row):
+            return RegimeDecision(regime, f"regime_bear_allows_exhaustion_{pb}", "breakout_confirm_limit", 0.35)
         return RegimeDecision(regime, f"regime_bear_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 
     if regime == CRASH_DOWN:
         if (
             side_u == "SHORT"
-            and pb in {"A2", "C1"}
+            and pb == "C1"
             and confirmed
             and edge >= 0.80
             and _strong_token_side(playbook_row, "SHORT")
             and bool(sig & {"crash_spike", "break_support", "volume_expand_down"})
         ):
-            mult = 0.35 if pb == "A2" else 0.25
-            mode = "crash_probe_limit" if pb == "C1" else "pullback_limit"
-            return RegimeDecision(regime, f"regime_crash_allows_{pb}_probe", mode, mult)
+            return RegimeDecision(regime, "regime_crash_allows_C1_probe", "crash_probe_limit", 0.25)
         return RegimeDecision(regime, f"regime_crash_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 
     if regime == PANIC_REBOUND:
         return RegimeDecision(regime, f"regime_panic_rebound_shadow_{side_u}_{pb}", "shadow_only", 0.0)
 
     if regime == RANGE_CHOP:
-        if side_u in ("LONG", "SHORT") and pb in {"A1", "A2"} and confirmed and edge >= 0.90:
+        if side_u == "LONG" and pb == "A1" and confirmed and edge >= 0.90:
             return RegimeDecision(regime, f"regime_range_allows_high_edge_{pb}", "pullback_limit", 0.35)
+        if side_u == "LONG" and pb == "C3" and confirmed and edge >= 0.75 and _token_impulse_long(playbook_row):
+            return RegimeDecision(regime, "regime_range_allows_token_impulse_C3", "pullback_limit", 0.35)
+        if side_u == "SHORT" and pb in {"B3", "C4"} and confirmed and edge >= 0.80 and _token_exhaustion_short(playbook_row):
+            return RegimeDecision(regime, f"regime_range_allows_exhaustion_{pb}", "breakout_confirm_limit", 0.25)
         return RegimeDecision(regime, f"regime_range_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 
     if regime == TOKEN_DIVERGENCE:
         if side_u == "LONG" and pb == "A1" and confirmed and edge >= 0.80:
             return RegimeDecision(regime, "regime_token_divergence_allows_A1", "pullback_limit", 0.50)
-        if side_u == "SHORT" and pb == "A2" and confirmed and edge >= 0.80:
-            return RegimeDecision(regime, "regime_token_divergence_allows_A2", "pullback_limit", 0.50)
+        if side_u == "LONG" and pb == "C3" and confirmed and edge >= 0.75 and _token_impulse_long(playbook_row):
+            return RegimeDecision(regime, "regime_token_divergence_allows_C3_impulse", "pullback_limit", 0.35)
         if (
             side_u == "SHORT"
             and pb == "C1"
@@ -327,11 +371,13 @@ def brain_open_regime_decision(
             and bool(sig & {"crash_spike", "break_support", "volume_expand_down"})
         ):
             return RegimeDecision(regime, "regime_token_divergence_allows_C1_probe", "breakout_confirm_limit", 0.35)
+        if side_u == "SHORT" and pb in {"B3", "C4"} and confirmed and edge >= 0.75 and _token_exhaustion_short(playbook_row):
+            return RegimeDecision(regime, f"regime_token_divergence_allows_exhaustion_{pb}", "breakout_confirm_limit", 0.25)
         return RegimeDecision(regime, f"regime_token_divergence_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 
     if regime == TRANSITION:
-        # Transition forbids old-direction inertia. Only strong, confirmed token divergence may pass.
-        if side_u in ("LONG", "SHORT") and pb in {"A1", "A2"} and confirmed and edge >= 0.95 and _strong_token_side(playbook_row, side_u):
+        # Transition forbids old-direction inertia. Only strong A1 may pass.
+        if side_u == "LONG" and pb == "A1" and confirmed and edge >= 0.95 and _strong_token_side(playbook_row, side_u):
             return RegimeDecision(regime, f"regime_transition_allows_strong_{side_u}_{pb}", "pullback_limit", 0.25)
         return RegimeDecision(regime, f"regime_transition_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 

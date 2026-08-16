@@ -4,6 +4,9 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.services.brain_config import (
+    BRAIN_EXHAUSTION_UPPER_WICK_MIN,
+    BRAIN_IMPULSE_1H_BREAK_PCT,
+    BRAIN_IMPULSE_1H_VOL_REL,
     CRASH_ATR_MULT,
     CRASH_LOOKBACK_BARS,
     PLAYBOOK_SIDE,
@@ -87,6 +90,11 @@ def extract_features(
         "ema20_15m": None,
         "crash_spike": False,
         "pump_spike": False,
+        "h1_breakout_up": False,
+        "h1_breakdown_down": False,
+        "impulse_up": False,
+        "impulse_down": False,
+        "exhaustion_up": False,
         "vol_up": False,
         "vol_down": False,
         "vol_shrink_pullback": False,
@@ -206,6 +214,25 @@ def extract_features(
         if max(c15[-8:]) >= max(c15[-24:-8]) and sum(v15[-8:]) < sum(v15[-24:-8]) * 0.7:
             signals.append("volume_diverge_bear")
 
+    if len(c1) >= 24:
+        v1 = [_f(r.get("volume")) for r in rows_1h]
+        prev_hi_1h = max(c1[-21:-1])
+        prev_lo_1h = min(c1[-21:-1])
+        avg_v1 = sum(v1[-21:-1]) / 20 if len(v1) >= 21 else 0.0
+        vol_rel_1h = (v1[-1] / avg_v1) if avg_v1 > 0 else 0.0
+        if c1[-1] > prev_hi_1h * (1 + BRAIN_IMPULSE_1H_BREAK_PCT / 100.0):
+            feats["h1_breakout_up"] = True
+            signals.append("h1_breakout_up")
+            if vol_rel_1h >= BRAIN_IMPULSE_1H_VOL_REL:
+                feats["impulse_up"] = True
+                signals.append("impulse_up")
+        if c1[-1] < prev_lo_1h * (1 - BRAIN_IMPULSE_1H_BREAK_PCT / 100.0):
+            feats["h1_breakdown_down"] = True
+            signals.append("h1_breakdown_down")
+            if vol_rel_1h >= BRAIN_IMPULSE_1H_VOL_REL:
+                feats["impulse_down"] = True
+                signals.append("impulse_down")
+
     # crash / pump vs ATR
     atr = _atr(rows_15m[-60:] if len(rows_15m) >= 60 else rows_15m, 14)
     n = CRASH_LOOKBACK_BARS
@@ -232,6 +259,15 @@ def extract_features(
     if wm.get("upper_is_wick"):
         feats["long_upper_wick"] = True
         signals.append("long_upper_wick")
+    candle_range = max(_f(last.get("high_price")) - _f(last.get("low_price")), 1e-12)
+    upper_wick_ratio = _f(wm.get("upper")) / candle_range
+    if (
+        feats.get("pump_spike")
+        and upper_wick_ratio >= BRAIN_EXHAUSTION_UPPER_WICK_MIN
+        and ("volume_diverge_bear" in signals or "rsi_15m_turn_down" in signals or feats.get("vol_down"))
+    ):
+        feats["exhaustion_up"] = True
+        signals.append("exhaustion_up")
 
     wick = analyze_wicks(rows_15m[-min(672, len(rows_15m)):])
     feats["wick_frequent"] = bool(wick.get("frequent"))
@@ -378,6 +414,8 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     b3 = 0.0
     if feats.get("pump_spike"):
         b3 += 0.35
+    if feats.get("exhaustion_up"):
+        b3 += 0.25
     if feats.get("long_upper_wick") or "volume_diverge_bear" in sig:
         b3 += 0.3
     if "ema_reject" in sig or feats.get("false_break_up"):
@@ -405,12 +443,17 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         scored.append(("C2", 0.75, True))
 
     # C3 向上突破
-    if feats.get("break_resistance") and feats.get("vol_up"):
-        scored.append(("C3", 0.7, True))
+    if (feats.get("break_resistance") and feats.get("vol_up")) or feats.get("impulse_up"):
+        c3 = 0.7
+        if feats.get("impulse_up"):
+            c3 += 0.2
+        if feats.get("h1_breakout_up"):
+            c3 += 0.1
+        scored.append(("C3", min(1.0, c3), True))
 
     # C4 假突陷阱
     if feats.get("false_break_up") and (feats.get("long_upper_wick") or feats.get("vol_down")):
-        scored.append(("C4", 0.75, True))
+        scored.append(("C4", 0.75 + (0.1 if feats.get("exhaustion_up") else 0), True))
 
     scored.sort(key=lambda x: (x[2], x[1]), reverse=True)
     return scored
@@ -431,7 +474,22 @@ def classify_playbook(
     feats = extract_features(rows_1h, rows_15m, big4=big4)
     signals = list(feats.get("signals") or [])
 
-    if not feats.get("big4_ok"):
+    token_event = bool(feats.get("impulse_up") or feats.get("impulse_down") or feats.get("exhaustion_up"))
+    strong_big4_weak_trend = bool(
+        (
+            feats.get("ema_bull")
+            and feats.get("hh_hl")
+            and feats.get("h1_side") == "LONG"
+            and feats.get("m15_side") == "LONG"
+        )
+        or (
+            feats.get("ema_bear")
+            and feats.get("lh_ll")
+            and feats.get("h1_side") == "SHORT"
+            and feats.get("m15_side") == "SHORT"
+        )
+    )
+    if not feats.get("big4_ok") and not (token_event or strong_big4_weak_trend):
         return {
             "playbook": "D1",
             "side": "FLAT",
