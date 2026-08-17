@@ -168,11 +168,18 @@ def _fast_event_winprob_allowed(
     playbook = str(playbook_row.get("playbook") or "")
     signals = set(playbook_row.get("signals") or [])
     is_fast_long = side_u == "LONG" and playbook == "C3" and bool(signals & {"impulse_up", "h1_breakout_up"})
-    is_fast_short = side_u == "SHORT" and playbook in {"B3", "C4"} and bool(
-        signals & {
-            "exhaustion_up", "false_break_up", "long_upper_wick",
-            "volume_diverge_bear", "stall_at_high", "15m_stop_new_high",
-        }
+    is_fast_short = side_u == "SHORT" and (
+        (
+            playbook in {"B3", "C4"}
+            and bool(signals & {
+                "exhaustion_up", "false_break_up", "long_upper_wick",
+                "volume_diverge_bear", "stall_at_high", "15m_stop_new_high",
+            })
+        )
+        or (
+            playbook in {"C1", "B2"}
+            and bool(signals & {"break_support", "impulse_down", "h1_breakdown_down", "crash_spike", "volume_expand_down"})
+        )
     )
     if not (is_fast_long or is_fast_short):
         return False, "not_fast_event"

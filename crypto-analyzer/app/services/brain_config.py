@@ -70,23 +70,28 @@ BRAIN_MIN_EDGE_SCORE_SHORT = 0.90
 BRAIN_REQUIRE_CONFIRMED_PREFIXES = ("A", "B")
 
 # Playbook v1（§7.3.11）
-# 2026-08-14 48h review: A2 produced churn losses in clear downtrends.
-# Keep A2 tagged for analysis only; only C1 breakdowns may open short.
+# v4.5.17: C1 破位当根跟风；A2/B2 精准确认后开仓。
 TRADEABLE_PLAYBOOKS = frozenset({
     "A1",
+    "A2",
+    "B2",
     "B3",
     "C1",
     "C3",
     "C4",
 })
-PILOT_SHORT_PLAYBOOKS = frozenset({"C1"})
+PILOT_SHORT_PLAYBOOKS = frozenset({"A2", "B2", "C1"})
 PLAYBOOK_MIN_EDGE_SCORE = {
+    "A2": 0.80,
+    "B2": 0.80,
     "B3": 0.80,
-    "C1": 0.80,  # only volume-confirmed breakdowns clear this score in v1.
+    "C1": 0.80,
     "C3": 0.70,
     "C4": 0.75,
 }
 PLAYBOOK_MARGIN_MULTIPLIER = {
+    "A2": 0.45,
+    "B2": 0.30,
     "B3": 0.25,
     "C1": 0.35,
     "C3": 0.50,

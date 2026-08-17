@@ -126,6 +126,34 @@ def test_breakout_action_opportunity() -> None:
     assert blocked["should_open"] is False and blocked["reason"] == "future_4h_not_actionable"
 
     chase = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="C1",
+        edge=0.90,
+        confirmed=True,
+        signals={"break_support", "volume_expand_down", "crash_spike"},
+        features={"h1_side": "SHORT", "m15_side": "SHORT", "ema_bear": True},
+        future_4h={"side": "SHORT", "score": 0.60},
+        big4_bias="SHORT",
+        global_name="BEAR_TREND",
+        entry_15m={"fresh_breakout": True},
+    )
+    assert chase["should_open"] is True, chase
+
+    b2 = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="B2",
+        edge=0.80,
+        confirmed=True,
+        signals={"ema_reject", "15m_lower_high", "break_support"},
+        features={"h1_side": "SHORT", "m15_side": "SHORT", "ema_bear": True, "vol_shrink_pullback": True},
+        future_4h={"side": "SHORT", "score": 0.52},
+        big4_bias="SHORT",
+        global_name="BEAR_TREND",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert b2["should_open"] is True, b2
+
+    c3_chase = _breakout_action_opportunity(
         side="LONG",
         playbook="C3",
         edge=0.90,
@@ -137,7 +165,7 @@ def test_breakout_action_opportunity() -> None:
         global_name="TOKEN_DIVERGENCE",
         entry_15m={"fresh_breakout": True},
     )
-    assert chase["should_open"] is False and chase["reason"] == "wait_pullback", chase
+    assert c3_chase["should_open"] is False and c3_chase["reason"] == "wait_pullback", c3_chase
 
     b3 = _breakout_action_opportunity(
         side="SHORT",
@@ -166,7 +194,7 @@ def test_breakout_action_opportunity() -> None:
         entry_15m={"fresh_breakout": False},
     )
     assert still_long["should_open"] is False and still_long["reason"] == "future_4h_still_long", still_long
-    _ok("A2/C1 open only when the 4h breakout opportunity is aligned; C3 waits for pullback; B3 sells stall at highs")
+    _ok("C1 follows a fresh breakdown; A2/B2 can open; C3 still waits for pullback; B3 sells stall at highs")
 
 
 def test_limit_price() -> None:

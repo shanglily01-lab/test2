@@ -1,13 +1,13 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-08-17 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.16** 对齐
+> 文档版本：2026-08-17 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.17** 对齐
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
 > **中线 v2 §7.2**：已落地模拟仓。  
 > **实盘同步 / 闸门 / 15m 定方向 / 限价偏移 / BRAIN**：以 REQUIREMENTS 为准；本文侧重 AI/中线细节。
 
 ## 1. 总览
 
-**主路径（已落地）**：REQ-BRAIN — **盈利 KPI**；A1 主力 + A2/C1 受控空头试点；LONG≥0.75 / SHORT≥0.90（C1 放量破位≥0.80）；Big4 SHORT 时阻断 A1 追多、A2/C1 才可试空；**A1 豁免 5m**，其它 5m(40U/4根) + -80U + trail（soft 关；§7.3）。  
+**主路径（已落地）**：REQ-BRAIN — **盈利 KPI**；A1 主力；C1 破位跟风；A2/B2 精准确认后开空；LONG≥0.75 / SHORT≥0.90（C1 放量破位≥0.80）；**A1 豁免 5m**，其它 5m(40U/4根) + -80U + trail（soft 关；§7.3）。  
 **并行已落地**：中线 v2（独立量化；**纳入**持仓顾问做盈利保护；多单回调买、B3/C4 冲高卖）。  
 **旧路径**：Gemini 交易已下线；DeepSeek 探索/预测自动开仓 **对照期暂保留**（与 BRAIN 并行对比；INV-BRAIN-07 暂缓）。
 

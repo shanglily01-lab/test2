@@ -43,7 +43,7 @@ def test_imports_and_config() -> None:
     assert BRAIN_STRATEGIC_CLOSE_ENABLED is False
     assert BRAIN_MIN_EDGE_SCORE == 0.75
     assert BRAIN_REQUIRE_CONFIRMED_PREFIXES == ("A", "B")
-    assert TRADEABLE_PLAYBOOKS == frozenset({"A1", "B3", "C1", "C3", "C4"})
+    assert TRADEABLE_PLAYBOOKS == frozenset({"A1", "A2", "B2", "B3", "C1", "C3", "C4"})
     from app.services.brain_config import (
         BRAIN_MIN_EDGE_SCORE_SHORT,
         PILOT_SHORT_PLAYBOOKS,
@@ -51,8 +51,10 @@ def test_imports_and_config() -> None:
         PLAYBOOK_MIN_EDGE_SCORE,
     )
     assert BRAIN_MIN_EDGE_SCORE_SHORT == 0.90
-    assert PILOT_SHORT_PLAYBOOKS == frozenset({"C1"})
+    assert PILOT_SHORT_PLAYBOOKS == frozenset({"A2", "B2", "C1"})
     assert PLAYBOOK_MIN_EDGE_SCORE["C1"] == 0.80
+    assert PLAYBOOK_MIN_EDGE_SCORE["A2"] == 0.80
+    assert PLAYBOOK_MIN_EDGE_SCORE["B2"] == 0.80
     assert PLAYBOOK_MIN_EDGE_SCORE["C3"] == 0.70
     assert PLAYBOOK_MARGIN_MULTIPLIER["C3"] < 1.0
     assert PLAYBOOK_MARGIN_MULTIPLIER["B3"] < PLAYBOOK_MARGIN_MULTIPLIER["C1"]
@@ -613,7 +615,7 @@ def test_brain_market_regime() -> None:
         "confirmed": True,
         "edge_score": 0.86,
         "features": {"h1_side": "SHORT", "m15_side": "SHORT"},
-        "signals": ["ema_bear_align", "lh_ll", "15m_lower_high"],
+        "signals": ["ema_bear_align", "lh_ll", "15m_lower_high", "ema_reject"],
     }
     dec7 = brain_open_regime_decision(
         big4={"big4_ok": True, "bias": "FLAT", "bull_count": 1, "bear_count": 1},
@@ -622,7 +624,7 @@ def test_brain_market_regime() -> None:
         playbook="A2",
         global_regime=global_bear,
     )
-    assert dec7.margin_multiplier == 0 and "a2_shadow_only" in dec7.reason
+    assert dec7.margin_multiplier > 0 and "A2" in dec7.reason
 
     c3_impulse = {
         "side": "LONG",
@@ -826,6 +828,40 @@ def test_entry_timing_exhaustion_short() -> None:
     _ok("entry timing sells B3 stall at the high, waits if still extending, skips if already dumped")
 
 
+def test_entry_timing_c1_follow() -> None:
+    from app.services.entry_timing import compute_pullback_entry
+
+    bars = []
+    for _ in range(48):
+        bars.append({
+            "open_price": 99.98,
+            "high_price": 100.06,
+            "low_price": 99.90,
+            "close_price": 100.00,
+            "volume": 700,
+        })
+    px = 100.0
+    for _ in range(4):
+        px -= 0.45
+        bars.append({
+            "open_price": px + 0.10,
+            "high_price": px + 0.12,
+            "low_price": px - 0.08,
+            "close_price": px,
+            "volume": 2600,
+        })
+    ready = compute_pullback_entry(
+        "SHORT", "C1", bars,
+        playbook_row={"signals": ["break_support", "volume_expand_down", "crash_spike", "impulse_down"]},
+        ref_price=bars[-1]["close_price"],
+    )
+    assert ready.ready is True, ready
+    assert ready.status == "breakdown_ready"
+    assert ready.mode == "follow"
+    assert ready.limit_price is not None and ready.limit_price > bars[-1]["close_price"]
+    _ok("entry timing follows a fresh C1 breakdown instead of waiting for a bounce")
+
+
 def main() -> int:
     print("=== validate_brain_req ===\n")
     test_imports_and_config()
@@ -847,6 +883,7 @@ def main() -> int:
     test_orchestrator_syntax()
     test_entry_timing_pullback()
     test_entry_timing_exhaustion_short()
+    test_entry_timing_c1_follow()
     print()
     if _fail_n:
         print(f"FAILED {_fail_n}")

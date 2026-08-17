@@ -394,20 +394,27 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     if a1 >= 0.5:
         scored.append(("A1", a1, a1 >= 0.7))
 
-    # A2 空头趋势反抽
+    # A2 空头趋势反抽：下降结构中出现缩量反抽，并在前高/EMA 被拒绝
     a2 = 0.0
     if feats.get("ema_bear"):
-        a2 += 0.35
+        a2 += 0.30
     if feats.get("lh_ll"):
         a2 += 0.25
     if "15m_lower_high" in sig:
-        a2 += 0.2
+        a2 += 0.20
     if feats.get("vol_shrink_pullback"):
         a2 += 0.15
+    if "ema_reject" in sig or feats.get("long_upper_wick"):
+        a2 += 0.20
     if "rsi_1h_healthy_short" in sig:
-        a2 += 0.1
-    if a2 >= 0.5:
-        scored.append(("A2", a2, a2 >= 0.7))
+        a2 += 0.10
+    a2_bounce_reject = bool(
+        ("15m_lower_high" in sig or feats.get("vol_shrink_pullback"))
+        and ("ema_reject" in sig or feats.get("long_upper_wick"))
+    )
+    a2_structure = bool(feats.get("ema_bear") and (feats.get("lh_ll") or feats.get("h1_side") == "SHORT"))
+    if a2 >= 0.55 and a2_structure and not (feats.get("hh_hl") and feats.get("vol_up")):
+        scored.append(("A2", a2, bool(a2 >= 0.75 and a2_bounce_reject)))
 
     # B1 暴跌放量反弹
     b1 = 0.0
@@ -425,9 +432,10 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     if b1 >= 0.55 and (feats.get("stop_new_low") or feats.get("long_lower_wick")):
         scored.append(("B1", b1, b1 >= 0.75 and bool(feats.get("vol_up"))))
 
-    # B2 弱反抽失败
+    # B2 弱反抽失败：必须先有下跌与弱反抽，再跌破反抽起点才确认（禁止无反抽纯追跌）
     b2 = 0.0
-    if feats.get("lh_ll") or feats.get("ema_bear") or feats.get("h1_side") == "SHORT":
+    b2_downtrend = bool(feats.get("lh_ll") or feats.get("ema_bear") or feats.get("h1_side") == "SHORT")
+    if b2_downtrend:
         b2 += 0.25
     weak_n = 0
     if feats.get("vol_shrink_pullback"):
@@ -438,14 +446,27 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         weak_n += 1
     if "rsi_15m_turn_down" in sig:
         weak_n += 1
+    if feats.get("long_upper_wick"):
+        weak_n += 1
+    had_bounce = bool(
+        feats.get("vol_shrink_pullback")
+        or "15m_lower_high" in sig
+        or feats.get("long_upper_wick")
+    )
+    bounce_failed = bool(feats.get("break_support") or "ema_reject" in sig)
     if weak_n >= 2:
         b2 += 0.35
-    if feats.get("break_support") or "ema_reject" in sig:
+    if bounce_failed:
         b2 += 0.25
-    if b2 >= 0.55 and weak_n >= 2:
-        # 禁止：明显放量抬高结构
-        if not (feats.get("vol_up") and feats.get("hh_hl")):
-            scored.append(("B2", b2, bool(feats.get("break_support") or "ema_reject" in sig)))
+    if (
+        b2 >= 0.55
+        and b2_downtrend
+        and had_bounce
+        and weak_n >= 2
+        and not (feats.get("vol_up") and feats.get("hh_hl"))
+        and not (feats.get("crash_spike") and not had_bounce)
+    ):
+        scored.append(("B2", b2, bounce_failed and weak_n >= 2))
 
     # B3 暴涨滞涨
     b3 = 0.0
@@ -476,15 +497,13 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     if b4 >= 0.55:
         scored.append(("B4", b4, bool(feats.get("vol_up"))))
 
-    # C1 向下破位：识别可在破位当根，confirmed 须等回抽拒绝
-    if feats.get("break_support") and (feats.get("vol_down") or feats.get("ema_bear")):
+    # C1 向下破位：刚破位且放量/急跌 → 当根确认、跟风做空（不等回抽）
+    if feats.get("break_support") and (feats.get("vol_down") or feats.get("ema_bear") or feats.get("impulse_down") or feats.get("crash_spike")):
         c1_confirmed = bool(
-            feats.get("vol_shrink_pullback")
-            or "15m_lower_high" in sig
-            or feats.get("long_upper_wick")
-            or "ema_reject" in sig
+            (feats.get("vol_down") or feats.get("impulse_down") or feats.get("crash_spike"))
+            and not feats.get("false_break_down")
         )
-        scored.append(("C1", 0.7 + (0.1 if feats.get("vol_down") else 0), c1_confirmed))
+        scored.append(("C1", 0.7 + (0.1 if feats.get("vol_down") or feats.get("crash_spike") else 0), c1_confirmed))
 
     # C2 假破吸筹
     if feats.get("false_break_down") and (feats.get("long_lower_wick") or "15m_higher_low" in sig):

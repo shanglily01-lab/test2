@@ -24,6 +24,7 @@ MIDLINE_NO_FOLLOW_LOSS_PCT = -1.20
 MIDLINE_HOLD_HOURS_BY_PLAYBOOK = {
     "A1": 6.0,
     "A2": 6.0,
+    "B2": 4.0,
     "B3": 4.0,
     "C1": 4.0,
     "C3": 4.0,

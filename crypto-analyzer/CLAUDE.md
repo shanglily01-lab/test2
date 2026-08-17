@@ -158,10 +158,10 @@
 - **Gemini 预测已下线**（API / 页面 / worker 已移除）
 
 ### 超级大脑主权层（REQ-BRAIN）【需求 2026-07-28 · 首版已落地 · 对照期 · v2 Playbook 2026-07-30】
-- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.5.16）
+- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.5.17）
 - `brain_swing`：L0/L1；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
 - 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**强制防插针限价**（`BRAIN_USE_MARKET_ENTRY=False`），超时取消
-- **入场（v4.5.16）**：LONG 等 15m 回踩；B3/C4 **冲高滞涨在高点挂空**；C1 等回抽；edge LONG≥0.75 / SHORT≥0.90
+- **入场（v4.5.17）**：LONG 等 15m 回踩；B3/C4 冲高滞涨在高点挂空；**C1/B2 破位跟风**；A2 弱反抽拒绝后开空
 - **退出（v4.5.12 · 盈利 KPI）**：**A1 豁免 5m**；其它 5m（≥40U/4根）；**-80U**；硬 SL；trail；**soft 关**
 - **执行隔离（v4.5.13）**：BRAIN 排除 SmartExit；限价成交前重跑安全闸门；模拟平仓事务行锁幂等
 - 防插针：影>实体×2；频繁则平均插针限价；超时取消；**INV-BRAIN-06 已正式启用**
@@ -171,7 +171,7 @@
 
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟】
 - **量化扫描**，非 LLM；标的 `config.yaml`；**15min** 轮询；旧四路 `*_midline_*` 停并移除
-- 限价：做多挂 **15m 回调区**（禁止破位追高）；B3/C4 做空挂 **冲高滞涨区**；C3/C1/B3/C4 持仓 **4h** / A1 **6h**；SL **6%** / TP **3%** / 5x / 500U
+- 限价：做多挂 **15m 回调区**；B3/C4 做空挂 **冲高滞涨区**；C1/B2 **破位跟风**；A2 挂反抽区；C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h**；SL **6%** / TP **3%** / 5x / 500U
 - **跳过**开仓顾问；**纳入**持仓顾问（盈利保护）；**midline_hold_exit** 峰≥1.2% 锁利；**排除** SmartExit
 - **暂不实盘**（不进 `LIVE_SYNC_SOURCES`）；Web：原 Gemini 探索页整页改中线机会分析
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.2

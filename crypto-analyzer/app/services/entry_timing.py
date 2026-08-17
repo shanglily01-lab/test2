@@ -2,7 +2,8 @@
 
 LONG (A1/C3): wait for the 15m pullback into EMA20 / 38–50% retrace.
 SHORT exhaustion (B3/C4): sell into the stall at the high — do not wait for EMA.
-SHORT breakdown (A2/C1): sell the 15m bounce into broken support / EMA.
+SHORT follow (C1/B2): follow a fresh breakdown immediately — do not wait for a bounce.
+SHORT bounce (A2): sell the 15m bounce into EMA / prior high in a downtrend.
 
 Used by BRAIN and midline/breakout. Direction can already be right; this module
 only answers "is this the buy/sell point, and where to rest the limit".
@@ -13,13 +14,15 @@ from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 PULLBACK_LONG_PLAYBOOKS = frozenset({"A1", "B4", "C3"})
-PULLBACK_SHORT_PLAYBOOKS = frozenset({"A2", "C1"})
+PULLBACK_SHORT_PLAYBOOKS = frozenset({"A2"})
 EXHAUSTION_SHORT_PLAYBOOKS = frozenset({"B3", "C4"})
+FOLLOW_BREAKDOWN_PLAYBOOKS = frozenset({"C1", "B2"})
 
 ENTRY_OFFSET_MIN_PCT = 0.20
 ENTRY_OFFSET_MAX_PCT = 1.80
 ENTRY_READY_OFFSET_PCT = 0.35
 EXHAUSTION_OFFSET_MAX_PCT = 0.55
+FOLLOW_OFFSET_MAX_PCT = 0.30
 EXTENDED_RANGE_POS = 0.82
 EXTENDED_EMA_DIST_PCT = 0.80
 ZONE_ATR_PAD = 0.35
@@ -273,6 +276,86 @@ def _exhaustion_short_entry(
     )
 
 
+def _follow_breakdown_entry(
+    rows_15m: List[Dict[str, Any]],
+    *,
+    playbook_row: Optional[Dict[str, Any]],
+    price: float,
+    ema20: Optional[float],
+    look_lo: float,
+) -> EntryTiming:
+    """Follow a fresh breakdown: sell near the break, do not wait for a bounce to EMA."""
+    c = _closes(rows_15m)
+    l = _lows(rows_15m)
+    h = _highs(rows_15m)
+    v = _vols(rows_15m)
+    sig = _signals_of(playbook_row)
+    recent_lo = min(l[-8:])
+    recent_hi = max(h[-8:])
+    dist_from_low = (price - recent_lo) / price * 100.0 if price > 0 else 99.0
+    broke = bool(
+        "break_support" in sig
+        or "impulse_down" in sig
+        or "crash_spike" in sig
+        or "h1_breakdown_down" in sig
+        or (look_lo > 0 and price < look_lo * 0.998)
+    )
+    force = bool(
+        "volume_expand_down" in sig
+        or "crash_spike" in sig
+        or "impulse_down" in sig
+        or (len(v) >= 8 and sum(v[-3:]) > sum(v[-8:-3]) * 1.05 and c[-1] < c[-4])
+    )
+    at_lows = dist_from_low <= 0.90 or (look_lo > 0 and price <= look_lo * 1.003)
+    recovering = bool(
+        "false_break_down" in sig
+        or (look_lo > 0 and c[-1] > look_lo * 1.004 and len(c) >= 3 and c[-1] > c[-3])
+    )
+    last_down = len(c) >= 2 and c[-1] <= c[-2]
+    target = price * (1.0 + ENTRY_OFFSET_MIN_PCT / 100.0)
+    offset = _clamp((target - price) / price * 100.0, ENTRY_OFFSET_MIN_PCT, FOLLOW_OFFSET_MAX_PCT)
+    zone_high = look_lo if look_lo > 0 else recent_hi
+    zone_low = recent_lo
+
+    if recovering:
+        return EntryTiming(
+            ready=False, status="invalidated", reason="breakdown_reclaimed",
+            limit_offset_pct=offset, limit_price=None,
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=look_lo, extended=False, bounce_ok=False, mode="follow",
+        )
+    if not broke:
+        return EntryTiming(
+            ready=False, status="wait_break", reason="support_not_broken",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=look_lo, extended=False, bounce_ok=False, mode="follow",
+        )
+    if at_lows and (force or last_down):
+        return EntryTiming(
+            ready=True, status="breakdown_ready",
+            reason="follow_fresh_breakdown",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=look_lo, extended=True, bounce_ok=True, mode="follow",
+        )
+    if dist_from_low >= 1.40:
+        return EntryTiming(
+            ready=False, status="missed_break",
+            reason=f"already_off_low_{dist_from_low:.2f}pct",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=look_lo, extended=False, bounce_ok=False, mode="follow",
+        )
+    return EntryTiming(
+        ready=False, status="wait_follow",
+        reason="broke_wait_continuation",
+        limit_offset_pct=offset, limit_price=round(target, 8),
+        zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+        break_level=look_lo, extended=False, bounce_ok=False, mode="follow",
+    )
+
+
 def compute_pullback_entry(
     side: str,
     playbook: str,
@@ -401,6 +484,11 @@ def compute_pullback_entry(
     if pb in EXHAUSTION_SHORT_PLAYBOOKS:
         return _exhaustion_short_entry(
             rows_15m, playbook_row=playbook_row, price=price, ema20=ema20,
+        )
+    if pb in FOLLOW_BREAKDOWN_PLAYBOOKS:
+        return _follow_breakdown_entry(
+            rows_15m, playbook_row=playbook_row, price=price, ema20=ema20,
+            look_lo=look_lo,
         )
 
     break_level = look_lo
