@@ -101,6 +101,8 @@ def extract_features(
         "hh_hl": False,
         "lh_ll": False,
         "stop_new_low": False,
+        "stop_new_high": False,
+        "stall_at_high": False,
         "long_lower_wick": False,
         "long_upper_wick": False,
         "ema_bull": False,
@@ -125,6 +127,7 @@ def extract_features(
 
     c1 = [_f(r.get("close_price")) for r in rows_1h]
     c15 = [_f(r.get("close_price")) for r in rows_15m]
+    h15 = [_f(r.get("high_price")) for r in rows_15m]
     v15 = [_f(r.get("volume")) for r in rows_15m]
     feats["ref_price"] = c15[-1]
 
@@ -169,6 +172,9 @@ def extract_features(
         if min(c15[-4:]) >= min(c15[-12:-4]) * 0.999:
             feats["stop_new_low"] = True
             signals.append("15m_stop_new_low")
+        if len(h15) >= 16 and max(h15[-4:]) <= max(h15[-12:-4]) * 1.001:
+            feats["stop_new_high"] = True
+            signals.append("15m_stop_new_high")
 
     rsi1 = _rsi(c1, 14)
     rsi15 = _rsi(c15, 14)
@@ -304,6 +310,37 @@ def extract_features(
             feats["near_7d_low"] = True
             signals.append("near_7d_low")
 
+    # 冲高滞涨：须在 7d 高点判定之后。靠近近期高点且不再延伸，再叠加上影/量价/RSI
+    if len(h15) >= 12:
+        prior_hi = max(h15[-12:-3])
+        recent_hi = max(h15[-3:])
+        close_near_high = c15[-1] >= prior_hi * 0.992
+        no_extension = recent_hi <= prior_hi * 1.0015
+        stall_aux = (
+            feats.get("long_upper_wick")
+            or "volume_diverge_bear" in signals
+            or "rsi_15m_turn_down" in signals
+            or feats.get("vol_shrink_pullback")
+            or feats.get("near_7d_high")
+            or feats.get("stop_new_high")
+        )
+        if close_near_high and no_extension and stall_aux:
+            feats["stall_at_high"] = True
+            signals.append("stall_at_high")
+        if (
+            not feats.get("exhaustion_up")
+            and feats.get("long_upper_wick")
+            and (feats.get("near_7d_high") or feats.get("pump_spike") or feats.get("stall_at_high"))
+            and (
+                "volume_diverge_bear" in signals
+                or "rsi_15m_turn_down" in signals
+                or feats.get("stop_new_high")
+                or feats.get("vol_down")
+            )
+        ):
+            feats["exhaustion_up"] = True
+            signals.append("exhaustion_up")
+
     # coarse h1/m15 sides for arbitration
     if len(c1) >= 48:
         chg = (c1[-1] - c1[-48]) / c1[-48] * 100 if c1[-48] else 0
@@ -420,8 +457,13 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         b3 += 0.3
     if "ema_reject" in sig or feats.get("false_break_up"):
         b3 += 0.25
+    if feats.get("stall_at_high") or "15m_stop_new_high" in sig:
+        b3 += 0.2
     if b3 >= 0.55:
-        scored.append(("B3", b3, b3 >= 0.7))
+        b3_confirmed = b3 >= 0.7 or bool(
+            feats.get("stall_at_high") or feats.get("exhaustion_up") or feats.get("false_break_up")
+        )
+        scored.append(("B3", b3, b3_confirmed))
 
     # B4 暴涨回踩有力
     b4 = 0.0
@@ -464,7 +506,9 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         scored.append(("C3", min(1.0, c3), c3_confirmed))
 
     # C4 假突陷阱
-    if feats.get("false_break_up") and (feats.get("long_upper_wick") or feats.get("vol_down")):
+    if feats.get("false_break_up") and (
+        feats.get("long_upper_wick") or feats.get("vol_down") or feats.get("stall_at_high")
+    ):
         scored.append(("C4", 0.75 + (0.1 if feats.get("exhaustion_up") else 0), True))
 
     scored.sort(key=lambda x: (x[2], x[1]), reverse=True)

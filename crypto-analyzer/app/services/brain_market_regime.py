@@ -180,6 +180,7 @@ def _token_exhaustion_short(playbook_row: Dict[str, Any]) -> bool:
     sig = _signals(playbook_row)
     return bool(
         "exhaustion_up" in sig
+        or "stall_at_high" in sig
         or ("false_break_up" in sig and ("long_upper_wick" in sig or "volume_expand_down" in sig))
         or ("pump_spike" in sig and ("long_upper_wick" in sig or "volume_diverge_bear" in sig))
     )

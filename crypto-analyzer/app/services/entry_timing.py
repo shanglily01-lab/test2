@@ -1,7 +1,8 @@
-"""Pullback entry timing — wait for the retest, do not chase the breakout candle.
+"""Entry timing — buy the pullback, sell the high.
 
-LONG: buy the 15m pullback into EMA20 / breakout level / 38–50% of the impulse.
-SHORT: sell the 15m bounce into EMA20 / breakdown level / 38–50% of the impulse.
+LONG (A1/C3): wait for the 15m pullback into EMA20 / 38–50% retrace.
+SHORT exhaustion (B3/C4): sell into the stall at the high — do not wait for EMA.
+SHORT breakdown (A2/C1): sell the 15m bounce into broken support / EMA.
 
 Used by BRAIN and midline/breakout. Direction can already be right; this module
 only answers "is this the buy/sell point, and where to rest the limit".
@@ -9,18 +10,23 @@ only answers "is this the buy/sell point, and where to rest the limit".
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 PULLBACK_LONG_PLAYBOOKS = frozenset({"A1", "B4", "C3"})
-PULLBACK_SHORT_PLAYBOOKS = frozenset({"A2", "B3", "C1", "C4"})
+PULLBACK_SHORT_PLAYBOOKS = frozenset({"A2", "C1"})
+EXHAUSTION_SHORT_PLAYBOOKS = frozenset({"B3", "C4"})
 
 ENTRY_OFFSET_MIN_PCT = 0.20
 ENTRY_OFFSET_MAX_PCT = 1.80
 ENTRY_READY_OFFSET_PCT = 0.35
+EXHAUSTION_OFFSET_MAX_PCT = 0.55
 EXTENDED_RANGE_POS = 0.82
 EXTENDED_EMA_DIST_PCT = 0.80
 ZONE_ATR_PAD = 0.35
 INVALIDATION_BUFFER = 0.0015
+STALL_HIT_MIN = 2
+NEAR_HIGH_MAX_DIST_PCT = 0.85
+MISSED_HIGH_DIST_PCT = 1.35
 
 
 def _f(v: Any, default: float = 0.0) -> float:
@@ -87,12 +93,13 @@ class EntryTiming:
     break_level: Optional[float]
     extended: bool
     bounce_ok: bool
+    mode: str = "pullback"
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
 
-def _empty(status: str, reason: str, *, offset: float = ENTRY_READY_OFFSET_PCT) -> EntryTiming:
+def _empty(status: str, reason: str, *, offset: float = ENTRY_READY_OFFSET_PCT, mode: str = "pullback") -> EntryTiming:
     return EntryTiming(
         ready=False,
         status=status,
@@ -105,6 +112,7 @@ def _empty(status: str, reason: str, *, offset: float = ENTRY_READY_OFFSET_PCT) 
         break_level=None,
         extended=False,
         bounce_ok=False,
+        mode=mode,
     )
 
 
@@ -115,6 +123,156 @@ def _signals_of(playbook_row: Optional[Dict[str, Any]]) -> set:
     return {str(s) for s in raw}
 
 
+def _upper_wick_ratio(row: Dict[str, Any]) -> float:
+    o = _f(row.get("open_price"))
+    h = _f(row.get("high_price"))
+    l = _f(row.get("low_price"))
+    c = _f(row.get("close_price"))
+    span = max(h - l, 1e-12)
+    body_top = max(o, c)
+    return max(h - body_top, 0.0) / span
+
+
+def _close_loc_in_bar(row: Dict[str, Any]) -> float:
+    h = _f(row.get("high_price"))
+    l = _f(row.get("low_price"))
+    c = _f(row.get("close_price"))
+    span = max(h - l, 1e-12)
+    return (c - l) / span
+
+
+def collect_stall_hits(
+    rows_15m: List[Dict[str, Any]],
+    *,
+    signals: Optional[Sequence[str]] = None,
+) -> Tuple[List[str], bool]:
+    """Independent evidence that the high is failing (need >=2 to sell the spike)."""
+    sig = {str(s) for s in (signals or [])}
+    hits: List[str] = []
+    if len(rows_15m) < 8:
+        return hits, False
+
+    h = _highs(rows_15m)
+    v = _vols(rows_15m)
+    last = rows_15m[-1]
+    wick_ratio = _upper_wick_ratio(last)
+    close_loc = _close_loc_in_bar(last)
+
+    if (
+        "long_upper_wick" in sig
+        or "exhaustion_up" in sig
+        or wick_ratio >= 0.35
+    ):
+        hits.append("wick")
+    if "volume_diverge_bear" in sig or (
+        len(v) >= 8
+        and max(h[-8:]) >= max(h[-24:-8] if len(h) >= 24 else h[-8:]) * 0.999
+        and sum(v[-3:]) < sum(v[-8:-3]) * 0.85
+    ):
+        hits.append("vol_diverge")
+    if "rsi_15m_turn_down" in sig or "rsi_extreme_high" in sig:
+        hits.append("rsi")
+    if "false_break_up" in sig:
+        hits.append("false_break")
+    if "15m_lower_high" in sig or "ema_reject" in sig:
+        hits.append("reject")
+    if "stall_at_high" in sig or "15m_stop_new_high" in sig:
+        hits.append("no_new_high")
+    elif len(h) >= 8 and max(h[-3:]) <= max(h[-8:-3]) * 1.0015:
+        hits.append("no_new_high")
+    if close_loc <= 0.55 and wick_ratio >= 0.22:
+        hits.append("reject_close")
+    if "near_7d_high" in sig:
+        hits.append("near_7d_high")
+
+    # still printing new highs on a full-body expanding bar → not a sell yet
+    prior_hi = max(h[-8:-1]) if len(h) >= 9 else max(h[:-1])
+    last_vol = v[-1] if v else 0.0
+    avg_vol = (sum(v[-6:-1]) / 5.0) if len(v) >= 6 else last_vol
+    accelerating = bool(
+        h[-1] > prior_hi * 1.001
+        and close_loc >= 0.70
+        and last_vol >= avg_vol * 1.15
+        and wick_ratio < 0.40
+    )
+    return list(dict.fromkeys(hits)), accelerating
+
+
+def _exhaustion_short_entry(
+    rows_15m: List[Dict[str, Any]],
+    *,
+    playbook_row: Optional[Dict[str, Any]],
+    price: float,
+    ema20: Optional[float],
+) -> EntryTiming:
+    """Sell the stall at the high: limit slightly above last poke, not down at EMA."""
+    h = _highs(rows_15m)
+    l = _lows(rows_15m)
+    sig = _signals_of(playbook_row)
+    hits, accelerating = collect_stall_hits(rows_15m, signals=sig)
+    recent_high = max(h[-8:])
+    impulse_lo = min(l[-8:])
+    dist_pct = (recent_high - price) / price * 100.0 if price > 0 else 99.0
+    at_highs = dist_pct <= NEAR_HIGH_MAX_DIST_PCT or (
+        ema20 is not None and price >= ema20 * 1.004 and dist_pct <= 1.10
+    )
+    missed = dist_pct >= MISSED_HIGH_DIST_PCT and not at_highs
+    zone_high = recent_high
+    zone_low = max(recent_high * (1.0 - NEAR_HIGH_MAX_DIST_PCT / 100.0), impulse_lo)
+    target = min(recent_high, price * (1.0 + EXHAUSTION_OFFSET_MAX_PCT / 100.0))
+    target = max(target, price * (1.0 + ENTRY_OFFSET_MIN_PCT / 100.0))
+    offset = _clamp((target - price) / price * 100.0, ENTRY_OFFSET_MIN_PCT, EXHAUSTION_OFFSET_MAX_PCT)
+    stall_ok = len(hits) >= STALL_HIT_MIN
+    hit_label = "+".join(hits) if hits else "none"
+
+    if price > recent_high * (1.0 + INVALIDATION_BUFFER) and accelerating:
+        return EntryTiming(
+            ready=False, status="invalidated", reason="new_high_with_volume",
+            limit_offset_pct=offset, limit_price=None,
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=recent_high, extended=True, bounce_ok=False, mode="exhaustion",
+        )
+    if missed:
+        return EntryTiming(
+            ready=False, status="missed_high",
+            reason=f"already_off_high_{dist_pct:.2f}pct",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=recent_high, extended=False, bounce_ok=stall_ok, mode="exhaustion",
+        )
+    if accelerating:
+        return EntryTiming(
+            ready=False, status="wait_stall",
+            reason="still_extending_wait_reject",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=recent_high, extended=True, bounce_ok=False, mode="exhaustion",
+        )
+    if at_highs and stall_ok:
+        return EntryTiming(
+            ready=True, status="exhaustion_ready",
+            reason=f"stall_at_high:{hit_label}",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=recent_high, extended=True, bounce_ok=True, mode="exhaustion",
+        )
+    if at_highs:
+        return EntryTiming(
+            ready=False, status="wait_stall",
+            reason=f"at_high_need_more_stall:{hit_label}",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=recent_high, extended=True, bounce_ok=False, mode="exhaustion",
+        )
+    return EntryTiming(
+        ready=False, status="wait_stall",
+        reason=f"not_at_high:{hit_label}",
+        limit_offset_pct=offset, limit_price=round(target, 8),
+        zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+        break_level=recent_high, extended=False, bounce_ok=stall_ok, mode="exhaustion",
+    )
+
+
 def compute_pullback_entry(
     side: str,
     playbook: str,
@@ -123,7 +281,7 @@ def compute_pullback_entry(
     playbook_row: Optional[Dict[str, Any]] = None,
     ref_price: Optional[float] = None,
 ) -> EntryTiming:
-    """Decide whether the current 15m bar is a pullback buy/sell point."""
+    """Decide whether the current 15m bar is a pullback buy or exhaustion/retest sell."""
     side_u = (side or "").upper()
     pb = (playbook or "").strip().upper()
     if side_u not in ("LONG", "SHORT"):
@@ -238,6 +396,11 @@ def compute_pullback_entry(
             limit_offset_pct=offset, limit_price=round(target, 8),
             zone_low=zone_low, zone_high=zone_high, ema20=ema20,
             break_level=break_level, extended=extended, bounce_ok=bounce_ok,
+        )
+
+    if pb in EXHAUSTION_SHORT_PLAYBOOKS:
+        return _exhaustion_short_entry(
+            rows_15m, playbook_row=playbook_row, price=price, ema20=ema20,
         )
 
     break_level = look_lo

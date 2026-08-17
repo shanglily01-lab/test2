@@ -138,7 +138,35 @@ def test_breakout_action_opportunity() -> None:
         entry_15m={"fresh_breakout": True},
     )
     assert chase["should_open"] is False and chase["reason"] == "wait_pullback", chase
-    _ok("A2/C1 open only when the 4h breakout opportunity is aligned; C3 waits for pullback")
+
+    b3 = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="B3",
+        edge=0.80,
+        confirmed=True,
+        signals={"pump_spike", "long_upper_wick", "volume_diverge_bear", "exhaustion_up", "stall_at_high"},
+        features={"h1_side": "LONG", "m15_side": "LONG", "stall_at_high": True},
+        future_4h={"side": "FLAT", "score": 0.20},
+        big4_bias="FLAT",
+        global_name="TOKEN_DIVERGENCE",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert b3["should_open"] is True, b3
+
+    still_long = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="B3",
+        edge=0.90,
+        confirmed=True,
+        signals={"pump_spike", "long_upper_wick", "exhaustion_up"},
+        features={"h1_side": "LONG", "m15_side": "LONG", "stall_at_high": True},
+        future_4h={"side": "LONG", "score": 0.60},
+        big4_bias="FLAT",
+        global_name="TOKEN_DIVERGENCE",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert still_long["should_open"] is False and still_long["reason"] == "future_4h_still_long", still_long
+    _ok("A2/C1 open only when the 4h breakout opportunity is aligned; C3 waits for pullback; B3 sells stall at highs")
 
 
 def test_limit_price() -> None:
@@ -200,6 +228,8 @@ def test_ai_trail_for_midline() -> None:
     assert check_midline_hold_exits(0.007, 0.013, 40 * 60) is not None
     assert midline_hold_hours("C3") == 4.0
     assert midline_hold_hours("A1") == 6.0
+    assert midline_hold_hours("B3") == 4.0
+    assert midline_hold_hours("C4") == 4.0
     _ok("midline locks at ~1.2% peak and cuts profit-to-loss")
 
 

@@ -255,17 +255,48 @@ def _breakout_action_opportunity(
         "entry_15m": entry_15m,
     }
 
-    if playbook_u not in {"A1", "A2", "C1", "C3"}:
+    if playbook_u not in {"A1", "A2", "B3", "C1", "C3", "C4"}:
         detail["reason"] = "not_breakout_playbook"
         return detail
     if not confirmed:
         detail["reason"] = "unconfirmed_playbook"
         return detail
-    if future_side != side_u or future_score < FUTURE_4H_OPPORTUNITY_SCORE_MIN:
+    exhaustion_short = playbook_u in {"B3", "C4"}
+    if exhaustion_short:
+        if future_side == "LONG" and future_score >= FUTURE_4H_OPPORTUNITY_SCORE_MIN:
+            detail["reason"] = "future_4h_still_long"
+            return detail
+    elif future_side != side_u or future_score < FUTURE_4H_OPPORTUNITY_SCORE_MIN:
         detail["reason"] = "future_4h_not_actionable"
         return detail
 
-    if side_u == "SHORT":
+    if exhaustion_short:
+        evidence = {
+            "exhaustion_up": "exhaustion_up" in signals,
+            "long_upper_wick": "long_upper_wick" in signals,
+            "volume_diverge_bear": "volume_diverge_bear" in signals,
+            "false_break_up": "false_break_up" in signals,
+            "stall_at_high": "stall_at_high" in signals or bool(features.get("stall_at_high")),
+            "rsi_turn": "rsi_15m_turn_down" in signals,
+            "lower_high": "15m_lower_high" in signals,
+            "pump_spike": "pump_spike" in signals,
+            "stop_new_high": "15m_stop_new_high" in signals,
+        }
+        stall_n = sum(
+            1 for k in (
+                "exhaustion_up", "long_upper_wick", "volume_diverge_bear",
+                "false_break_up", "stall_at_high", "rsi_turn", "lower_high",
+                "stop_new_high",
+            ) if evidence[k]
+        )
+        structure_ok = stall_n >= 2 or evidence["exhaustion_up"] or evidence["false_break_up"]
+        force_ok = (
+            evidence["pump_spike"]
+            or evidence["stall_at_high"]
+            or evidence["exhaustion_up"]
+            or evidence["false_break_up"]
+        )
+    elif side_u == "SHORT":
         evidence = {
             "break_support": "break_support" in signals,
             "volume_expand_down": "volume_expand_down" in signals,
@@ -340,6 +371,8 @@ def _breakout_action_opportunity(
         action_score += 5.0
     if global_name in {"BULL_TREND", "BULL_RECOVERY"} and side_u == "LONG":
         action_score += 5.0
+    if playbook_u in {"B3", "C4"}:
+        action_score += 8.0
 
     detail["action_score"] = round(min(100.0, action_score), 1)
     if action_score < BREAKOUT_ACTION_SCORE_MIN:
@@ -671,18 +704,25 @@ def evaluate_symbol_multiperiod(
     big4_bias = str((big4 or {}).get("bias") or "FLAT").upper()
     big4_ok = bool((big4 or {}).get("big4_ok", True))
 
-    allowed_playbooks = {"LONG": {"A1", "C3"}, "SHORT": {"A2", "C1"}}[side]
+    allowed_playbooks = {"LONG": {"A1", "C3"}, "SHORT": {"A2", "B3", "C1", "C4"}}[side]
     if pb_side != side:
         out.update({"reason": f"playbook_side_{pb_side}", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
     if playbook not in allowed_playbooks:
         out.update({"reason": f"playbook_{playbook}", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
-    has_break_signal = bool(signals & {"break_support", "break_resistance", "ema_reject", "ema_reclaim"})
-    has_volume_signal = bool(signals & {"volume_expand_down", "volume_expand_up", "crash_spike", "pump_spike"})
+    has_break_signal = bool(signals & {
+        "break_support", "break_resistance", "ema_reject", "ema_reclaim",
+        "false_break_up", "stall_at_high", "exhaustion_up",
+    })
+    has_volume_signal = bool(signals & {
+        "volume_expand_down", "volume_expand_up", "crash_spike", "pump_spike",
+        "volume_diverge_bear",
+    })
     strong_token_side = features.get("h1_side") == side and features.get("m15_side") == side
     trend_playbook = playbook in {"A1", "A2"}
     breakout_playbook = playbook in {"C1", "C3"}
+    exhaustion_playbook = playbook in {"B3", "C4"}
     weak_big4_long_override = (
         not big4_ok
         and side == "LONG"
@@ -704,12 +744,20 @@ def evaluate_symbol_multiperiod(
         and edge >= 0.80
         and bool(signals & {"break_support", "volume_expand_down", "crash_spike"})
     )
-    if not big4_ok and not (weak_big4_long_override or weak_big4_short_override):
+    weak_big4_exhaustion_override = (
+        not big4_ok
+        and side == "SHORT"
+        and playbook in {"B3", "C4"}
+        and confirmed
+        and edge >= 0.75
+        and bool(signals & {"exhaustion_up", "false_break_up", "stall_at_high", "long_upper_wick"})
+    )
+    if not big4_ok and not (weak_big4_long_override or weak_big4_short_override or weak_big4_exhaustion_override):
         out.update({"reason": "big4_weak", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
 
     min_edge = 0.68 if breakout_playbook else 0.72
-    if side == "SHORT" and playbook == "C1":
+    if side == "SHORT" and playbook in {"C1", "B3", "C4"}:
         min_edge = 0.70
     if edge < min_edge:
         out.update({"reason": "low_edge", "trend": dims, "future_4h": future_4h, "playbook": pb})
@@ -724,7 +772,10 @@ def evaluate_symbol_multiperiod(
     if global_name == "DAILY_BEAR_PROBE" and side == "LONG" and not weak_big4_long_override:
         out.update({"reason": "daily_bear_blocks_long", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
-    if global_name == "RELIEF_BOUNCE" and side == "SHORT" and not (playbook == "C1" and "break_support" in signals and "crash_spike" in signals):
+    if global_name == "RELIEF_BOUNCE" and side == "SHORT" and not (
+        (playbook == "C1" and "break_support" in signals and "crash_spike" in signals)
+        or playbook in {"B3", "C4"}
+    ):
         out.update({"reason": "relief_bounce_blocks_fresh_short", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
     if big4_bias in ("LONG", "SHORT") and big4_bias != side and not strong_token_side:
@@ -736,13 +787,15 @@ def evaluate_symbol_multiperiod(
     setup = {
         "A1": "brain_A1_trend_continuation_long",
         "A2": "brain_A2_failed_rebound_short",
+        "B3": "brain_B3_exhaustion_short",
         "C1": "brain_C1_breakdown_short",
         "C3": "brain_C3_breakout_long",
+        "C4": "brain_C4_false_break_short",
     }.get(playbook, playbook)
     score = edge * 100.0
     if confirmed:
         score += 6
-    if breakout_playbook:
+    if breakout_playbook or exhaustion_playbook:
         score += 5
     if has_break_signal:
         score += 4

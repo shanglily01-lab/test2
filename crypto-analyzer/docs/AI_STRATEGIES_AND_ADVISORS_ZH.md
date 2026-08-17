@@ -1,6 +1,6 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-08-17 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.15** 对齐
+> 文档版本：2026-08-17 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.16** 对齐
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
 > **中线 v2 §7.2**：已落地模拟仓。  
 > **实盘同步 / 闸门 / 15m 定方向 / 限价偏移 / BRAIN**：以 REQUIREMENTS 为准；本文侧重 AI/中线细节。
@@ -8,7 +8,7 @@
 ## 1. 总览
 
 **主路径（已落地）**：REQ-BRAIN — **盈利 KPI**；A1 主力 + A2/C1 受控空头试点；LONG≥0.75 / SHORT≥0.90（C1 放量破位≥0.80）；Big4 SHORT 时阻断 A1 追多、A2/C1 才可试空；**A1 豁免 5m**，其它 5m(40U/4根) + -80U + trail（soft 关；§7.3）。  
-**并行已落地**：中线 v2（独立量化；**纳入**持仓顾问做盈利保护；回调买入）。  
+**并行已落地**：中线 v2（独立量化；**纳入**持仓顾问做盈利保护；多单回调买、B3/C4 冲高卖）。  
 **旧路径**：Gemini 交易已下线；DeepSeek 探索/预测自动开仓 **对照期暂保留**（与 BRAIN 并行对比；INV-BRAIN-07 暂缓）。
 
 系统另保留 DeepSeek/GPT 等 LLM 模块代码供顾问确认与复盘；统一模拟仓 `account_id=2`。
@@ -18,7 +18,7 @@ crypto-scheduler (app/scheduler.py)
   ├─ data_cache: candidate_pool (6min) → explore_prepared (15min)
   ├─ REQ-BRAIN brain_swing（每15s×5币轮询 L0/L1；发现即开；启动+75s）
   ├─ DeepSeek 探索/预测自动开仓：对照期并行（INV-BRAIN-07 暂缓）
-  ├─ 中线 v2（midline_long/short）— 15min 轮询；回调买入；4h/6h 持仓
+  ├─ 中线 v2（midline_long/short）— 15min 轮询；多单回调买 / B3/C4 冲高卖；4h/6h 持仓
   └─ （战术/情绪等按现网开关）
 
 crypto-scheduler (每 15min)
@@ -265,7 +265,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 6.5.1 职责
 
-`config.yaml` 交易对 + Playbook 破位/趋势扫描，**不调用 LLM 开仓**。**跳过**开仓顾问；**纳入** DeepSeek 持仓顾问（盈利保护）。入场须 **15m 回调进区**（`entry_timing`），禁止破位追高。退出：硬 SL/TP + `midline_hold_exit`（峰 1.2% 锁利 / 回吐平）+ 4h/6h 到期；**不参与** SmartExit。
+`config.yaml` 交易对 + Playbook 破位/趋势扫描，**不调用 LLM 开仓**。**跳过**开仓顾问；**纳入** DeepSeek 持仓顾问（盈利保护）。做多须 **15m 回调进区**；B3/C4 做空在高点滞涨挂空（`entry_timing`），禁止破位追高、禁止把仍在放量创新高当卖点。退出：硬 SL/TP + `midline_hold_exit`（峰 1.2% 锁利 / 回吐平）+ 4h/6h 到期；**不参与** SmartExit。
 
 旧四路 `gemini/deepseek_midline_*`：**停调度并移除**。
 

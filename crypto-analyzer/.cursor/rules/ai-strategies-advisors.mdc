@@ -20,7 +20,7 @@ alwaysApply: true
 
 - 扫描: `midline_swing_scanner` · `entry_timing` · worker · **15min** 轮询
 - **跳过**开仓顾问；**纳入**持仓顾问（盈利保护）· **midline_hold_exit** 峰≥1.2% 锁利 · **排除** SmartExit
-- 限价挂在 **15m 回调区**（禁止破位追高）· C3/C1 持仓 **4h** / A1 **6h** · SL **6%** / TP **3%** · 5x · 500U
+- 多单限价挂在 **15m 回调区**（禁止破位追高）；B3/C4 空单挂 **冲高滞涨区** · C3/C1/B3/C4 持仓 **4h** / A1 **6h** · SL **6%** / TP **3%** · 5x · 500U
 - 标的：`config.yaml`；**暂不**进 `LIVE_SYNC_SOURCES`
 - Web：原 Gemini 探索页 → 中线策略/机会分析；DeepSeek 探索去中线 Tab
 - 非中线限价仍读 `system_settings.paper_limit_*_offset_pct`（0.1~1%）
@@ -37,7 +37,7 @@ alwaysApply: true
 | 主探索/预测 | ≥0.75 + catalyst + 15m OHLC；**DeepSeek LONG** 另≥0.82+RSI/7d/24h/OHLC+2 | 系统 SL/TP | max_hold_hours |
 | 战术四策略 | ≥0.55 + tactical_catalyst | 3%/5% | 4h |
 | 顶空底多 | ≥0.65 + reversal catalyst | 3%/5% | 4h |
-| 中线 v2 | 回调进区 + Playbook | 6%/3% | C3/C1 4h · A1 6h |
+| 中线 v2 | 回调买 / B3/C4 冲高卖 | 6%/3% | C3/C1/B3/C4 4h · A1 6h |
 
 **DeepSeek 选币**：仅 **L0+L1**；**DeepSeek soft-sl**：grace45 / no_follow≥60m且≈-2.2%
 

@@ -673,6 +673,7 @@ def test_orchestrator_syntax() -> None:
         "app/services/brain_playbook.py",
         "app/services/brain_opportunity_store.py",
         "app/services/brain_strategy_orchestrator.py",
+        "app/services/entry_timing.py",
         "app/services/position_sl_tp_monitor.py",
         "app/services/smart_exit_optimizer.py",
         "app/trading/futures_trading_engine.py",
@@ -736,6 +737,95 @@ def test_entry_timing_pullback() -> None:
     _ok("entry timing waits for C3 pullback then arms the limit")
 
 
+def _pump_bars() -> list:
+    bars = []
+    p = 100.0
+    for _ in range(36):
+        p += 0.02
+        bars.append({
+            "open_price": p - 0.01,
+            "high_price": p + 0.03,
+            "low_price": p - 0.02,
+            "close_price": p,
+            "volume": 800,
+        })
+    for _ in range(4):
+        p += 0.55
+        bars.append({
+            "open_price": p - 0.10,
+            "high_price": p + 0.12,
+            "low_price": p - 0.08,
+            "close_price": p,
+            "volume": 2800,
+        })
+    return bars, p
+
+
+def test_entry_timing_exhaustion_short() -> None:
+    from app.services.entry_timing import compute_pullback_entry
+
+    bars, peak = _pump_bars()
+    bars.append({
+        "open_price": peak - 0.02,
+        "high_price": peak + 0.45,
+        "low_price": peak - 0.15,
+        "close_price": peak - 0.08,
+        "volume": 900,
+    })
+    ready = compute_pullback_entry(
+        "SHORT", "B3", bars,
+        playbook_row={"signals": ["pump_spike", "exhaustion_up", "long_upper_wick", "volume_diverge_bear"]},
+        ref_price=bars[-1]["close_price"],
+    )
+    assert ready.ready is True, ready
+    assert ready.status == "exhaustion_ready"
+    assert ready.mode == "exhaustion"
+    assert ready.limit_price is not None and ready.limit_price > bars[-1]["close_price"]
+
+    accel, p = _pump_bars()
+    accel.append({
+        "open_price": p - 0.05,
+        "high_price": p + 0.50,
+        "low_price": p - 0.06,
+        "close_price": p + 0.48,
+        "volume": 3600,
+    })
+    waiting = compute_pullback_entry(
+        "SHORT", "B3", accel,
+        playbook_row={"signals": ["pump_spike"]},
+        ref_price=accel[-1]["close_price"],
+    )
+    assert waiting.ready is False, waiting
+    assert waiting.status in {"wait_stall", "invalidated"}, waiting
+
+    dumped, peak2 = _pump_bars()
+    dumped.append({
+        "open_price": peak2 - 0.02,
+        "high_price": peak2 + 0.20,
+        "low_price": peak2 - 0.10,
+        "close_price": peak2 - 0.08,
+        "volume": 900,
+    })
+    dump_px = dumped[-1]["close_price"]
+    for _ in range(4):
+        dump_px -= 0.55
+        dumped.append({
+            "open_price": dump_px + 0.08,
+            "high_price": dump_px + 0.10,
+            "low_price": dump_px - 0.06,
+            "close_price": dump_px,
+            "volume": 1200,
+        })
+    missed = compute_pullback_entry(
+        "SHORT", "B3", dumped,
+        playbook_row={"signals": ["exhaustion_up", "long_upper_wick"]},
+        ref_price=dumped[-1]["close_price"],
+    )
+    assert missed.ready is False, missed
+    assert missed.status == "missed_high", missed
+    _ok("entry timing sells B3 stall at the high, waits if still extending, skips if already dumped")
+
+
 def main() -> int:
     print("=== validate_brain_req ===\n")
     test_imports_and_config()
@@ -756,6 +846,7 @@ def main() -> int:
     test_scheduler_brain()
     test_orchestrator_syntax()
     test_entry_timing_pullback()
+    test_entry_timing_exhaustion_short()
     print()
     if _fail_n:
         print(f"FAILED {_fail_n}")

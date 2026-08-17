@@ -21,7 +21,7 @@ alwaysApply: true
 | Gemini/DeepSeek/GPT 预测 | 距上次 ok ≥ max_hold_hours + 5min 轮询 | `*_predict_next_due_utc` 认领 |
 | **REQ-BRAIN** | every(15).seconds（每批5币） | `brain_swing_enabled`；启动 +75s；发现即挂防插针限价，成交前重跑闸门；权威 §7.3 |
 | DeepSeek 探索/预测 | every(2).hours + 10min/5min（**对照期保留**） | INV-BRAIN-07 暂缓；结束后停 |
-| **中线 v2** | every(15).min | `midline_long/short` kill switch；回调买入；**移除**旧 ×4 `*_midline_*` |
+| **中线 v2** | every(15).min | `midline_long/short` kill switch；多单回调买 / B3/C4 冲高卖；**移除**旧 ×4 `*_midline_*` |
 | 战术 15 槽位 | every(15).min | `tactical_explore_scheduler` |
 | **Gemini/DeepSeek 持仓顾问** | **every(15).min** | 每仓 15min；浮盈转亏 urgent；**含** midline_* 与 brain_* |
 | Gemini 情绪 | every(8).hours | `gemini_sentiment_enabled` |
@@ -50,7 +50,7 @@ alwaysApply: true
 
 ## 限价与实盘
 
-- 中线 v2: 限价挂回调区（无区才 ±1%）；`is_midline_source` 覆盖 `midline_long/short`
+- 中线 v2: 做多挂回调区；B3/C4 做空挂冲高区（无区才 ±1%）；`is_midline_source` 覆盖 `midline_long/short`
 - 非中线: `paper_limit_long/short_offset_pct` 系统设定
 - 成交: executor 500 笔/轮 + ticker 触价；FILLED 后 `sync_filled_order_now`
 - 中线 **不进** SmartExit；**暂不** LIVE_SYNC；对冲平仓跳过含中线 symbol
