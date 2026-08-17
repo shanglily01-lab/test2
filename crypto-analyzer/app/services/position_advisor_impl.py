@@ -616,6 +616,16 @@ class PositionAdvisorCore:
             struct_line = "N/A"
 
         side_cn = "做多 LONG" if side == 'LONG' else "做空 SHORT"
+        midline_note = ""
+        try:
+            from app.services.midline_swing_config import is_midline_source
+            if is_midline_source(source):
+                midline_note = (
+                    "**中线/破位仓**：优先保护已实现浮盈。峰 ROI≥+5% 后转亏或 15m 明确转弱 → **sell**；"
+                    "15m 仍顺向且未回吐 → hold。不要为了凑满 8h 把盈利拿成亏损。\n"
+                )
+        except Exception:
+            midline_note = ""
         strict_note = (
             "**本仓亏损已超 1%（保证金 ROI≤-1%）**：须严格审查 **15m 结构** + 量价 + RSI 后再给结论，禁止敷衍一律 hold。\n"
             if strict_loss else ""
@@ -628,7 +638,7 @@ class PositionAdvisorCore:
 - **核心判据**：下方 **15m 表**（{HOLD_15M_BARS} 根）+ 15m 叙事。
 - **1h 保留**：近 **{HOLD_1H_BARS} 根 1h 表**（同窗口交叉验证）+ **1h 叙事**（24 根更长背景）；**不得**仅凭 1h 做 sell/hold。
 
-{strict_note}## 核心原则（**15m 核心**，1h 交叉验证，5m 辅证）
+{strict_note}{midline_note}## 核心原则（**15m 核心**，1h 交叉验证，5m 辅证）
 - **决策顺序**：① ROI 档位 → ② **15m 趋势结构**（主判据）→ ③ **成交量** → ④ **RSI + 7日位置** → ⑤ 5m 辅证 → ⑥ 宏观辅证
 - **每轮必须给出明确结论**；reason 须写明 **15m** 表格形态 + 量能或 RSI 要点
 - **15m 未破方向**时，5m 回调/震荡 → **hold** 或 **observe**；**浮盈≥+3% 且 15m 转弱** → 至少 **observe**，**浮盈≥+5% 且 15m 明确转弱** → 倾向 **sell**

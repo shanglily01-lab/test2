@@ -267,13 +267,17 @@ def create_paper_limit_order(
         logger.info(f"[限价开仓] 跳过 {symbol} {side} source={source}: 已有挂单")
         return None
 
-    # 限价偏移：中线固定；BRAIN 用调用方 limit_offset_pct（插针）或默认；其余读系统设定
+    # 限价偏移：中线优先用回调区 offset；否则固定 ±1%
     if is_midline_source(source):
-        long_pct = get_midline_limit_offset_pct("LONG")
-        short_pct = get_midline_limit_offset_pct("SHORT")
-        limit_offset_pct = get_midline_limit_offset_pct(side)
-        long_off = Decimal(str(_clamp_offset_pct(long_pct, strategy_override=True) / 100))
-        short_off = Decimal(str(_clamp_offset_pct(short_pct, strategy_override=True) / 100))
+        if limit_offset_pct is not None:
+            pct = _clamp_offset_pct(float(limit_offset_pct), strategy_override=True)
+            long_off = short_off = Decimal(str(pct / 100))
+        else:
+            long_pct = get_midline_limit_offset_pct("LONG")
+            short_pct = get_midline_limit_offset_pct("SHORT")
+            limit_offset_pct = get_midline_limit_offset_pct(side)
+            long_off = Decimal(str(_clamp_offset_pct(long_pct, strategy_override=True) / 100))
+            short_off = Decimal(str(_clamp_offset_pct(short_pct, strategy_override=True) / 100))
     elif is_brain_source(source) and limit_offset_pct is not None:
         pct = _clamp_offset_pct(float(limit_offset_pct), strategy_override=True)
         long_off = short_off = Decimal(str(pct / 100))

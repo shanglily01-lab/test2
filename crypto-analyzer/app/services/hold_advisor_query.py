@@ -12,14 +12,9 @@ HOLD_MIN_MINUTES = 15
 HOLD_ADVISOR_MAX_PER_TICK = 50
 HOLD_REVIEW_INTERVAL_MINUTES = 15
 
-# DeepSeek 监管 AI 模拟仓；中线 v2 排除（仅硬 SL/TP + 计划到期）。
-# BRAIN 仓位纳入持仓顾问复核：顾问只判断 thesis 是否保留，
+# DeepSeek 监管 AI 模拟仓（含中线 v2 盈利保护 + BRAIN thesis 复核）。
 # 硬 SL/TP、美元熔断、trail 仍由 position_sl_tp_monitor 兜底。
-from app.services.midline_swing_config import midline_source_sql_not_in
-
-DEEPSEEK_HOLD_SOURCE_SQL = (
-    f"AND {midline_source_sql_not_in('fp.source')} "
-)
+DEEPSEEK_HOLD_SOURCE_SQL = ""
 # 兼容旧调用；Gemini 持仓顾问已下线，恒空集
 GEMINI_HOLD_SOURCE_SQL = (
     "AND 1=0"

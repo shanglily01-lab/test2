@@ -434,22 +434,34 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     if b4 >= 0.55:
         scored.append(("B4", b4, bool(feats.get("vol_up"))))
 
-    # C1 向下破位
+    # C1 向下破位：识别可在破位当根，confirmed 须等回抽拒绝
     if feats.get("break_support") and (feats.get("vol_down") or feats.get("ema_bear")):
-        scored.append(("C1", 0.7 + (0.1 if feats.get("vol_down") else 0), True))
+        c1_confirmed = bool(
+            feats.get("vol_shrink_pullback")
+            or "15m_lower_high" in sig
+            or feats.get("long_upper_wick")
+            or "ema_reject" in sig
+        )
+        scored.append(("C1", 0.7 + (0.1 if feats.get("vol_down") else 0), c1_confirmed))
 
     # C2 假破吸筹
     if feats.get("false_break_down") and (feats.get("long_lower_wick") or "15m_higher_low" in sig):
         scored.append(("C2", 0.75, True))
 
-    # C3 向上突破
+    # C3 向上突破：识别可在突破当根，confirmed 须等回踩（禁止把追高当买入点）
     if (feats.get("break_resistance") and feats.get("vol_up")) or feats.get("impulse_up"):
         c3 = 0.7
         if feats.get("impulse_up"):
             c3 += 0.2
         if feats.get("h1_breakout_up"):
             c3 += 0.1
-        scored.append(("C3", min(1.0, c3), True))
+        c3_confirmed = bool(
+            feats.get("vol_shrink_pullback")
+            or "15m_higher_low" in sig
+            or feats.get("long_lower_wick")
+            or "ema_reclaim" in sig
+        )
+        scored.append(("C3", min(1.0, c3), c3_confirmed))
 
     # C4 假突陷阱
     if feats.get("false_break_up") and (feats.get("long_upper_wick") or feats.get("vol_down")):

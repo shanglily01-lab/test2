@@ -277,8 +277,13 @@ def _breakout_action_opportunity(
             "entry_fresh": entry_fresh,
         }
         if playbook_u == "C1":
-            structure_ok = evidence["break_support"] or entry_fresh
+            structure_ok = evidence["break_support"] or evidence["lower_high"]
             force_ok = evidence["volume_expand_down"] or evidence["crash_spike"] or evidence["token_aligned"]
+            retest_ok = evidence["lower_high"] or bool(features.get("vol_shrink_pullback"))
+            if (evidence["entry_fresh"] or evidence["crash_spike"]) and not retest_ok:
+                detail["evidence"] = evidence
+                detail["reason"] = "wait_pullback"
+                return detail
         else:
             structure_ok = evidence["ema_bear"] and (evidence["lower_high"] or evidence["ema_reject"])
             force_ok = evidence["volume_expand_down"] or evidence["token_aligned"] or bool(features.get("vol_shrink_pullback"))
@@ -300,17 +305,21 @@ def _breakout_action_opportunity(
         if playbook_u == "A1":
             structure_ok = (
                 (evidence["ema_bull"] and (evidence["hh_hl"] or evidence["higher_low"]))
-                or entry_fresh
                 or token_aligned
             )
             force_ok = (
                 (evidence["token_aligned"] and (evidence["volume_expand_up"] or evidence["volume_shrink_pullback"]))
                 or edge >= 0.90
-                or evidence["pump_spike"]
+                or evidence["higher_low"]
             )
         else:
-            structure_ok = evidence["break_resistance"] or evidence["h1_breakout_up"] or evidence["impulse_up"] or entry_fresh
-            force_ok = evidence["volume_expand_up"] or evidence["pump_spike"] or evidence["impulse_up"] or evidence["token_aligned"]
+            structure_ok = evidence["break_resistance"] or evidence["h1_breakout_up"] or evidence["impulse_up"] or evidence["higher_low"]
+            force_ok = evidence["volume_expand_up"] or evidence["impulse_up"] or evidence["token_aligned"]
+            pullback_ok = evidence["higher_low"] or evidence["volume_shrink_pullback"]
+            if (evidence["entry_fresh"] or evidence["impulse_up"] or evidence["h1_breakout_up"]) and not pullback_ok:
+                detail["evidence"] = evidence
+                detail["reason"] = "wait_pullback"
+                return detail
 
     detail["evidence"] = evidence
     if not structure_ok:
@@ -539,15 +548,27 @@ def _entry_15m_opportunity(
             and momentum_ok
             and (volume_ok or strong_break)
         )
-        detail["setup"] = "fresh_breakdown_short" if fresh_breakdown else "breakdown_short" if breakdown else "none"
-        if breakdown:
+        recent_broke = recent_lo < prev_lo * (1.0 - BREAKDOWN_SUPPORT_BUFFER)
+        retest_ok = (
+            recent_broke
+            and last >= prev_lo * 0.988
+            and last <= prev_lo * (1.0 + BREAKDOWN_SUPPORT_BUFFER)
+            and vol_ratio <= 1.05
+        )
+        detail["setup"] = (
+            "pullback_retest_short" if retest_ok else
+            "fresh_breakdown_short" if fresh_breakdown else
+            "breakdown_short" if breakdown else "none"
+        )
+        if breakdown or retest_ok:
             detail["break_pct"] = round(break_down_pct, 3)
         detail["momentum_ok"] = momentum_ok
         detail["volume_ok"] = volume_ok
         detail["strong_break"] = strong_break
         detail["not_overextended"] = not_overextended
         detail["fresh_breakout"] = fresh_breakdown
-        ok = fresh_breakdown
+        detail["retest_ok"] = retest_ok
+        ok = retest_ok
     else:
         breakout = last > prev_hi * (1.0 + BREAKOUT_RESIST_BUFFER)
         momentum_ok = change_1h >= BREAKOUT_1H_RISE_MIN_PCT or change_4h >= BREAKOUT_4H_RISE_MIN_PCT
@@ -561,16 +582,31 @@ def _entry_15m_opportunity(
             and momentum_ok
             and (volume_ok or strong_break)
         )
-        detail["setup"] = "fresh_breakout_long" if fresh_breakout else "breakout_long" if breakout else "none"
-        if breakout:
+        recent_broke = recent_hi > prev_hi * (1.0 + BREAKOUT_RESIST_BUFFER)
+        retest_ok = (
+            recent_broke
+            and last <= prev_hi * 1.012
+            and last >= prev_hi * (1.0 - BREAKOUT_RESIST_BUFFER)
+            and vol_ratio <= 1.05
+        )
+        detail["setup"] = (
+            "pullback_retest_long" if retest_ok else
+            "fresh_breakout_long" if fresh_breakout else
+            "breakout_long" if breakout else "none"
+        )
+        if breakout or retest_ok:
             detail["break_pct"] = round(break_up_pct, 3)
         detail["momentum_ok"] = momentum_ok
         detail["volume_ok"] = volume_ok
         detail["strong_break"] = strong_break
         detail["not_overextended"] = not_overextended
         detail["fresh_breakout"] = fresh_breakout
-        ok = fresh_breakout
+        detail["retest_ok"] = retest_ok
+        ok = retest_ok
     if not ok:
+        if detail.get("setup") in ("fresh_breakout_long", "fresh_breakdown_short"):
+            detail["reason"] = "wait_pullback"
+            return False, detail
         if detail.get("setup") in ("breakdown_short", "breakout_long"):
             detail["reason"] = (
                 "phase_range_not_clean"
@@ -736,6 +772,14 @@ def evaluate_symbol_multiperiod(
     )
     should_open = bool(action_opportunity.get("should_open"))
     display_score = max(score, float(action_opportunity.get("action_score") or 0.0))
+    from app.services.entry_timing import compute_pullback_entry
+    timing = compute_pullback_entry(
+        side, playbook, rows_15m, playbook_row=pb, ref_price=out.get("ref_price"),
+    )
+    if should_open and not timing.ready:
+        should_open = False
+        action_opportunity["should_open"] = False
+        action_opportunity["reason"] = f"entry_{timing.status}:{timing.reason}"
 
     out.update({
         "passed": should_open,
@@ -752,6 +796,7 @@ def evaluate_symbol_multiperiod(
             "trend_dimensions": dims,
             "future_4h": future_4h,
             "action_opportunity": action_opportunity,
+            "entry_timing": timing.to_dict(),
             "playbook": {
                 "name": playbook,
                 "side": pb_side,

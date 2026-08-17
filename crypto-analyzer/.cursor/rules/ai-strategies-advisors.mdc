@@ -18,9 +18,9 @@ alwaysApply: true
 
 ## 中线 v2（量化，非 LLM）【§7.2 待落地】
 
-- 扫描: `midline_swing_scanner` · worker · **独立 4h** 调度（停旧四路）
-- **跳过**开仓顾问与持仓顾问 · **接入** **ai-trail-tp** · **排除** SmartExit → `position_sl_tp_monitor`
-- 限价 **±1%** · 4h 超时 · **8h** 持仓 · SL **6%** / TP **3%** · 5x · 500U
+- 扫描: `midline_swing_scanner` · `entry_timing` · worker · **15min** 轮询
+- **跳过**开仓顾问；**纳入**持仓顾问（盈利保护）· **midline_hold_exit** 峰≥1.2% 锁利 · **排除** SmartExit
+- 限价挂在 **15m 回调区**（禁止破位追高）· C3/C1 持仓 **4h** / A1 **6h** · SL **6%** / TP **3%** · 5x · 500U
 - 标的：`config.yaml`；**暂不**进 `LIVE_SYNC_SOURCES`
 - Web：原 Gemini 探索页 → 中线策略/机会分析；DeepSeek 探索去中线 Tab
 - 非中线限价仍读 `system_settings.paper_limit_*_offset_pct`（0.1~1%）
@@ -37,7 +37,7 @@ alwaysApply: true
 | 主探索/预测 | ≥0.75 + catalyst + 15m OHLC；**DeepSeek LONG** 另≥0.82+RSI/7d/24h/OHLC+2 | 系统 SL/TP | max_hold_hours |
 | 战术四策略 | ≥0.55 + tactical_catalyst | 3%/5% | 4h |
 | 顶空底多 | ≥0.65 + reversal catalyst | 3%/5% | 4h |
-| 中线 v2 | 三层 AND 硬规则 | 6%/3% | 8h |
+| 中线 v2 | 回调进区 + Playbook | 6%/3% | C3/C1 4h · A1 6h |
 
 **DeepSeek 选币**：仅 **L0+L1**；**DeepSeek soft-sl**：grace45 / no_follow≥60m且≈-2.2%
 
@@ -48,7 +48,7 @@ alwaysApply: true
 | 类型 | Gemini | DeepSeek | 跳过 |
 |------|--------|----------|------|
 | 开仓 | — | 非中线/非 BRAIN | `midline_*` · `brain_*` |
-| 持仓 | — | 非中线/非 BRAIN | `midline_*` · `brain_*` |
+| 持仓 | — | **含** midline_* 与 brain_* | — |
 
 - tick: scheduler **15min**；每仓 15min；浮盈转亏 urgent
 - 盈利 sell: ROI≥**+8%** + 15m 反向≥4；`_temper_premature_sell` 严格拦截过早 sell
@@ -57,14 +57,14 @@ alwaysApply: true
 ## 调度要点
 
 - 主探索/预测: 距上次 ok ≥ max_hold_hours + 10min/5min 轮询；`partial` 非 `running`
-- 中线 v2: **4h** 独立
+- 中线 v2: **15min** 轮询
 - 战术: 15 槽位，15min 轮询
 - 持仓顾问: **15min** tick
 - 情绪: **8h**
 
 ## AI 平仓（非 SmartExit）
 
-- `position_sl_tp_monitor`（main 1s）：探索/预测/**中线 v2** 硬 SL/TP + **ai-trail-tp**（peak≥3%，回撤≥1%）
+- `position_sl_tp_monitor`（main 1s）：探索/预测硬 SL/TP + **ai-trail-tp**（peak≥3%，回撤≥1%）；**中线** `midline_hold_exit`（峰≥1.2%）
 - 中线 **禁止** SmartExit
 
 ## 实盘（`trading_gates.py`）

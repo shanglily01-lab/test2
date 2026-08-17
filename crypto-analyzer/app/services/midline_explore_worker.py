@@ -14,7 +14,6 @@ from app.utils.config_loader import get_db_config
 
 from app.services.midline_swing_config import (
     MIDLINE_ACCOUNT_ID,
-    MIDLINE_HOLD_MINUTES,
     MIDLINE_KILL_SWITCH,
     MIDLINE_LEVERAGE,
     MIDLINE_SCAN_INTERVAL_MINUTES,
@@ -276,20 +275,25 @@ def _open_limit_order(
     from app.services.paper_limit_entry import create_paper_limit_order
     from app.services.trading_gates import get_paper_margin_usd
 
+    from app.services.midline_hold_exit import midline_hold_hours
+    playbook = str(((signal_detail.get("playbook") or {}).get("name")) or "")
+    hold_hours = midline_hold_hours(playbook)
     allowed, _ = gate_simulated_open(
         symbol, side, price, source,
         catalyst="midline_v2_pass",
         leverage=MIDLINE_LEVERAGE,
         sl_pct=MIDLINE_SL_PCT, tp_pct=MIDLINE_TP_PCT,
-        hold_hours=MIDLINE_HOLD_MINUTES / 60.0,
+        hold_hours=hold_hours,
         conn=conn,
     )
     if not allowed:
         return None
 
-    hold_deadline = utc_now_naive() + timedelta(minutes=MIDLINE_HOLD_MINUTES)
     reason = "midline_v2 " + json.dumps(signal_detail, ensure_ascii=False)[:140]
     paper_margin = get_paper_margin_usd(symbol, conn)
+    hold_deadline = utc_now_naive() + timedelta(hours=hold_hours)
+    timing = signal_detail.get("entry_timing") or {}
+    limit_offset = timing.get("limit_offset_pct")
     return create_paper_limit_order(
         conn,
         symbol=symbol,
@@ -304,10 +308,11 @@ def _open_limit_order(
         entry_reason=reason[:200],
         entry_score=score,
         signal_components=signal_detail,
-        max_hold_minutes=MIDLINE_HOLD_MINUTES,
+        max_hold_minutes=int(hold_hours * 60),
         planned_close_time=hold_deadline,
         account_id=MIDLINE_ACCOUNT_ID,
         timeout_minutes=get_midline_limit_timeout_minutes(),
+        limit_offset_pct=float(limit_offset) if limit_offset is not None else None,
         skip_open_advisor=True,
     )
 

@@ -404,6 +404,32 @@ class PositionSLTPMonitor:
                                 self._cooldown[pid] = now + self._cooldown_seconds
                                 continue
                             close_reason = recheck_reason
+                        elif _is_midline_source(planned_src):
+                            if side.upper() == "LONG":
+                                pnl_now = (price - entry_price) / entry_price if entry_price else 0.0
+                            else:
+                                pnl_now = (entry_price - price) / entry_price if entry_price else 0.0
+                            db_peak = 0.0
+                            try:
+                                raw_peak = pos.get("max_profit_pct")
+                                if raw_peak is not None:
+                                    db_peak = max(0.0, float(raw_peak) / 100.0)
+                            except (TypeError, ValueError):
+                                db_peak = 0.0
+                            peak_now = max(self._peak_pnl_map.get(pid, 0.0), db_peak, pnl_now)
+                            from app.services.midline_hold_exit import (
+                                MIDLINE_HOLD_EXTEND_HOURS,
+                                midline_expiry_should_extend,
+                            )
+                            if midline_expiry_should_extend(pnl_now, peak_now):
+                                self._extend_brain_planned_close(
+                                    pid,
+                                    int(MIDLINE_HOLD_EXTEND_HOURS * 60),
+                                    f"midline_extend pnl={pnl_now * 100:.2f}% peak={peak_now * 100:.2f}%",
+                                )
+                                self._cooldown[pid] = now + self._cooldown_seconds
+                                continue
+                            close_reason = "planned_close_time_expired"
                         else:
                             close_reason = "planned_close_time_expired"
                         logger.warning(
@@ -444,10 +470,10 @@ class PositionSLTPMonitor:
                 # BRAIN：峰值抬高即落库，防 main 重启丢峰
                 try:
                     from app.services.brain_config import is_brain_source as _brain_peak_src
-                    if _brain_peak_src(src):
+                    if _brain_peak_src(src) or _is_midline_source(src):
                         self._sync_peak_to_db(pid, new_peak * 100)
                 except Exception:
-                    if (src or "").startswith("brain_"):
+                    if (src or "").startswith("brain_") or _is_midline_source(src):
                         self._sync_peak_to_db(pid, new_peak * 100)
 
             reason: Optional[str] = None
@@ -628,7 +654,20 @@ class PositionSLTPMonitor:
                         self._do_close(pid, symbol, side, soft_sl, price, now)
                         continue
 
-                # ai-trail-tp：探索/预测 + 中线 v2
+                # ai-trail-tp：探索/预测；中线改走更早的 midline_hold_exit
+                if _is_midline_source(src):
+                    from app.services.midline_hold_exit import check_midline_hold_exits
+                    trail_mid = check_midline_hold_exits(pnl_pct, new_peak, age_s)
+                    if trail_mid:
+                        self._sync_peak_to_db(pid, new_peak * 100)
+                        logger.info(
+                            f"[midline hold-exit] pid={pid} {symbol} {side} "
+                            f"reason={trail_mid} price={price:.6f} peak={new_peak * 100:.2f}%"
+                        )
+                        self._cooldown[pid] = now + self._cooldown_seconds
+                        self._peak_pnl_map.pop(pid, None)
+                        self._do_close(pid, symbol, side, trail_mid, price, now)
+                    continue
                 trail_ai = _check_ai_trail_tp(
                     pnl_pct,
                     new_peak,

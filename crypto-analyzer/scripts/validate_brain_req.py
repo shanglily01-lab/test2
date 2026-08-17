@@ -203,6 +203,7 @@ def test_brain_skip_open_advisor() -> None:
     from app.services.open_advisor_routing import should_use_deepseek_hold_advisor
     assert should_use_deepseek_hold_advisor("brain_swing") is True
     assert should_use_deepseek_hold_advisor("deepseek_explore") is True
+    assert should_use_deepseek_hold_advisor("midline_long") is True
     hold_q = (ROOT / "app/services/hold_advisor_query.py").read_text(encoding="utf-8")
     if "brain_source_sql_exclude" in hold_q:
         _fail("hold_advisor_query 不应再排除 BRAIN")
@@ -215,6 +216,10 @@ def test_brain_skip_open_advisor() -> None:
         _fail("monitor 可能对 BRAIN 误用旧 ai-trail")
     else:
         _ok("monitor brain trail (new, not old ai-trail)")
+    if "check_midline_hold_exits" not in mon:
+        _fail("monitor 未接入中线更早锁利/回吐")
+    else:
+        _ok("monitor midline hold-exit")
     if "_brain_planned_close_recheck" not in mon or "brain_planned_recheck" not in mon:
         _fail("monitor 未接入 BRAIN planned_close 到期复核")
     else:
@@ -243,24 +248,7 @@ def test_brain_skip_open_advisor() -> None:
     else:
         _ok("orchestrator controlled short gates")
 
-    from app.services.brain_strategy_orchestrator import _fast_event_winprob_allowed, _strong_token_short_override
-    strong_c1 = {
-        "playbook": "C1",
-        "confirmed": True,
-        "edge_score": 0.90,
-        "features": {"h1_side": "SHORT", "m15_side": "SHORT"},
-        "signals": ["break_support", "volume_expand_down", "crash_spike"],
-    }
-    assert _strong_token_short_override(strong_c1, "FLAT")
-    assert not _strong_token_short_override(strong_c1, "LONG")
-    shadow_a2 = {
-        "playbook": "A2",
-        "confirmed": True,
-        "edge_score": 0.90,
-        "features": {"h1_side": "SHORT", "m15_side": "SHORT"},
-        "signals": ["ema_bear_align", "crash_spike"],
-    }
-    assert not _strong_token_short_override(shadow_a2, "FLAT")
+    from app.services.brain_strategy_orchestrator import _fast_event_winprob_allowed
     c3 = {
         "playbook": "C3",
         "signals": ["h1_breakout_up", "impulse_up"],
@@ -275,15 +263,13 @@ def test_brain_skip_open_advisor() -> None:
     }
     ok_b3, _ = _fast_event_winprob_allowed("SHORT", b3, 0.52, 0.47)
     assert ok_b3
-    weak_pb = {
-        "playbook": "B2",
-        "confirmed": True,
-        "edge_score": 0.90,
-        "features": {"h1_side": "SHORT", "m15_side": "SHORT"},
-        "signals": ["break_support"],
-    }
-    assert not _strong_token_short_override(weak_pb, "FLAT")
-    _ok("strong token short override + fast-event winprob")
+    _ok("fast-event winprob")
+
+    orch2 = (ROOT / "app/services/brain_strategy_orchestrator.py").read_text(encoding="utf-8")
+    if "compute_pullback_entry" not in orch2:
+        _fail("orchestrator 未接入回调买入点")
+    else:
+        _ok("orchestrator pullback entry")
 
 
 def test_brain_risk_params() -> None:
@@ -697,6 +683,59 @@ def test_orchestrator_syntax() -> None:
         _ok(f"syntax {rel}")
 
 
+def test_entry_timing_pullback() -> None:
+    from app.services.entry_timing import compute_pullback_entry
+
+    bars = []
+    p = 100.0
+    for i in range(36):
+        p += 0.02
+        bars.append({
+            "open_price": p - 0.01,
+            "high_price": p + 0.03,
+            "low_price": p - 0.02,
+            "close_price": p,
+            "volume": 800,
+        })
+    spike = p
+    for i in range(4):
+        spike += 0.55
+        bars.append({
+            "open_price": spike - 0.10,
+            "high_price": spike + 0.12,
+            "low_price": spike - 0.08,
+            "close_price": spike,
+            "volume": 2800,
+        })
+    chase = compute_pullback_entry(
+        "LONG", "C3", bars,
+        playbook_row={"signals": ["impulse_up", "h1_breakout_up", "break_resistance"]},
+        ref_price=bars[-1]["close_price"],
+    )
+    assert chase.ready is False, chase
+    assert chase.status in {"wait_pullback", "wait_bounce"}, chase
+
+    pull = list(bars)
+    peak = pull[-1]["close_price"]
+    for i, frac in enumerate((0.25, 0.45, 0.62, 0.72, 0.78)):
+        p = peak - (peak - 101.30) * frac
+        pull.append({
+            "open_price": p + 0.04,
+            "high_price": p + 0.05,
+            "low_price": p - 0.03,
+            "close_price": p,
+            "volume": 350,
+        })
+    ready = compute_pullback_entry(
+        "LONG", "C3", pull,
+        playbook_row={"signals": ["break_resistance", "volume_shrink_pullback", "15m_higher_low"]},
+        ref_price=pull[-1]["close_price"],
+    )
+    assert ready.ready is True, ready
+    assert ready.status == "pullback_ready"
+    _ok("entry timing waits for C3 pullback then arms the limit")
+
+
 def main() -> int:
     print("=== validate_brain_req ===\n")
     test_imports_and_config()
@@ -716,6 +755,7 @@ def main() -> int:
     test_brain_risk_params()
     test_scheduler_brain()
     test_orchestrator_syntax()
+    test_entry_timing_pullback()
     print()
     if _fail_n:
         print(f"FAILED {_fail_n}")

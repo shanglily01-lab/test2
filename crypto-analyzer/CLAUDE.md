@@ -74,7 +74,7 @@
 | Gemini 探索 | —（已下线） | — |
 | DeepSeek 探索/预测 | 每2h + 10min/5min（**对照期保留**；INV-BRAIN-07 暂缓） | `deepseek_*_enabled` |
 | **REQ-BRAIN** `brain_swing` | 每 **15s** 一批 **5** 币轮询 L0/L1 | `brain_swing_enabled`；启动 +75s；发现机会挂防插针限价 |
-| **中线 v2** `midline_long/short` | 每 **4h**（独立调度；需求见 REQUIREMENTS §7.2，待落地） |
+| **中线 v2** `midline_long/short` | 每 **15min** 轮询；回调买入；C3/C1 4h / A1 6h |
 | **持仓顾问** DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent；含历史 gemini_*） |
 | 市场情绪分析 | **已下线**（原 Gemini 情绪） |
 | ETF 同步 | 每天 06:45 |
@@ -170,15 +170,15 @@
 
 
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟】
-- **量化扫描**，非 LLM；标的 `config.yaml`；独立 **4h** 调度；旧四路 `*_midline_*` 停并移除
-- 限价 **±1%**；超时 **4h**；持仓 **8h**；SL **6%** / TP **3%** / 5x / 500U
-- **跳过**开仓顾问与持仓顾问；**接入** **ai-trail-tp**；**排除** SmartExit → `position_sl_tp_monitor`
+- **量化扫描**，非 LLM；标的 `config.yaml`；**15min** 轮询；旧四路 `*_midline_*` 停并移除
+- 限价挂在 **15m 回调区**（禁止破位追高）；C3/C1 持仓 **4h** / A1 **6h**；SL **6%** / TP **3%** / 5x / 500U
+- **跳过**开仓顾问；**纳入**持仓顾问（盈利保护）；**midline_hold_exit** 峰≥1.2% 锁利；**排除** SmartExit
 - **暂不实盘**（不进 `LIVE_SYNC_SOURCES`）；Web：原 Gemini 探索页整页改中线机会分析
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.2
 
 ### 开仓 / 持仓顾问
-- 路由：统一 **DeepSeek**（Gemini 顾问已下线；历史 `gemini_*` 仓亦由 DeepSeek 监管）；中线开仓/持仓顾问均 skip
-- **BRAIN**：开仓跳过顾问；持仓亦 **跳过**（仅硬 SL5%/TP8%/6h）
+- 路由：统一 **DeepSeek**（Gemini 顾问已下线；历史 `gemini_*` 仓亦由 DeepSeek 监管）；中线跳过开仓顾问、**纳入**持仓顾问
+- **BRAIN**：开仓跳过顾问；持仓进入 DeepSeek 做 thesis 复核（硬 SL/TP/trail 仍兜底）
 - 持仓 tick：**15min**；每仓 15min；浮盈转亏 urgent 立即再审
 - 盈利 sell（探索仓）：ROI **≥+8%** 且 15m 明确转弱（反向≥4）；过早 sell 程序化拦截恢复严格
 - Prompt/rubric/**reason 中文**；开关 `deepseek_*_advisor_enabled`（系统设置「开仓/持仓顾问」）
@@ -233,7 +233,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 
 - **按 source 白名单**（`trading_gates.LIVE_SYNC_SOURCES`）：仅 DeepSeek 探索/预测；GPT/战术/反转/smart_trader/**中线 v2**/已下线 Gemini 只模拟
 - **实盘开仓 symbol**：须 **L0 白名单**（`rating_level=0`）；L1/L2/L3 禁止实盘
-- **限价偏移**：中线 v2 **±1%** 固定；其他模拟限价读 `paper_limit_long/short_offset_pct`（系统设定）
+- **限价偏移**：中线优先 **回调区**（无区才 ±1%）；其他模拟限价读 `paper_limit_long/short_offset_pct`（系统设定）
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)
 - **平仓总开关**: `system_settings.live_close_enabled` (1=开启；模拟平仓时同步交易所；持仓顾问 sell 亦受此规则)
 - **北京时间实盘开仓时段**: 仅 10:00-16:00、22:00-次日04:00 允许同步/直接开实盘；服务器 UTC 对应 02:00-08:00、14:00-20:00。模拟开仓不受该时段限制。

@@ -1,6 +1,6 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-08-11 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.14** 对齐
+> 文档版本：2026-08-17 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.15** 对齐
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
 > **中线 v2 §7.2**：已落地模拟仓。  
 > **实盘同步 / 闸门 / 15m 定方向 / 限价偏移 / BRAIN**：以 REQUIREMENTS 为准；本文侧重 AI/中线细节。
@@ -8,7 +8,7 @@
 ## 1. 总览
 
 **主路径（已落地）**：REQ-BRAIN — **盈利 KPI**；A1 主力 + A2/C1 受控空头试点；LONG≥0.75 / SHORT≥0.90（C1 放量破位≥0.80）；Big4 SHORT 时阻断 A1 追多、A2/C1 才可试空；**A1 豁免 5m**，其它 5m(40U/4根) + -80U + trail（soft 关；§7.3）。  
-**并行已落地**：中线 v2（独立量化，跳过顾问）。  
+**并行已落地**：中线 v2（独立量化；**纳入**持仓顾问做盈利保护；回调买入）。  
 **旧路径**：Gemini 交易已下线；DeepSeek 探索/预测自动开仓 **对照期暂保留**（与 BRAIN 并行对比；INV-BRAIN-07 暂缓）。
 
 系统另保留 DeepSeek/GPT 等 LLM 模块代码供顾问确认与复盘；统一模拟仓 `account_id=2`。
@@ -18,14 +18,14 @@ crypto-scheduler (app/scheduler.py)
   ├─ data_cache: candidate_pool (6min) → explore_prepared (15min)
   ├─ REQ-BRAIN brain_swing（每15s×5币轮询 L0/L1；发现即开；启动+75s）
   ├─ DeepSeek 探索/预测自动开仓：对照期并行（INV-BRAIN-07 暂缓）
-  ├─ 中线 v2（midline_long/short）— 独立 4h 扫描
+  ├─ 中线 v2（midline_long/short）— 15min 轮询；回调买入；4h/6h 持仓
   └─ （战术/情绪等按现网开关）
 
 crypto-scheduler (每 15min)
-  └─ DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**排除** midline_*；覆盖 brain_*）
+  └─ DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**含** midline_* 与 brain_*）
 
 crypto-app-main
-  └─ position_sl_tp_monitor (1s)：探索/预测硬 SL/TP + ai-trail；brain：评估硬 SL/TP + 5m/-80/trail/到期；中线硬 SL/TP + ai-trail（中线/BRAIN 均不参与 SmartExit）
+  └─ position_sl_tp_monitor (1s)：探索/预测硬 SL/TP + ai-trail；brain：评估硬 SL/TP + 5m/-80/trail/到期；中线硬 SL/TP + midline_hold_exit（中线/BRAIN 均不参与 SmartExit）
 
 任意模拟开仓
   └─ paper_open_gate.gate_simulated_open()
@@ -39,7 +39,7 @@ crypto-app-main
 | 顶空底多 | 是 | `*_reversal` | 否 |
 | 战术四策略 | 是 | `*_pullback` 等 | 否 |
 | **中线做多/做空 v2** | **否（量化）** | `midline_long` / `midline_short` | **否（暂不进 LIVE_SYNC）** |
-| 开仓/持仓顾问 | 是 | BRAIN：**跳过开仓顾问，纳入持仓顾问**；按币 SL/TP/hold + trail/soft 继续兜底；中线跳过 | 持仓 sell：`live_close_enabled=1` 且有映射时平交易所 |
+| 开仓/持仓顾问 | 是 | BRAIN：**跳过开仓顾问，纳入持仓顾问**；中线：**跳过开仓顾问，纳入持仓顾问**（盈利保护） | 持仓 sell：`live_close_enabled=1` 且有映射时平交易所 |
 | 情绪分析 | 是 | 不下单（Gemini 情绪已下线） | — |
 
 ### 1.1 REQ-BRAIN 要点（权威见 REQUIREMENTS §7.3）
@@ -265,7 +265,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 6.5.1 职责
 
-`config.yaml` 交易对 + **30×1d / ~1 周 1h / 近 4h×15m** 三层 AND 扫描，**不调用 LLM**。**跳过**开仓顾问与**持仓顾问**；**接入** **ai-trail-tp**；**不参与** `SmartExitOptimizer`（`position_sl_tp_monitor`：硬 SL/TP、**8h** 到期、爆仓、ai-trail-tp）。
+`config.yaml` 交易对 + Playbook 破位/趋势扫描，**不调用 LLM 开仓**。**跳过**开仓顾问；**纳入** DeepSeek 持仓顾问（盈利保护）。入场须 **15m 回调进区**（`entry_timing`），禁止破位追高。退出：硬 SL/TP + `midline_hold_exit`（峰 1.2% 锁利 / 回吐平）+ 4h/6h 到期；**不参与** SmartExit。
 
 旧四路 `gemini/deepseek_midline_*`：**停调度并移除**。
 
@@ -273,8 +273,8 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 | 组件 | 路径 |
 |------|------|
-| 常量 | `midline_swing_config.py` |
-| 扫描 | `midline_swing_scanner.py` |
+| 常量 | `midline_swing_config.py` · `midline_hold_exit.py` |
+| 扫描 | `midline_swing_scanner.py` · `entry_timing.py` |
 | Worker | `midline_explore_worker.py`（可改名 `midline_worker`） |
 | API / Web | `midline_swing_api.py` · **原 Gemini 探索页整页**为中线策略/机会分析 |
 
@@ -367,7 +367,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | 教师 | 类 | 监管 source |
 |------|-----|-------------|
 | Gemini | `gemini_position_advisor.GeminiPositionAdvisor.tick` | `gemini_explore` / `gemini_predict` |
-| DeepSeek | `deepseek_position_advisor` | 其他 source（**排除** `midline_*` / 旧 `*_midline_*`） |
+| DeepSeek | `deepseek_position_advisor` | 其他 source（**含** `midline_*` 与 `brain_*`） |
 
 `crypto-scheduler` 每 **15 分钟** 调用 Gemini / DeepSeek 两个 tick。
 

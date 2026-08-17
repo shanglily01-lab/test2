@@ -49,12 +49,12 @@ def test_breakout_action_opportunity() -> None:
         playbook="C1",
         edge=0.70,
         confirmed=True,
-        signals={"break_support", "volume_expand_down"},
-        features={"h1_side": "SHORT", "m15_side": "SHORT", "ema_bear": True},
+        signals={"break_support", "volume_expand_down", "15m_lower_high"},
+        features={"h1_side": "SHORT", "m15_side": "SHORT", "ema_bear": True, "vol_shrink_pullback": True},
         future_4h={"side": "SHORT", "score": 0.56},
         big4_bias="SHORT",
         global_name="BEAR_TREND",
-        entry_15m={"fresh_breakout": True},
+        entry_15m={"fresh_breakout": False},
     )
     assert c1["should_open"] is True, c1
 
@@ -124,7 +124,21 @@ def test_breakout_action_opportunity() -> None:
         entry_15m={"fresh_breakout": True},
     )
     assert blocked["should_open"] is False and blocked["reason"] == "future_4h_not_actionable"
-    _ok("A2/C1 open only when the 4h breakout opportunity is aligned")
+
+    chase = _breakout_action_opportunity(
+        side="LONG",
+        playbook="C3",
+        edge=0.90,
+        confirmed=True,
+        signals={"h1_breakout_up", "impulse_up"},
+        features={"h1_side": "LONG", "m15_side": "LONG"},
+        future_4h={"side": "LONG", "score": 0.60},
+        big4_bias="FLAT",
+        global_name="TOKEN_DIVERGENCE",
+        entry_15m={"fresh_breakout": True},
+    )
+    assert chase["should_open"] is False and chase["reason"] == "wait_pullback", chase
+    _ok("A2/C1 open only when the 4h breakout opportunity is aligned; C3 waits for pullback")
 
 
 def test_limit_price() -> None:
@@ -165,31 +179,40 @@ def test_live_sync_whitelist() -> None:
 
 
 def test_ai_trail_for_midline() -> None:
-    print("[3c] midline includes ai-trail-tp path")
+    print("[3c] midline earlier lock / giveback")
     from app.services.position_sl_tp_monitor import (
-        _check_ai_trail_tp,
         _is_ai_hard_sltp_source,
         _is_midline_source,
+    )
+    from app.services.midline_hold_exit import (
+        check_midline_giveback,
+        check_midline_hold_exits,
+        check_midline_trail_lock,
+        midline_hold_hours,
     )
 
     assert _is_midline_source("midline_long")
     assert _is_ai_hard_sltp_source("midline_long")
-    # peak 4%, pullback 1.2%, still keeps >=2% profit: trigger ai-trail-tp
-    assert _check_ai_trail_tp(0.028, 0.040) is not None
-    _ok("ai-trail-tp applies to midline_long (monitor loop)")
+    assert check_midline_trail_lock(0.007, 0.013) is not None
+    assert check_midline_trail_lock(0.012, 0.013) is None
+    assert check_midline_giveback(0.0, 0.015, 30 * 60) is not None
+    assert check_midline_giveback(0.0, 0.015, 10 * 60) is None
+    assert check_midline_hold_exits(0.007, 0.013, 40 * 60) is not None
+    assert midline_hold_hours("C3") == 4.0
+    assert midline_hold_hours("A1") == 6.0
+    _ok("midline locks at ~1.2% peak and cuts profit-to-loss")
 
 
-def test_hold_advisor_excludes_midline() -> None:
-    print("[3d] hold advisor SQL excludes midline")
+def test_hold_advisor_includes_midline() -> None:
+    print("[3d] hold advisor includes midline")
     from app.services.hold_advisor_query import DEEPSEEK_HOLD_SOURCE_SQL, GEMINI_HOLD_SOURCE_SQL
+    from app.services.open_advisor_routing import should_use_deepseek_hold_advisor
 
-    assert "midline_long" in DEEPSEEK_HOLD_SOURCE_SQL
-    assert "midline_short" in DEEPSEEK_HOLD_SOURCE_SQL
-    assert "NOT IN" in DEEPSEEK_HOLD_SOURCE_SQL  # midline_source_sql_not_in
-    # Gemini hold advisor is retired; DeepSeek SQL no longer excludes gemini_*.
-    assert "gemini_explore" not in DEEPSEEK_HOLD_SOURCE_SQL
+    assert should_use_deepseek_hold_advisor("midline_long") is True
+    assert "midline_long" not in (DEEPSEEK_HOLD_SOURCE_SQL or "")
+    assert "NOT IN" not in (DEEPSEEK_HOLD_SOURCE_SQL or "")
     assert "1=0" in GEMINI_HOLD_SOURCE_SQL
-    _ok("DeepSeek hold SQL excludes midline (hard SL/TP + trail + 8h only)")
+    _ok("DeepSeek hold advisor now reviews midline profit giveback")
 
 
 def test_run_summary_zh() -> None:
@@ -237,7 +260,7 @@ def main() -> None:
     test_limit_price()
     test_live_sync_whitelist()
     test_ai_trail_for_midline()
-    test_hold_advisor_excludes_midline()
+    test_hold_advisor_includes_midline()
     test_run_summary_zh()
     if args.db:
         test_db_and_scan()

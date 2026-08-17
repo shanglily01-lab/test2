@@ -489,26 +489,40 @@ def _analyze_one(
             elif not allow_open:
                 skip_reason = "tick_open_quota"
             else:
-                # 发现机会 → 立即下单（测试期市价；见 BRAIN_USE_MARKET_ENTRY）
-                order_id, gate_reason = _open_brain_entry(
-                    conn,
-                    symbol=sym,
-                    side=side,
-                    price=float(price),
-                    playbook_row=pb,
-                    win_long=wl,
-                    win_short=ws,
-                    rows_15m=rows_15m,
+                from app.services.entry_timing import compute_pullback_entry
+                timing = compute_pullback_entry(
+                    side, str(playbook), rows_15m,
+                    playbook_row=pb, ref_price=float(price) if price else None,
                 )
-                if order_id:
-                    decision = "OPENED"
-                    _mark_open_cooldown(sym)
-                    logger.info(
-                        f"[BRAIN即时开仓] {sym} {side} {playbook} id={order_id}"
-                    )
+                pb["entry_timing"] = timing.to_dict()
+                if not timing.ready:
+                    skip_reason = f"entry_{timing.status}:{timing.reason}"
                 else:
-                    skip_reason = gate_reason or "ds_or_gate_reject"
-                    _mark_open_cooldown(sym)  # 失败也冷却，避免连打 DS
+                    wick_off = float(pb.get("limit_offset_pct") or 0.5)
+                    pb["limit_offset_pct"] = min(
+                        1.8,
+                        max(float(timing.limit_offset_pct), wick_off * 0.5),
+                    )
+                    order_id, gate_reason = _open_brain_entry(
+                        conn,
+                        symbol=sym,
+                        side=side,
+                        price=float(price),
+                        playbook_row=pb,
+                        win_long=wl,
+                        win_short=ws,
+                        rows_15m=rows_15m,
+                    )
+                    if order_id:
+                        decision = "OPENED"
+                        _mark_open_cooldown(sym)
+                        logger.info(
+                            f"[BRAIN即时开仓] {sym} {side} {playbook} "
+                            f"entry={timing.status} id={order_id}"
+                        )
+                    else:
+                        skip_reason = gate_reason or "ds_or_gate_reject"
+                        _mark_open_cooldown(sym)
 
     try:
         insert_opportunity(
