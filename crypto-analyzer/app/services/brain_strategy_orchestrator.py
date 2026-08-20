@@ -122,6 +122,13 @@ def get_brain_live_status() -> Dict[str, Any]:
     # cooldown map may grow; only expose count
     cd = snap.pop("open_cooldown_until", {}) or {}
     snap["cooldown_symbols"] = len(cd)
+    try:
+        from app.services.trading_gates import is_live_close_enabled, is_live_trading_enabled
+        snap["live_trading_enabled"] = bool(is_live_trading_enabled())
+        snap["live_close_enabled"] = bool(is_live_close_enabled())
+    except Exception:
+        snap["live_trading_enabled"] = False
+        snap["live_close_enabled"] = False
     return snap
 
 

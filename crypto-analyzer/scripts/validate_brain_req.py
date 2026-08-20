@@ -63,6 +63,11 @@ def test_imports_and_config() -> None:
     assert is_brain_source(BRAIN_SOURCE)
     assert is_brain_source("brain_long")
     assert not is_brain_source("deepseek_explore")
+    from app.services.trading_gates import LIVE_SYNC_SOURCES, should_sync_live_for_source
+    assert BRAIN_SOURCE in LIVE_SYNC_SOURCES
+    assert should_sync_live_for_source(BRAIN_SOURCE)
+    assert should_sync_live_for_source("brain_long")
+    assert not should_sync_live_for_source("midline_long")
     assert "brain_%" in brain_source_sql_exclude("fp.source")
     _ok("brain_config")
 
@@ -793,6 +798,25 @@ def test_entry_timing_pullback() -> None:
     )
     assert ready.ready is True, ready
     assert ready.status == "pullback_ready"
+
+    grind = []
+    g = 100.0
+    for _ in range(40):
+        g += 0.04
+        grind.append({
+            "open_price": g - 0.01,
+            "high_price": g + 0.03,
+            "low_price": g - 0.02,
+            "close_price": g,
+            "volume": 900,
+        })
+    a1_chase = compute_pullback_entry(
+        "LONG", "A1", grind,
+        playbook_row={"signals": ["ema_bull_align", "hh_hl", "15m_higher_low"]},
+        ref_price=grind[-1]["close_price"],
+    )
+    assert a1_chase.ready is False, a1_chase
+    assert a1_chase.status == "wait_pullback"
     _ok("entry timing waits for C3 pullback then arms the limit")
 
 

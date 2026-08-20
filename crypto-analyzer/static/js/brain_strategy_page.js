@@ -108,6 +108,12 @@
           chip.textContent = analyzing ? '分析中' : (d.enabled === false ? '已关闭' : '轮询中');
           chip.className = 'chip ' + (analyzing ? 'chip-on' : (d.enabled === false ? 'chip-off' : 'chip-warn'));
         }
+        var liveChip = $('live-chip');
+        if (liveChip) {
+          var liveOn = !!d.live_trading_enabled;
+          liveChip.textContent = liveOn ? '实盘开 · 仅L0' : '实盘关';
+          liveChip.className = 'chip ' + (liveOn ? 'chip-on' : 'chip-off');
+        }
         var size = d.pool_size || 0;
         var cur = d.cursor || 0;
         var pct = d.progress_pct != null ? d.progress_pct : (size ? (100 * cur / size) : 0);

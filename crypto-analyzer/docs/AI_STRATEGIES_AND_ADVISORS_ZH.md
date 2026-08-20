@@ -1,6 +1,6 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-08-20 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.19** 对齐
+> 文档版本：2026-08-20 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.21** 对齐
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
 > **中线 v2 §7.2**：已落地模拟仓。  
 > **实盘同步 / 闸门 / 15m 定方向 / 限价偏移 / BRAIN**：以 REQUIREMENTS 为准；本文侧重 AI/中线细节。
@@ -33,7 +33,7 @@ crypto-app-main
 
 | 类别 | 是否 LLM | 典型 source 前缀 | 实盘同步 |
 |------|----------|------------------|----------|
-| **超级大脑 BRAIN** | 量化主判 + DeepSeek 确认 | `brain_swing` | **另开确认**；未确认仅模拟 |
+| **超级大脑 BRAIN** | 量化主判 + DeepSeek 确认 | `brain_swing` | **是**（`live_trading_enabled` + **仅 L0**） |
 | 主探索 | 是 | `deepseek_explore` / `gpt_explore`（gemini 已下线） | **对照期自动开仓保留**；GPT 仅模拟 |
 | 主预测 | 是 | `*_predict` | **对照期 deepseek_predict 自动开仓保留** |
 | 顶空底多 | 是 | `*_reversal` | 否 |
@@ -50,7 +50,8 @@ crypto-app-main
 - DeepSeek：开仓**不经**开仓顾问；BRAIN 持仓进入 DeepSeek 持仓顾问复核（**不执行平仓**）  
 - **入场/退出（v4.5.14）**：强制防插针限价；按币评估 SL 2.5~4.5% / TP 3~12%；A2/C1 仅 Big4 SHORT 顺势小仓试点；5m/-80U/trail/到期，soft 关闭；peak 落库/恢复
 - 插针：影线>实体×2；频繁则按平均插针偏移；限价超时必须取消，禁止转市价
-- BRAIN 不经开仓顾问且全面排除 SmartExit；限价触价后、成交前重跑安全闸门
+- BRAIN 不经开仓顾问且全面排除 SmartExit；限价触价后、成交前重跑安全闸门  
+- **实盘**：`brain_swing` ∈ `LIVE_SYNC_SOURCES`；`live_trading_enabled` 控制开仓同步；**仅 L0**；L1 模拟成交 SKIPPED
 - 旧 DeepSeek 自动开仓：对照期暂保留；结束后 INV-BRAIN-07  
 - **Web**：`/brain_strategy`；API `/api/brain-swing`（含 `/orders`）  
 
@@ -265,7 +266,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 6.5.1 职责
 
-`config.yaml` 交易对 + Playbook 破位/趋势扫描，**不调用 LLM 开仓**。**跳过**开仓顾问；**纳入** DeepSeek 持仓顾问（**sell 只建议不执行**）。Big4 已 LONG 时禁止新开空单。做多须 **15m 回调进区**；B3/C4 做空在高点滞涨挂空（`entry_timing`），禁止破位追高、禁止把仍在放量创新高当卖点。退出：硬 SL/TP + `midline_hold_exit`（峰 1.2% 锁利 / 回吐平）+ 4h/6h 到期；**不参与** SmartExit。
+`config.yaml` 交易对 + Playbook 破位/趋势扫描，**不调用 LLM 开仓**。**跳过**开仓顾问；**纳入** DeepSeek 持仓顾问（**sell 只建议不执行**）。Big4 已 LONG 时禁止新开空单。做多须 **15m 回调进区**（贴着近 8 根高点不挂）；B3/C4 做空在高点滞涨挂空（`entry_timing`），禁止破位追高、禁止把仍在放量创新高当卖点。退出：硬 SL/TP + `midline_hold_exit`（峰 1.2% 锁利 / 回吐平）+ 4h/6h 到期；**不参与** SmartExit。
 
 旧四路 `gemini/deepseek_midline_*`：**停调度并移除**。
 
@@ -416,7 +417,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | `live_whitelist_enabled` | 开仓：`rating_level=0` 可开实仓 |
 | `blacklist_level3_enabled` | **已废弃**（L2+/锁定恒禁模拟+实盘；保留仅为兼容） |
 
-**开仓按 source 白名单**（`LIVE_SYNC_SOURCES`）：仅 DeepSeek 探索/预测。GPT/战术/反转/**中线 v2**/已下线 Gemini 等只写模拟仓。
+**开仓按 source 白名单**（`LIVE_SYNC_SOURCES`）：DeepSeek 探索/预测 + **BRAIN**。GPT/战术/反转/**中线 v2**/已下线 Gemini 等只写模拟仓。
 
 **北京时间实盘开仓时段**：仅 **10:00-16:00**、**22:00-次日04:00** 允许同步/直接开实盘；服务器 UTC 对应 **02:00-08:00**、**14:00-20:00**。模拟开仓不受该时段限制。
 

@@ -1,12 +1,14 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.19
+**版本**: v4.5.21
 **日期**: 2026-08-20
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
 > **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。  
 > **BRAIN v2 机会识别（§7.3.10–7.3.15）**：**已落地且开仓机会判定视为相对客观**；退出/风控见 §7.3.16。  
 > **C1 / A2 / B2（v4.5.17）**：C1 **破位当根跟风做空**（不等回抽）；A2 下降结构弱反抽被拒绝后开仓；B2 弱反抽失败（须先有反抽再破起点）后跟风开仓。  
+> **BRAIN 实盘（v4.5.21）**：`brain_swing` 加入 `LIVE_SYNC_SOURCES`；由 `live_trading_enabled` / `live_close_enabled` 控制；实盘开仓**仅 L0 白名单**（模拟仍扫 L0+L1）。成交瞬间同步，禁止回填历史仓。  
+> **单边不追高（v4.5.20）**：多单贴着近 8 根 15m 高点（距高 ≤0.40%）一律 `wait_pullback`；禁止仅凭 `15m_higher_low` / 靠近 EMA 在高点挂多。  
 > **顺势不做空（v4.5.19）**：Big4 已 LONG 时 **禁止新开任何空单**（含 C1/B3/C4；BULL 不再放行冲高滞涨空）。计划到期 **不再因 D1/翻转强平**。BRAIN/中线持仓顾问 **只复核落库，sell 不执行**。  
 > **趋势持仓（v4.5.18）**：Big4 已 LONG 时，日线 `DAILY_BEAR_PROBE` **不得否决 A1**；中线/BRAIN 多单 trail 放宽（约 2.2–2.5% / 回撤 0.80%），多头趋势关闭 no_follow；顾问禁止仅凭 RSI 超买强平多单。  
 > **BRAIN / 中线卖点（v4.5.16）**：B3/C4 **冲高滞涨**在高点挂空（上影/量价背离/不再创新高 ≥2 条才 `exhaustion_ready`）；仍加速则 `wait_stall`；已离高点则 `missed_high`。  
@@ -176,6 +178,7 @@
 
 - `deepseek_explore`
 - `deepseek_predict`
+- `brain_swing`（及 `brain_long` / `brain_short`）
 
 **已下线（不再实盘、不再调度）**：`gemini_explore` / `gemini_predict`（系统配置开关已移除，DB 强制关闭）。
 
@@ -183,6 +186,8 @@
 落地时须从白名单**移除**旧四路 `gemini_midline_*` / `deepseek_midline_*`（若仍残留）。
 
 **其余**（GPT 探索/预测、战术、反转、smart_trader、BTC 动量、中线 v2 等）**仅模拟仓**。
+
+BRAIN 实盘与 DeepSeek 同一套开关：`live_trading_enabled=1` 才在**成交瞬间**排队同步；L1 模拟仓当场 `SKIPPED`。打开开关**不得**回填历史 BRAIN 模拟仓（INV-01/02）。
 
 ### 6.3 check_live_open_allowed 检查顺序
 
@@ -203,7 +208,7 @@
 
 ### 6.5 实盘保证金
 
-- **主探索/预测**：`user_api_keys.max_position_value` × `get_live_margin_ratio(symbol)`  
+- **主探索/预测 / BRAIN**：`user_api_keys.max_position_value` × `get_live_margin_ratio(symbol)`；BRAIN 模拟可扫 L0+L1，实盘同步**仅 L0**  
 - **中线 v2**：本期**不实盘**；若日后加入 `LIVE_SYNC_SOURCES`，保证金同主探索（API `max_position_value` × 评级比例），杠杆/SL/TP 与模拟一致（SL **6%** / TP **3%**），且须过 L0 白名单闸门  
 - L0=1.0x；L1/L2/L3 禁止实盘（L2+ 同时禁止模拟）  
 
@@ -293,7 +298,7 @@
 
 方向对仍不够。实现：`entry_timing.compute_pullback_entry`。
 
-- **做多 A1/C3**：禁止破位当根追价；须 15m 回到 EMA20 / 38–50% 回撤区并出现缩量或高低点确认，才挂限价。未就绪记 `wait_pullback`（不冷却）。
+- **做多 A1/C3**：禁止破位当根追价；须 15m 回到 EMA20 / 38–50% 回撤区并出现缩量或高低点确认，才挂限价。未就绪记 `wait_pullback`（不冷却）。**单边贴高（距近 8 根高点 ≤0.40%）一律等待**，不得仅凭 `15m_higher_low` 或靠近 EMA 追多。
 - **做空 B3/C4（冲高滞涨）**：**在高点卖**，不等回落到 EMA。须靠近近 8 根高点（距高 ≤0.85%），且滞涨证据 ≥2 条（长上影、价新高量萎缩、RSI 从超买拐头、假突破收回、近 3 根不再创新高、收盘离开上沿）。仍放量实体创新高 → `wait_stall`；已离高点 ≥1.35% → `missed_high`。限价挂在现价上方 0.20–0.55%（吃最后一刺）。4h 仍强多则不开。
 - **做空 C1/B2（破位跟风）**：刚跌破支撑且放量/急跌 → **当根跟风做空**（`breakdown_ready`），不等回抽。假跌破收回 → `invalidated`。限价贴近市价上方 0.20–0.30%（强制限价，禁止市价）。
 - **做空 A2（弱反抽）**：下降结构中缩量反抽到 EMA/前高被拒绝，才在反抽区挂空。
@@ -396,7 +401,7 @@
   → OPENED = 已挂 PENDING 限价；成交后才生成持仓
 ```
 
-**入场（v4.5.17）**：C3 confirmed 须回踩。C1 **破位当根跟风**（放量/急跌跌破支撑即 `confirmed`，假跌破收回除外）。B3/C4 在高点卖。A2 须下降结构 + 缩量反抽 + EMA/前高拒绝。B2 须先有弱反抽再跌破反抽起点。BRAIN **等到 `entry_timing.ready`** 才下单。
+**入场（v4.5.20）**：C3 confirmed 须回踩。**多单距近 8 根 15m 高点 ≤0.40% 不得挂**。C1 **破位当根跟风**（放量/急跌跌破支撑即 `confirmed`，假跌破收回除外）。B3/C4 在高点卖。A2 须下降结构 + 缩量反抽 + EMA/前高拒绝。B2 须先有弱反抽再跌破反抽起点。BRAIN **等到 `entry_timing.ready`** 才下单。
 **日线 vs Big4（v4.5.18）**：`DAILY_BEAR_PROBE` 仍收缩多数多单，但 **Big4 已 LONG 时不得否决 A1**（日线滞后不得挡住已确认的多头趋势）。
 **顺势不做空（v4.5.19）**：`big4.bias == LONG` 时 **禁止新开任何空单**（C1/B3/C4/A2/B2 一律 `shadow_only` / `big4_long_blocks_short`）；BULL_TREND 不再放行冲高滞涨空。中线扫描同样阻断。
 
@@ -474,7 +479,7 @@
 | Web / API | `/brain_strategy`；`/api/brain-swing` |
 | 回归 | `scripts/validate_brain_req.py` |
 
-**实盘**：`brain_swing` **未**加入 `LIVE_SYNC_SOURCES`（仅模拟）；另开确认后再加。
+**实盘**：`brain_swing` ∈ `LIVE_SYNC_SOURCES`；开仓须 `live_trading_enabled=1` 且 **L0 白名单**；平仓须 `live_close_enabled=1`。模拟仍扫 L0+L1；L1 成交瞬间 SKIPPED。打开开关不回填历史仓。
 
 **kill switch**：`system_settings.brain_swing_enabled`（默认视为开；显式 `0` 跳过）。
 
@@ -930,9 +935,9 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-KLINE | `binance_ws_kline_collector.py`, `fast_collector_service.py` |
 | REQ-RATING | `update_top_performers.py` |
 | REQ-MIDLINE | `midline_swing_config.py`, `midline_swing_scanner.py`, `entry_timing.py`, `midline_hold_exit.py`, `midline_explore_worker.py`, `midline_swing_api.py`, 中线策略页 JS/模板, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
-| **REQ-BRAIN** | `brain_config` / `brain_wick` / `brain_market_analyzer` / `brain_winrate` / `brain_strategy_orchestrator`；`paper_limit_entry` + executor expire；`smart_exit_optimizer` 排除；`validate_brain_req.py`；权威 §7.3 |
+| **REQ-BRAIN** | `brain_config` / `brain_wick` / `brain_market_analyzer` / `brain_winrate` / `brain_strategy_orchestrator`；`paper_limit_entry` + executor expire；`trading_gates.LIVE_SYNC_SOURCES`；`smart_exit_optimizer` 排除；`validate_brain_req.py`；权威 §7.3 |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
-| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **A1 豁免 5m**；其它 40U/4根；-80U；trail（Big4 LONG 多单 2.2%/0.80%）；soft 关；Big4 LONG 禁新空；顾问 suggest-only；到期不因 D1 强平；§7.3（**v4.5.19**） |
+| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **A1 豁免 5m**；其它 40U/4根；-80U；trail（Big4 LONG 多单 2.2%/0.80%）；soft 关；Big4 LONG 禁新空；顾问 suggest-only；到期不因 D1 强平；多单贴高等待回调；**BRAIN 实盘随总开关仅 L0**；§7.3（**v4.5.21**） |
 | REQ-ST | `smart_trader_service.py` |
 
 ---
@@ -941,6 +946,8 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-20 | **v4.5.21** | **BRAIN 接入实盘**：`brain_swing` 加入 `LIVE_SYNC_SOURCES`；由实盘开/平仓总开关控制；实盘仅 L0 白名单 |
+| 2026-08-20 | **v4.5.20** | **单边不追高**：多单贴着近 8 根 15m 高点（距高 ≤0.40%）一律 `wait_pullback`；A1 不得仅凭 `15m_higher_low` / 靠近 EMA 追多 |
 | 2026-08-20 | **v4.5.19** | **顺势不做空 + 退出收口**：Big4 已 LONG 时禁止新开空单（含 C1/B3/C4）；计划到期不再因 D1/翻转强平；BRAIN/中线持仓顾问 sell 只建议不执行 |
 | 2026-08-20 | **v4.5.18** | **主升浪持仓**：Big4 已 LONG 时日线 `DAILY_BEAR_PROBE` 不得否决 A1；中线/BRAIN 多单 trail 放宽；多头趋势关闭 no_follow（其它多单 180min/-2.5%）；顾问禁止仅凭 RSI 超买强平多单 |
 | 2026-08-17 | **v4.5.17** | **C1 破位跟风 + A2/B2 开仓**：C1 刚破位放量即跟风做空（不等回抽）；A2 须下降结构+弱反抽拒绝；B2 须先有反抽再破起点；三者纳入 TRADEABLE |

@@ -148,7 +148,7 @@
 - 每 **max_hold_hours**（距上次 ok）+ 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
 - SL **3%** / TP **5%** / **max_hold_hours** / 5x / 500U；conf≥**0.75** + `explore_catalyst_technical_ok`（含 15m OHLC）；**DeepSeek LONG** 另≥**0.82** + RSI/7d/24h/`deepseek_long_entry_quality_ok`
 - **DeepSeek 选币**：仅 **L0+L1**（不扫未评级/全市场）
-- **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：仅 `deepseek_explore`（+ L0 白名单等 symbol 闸门）
+- **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：`deepseek_explore` / `deepseek_predict` / `brain_swing`（+ L0 白名单等 symbol 闸门）
 - **Gemini 探索已下线**（系统配置无开关；不调度）
 
 ### 主预测 (`*_predict`)
@@ -158,10 +158,11 @@
 - **Gemini 预测已下线**（API / 页面 / worker 已移除）
 
 ### 超级大脑主权层（REQ-BRAIN）【需求 2026-07-28 · 首版已落地 · 对照期 · v2 Playbook 2026-07-30】
-- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.5.17）
-- `brain_swing`：L0/L1；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
+- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.5.21）
+- `brain_swing`：L0/L1 模拟扫描；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
+- **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
 - 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**强制防插针限价**（`BRAIN_USE_MARKET_ENTRY=False`），超时取消
-- **入场（v4.5.19）**：LONG 等 15m 回踩；**Big4 LONG 禁止新开空单**；B3/C4 仅在非多头宏观冲高滞涨挂空；**C1/B2 破位跟风**；A2 弱反抽拒绝后开空
+- **入场（v4.5.20）**：LONG 等 15m 回踩（贴着近 8 根高点不挂）；**Big4 LONG 禁止新开空单**；B3/C4 仅在非多头宏观冲高滞涨挂空；**C1/B2 破位跟风**；A2 弱反抽拒绝后开空
 - **退出（v4.5.12 · 盈利 KPI）**：**A1 豁免 5m**；其它 5m（≥40U/4根）；**-80U**；硬 SL；trail；**soft 关**
 - **执行隔离（v4.5.13）**：BRAIN 排除 SmartExit；限价成交前重跑安全闸门；模拟平仓事务行锁幂等
 - 防插针：影>实体×2；频繁则平均插针限价；超时取消；**INV-BRAIN-06 已正式启用**
@@ -171,7 +172,7 @@
 
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟】
 - **量化扫描**，非 LLM；标的 `config.yaml`；**15min** 轮询；旧四路 `*_midline_*` 停并移除
-- 限价：做多挂 **15m 回调区**；B3/C4 做空挂 **冲高滞涨区**；C1/B2 **破位跟风**；A2 挂反抽区；C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h**；SL **6%** / TP **3%** / 5x / 500U
+- 限价：做多挂 **15m 回调区**（贴着近 8 根高点不挂）；B3/C4 做空挂 **冲高滞涨区**；C1/B2 **破位跟风**；A2 挂反抽区；C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h**；SL **6%** / TP **3%** / 5x / 500U
 - **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）；**midline_hold_exit** 默认峰≥1.2% 锁利，Big4 LONG 多单 2.5%/0.80% 且关闭 no_follow；**排除** SmartExit
 - **暂不实盘**（不进 `LIVE_SYNC_SOURCES`）；Web：原 Gemini 探索页整页改中线机会分析
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.2
@@ -231,7 +232,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 
 ## 实盘控制
 
-- **按 source 白名单**（`trading_gates.LIVE_SYNC_SOURCES`）：仅 DeepSeek 探索/预测；GPT/战术/反转/smart_trader/**中线 v2**/已下线 Gemini 只模拟
+- **按 source 白名单**（`trading_gates.LIVE_SYNC_SOURCES`）：DeepSeek 探索/预测 + **BRAIN**；GPT/战术/反转/smart_trader/**中线 v2**/已下线 Gemini 只模拟
 - **实盘开仓 symbol**：须 **L0 白名单**（`rating_level=0`）；L1/L2/L3 禁止实盘
 - **限价偏移**：中线优先 **回调区**（无区才 ±1%）；其他模拟限价读 `paper_limit_long/short_offset_pct`（系统设定）
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)

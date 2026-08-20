@@ -54,6 +54,7 @@ alwaysApply: true
 - 非中线: `paper_limit_long/short_offset_pct` 系统设定
 - 成交: executor 500 笔/轮 + ticker 触价；FILLED 后 `sync_filled_order_now`
 - 中线 **不进** SmartExit；**暂不** LIVE_SYNC；对冲平仓跳过含中线 symbol
+- BRAIN **进** LIVE_SYNC（`live_trading_enabled` + 仅 L0）；仍排除 SmartExit
 
 ## 改动文件（维护时）
 

@@ -2,7 +2,7 @@
 实盘开仓闸门 & 黑名单等级 — 统一读取 system_settings，避免各模块硬编码。
 
 按 source 控制实盘（其余策略仅模拟）:
-  - gemini_explore, gemini_predict, deepseek_explore, deepseek_predict → 可开实盘（L0 白名单等 symbol 闸门）
+  - deepseek_explore, deepseek_predict, brain_swing → 可开实盘（须 live_trading_enabled + L0 白名单）
   - 总开关: live_trading_enabled（开仓）, live_close_enabled（平仓）
 """
 from __future__ import annotations
@@ -22,6 +22,9 @@ from app.utils.futures_symbol import (
 LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
     "deepseek_explore",
     "deepseek_predict",
+    "brain_swing",
+    "brain_long",
+    "brain_short",
     # gemini_explore / gemini_predict 已下线（系统配置不再提供开关）
     # 中线 v2（midline_long/short）暂不实盘 — REQUIREMENTS §7.2
 })
@@ -110,7 +113,14 @@ def get_beijing_open_window_status(now_utc=None) -> Tuple[bool, str]:
 
 def should_sync_live_for_source(source: str) -> bool:
     """该订单 source 是否允许参与实盘开仓同步."""
-    return _normalize_source(source) in LIVE_SYNC_SOURCES
+    src = _normalize_source(source)
+    if src in LIVE_SYNC_SOURCES:
+        return True
+    try:
+        from app.services.brain_config import is_brain_source
+        return is_brain_source(src)
+    except Exception:
+        return False
 
 
 def check_live_open_allowed(

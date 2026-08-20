@@ -390,7 +390,7 @@
 
 <p class="text-on-surface-variant leading-relaxed">
 
-                        Gemini、DeepSeek 按固定槽位探索与预测，技术面 TOP50 候选池 + catalyst 硬门槛。Gemini/DeepSeek 探索与预测可同步 Binance 实盘，其它策略仅模拟仓。
+                        Gemini、DeepSeek 按固定槽位探索与预测，技术面 TOP50 候选池 + catalyst 硬门槛。DeepSeek 探索/预测与超级大脑可同步 Binance 实盘（仅 L0 白名单），其它策略仅模拟仓。
 
                     </p>
 
@@ -535,8 +535,8 @@
 <h3 class="text-lg font-bold font-headline text-on-surface">实盘与风控</h3>
 </div>
 <ul class="space-y-3 text-sm text-on-surface-variant">
-<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span><span><b class="text-on-surface">实盘白名单 source</b>：gemini/deepseek 探索与预测；其余策略仅模拟仓</span></li>
-<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>开仓：live_trading_enabled + TOP50 或白名单；平仓：live_close_enabled 按 paper_position_id 映射</li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span><span><b class="text-on-surface">实盘白名单 source</b>：deepseek 探索/预测 + 超级大脑；其余策略仅模拟仓</span></li>
+<li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>开仓：live_trading_enabled + L0 白名单；平仓：live_close_enabled 按 paper_position_id 映射</li>
 <li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>黑名单 L3 默认拦截开仓；Big4 / 盈亏熔断仅 Telegram 通知</li>
 <li class="flex items-start gap-2"><span class="text-primary mt-0.5">&#8250;</span>每账号 OPEN 上限 20 仓；模拟与实盘分轨，关模拟不会自动平交易所</li>
 </ul>

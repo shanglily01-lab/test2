@@ -30,6 +30,9 @@ INVALIDATION_BUFFER = 0.0015
 STALL_HIT_MIN = 2
 NEAR_HIGH_MAX_DIST_PCT = 0.85
 MISSED_HIGH_DIST_PCT = 1.35
+# LONG: still hugging the local 15m high → wait, never chase the one-way run.
+LONG_STILL_AT_HIGH_PCT = 0.40
+LONG_A1_NEAR_EMA_MAX_RANGE_POS = 0.68
 
 
 def _f(v: Any, default: float = 0.0) -> float:
@@ -404,25 +407,28 @@ def compute_pullback_entry(
         range_span = max(max(h[-8:]) - min(l[-8:]), 1e-12)
         range_pos = (price - min(l[-8:])) / range_span
         ema_dist_pct = ((price - ema20) / ema20 * 100.0) if ema20 else 0.0
+        dist_from_high_pct = ((impulse_hi - price) / price * 100.0) if price > 0 else 0.0
+        still_at_high = dist_from_high_pct <= LONG_STILL_AT_HIGH_PCT
         extended = (
             range_pos >= EXTENDED_RANGE_POS
             or ema_dist_pct >= EXTENDED_EMA_DIST_PCT
             or price > zone_high * 1.003
+            or still_at_high
         )
         if "impulse_up" in sig or "h1_breakout_up" in sig or "pump_spike" in sig:
             extended = extended or range_pos >= 0.72
         in_zone = zone_low <= price <= zone_high * 1.002
+        pulled_back = len(c) >= 5 and c[-1] < max(h[-5:-1]) * 0.998
         bounce_ok = bool(
-            "15m_higher_low" in sig
-            or "volume_shrink_pullback" in sig
+            "volume_shrink_pullback" in sig
             or "long_lower_wick" in sig
             or "rsi_15m_turn_up" in sig
             or "ema_reclaim" in sig
+            or ("15m_higher_low" in sig and pulled_back and not still_at_high)
         )
         if not bounce_ok and len(c) >= 5:
-            pulled_back = c[-1] < max(h[-5:-1]) * 0.998
             vol_shrink = len(v) >= 8 and sum(v[-3:]) < sum(v[-8:-3]) * 0.85
-            bounce_ok = pulled_back and vol_shrink
+            bounce_ok = pulled_back and vol_shrink and not still_at_high
         if price < invalidation:
             return EntryTiming(
                 ready=False, status="invalidated", reason="broke_pullback_invalidation",
@@ -438,6 +444,14 @@ def compute_pullback_entry(
         if target >= price:
             target = price * (1.0 - ENTRY_READY_OFFSET_PCT / 100.0)
         offset = _clamp((price - target) / price * 100.0, ENTRY_OFFSET_MIN_PCT, ENTRY_OFFSET_MAX_PCT)
+        if still_at_high:
+            return EntryTiming(
+                ready=False, status="wait_pullback",
+                reason="still_at_high_wait_pullback",
+                limit_offset_pct=offset, limit_price=round(target, 8),
+                zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+                break_level=break_level, extended=True, bounce_ok=bounce_ok,
+            )
         if extended:
             return EntryTiming(
                 ready=False, status="wait_pullback",
@@ -464,7 +478,12 @@ def compute_pullback_entry(
                 zone_low=zone_low, zone_high=zone_high, ema20=ema20,
                 break_level=break_level, extended=False, bounce_ok=False,
             )
-        if pb in {"A1", "B4"} and bounce_ok and ema_dist_pct <= 0.45:
+        if (
+            pb in {"A1", "B4"}
+            and bounce_ok
+            and ema_dist_pct <= 0.45
+            and range_pos <= LONG_A1_NEAR_EMA_MAX_RANGE_POS
+        ):
             return EntryTiming(
                 ready=True, status="pullback_ready",
                 reason="trend_pullback_near_ema",

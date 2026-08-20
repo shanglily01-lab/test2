@@ -20,7 +20,7 @@ alwaysApply: true
 
 - 扫描: `midline_swing_scanner` · `entry_timing` · worker · **15min** 轮询
 - **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）· **midline_hold_exit** 默认峰≥1.2% 锁利；**Big4 LONG 多单** 2.5%/0.80%，关闭 no_follow · **排除** SmartExit
-- 多单限价挂在 **15m 回调区**（禁止破位追高）；B3/C4 空单挂 **冲高滞涨区**；C1/B2 **破位跟风**；A2 反抽拒绝 · C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h** · SL **6%** / TP **3%** · 5x · 500U
+- 多单限价挂在 **15m 回调区**（禁止破位追高；贴着近 8 根高点不挂）；B3/C4 空单挂 **冲高滞涨区**；C1/B2 **破位跟风**；A2 反抽拒绝 · C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h** · SL **6%** / TP **3%** · 5x · 500U
 - **Big4 已 LONG 时禁止新开空单**
 - 标的：`config.yaml`；**暂不**进 `LIVE_SYNC_SOURCES`
 - Web：原 Gemini 探索页 → 中线策略/机会分析；DeepSeek 探索去中线 Tab
@@ -53,7 +53,7 @@ alwaysApply: true
 
 - tick: scheduler **15min**；每仓 15min；浮盈转亏 urgent
 - 盈利 sell: ROI≥**+8%** + 15m 反向≥4；`_temper_premature_sell` 严格拦截过早 sell；BRAIN/中线 sell→observe
-- **Gemini 探索/预测/情绪/顾问已下线**（系统配置无开关；LIVE_SYNC 仅 DeepSeek）
+- **Gemini 探索/预测/情绪/顾问已下线**（系统配置无开关；LIVE_SYNC：DeepSeek + BRAIN）
 
 ## 调度要点
 
@@ -70,7 +70,7 @@ alwaysApply: true
 
 ## 实盘（`trading_gates.py`）
 
-**LIVE_SYNC_SOURCES**: 主探索/预测四路（**不含**中线 v2）
+**LIVE_SYNC_SOURCES**: DeepSeek 探索/预测 + **BRAIN**（**不含**中线 v2）
 
 | 动作 | 条件 |
 |------|------|
