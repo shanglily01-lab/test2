@@ -277,6 +277,16 @@ def brain_open_regime_decision(
     regime, why = classify_brain_regime(big4, playbook_row)
     global_regime = global_regime or {}
     global_name = str(global_regime.get("global_regime") or GLOBAL_UNKNOWN)
+    bias_u = str(big4.get("bias") or "").upper()
+
+    # v4.5.19: Big4 已确认做多时禁止新开任何空单（含 DAILY_BEAR 下的 C1/B3/C4）。
+    if side_u == "SHORT" and bias_u == "LONG":
+        return RegimeDecision(
+            regime,
+            f"big4_long_blocks_short:{why}:{pb}",
+            "shadow_only",
+            0.0,
+        )
 
     if global_name == GLOBAL_DAILY_BEAR_PROBE:
         if side_u == "LONG":
@@ -380,8 +390,6 @@ def brain_open_regime_decision(
             return RegimeDecision(regime, "regime_bull_allows_A1", "pullback_limit", 1.0)
         if side_u == "LONG" and pb == "C3" and confirmed and _token_impulse_long(playbook_row):
             return RegimeDecision(regime, "regime_bull_allows_C3_impulse", "pullback_limit", 0.50)
-        if side_u == "SHORT" and pb in {"B3", "C4"} and confirmed and edge >= 0.85 and _token_exhaustion_short(playbook_row):
-            return RegimeDecision(regime, f"regime_bull_allows_exhaustion_{pb}", "breakout_confirm_limit", 0.20)
         return RegimeDecision(regime, f"regime_bull_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 
     if regime == BEAR_TREND:

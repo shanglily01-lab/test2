@@ -244,6 +244,7 @@ def _breakout_action_opportunity(
     future_score = float(future_4h.get("score") or 0.0)
     token_aligned = features.get("h1_side") == side_u and features.get("m15_side") == side_u
     entry_fresh = bool(entry_15m.get("fresh_breakout"))
+    bias_u = str(big4_bias or "").upper()
 
     detail: Dict[str, Any] = {
         "should_open": False,
@@ -254,6 +255,10 @@ def _breakout_action_opportunity(
         "future_score": round(future_score, 3),
         "entry_15m": entry_15m,
     }
+
+    if bias_u == "LONG" and side_u == "SHORT":
+        detail["reason"] = "big4_long_blocks_short"
+        return detail
 
     if playbook_u not in {"A1", "A2", "B2", "B3", "C1", "C3", "C4"}:
         detail["reason"] = "not_breakout_playbook"
@@ -710,6 +715,9 @@ def evaluate_symbol_multiperiod(
         return out
     if playbook not in allowed_playbooks:
         out.update({"reason": f"playbook_{playbook}", "trend": dims, "future_4h": future_4h, "playbook": pb})
+        return out
+    if big4_bias == "LONG" and side == "SHORT":
+        out.update({"reason": "big4_long_blocks_short", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
     has_break_signal = bool(signals & {
         "break_support", "break_resistance", "ema_reject", "ema_reclaim",

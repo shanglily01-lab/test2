@@ -165,7 +165,21 @@ def test_breakout_action_opportunity() -> None:
         global_name="TOKEN_DIVERGENCE",
         entry_15m={"fresh_breakout": True},
     )
-    assert c3_chase["should_open"] is True, c3_chase
+    assert c3_chase["should_open"] is False and c3_chase["reason"] == "wait_pullback", c3_chase
+
+    c3_pullback = _breakout_action_opportunity(
+        side="LONG",
+        playbook="C3",
+        edge=0.90,
+        confirmed=True,
+        signals={"h1_breakout_up", "impulse_up", "volume_expand_up", "15m_higher_low"},
+        features={"h1_side": "LONG", "m15_side": "LONG", "vol_shrink_pullback": True},
+        future_4h={"side": "LONG", "score": 0.60},
+        big4_bias="FLAT",
+        global_name="TOKEN_DIVERGENCE",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert c3_pullback["should_open"] is True, c3_pullback
 
     b3 = _breakout_action_opportunity(
         side="SHORT",
@@ -181,6 +195,23 @@ def test_breakout_action_opportunity() -> None:
     )
     assert b3["should_open"] is True, b3
 
+    b3_vs_big4_long = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="B3",
+        edge=0.80,
+        confirmed=True,
+        signals={"pump_spike", "long_upper_wick", "volume_diverge_bear", "exhaustion_up", "stall_at_high"},
+        features={"h1_side": "LONG", "m15_side": "LONG", "stall_at_high": True},
+        future_4h={"side": "FLAT", "score": 0.20},
+        big4_bias="LONG",
+        global_name="BULL_TREND",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert (
+        b3_vs_big4_long["should_open"] is False
+        and b3_vs_big4_long["reason"] == "big4_long_blocks_short"
+    ), b3_vs_big4_long
+
     still_long = _breakout_action_opportunity(
         side="SHORT",
         playbook="B3",
@@ -194,7 +225,7 @@ def test_breakout_action_opportunity() -> None:
         entry_15m={"fresh_breakout": False},
     )
     assert still_long["should_open"] is False and still_long["reason"] == "future_4h_still_long", still_long
-    _ok("C1 follows breakdown; A2/B2 can open; strong C3 follows breakout; B3 sells stall at highs")
+    _ok("C1 follows breakdown; A2/B2 can open; C3 waits pullback; B3 sells stall; Big4 LONG blocks shorts")
 
 
 def test_limit_price() -> None:
@@ -212,7 +243,7 @@ def test_limit_price() -> None:
 
     assert DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT == 1.0
     assert DEFAULT_MIDLINE_LIMIT_SHORT_OFFSET_PCT == 1.0
-    assert MIDLINE_SL_PCT == 4.5 and MIDLINE_TP_PCT == 5.0
+    assert MIDLINE_SL_PCT == 6.0 and MIDLINE_TP_PCT == 3.0
     assert MIDLINE_HOLD_HOURS == 8
     long_pct = get_midline_limit_offset_pct("LONG")
     short_pct = get_midline_limit_offset_pct("SHORT")

@@ -1065,56 +1065,48 @@ class PositionSLTPMonitor:
             logger.warning(f"[SL/TP Monitor] BRAIN extend planned close failed pid={pid}: {e}")
 
     def _brain_planned_close_recheck(self, pos: Dict[str, Any], price: float) -> Optional[str]:
-        """Return close reason, or None when BRAIN thesis still allows holding."""
+        """At planned expiry: extend if still working; else normal expiry.
+
+        v4.5.19: D1 / regime flip / fetch error no longer force-close.
+        Safety net remains hard SL/TP, trail, 5m adverse, and -80U.
+        """
         pid = int(pos["id"])
-        symbol = str(pos.get("symbol") or "")
         side = str(pos.get("position_side") or "").upper()
         entry_price = float(pos.get("entry_price") or 0)
-        entry_pb = str(pos.get("entry_signal_type") or "").replace("brain_", "").replace("BRAIN_", "")
         if side not in ("LONG", "SHORT") or entry_price <= 0 or price <= 0:
             return "brain_planned_recheck:bad_position"
         pnl_pct = ((price - entry_price) / entry_price) if side == "LONG" else ((entry_price - price) / entry_price)
 
+        db_peak = 0.0
         try:
-            from app.services.brain_config import BARS_15M_DAY, BARS_15M_WICK_7D, BARS_1H_WEEK
-            from app.services.brain_market_analyzer import _fetch_klines, evaluate_big4_gate
-            from app.services.brain_market_regime import classify_brain_regime
-            from app.services.brain_playbook import classify_playbook
+            raw_peak = pos.get("max_profit_pct")
+            if raw_peak is not None:
+                db_peak = max(0.0, float(raw_peak) / 100.0)
+        except (TypeError, ValueError):
+            db_peak = 0.0
+        peak_now = max(self._peak_pnl_map.get(pid, 0.0), db_peak, pnl_pct)
 
-            conn = pymysql.connect(**_db_cfg())
-            try:
-                with conn.cursor() as c:
-                    big4 = evaluate_big4_gate(c)
-                    rows_1h = _fetch_klines(c, symbol, "1h", BARS_1H_WEEK)
-                    rows_15m = _fetch_klines(c, symbol, "15m", max(BARS_15M_DAY, BARS_15M_WICK_7D))
-                    pb = classify_playbook(rows_1h, rows_15m, big4=big4)
-            finally:
-                conn.close()
-        except Exception as e:
-            logger.warning(f"[SL/TP Monitor] BRAIN planned recheck failed pid={pid}: {e}")
-            return "brain_planned_recheck:error"
+        market_bias = "FLAT"
+        try:
+            from app.services.brain_market_analyzer import cached_big4_bias
+            market_bias = cached_big4_bias()
+        except Exception:
+            pass
 
-        current_side = str(pb.get("side") or "FLAT").upper()
-        current_pb = str(pb.get("playbook") or "D1")
-        regime, regime_reason = classify_brain_regime(big4, pb)
-        thesis_ok = current_side == side and current_side in ("LONG", "SHORT")
-
-        if regime in ("LOW_VOL_NO_TRADE", "PANIC_REBOUND") and pnl_pct <= 0:
-            return f"brain_planned_recheck:{regime}:no_progress"
-        if side == "LONG" and regime in ("BEAR_TREND", "CRASH_DOWN", "TRANSITION"):
-            return f"brain_planned_recheck:{regime}:long_not_allowed"
-        if side == "SHORT" and regime in ("BULL_TREND", "PANIC_REBOUND"):
-            return f"brain_planned_recheck:{regime}:short_not_allowed"
-        if not thesis_ok:
-            return f"brain_planned_recheck:{regime}:{entry_pb}->{current_pb}_{current_side}"
-
-        extend_minutes = 30 if regime in ("RANGE_CHOP", "TRANSITION", "CRASH_DOWN") else 60
-        self._extend_brain_planned_close(
-            pid,
-            extend_minutes,
-            f"{regime}:{regime_reason}:{entry_pb}->{current_pb}:pnl={pnl_pct * 100:.2f}%",
+        from app.services.midline_hold_exit import (
+            MIDLINE_HOLD_EXTEND_HOURS,
+            midline_expiry_should_extend,
         )
-        return None
+        if midline_expiry_should_extend(
+            pnl_pct, peak_now, side=side, market_bias=market_bias,
+        ):
+            self._extend_brain_planned_close(
+                pid,
+                int(MIDLINE_HOLD_EXTEND_HOURS * 60),
+                f"brain_planned_recheck_hold pnl={pnl_pct * 100:.2f}% peak={peak_now * 100:.2f}%",
+            )
+            return None
+        return "planned_close_time_expired"
 
     def _fetch_open_positions(self) -> List[Dict[str, Any]]:
         sql = (

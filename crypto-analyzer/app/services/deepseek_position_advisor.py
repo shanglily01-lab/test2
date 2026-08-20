@@ -421,21 +421,27 @@ class DeepSeekPositionAdvisor:
                 action, reason = helper._temper_profitable_hold(
                     roi, action, reason, pos["position_side"], s15, s1h, peak_roi,
                 )
-                # REQ-BRAIN INV-BRAIN-05：DeepSeek 主张平 → 坚决平（不 temper 掉）
-                try:
-                    from app.services.brain_config import is_brain_source
-                    _brain_pos = is_brain_source(pos.get("source") or "")
-                except Exception:
-                    _brain_pos = str(pos.get("source") or "").startswith("brain_")
-                if not (_brain_pos and action == "sell"):
-                    action, reason = helper._temper_premature_sell(
-                        roi, action, reason, pos["position_side"], s15, s1h, s5,
-                    )
-                elif action == "sell":
-                    reason = f"brain_ds_force_close:{reason}"[:500]
+                action, reason = helper._temper_premature_sell(
+                    roi, action, reason, pos["position_side"], s15, s1h, s5,
+                )
                 action, reason = helper._temper_bull_overbought_sell(
                     action, reason, pos["position_side"], s15, market_bias, roi,
                 )
+                src = pos.get("source") or ""
+                advise_only = False
+                try:
+                    from app.services.brain_config import is_brain_source
+                    from app.services.midline_swing_config import is_midline_source
+                    advise_only = is_brain_source(src) or is_midline_source(src)
+                except Exception:
+                    advise_only = str(src).startswith("brain_") or str(src).startswith("midline_")
+                if advise_only and action == "sell":
+                    reason = f"advisor_suggest_only:{reason}"[:500]
+                    action = "observe"
+                    logger.info(
+                        f"[DeepSeek顾问] BRAIN/中线 sell 仅建议、不平仓 "
+                        f"id={pos['id']} {pos['symbol']} {pos['position_side']}"
+                    )
                 stats[action] += 1
                 stats["evaluated"] += 1
                 self._last_check_ts[pid] = time.time()

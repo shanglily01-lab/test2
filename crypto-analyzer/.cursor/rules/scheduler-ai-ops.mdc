@@ -23,7 +23,7 @@ alwaysApply: true
 | DeepSeek 探索/预测 | every(2).hours + 10min/5min（**对照期保留**） | INV-BRAIN-07 暂缓；结束后停 |
 | **中线 v2** | every(15).min | `midline_long/short` kill switch；多单回调买 / B3/C4 冲高卖；**移除**旧 ×4 `*_midline_*` |
 | 战术 15 槽位 | every(15).min | `tactical_explore_scheduler` |
-| **Gemini/DeepSeek 持仓顾问** | **every(15).min** | 每仓 15min；浮盈转亏 urgent；**含** midline_* 与 brain_* |
+| **Gemini/DeepSeek 持仓顾问** | **every(15).min** | 每仓 15min；浮盈转亏 urgent；**含** midline_* 与 brain_*（**sell 只建议不执行**） |
 | Gemini 情绪 | every(8).hours | `gemini_sentiment_enabled` |
 | TOP50 + 评级 | every(1).hours + every(15).min | `rating_refresh_next_due_utc` |
 | price_stats_24h | every(1).min | `GET_LOCK('price_stats_24h_refresh')` 防重 |

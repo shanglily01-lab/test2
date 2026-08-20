@@ -224,8 +224,24 @@ def test_brain_skip_open_advisor() -> None:
         _ok("monitor midline hold-exit")
     if "_brain_planned_close_recheck" not in mon or "brain_planned_recheck" not in mon:
         _fail("monitor 未接入 BRAIN planned_close 到期复核")
+    elif "short_not_allowed" in mon or "long_not_allowed" in mon:
+        _fail("BRAIN planned_recheck 不得再因 D1/regime flip 强平")
     else:
         _ok("monitor brain planned_close recheck")
+    adv = (ROOT / "app/services/deepseek_position_advisor.py").read_text(encoding="utf-8")
+    if "advisor_suggest_only" not in adv:
+        _fail("DeepSeek 持仓顾问未对 BRAIN/中线改为仅建议")
+    elif "brain_ds_force_close" in adv:
+        _fail("BRAIN 持仓顾问不得再 force-close")
+    else:
+        _ok("hold advisor suggest-only for BRAIN/midline")
+    regime_src = (ROOT / "app/services/brain_market_regime.py").read_text(encoding="utf-8")
+    if "big4_long_blocks_short" not in regime_src:
+        _fail("BRAIN 未在 Big4 LONG 时阻断新空单")
+    elif "regime_bull_allows_exhaustion" in regime_src:
+        _fail("BULL_TREND 不得再放行 B3/C4 空单")
+    else:
+        _ok("Big4 LONG blocks new shorts")
     trail_mod = (ROOT / "app/services/brain_trail_exit.py").read_text(encoding="utf-8")
     if "check_brain_trail_lock" not in trail_mod or "check_brain_soft_no_follow" not in trail_mod:
         _fail("brain_trail_exit 缺 trail/soft")
@@ -621,6 +637,34 @@ def test_brain_market_regime() -> None:
         global_regime=global_bear,
     )
     assert dec6_flat.margin_multiplier == 0 and "global_daily_bear_probe_blocks_long" in dec6_flat.reason
+
+    b3_exh = {
+        "side": "SHORT",
+        "playbook": "B3",
+        "confirmed": True,
+        "edge_score": 0.90,
+        "features": {"h1_side": "LONG", "m15_side": "SHORT"},
+        "signals": ["pump_spike", "long_upper_wick", "volume_diverge_bear", "exhaustion_up"],
+    }
+    dec_b3_bull = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "LONG", "bull_count": 3, "bear_count": 0},
+        playbook_row=b3_exh,
+        side="SHORT",
+        playbook="B3",
+    )
+    assert dec_b3_bull.margin_multiplier == 0 and "big4_long_blocks_short" in dec_b3_bull.reason
+
+    dec_c1_vs_big4_long = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "LONG", "bull_count": 3, "bear_count": 0},
+        playbook_row=c1,
+        side="SHORT",
+        playbook="C1",
+        global_regime=global_bear,
+    )
+    assert (
+        dec_c1_vs_big4_long.margin_multiplier == 0
+        and "big4_long_blocks_short" in dec_c1_vs_big4_long.reason
+    )
 
     a2 = {
         "side": "SHORT",

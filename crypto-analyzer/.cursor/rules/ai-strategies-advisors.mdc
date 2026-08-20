@@ -19,8 +19,9 @@ alwaysApply: true
 ## 中线 v2（量化，非 LLM）【§7.2 待落地】
 
 - 扫描: `midline_swing_scanner` · `entry_timing` · worker · **15min** 轮询
-- **跳过**开仓顾问；**纳入**持仓顾问（盈利保护）· **midline_hold_exit** 默认峰≥1.2% 锁利；**Big4 LONG 多单** 2.5%/0.80%，关闭 no_follow · **排除** SmartExit
+- **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）· **midline_hold_exit** 默认峰≥1.2% 锁利；**Big4 LONG 多单** 2.5%/0.80%，关闭 no_follow · **排除** SmartExit
 - 多单限价挂在 **15m 回调区**（禁止破位追高）；B3/C4 空单挂 **冲高滞涨区**；C1/B2 **破位跟风**；A2 反抽拒绝 · C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h** · SL **6%** / TP **3%** · 5x · 500U
+- **Big4 已 LONG 时禁止新开空单**
 - 标的：`config.yaml`；**暂不**进 `LIVE_SYNC_SOURCES`
 - Web：原 Gemini 探索页 → 中线策略/机会分析；DeepSeek 探索去中线 Tab
 - 非中线限价仍读 `system_settings.paper_limit_*_offset_pct`（0.1~1%）
@@ -41,17 +42,17 @@ alwaysApply: true
 
 **DeepSeek 选币**：仅 **L0+L1**；**DeepSeek soft-sl**：grace45 / no_follow≥60m且≈-2.2%
 
-**REQ-BRAIN §7.3**：盈利 KPI；**C1 破位跟风**；A2/B2 精准确认后开空；**A1 豁免 5m**；其它 5m(≥40U/4根) / -80U / trail（soft 关）；**强制防插针限价+超时取消**；**排除 SmartExit**；成交前重跑安全闸门；`validate_brain_req.py`
+**REQ-BRAIN §7.3**：盈利 KPI；**Big4 LONG 禁新空**；C1 破位跟风（非多头宏观）；A2/B2 精准确认后开空；**A1 豁免 5m**；其它 5m(≥40U/4根) / -80U / trail（soft 关）；顾问 suggest-only；到期不因 D1 强平；**强制防插针限价+超时取消**；**排除 SmartExit**；成交前重跑安全闸门；`validate_brain_req.py`
 
 ## 顾问路由 (`open_advisor_routing.py`)
 
 | 类型 | Gemini | DeepSeek | 跳过 |
 |------|--------|----------|------|
 | 开仓 | — | 非中线/非 BRAIN | `midline_*` · `brain_*` |
-| 持仓 | — | **含** midline_* 与 brain_* | — |
+| 持仓 | — | **含** midline_* 与 brain_*（**suggest-only，不平仓**） | — |
 
 - tick: scheduler **15min**；每仓 15min；浮盈转亏 urgent
-- 盈利 sell: ROI≥**+8%** + 15m 反向≥4；`_temper_premature_sell` 严格拦截过早 sell
+- 盈利 sell: ROI≥**+8%** + 15m 反向≥4；`_temper_premature_sell` 严格拦截过早 sell；BRAIN/中线 sell→observe
 - **Gemini 探索/预测/情绪/顾问已下线**（系统配置无开关；LIVE_SYNC 仅 DeepSeek）
 
 ## 调度要点
