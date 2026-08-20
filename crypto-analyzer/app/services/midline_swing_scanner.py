@@ -769,7 +769,12 @@ def evaluate_symbol_multiperiod(
         out.update({"reason": "weak_phase_evidence", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
 
-    if global_name == "DAILY_BEAR_PROBE" and side == "LONG" and not weak_big4_long_override:
+    if (
+        global_name == "DAILY_BEAR_PROBE"
+        and side == "LONG"
+        and big4_bias != "LONG"
+        and not weak_big4_long_override
+    ):
         out.update({"reason": "daily_bear_blocks_long", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
     if global_name == "RELIEF_BOUNCE" and side == "SHORT" and not (

@@ -158,14 +158,14 @@ def test_breakout_action_opportunity() -> None:
         playbook="C3",
         edge=0.90,
         confirmed=True,
-        signals={"h1_breakout_up", "impulse_up"},
+        signals={"h1_breakout_up", "impulse_up", "volume_expand_up"},
         features={"h1_side": "LONG", "m15_side": "LONG"},
         future_4h={"side": "LONG", "score": 0.60},
         big4_bias="FLAT",
         global_name="TOKEN_DIVERGENCE",
         entry_15m={"fresh_breakout": True},
     )
-    assert c3_chase["should_open"] is False and c3_chase["reason"] == "wait_pullback", c3_chase
+    assert c3_chase["should_open"] is True, c3_chase
 
     b3 = _breakout_action_opportunity(
         side="SHORT",
@@ -194,7 +194,7 @@ def test_breakout_action_opportunity() -> None:
         entry_15m={"fresh_breakout": False},
     )
     assert still_long["should_open"] is False and still_long["reason"] == "future_4h_still_long", still_long
-    _ok("C1 follows a fresh breakdown; A2/B2 can open; C3 still waits for pullback; B3 sells stall at highs")
+    _ok("C1 follows breakdown; A2/B2 can open; strong C3 follows breakout; B3 sells stall at highs")
 
 
 def test_limit_price() -> None:
@@ -212,7 +212,7 @@ def test_limit_price() -> None:
 
     assert DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT == 1.0
     assert DEFAULT_MIDLINE_LIMIT_SHORT_OFFSET_PCT == 1.0
-    assert MIDLINE_SL_PCT == 6.0 and MIDLINE_TP_PCT == 3.0
+    assert MIDLINE_SL_PCT == 4.5 and MIDLINE_TP_PCT == 5.0
     assert MIDLINE_HOLD_HOURS == 8
     long_pct = get_midline_limit_offset_pct("LONG")
     short_pct = get_midline_limit_offset_pct("SHORT")
@@ -243,6 +243,7 @@ def test_ai_trail_for_midline() -> None:
     from app.services.midline_hold_exit import (
         check_midline_giveback,
         check_midline_hold_exits,
+        check_midline_no_follow,
         check_midline_trail_lock,
         midline_hold_hours,
     )
@@ -250,10 +251,25 @@ def test_ai_trail_for_midline() -> None:
     assert _is_midline_source("midline_long")
     assert _is_ai_hard_sltp_source("midline_long")
     assert check_midline_trail_lock(0.007, 0.013) is not None
+    assert check_midline_trail_lock(0.007, 0.013, playbook="C3") is None
+    assert check_midline_trail_lock(
+        0.021,
+        0.034,
+        playbook="C3",
+        signals=["volume_expand_up", "h1_breakout_up"],
+    ) is not None
     assert check_midline_trail_lock(0.012, 0.013) is None
+    assert check_midline_trail_lock(0.007, 0.013, side="LONG", market_bias="LONG") is None
+    assert check_midline_trail_lock(0.018, 0.026, side="LONG", market_bias="LONG") is not None
     assert check_midline_giveback(0.0, 0.015, 30 * 60) is not None
+    assert check_midline_giveback(0.0, 0.015, 30 * 60, playbook="C3") is None
+    assert check_midline_giveback(0.002, 0.023, 40 * 60, playbook="C3") is not None
     assert check_midline_giveback(0.0, 0.015, 10 * 60) is None
     assert check_midline_hold_exits(0.007, 0.013, 40 * 60) is not None
+    assert check_midline_no_follow(-0.012, 0.003, 90 * 60) is not None
+    assert check_midline_no_follow(-0.012, 0.003, 90 * 60, side="LONG") is None
+    assert check_midline_no_follow(-0.012, 0.003, 90 * 60, side="LONG", market_bias="LONG") is None
+    assert check_midline_no_follow(-0.026, 0.003, 180 * 60, side="LONG") is not None
     assert midline_hold_hours("C3") == 4.0
     assert midline_hold_hours("A1") == 6.0
     assert midline_hold_hours("B3") == 4.0
@@ -270,6 +286,15 @@ def test_hold_advisor_includes_midline() -> None:
     assert "midline_long" not in (DEEPSEEK_HOLD_SOURCE_SQL or "")
     assert "NOT IN" not in (DEEPSEEK_HOLD_SOURCE_SQL or "")
     assert "1=0" in GEMINI_HOLD_SOURCE_SQL
+    from app.services.position_advisor_impl import PositionAdvisorCore
+    hold_rsi, _ = PositionAdvisorCore._temper_bull_overbought_sell(
+        "sell", "RSI72高位背离", "LONG", {"against": 2, "for": 3}, "LONG", -5.0,
+    )
+    assert hold_rsi == "hold"
+    keep_break, _ = PositionAdvisorCore._temper_bull_overbought_sell(
+        "sell", "15m跌破前低", "LONG", {"against": 2, "for": 1}, "LONG", -8.0,
+    )
+    assert keep_break == "sell"
     _ok("DeepSeek hold advisor now reviews midline profit giveback")
 
 

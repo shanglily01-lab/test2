@@ -19,7 +19,7 @@ alwaysApply: true
 ## 中线 v2（量化，非 LLM）【§7.2 待落地】
 
 - 扫描: `midline_swing_scanner` · `entry_timing` · worker · **15min** 轮询
-- **跳过**开仓顾问；**纳入**持仓顾问（盈利保护）· **midline_hold_exit** 峰≥1.2% 锁利 · **排除** SmartExit
+- **跳过**开仓顾问；**纳入**持仓顾问（盈利保护）· **midline_hold_exit** 默认峰≥1.2% 锁利；**Big4 LONG 多单** 2.5%/0.80%，关闭 no_follow · **排除** SmartExit
 - 多单限价挂在 **15m 回调区**（禁止破位追高）；B3/C4 空单挂 **冲高滞涨区**；C1/B2 **破位跟风**；A2 反抽拒绝 · C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h** · SL **6%** / TP **3%** · 5x · 500U
 - 标的：`config.yaml`；**暂不**进 `LIVE_SYNC_SOURCES`
 - Web：原 Gemini 探索页 → 中线策略/机会分析；DeepSeek 探索去中线 Tab
@@ -64,7 +64,7 @@ alwaysApply: true
 
 ## AI 平仓（非 SmartExit）
 
-- `position_sl_tp_monitor`（main 1s）：探索/预测硬 SL/TP + **ai-trail-tp**（peak≥3%，回撤≥1%）；**中线** `midline_hold_exit`（峰≥1.2%）
+- `position_sl_tp_monitor`（main 1s）：探索/预测硬 SL/TP + **ai-trail-tp**（peak≥3%，回撤≥1%）；**中线** `midline_hold_exit`（默认峰≥1.2%；Big4 LONG 多单 2.5%/0.80%）
 - 中线 **禁止** SmartExit
 
 ## 实盘（`trading_gates.py`）

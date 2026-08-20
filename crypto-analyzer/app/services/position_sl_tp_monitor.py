@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as _dt
+import json
 import os
 import time
 from typing import Any, Dict, List, Optional
@@ -321,6 +322,13 @@ class PositionSLTPMonitor:
 
         # 全局裸奔开关（10s 缓存）
         disable_rules = self._is_disable_sl_tp_hold()
+        market_bias = "FLAT"
+        try:
+            from app.services.brain_market_analyzer import cached_big4_bias
+
+            market_bias = cached_big4_bias()
+        except Exception:
+            market_bias = "FLAT"
 
         # 清理已不在 open 列表的 peak 记录
         alive_pids = {int(p["id"]) for p in positions}
@@ -421,7 +429,9 @@ class PositionSLTPMonitor:
                                 MIDLINE_HOLD_EXTEND_HOURS,
                                 midline_expiry_should_extend,
                             )
-                            if midline_expiry_should_extend(pnl_now, peak_now):
+                            if midline_expiry_should_extend(
+                                pnl_now, peak_now, side=side, market_bias=market_bias,
+                            ):
                                 self._extend_brain_planned_close(
                                     pid,
                                     int(MIDLINE_HOLD_EXTEND_HOURS * 60),
@@ -583,7 +593,13 @@ class PositionSLTPMonitor:
                                 abs(float(tp) - entry_price) / entry_price * 100.0
                                 if tp is not None else 0.0
                             )
-                            act, pull, keep = trail_levels_from_sl_tp(sl_pct_pos, tp_pct_pos)
+                            bull_long = (
+                                str(side or "").upper() == "LONG"
+                                and str(market_bias or "").upper() == "LONG"
+                            )
+                            act, pull, keep = trail_levels_from_sl_tp(
+                                sl_pct_pos, tp_pct_pos, bull_long=bull_long,
+                            )
                             act_kw = {
                                 "activate_pct": act,
                                 "pullback_pct": pull,
@@ -591,6 +607,16 @@ class PositionSLTPMonitor:
                             }
                     except Exception:
                         act_kw = {}
+                    if (
+                        not act_kw
+                        and str(side or "").upper() == "LONG"
+                        and str(market_bias or "").upper() == "LONG"
+                    ):
+                        act_kw = {
+                            "activate_pct": 2.2,
+                            "pullback_pct": 0.80,
+                            "min_keep_pct": 0.50,
+                        }
                     trail_br = check_brain_trail_lock(pnl_pct, new_peak, **act_kw)
                     if trail_br:
                         self._sync_peak_to_db(pid, new_peak * 100)
@@ -657,7 +683,31 @@ class PositionSLTPMonitor:
                 # ai-trail-tp：探索/预测；中线改走更早的 midline_hold_exit
                 if _is_midline_source(src):
                     from app.services.midline_hold_exit import check_midline_hold_exits
-                    trail_mid = check_midline_hold_exits(pnl_pct, new_peak, age_s)
+                    midline_playbook = None
+                    midline_signals = []
+                    try:
+                        raw_components = pos.get("signal_components")
+                        components = (
+                            json.loads(raw_components)
+                            if isinstance(raw_components, str) and raw_components.strip()
+                            else raw_components
+                        ) or {}
+                        pb = components.get("playbook") or {}
+                        if isinstance(pb, dict):
+                            midline_playbook = pb.get("name") or pb.get("playbook")
+                            midline_signals = list(pb.get("signals") or [])
+                    except Exception:
+                        midline_playbook = None
+                        midline_signals = []
+                    trail_mid = check_midline_hold_exits(
+                        pnl_pct,
+                        new_peak,
+                        age_s,
+                        playbook=midline_playbook,
+                        signals=midline_signals,
+                        side=side,
+                        market_bias=market_bias,
+                    )
                     if trail_mid:
                         self._sync_peak_to_db(pid, new_peak * 100)
                         logger.info(
@@ -1070,7 +1120,8 @@ class PositionSLTPMonitor:
         sql = (
             "SELECT id, symbol, position_side, entry_price, leverage, margin, quantity, "
             "       stop_loss_price, take_profit_price, liquidation_price, "
-            "       source, open_time, planned_close_time, max_profit_pct, entry_signal_type "
+            "       source, open_time, planned_close_time, max_profit_pct, "
+            "       entry_signal_type, signal_components "
             "FROM futures_positions "
             "WHERE status='open' "
             "  AND (source LIKE %s) "

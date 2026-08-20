@@ -280,6 +280,14 @@ def brain_open_regime_decision(
 
     if global_name == GLOBAL_DAILY_BEAR_PROBE:
         if side_u == "LONG":
+            # 日线滞后探底不得否决已经确认的 Big4 多头 A1（v4.5.18）
+            if pb == "A1" and regime == BULL_TREND:
+                return RegimeDecision(
+                    regime,
+                    f"global_daily_bear_probe_defers_to_big4_long_A1:{why}",
+                    "pullback_limit",
+                    1.0,
+                )
             if pb == "C3" and confirmed and edge >= 0.75 and _token_impulse_long(playbook_row):
                 return RegimeDecision(
                     regime,

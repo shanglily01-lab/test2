@@ -370,6 +370,10 @@ def test_brain_risk_params() -> None:
     act8, pull8, _ = trail_levels_from_sl_tp(8.0, 12.0)
     assert act8 <= 1.0  # 宽仓激活≤1.0%，峰1.1%可锁
     assert check_brain_trail_lock(0.006, 0.011, activate_pct=act8, pullback_pct=pull8)
+    act_bull, pull_bull, keep_bull = trail_levels_from_sl_tp(8.0, 12.0, bull_long=True)
+    assert act_bull >= 2.0 and pull_bull >= 0.8 and keep_bull >= 0.5
+    assert check_brain_trail_lock(0.008, 0.013, activate_pct=act_bull, pullback_pct=pull_bull) is None
+    assert check_brain_trail_lock(0.015, 0.024, activate_pct=act_bull, pullback_pct=pull_bull)
     act_tight, _, _ = trail_levels_from_sl_tp(2.5, 3.0)
     assert BRAIN_TRAIL_ACTIVATE_MIN_PCT <= act_tight <= BRAIN_TRAIL_ACTIVATE_MAX_PCT
     # 新开仓 SL 不得再评估到 8%
@@ -607,7 +611,16 @@ def test_brain_market_regime() -> None:
         playbook="A1",
         global_regime=global_bear,
     )
-    assert dec6.margin_multiplier == 0 and "global_daily_bear_probe_blocks_long" in dec6.reason
+    assert dec6.margin_multiplier > 0 and "defers_to_big4_long_A1" in dec6.reason
+
+    dec6_flat = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "FLAT", "bull_count": 1, "bear_count": 1},
+        playbook_row=a1,
+        side="LONG",
+        playbook="A1",
+        global_regime=global_bear,
+    )
+    assert dec6_flat.margin_multiplier == 0 and "global_daily_bear_probe_blocks_long" in dec6_flat.reason
 
     a2 = {
         "side": "SHORT",

@@ -172,13 +172,13 @@
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟】
 - **量化扫描**，非 LLM；标的 `config.yaml`；**15min** 轮询；旧四路 `*_midline_*` 停并移除
 - 限价：做多挂 **15m 回调区**；B3/C4 做空挂 **冲高滞涨区**；C1/B2 **破位跟风**；A2 挂反抽区；C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h**；SL **6%** / TP **3%** / 5x / 500U
-- **跳过**开仓顾问；**纳入**持仓顾问（盈利保护）；**midline_hold_exit** 峰≥1.2% 锁利；**排除** SmartExit
+- **跳过**开仓顾问；**纳入**持仓顾问（盈利保护）；**midline_hold_exit** 默认峰≥1.2% 锁利，Big4 LONG 多单 2.5%/0.80% 且关闭 no_follow；**排除** SmartExit
 - **暂不实盘**（不进 `LIVE_SYNC_SOURCES`）；Web：原 Gemini 探索页整页改中线机会分析
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.2
 
 ### 开仓 / 持仓顾问
 - 路由：统一 **DeepSeek**（Gemini 顾问已下线；历史 `gemini_*` 仓亦由 DeepSeek 监管）；中线跳过开仓顾问、**纳入**持仓顾问
-- **BRAIN**：开仓跳过顾问；持仓进入 DeepSeek 做 thesis 复核（硬 SL/TP/trail 仍兜底）
+- **BRAIN**：开仓跳过顾问；持仓进入 DeepSeek 做 thesis 复核（硬 SL/TP/trail 仍兜底；**Big4 偏多时禁止仅凭 RSI 超买强平多单**）
 - 持仓 tick：**15min**；每仓 15min；浮盈转亏 urgent 立即再审
 - 盈利 sell（探索仓）：ROI **≥+8%** 且 15m 明确转弱（反向≥4）；过早 sell 程序化拦截恢复严格
 - Prompt/rubric/**reason 中文**；开关 `deepseek_*_advisor_enabled`（系统设置「开仓/持仓顾问」）

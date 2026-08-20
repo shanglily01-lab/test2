@@ -1,9 +1,13 @@
 """REQ-BRAIN 自有行情分析 — 1H 大方向 + 15M 结构 + Big4 闸门 + 插针。"""
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
+
+_BIG4_BIAS_CACHE = {"ts": 0.0, "bias": "FLAT"}
+_BIG4_BIAS_TTL_S = 30.0
 
 from app.services.brain_config import (
     BARS_15M_DAY,
@@ -141,6 +145,57 @@ def evaluate_big4_gate(cur) -> Dict[str, Any]:
         "per_coin": per,
         "reason": "" if big4_ok else "big4_weak_low_momentum_low_volume",
     }
+
+
+def cached_big4_bias(conn=None) -> str:
+    """最近一轮 BRAIN 扫描的 Big4 方向；30s 缓存，失败时沿用上次或 FLAT。"""
+    now = time.time()
+    cached_ts = float(_BIG4_BIAS_CACHE.get("ts") or 0.0)
+    cached_bias = str(_BIG4_BIAS_CACHE.get("bias") or "FLAT").upper() or "FLAT"
+    if now - cached_ts < _BIG4_BIAS_TTL_S:
+        return cached_bias
+
+    own = False
+    try:
+        if conn is None:
+            import pymysql
+            from app.utils.config_loader import get_db_config
+
+            conn = pymysql.connect(
+                **get_db_config(),
+                charset="utf8mb4",
+                cursorclass=pymysql.cursors.DictCursor,
+            )
+            own = True
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "SELECT big4_bias FROM brain_scan_rounds "
+                "WHERE big4_bias IS NOT NULL AND big4_bias <> '' "
+                "ORDER BY id DESC LIMIT 1"
+            )
+            row = cur.fetchone()
+        finally:
+            cur.close()
+        bias = "FLAT"
+        if row:
+            if isinstance(row, dict):
+                bias = str(row.get("big4_bias") or "FLAT")
+            else:
+                bias = str(row[0] or "FLAT")
+        bias = bias.upper() or "FLAT"
+        _BIG4_BIAS_CACHE["ts"] = now
+        _BIG4_BIAS_CACHE["bias"] = bias
+        return bias
+    except Exception as exc:
+        logger.debug(f"[big4] cached bias fallback {cached_bias}: {exc}")
+        return cached_bias
+    finally:
+        if own and conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def analyze_symbol(cur, symbol: str, big4: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

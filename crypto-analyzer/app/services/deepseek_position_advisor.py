@@ -364,6 +364,13 @@ class DeepSeekPositionAdvisor:
 
         logger.info(f"[DeepSeek顾问] tick 开始,到期 {len(positions)} 模拟单")
         helper = self._prompt_helper
+        market_bias = "FLAT"
+        try:
+            from app.services.brain_market_analyzer import cached_big4_bias
+
+            market_bias = cached_big4_bias()
+        except Exception:
+            market_bias = "FLAT"
 
         for pos in positions:
             if not should_use_deepseek_hold_advisor(pos.get("source") or ""):
@@ -426,6 +433,9 @@ class DeepSeekPositionAdvisor:
                     )
                 elif action == "sell":
                     reason = f"brain_ds_force_close:{reason}"[:500]
+                action, reason = helper._temper_bull_overbought_sell(
+                    action, reason, pos["position_side"], s15, market_bias, roi,
+                )
                 stats[action] += 1
                 stats["evaluated"] += 1
                 self._last_check_ts[pid] = time.time()

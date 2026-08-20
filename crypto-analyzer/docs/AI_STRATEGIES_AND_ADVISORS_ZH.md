@@ -375,9 +375,9 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 
 - **主依据**：近 **16 根 15m**（4h 窗口）K 线表 + 量价/RSI；1h 交叉验证  
 - **Big4**：仅辅证，**不得单独触发 sell**  
-- **盈利侧**：ROI≥**+8%** 且 15m **明确**转弱（反向≥4）→ 倾向 observe/sell；`_temper_premature_sell` 严格拦截过早 sell  
+- **盈利侧**：ROI≥**+8%** 且 15m **明确**转弱（反向≥4）→ 倾向 observe/sell；`_temper_premature_sell` 严格拦截过早 sell；**Big4 偏多时多单禁止仅凭 RSI 超买/高位背离 sell**（`_temper_bull_overbought_sell`）  
 - **亏损分档**（保证金 ROI%）：轻微 >-5%、中度 >-12%、严重 ≤-15%；深亏 `hold` 经 `_temper_losing_hold` 统计复核  
-- **程序化锁利**：探索/预测/中线 v2 `position_sl_tp_monitor` **ai-trail-tp**（peak 价格收益≥3%，回撤≥1%）
+- **程序化锁利**：探索/预测 `ai-trail-tp`（peak≥3% 回撤≥1%）；中线 `midline_hold_exit` 默认 1.2%/0.45%，**Big4 LONG 多单 2.5%/0.80%**，C3 3.0%/1.10%；BRAIN 默认 0.8–1.0%，**Big4 LONG 多单 2.2%/0.80%**
 - **DeepSeek soft-sl**：grace 45min；no_follow 须≥60min 且价格亏≈2.2%（匹配 15m×4h 开仓，避免早期闷杀）
 
 ### 8.4 sell 后果

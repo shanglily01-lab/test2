@@ -8,6 +8,9 @@ from app.services.brain_config import (
     BRAIN_ADVERSE_5M_MIN_LOSS_USD,
     BRAIN_ADVERSE_5M_SKIP_PLAYBOOKS,
     BRAIN_ADVERSE_5M_TRAIL_MIN,
+    BRAIN_BULL_TRAIL_ACTIVATE_PCT,
+    BRAIN_BULL_TRAIL_MIN_KEEP_PCT,
+    BRAIN_BULL_TRAIL_PULLBACK_PCT,
     BRAIN_MAX_LOSS_USD,
     BRAIN_SOFT_NO_FOLLOW_ENABLED,
     BRAIN_SOFT_NO_FOLLOW_LOSS_PCT,
@@ -24,12 +27,24 @@ from app.services.brain_config import (
 )
 
 
-def trail_levels_from_sl_tp(sl_pct: float, tp_pct: float) -> Tuple[float, float, float]:
+def trail_levels_from_sl_tp(
+    sl_pct: float,
+    tp_pct: float,
+    *,
+    bull_long: bool = False,
+) -> Tuple[float, float, float]:
     """由本笔 SL/TP（百分点）推激活/回撤/保本线（百分点）。
 
     激活 = min(TP×tp_frac, SL×sl_frac)，夹在 [MIN, MAX]；
     宽 SL（如 8%）时上限 1.0%，峰≈1.1% 即可锁利。
+    Big4 LONG 的多单改用更宽激活/回撤，避免主升被浅锁。
     """
+    if bull_long:
+        return (
+            float(BRAIN_BULL_TRAIL_ACTIVATE_PCT),
+            float(BRAIN_BULL_TRAIL_PULLBACK_PCT),
+            float(BRAIN_BULL_TRAIL_MIN_KEEP_PCT),
+        )
     try:
         sl_f = max(0.0, float(sl_pct))
         tp_f = max(0.0, float(tp_pct))

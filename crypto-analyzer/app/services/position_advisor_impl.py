@@ -52,7 +52,8 @@ HOLD_ADVISOR_JSON_SYSTEM_ZH = (
     "reason 为50字以内中文，须引用 **15m** 表格形态 + 量能或 RSI 要点；"
     "保证金 ROI≤-1% 须严格审查 15m 是否仍支持原方向，不可敷衍 hold；"
     "浮盈 ROI≥+3% 且 15m 转弱时至少 observe，ROI≥+5% 且 15m 明确转弱时应倾向 sell，避免盈利回吐；"
-    "15m 未破方向时不得 sell；亏损越深 hold 门槛越高；禁止仅凭 ROI、Big4 或 1h 滞后信号单独 sell。"
+    "15m 未破方向时不得 sell；亏损越深 hold 门槛越高；禁止仅凭 ROI、Big4 或 1h 滞后信号单独 sell；"
+    "Big4 偏多时，多单禁止仅凭 RSI 超买/高位背离 sell，须 15m 近4根明确破位才可卖。"
 )
 
 # DeepSeek/GPT 开仓顾问 system（与 build_open_advisor_prompt 中文 reason 一致）
@@ -559,6 +560,39 @@ class PositionAdvisorCore:
             reason = f"{reason[:80]}|复核:{override}"[:200]
             logger.info(f"[顾问核心] 过早 sell 复核 → {action} ({override})")
         return action, reason
+
+    @staticmethod
+    def _temper_bull_overbought_sell(
+        action: str,
+        reason: str,
+        side: str,
+        s15: dict,
+        market_bias: str,
+        roi_pct: float = 0.0,
+    ) -> Tuple[str, str]:
+        """Big4 多头里，多单不得仅凭 RSI 超买/高位背离强平。"""
+        if action != "sell":
+            return action, reason
+        if str(side or "").upper() != "LONG":
+            return action, reason
+        if str(market_bias or "").upper() != "LONG":
+            return action, reason
+        reason_l = (reason or "").lower()
+        if any(tag in reason_l for tag in HOLD_RISK_REASON_TAGS):
+            return action, reason
+        s15_against = int(s15.get("against") or 0)
+        if s15_against >= 4 or roi_pct <= HOLD_LOSS_MODERATE_ROI:
+            return action, reason
+        structure_tags = ("跌破", "破位", "破前低", "跌破支撑", "破均")
+        if any(tag in (reason or "") for tag in structure_tags):
+            return action, reason
+        rsi_tags = ("超买", "高位背离", "rsi高", "rsi 高", "overbought", "rsi7", "rsi6")
+        if not any(tag in reason_l for tag in rsi_tags):
+            return action, reason
+        override = "多头趋势禁止RSI超买强平"
+        reason = f"{reason[:80]}|复核:{override}"[:200]
+        logger.info(f"[顾问核心] 多头 RSI 超买 sell → hold ({override})")
+        return "hold", reason
 
     @staticmethod
     def _recent_klines(klines: list, n: int) -> list:
