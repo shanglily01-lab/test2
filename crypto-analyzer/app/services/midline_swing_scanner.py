@@ -256,7 +256,7 @@ def _breakout_action_opportunity(
         "entry_15m": entry_15m,
     }
 
-    if bias_u == "LONG" and side_u == "SHORT":
+    if bias_u == "LONG" and side_u == "SHORT" and playbook_u not in {"B3", "C4", "C1"}:
         detail["reason"] = "big4_long_blocks_short"
         return detail
 
@@ -267,11 +267,17 @@ def _breakout_action_opportunity(
         detail["reason"] = "unconfirmed_playbook"
         return detail
     exhaustion_short = playbook_u in {"B3", "C4"}
-    if exhaustion_short:
-        if future_side == "LONG" and future_score >= FUTURE_4H_OPPORTUNITY_SCORE_MIN:
-            detail["reason"] = "future_4h_still_long"
-            return detail
-    elif future_side != side_u or future_score < FUTURE_4H_OPPORTUNITY_SCORE_MIN:
+    breakdown_vs_bull = (
+        playbook_u == "C1"
+        and bias_u == "LONG"
+        and bool(signals & {"break_support", "crash_spike"})
+        and bool(signals & {"volume_expand_down", "crash_spike"})
+    )
+    if (
+        not exhaustion_short
+        and not breakdown_vs_bull
+        and (future_side != side_u or future_score < FUTURE_4H_OPPORTUNITY_SCORE_MIN)
+    ):
         detail["reason"] = "future_4h_not_actionable"
         return detail
 
@@ -301,6 +307,14 @@ def _breakout_action_opportunity(
             or evidence["exhaustion_up"]
             or evidence["false_break_up"]
         )
+        if (
+            future_side == "LONG"
+            and future_score >= FUTURE_4H_OPPORTUNITY_SCORE_MIN
+            and not structure_ok
+        ):
+            detail["evidence"] = evidence
+            detail["reason"] = "future_4h_still_long"
+            return detail
     elif side_u == "SHORT":
         evidence = {
             "break_support": "break_support" in signals,
@@ -349,11 +363,6 @@ def _breakout_action_opportunity(
         else:
             structure_ok = evidence["break_resistance"] or evidence["h1_breakout_up"] or evidence["impulse_up"] or evidence["higher_low"]
             force_ok = evidence["volume_expand_up"] or evidence["impulse_up"] or evidence["token_aligned"]
-            pullback_ok = evidence["higher_low"] or evidence["volume_shrink_pullback"]
-            if (evidence["entry_fresh"] or evidence["impulse_up"] or evidence["h1_breakout_up"]) and not pullback_ok:
-                detail["evidence"] = evidence
-                detail["reason"] = "wait_pullback"
-                return detail
 
     detail["evidence"] = evidence
     if not structure_ok:
@@ -362,7 +371,12 @@ def _breakout_action_opportunity(
     if not force_ok:
         detail["reason"] = "breakout_force_missing"
         return detail
-    if big4_bias in {"LONG", "SHORT"} and big4_bias != side_u and not token_aligned:
+    if (
+        big4_bias in {"LONG", "SHORT"}
+        and big4_bias != side_u
+        and not token_aligned
+        and playbook_u not in {"B3", "C4", "C1"}
+    ):
         detail["reason"] = "big4_opposes_without_token_alignment"
         return detail
 
@@ -376,7 +390,7 @@ def _breakout_action_opportunity(
         action_score += 5.0
     if playbook_u in {"B3", "C4"}:
         action_score += 8.0
-    if playbook_u in {"C1", "B2"}:
+    if playbook_u in {"C1", "B2", "C3"}:
         action_score += 6.0
 
     detail["action_score"] = round(min(100.0, action_score), 1)
@@ -716,7 +730,7 @@ def evaluate_symbol_multiperiod(
     if playbook not in allowed_playbooks:
         out.update({"reason": f"playbook_{playbook}", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
-    if big4_bias == "LONG" and side == "SHORT":
+    if big4_bias == "LONG" and side == "SHORT" and playbook not in {"B3", "C4", "C1"}:
         out.update({"reason": "big4_long_blocks_short", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
     has_break_signal = bool(signals & {
@@ -791,7 +805,12 @@ def evaluate_symbol_multiperiod(
     ):
         out.update({"reason": "relief_bounce_blocks_fresh_short", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
-    if big4_bias in ("LONG", "SHORT") and big4_bias != side and not strong_token_side:
+    if (
+        big4_bias in ("LONG", "SHORT")
+        and big4_bias != side
+        and not strong_token_side
+        and playbook not in {"B3", "C4", "C1"}
+    ):
         out.update({"reason": "big4_bias_opposes_symbol", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
 
@@ -842,6 +861,7 @@ def evaluate_symbol_multiperiod(
     from app.services.entry_timing import compute_pullback_entry
     timing = compute_pullback_entry(
         side, playbook, rows_15m, playbook_row=pb, ref_price=out.get("ref_price"),
+        follow_breakout=True,
     )
     if should_open and not timing.ready:
         should_open = False

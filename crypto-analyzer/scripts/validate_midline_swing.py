@@ -165,7 +165,7 @@ def test_breakout_action_opportunity() -> None:
         global_name="TOKEN_DIVERGENCE",
         entry_15m={"fresh_breakout": True},
     )
-    assert c3_chase["should_open"] is False and c3_chase["reason"] == "wait_pullback", c3_chase
+    assert c3_chase["should_open"] is True, c3_chase
 
     c3_pullback = _breakout_action_opportunity(
         side="LONG",
@@ -207,10 +207,7 @@ def test_breakout_action_opportunity() -> None:
         global_name="BULL_TREND",
         entry_15m={"fresh_breakout": False},
     )
-    assert (
-        b3_vs_big4_long["should_open"] is False
-        and b3_vs_big4_long["reason"] == "big4_long_blocks_short"
-    ), b3_vs_big4_long
+    assert b3_vs_big4_long["should_open"] is True, b3_vs_big4_long
 
     still_long = _breakout_action_opportunity(
         side="SHORT",
@@ -224,8 +221,78 @@ def test_breakout_action_opportunity() -> None:
         global_name="TOKEN_DIVERGENCE",
         entry_15m={"fresh_breakout": False},
     )
-    assert still_long["should_open"] is False and still_long["reason"] == "future_4h_still_long", still_long
-    _ok("C1 follows breakdown; A2/B2 can open; C3 waits pullback; B3 sells stall; Big4 LONG blocks shorts")
+    assert still_long["should_open"] is True, still_long
+
+    no_stall_still_long = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="B3",
+        edge=0.90,
+        confirmed=True,
+        signals={"pump_spike"},
+        features={"h1_side": "LONG", "m15_side": "LONG"},
+        future_4h={"side": "LONG", "score": 0.60},
+        big4_bias="FLAT",
+        global_name="TOKEN_DIVERGENCE",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert (
+        no_stall_still_long["should_open"] is False
+        and no_stall_still_long["reason"] == "future_4h_still_long"
+    ), no_stall_still_long
+
+    c1_vs_big4_long = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="C1",
+        edge=0.85,
+        confirmed=True,
+        signals={"break_support", "volume_expand_down", "crash_spike"},
+        features={"h1_side": "LONG", "m15_side": "SHORT"},
+        future_4h={"side": "LONG", "score": 0.60},
+        big4_bias="LONG",
+        global_name="BULL_TREND",
+        entry_15m={"fresh_breakout": True},
+    )
+    assert c1_vs_big4_long["should_open"] is True, c1_vs_big4_long
+
+    a2_vs_big4_long = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="A2",
+        edge=0.86,
+        confirmed=True,
+        signals={"ema_reject", "15m_lower_high"},
+        features={"h1_side": "SHORT", "m15_side": "SHORT", "ema_bear": True, "vol_shrink_pullback": True},
+        future_4h={"side": "SHORT", "score": 0.56},
+        big4_bias="LONG",
+        global_name="BULL_TREND",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert (
+        a2_vs_big4_long["should_open"] is False
+        and a2_vs_big4_long["reason"] == "big4_long_blocks_short"
+    ), a2_vs_big4_long
+    _ok("C1/B3 catch pullback vs Big4 LONG; C3 follows breakout; A2 blocked; no-stall 4h long stays closed")
+
+
+def test_midline_market_follow() -> None:
+    print("[2b] midline market follow")
+    from inspect import signature
+    from app.services.midline_swing_config import midline_uses_market_entry, MIDLINE_MARKET_PLAYBOOKS
+    from app.services.paper_limit_entry import create_paper_limit_order
+
+    assert MIDLINE_MARKET_PLAYBOOKS == frozenset({"C1", "B2", "C3", "B3", "C4"})
+    assert midline_uses_market_entry("C1")
+    assert midline_uses_market_entry("C3")
+    assert midline_uses_market_entry("B3")
+    assert not midline_uses_market_entry("A1")
+    assert not midline_uses_market_entry("A2")
+    assert "force_market" in signature(create_paper_limit_order).parameters
+    worker = (ROOT / "app/services/midline_explore_worker.py").read_text(encoding="utf-8")
+    scanner = (ROOT / "app/services/midline_swing_scanner.py").read_text(encoding="utf-8")
+    if "force_market=use_market" not in worker:
+        _fail("中线 worker 未对破位/顶部走市价")
+    if "follow_breakout=True" not in scanner:
+        _fail("中线扫描未对 C3 启用破位跟风")
+    _ok("C1/C3/B3 midline market; A1/A2 stay limit")
 
 
 def test_limit_price() -> None:
@@ -371,6 +438,7 @@ def main() -> None:
 
     test_imports()
     test_breakout_action_opportunity()
+    test_midline_market_follow()
     test_limit_price()
     test_live_sync_whitelist()
     test_ai_trail_for_midline()

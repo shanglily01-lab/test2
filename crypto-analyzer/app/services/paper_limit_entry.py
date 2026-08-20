@@ -182,6 +182,7 @@ def create_paper_limit_order(
     limit_offset_pct: Optional[float] = None,
     skip_open_advisor: bool = False,
     failure_reason: Optional[List[str]] = None,
+    force_market: bool = False,
 ) -> Optional[int]:
     """
     创建模拟盘限价开仓单（不直接成交）。
@@ -200,10 +201,12 @@ def create_paper_limit_order(
     from app.services.midline_swing_config import is_midline_source, get_midline_limit_offset_pct
     from app.services.brain_config import is_brain_source, BRAIN_USE_MARKET_ENTRY
 
-    # BRAIN 测试期：直接市价（不经 PENDING 限价）
-    if is_brain_source(source) and BRAIN_USE_MARKET_ENTRY:
+    use_market = bool(force_market) or (is_brain_source(source) and BRAIN_USE_MARKET_ENTRY)
+    if use_market:
+        tag = "BRAIN" if is_brain_source(source) else "中线"
         logger.info(
-            f"[市价开仓] {symbol} {side} source={source}: BRAIN_USE_MARKET_ENTRY=1"
+            f"[市价开仓] {symbol} {side} source={source}: {tag}跟风/顶部确认 "
+            f"(force_market={bool(force_market)})"
         )
         return _open_paper_market_position(
             conn,
@@ -229,7 +232,7 @@ def create_paper_limit_order(
             failure_reason=failure_reason,
         )
 
-    force_limit = is_midline_source(source) or is_brain_source(source)
+    force_limit = is_brain_source(source) or is_midline_source(source)
 
     if not is_paper_limit_entry_enabled() and not force_limit:
         return _open_paper_market_position(

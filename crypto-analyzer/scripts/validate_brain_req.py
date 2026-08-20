@@ -241,12 +241,14 @@ def test_brain_skip_open_advisor() -> None:
     else:
         _ok("hold advisor suggest-only for BRAIN/midline")
     regime_src = (ROOT / "app/services/brain_market_regime.py").read_text(encoding="utf-8")
-    if "big4_long_blocks_short" not in regime_src:
-        _fail("BRAIN 未在 Big4 LONG 时阻断新空单")
-    elif "regime_bull_allows_exhaustion" in regime_src:
-        _fail("BULL_TREND 不得再放行 B3/C4 空单")
+    if "big4_long_allows_exhaustion" not in regime_src:
+        _fail("Big4 LONG 未放开 B3/C4 高点滞涨空")
+    elif "big4_long_allows_breakdown_C1" not in regime_src:
+        _fail("Big4 LONG 未放开 C1 破位跟风")
+    elif "big4_long_blocks_short" not in regime_src:
+        _fail("BRAIN 未在 Big4 LONG 时阻断 A2/B2 逆势空")
     else:
-        _ok("Big4 LONG blocks new shorts")
+        _ok("Big4 LONG allows stall/breakdown shorts, blocks A2/B2")
     trail_mod = (ROOT / "app/services/brain_trail_exit.py").read_text(encoding="utf-8")
     if "check_brain_trail_lock" not in trail_mod or "check_brain_soft_no_follow" not in trail_mod:
         _fail("brain_trail_exit 缺 trail/soft")
@@ -657,7 +659,7 @@ def test_brain_market_regime() -> None:
         side="SHORT",
         playbook="B3",
     )
-    assert dec_b3_bull.margin_multiplier == 0 and "big4_long_blocks_short" in dec_b3_bull.reason
+    assert dec_b3_bull.margin_multiplier > 0 and "big4_long_allows_exhaustion_B3" in dec_b3_bull.reason
 
     dec_c1_vs_big4_long = brain_open_regime_decision(
         big4={"big4_ok": True, "bias": "LONG", "bull_count": 3, "bear_count": 0},
@@ -667,9 +669,25 @@ def test_brain_market_regime() -> None:
         global_regime=global_bear,
     )
     assert (
-        dec_c1_vs_big4_long.margin_multiplier == 0
-        and "big4_long_blocks_short" in dec_c1_vs_big4_long.reason
+        dec_c1_vs_big4_long.margin_multiplier > 0
+        and "big4_long_allows_breakdown_C1" in dec_c1_vs_big4_long.reason
     )
+
+    a2_vs_bull = {
+        "side": "SHORT",
+        "playbook": "A2",
+        "confirmed": True,
+        "edge_score": 0.90,
+        "features": {"h1_side": "SHORT", "m15_side": "SHORT"},
+        "signals": ["ema_bear_align", "lh_ll", "15m_lower_high", "ema_reject"],
+    }
+    dec_a2_bull = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "LONG", "bull_count": 3, "bear_count": 0},
+        playbook_row=a2_vs_bull,
+        side="SHORT",
+        playbook="A2",
+    )
+    assert dec_a2_bull.margin_multiplier == 0 and "big4_long_blocks_short" in dec_a2_bull.reason
 
     a2 = {
         "side": "SHORT",
@@ -906,7 +924,24 @@ def test_entry_timing_exhaustion_short() -> None:
     )
     assert missed.ready is False, missed
     assert missed.status == "missed_high", missed
-    _ok("entry timing sells B3 stall at the high, waits if still extending, skips if already dumped")
+
+    sitting, peak3 = _pump_bars()
+    tagged = max(b["high_price"] for b in sitting[-8:])
+    sitting.append({
+        "open_price": tagged - 0.02,
+        "high_price": tagged,
+        "low_price": tagged - 0.04,
+        "close_price": tagged,
+        "volume": 900,
+    })
+    waiting_cb = compute_pullback_entry(
+        "SHORT", "B3", sitting,
+        playbook_row={"signals": ["pump_spike", "long_upper_wick", "volume_diverge_bear", "exhaustion_up"]},
+        ref_price=sitting[-1]["close_price"],
+    )
+    assert waiting_cb.ready is False, waiting_cb
+    assert waiting_cb.status in {"wait_stall", "invalidated"}, waiting_cb
+    _ok("entry timing sells B3 first callback off the high, waits if still extending or no callback yet")
 
 
 def test_entry_timing_c1_follow() -> None:
@@ -943,6 +978,46 @@ def test_entry_timing_c1_follow() -> None:
     _ok("entry timing follows a fresh C1 breakdown instead of waiting for a bounce")
 
 
+def test_entry_timing_c3_midline_follow() -> None:
+    from app.services.entry_timing import compute_pullback_entry
+
+    bars = []
+    p = 100.0
+    for _ in range(48):
+        bars.append({
+            "open_price": p - 0.01,
+            "high_price": p + 0.04,
+            "low_price": p - 0.03,
+            "close_price": p,
+            "volume": 600,
+        })
+        p += 0.01
+    for _ in range(3):
+        p += 0.55
+        bars.append({
+            "open_price": p - 0.08,
+            "high_price": p + 0.10,
+            "low_price": p - 0.06,
+            "close_price": p,
+            "volume": 2400,
+        })
+    brain = compute_pullback_entry(
+        "LONG", "C3", bars,
+        playbook_row={"signals": ["impulse_up", "h1_breakout_up", "break_resistance", "volume_expand_up"]},
+        ref_price=bars[-1]["close_price"],
+    )
+    assert brain.ready is False, brain
+    follow = compute_pullback_entry(
+        "LONG", "C3", bars,
+        playbook_row={"signals": ["impulse_up", "h1_breakout_up", "break_resistance", "volume_expand_up"]},
+        ref_price=bars[-1]["close_price"],
+        follow_breakout=True,
+    )
+    assert follow.ready is True, follow
+    assert follow.status == "breakout_ready"
+    _ok("midline C3 follows the breakout; BRAIN C3 still waits for pullback")
+
+
 def main() -> int:
     print("=== validate_brain_req ===\n")
     test_imports_and_config()
@@ -965,6 +1040,7 @@ def main() -> int:
     test_entry_timing_pullback()
     test_entry_timing_exhaustion_short()
     test_entry_timing_c1_follow()
+    test_entry_timing_c3_midline_follow()
     print()
     if _fail_n:
         print(f"FAILED {_fail_n}")

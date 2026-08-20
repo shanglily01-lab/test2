@@ -327,6 +327,22 @@ def extract_features(
         if close_near_high and no_extension and stall_aux:
             feats["stall_at_high"] = True
             signals.append("stall_at_high")
+        tagged = max(h15[-8:])
+        off_high = tagged > 0 and c15[-1] > 0 and (tagged - c15[-1]) / c15[-1] >= 0.0008
+        still_near = tagged > 0 and c15[-1] > 0 and (tagged - c15[-1]) / c15[-1] <= 0.0085
+        reject_close = bool(feats.get("long_upper_wick") or upper_wick_ratio >= 0.22)
+        if (
+            off_high
+            and still_near
+            and (
+                feats.get("stall_at_high")
+                or feats.get("exhaustion_up")
+                or reject_close
+                or "15m_stop_new_high" in signals
+            )
+        ):
+            feats["top_callback"] = True
+            signals.append("top_callback")
         if (
             not feats.get("exhaustion_up")
             and feats.get("long_upper_wick")
@@ -480,9 +496,14 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         b3 += 0.25
     if feats.get("stall_at_high") or "15m_stop_new_high" in sig:
         b3 += 0.2
+    if feats.get("top_callback") or "top_callback" in sig:
+        b3 += 0.15
     if b3 >= 0.55:
         b3_confirmed = b3 >= 0.7 or bool(
-            feats.get("stall_at_high") or feats.get("exhaustion_up") or feats.get("false_break_up")
+            feats.get("stall_at_high")
+            or feats.get("exhaustion_up")
+            or feats.get("false_break_up")
+            or feats.get("top_callback")
         )
         scored.append(("B3", b3, b3_confirmed))
 
@@ -509,7 +530,7 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     if feats.get("false_break_down") and (feats.get("long_lower_wick") or "15m_higher_low" in sig):
         scored.append(("C2", 0.75, True))
 
-    # C3 向上突破：识别可在突破当根，confirmed 须等回踩（禁止把追高当买入点）
+    # C3 向上突破：识别在突破当根；BRAIN 仍等回踩，中线市价跟风
     if (feats.get("break_resistance") and feats.get("vol_up")) or feats.get("impulse_up"):
         c3 = 0.7
         if feats.get("impulse_up"):
@@ -517,7 +538,10 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         if feats.get("h1_breakout_up"):
             c3 += 0.1
         c3_confirmed = bool(
-            feats.get("vol_shrink_pullback")
+            feats.get("impulse_up")
+            or feats.get("h1_breakout_up")
+            or (feats.get("break_resistance") and feats.get("vol_up"))
+            or feats.get("vol_shrink_pullback")
             or "15m_higher_low" in sig
             or feats.get("long_lower_wick")
             or "ema_reclaim" in sig

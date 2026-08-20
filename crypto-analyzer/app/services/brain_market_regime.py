@@ -209,6 +209,7 @@ def _token_exhaustion_short(playbook_row: Dict[str, Any]) -> bool:
     return bool(
         "exhaustion_up" in sig
         or "stall_at_high" in sig
+        or "top_callback" in sig
         or ("false_break_up" in sig and ("long_upper_wick" in sig or "volume_expand_down" in sig))
         or ("pump_spike" in sig and ("long_upper_wick" in sig or "volume_diverge_bear" in sig))
     )
@@ -279,8 +280,27 @@ def brain_open_regime_decision(
     global_name = str(global_regime.get("global_regime") or GLOBAL_UNKNOWN)
     bias_u = str(big4.get("bias") or "").upper()
 
-    # v4.5.19: Big4 已确认做多时禁止新开任何空单（含 DAILY_BEAR 下的 C1/B3/C4）。
+    # v4.5.22: Big4 仍 LONG 时禁止 A2/B2 逆势摸空；允许高点滞涨 / 破位跟风抓回调。
     if side_u == "SHORT" and bias_u == "LONG":
+        if pb in {"B3", "C4"} and confirmed and edge >= 0.85 and _token_exhaustion_short(playbook_row):
+            return RegimeDecision(
+                regime,
+                f"big4_long_allows_exhaustion_{pb}:{why}",
+                "breakout_confirm_limit",
+                0.20,
+            )
+        if (
+            pb == "C1"
+            and confirmed
+            and edge >= 0.80
+            and bool(sig & {"break_support", "volume_expand_down", "crash_spike"})
+        ):
+            return RegimeDecision(
+                regime,
+                f"big4_long_allows_breakdown_C1:{why}",
+                "crash_probe_limit",
+                0.35,
+            )
         return RegimeDecision(
             regime,
             f"big4_long_blocks_short:{why}:{pb}",
@@ -390,6 +410,16 @@ def brain_open_regime_decision(
             return RegimeDecision(regime, "regime_bull_allows_A1", "pullback_limit", 1.0)
         if side_u == "LONG" and pb == "C3" and confirmed and _token_impulse_long(playbook_row):
             return RegimeDecision(regime, "regime_bull_allows_C3_impulse", "pullback_limit", 0.50)
+        if side_u == "SHORT" and pb in {"B3", "C4"} and confirmed and edge >= 0.85 and _token_exhaustion_short(playbook_row):
+            return RegimeDecision(regime, f"regime_bull_allows_exhaustion_{pb}", "breakout_confirm_limit", 0.20)
+        if (
+            side_u == "SHORT"
+            and pb == "C1"
+            and confirmed
+            and edge >= 0.80
+            and bool(sig & {"break_support", "volume_expand_down", "crash_spike"})
+        ):
+            return RegimeDecision(regime, "regime_bull_allows_breakdown_C1", "crash_probe_limit", 0.35)
         return RegimeDecision(regime, f"regime_bull_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 
     if regime == BEAR_TREND:

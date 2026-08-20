@@ -278,6 +278,8 @@ def _open_limit_order(
     from app.services.midline_hold_exit import midline_hold_hours
     playbook = str(((signal_detail.get("playbook") or {}).get("name")) or "")
     hold_hours = midline_hold_hours(playbook)
+    from app.services.midline_swing_config import midline_uses_market_entry
+    use_market = midline_uses_market_entry(playbook)
     allowed, _ = gate_simulated_open(
         symbol, side, price, source,
         catalyst="midline_v2_pass",
@@ -314,6 +316,7 @@ def _open_limit_order(
         timeout_minutes=get_midline_limit_timeout_minutes(),
         limit_offset_pct=float(limit_offset) if limit_offset is not None else None,
         skip_open_advisor=True,
+        force_market=use_market,
     )
 
 
@@ -436,14 +439,17 @@ def run_midline_round(
                 order_id = _open_limit_order(conn, symbol, side, price, source, score, detail)
                 if order_id:
                     orders_placed += 1
+                    playbook = str(((detail.get("playbook") or {}).get("name")) or "")
+                    from app.services.midline_swing_config import midline_uses_market_entry
+                    action = "market_opened" if midline_uses_market_entry(playbook) else "limit_placed"
                     _insert_verdict(
                         conn, run_id, source, symbol, side, score, detail,
-                        "limit_placed", order_id, None,
+                        action, order_id, None,
                     )
                 else:
                     _insert_verdict(
                         conn, run_id, source, symbol, side, score, detail,
-                        "skipped_order_fail", None, "限价单创建失败或闸门拒绝",
+                        "skipped_order_fail", None, "市价/限价开仓失败或闸门拒绝",
                     )
 
             elapsed = time.time() - t0
