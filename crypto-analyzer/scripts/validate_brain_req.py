@@ -456,6 +456,19 @@ def test_tick_config() -> None:
     _ok("tick config + live status")
 
 
+def test_market_regime_page_uses_brain_gates() -> None:
+    page = (ROOT / "templates/market_regime.html").read_text(encoding="utf-8")
+    js = (ROOT / "static/js/market_regime_page.js").read_text(encoding="utf-8")
+    api = (ROOT / "app/api/market_regime_api.py").read_text(encoding="utf-8")
+    if "$62,400" in page or "Predict: Flat" in page:
+        _fail("行情识别页仍是写死演示")
+    if "/api/market-regime/live" not in js:
+        _fail("行情识别 JS 未读 /live")
+    if "evaluate_big4_gate" not in api or "evaluate_global_daily_regime" not in api:
+        _fail("行情识别 API 未接 BRAIN 闸门")
+    _ok("行情识别页接 BRAIN Big4 + 日线")
+
+
 def test_playbook_classify() -> None:
     from app.services.brain_playbook import classify_playbook, extract_features
 
@@ -1237,6 +1250,7 @@ def main() -> int:
     test_directional_gate()
     test_brain_market_regime()
     test_tick_config()
+    test_market_regime_page_uses_brain_gates()
     test_ds_auto_open_available()
     test_paper_limit_brain_force()
     test_executor_brain_expire()

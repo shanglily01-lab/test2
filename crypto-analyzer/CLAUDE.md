@@ -244,7 +244,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 ## 实盘控制
 
 - **按 source 白名单**（`trading_gates.LIVE_SYNC_SOURCES`）：DeepSeek 探索/预测 + **BRAIN** + **破位 `midline_*`** + **自选 `manual_watchlist`**；GPT/战术/反转/smart_trader/现货镜像/已下线 Gemini 只模拟
-- **合约自选**（§7.5）：`/watchlist`；页面价格浏览器直连币安合约 WS；下单/触价仍 ticker；仅 L0；打开不回填
+- **合约自选**（§7.5）：`/watchlist`；页面价格浏览器直连币安合约 WS；下单/触价仍 ticker；限价可撤；实盘随 `live_trading_enabled`，仅 L0，成交瞬间同步，打开不回填
 - **现货**（§7.4）：模拟跟 BRAIN A1 + DeepSeek LONG，仅 L0，`spot_trading_enabled`；实盘独立开关 `spot_live_enabled`（成交瞬间，不回填）
 - **实盘开仓 symbol**：须 **L0 白名单**（`rating_level=0`）；L1/L2/L3 禁止实盘
 - **限价偏移**：中线优先 **回调区**（无区才 ±1%）；其他模拟限价读 `paper_limit_long/short_offset_pct`（系统设定）

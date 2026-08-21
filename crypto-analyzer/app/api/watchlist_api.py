@@ -202,21 +202,6 @@ def watchlist_add(body: AddSymbolBody):
             pass
 
 
-@router.delete("/{symbol:path}")
-def watchlist_remove(symbol: str):
-    from app.services.watchlist_store import remove_watchlist_symbol
-
-    conn = _connect()
-    try:
-        removed = remove_watchlist_symbol(conn, symbol)
-        return {"ok": True, "removed": removed}
-    finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
-
-
 @router.post("/order")
 def watchlist_order(body: PlaceOrderBody):
     from app.services.watchlist_orders import place_watchlist_order
@@ -260,6 +245,43 @@ def watchlist_orders(limit: int = 40):
             "orders": [_serialize(r) for r in list_watchlist_orders(conn, limit=limit)],
             "positions": [_serialize(r) for r in list_watchlist_positions(conn)],
         }
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+@router.delete("/orders/{order_id}")
+def watchlist_cancel_order(order_id: str):
+    from app.services.watchlist_orders import cancel_watchlist_order
+
+    conn = _connect()
+    try:
+        payload, err = cancel_watchlist_order(conn, order_id)
+        if err:
+            raise HTTPException(status_code=400, detail=err)
+        return {"ok": True, **(payload or {})}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[自选] 撤单失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+@router.delete("/{symbol:path}")
+def watchlist_remove(symbol: str):
+    from app.services.watchlist_store import remove_watchlist_symbol
+
+    conn = _connect()
+    try:
+        removed = remove_watchlist_symbol(conn, symbol)
+        return {"ok": True, "removed": removed}
     finally:
         try:
             conn.close()

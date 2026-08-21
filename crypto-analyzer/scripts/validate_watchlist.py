@@ -77,7 +77,15 @@ def test_ui_and_routes() -> None:
     page_txt = page.read_text(encoding="utf-8")
     if "5 分钟刷新" in page_txt:
         _fail("自选页仍写 5 分钟刷价")
-    _ok("menu + page + Binance futures WS prices")
+    if "DELETE" not in js_txt or "data-cancel" not in js_txt:
+        _fail("前端未提供限价撤单")
+    api_txt = api.read_text(encoding="utf-8")
+    if "/orders/{order_id}" not in api_txt or "cancel_watchlist_order" not in api_txt:
+        _fail("API 未提供自选撤单")
+    orders = (ROOT / "app/services/watchlist_orders.py").read_text(encoding="utf-8")
+    if "def cancel_watchlist_order" not in orders:
+        _fail("watchlist_orders 缺少 cancel")
+    _ok("menu + page + Binance futures WS prices + cancel")
 
 
 def test_syntax() -> None:

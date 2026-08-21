@@ -1,9 +1,9 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.36
+**版本**: v4.5.38
 **日期**: 2026-08-21
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
-> **合约自选（REQ-WATCHLIST §7.5）**：侧栏「我的自选」；用户加交易对；价格由浏览器直连币安合约 **WS** 实时刷新；手动限价/市价；成交走实时 ticker；实盘随 `live_trading_enabled`，**仅 L0**；成交瞬间同步，打开不回填。  
+> **合约自选（REQ-WATCHLIST §7.5）**：侧栏「我的自选」；用户加交易对；价格由浏览器直连币安合约 **WS** 实时刷新；手动限价/市价（限价可撤）；成交走实时 ticker；实盘随 `live_trading_enabled`，**仅 L0**；成交瞬间同步，打开不回填。  
 > **操作对照（给人看）**：超级大脑 vs 破位策略说明见 [`docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`](./BRAIN_AND_BREAKOUT_OPERATOR_ZH.md)（冲突仍以本文为准）。  
 > **现货镜像（REQ-SPOT §7.4）**：模拟现货跟 **BRAIN A1** 回调买 + **DeepSeek LONG**；仅 **L0**；旧 DCA 停用；实盘由 `spot_live_enabled` 控制（成交瞬间同步，打开不回填）。  
 > **破位策略（REQ-MIDLINE §7.2）**：`midline_long` / `midline_short` 已落地模拟+实盘；扫描 **市值前 100**；对外文案为「破位策略」。  
@@ -500,7 +500,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 
 **kill switch**：`system_settings.brain_swing_enabled`（默认视为开；显式 `0` 跳过）。
 
-**Web**：侧栏「超级大脑策略」；页面每 **5s** 拉 `/live`；市价成交后立即进持仓（同币冷却 60min；单批最多 2 次开仓）。
+**Web**：侧栏「超级大脑策略」；页面每 **5s** 拉 `/live`。侧栏「行情识别」`/market_regime` 只展示 **BRAIN 真正用的** Big4 1h 闸门 + BTC/ETH 日线桶（`/api/market-regime/live`），禁止再画旧 EMA/ADX 演示和写死时间轴。
 
 #### 7.3.10 BRAIN v2：机会识别与 Playbook 体系【需求已确认 · 首版已落地】
 
@@ -820,7 +820,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 
 合约成交镜像失败 **不得**回滚合约仓（INV-01 现货侧：无成交则无实盘；本期无实盘路径）。
 
-### 7.5 合约自选（REQ-WATCHLIST）【v4.5.33】
+### 7.5 合约自选（REQ-WATCHLIST）【v4.5.37】
 
 **页面**: `/watchlist`（侧栏「合约交易」下「我的自选」）  
 **实现**: `watchlist_config.py` · `watchlist_store.py` · `watchlist_orders.py` · `watchlist_api.py` · `watchlist_page.js`  
@@ -832,11 +832,11 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 | 标的 | 用户从 `config.yaml` 市值池自选，最多 **50**；证券 / L2+ / 锁定禁止开仓 |
 | 价格 | 浏览器直连 `wss://fstream.binance.com` 订阅自选 `@miniTicker`（约 1s）；**不**在 `crypto-app-main` 再开 markPrice WS。WS 断开则 REST 快照回退。下单与限价触价仍用服务端 **ticker 最新价** |
 | 市价 | 先挂 PENDING 再 `fill_paper_limit_order(at_market=True)`，走 INV-01 成交瞬间同步 |
-| 限价 | 用户填写委托价；executor 触价成交；超时 **8h 取消**（禁止转市价） |
+| 限价 | 用户填写委托价；executor 触价成交；页面可**撤单**；超时 **8h 取消**（禁止转市价） |
 | 开仓顾问 | **跳过** |
 | 持仓顾问 | DeepSeek **sell 只建议不执行** |
 | SmartExit | **排除**；硬 SL/TP 由 `position_sl_tp_monitor` |
-| 实盘 | ∈ `LIVE_SYNC_SOURCES`；`live_trading_enabled` / `live_close_enabled`；**仅 L0**；打开开关不回填 |
+| 实盘 | ∈ `LIVE_SYNC_SOURCES`；与 BRAIN/破位同一套 `live_trading_enabled` / `live_close_enabled`；**仅 L0**；**成交瞬间**同步，打开开关不回填 |
 | 现货镜像 | **不跟** |
 
 ## 8. AI 主探索 / 主预测（REQ-AI-EP）
@@ -1007,7 +1007,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
-| 2026-08-21 | **v4.5.36** | **A2/B2 拒绝确认收紧**：A2 须离低点并出现真实拒绝才挂空；B2 不再与 C1 共用第一根阴跌跟风；C4 打标不得仅凭 stall。C1/C3 当根跟风未改 |
+| 2026-08-21 | **v4.5.38** | **行情识别页接真闸门**：`/market_regime` 展示 BRAIN Big4 1h + BTC 日线桶；去掉写死时间轴/假区间；`GLOBAL_UNKNOWN` 标明为日线混合 |
 | 2026-08-21 | **v4.5.34** | **B3 衰竭确认收紧**：须离高 ≥0.28% 且当根拒绝（收在下半+上影/阴线）；贴高横盘 / RSI 仍超买 / 仅 stall 不得开空；C3/C1 未改 |
 | 2026-08-21 | **v4.5.33** | **自选价格 WS**：`/watchlist` 浏览器直连币安 U 本位 `miniTicker` 实时刷价；下单/触价仍走服务端 ticker；WS 断开 REST 回退 |
 | 2026-08-21 | **v4.5.32** | **合约自选**：侧栏「我的自选」；用户添加交易对；手动限价/市价；`manual_watchlist` 进 LIVE_SYNC（仅 L0，成交瞬间，打开不回填） |

@@ -178,6 +178,53 @@ def place_watchlist_order(
     return payload, ""
 
 
+def cancel_watchlist_order(conn, order_id: str) -> Tuple[Optional[Dict[str, Any]], str]:
+    """撤销自选未成交限价单。尚未成交，按 INV-01 此时还没有实盘挂单。"""
+    oid = (order_id or "").strip()
+    if not oid:
+        return _fail("缺少订单号")
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, order_id, symbol, side, status
+            FROM futures_orders
+            WHERE order_id=%s AND account_id=%s AND order_source=%s
+            LIMIT 1
+            """,
+            (oid, WATCHLIST_ACCOUNT_ID, WATCHLIST_SOURCE),
+        )
+        row = cur.fetchone()
+        if not row:
+            return _fail("订单不存在或不属于自选")
+        st = str(row.get("status") or "").upper()
+        if st not in ("PENDING", "FILLING"):
+            return _fail(f"状态 {st} 不可撤")
+        cur.execute(
+            """
+            UPDATE futures_orders
+            SET status='CANCELLED', cancellation_reason=%s,
+                canceled_at=NOW(), updated_at=NOW()
+            WHERE order_id=%s AND account_id=%s AND order_source=%s
+              AND status IN ('PENDING','FILLING')
+            """,
+            ("watchlist_manual_cancel", oid, WATCHLIST_ACCOUNT_ID, WATCHLIST_SOURCE),
+        )
+        n = int(cur.rowcount or 0)
+    if n != 1:
+        return _fail("撤单失败，订单可能已成交")
+    try:
+        conn.commit()
+    except Exception:
+        pass
+    logger.info(f"[自选] 撤单 {row.get('symbol')} {oid}")
+    return {
+        "order_id": oid,
+        "symbol": row.get("symbol"),
+        "status": "CANCELLED",
+        "message": f"{row.get('symbol')} 已撤单",
+    }, ""
+
+
 def _load_order_by_id(conn, db_id: int) -> Optional[Dict[str, Any]]:
     with conn.cursor() as cur:
         cur.execute("SELECT * FROM futures_orders WHERE id=%s LIMIT 1", (db_id,))

@@ -44,7 +44,7 @@
   <div>
     <h1 class="text-2xl font-bold tracking-tight">我的自选</h1>
     <p class="text-[11px] text-on-surface-variant mt-1 tracking-wide">
-      合约交易对自选 · 价格走币安合约 WS 实时刷新 · 手动限价/市价 · 成交走实时 ticker · 实盘随总开关且仅 L0
+      合约交易对自选 · 价格走币安合约 WS 实时刷新 · 手动限价/市价 · 成交走实时 ticker · 实盘与合约页同一套开关（仅 L0，成交瞬间同步，打开不回填）
     </p>
   </div>
   <div class="flex items-center gap-3 flex-wrap">
@@ -81,7 +81,7 @@
 
   <div class="bg-surface-container-low rounded-xl p-5 space-y-3">
     <h2 class="font-semibold">手动下单</h2>
-    <p class="text-[11px] text-on-surface-variant">选中一行填入交易对。市价立刻按实时价成交；限价挂着等 ticker 触价。</p>
+    <p class="text-[11px] text-on-surface-variant">选中一行填入交易对。市价立刻按实时价成交；限价挂着等 ticker 触价，可撤单。实盘开且该币 L0 时，成交瞬间同步到交易所；打开开关不回填已有模拟仓。平仓跟平仓总开关。</p>
     <label class="block text-[11px] text-on-surface-variant">交易对
       <input id="ord-symbol" class="mt-1 w-full bg-surface-container border border-outline-variant/20 rounded-lg px-3 py-2 text-sm" readonly/>
     </label>
@@ -127,5 +127,5 @@
 </section>
 
 </main>
-<script src="/static/js/watchlist_page.js?v=2"></script>
+<script src="/static/js/watchlist_page.js?v=3"></script>
 </body></html>

@@ -1,7 +1,7 @@
 # 超级大脑 vs 破位策略（操作对照）
 
 **日期**: 2026-08-21  
-**对照现网**: 需求 `docs/REQUIREMENTS_LOGIC_ZH.md` **v4.5.36**（§7.2 破位、§7.3 超级大脑）  
+**对照现网**: 需求 `docs/REQUIREMENTS_LOGIC_ZH.md` **v4.5.38**（§7.2 破位、§7.3 超级大脑）  
 **本文性质**: 给人看的说明书。条款冲突时以 REQUIREMENTS 为准，不要拿本文改代码。
 
 旧复查稿 `docs/SUPER_BRAIN_BREAKOUT_REVIEW_ZH.md`（2026-08-16）已过时（当时还是 L0/L1、成交量 Top50），不要再当操作依据。

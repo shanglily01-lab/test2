@@ -22,6 +22,91 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix='/api/market-regime', tags=['Market Regime'])
 
+
+GLOBAL_REGIME_CN = {
+    "BULL_RECOVERY": ("日线偏多", "BTC 日线站上均线且近 30 日还在涨，偏多修复。"),
+    "DAILY_BEAR_PROBE": ("日线探底偏空", "BTC 靠近 90 日低点。Big4 仍多时不否决 A1。"),
+    "RELIEF_BOUNCE": ("低位反抽", "低位短线反弹，不是新一轮牛市。"),
+    "RANGE_DISTRIBUTION": ("高位滞涨", "90 日偏高且 30 日涨不动，容易派发。"),
+    "RANGE_ACCUMULATION": ("低位震荡", "90 日偏低、30 日波动不大。"),
+    "GLOBAL_UNKNOWN": ("日线混合", "日线没落进明确桶。不是坏了，只是周期互相打架。"),
+}
+
+
+def _jsonish(v):
+    if v is None or isinstance(v, (str, int, bool)):
+        return v
+    if isinstance(v, dict):
+        return {k: _jsonish(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_jsonish(x) for x in v]
+    if hasattr(v, "isoformat"):
+        return v.isoformat(sep=" ", timespec="seconds")
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return v
+
+
+def _gate_lines(big4: dict, daily: dict) -> list:
+    ok = bool(big4.get("big4_ok"))
+    bias = str(big4.get("bias") or "FLAT").upper()
+    lines = []
+    if not ok:
+        lines.append("Big4 疲软：动量低且量能低，超级大脑默认少开。")
+    if bias == "LONG":
+        lines.append("Big4 偏多：禁止 A2/B2 逆势摸空。")
+        lines.append("放行 A1 回踩、C3 突破（破位可市价跟，高潮不追）。")
+        lines.append("放行小仓 B3/C4 滞涨空、C1 破位空。")
+    elif bias == "SHORT":
+        lines.append("Big4 偏空：禁止 A1 追多。")
+        lines.append("可试 A2 弱反抽空、C1 破位空。")
+    else:
+        lines.append("Big4 方向不明：两边都要更严的确认才开。")
+    g = str(daily.get("global_regime") or "")
+    if g == "GLOBAL_UNKNOWN":
+        lines.append("日线混合不影响 15m 卖点；B3 仍看拒绝 K，不看这一列。")
+    return lines
+
+
+@router.get("/live")
+def market_regime_live():
+    """超级大脑/破位真正用的宏观闸门：Big4 1h + BTC/ETH 日线。"""
+    from app.database.connection_pool import get_api_connection
+    from app.services.brain_market_analyzer import evaluate_big4_gate
+    from app.services.brain_market_regime import evaluate_global_daily_regime
+
+    conn = get_api_connection()
+    try:
+        with conn.cursor() as cur:
+            big4 = evaluate_big4_gate(cur)
+            daily = evaluate_global_daily_regime(cur)
+        g = str(daily.get("global_regime") or "GLOBAL_UNKNOWN")
+        title, meaning = GLOBAL_REGIME_CN.get(g, ("日线未归类", g))
+        return {
+            "ok": True,
+            "source": "brain_gates",
+            "big4": _jsonish(big4),
+            "daily": {
+                "global_regime": g,
+                "reason": daily.get("reason"),
+                "title": title,
+                "meaning": meaning,
+                "btc": _jsonish(daily.get("btc") or {}),
+                "eth": _jsonish(daily.get("eth") or {}),
+            },
+            "gates": _gate_lines(big4, daily),
+        }
+    except Exception as e:
+        logger.error(f"行情识别 live 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 # 加载数据库配置
 try:
     from app.utils.config_loader import load_config

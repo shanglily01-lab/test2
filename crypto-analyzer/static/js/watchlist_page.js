@@ -153,12 +153,25 @@
       : "暂无自选持仓";
     $("ord-box").innerHTML = ords.length
       ? ords.map(function (o) {
-          return '<div class="flex justify-between gap-2 py-2 border-b border-outline-variant/10">' +
-            "<span>" + o.symbol + " " + o.side + " " + o.order_type + "</span>" +
+          const st = String(o.status || "").toUpperCase();
+          const canCancel = st === "PENDING" || st === "FILLING";
+          const oid = String(o.order_id || "").replace(/"/g, "");
+          return '<div class="flex items-center justify-between gap-2 py-2 border-b border-outline-variant/10">' +
+            "<span>" + o.symbol + " " + o.side + " " + (o.order_type || "") + "</span>" +
             '<span class="mono">' + fmtPx(o.price) + "</span>" +
-            '<span class="text-xs">' + o.status + "</span></div>";
+            '<span class="text-xs">' + st + "</span>" +
+            (canCancel
+              ? '<button type="button" data-cancel="' + oid + '" data-cancel-sym="' + String(o.symbol || "").replace(/"/g, "") +
+                '" class="text-xs text-error hover:underline whitespace-nowrap">撤单</button>'
+              : "") +
+            "</div>";
         }).join("")
       : "暂无自选订单";
+    $("ord-box").querySelectorAll("[data-cancel]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        cancelOrder(btn.getAttribute("data-cancel"), btn.getAttribute("data-cancel-sym"));
+      });
+    });
     pos.forEach(function (p) {
       const live = lastPrices[p.symbol];
       if (live) applyTick(p.symbol, live, null);
@@ -263,6 +276,19 @@
   async function loadBook() {
     const book = await jget(API + "/orders");
     renderBook(book);
+  }
+
+  async function cancelOrder(orderId, symbol) {
+    if (!orderId) return;
+    if (!window.confirm("确定撤销 " + (symbol || "") + " 限价单？")) return;
+    try {
+      const d = await jsend(API + "/orders/" + encodeURIComponent(orderId), "DELETE");
+      $("ord-msg").textContent = d.message || ((symbol || "") + " 已撤单");
+      await loadBook();
+    } catch (e) {
+      $("ord-msg").textContent = e.message;
+      alert(e.message);
+    }
   }
 
   async function loadAll() {

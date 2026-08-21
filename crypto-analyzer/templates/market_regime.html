@@ -1,571 +1,111 @@
 ﻿<!DOCTYPE html>
-
 <html class="dark" lang="zh-CN"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<title>行情识别 | Neural Obsidian</title>
 <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "on-tertiary": "#490011",
-                        "secondary-fixed": "#bbd2ff",
-                        "inverse-surface": "#f8f9ff",
-                        "on-tertiary-fixed": "#39000b",
-                        "inverse-primary": "#006c55",
-                        "secondary-container": "#005eb5",
-                        "surface-dim": "#0a0f14",
-                        "error-container": "#9f0519",
-                        "error": "#ff716c",
-                        "surface-container": "#151a20",
-                        "inverse-on-surface": "#51555c",
-                        "outline-variant": "#44484e",
-                        "tertiary-container": "#fa4966",
-                        "on-secondary-fixed-variant": "#00509c",
-                        "on-background": "#ebeef5",
-                        "primary": "#49f4c8",
-                        "surface-bright": "#262d35",
-                        "outline": "#72767c",
-                        "primary-dim": "#33e5ba",
-                        "tertiary": "#ff6e80",
-                        "on-tertiary-container": "#100001",
-                        "background": "#0a0f14",
-                        "surface-container-highest": "#20262e",
-                        "surface-variant": "#20262e",
-                        "on-surface-variant": "#a8abb2",
-                        "on-primary": "#005745",
-                        "tertiary-fixed": "#ff909a",
-                        "secondary-fixed-dim": "#a4c5ff",
-                        "on-primary-fixed-variant": "#00624d",
-                        "on-surface": "#ebeef5",
-                        "surface-container-low": "#0f1419",
-                        "on-secondary-fixed": "#003469",
-                        "tertiary-dim": "#ff6e80",
-                        "primary-container": "#00d4aa",
-                        "tertiary-fixed-dim": "#ff7987",
-                        "on-secondary": "#002045",
-                        "surface-tint": "#49f4c8",
-                        "error-dim": "#d7383b",
-                        "surface": "#0a0f14",
-                        "on-error-container": "#ffa8a3",
-                        "primary-fixed": "#49f4c8",
-                        "secondary": "#5b9eff",
-                        "on-tertiary-fixed-variant": "#780022",
-                        "on-primary-fixed": "#004334",
-                        "on-primary-container": "#004132",
-                        "surface-container-lowest": "#000000",
-                        "surface-container-high": "#1a2027",
-                        "on-error": "#490006",
-                        "on-secondary-container": "#f6f7ff",
-                        "secondary-dim": "#5b9eff",
-                        "primary-fixed-dim": "#33e5ba"
-                    },
-                    fontFamily: {
-                        "headline": ["Space Grotesk"],
-                        "body": ["Manrope"],
-                        "label": ["Manrope"],
-                        "mono": ["JetBrains Mono"]
-                    },
-                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
-                },
-            },
-        }
-    </script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
 <style>
-        body { background-color: #0a0f14; color: #ebeef5; font-family: 'Manrope', sans-serif; }
-        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
-        .glass-card { background: rgba(21, 26, 32, 0.8); backdrop-filter: blur(12px); }
-        .data-mono { font-family: 'JetBrains Mono', monospace; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #0f1520; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #49f4c8; }
-    </style>
-</head>
-<body class="bg-surface text-on-surface selection:bg-primary selection:text-on-primary">
-{% include "partials/desktop_sidebar.html" %}
-<!-- TopNavBar -->
-<header class="fixed top-0 right-0 w-[calc(100%-16rem)] h-16 bg-[#0a0f14]/80 backdrop-blur-xl border-b border-[#44484e]/20 z-40 flex items-center justify-between px-8">
-<div class="flex items-center gap-4">
-<h2 class="text-lg font-headline font-medium text-on-surface">市场状态识别</h2>
-<div class="h-4 w-px bg-outline-variant/30"></div>
-<div class="flex items-center gap-2 text-on-surface-variant">
-<span class="material-symbols-outlined text-sm" data-icon="update">update</span>
-<span class="text-xs data-mono" id="last-update-time">LAST UPDATE: --</span>
-</div>
-</div>
-<div class="flex items-center gap-6">
-<div class="flex items-center gap-4">
-<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors" data-icon="account_tree">account_tree</span>
-<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors" data-icon="notifications">notifications</span>
-<span class="material-symbols-outlined text-on-surface-variant cursor-pointer hover:text-primary transition-colors" data-icon="settings_input_component">settings_input_component</span>
-</div>
-<div class="h-8 w-8 rounded-full overflow-hidden border border-outline-variant/50">
-<img alt="User Profile" class="w-full h-full object-cover" data-alt="portrait of a focused professional technologist in a dimly lit modern environment with subtle teal reflection on face" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAVcLY03SkqqyE1VkgYGzTrSGhuOlyTquNoaJrSuS6yuRbDIvcjH_FWUvP3fTqce2BGjP9E-WbY4vc59Aq655lTYjPeNn7_2WWRM23a1VPJbNZPEZK3Yuar6vzeBRRtK1lqqnjXFvX4EF-MwUEf3O7vxj_5Tr3BPQ834EBrgzbQKmF3edpZ35o8MhdlJA4etQuBFPnAlWk242rVadPys2pHFsT_4E-cDJrUxazOHIoaRwYvSwd2Mf7RG-w2rIo2ryCgwT3S5QEubLWP"/>
-</div>
-</div>
-</header>
-<!-- Main Content -->
-<main class="ml-64 pt-16 min-h-screen p-8 space-y-8">
-<!-- Hero Section: Regime Cards -->
-<section>
-<h3 class="text-xs font-headline font-bold text-on-surface-variant uppercase tracking-[0.2em] mb-6">当前市场范式 (Market Regime)</h3>
-<div class="grid grid-cols-5 gap-4">
-<!-- Card 1: Strong Bull -->
-<div id="regime-card-strong-bull" class="group p-5 rounded-xl bg-surface-container-low border border-primary/10 hover:border-primary/40 transition-all duration-300">
-<div class="flex justify-between items-start mb-4">
-<span class="material-symbols-outlined text-primary" data-icon="trending_up">trending_up</span>
-<span class="text-[10px] font-mono text-primary/60">BULLISH++</span>
-</div>
-<p class="text-sm font-headline font-medium text-on-surface mb-1">强势上涨</p>
-<div class="w-full h-1 bg-surface-container rounded-full overflow-hidden">
-<div class="w-0 group-hover:w-full h-full bg-primary transition-all duration-700"></div>
-</div>
-</div>
-<!-- Card 2: Mild Bull -->
-<div id="regime-card-mild-bull" class="p-5 rounded-xl bg-surface-container-low border border-primary/5 hover:border-primary/20 transition-all duration-300">
-<div class="flex justify-between items-start mb-4">
-<span class="material-symbols-outlined text-primary/60" data-icon="keyboard_double_arrow_up">keyboard_double_arrow_up</span>
-<span class="text-[10px] font-mono text-on-surface-variant">MILD BULL</span>
-</div>
-<p class="text-sm font-headline font-medium text-on-surface mb-1">温和上涨</p>
-<div class="w-full h-1 bg-surface-container rounded-full"></div>
-</div>
-<!-- Card 3: Sideways (ACTIVE) -->
-<div id="regime-card-neutral" class="p-5 rounded-xl bg-surface-container border-2 border-primary shadow-[0_0_20px_rgba(73,244,200,0.15)] relative overflow-hidden transition-all duration-300">
-<div class="absolute top-0 right-0 p-2">
-<span class="flex h-2 w-2">
-<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-</span>
-</div>
-<div class="flex justify-between items-start mb-4">
-<span class="material-symbols-outlined text-primary" data-icon="trending_flat" style="font-variation-settings: 'FILL' 1;">trending_flat</span>
-<span class="text-[10px] font-mono text-primary">ACTIVE</span>
-</div>
-<p class="text-lg font-headline font-bold text-on-surface mb-1">震荡盘整</p>
-<p class="text-[10px] font-mono text-on-surface-variant">RANGE: $62,400 - $64,800</p>
-</div>
-<!-- Card 4: Mild Bear -->
-<div id="regime-card-mild-bear" class="p-5 rounded-xl bg-surface-container-low border border-error/5 hover:border-error/20 transition-all duration-300">
-<div class="flex justify-between items-start mb-4">
-<span class="material-symbols-outlined text-error/60" data-icon="keyboard_double_arrow_down">keyboard_double_arrow_down</span>
-<span class="text-[10px] font-mono text-on-surface-variant">MILD BEAR</span>
-</div>
-<p class="text-sm font-headline font-medium text-on-surface mb-1">温和下跌</p>
-<div class="w-full h-1 bg-surface-container rounded-full"></div>
-</div>
-<!-- Card 5: Strong Bear -->
-<div id="regime-card-strong-bear" class="p-5 rounded-xl bg-surface-container-low border border-error/10 hover:border-error/40 transition-all duration-300">
-<div class="flex justify-between items-start mb-4">
-<span class="material-symbols-outlined text-error" data-icon="trending_down">trending_down</span>
-<span class="text-[10px] font-mono text-error/60">BEARISH--</span>
-</div>
-<p class="text-sm font-headline font-medium text-on-surface mb-1">强势下跌</p>
-<div class="w-full h-1 bg-surface-container rounded-full"></div>
-</div>
-</div>
-</section>
-<!-- Indicators and Table Grid -->
-<div class="grid grid-cols-12 gap-8">
-<!-- Left Column: Market Indicators -->
-<div class="col-span-12 lg:col-span-5 space-y-6">
-<div class="p-6 rounded-2xl bg-surface-container-low border border-outline-variant/10">
-<h4 class="text-sm font-headline font-bold text-on-surface mb-8">市场指标识别</h4>
-<div class="space-y-8">
-<!-- Big4 Composite Gauge -->
-<div class="flex flex-col items-center py-4">
-<div class="relative w-48 h-24 overflow-hidden">
-<div class="absolute top-0 left-0 w-48 h-48 rounded-full border-[12px] border-surface-container"></div>
-<div class="absolute top-0 left-0 w-48 h-48 rounded-full border-[12px] border-primary/20 border-t-transparent border-r-transparent -rotate-45"></div>
-<div class="absolute top-0 left-0 w-48 h-48 rounded-full border-[12px] border-primary border-t-transparent border-r-transparent rotate-[20deg] shadow-[0_0_15px_rgba(73,244,200,0.2)]"></div>
-<div class="absolute bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center">
-<span class="text-2xl font-headline font-bold text-on-surface" id="composite-label">中性</span>
-<span class="text-[10px] font-mono text-on-surface-variant">COMPOSITE</span>
-</div>
-</div>
-</div>
-<!-- Progress Bars -->
-<div class="space-y-4">
-<div>
-<div class="flex justify-between text-[11px] mb-2">
-<span class="font-mono text-on-surface">BTC TREND PROGRESS</span>
-<span class="font-mono text-on-surface-variant" id="btc-progress-label">FLAT | 48.2%</span>
-</div>
-<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
-<div class="h-full bg-outline w-[48%] rounded-full opacity-50" id="btc-progress-bar"></div>
-</div>
-</div>
-<div>
-<div class="flex justify-between text-[11px] mb-2">
-<span class="font-mono text-on-surface">ETH TREND PROGRESS</span>
-<span class="font-mono text-on-surface-variant" id="eth-progress-label">FLAT | 51.5%</span>
-</div>
-<div class="h-1.5 w-full bg-surface-container rounded-full overflow-hidden">
-<div class="h-full bg-outline w-[51%] rounded-full opacity-50" id="eth-progress-bar"></div>
-</div>
-</div>
-</div>
-<!-- Signal Strength -->
-<div class="pt-6 border-t border-outline-variant/10 flex items-center justify-between">
-<div>
-<p class="text-[10px] font-mono text-on-surface-variant uppercase tracking-widest">综合信号强度</p>
-<p class="text-3xl font-headline font-bold text-primary" id="signal-strength">42%</p>
-</div>
-<div class="w-16 h-16 flex items-center justify-center rounded-full bg-primary/10 border border-primary/20">
-<span class="material-symbols-outlined text-primary text-3xl" data-icon="hub">hub</span>
-</div>
-</div>
-</div>
-</div>
-</div>
-<!-- Right Column: Big4 Detail Table -->
-<div class="col-span-12 lg:col-span-7">
-<div class="p-6 rounded-2xl bg-surface-container-low border border-outline-variant/10 h-full">
-<div class="flex items-center justify-between mb-6">
-<h4 class="text-sm font-headline font-bold text-on-surface uppercase tracking-wider">Big4 明细数据</h4>
-<span class="text-[10px] font-mono px-2 py-1 rounded bg-surface-bright text-on-surface-variant">WEIGHTED SCAN</span>
-</div>
-<div class="overflow-x-auto">
-<table class="w-full text-left">
-<thead>
-<tr class="text-[10px] font-mono text-on-surface-variant uppercase tracking-widest border-b border-outline-variant/20">
-<th class="pb-4 font-medium">币种</th>
-<th class="pb-4 font-medium">权重</th>
-<th class="pb-4 font-medium text-center">15M 信号</th>
-<th class="pb-4 font-medium text-center">1H 信号</th>
-<th class="pb-4 font-medium text-right">综合评分</th>
-</tr>
-</thead>
-<tbody class="text-sm divide-y divide-outline-variant/5">
-<tr class="group hover:bg-surface-container transition-colors">
-<td class="py-4">
-<div class="flex items-center gap-2">
-<div class="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
-<span class="text-[10px] font-bold text-primary">B</span>
-</div>
-<span class="font-headline font-medium">BTC</span>
-</div>
-</td>
-<td class="py-4 font-mono text-xs" id="btc-weight">50%</td>
-<td class="py-4 text-center" id="btc-signal-cell">
-<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-error/10 text-error">BEAR</span>
-</td>
-<td class="py-4 text-center">
-<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>
-</td>
-<td class="py-4 text-right font-mono text-primary" id="btc-score">48.2</td>
-</tr>
-<tr class="group hover:bg-surface-container transition-colors">
-<td class="py-4">
-<div class="flex items-center gap-2">
-<div class="w-6 h-6 rounded-full bg-secondary/10 flex items-center justify-center border border-secondary/20">
-<span class="text-[10px] font-bold text-secondary">E</span>
-</div>
-<span class="font-headline font-medium">ETH</span>
-</div>
-</td>
-<td class="py-4 font-mono text-xs" id="eth-weight">30%</td>
-<td class="py-4 text-center" id="eth-signal-cell">
-<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>
-</td>
-<td class="py-4 text-center">
-<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-surface-bright text-on-surface-variant">FLAT</span>
-</td>
-<td class="py-4 text-right font-mono text-primary" id="eth-score">51.5</td>
-</tr>
-<tr class="group hover:bg-surface-container transition-colors">
-<td class="py-4">
-<div class="flex items-center gap-2">
-<div class="w-6 h-6 rounded-full bg-yellow-500/10 flex items-center justify-center border border-yellow-500/20">
-<span class="text-[10px] font-bold text-yellow-500">B</span>
-</div>
-<span class="font-headline font-medium">BNB</span>
-</div>
-</td>
-<td class="py-4 font-mono text-xs" id="bnb-weight">10%</td>
-<td class="py-4 text-center" id="bnb-signal-cell">
-<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-surface-bright text-on-surface-variant">FLAT</span>
-</td>
-<td class="py-4 text-center">
-<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-error/10 text-error">BEAR</span>
-</td>
-<td class="py-4 text-right font-mono text-on-surface-variant" id="bnb-score">32.8</td>
-</tr>
-<tr class="group hover:bg-surface-container transition-colors">
-<td class="py-4">
-<div class="flex items-center gap-2">
-<div class="w-6 h-6 rounded-full bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
-<span class="text-[10px] font-bold text-purple-500">S</span>
-</div>
-<span class="font-headline font-medium">SOL</span>
-</div>
-</td>
-<td class="py-4 font-mono text-xs" id="sol-weight">10%</td>
-<td class="py-4 text-center" id="sol-signal-cell">
-<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>
-</td>
-<td class="py-4 text-center">
-<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>
-</td>
-<td class="py-4 text-right font-mono text-primary" id="sol-score">76.4</td>
-</tr>
-</tbody>
-</table>
-</div>
-</div>
-</div>
-</div>
-<!-- Timeline Section -->
-<section class="p-6 rounded-2xl bg-surface-container-low border border-outline-variant/10">
-<div class="flex items-center justify-between mb-8">
-<h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-wider">历史状态记录 (24H Timeline)</h3>
-<div class="flex items-center gap-4">
-<div class="flex items-center gap-1.5 text-[10px] text-on-surface-variant font-mono">
-<span class="w-2 h-2 rounded-full bg-primary"></span> Bullish
-                    </div>
-<div class="flex items-center gap-1.5 text-[10px] text-on-surface-variant font-mono">
-<span class="w-2 h-2 rounded-full bg-outline"></span> Sideways
-                    </div>
-<div class="flex items-center gap-1.5 text-[10px] text-on-surface-variant font-mono">
-<span class="w-2 h-2 rounded-full bg-error"></span> Bearish
-                    </div>
-</div>
-</div>
-<div class="relative py-10">
-<!-- Main Timeline Bar -->
-<div class="absolute left-0 right-0 h-1 bg-surface-container rounded-full top-1/2 -translate-y-1/2"></div>
-<!-- Timeline Markers -->
-<div class="relative flex justify-between px-4">
-<!-- Point 1 -->
-<div class="flex flex-col items-center group">
-<div class="text-[9px] font-mono text-on-surface-variant mb-4 -translate-y-2 opacity-0 group-hover:opacity-100 transition-all">06:00</div>
-<div class="w-4 h-4 rounded-full bg-surface border-2 border-primary z-10"></div>
-<div class="mt-4 flex flex-col items-center">
-<span class="text-[10px] font-mono text-primary">Bullish</span>
-</div>
-</div>
-<!-- Point 2 -->
-<div class="flex flex-col items-center group">
-<div class="text-[9px] font-mono text-on-surface-variant mb-4 -translate-y-2 opacity-0 group-hover:opacity-100 transition-all">10:30</div>
-<div class="w-3 h-3 rounded-full bg-surface border-2 border-primary/40 z-10"></div>
-<div class="mt-4 flex flex-col items-center">
-<span class="text-[10px] font-mono text-on-surface-variant">Mild Bull</span>
-</div>
-</div>
-<!-- Point 3 (Active) -->
-<div class="flex flex-col items-center group">
-<div class="text-[9px] font-mono text-on-surface-variant mb-4">14:00</div>
-<div class="w-5 h-5 rounded-full bg-primary border-4 border-surface shadow-[0_0_12px_rgba(73,244,200,0.5)] z-10 scale-125"></div>
-<div class="mt-4 flex flex-col items-center">
-<span class="text-[11px] font-headline font-bold text-on-surface">Sideways</span>
-<span class="text-[9px] font-mono text-primary">CURRENT</span>
-</div>
-</div>
-<!-- Point 4 (Projection) -->
-<div class="flex flex-col items-center group opacity-40">
-<div class="text-[9px] font-mono text-on-surface-variant mb-4">18:00</div>
-<div class="w-3 h-3 rounded-full bg-surface border-2 border-outline-variant z-10 border-dashed"></div>
-<div class="mt-4 flex flex-col items-center">
-<span class="text-[10px] font-mono text-on-surface-variant">Predict: Flat</span>
-</div>
-</div>
-<!-- Point 5 -->
-<div class="flex flex-col items-center group opacity-20">
-<div class="text-[9px] font-mono text-on-surface-variant mb-4">22:00</div>
-<div class="w-3 h-3 rounded-full bg-surface border-2 border-outline-variant z-10 border-dashed"></div>
-</div>
-</div>
-</div>
-</section>
-</main>
-<!-- Floating Action Button (FAB) - Suppressed for this detailed view as per logic -->
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  body { font-family: 'Manrope', sans-serif; }
+  h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .chip-on { background: rgba(73,244,200,0.15); color: #49f4c8; border: 1px solid rgba(73,244,200,0.3); }
+  .chip-off { background: rgba(168,171,178,0.1); color: #a8abb2; border: 1px solid rgba(168,171,178,0.2); }
+  .chip-warn { background: rgba(255,180,84,0.12); color: #ffb454; border: 1px solid rgba(255,180,84,0.25); }
+</style>
 <script>
-    // -------------------------------------------------------
-    // Big4 市场状态实时数据接入
-    // -------------------------------------------------------
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "on-surface": "#ebeef5", "surface-container-low": "#0f1419",
+          "outline": "#72767c", "surface-container-highest": "#20262e",
+          "surface": "#0a0f14", "error": "#ff716c",
+          "on-surface-variant": "#a8abb2", "surface-container": "#151a20",
+          "outline-variant": "#44484e", "primary": "#49f4c8",
+          "background": "#0a0f14", "secondary": "#5b9eff",
+        },
+      },
+    },
+  }
+</script>
+</head>
+<body class="bg-surface text-on-surface">
+{% include "partials/desktop_sidebar.html" %}
+<main class="ml-[240px] min-h-screen">
 
-    var BIG4_API_URL = '/api/system/big4-trend';
+<header class="border-b border-outline-variant/10 px-8 py-5 flex items-center justify-between flex-wrap gap-4">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">行情识别</h1>
+    <p class="text-[11px] text-on-surface-variant mt-1 tracking-wide">
+      超级大脑 / 破位真正用的闸门：Big4 近 6 小时 1h + BTC/ETH 日线。不是旧 EMA/ADX 演示页，也不是「未来 4 小时预测」。
+    </p>
+  </div>
+  <div class="flex items-center gap-3 flex-wrap">
+    <span id="live-chip" class="chip chip-off">--</span>
+    <span id="last-update-time" class="text-[11px] text-on-surface-variant mono">刷新 --</span>
+    <button id="btn-refresh" class="px-3 py-1.5 rounded-lg bg-surface-container text-xs text-on-surface-variant hover:bg-surface-container-highest">刷新</button>
+  </div>
+</header>
 
-    // 根据 signal 字符串生成徽章 HTML
-    function signalBadge(signal) {
-        if (!signal) {
-            return '<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-surface-bright text-on-surface-variant">--</span>';
-        }
-        var s = signal.toUpperCase();
-        if (s === 'BULLISH' || s === 'BULL') {
-            return '<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">BULL</span>';
-        }
-        if (s === 'BEARISH' || s === 'BEAR') {
-            return '<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-error/10 text-error">BEAR</span>';
-        }
-        return '<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-surface-bright text-on-surface-variant">FLAT</span>';
-    }
+<section class="px-8 py-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+  <div class="rounded-xl border border-outline-variant/15 bg-surface-container-low p-5">
+    <h2 class="text-xs uppercase tracking-widest text-on-surface-variant mb-2">Big4 闸门</h2>
+    <p id="big4-title" class="text-xl font-bold">--</p>
+    <p id="big4-sub" class="text-sm text-on-surface-variant mt-1">BTC/ETH/BNB/SOL 近 6 根 1h</p>
+  </div>
+  <div class="rounded-xl border border-outline-variant/15 bg-surface-container-low p-5">
+    <h2 class="text-xs uppercase tracking-widest text-on-surface-variant mb-2">BTC 日线桶</h2>
+    <p id="daily-title" class="text-xl font-bold">--</p>
+    <p id="daily-code" class="text-[11px] mono text-secondary mt-1"></p>
+    <p id="daily-meaning" class="text-sm text-on-surface-variant mt-2"></p>
+  </div>
+</section>
 
-    // 根据 overall_signal + bullish_count/bearish_count 决定高亮哪张卡片
-    function resolveActiveCard(data) {
-        var sig = (data.overall_signal || '').toUpperCase();
-        var bullishCount = data.bullish_count || 0;
-        var bearishCount = data.bearish_count || 0;
+<section class="px-8 pb-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+  <div class="lg:col-span-2 overflow-x-auto rounded-xl border border-outline-variant/15">
+    <table class="w-full text-sm">
+      <thead class="text-[11px] uppercase text-on-surface-variant bg-surface-container-low">
+        <tr>
+          <th class="text-left px-4 py-3">币</th>
+          <th class="text-left px-4 py-3">6h 方向</th>
+          <th class="text-right px-4 py-3">6h 涨跌</th>
+          <th class="text-right px-4 py-3">相对量</th>
+          <th class="text-left px-4 py-3">状态</th>
+        </tr>
+      </thead>
+      <tbody id="coin-body"></tbody>
+    </table>
+  </div>
+  <div class="rounded-xl border border-outline-variant/15 bg-surface-container-low p-5 space-y-3 text-sm">
+    <h2 class="text-xs uppercase tracking-widest text-on-surface-variant">BTC 日线数字</h2>
+    <div class="flex justify-between"><span class="text-on-surface-variant">90 日位置</span><span id="btc-pos" class="mono">--</span></div>
+    <div class="flex justify-between"><span class="text-on-surface-variant">7 日</span><span id="btc-7d" class="mono">--</span></div>
+    <div class="flex justify-between"><span class="text-on-surface-variant">30 日</span><span id="btc-30d" class="mono">--</span></div>
+    <div class="flex justify-between"><span class="text-on-surface-variant">90 日</span><span id="btc-90d" class="mono">--</span></div>
+    <div class="flex justify-between"><span class="text-on-surface-variant">EMA20/60</span><span id="btc-ema">--</span></div>
+    <div class="flex justify-between pt-2 border-t border-outline-variant/10"><span class="text-on-surface-variant">ETH 30 日</span><span id="eth-30d" class="mono">--</span></div>
+  </div>
+</section>
 
-        if (sig === 'BULLISH') {
-            if (bullishCount >= 3) return 'regime-card-strong-bull';
-            return 'regime-card-mild-bull';
-        }
-        if (sig === 'BEARISH') {
-            if (bearishCount >= 3) return 'regime-card-strong-bear';
-            return 'regime-card-mild-bear';
-        }
-        return 'regime-card-neutral';
-    }
+<section class="px-8 pb-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div>
+    <h2 class="font-semibold mb-3">现在允许什么</h2>
+    <ul id="gate-box" class="text-sm text-on-surface-variant space-y-2 list-disc pl-5"></ul>
+  </div>
+  <div class="text-sm text-on-surface-variant space-y-2">
+    <h2 class="font-semibold text-on-surface mb-3">别和这些混淆</h2>
+    <p>破位页「未来4H」是<strong class="text-on-surface">这颗币近 4h 还在涨还是跌</strong>，不是本页日线桶，更不是预测。</p>
+    <p><code class="text-secondary">GLOBAL_UNKNOWN</code> = 日线混合，不是识别失败。</p>
+    <p>开仓细节看 <a class="text-primary" href="/brain_strategy">超级大脑</a> / <a class="text-primary" href="/midline_strategy">破位策略</a>。</p>
+    <p id="err" class="text-error"></p>
+  </div>
+</section>
 
-    // 高亮对应 regime 卡片，其余恢复默认
-    function applyRegimeHighlight(activeId) {
-        var cards = [
-            'regime-card-strong-bull',
-            'regime-card-mild-bull',
-            'regime-card-neutral',
-            'regime-card-mild-bear',
-            'regime-card-strong-bear'
-        ];
-
-        cards.forEach(function(cardId) {
-            var el = document.getElementById(cardId);
-            if (!el) return;
-            if (cardId === activeId) {
-                el.classList.add('ring-2', 'ring-primary');
-            } else {
-                el.classList.remove('ring-2', 'ring-primary');
-            }
-        });
-    }
-
-    // 将 signal 字符串映射为中文显示
-    function signalToLabel(sig) {
-        var s = (sig || '').toUpperCase();
-        if (s === 'BULLISH' || s === 'BULL') return '多头';
-        if (s === 'BEARISH' || s === 'BEAR') return '空头';
-        return '中性';
-    }
-
-    // 更新仪表盘左侧指标区域
-    function updateIndicators(data) {
-        // 综合标签
-        var compositeEl = document.getElementById('composite-label');
-        if (compositeEl) {
-            compositeEl.textContent = signalToLabel(data.overall_signal);
-        }
-
-        // BTC 进度条
-        var btcInfo = data.btc || {};
-        var btcScore = typeof btcInfo.score === 'number' ? btcInfo.score : 0;
-        var btcLabelEl = document.getElementById('btc-progress-label');
-        var btcBarEl = document.getElementById('btc-progress-bar');
-        if (btcLabelEl) {
-            btcLabelEl.textContent = signalToLabel(btcInfo.signal) + ' | ' + btcScore.toFixed(1) + '%';
-        }
-        if (btcBarEl) {
-            btcBarEl.style.width = Math.min(Math.abs(btcScore), 100) + '%';
-        }
-
-        // ETH 进度条
-        var ethInfo = data.eth || {};
-        var ethScore = typeof ethInfo.score === 'number' ? ethInfo.score : 0;
-        var ethLabelEl = document.getElementById('eth-progress-label');
-        var ethBarEl = document.getElementById('eth-progress-bar');
-        if (ethLabelEl) {
-            ethLabelEl.textContent = signalToLabel(ethInfo.signal) + ' | ' + ethScore.toFixed(1) + '%';
-        }
-        if (ethBarEl) {
-            ethBarEl.style.width = Math.min(Math.abs(ethScore), 100) + '%';
-        }
-
-        // 综合信号强度：以 bullish_count / 4 * 100 估算
-        var strengthEl = document.getElementById('signal-strength');
-        if (strengthEl) {
-            var bullishCount = data.bullish_count || 0;
-            var bearishCount = data.bearish_count || 0;
-            var total = bullishCount + bearishCount;
-            var pct = total > 0 ? Math.round((bullishCount / 4) * 100) : 0;
-            strengthEl.textContent = pct + '%';
-        }
-    }
-
-    // 更新 Big4 表格
-    function updateBig4Table(data) {
-        var symbols = ['btc', 'eth', 'bnb', 'sol'];
-        symbols.forEach(function(sym) {
-            var info = data[sym] || {};
-            var signalCellEl = document.getElementById(sym + '-signal-cell');
-            var weightEl = document.getElementById(sym + '-weight');
-            var scoreEl = document.getElementById(sym + '-score');
-
-            if (signalCellEl) {
-                signalCellEl.innerHTML = signalBadge(info.signal);
-            }
-            if (weightEl && typeof info.weight === 'number') {
-                weightEl.textContent = Math.round(info.weight * 100) + '%';
-            }
-            if (scoreEl && typeof info.score === 'number') {
-                scoreEl.textContent = info.score.toFixed(1);
-            }
-        });
-    }
-
-    // 更新最后刷新时间
-    function updateLastUpdateTime(updatedAt) {
-        var el = document.getElementById('last-update-time');
-        if (!el) return;
-        if (updatedAt) {
-            var d = new Date(updatedAt);
-            var pad = function(n) { return n < 10 ? '0' + n : String(n); };
-            var ts = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate())
-                + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
-            el.textContent = 'LAST UPDATE: ' + ts;
-        } else {
-            var now = new Date();
-            var pad2 = function(n) { return n < 10 ? '0' + n : String(n); };
-            var ts2 = now.getFullYear() + '-' + pad2(now.getMonth() + 1) + '-' + pad2(now.getDate())
-                + ' ' + pad2(now.getHours()) + ':' + pad2(now.getMinutes()) + ':' + pad2(now.getSeconds());
-            el.textContent = 'LAST UPDATE: ' + ts2;
-        }
-    }
-
-    async function fetchBig4Data() {
-        try {
-            var resp = await fetch(BIG4_API_URL);
-            if (!resp.ok) return null;
-            var json = await resp.json();
-            var data = (json.data !== undefined) ? json.data : json;
-            if (data && data.overall_signal) return data;
-        } catch (e) {}
-        return null;
-    }
-
-    // 主刷新函数
-    async function loadMarketRegime() {
-        var data = await fetchBig4Data();
-        if (!data) {
-            console.error('market_regime: 所有 Big4 API 端点均无响应');
-            return;
-        }
-
-        var activeCardId = resolveActiveCard(data);
-        applyRegimeHighlight(activeCardId);
-        updateBig4Table(data);
-        updateIndicators(data);
-        updateLastUpdateTime(data.updated_at || null);
-    }
-
-    // DOMContentLoaded 时首次加载并启动定时刷新（每30秒）
-    document.addEventListener('DOMContentLoaded', function() {
-        loadMarketRegime();
-        setInterval(loadMarketRegime, 30000);
-    });
-    </script>
+</main>
+<script src="/static/js/market_regime_page.js?v=1"></script>
 </body></html>
