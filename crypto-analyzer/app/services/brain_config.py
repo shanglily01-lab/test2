@@ -132,13 +132,13 @@ BIG4_WEAK_REL_VOLUME = 0.55  # 近量 / 7日均量
 # kill switch
 BRAIN_ENABLED_KEY = "brain_swing_enabled"
 
-# 轮询扫描（L0+L1 约 100+ 币）：每批 5 个、间隔 15 秒，发现机会立即下单
+# 轮询扫描（市值前 300）：每批 5 个、间隔 15 秒，发现机会立即下单
 BRAIN_TICK_BATCH_SIZE = 5
 BRAIN_TICK_INTERVAL_SECONDS = 15
 BRAIN_SYMBOL_OPEN_COOLDOWN_MINUTES = 60
 BRAIN_TICK_MAX_OPENS = 2  # 单批最多触发几次 DS 开仓
 BRAIN_CLOSE_CHECK_EVERY_TICKS = 20  # ~5min 做一次 thesis 平仓检查
-BRAIN_POOL_REFRESH_EVERY_TICKS = 40  # ~10min 刷新 L0/L1 池
+BRAIN_POOL_REFRESH_EVERY_TICKS = 40  # ~10min 刷新市值前 300 池
 # 开仓后最短持仓：期间不做 thesis/Big4 战略平（硬 SL/TP 仍生效）
 BRAIN_CLOSE_MIN_HOLD_MINUTES = 45
 # True=仅在 Playbook 方向明确反转时战略平；False=D1/D2 也可平（仍受最短持仓约束）

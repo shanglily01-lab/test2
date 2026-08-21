@@ -1349,7 +1349,7 @@ class UnifiedDataScheduler:
         # ============================================================
         logger.info("\n  🤖 AI 系列: REQ-BRAIN + DeepSeek 探索/预测并行对照")
 
-        # REQ-BRAIN 超级大脑 — L0/L1 轮询：每 15s 一批 5 币，发现机会立即下单
+        # REQ-BRAIN 超级大脑 — 市值前 300 轮询：每 15s 一批 5 币，发现机会立即下单
         def _run_brain_swing_tick():
             def wrapper():
                 try:
@@ -1401,7 +1401,7 @@ class UnifiedDataScheduler:
             threading.Thread(target=wrapper, daemon=True, name="MidlineSwing").start()
 
         schedule.every(15).minutes.do(_run_midline_swing)
-        logger.info("  ✓ midline_swing v2 - 每15min轮询 Top50 多周期趋势机会")
+        logger.info("  ✓ midline_swing v2 - 每15min轮询市值前100破位机会")
 
         # DeepSeek 持仓顾问 - 监管模拟仓；scheduler 每 15min tick
         def _run_deepseek_position_advisor():

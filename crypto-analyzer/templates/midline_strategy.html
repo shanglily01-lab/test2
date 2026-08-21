@@ -35,9 +35,23 @@ tailwind.config = {
   <header class="border-b border-outline-variant/15 px-8 py-5 flex items-center justify-between gap-4 flex-wrap">
     <div>
       <h1 class="text-2xl font-bold">破位机会策略</h1>
-      <p class="text-[11px] text-on-surface-variant mt-1">Top50 主流币池 · 大趋势定方向 · 阶段整理后 15M 放量破位 · C1/C3/B2/B3/C4 确认后市价跟风</p>
+      <p class="text-[11px] text-on-surface-variant mt-1">市值前100 · 大趋势定方向 · 阶段整理后 15M 放量破位 · C1/C3/B2/B3/C4 确认后市价跟风</p>
     </div>
-    <div class="flex gap-2">
+    <div class="flex items-center gap-3 flex-wrap">
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] text-on-surface-variant">做多</span>
+        <button id="toggle-long" type="button" data-enabled="false"
+          class="h-9 px-3 rounded bg-surface-container-highest text-on-surface-variant text-xs font-bold border border-outline-variant/20">
+          关
+        </button>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] text-on-surface-variant">做空</span>
+        <button id="toggle-short" type="button" data-enabled="false"
+          class="h-9 px-3 rounded bg-surface-container-highest text-on-surface-variant text-xs font-bold border border-outline-variant/20">
+          关
+        </button>
+      </div>
       <button id="btn-run" class="h-9 px-3 rounded bg-primary text-[#002045] text-xs font-bold inline-flex items-center gap-1">
         <span class="material-symbols-outlined text-[17px]">play_arrow</span> 扫描
       </button>
@@ -109,12 +123,12 @@ tailwind.config = {
         <div id="orders-list" class="space-y-2 text-xs"></div>
       </div>
       <div>
-        <h2 class="text-sm font-semibold mb-3">Top50 交易池</h2>
+        <h2 class="text-sm font-semibold mb-3">市值前100 交易池</h2>
         <div id="universe-list" class="flex flex-wrap gap-1.5 text-[11px] mono"></div>
       </div>
     </aside>
   </section>
 </main>
-<script src="/static/js/midline_strategy_page.js?v=5"></script>
+<script src="/static/js/midline_strategy_page.js?v=6"></script>
 </body>
 </html>

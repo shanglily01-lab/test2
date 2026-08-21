@@ -37,6 +37,19 @@ def test_imports() -> None:
     assert not hasattr(scanner, "_layer2_hourly")
     assert not hasattr(scanner, "_layer3_entry")
     assert not hasattr(scanner, "evaluate_symbol")
+    from app.services.market_cap_universe import (
+        BRAIN_MARKET_CAP_LIMIT,
+        MIDLINE_MARKET_CAP_LIMIT,
+        match_coingecko_to_binance,
+    )
+    assert BRAIN_MARKET_CAP_LIMIT == 300
+    assert MIDLINE_MARKET_CAP_LIMIT == 100
+    mapped = match_coingecko_to_binance(
+        ["BTC", "ETH", "PEPE", "USDT"],
+        ["BTC/USDT", "ETH/USDT", "1000PEPE/USDT", "DOGE/USDT"],
+        limit=10,
+    )
+    assert mapped == ["BTC/USDT", "ETH/USDT", "1000PEPE/USDT"], mapped
     _ok("modules import")
 
 
@@ -346,6 +359,24 @@ def test_live_sync_whitelist() -> None:
     _ok("midline_long/short in LIVE_SYNC_SOURCES; legacy midline still paper-only")
 
 
+def test_kill_switch_ui() -> None:
+    print("[3b2] kill switch visible on settings + 破位页")
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    desktop = (root / "templates" / "system_settings.html").read_text(encoding="utf-8")
+    mobile = (root / "templates" / "mobile_settings.html").read_text(encoding="utf-8")
+    page = (root / "templates" / "midline_strategy.html").read_text(encoding="utf-8")
+    js = (root / "static" / "js" / "midline_strategy_page.js").read_text(encoding="utf-8")
+    api = (root / "app" / "api" / "system_settings_api.py").read_text(encoding="utf-8")
+    assert "midlineLongToggle" in desktop and "midlineShortToggle" in desktop
+    assert "midlineLongToggle" in mobile and "midlineShortToggle" in mobile
+    assert "toggle-long" in page and "toggle-short" in page
+    assert "midline_long_enabled" in api and "midline_short_enabled" in api
+    assert "/toggle?source=" in js
+    _ok("破位做多/做空开关已挂系统配置与破位策略页")
+
+
 def test_ai_trail_for_midline() -> None:
     print("[3c] midline earlier lock / giveback")
     from app.services.position_sl_tp_monitor import (
@@ -487,6 +518,7 @@ def main() -> None:
     test_midline_market_follow()
     test_limit_price()
     test_live_sync_whitelist()
+    test_kill_switch_ui()
     test_ai_trail_for_midline()
     test_entry_signal_labels()
     test_hold_advisor_includes_midline()

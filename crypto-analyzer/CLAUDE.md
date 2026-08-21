@@ -43,7 +43,7 @@
 - **K 线采集分工 (2026-06-12)**: **5m/15m 仅 WS** (`ws_kline_collector_service` / `crypto-ws-kline`)；`fast_collector` **30 分钟轮询**，REST **只补 1h/4h/1d**（禁止 REST 拉 5m/15m，与 WS 重复会触发 Binance IP ban -1003）。封禁状态见 `logs/binance_ban_state.json` + `app/utils/binance_rate_guard.py`。
 - **Kline volume 精度 (2026-06-15)**: 生产库 `kline_data.volume` 与 `taker_buy_base_volume` 已升级为 `DECIMAL(28,8)`，模型必须保持一致。原因是 DOGS/NEIRO 等低价高供应合约 base volume 会超过 `DECIMAL(20,8)` 的 12 位整数上限。
 - **持仓时间 UTC (2026-06-13)**: `futures_positions.open_time` / 限价开仓成交须用 **`utc_now_naive()`**（`app/utils/position_time.py`）。历史行若 `open_time` 比 `close_time` 晚约 8h（CST/UTC 混存），成交记录持仓时长会显示 `--`；API 用 `calc_holding_minutes(..., created_at=)` 回退到 `created_at`/`fill_time` 对齐。
-- **config.yaml 交易对**: 与 Binance `PERPETUAL`+`TRADING` 同步；**不含** `TRADIFI_PERPETUAL`（XAG/XAU/代币化股票等）；`securities_filter.py` 另拦股票/大宗 base。
+- **config.yaml 交易对**: 市值前 **300** 的 Binance `PERPETUAL`+`TRADING`（`sync_config_market_cap_symbols.py`）；**不含** `TRADIFI_PERPETUAL`；`securities_filter.py` 另拦股票/大宗 base。超级大脑扫 300，破位扫前 100。
 
 ### 2026-06-15 DB 配置事故复盘
 
@@ -73,7 +73,7 @@
 | GPT 探索/预测 | 同节奏 + `gpt_*_next_due_utc` |
 | Gemini 探索 | —（已下线） | — |
 | DeepSeek 探索/预测 | 每2h + 10min/5min（**对照期保留**；INV-BRAIN-07 暂缓） | `deepseek_*_enabled` |
-| **REQ-BRAIN** `brain_swing` | 每 **15s** 一批 **5** 币轮询 L0/L1 | `brain_swing_enabled`；启动 +75s；发现机会挂防插针限价 |
+| **REQ-BRAIN** `brain_swing` | 每 **15s** 一批 **5** 币轮询市值前 300 | `brain_swing_enabled`；启动 +75s；发现机会挂防插针限价 |
 | **中线 v2** `midline_long/short` | 每 **15min** 轮询；多单回调买 / B3/C4 冲高卖；C3/C1/B3/C4 4h / A1 6h |
 | **现货镜像** `spot_*` | 合约模拟成交瞬间跟单；`crypto-app-main` 每 1min 查 TP/SL；`spot_trading_enabled` |
 | **持仓顾问** DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent；BRAIN/中线 **suggest-only**） |
@@ -160,7 +160,7 @@
 
 ### 超级大脑主权层（REQ-BRAIN）【需求 2026-07-28 · 首版已落地 · 对照期 · v2 Playbook 2026-07-30】
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.5.23）
-- `brain_swing`：L0/L1 模拟扫描；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
+- `brain_swing`：市值前 **300** 模拟扫描；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
 - 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**强制防插针限价**（`BRAIN_USE_MARKET_ENTRY=False`），超时取消
 - **入场（v4.5.22）**：LONG 等 15m 回踩（贴着近 8 根高点不挂）；**Big4 LONG 禁 A2/B2**；**B3/C4 高点滞涨挂空**（小仓 ×0.20）；**C1 破位跟风**（×0.35）；A2 弱反抽拒绝后开空
@@ -179,7 +179,8 @@
 
 
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟+实盘】
-- **量化扫描**，非 LLM；标的 `config.yaml`；**15min** 轮询；旧四路 `*_midline_*` 停并移除
+- **量化扫描**，非 LLM；标的 **市值前 100**（`config.yaml` 序）；**15min** 轮询；旧四路 `*_midline_*` 停并移除
+- kill switch：`midline_long_enabled` / `midline_short_enabled`（系统配置「策略与模式」+ 破位策略页）
 - 限价：做多 A1 挂 **15m 回调区**；**C3/C1/B2 破位市价跟风**（C3 禁 RSI 极端+7日高追；止盈后 4h 冷却）；B3/C4 顶部第一回调后市价空；A2 挂反抽区；C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h**；SL **6%** / TP **3%** / 5x / 500U
 - **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）；**midline_hold_exit** 默认峰≥1.2% 锁利，Big4 LONG 多单 2.5%/0.80% 且关闭 no_follow；**排除** SmartExit
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓

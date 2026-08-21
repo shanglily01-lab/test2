@@ -286,6 +286,24 @@
 </div>
 <div class="cfg-row">
 <div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-[#49f4c8] text-xl shrink-0">candlestick_chart</span>
+<div><div class="text-sm font-medium text-slate-200">破位做多</div><p class="text-[11px] text-slate-500">量化扫描 · 15min · 实盘随「实盘开仓」仅 L0</p></div>
+</div>
+<div id="midlineLongToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
+</div>
+</div>
+<div class="cfg-row">
+<div class="flex items-center gap-2 min-w-0">
+<span class="material-symbols-outlined text-[#ff716c] text-xl shrink-0">candlestick_chart</span>
+<div><div class="text-sm font-medium text-slate-200">破位做空</div><p class="text-[11px] text-slate-500">量化扫描 · 15min · 实盘随「实盘开仓」仅 L0</p></div>
+</div>
+<div id="midlineShortToggle" data-enabled="false" class="w-12 h-6 shrink-0 bg-primary-container/30 rounded-full relative cursor-pointer transition-colors duration-200">
+<div class="toggle-thumb absolute right-1 top-1 w-4 h-4 bg-primary rounded-full transition-all duration-200"></div>
+</div>
+</div>
+<div class="cfg-row">
+<div class="flex items-center gap-2 min-w-0">
 <span class="material-symbols-outlined text-[#ff9500] text-xl shrink-0">visibility</span>
 <div><div class="text-sm font-medium text-slate-200">持仓顾问</div><p class="text-[11px] text-slate-500">DeepSeek 监管模拟仓；满 15min 后每 15min hold/observe/sell</p></div>
 </div>
@@ -706,6 +724,8 @@
                 // 策略开关
                 setToggle('deepseekExploreToggle', !!svc.deepseek_explore_enabled);
                 setToggle('deepseekPredictToggle', !!svc.deepseek_predict_enabled);
+                setToggle('midlineLongToggle', !!svc.midline_long_enabled);
+                setToggle('midlineShortToggle', !!svc.midline_short_enabled);
                 setToggle('positionAdvisorToggle', svc.position_advisor_enabled !== false);
                 setToggle('openAdvisorToggle', svc.open_advisor_enabled !== false);
                 setToggle('smartExitToggle', !!svc.smart_exit_enabled);
@@ -926,6 +946,26 @@
             }
         });
 
+        bindToggle('midlineLongToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { midline_long_enabled: enabled });
+                showToast('破位做多已' + (enabled ? '开启' : '关闭'), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
+        bindToggle('midlineShortToggle', async function (enabled) {
+            try {
+                await apiPut('/trading-services', { midline_short_enabled: enabled });
+                showToast('破位做空已' + (enabled ? '开启' : '关闭'), false);
+            } catch (err) {
+                showToast('保存失败: ' + err.message, true);
+                return false;
+            }
+        });
+
         // 持仓顾问 / 开仓顾问 (DeepSeek)
         bindToggle('openAdvisorToggle', async function (enabled) {
             try {
@@ -1042,6 +1082,8 @@
                             live_whitelist_enabled: getToggle('liveWhitelistToggle'),
                             spot_trading_enabled: getToggle('spotTradingToggle'),
                             spot_live_enabled: getToggle('spotLiveToggle'),
+                            midline_long_enabled: getToggle('midlineLongToggle'),
+                            midline_short_enabled: getToggle('midlineShortToggle'),
                             stop_loss_pct: slVal,
                             take_profit_pct: tpVal,
                             paper_limit_entry_enabled: getToggle('paperLimitToggle'),

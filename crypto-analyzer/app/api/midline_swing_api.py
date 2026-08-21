@@ -43,6 +43,24 @@ def _validate_source(source: str) -> str:
     return s
 
 
+def _midline_live_sync() -> bool:
+    from app.services.trading_gates import LIVE_SYNC_SOURCES
+    return bool(MIDLINE_SOURCES <= LIVE_SYNC_SOURCES)
+
+
+def _read_kill_switches(cur) -> dict:
+    out = {}
+    for source, key in MIDLINE_KILL_SWITCH.items():
+        cur.execute(
+            "SELECT setting_value FROM system_settings WHERE setting_key=%s LIMIT 1",
+            (key,),
+        )
+        row = cur.fetchone()
+        raw = str((row or {}).get("setting_value", "0")).strip().lower()
+        out[source] = raw in ("1", "true", "yes", "on")
+    return out
+
+
 def _ensure_settings(cur) -> None:
     for key in MIDLINE_KILL_SWITCH.values():
         cur.execute(
@@ -117,7 +135,7 @@ def status(source: str = Query(...)):
                 "last_run": last_run,
                 "open_positions": open_count,
                 "closed_positions_30d": closed_30d,
-                "live_sync": False,
+                "live_sync": _midline_live_sync(),
                 "params": {
                     "margin_usd": MIDLINE_MARGIN_USD,
                     "leverage": MIDLINE_LEVERAGE,
@@ -180,7 +198,7 @@ def get_params():
                 "sl_pct": MIDLINE_SL_PCT,
                 "tp_pct": MIDLINE_TP_PCT,
                 "sources": sorted(MIDLINE_SOURCES),
-                "live_sync": False,
+                "live_sync": _midline_live_sync(),
             },
         }
     except Exception as e:
@@ -294,7 +312,7 @@ def overview():
                 "tp_pct": MIDLINE_TP_PCT,
                 "margin_usd": MIDLINE_MARGIN_USD,
                 "leverage": MIDLINE_LEVERAGE,
-                "live_sync": False,
+                "live_sync": _midline_live_sync(),
             },
         }
     except Exception as e:
@@ -492,6 +510,7 @@ def dashboard():
                 )
                 latest_runs = cur.fetchall() or []
                 run_ids = [int(r["id"]) for r in latest_runs if r.get("id")]
+                enabled = _read_kill_switches(cur)
 
                 opportunities = []
                 if run_ids:
@@ -582,7 +601,7 @@ def dashboard():
             "success": True,
             "data": {
                 "scan_interval_minutes": MIDLINE_SCAN_INTERVAL_MINUTES,
-                "universe_mode": "local_liquidity_top50_crypto_only",
+                "universe_mode": "market_cap_top100",
                 "universe_size": len(universe),
                 "universe": universe,
                 "trend": trend,
@@ -591,7 +610,8 @@ def dashboard():
                 "orders": orders,
                 "positions": positions,
                 "params": get_midline_runtime_params(),
-                "live_sync": False,
+                "enabled": enabled,
+                "live_sync": _midline_live_sync(),
             },
         }
     except Exception as e:

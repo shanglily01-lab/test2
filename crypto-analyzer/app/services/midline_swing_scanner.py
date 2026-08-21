@@ -1,4 +1,4 @@
-"""Breakout opportunity scanner: Top50 universe, multi-period context, 15m break levels.
+"""Breakout opportunity scanner: market-cap Top100 universe, multi-period context, 15m break levels.
 
 midline_* sources and tables are retained only for historical order/position/API compatibility.
 """
@@ -14,7 +14,7 @@ from loguru import logger
 from app.services.securities_filter import is_security
 from app.utils.futures_symbol import futures_symbol_clean, futures_symbol_rating_canonical
 
-MIDLINE_TOP50_LIMIT = 50
+MIDLINE_TOP50_LIMIT = 100  # 市值前 100；保留旧名兼容校验
 MIDLINE_BIG_SYMBOLS = ("BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT")
 PLAIN_USDT_SYMBOL_RE = re.compile(r"^[A-Z0-9]{2,24}/USDT$")
 BREAKOUT_LOOKBACK_15M = 32
@@ -411,30 +411,18 @@ def _fetch_window(cur, symbol: str, key: str) -> Tuple[List[float], List[float],
 
 
 def load_midline_universe(conn) -> List[str]:
-    """Top50 liquid crypto universe. Market-cap rank can replace this query later."""
-    symbols: List[str] = []
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT symbol
-                FROM price_stats_24h
-                WHERE symbol LIKE '%%/USDT'
-                  AND quote_volume_24h IS NOT NULL
-                  AND quote_volume_24h > 0
-                ORDER BY quote_volume_24h DESC
-                LIMIT 120
-                """
-            )
-            for row in cur.fetchall() or []:
-                raw = row.get("symbol") if isinstance(row, dict) else row[0]
-                canon = futures_symbol_rating_canonical(str(raw or ""))
-                if canon and _is_plain_usdt_symbol(canon) and not is_security(canon):
-                    symbols.append(canon)
-    except Exception as e:
-        logger.warning(f"[breakout scanner] failed to read liquid Top50, fallback to config pool: {e}")
-        symbols = load_config_yaml_symbols()
+    """市值前 100（config.yaml 按市值序）；证券 / L2+ / 锁定剔除。"""
+    from app.services.market_cap_universe import (
+        MIDLINE_MARKET_CAP_LIMIT,
+        load_midline_universe_from_cap,
+    )
 
+    symbols = load_midline_universe_from_cap(conn)
+    if symbols:
+        return symbols[:MIDLINE_MARKET_CAP_LIMIT]
+
+    logger.warning("[breakout scanner] ranked cap pool empty, fallback to config yaml")
+    ranked = load_config_yaml_symbols()
     try:
         from app.services.trading_gates import load_trading_forbidden_symbols
         banned = load_trading_forbidden_symbols(conn) or set()
@@ -442,10 +430,9 @@ def load_midline_universe(conn) -> List[str]:
         logger.warning(f"[breakout scanner] failed to read forbidden symbols: {e}")
         banned = set()
     banned_clean = {futures_symbol_clean(futures_symbol_rating_canonical(b)) for b in banned}
-
     filtered: List[str] = []
     seen = set()
-    for sym in symbols:
+    for sym in ranked:
         clean = futures_symbol_clean(sym)
         if (
             not clean
@@ -457,7 +444,7 @@ def load_midline_universe(conn) -> List[str]:
             continue
         seen.add(clean)
         filtered.append(sym)
-        if len(filtered) >= MIDLINE_TOP50_LIMIT:
+        if len(filtered) >= MIDLINE_MARKET_CAP_LIMIT:
             break
     return filtered
 

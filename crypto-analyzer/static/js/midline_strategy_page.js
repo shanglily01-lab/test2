@@ -174,6 +174,40 @@
       box.appendChild(span);
     });
   }
+  function paintKill(id, on) {
+    var el = $(id);
+    if (!el) return;
+    el.dataset.enabled = on ? 'true' : 'false';
+    el.textContent = on ? '开' : '关';
+    if (on) {
+      el.className = 'h-9 px-3 rounded bg-primary text-[#002045] text-xs font-bold border border-primary/40';
+    } else {
+      el.className = 'h-9 px-3 rounded bg-surface-container-highest text-on-surface-variant text-xs font-bold border border-outline-variant/20';
+    }
+  }
+  function bindKill(id, source) {
+    var el = $(id);
+    if (!el) return;
+    el.onclick = function () {
+      var next = el.dataset.enabled !== 'true';
+      el.disabled = true;
+      fetch(API + '/toggle?source=' + encodeURIComponent(source), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: next })
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.body.success) throw new Error((res.body || {}).detail || 'toggle failed');
+          paintKill(id, next);
+        })
+        .catch(function (e) {
+          console.error(e);
+          setRunStatus('开关失败: ' + String(e), true);
+        })
+        .finally(function () { el.disabled = false; });
+    };
+  }
   function loadDashboard() {
     return fetch(API + '/dashboard')
       .then(function (r) { return r.json(); })
@@ -185,6 +219,8 @@
         $('stat-universe').textContent = d.universe_size || 0;
         $('stat-opp').textContent = (d.opportunities || []).length;
         $('stat-pos').textContent = (d.positions || []).length;
+        paintKill('toggle-long', !!(d.enabled || {}).midline_long);
+        paintKill('toggle-short', !!(d.enabled || {}).midline_short);
         var runs = d.latest_runs || [];
         setRunStatus(runs.length ? runs.map(function (r) {
           return r.source + ' #' + r.id + ' ' + time(r.asof_utc);
@@ -226,6 +262,8 @@
   }
   $('btn-refresh').onclick = loadDashboard;
   $('btn-run').onclick = runNow;
+  bindKill('toggle-long', 'midline_long');
+  bindKill('toggle-short', 'midline_short');
   loadDashboard();
   setInterval(loadDashboard, 60000);
 })();

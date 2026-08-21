@@ -22,7 +22,7 @@ alwaysApply: true
 - **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）· **midline_hold_exit** 默认峰≥1.2% 锁利；**Big4 LONG 多单** 2.5%/0.80%，关闭 no_follow · **排除** SmartExit
 - 多单限价挂在 **15m 回调区**（A1；贴着近 8 根高点不挂；滞涨不得当回踩）；**C3/C1/B2 破位市价跟风**（C3 禁高潮追价；同币止盈 4h 冷却）；B3/C4 顶部第一回调后市价空；A2 反抽拒绝仍限价 · C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h** · SL **6%** / TP **3%** · 5x · 500U
 - **Big4 已 LONG 时禁止 A2/B2**；允许 B3/C4 滞涨空与 C1 破位跟风（小仓）
-- 标的：`config.yaml`；**进** `LIVE_SYNC_SOURCES`（`live_trading_enabled` + 仅 L0；打开不回填）
+- 标的：`config.yaml` **市值前 100**；**进** `LIVE_SYNC_SOURCES`（`live_trading_enabled` + 仅 L0；打开不回填）
 - Web：原 Gemini 探索页 → 破位策略/机会分析；DeepSeek 探索去中线 Tab
 - 非中线限价仍读 `system_settings.paper_limit_*_offset_pct`（0.1~1%）
 

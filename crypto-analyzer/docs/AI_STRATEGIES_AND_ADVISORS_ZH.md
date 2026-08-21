@@ -1,6 +1,6 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-08-21 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.28** 对齐
+> 文档版本：2026-08-21 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.30** 对齐
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
 > **中线 v2 §7.2**：已落地模拟仓。  
 > **现货镜像 §7.4**：模拟跟 BRAIN A1 + DeepSeek LONG，仅 L0，实盘关。  
@@ -17,7 +17,7 @@
 ```text
 crypto-scheduler (app/scheduler.py)
   ├─ data_cache: candidate_pool (6min) → explore_prepared (15min)
-  ├─ REQ-BRAIN brain_swing（每15s×5币轮询 L0/L1；发现即开；启动+75s）
+  ├─ REQ-BRAIN brain_swing（每15s×5币轮询市值前300；发现即开；启动+75s）
   ├─ DeepSeek 探索/预测自动开仓：对照期并行（INV-BRAIN-07 暂缓）
   ├─ 中线 v2（midline_long/short）— 15min 轮询；多单回调买 / B3/C4 冲高卖；4h/6h 持仓
   └─ （战术/情绪等按现网开关）
@@ -46,7 +46,7 @@ crypto-app-main
 
 ### 1.1 REQ-BRAIN 要点（权威见 REQUIREMENTS §7.3）
 
-- 标的 L0+L1；1H 近 1 周定大方向，15M 近 1 天定结构  
+- 标的 **市值前 300**；1H 近 1 周定大方向，15M 近 1 天定结构；实盘仍仅 L0  
 - Big4 疲软（动量弱 + 相对成交量很低 → 量价波动小）→ 不开  
 - 近 7 日×4h **方向对就算赢**，胜率 ≥55% 才开  
 - DeepSeek：开仓**不经**开仓顾问；BRAIN 持仓进入 DeepSeek 持仓顾问复核（**不执行平仓**）  
@@ -305,7 +305,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 6.5.5 Kill Switch
 
-`midline_long_enabled` / `midline_short_enabled`（替换旧四路 `*_midline_*_enabled`）
+`midline_long_enabled` / `midline_short_enabled`（替换旧四路 `*_midline_*_enabled`）。系统配置「策略与模式」与破位策略页可开关。
 
 ---
 

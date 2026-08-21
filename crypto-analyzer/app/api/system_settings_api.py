@@ -99,6 +99,8 @@ class TradingServicesUpdate(BaseModel):
     gemini_predict_enabled: Optional[bool] = None
     deepseek_explore_enabled: Optional[bool] = None   # DeepSeek 探索
     deepseek_predict_enabled: Optional[bool] = None   # DeepSeek 预测
+    midline_long_enabled: Optional[bool] = None       # 破位做多
+    midline_short_enabled: Optional[bool] = None      # 破位做空
     gemini_position_advisor_enabled: Optional[bool] = None  # 兼容；映射为 DeepSeek 持仓顾问
     gemini_open_advisor_enabled: Optional[bool] = None      # 兼容；映射为 DeepSeek 开仓顾问
     open_advisor_enabled: Optional[bool] = None             # 统一开仓顾问 (DeepSeek)
@@ -443,6 +445,7 @@ async def get_trading_services():
                                   'u_coin_style_enabled',
                                   'gemini_explore_enabled', 'gemini_predict_enabled',
                                   'deepseek_explore_enabled', 'deepseek_predict_enabled',
+                                  'midline_long_enabled', 'midline_short_enabled',
                                   'gemini_position_advisor_enabled',
                                   'gemini_open_advisor_enabled',
                                   'deepseek_position_advisor_enabled',
@@ -477,6 +480,8 @@ async def get_trading_services():
             'u_coin_style_enabled': 'u_coin_style_enabled',
             'deepseek_explore_enabled': 'deepseek_explore_enabled',
             'deepseek_predict_enabled': 'deepseek_predict_enabled',
+            'midline_long_enabled': 'midline_long_enabled',
+            'midline_short_enabled': 'midline_short_enabled',
             'deepseek_position_advisor_enabled': 'deepseek_position_advisor_enabled',
             'deepseek_open_advisor_enabled': 'deepseek_open_advisor_enabled',
             'smart_exit_enabled': 'smart_exit_enabled',
@@ -498,6 +503,8 @@ async def get_trading_services():
             'gemini_predict_enabled': False,
             'deepseek_explore_enabled': False,
             'deepseek_predict_enabled': False,
+            'midline_long_enabled': False,
+            'midline_short_enabled': False,
             'gemini_position_advisor_enabled': False,
             'gemini_open_advisor_enabled': False,
             'deepseek_position_advisor_enabled': True,
@@ -695,6 +702,30 @@ async def update_trading_services(data: TradingServicesUpdate):
                     updated_at = NOW()
             """, (value,))
             updates.append(f"DeepSeek预测: {'启用' if data.deepseek_predict_enabled else '禁用'}")
+
+        if data.midline_long_enabled is not None:
+            value = '1' if data.midline_long_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('midline_long_enabled', %s, '破位做多开关 (1=扫描开仓, 0=停扫; 已开仓仍监控)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"破位做多: {'启用' if data.midline_long_enabled else '禁用'}")
+
+        if data.midline_short_enabled is not None:
+            value = '1' if data.midline_short_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('midline_short_enabled', %s, '破位做空开关 (1=扫描开仓, 0=停扫; 已开仓仍监控)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            updates.append(f"破位做空: {'启用' if data.midline_short_enabled else '禁用'}")
 
         if data.position_advisor_enabled is not None:
             _set_position_advisor_pair(cursor, data.position_advisor_enabled)

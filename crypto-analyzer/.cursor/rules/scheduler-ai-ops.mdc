@@ -19,9 +19,9 @@ alwaysApply: true
 | candidate_pool | 每 6min | 后台线程 refresh |
 | Gemini/DeepSeek/GPT 探索 | 距上次 ok ≥ max_hold_hours + 10min 轮询 | worker 防重 |
 | Gemini/DeepSeek/GPT 预测 | 距上次 ok ≥ max_hold_hours + 5min 轮询 | `*_predict_next_due_utc` 认领 |
-| **REQ-BRAIN** | every(15).seconds（每批5币） | `brain_swing_enabled`；启动 +75s；发现即挂防插针限价，成交前重跑闸门；权威 §7.3 |
+| **REQ-BRAIN** | every(15).seconds（每批5币，市值前300） | `brain_swing_enabled`；启动 +75s；发现即挂防插针限价，成交前重跑闸门；权威 §7.3 |
 | DeepSeek 探索/预测 | every(2).hours + 10min/5min（**对照期保留**） | INV-BRAIN-07 暂缓；结束后停 |
-| **中线 v2** | every(15).min | `midline_long/short` kill switch；A1 回调买 / C3·C1 破位市价跟风 / B3/C4 顶部回调空；**移除**旧 ×4 `*_midline_*` |
+| **中线 v2** | every(15).min | `midline_long/short` kill switch；扫描市值前100；A1 回调买 / C3·C1 破位市价跟风 / B3/C4 顶部回调空 |
 | **现货镜像** | 合约成交钩子 + main 1min | `spot_trading_enabled`；`spot_live_enabled` 成交瞬间同步 500U；仅 L0；打开不回填 |
 | 战术 15 槽位 | every(15).min | `tactical_explore_scheduler` |
 | **Gemini/DeepSeek 持仓顾问** | **every(15).min** | 每仓 15min；浮盈转亏 urgent；**含** midline_* 与 brain_*（**sell 只建议不执行**） |

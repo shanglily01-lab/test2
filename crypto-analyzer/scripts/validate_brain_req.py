@@ -448,6 +448,11 @@ def test_tick_config() -> None:
     snap = get_brain_live_status()
     assert snap.get("batch_size") == 5
     assert callable(run_brain_tick)
+    orch = (ROOT / "app/services/brain_strategy_orchestrator.py").read_text(encoding="utf-8")
+    if "load_brain_universe" not in orch:
+        _fail("BRAIN 未改扫市值前300")
+    else:
+        _ok("BRAIN universe market-cap top 300")
     _ok("tick config + live status")
 
 

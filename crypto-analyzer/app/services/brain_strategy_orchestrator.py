@@ -1,4 +1,4 @@
-"""REQ-BRAIN 战略编排 — L0/L1 轮询分析，发现机会立即下单。"""
+"""REQ-BRAIN 战略编排 — 市值前 300 轮询分析，发现机会立即下单。"""
 from __future__ import annotations
 
 import threading
@@ -133,8 +133,8 @@ def get_brain_live_status() -> Dict[str, Any]:
 
 
 def _refresh_pool(conn) -> List[str]:
-    from app.services.trading_gates import load_l0_l1_scan_symbols
-    symbols = sorted(load_l0_l1_scan_symbols(conn))
+    from app.services.market_cap_universe import load_brain_universe
+    symbols = list(load_brain_universe(conn))
     _live["pool"] = symbols
     _live["pool_size"] = len(symbols)
     if _live["cursor"] >= len(symbols):
@@ -584,7 +584,7 @@ def _analyze_one(
 
 def run_brain_tick(triggered_by: str = "scheduler") -> Dict[str, Any]:
     """
-    轮询一批（默认 5）L0/L1：分析落库；过门则立即开仓。
+    轮询一批（默认 5）市值前 300：分析落库；过门则立即开仓。
     scheduler 每 15 秒调用一次。
     """
     global _running
