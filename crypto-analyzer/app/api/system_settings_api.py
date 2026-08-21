@@ -91,6 +91,7 @@ class TradingServicesUpdate(BaseModel):
     live_trading_enabled: Optional[bool] = None
     live_close_enabled: Optional[bool] = None       # 2026-05-22 实盘平仓独立开关
     spot_trading_enabled: Optional[bool] = None      # 2026-05-23 现货交易开关
+    spot_live_enabled: Optional[bool] = None          # 2026-08-21 现货实盘同步
     spot_close_enabled: Optional[bool] = None         # 2026-05-23 现货自动卖出开关
     u_coin_style_enabled: Optional[bool] = None
     # gemini_explore/predict 已下线：字段保留兼容旧客户端，写入时强制忽略并关闭
@@ -438,7 +439,7 @@ async def get_trading_services():
             FROM system_settings
             WHERE setting_key IN ('u_futures_trading_enabled',
                                   'live_trading_enabled', 'live_close_enabled',
-                                  'spot_trading_enabled', 'spot_close_enabled',
+                                  'spot_trading_enabled', 'spot_live_enabled', 'spot_close_enabled',
                                   'u_coin_style_enabled',
                                   'gemini_explore_enabled', 'gemini_predict_enabled',
                                   'deepseek_explore_enabled', 'deepseek_predict_enabled',
@@ -471,6 +472,7 @@ async def get_trading_services():
             'live_trading_enabled': 'live_trading_enabled',
             'live_close_enabled': 'live_close_enabled',
             'spot_trading_enabled': 'spot_trading_enabled',
+            'spot_live_enabled': 'spot_live_enabled',
             'spot_close_enabled': 'spot_close_enabled',
             'u_coin_style_enabled': 'u_coin_style_enabled',
             'deepseek_explore_enabled': 'deepseek_explore_enabled',
@@ -488,8 +490,9 @@ async def get_trading_services():
             'usdt_futures_enabled': True,
             'live_trading_enabled': True,
             'live_close_enabled': True,
-            'spot_trading_enabled': True,
-            'spot_close_enabled': True,
+            'spot_trading_enabled': False,
+            'spot_live_enabled': False,
+            'spot_close_enabled': False,
             'u_coin_style_enabled': False,
             'gemini_explore_enabled': False,
             'gemini_predict_enabled': False,
@@ -625,6 +628,21 @@ async def update_trading_services(data: TradingServicesUpdate):
             """, (value,))
             status = '启动' if data.spot_trading_enabled else '暂停'
             updates.append(f"现货交易: {status}")
+
+        if data.spot_live_enabled is not None:
+            value = '1' if data.spot_live_enabled else '0'
+            cursor.execute("""
+                INSERT INTO system_settings (setting_key, setting_value, description, updated_by, updated_at)
+                VALUES ('spot_live_enabled', %s, '现货实盘同步 (1=模拟成交瞬间买/卖Binance现货, 0=仅模拟; 打开不回填历史仓)', 'web_ui', NOW())
+                ON DUPLICATE KEY UPDATE
+                    setting_value = VALUES(setting_value),
+                    updated_by = 'web_ui',
+                    updated_at = NOW()
+            """, (value,))
+            if data.spot_live_enabled:
+                updates.append("现货实盘: 启动（仅此后新开模拟现货同步，不回填历史仓）")
+            else:
+                updates.append("现货实盘: 暂停")
 
         if data.spot_close_enabled is not None:
             value = '1' if data.spot_close_enabled else '0'

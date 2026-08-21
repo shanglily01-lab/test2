@@ -331,13 +331,19 @@ def test_limit_price() -> None:
 
 
 def test_live_sync_whitelist() -> None:
-    print("[3b] live sync: midline NOT in LIVE_SYNC")
-    from app.services.trading_gates import LIVE_SYNC_SOURCES
-    from app.services.midline_swing_config import MIDLINE_SOURCES, ALL_MIDLINE_SOURCES
+    print("[3b] live sync: midline IN LIVE_SYNC (v2 only; legacy out)")
+    from app.services.trading_gates import LIVE_SYNC_SOURCES, should_sync_live_for_source
+    from app.services.midline_swing_config import (
+        LEGACY_MIDLINE_SOURCES,
+        MIDLINE_SOURCES,
+    )
 
-    assert MIDLINE_SOURCES.isdisjoint(LIVE_SYNC_SOURCES)
-    assert ALL_MIDLINE_SOURCES.isdisjoint(LIVE_SYNC_SOURCES)
-    _ok("midline excluded from LIVE_SYNC_SOURCES (paper only)")
+    assert MIDLINE_SOURCES <= LIVE_SYNC_SOURCES
+    assert should_sync_live_for_source("midline_long")
+    assert should_sync_live_for_source("midline_short")
+    assert LEGACY_MIDLINE_SOURCES.isdisjoint(LIVE_SYNC_SOURCES)
+    assert not should_sync_live_for_source("gemini_midline_long")
+    _ok("midline_long/short in LIVE_SYNC_SOURCES; legacy midline still paper-only")
 
 
 def test_ai_trail_for_midline() -> None:

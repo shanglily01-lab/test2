@@ -158,7 +158,7 @@ class BinanceSpotEngine:
         logger.info(f"[BinanceSpot] 限价买入 {symbol} {rounded_qty} @ {limit_price:.6g} => {result}")
 
         if isinstance(result, dict) and 'orderId' in result:
-            self._save_live_order(account_id, symbol, 'BUY', result)
+            self._save_live_order(account_id, symbol, 'BUY', result, source)
             return {'success': True, 'order': result}
         return {'success': False, 'error': str(result)}
 
@@ -166,7 +166,8 @@ class BinanceSpotEngine:
     # 市价买入 (按 USDT 金额)
     # ──────────────────────────────────────────────
     def create_market_buy_order(self, account_id: int, symbol: str,
-                                 quote_quantity: float, source: str) -> dict:
+                                 quote_quantity: float, source: str,
+                                 client_order_id: str = None) -> dict:
         """市价买入 — 用 quote_quantity USDT 买入"""
         bs = symbol.replace('/', '').upper()
         if bs.endswith('USDT'):
@@ -175,7 +176,7 @@ class BinanceSpotEngine:
                 'side': 'BUY',
                 'type': 'MARKET',
                 'quoteOrderQty': str(round(quote_quantity, 2)),
-                'newClientOrderId': f"spot_dca_{int(_time.time())}",
+                'newClientOrderId': (client_order_id or f"spot_dca_{int(_time.time())}")[:36],
             }
         else:
             return {'success': False, 'error': f'未知交易对: {symbol}'}
@@ -184,7 +185,7 @@ class BinanceSpotEngine:
         logger.info(f"[BinanceSpot] 市价买入 {symbol} {quote_quantity}USDT => {result}")
 
         if isinstance(result, dict) and 'orderId' in result:
-            self._save_live_order(account_id, symbol, 'BUY', result)
+            self._save_live_order(account_id, symbol, 'BUY', result, source)
             return {'success': True, 'order': result}
         return {'success': False, 'error': str(result)}
 
@@ -192,7 +193,8 @@ class BinanceSpotEngine:
     # 市价卖出 (按数量)
     # ──────────────────────────────────────────────
     def create_market_sell_order(self, account_id: int, symbol: str,
-                                  quantity: Decimal, source: str) -> dict:
+                                  quantity: Decimal, source: str,
+                                  client_order_id: str = None) -> dict:
         bs = symbol.replace('/', '').upper()
         qty = self._round_qty(quantity, bs)
         if qty <= 0:
@@ -203,20 +205,21 @@ class BinanceSpotEngine:
             'side': 'SELL',
             'type': 'MARKET',
             'quantity': str(qty),
-            'newClientOrderId': f"spot_dca_sell_{int(_time.time())}",
+            'newClientOrderId': (client_order_id or f"spot_dca_sell_{int(_time.time())}")[:36],
         }
         result = self._request('POST', '/api/v3/order', params)
         logger.info(f"[BinanceSpot] 卖出 {symbol} {qty} => {result}")
 
         if isinstance(result, dict) and 'orderId' in result:
-            self._save_live_order(account_id, symbol, 'SELL', result)
+            self._save_live_order(account_id, symbol, 'SELL', result, source)
             return {'success': True, 'order': result}
         return {'success': False, 'error': str(result)}
 
     # ──────────────────────────────────────────────
     # 持久化实盘订单
     # ──────────────────────────────────────────────
-    def _save_live_order(self, account_id: int, symbol: str, side: str, order: dict):
+    def _save_live_order(self, account_id: int, symbol: str, side: str, order: dict,
+                         source: str = 'spot_live'):
         try:
             conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor,
                                    autocommit=True, charset='utf8mb4')
@@ -246,3 +249,45 @@ class BinanceSpotEngine:
             cur.close(); conn.close()
         except Exception as e:
             logger.error(f"[BinanceSpot] 保存实盘订单失败: {e}")
+
+    def take_open_live_qty(self, client_order_id: str) -> Optional[float]:
+        """按 client_order_id 取仍 OPEN 的现货实盘数量；不按 symbol 模糊匹配。"""
+        try:
+            conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor,
+                                   autocommit=True, charset='utf8mb4')
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT quantity FROM live_futures_positions
+                WHERE client_order_id=%s AND status='OPEN'
+                ORDER BY id DESC LIMIT 1
+                """,
+                (client_order_id,),
+            )
+            row = cur.fetchone()
+            cur.close()
+            conn.close()
+            if not row:
+                return None
+            return float(row.get("quantity") or 0)
+        except Exception as e:
+            logger.error(f"[BinanceSpot] 查询实盘仓失败 {client_order_id}: {e}")
+            return None
+
+    def mark_live_closed(self, client_order_id: str) -> None:
+        try:
+            conn = pymysql.connect(**self.db_config, cursorclass=pymysql.cursors.DictCursor,
+                                   autocommit=True, charset='utf8mb4')
+            cur = conn.cursor()
+            cur.execute(
+                """
+                UPDATE live_futures_positions
+                SET status='CLOSED'
+                WHERE client_order_id=%s AND status='OPEN'
+                """,
+                (client_order_id,),
+            )
+            cur.close()
+            conn.close()
+        except Exception as e:
+            logger.error(f"[BinanceSpot] 标记实盘已平失败 {client_order_id}: {e}")

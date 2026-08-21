@@ -75,6 +75,7 @@
 | DeepSeek 探索/预测 | 每2h + 10min/5min（**对照期保留**；INV-BRAIN-07 暂缓） | `deepseek_*_enabled` |
 | **REQ-BRAIN** `brain_swing` | 每 **15s** 一批 **5** 币轮询 L0/L1 | `brain_swing_enabled`；启动 +75s；发现机会挂防插针限价 |
 | **中线 v2** `midline_long/short` | 每 **15min** 轮询；多单回调买 / B3/C4 冲高卖；C3/C1/B3/C4 4h / A1 6h |
+| **现货镜像** `spot_*` | 合约模拟成交瞬间跟单；`crypto-app-main` 每 1min 查 TP/SL；`spot_trading_enabled` |
 | **持仓顾问** DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent；BRAIN/中线 **suggest-only**） |
 | 市场情绪分析 | **已下线**（原 Gemini 情绪） |
 | ETF 同步 | 每天 06:45 |
@@ -148,7 +149,7 @@
 - 每 **max_hold_hours**（距上次 ok）+ 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
 - SL **3%** / TP **5%** / **max_hold_hours** / 5x / 500U；conf≥**0.75** + `explore_catalyst_technical_ok`（含 15m OHLC）；**DeepSeek LONG** 另≥**0.82** + RSI/7d/24h/`deepseek_long_entry_quality_ok`
 - **DeepSeek 选币**：仅 **L0+L1**（不扫未评级/全市场）
-- **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：`deepseek_explore` / `deepseek_predict` / `brain_swing`（+ L0 白名单等 symbol 闸门）
+- **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：`deepseek_explore` / `deepseek_predict` / `brain_swing` / **`midline_long/short`**（+ L0 白名单等 symbol 闸门）
 - **Gemini 探索已下线**（系统配置无开关；不调度）
 
 ### 主预测 (`*_predict`)
@@ -169,12 +170,20 @@
 - **对照期**：DeepSeek 探索/预测自动开仓**暂保留**并行对比；结束后再执行 INV-BRAIN-07
 - 调度：BRAIN **每15s** 一批5币；`validate_brain_req.py`；页 `/brain_strategy`
 
+### 现货镜像（REQ-SPOT）【v4.5.26 · 仅模拟】
+- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.4
+- 合约模拟 **FILLED** 后跟开 `spot_positions`（account_id=3）：**BRAIN A1** + **DeepSeek LONG**；**仅 L0**；**500U/单**；最多 5 仓
+- **不跟** 空单 / C3 突破 / 破位 / 旧 DCA；`spot_trading_enabled` 缺省关
+- **现货实盘** `spot_live_enabled`：成交瞬间市价买/卖；打开不回填；不进合约 `LIVE_SYNC_SOURCES`
+- 持仓监控在 `crypto-app-main` 每 1min；回归：`validate_spot_paper.py`
 
-### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟】
+
+### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟+实盘】
 - **量化扫描**，非 LLM；标的 `config.yaml`；**15min** 轮询；旧四路 `*_midline_*` 停并移除
 - 限价：做多 A1 挂 **15m 回调区**；**C3/C1/B2 破位市价跟风**（C3 禁 RSI 极端+7日高追；止盈后 4h 冷却）；B3/C4 顶部第一回调后市价空；A2 挂反抽区；C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h**；SL **6%** / TP **3%** / 5x / 500U
 - **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）；**midline_hold_exit** 默认峰≥1.2% 锁利，Big4 LONG 多单 2.5%/0.80% 且关闭 no_follow；**排除** SmartExit
-- **暂不实盘**（不进 `LIVE_SYNC_SOURCES`）；Web：原 Gemini 探索页整页改破位策略/机会分析
+- **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
+- Web：原 Gemini 探索页整页改破位策略/机会分析
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.2
 
 ### 开仓 / 持仓顾问
@@ -197,6 +206,7 @@
 | `benchmark_*_prompt_lang.py` | 主/战术/顾问 prompt 中英对照（无 API） |
 | `validate_tactical_explore_db.py` | 战术表结构 |
 | `validate_brain_req.py` | **REQ-BRAIN** 静态回归（无 API） |
+| `validate_spot_paper.py` | **REQ-SPOT** 镜像资格 / 非实盘 / DCA 已停 |
 | `ai_win_rate_report.py` | **AI 按日胜率巡检** (见下) |
 
 ## AI 胜率 KPI (2026-05-31)
@@ -232,7 +242,8 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 
 ## 实盘控制
 
-- **按 source 白名单**（`trading_gates.LIVE_SYNC_SOURCES`）：DeepSeek 探索/预测 + **BRAIN**；GPT/战术/反转/smart_trader/**中线 v2**/已下线 Gemini 只模拟
+- **按 source 白名单**（`trading_gates.LIVE_SYNC_SOURCES`）：DeepSeek 探索/预测 + **BRAIN** + **破位 `midline_*`**；GPT/战术/反转/smart_trader/现货镜像/已下线 Gemini 只模拟
+- **现货**（§7.4）：模拟跟 BRAIN A1 + DeepSeek LONG，仅 L0，`spot_trading_enabled`；实盘独立开关 `spot_live_enabled`（成交瞬间，不回填）
 - **实盘开仓 symbol**：须 **L0 白名单**（`rating_level=0`）；L1/L2/L3 禁止实盘
 - **限价偏移**：中线优先 **回调区**（无区才 ±1%）；其他模拟限价读 `paper_limit_long/short_offset_pct`（系统设定）
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)

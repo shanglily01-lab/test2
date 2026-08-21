@@ -1,8 +1,9 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-08-21 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.23** 对齐
+> 文档版本：2026-08-21 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.28** 对齐
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
 > **中线 v2 §7.2**：已落地模拟仓。  
+> **现货镜像 §7.4**：模拟跟 BRAIN A1 + DeepSeek LONG，仅 L0，实盘关。  
 > **实盘同步 / 闸门 / 15m 定方向 / 限价偏移 / BRAIN**：以 REQUIREMENTS 为准；本文侧重 AI/中线细节。
 
 ## 1. 总览
@@ -38,7 +39,8 @@ crypto-app-main
 | 主预测 | 是 | `*_predict` | **对照期 deepseek_predict 自动开仓保留** |
 | 顶空底多 | 是 | `*_reversal` | 否 |
 | 战术四策略 | 是 | `*_pullback` 等 | 否 |
-| **中线做多/做空 v2** | **否（量化）** | `midline_long` / `midline_short` | **否（暂不进 LIVE_SYNC）** |
+| **中线做多/做空 v2** | **否（量化）** | `midline_long` / `midline_short` | **是**（`live_trading_enabled` + **仅 L0**） |
+| **现货镜像** | 否（跟单） | `spot_brain` / `spot_deepseek_*` | **`spot_live_enabled`（成交瞬间；不进合约 LIVE_SYNC）** |
 | 开仓/持仓顾问 | 是 | BRAIN/中线：**跳过开仓顾问，纳入持仓顾问（sell 只建议不执行）** | 探索/预测持仓 sell：`live_close_enabled=1` 且有映射时平交易所 |
 | 情绪分析 | 是 | 不下单（Gemini 情绪已下线） | — |
 
@@ -299,7 +301,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 6.5.4 实盘
 
-- **暂不** ∈ `LIVE_SYNC_SOURCES` → **仅模拟**。日后加入须同步闸门与本文。
+- ∈ `LIVE_SYNC_SOURCES`；随 `live_trading_enabled` / `live_close_enabled`；**仅 L0**；成交瞬间同步，打开开关不回填。旧四路 `*_midline_*` 仍不实盘。
 
 ### 6.5.5 Kill Switch
 
@@ -417,7 +419,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 | `live_whitelist_enabled` | 开仓：`rating_level=0` 可开实仓 |
 | `blacklist_level3_enabled` | **已废弃**（L2+/锁定恒禁模拟+实盘；保留仅为兼容） |
 
-**开仓按 source 白名单**（`LIVE_SYNC_SOURCES`）：DeepSeek 探索/预测 + **BRAIN**。GPT/战术/反转/**中线 v2**/已下线 Gemini 等只写模拟仓。
+**开仓按 source 白名单**（`LIVE_SYNC_SOURCES`）：DeepSeek 探索/预测 + **BRAIN** + **破位 `midline_long/short`**。GPT/战术/反转/已下线 Gemini 等只写模拟仓。
 
 **北京时间实盘开仓时段**：仅 **10:00-16:00**、**22:00-次日04:00** 允许同步/直接开实盘；服务器 UTC 对应 **02:00-08:00**、**14:00-20:00**。模拟开仓不受该时段限制。
 

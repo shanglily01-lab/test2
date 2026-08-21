@@ -67,7 +67,8 @@ def test_imports_and_config() -> None:
     assert BRAIN_SOURCE in LIVE_SYNC_SOURCES
     assert should_sync_live_for_source(BRAIN_SOURCE)
     assert should_sync_live_for_source("brain_long")
-    assert not should_sync_live_for_source("midline_long")
+    assert should_sync_live_for_source("midline_long")
+    assert not should_sync_live_for_source("gemini_midline_long")
     assert "brain_%" in brain_source_sql_exclude("fp.source")
     _ok("brain_config")
 

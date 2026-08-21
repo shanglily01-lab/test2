@@ -1294,6 +1294,26 @@ class FuturesTradingEngine:
                         )
                         live_sync_info = {"attempted": False, "reason": str(sync_ex)}
 
+            spot_position_id = None
+            if paper_acct and position_side == 'LONG':
+                try:
+                    from app.services.spot_paper_mirror import maybe_mirror_spot_from_paper_fill
+                    spot_position_id = maybe_mirror_spot_from_paper_fill(
+                        account_id=account_id,
+                        symbol=symbol,
+                        side=position_side,
+                        source=source,
+                        entry_price=float(entry_price),
+                        entry_signal_type=entry_signal_type,
+                        entry_reason=entry_reason,
+                        stop_loss_price=float(stop_loss_price) if stop_loss_price else None,
+                        take_profit_price=float(take_profit_price) if take_profit_price else None,
+                        planned_close_time=planned_close_time,
+                        futures_position_id=position_id,
+                    )
+                except Exception as spot_ex:
+                    logger.warning(f"[现货镜像] 成交后镜像失败 {symbol}: {spot_ex}")
+
             tag = '市价转单' if at_market else '限价成交'
             extra = f" 限价={limit_price}" if at_market else ''
             logger.info(
@@ -1307,6 +1327,7 @@ class FuturesTradingEngine:
                 'fill_price': float(entry_price),
                 'at_market': at_market,
                 'live_sync': live_sync_info,
+                'spot_position_id': spot_position_id,
             }
         except Exception as e:
             if self.connection and pending_order_id:

@@ -2,7 +2,8 @@
 实盘开仓闸门 & 黑名单等级 — 统一读取 system_settings，避免各模块硬编码。
 
 按 source 控制实盘（其余策略仅模拟）:
-  - deepseek_explore, deepseek_predict, brain_swing → 可开实盘（须 live_trading_enabled + L0 白名单）
+  - deepseek_explore, deepseek_predict, brain_swing, midline_long/short
+    → 可开实盘（须 live_trading_enabled + L0 白名单）
   - 总开关: live_trading_enabled（开仓）, live_close_enabled（平仓）
 """
 from __future__ import annotations
@@ -25,8 +26,11 @@ LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
     "brain_swing",
     "brain_long",
     "brain_short",
+    "midline_long",
+    "midline_short",
     # gemini_explore / gemini_predict 已下线（系统配置不再提供开关）
-    # 中线 v2（midline_long/short）暂不实盘 — REQUIREMENTS §7.2
+    # 旧四路 gemini/deepseek_midline_* 不实盘 — REQUIREMENTS §7.2
+    # 现货镜像 spot_* 走独立开关 spot_live_enabled — REQUIREMENTS §7.4
 })
 
 SYMBOL_STOP_LOSS_COOLDOWN_HOURS = 4
@@ -106,6 +110,16 @@ def is_live_trading_enabled() -> bool:
 def is_live_close_enabled() -> bool:
     """system_settings.live_close_enabled — 模拟平仓时是否同步平交易所仓位."""
     return _bool_setting("live_close_enabled", False)
+
+
+def is_spot_trading_enabled(cursor=None) -> bool:
+    """现货模拟镜像 kill switch（缺省关）。"""
+    return _bool_setting("spot_trading_enabled", False, cursor)
+
+
+def is_spot_live_enabled(cursor=None) -> bool:
+    """现货实盘同步开关（缺省关）。打开不得回填历史模拟现货仓。"""
+    return _bool_setting("spot_live_enabled", False, cursor)
 
 
 def get_beijing_open_window_status(now_utc=None) -> Tuple[bool, str]:
