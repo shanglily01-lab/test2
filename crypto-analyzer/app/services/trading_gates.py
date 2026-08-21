@@ -37,6 +37,8 @@ SYMBOL_LOSS_TRADE_LIMIT = 3
 SYMBOL_LOSS_NET_PNL_LIMIT = -120.0
 SOURCE_SYMBOL_LOSS_TRADE_LIMIT = 2
 SOURCE_SYMBOL_LOSS_NET_PNL_LIMIT = -100.0
+# Same symbol + same side closed green → do not chase the same run (Aug 20 DOGE/FIL).
+SYMBOL_TP_REENTRY_COOLDOWN_HOURS = 4
 SOURCE_SIDE_PERFORMANCE_HOURS = 72
 SOURCE_SIDE_PERFORMANCE_MIN_TRADES = 20
 SOURCE_SIDE_MIN_WIN_RATE = 35.0
@@ -230,6 +232,77 @@ def _evaluate_symbol_loss_cooldowns(
                 f"策略连续亏损冷静禁止开仓",
             )
     return True, ""
+
+
+def check_symbol_tp_reentry_cooldown(
+    symbol: str,
+    side: str,
+    conn_or_cursor=None,
+    account_id: int = 2,
+) -> Tuple[bool, str]:
+    """同币同向近 4h 已止盈 → 禁止再追同一段。"""
+    clean = futures_symbol_clean(symbol)
+    side_u = (side or "").strip().upper()
+    if not clean or side_u not in {"LONG", "SHORT"}:
+        return True, ""
+
+    own_conn = conn_or_cursor is None
+    conn = None
+    cur = None
+    close_cursor = False
+    try:
+        if own_conn:
+            conn = pymysql.connect(
+                **get_db_config(),
+                charset="utf8mb4",
+                cursorclass=pymysql.cursors.DictCursor,
+                autocommit=True,
+            )
+            cur = conn.cursor()
+            close_cursor = True
+        else:
+            cur = _as_cursor(conn_or_cursor)
+            close_cursor = hasattr(conn_or_cursor, "cursor") and cur is not conn_or_cursor
+
+        clean_expr = sql_rating_symbol_clean("symbol")
+        cur.execute(
+            f"""
+            SELECT id, realized_pnl, close_time
+            FROM futures_positions
+            WHERE account_id=%s
+              AND {clean_expr}=%s
+              AND position_side=%s
+              AND status='closed'
+              AND realized_pnl > 0
+              AND close_time >= DATE_SUB(NOW(), INTERVAL %s HOUR)
+            ORDER BY close_time DESC
+            LIMIT 1
+            """,
+            (account_id, clean, side_u, SYMBOL_TP_REENTRY_COOLDOWN_HOURS),
+        )
+        row = cur.fetchone()
+        if row:
+            pnl = float(row.get("realized_pnl") or 0)
+            return (
+                False,
+                f"recent_tp_cooldown:{side_u}+{pnl:.0f}U/"
+                f"{SYMBOL_TP_REENTRY_COOLDOWN_HOURS}h",
+            )
+        return True, ""
+    except Exception as e:
+        logger.warning(f"[开仓闸门] {symbol} 止盈冷却查询失败: {e}")
+        return True, ""
+    finally:
+        if close_cursor and cur is not None:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if own_conn and conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def check_symbol_loss_cooldown(

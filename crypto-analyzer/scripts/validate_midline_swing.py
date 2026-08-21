@@ -292,7 +292,15 @@ def test_midline_market_follow() -> None:
         _fail("中线 worker 未对破位/顶部走市价")
     if "follow_breakout=True" not in scanner:
         _fail("中线扫描未对 C3 启用破位跟风")
-    _ok("C1/C3/B3 midline market; A1/A2 stay limit")
+    from app.services.trading_gates import check_symbol_tp_reentry_cooldown, SYMBOL_TP_REENTRY_COOLDOWN_HOURS
+    from app.services.entry_timing import C3_BLOWOFF_SIGNALS, C3_PRE_BREAK_EXCLUDE_BARS
+    assert SYMBOL_TP_REENTRY_COOLDOWN_HOURS == 4
+    assert C3_BLOWOFF_SIGNALS == frozenset({"rsi_extreme_high", "near_7d_high"})
+    assert C3_PRE_BREAK_EXCLUDE_BARS == 8
+    gate = (ROOT / "app/services/paper_open_gate.py").read_text(encoding="utf-8")
+    if "check_symbol_tp_reentry_cooldown" not in gate:
+        _fail("开仓闸门未接止盈再入冷却")
+    _ok("C1/C3/B3 midline market; A1/A2 stay limit; chase/TP cooldown wired")
 
 
 def test_limit_price() -> None:

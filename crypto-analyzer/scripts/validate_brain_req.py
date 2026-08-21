@@ -835,6 +835,19 @@ def test_entry_timing_pullback() -> None:
     )
     assert a1_chase.ready is False, a1_chase
     assert a1_chase.status == "wait_pullback"
+
+    stall = compute_pullback_entry(
+        "LONG", "A1", pull,
+        playbook_row={
+            "signals": [
+                "ema_bull_align", "volume_shrink_pullback",
+                "15m_stop_new_high", "15m_lower_high", "top_callback",
+            ]
+        },
+        ref_price=pull[-1]["close_price"],
+    )
+    assert stall.ready is False, stall
+    assert stall.reason == "stall_high_not_pullback", stall
     _ok("entry timing waits for C3 pullback then arms the limit")
 
 
@@ -992,30 +1005,68 @@ def test_entry_timing_c3_midline_follow() -> None:
             "volume": 600,
         })
         p += 0.01
-    for _ in range(3):
-        p += 0.55
-        bars.append({
-            "open_price": p - 0.08,
-            "high_price": p + 0.10,
-            "low_price": p - 0.06,
-            "close_price": p,
-            "volume": 2400,
-        })
+    p += 0.50
+    bars.append({
+        "open_price": p - 0.08,
+        "high_price": p + 0.10,
+        "low_price": p - 0.06,
+        "close_price": p,
+        "volume": 2400,
+    })
+    sigs = ["impulse_up", "h1_breakout_up", "break_resistance", "volume_expand_up"]
     brain = compute_pullback_entry(
         "LONG", "C3", bars,
-        playbook_row={"signals": ["impulse_up", "h1_breakout_up", "break_resistance", "volume_expand_up"]},
+        playbook_row={"signals": sigs},
         ref_price=bars[-1]["close_price"],
     )
     assert brain.ready is False, brain
     follow = compute_pullback_entry(
         "LONG", "C3", bars,
-        playbook_row={"signals": ["impulse_up", "h1_breakout_up", "break_resistance", "volume_expand_up"]},
+        playbook_row={"signals": sigs},
         ref_price=bars[-1]["close_price"],
         follow_breakout=True,
     )
     assert follow.ready is True, follow
     assert follow.status == "breakout_ready"
-    _ok("midline C3 follows the breakout; BRAIN C3 still waits for pullback")
+
+    blow = compute_pullback_entry(
+        "LONG", "C3", bars,
+        playbook_row={"signals": sigs + ["rsi_extreme_high", "near_7d_high"]},
+        ref_price=bars[-1]["close_price"],
+        follow_breakout=True,
+    )
+    assert blow.ready is False, blow
+    assert blow.status == "chase_blowoff", blow
+
+    chase = []
+    q = 100.0
+    for _ in range(48):
+        chase.append({
+            "open_price": q - 0.01,
+            "high_price": q + 0.04,
+            "low_price": q - 0.03,
+            "close_price": q,
+            "volume": 600,
+        })
+        q += 0.01
+    for _ in range(8):
+        q += 0.40
+        chase.append({
+            "open_price": q - 0.08,
+            "high_price": q + 0.10,
+            "low_price": q - 0.06,
+            "close_price": q,
+            "volume": 2400,
+        })
+    missed = compute_pullback_entry(
+        "LONG", "C3", chase,
+        playbook_row={"signals": sigs},
+        ref_price=chase[-1]["close_price"],
+        follow_breakout=True,
+    )
+    assert missed.ready is False, missed
+    assert missed.status == "missed_break", missed
+    _ok("midline C3 follows a fresh break; blowoff/extended chase blocked; BRAIN C3 still waits")
 
 
 def main() -> int:

@@ -49,13 +49,22 @@ def gate_simulated_open(
     from app.services.brain_config import is_brain_source
     if is_midline_source(source):
         try:
-            from app.services.trading_gates import check_simulated_symbol_allowed
+            from app.services.trading_gates import (
+                check_simulated_symbol_allowed,
+                check_symbol_tp_reentry_cooldown,
+            )
             allowed, reason = check_simulated_symbol_allowed(symbol, conn)
             if not allowed:
                 logger.info(
                     f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {reason}"
                 )
                 return False, reason
+            tp_ok, tp_reason = check_symbol_tp_reentry_cooldown(symbol, side, conn, account_id=account_id)
+            if not tp_ok:
+                logger.info(
+                    f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {tp_reason}"
+                )
+                return False, tp_reason
         except Exception as e:
             logger.warning(f"[开仓闸门] {symbol} 基础闸门异常: {e}")
             return False, "symbol_gate_error"
@@ -65,6 +74,7 @@ def gate_simulated_open(
         from app.services.trading_gates import (
             check_simulated_symbol_allowed,
             check_symbol_loss_cooldown,
+            check_symbol_tp_reentry_cooldown,
             has_open_futures_position_same_side,
         )
         allowed, reason = check_simulated_symbol_allowed(symbol, conn)
@@ -81,6 +91,14 @@ def gate_simulated_open(
                 f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {symbol_reason}"
             )
             return False, symbol_reason
+        tp_ok, tp_reason = check_symbol_tp_reentry_cooldown(
+            symbol, side, conn, account_id=account_id,
+        )
+        if not tp_ok:
+            logger.info(
+                f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {tp_reason}"
+            )
+            return False, tp_reason
         duplicate, duplicate_reason = has_open_futures_position_same_side(
             conn, symbol, side, account_id=account_id,
         )

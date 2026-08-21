@@ -36,6 +36,13 @@ REJECT_STALL_HITS = frozenset({"wick", "reject_close", "false_break", "rsi", "re
 # LONG: still hugging the local 15m high → wait, never chase the one-way run.
 LONG_STILL_AT_HIGH_PCT = 0.40
 LONG_A1_NEAR_EMA_MAX_RANGE_POS = 0.68
+# C3 follow: measure extension vs the high *before* the last 2h, so the break
+# level does not ratchet with the pump (Aug 20 FIL/DOGE re-chase).
+C3_PRE_BREAK_EXCLUDE_BARS = 8
+C3_MISSED_BREAK_PCT = 1.40
+C3_BLOWOFF_SIGNALS = frozenset({"rsi_extreme_high", "near_7d_high"})
+C3_STALL_SIGNALS = frozenset({"stall_at_high", "top_callback", "long_upper_wick"})
+A1_STALL_SIGNALS = frozenset({"15m_lower_high", "top_callback", "stall_at_high", "near_7d_high"})
 
 
 def _f(v: Any, default: float = 0.0) -> float:
@@ -441,6 +448,17 @@ def _follow_breakdown_entry(
     )
 
 
+def _pre_impulse_high(h: List[float], exclude: int = C3_PRE_BREAK_EXCLUDE_BARS) -> float:
+    """Resistance from before the current 15m impulse; does not ride the pump."""
+    if not h:
+        return 0.0
+    if len(h) > exclude + 2:
+        return max(h[:-exclude])
+    if len(h) > 3:
+        return max(h[:-2])
+    return max(h)
+
+
 def _follow_breakout_long_entry(
     rows_15m: List[Dict[str, Any]],
     *,
@@ -455,15 +473,17 @@ def _follow_breakout_long_entry(
     v = _vols(rows_15m)
     sig = _signals_of(playbook_row)
     recent_hi = max(h[-8:])
-    swing_hi = max(h[-16:-2]) if len(h) >= 18 else (look_hi if look_hi > 0 else recent_hi)
-    dist_from_break = (price - swing_hi) / price * 100.0 if price > 0 and swing_hi > 0 else 0.0
+    break_level = _pre_impulse_high(h)
+    if break_level <= 0 and look_hi > 0:
+        break_level = look_hi
+    dist_from_break = (price - break_level) / price * 100.0 if price > 0 and break_level > 0 else 0.0
     broke = bool(
         "break_resistance" in sig
         or "impulse_up" in sig
         or "h1_breakout_up" in sig
         or "pump_spike" in sig
-        or (look_hi > 0 and price > look_hi * 1.002)
-        or (swing_hi > 0 and c[-1] > swing_hi * 1.002)
+        or (break_level > 0 and price > break_level * 1.002)
+        or (len(c) >= 2 and c[-1] > break_level * 1.002)
     )
     force = bool(
         "volume_expand_up" in sig
@@ -473,11 +493,11 @@ def _follow_breakout_long_entry(
     )
     fake = bool(
         "false_break_up" in sig
-        or (look_hi > 0 and c[-1] < look_hi * 0.997 and len(c) >= 3 and max(h[-3:]) > look_hi)
+        or (break_level > 0 and c[-1] < break_level * 0.997 and len(c) >= 3 and max(h[-3:]) > break_level)
     )
     target = price
     offset = 0.0
-    zone_low = look_hi if look_hi > 0 else swing_hi
+    zone_low = break_level
     zone_high = recent_hi
 
     if fake:
@@ -485,22 +505,38 @@ def _follow_breakout_long_entry(
             ready=False, status="invalidated", reason="breakout_reclaimed",
             limit_offset_pct=ENTRY_OFFSET_MIN_PCT, limit_price=None,
             zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-            break_level=look_hi, extended=False, bounce_ok=False, mode="follow",
+            break_level=break_level, extended=False, bounce_ok=False, mode="follow",
+        )
+    if C3_BLOWOFF_SIGNALS <= sig:
+        return EntryTiming(
+            ready=False, status="chase_blowoff",
+            reason="rsi_extreme_near_7d_high",
+            limit_offset_pct=ENTRY_OFFSET_MIN_PCT, limit_price=round(price, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=break_level, extended=True, bounce_ok=False, mode="follow",
+        )
+    if "rsi_extreme_high" in sig and (sig & C3_STALL_SIGNALS):
+        return EntryTiming(
+            ready=False, status="chase_blowoff",
+            reason="extreme_rsi_stalling_at_high",
+            limit_offset_pct=ENTRY_OFFSET_MIN_PCT, limit_price=round(price, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=break_level, extended=True, bounce_ok=False, mode="follow",
         )
     if not broke:
         return EntryTiming(
             ready=False, status="wait_break", reason="resistance_not_broken",
             limit_offset_pct=ENTRY_OFFSET_MIN_PCT, limit_price=round(price, 8),
             zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-            break_level=look_hi, extended=False, bounce_ok=False, mode="follow",
+            break_level=break_level, extended=False, bounce_ok=False, mode="follow",
         )
-    if dist_from_break >= 1.40:
+    if dist_from_break >= C3_MISSED_BREAK_PCT:
         return EntryTiming(
             ready=False, status="missed_break",
             reason=f"already_extended_{dist_from_break:.2f}pct",
             limit_offset_pct=ENTRY_OFFSET_MIN_PCT, limit_price=round(price, 8),
             zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-            break_level=look_hi, extended=True, bounce_ok=False, mode="follow",
+            break_level=break_level, extended=True, bounce_ok=False, mode="follow",
         )
     if force or (len(c) >= 2 and c[-1] >= c[-2]):
         return EntryTiming(
@@ -508,14 +544,14 @@ def _follow_breakout_long_entry(
             reason="follow_fresh_breakout",
             limit_offset_pct=offset, limit_price=round(target, 8),
             zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-            break_level=look_hi if look_hi > 0 else swing_hi, extended=True, bounce_ok=True, mode="follow",
+            break_level=break_level, extended=False, bounce_ok=True, mode="follow",
         )
     return EntryTiming(
         ready=False, status="wait_follow",
         reason="broke_wait_continuation",
         limit_offset_pct=ENTRY_OFFSET_MIN_PCT, limit_price=round(price, 8),
         zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-        break_level=look_hi, extended=False, bounce_ok=False, mode="follow",
+        break_level=break_level, extended=False, bounce_ok=False, mode="follow",
     )
 
 
@@ -617,6 +653,18 @@ def compute_pullback_entry(
                 limit_offset_pct=offset, limit_price=round(target, 8),
                 zone_low=zone_low, zone_high=zone_high, ema20=ema20,
                 break_level=break_level, extended=True, bounce_ok=bounce_ok,
+            )
+        if (
+            pb in {"A1", "B4"}
+            and "15m_stop_new_high" in sig
+            and bool(sig & A1_STALL_SIGNALS)
+        ):
+            return EntryTiming(
+                ready=False, status="wait_pullback",
+                reason="stall_high_not_pullback",
+                limit_offset_pct=offset, limit_price=round(target, 8),
+                zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+                break_level=break_level, extended=True, bounce_ok=False,
             )
         if extended:
             return EntryTiming(

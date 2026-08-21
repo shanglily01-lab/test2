@@ -1,13 +1,13 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.24
+**版本**: v4.5.25
 **日期**: 2026-08-21
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。**对外文案为「破位策略」**（中线策略已废弃）。  
 > **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。  
 > **BRAIN v2 机会识别（§7.3.10–7.3.15）**：**已落地且开仓机会判定视为相对客观**；退出/风控见 §7.3.16。  
 > **C1 / A2 / B2（v4.5.17）**：C1 **破位当根跟风做空**（不等回抽）；A2 下降结构弱反抽被拒绝后开仓；B2 弱反抽失败（须先有反抽再破起点）后跟风开仓。  
-> **中线破位跟风（v4.5.23）**：中线是破位策略。C1/C3/B2 **找到破位点即市价跟风**（禁止挂限价等回抽）；B3/C4 须摸准顶部第一回调再市价空。BRAIN 仍强制限价（INV-11）。  
+> **中线破位跟风（v4.5.23 / v4.5.25）**：中线是破位策略。C1/C3/B2 **找到破位点即市价跟风**（禁止挂限价等回抽）；B3/C4 须摸准顶部第一回调再市价空。**C3 禁止 RSI 极端+贴近 7 日高市价追**；`missed_break` 用冲高前高点（近 8 根 15m 排除）；同币同向止盈后 **4h** 不得再开。BRAIN 仍强制限价（INV-11）。  
 > **回调做空（v4.5.22）**：Big4 仍 LONG 时 **禁止 A2/B2** 逆势摸空；**允许** B3/C4 高点滞涨空（×0.20）与 C1 破位跟风（×0.35）。15m 须 `exhaustion_ready` / `breakdown_ready`。计划到期与顾问规则仍按 v4.5.19。  
 > **BRAIN 实盘（v4.5.21）**：`brain_swing` 加入 `LIVE_SYNC_SOURCES`；由 `live_trading_enabled` / `live_close_enabled` 控制；实盘开仓**仅 L0 白名单**（模拟仍扫 L0+L1）。成交瞬间同步，禁止回填历史仓。  
 > **单边不追高（v4.5.20）**：多单贴着近 8 根 15m 高点（距高 ≤0.40%）一律 `wait_pullback`；禁止仅凭 `15m_higher_low` / 靠近 EMA 在高点挂多。  
@@ -300,8 +300,9 @@ BRAIN 实盘与 DeepSeek 同一套开关：`live_trading_enabled=1` 才在**成�
 
 方向对仍不够。实现：`entry_timing.compute_pullback_entry`（中线 C3 传 `follow_breakout=True`）。
 
-- **做多 A1**：禁止破位当根追价；须 15m 回到 EMA20 / 38–50% 回撤区并出现缩量或高低点确认，才挂限价。未就绪记 `wait_pullback`（不冷却）。**单边贴高（距近 8 根高点 ≤0.40%）一律等待**。
-- **做多 C3（中线破位跟风）**：放量突破阻力/1h 突破当根 **市价跟进**（`breakout_ready`）。假突破收回 → `invalidated`；已延伸 ≥1.40% → `missed_break`。BRAIN 的 C3 **仍等回踩**（INV-11 限价）。
+- **做多 C3（中线破位跟风）**：放量突破阻力/1h 突破当根 **市价跟进**（`breakout_ready`）。假突破收回 → `invalidated`；已延伸 ≥1.40%（相对 **冲高前高点**，近 8 根 15m 不计入，避免突破位跟着涨）→ `missed_break`。**`rsi_extreme_high` + `near_7d_high`**，或极端 RSI 叠加滞涨（`stall_at_high` / `top_callback` / `long_upper_wick`）→ `chase_blowoff`（禁止市价追）。BRAIN 的 C3 **仍等回踩**（INV-11 限价）。
+- **做多 A1**：禁止破位当根追价；须 15m 回到 EMA20 / 38–50% 回撤区并出现缩量或高低点确认，才挂限价。未就绪记 `wait_pullback`（不冷却）。**单边贴高（距近 8 根高点 ≤0.40%）一律等待**。**`15m_stop_new_high` 且伴 `15m_lower_high` / `top_callback` / `stall_at_high` / `near_7d_high`** → `stall_high_not_pullback`（滞涨不是回踩）。
+- **同币止盈冷却（v4.5.25）**：同 symbol、同方向，近 **4h** 已平仓且 `realized_pnl>0` → 破位/BRAIN 均不得再开（`recent_tp_cooldown`）。去重仍拦当前持仓；止盈后再追由本条拦。
 - **做空 B3/C4（顶部回调点）**：先贴着近 8 根高点，再等 **第一根离开高点的拒绝/回调**（长上影、收盘离开上沿、RSI 从超买拐头、量价背离，且拒绝类证据 ≥1）。仍放量实体创新高 → `wait_stall`；只在高点横盘尚未回调 → `at_high_wait_first_callback`；已离高 ≥1.35% → `missed_high`。中线确认后 **市价空**；BRAIN 仍限价挂在高点上方 0.20–0.55%。**已有滞涨时允许 4h 仍偏多**。
 - **做空 C1/B2（破位跟风）**：刚跌破支撑且放量/急跌 → **当根跟风**（`breakdown_ready`），不等回抽。中线 **市价**；BRAIN 仍限价贴近破位价。假跌破收回 → `invalidated`。
 - **做空 A2（弱反抽）**：下降结构中缩量反抽到 EMA/前高被拒绝，才在反抽区挂空（限价）。
@@ -405,7 +406,7 @@ BRAIN 实盘与 DeepSeek 同一套开关：`live_trading_enabled=1` 才在**成�
   → OPENED = 已挂 PENDING 限价；成交后才生成持仓
 ```
 
-**入场（v4.5.23）**：BRAIN 的 C3 confirmed 仍须回踩；**多单距近 8 根 15m 高点 ≤0.40% 不得挂**。C1 **破位当根跟风**。B3/C4 卖顶部第一回调。中线 C3/C1/B2/B3/C4 **市价跟风**（§7.2）。BRAIN **等到 `entry_timing.ready`** 才下**限价**。
+**入场（v4.5.25）**：BRAIN 的 C3 confirmed 仍须回踩；**多单距近 8 根 15m 高点 ≤0.40% 不得挂**；A1 滞涨结构不得当回踩。C1 **破位当根跟风**。B3/C4 卖顶部第一回调。中线 C3/C1/B2/B3/C4 **市价跟风**（§7.2），但 C3 **不得**在 RSI 极端+7 日高追价；突破延伸按冲高前高点计。同币同向止盈后 4h 冷却。BRAIN **等到 `entry_timing.ready`** 才下**限价**。
 **日线 vs Big4（v4.5.18）**：`DAILY_BEAR_PROBE` 仍收缩多数多单，但 **Big4 已 LONG 时不得否决 A1**（日线滞后不得挡住已确认的多头趋势）。
 **回调做空（v4.5.22）**：`big4.bias == LONG` 时 **禁止 A2/B2**（`big4_long_blocks_short`）；**允许** B3/C4 高点滞涨（`big4_long_allows_exhaustion_*`，保证金 ×0.20，edge≥0.85）与 C1 放量破位（`big4_long_allows_breakdown_C1`，×0.35，edge≥0.80）。BULL_TREND 同样放行这两类。中线扫描一致。
 
@@ -941,7 +942,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-MIDLINE | `midline_swing_config.py`, `midline_swing_scanner.py`, `entry_timing.py`, `midline_hold_exit.py`, `midline_explore_worker.py`, `midline_swing_api.py`, 破位策略页 JS/模板, `strategy_display_names.py`, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
 | **REQ-BRAIN** | `brain_config` / `brain_wick` / `brain_market_analyzer` / `brain_winrate` / `brain_strategy_orchestrator`；`paper_limit_entry` + executor expire；`trading_gates.LIVE_SYNC_SOURCES`；`smart_exit_optimizer` 排除；`validate_brain_req.py`；权威 §7.3 |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
-| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **A1 豁免 5m**；其它 40U/4根；-80U；trail（Big4 LONG 多单 2.2%/0.80%）；soft 关；Big4 LONG 禁 A2/B2、放行 B3/C4/C1 小仓空；顾问 suggest-only；到期不因 D1 强平；多单贴高等待回调；**BRAIN 实盘随总开关仅 L0**；中线破位市价跟风；§7.3（**v4.5.23**） |
+| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **A1 豁免 5m**；其它 40U/4根；-80U；trail（Big4 LONG 多单 2.2%/0.80%）；soft 关；Big4 LONG 禁 A2/B2、放行 B3/C4/C1 小仓空；顾问 suggest-only；到期不因 D1 强平；多单贴高等待回调；C3 禁止高潮追价；同币止盈 4h 冷却；**BRAIN 实盘随总开关仅 L0**；中线破位市价跟风；§7.3（**v4.5.25**） |
 | REQ-ST | `smart_trader_service.py` |
 
 ---
@@ -950,6 +951,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-21 | **v4.5.25** | **禁止追高再入**：C3 `chase_blowoff`（RSI 极端+7日高 / 滞涨）；`missed_break` 用冲高前高点；同币同向止盈后 4h 冷却；A1 滞涨不得当回踩 |
 | 2026-08-21 | **v4.5.24** | **破位策略文案 + 具体开仓信号**：交易记录/复盘展示 Playbook（如 `破位·C1 放量破位跟空`）；页面「中线」改为「破位」；source 仍 `midline_*` |
 | 2026-08-21 | **v4.5.23** | **中线破位市价 + 顶部回调点**：C1/C3/B2 破位当根市价跟风；B3/C4 须第一根离开高点的拒绝才空；BRAIN 仍强制限价 |
 | 2026-08-20 | **v4.5.22** | **回调做空**：Big4 仍 LONG 时禁止 A2/B2；允许 B3/C4 高点滞涨空（×0.20）与 C1 破位跟风（×0.35）；已有滞涨时不因 4h 仍多拦截 |
