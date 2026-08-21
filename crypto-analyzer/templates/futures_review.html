@@ -1505,7 +1505,7 @@ function loadDailyPnl() {
       setT('m-trading-days', sum.total_days || sum.trading_days || '--');
       var mp = sum.max_daily_pnl !== undefined ? sum.max_daily_pnl : (s.max_pnl !== undefined ? s.max_pnl : s.best_pnl);
       var mpPnlEl = document.getElementById('m-max-pnl');
-      if (mpPnlEl) { mpPnlEl.textContent = fmtPnl(mp); mpPnlEl.className = 'mono text-2xl font-medium text-primary'; }
+      if (mpPnlEl) { mpPnlEl.textContent = fmtPnl(mp); mpPnlEl.className = 'mono text-2xl font-medium ' + pCls(mp); }
       setT('m-max-date', sum.max_daily_pnl_date || sum.max_date || s.max_date || '--');
       dpnlData = s.daily_data || s.daily || s.days || [];
       renderDpnlChart(dpnlData);

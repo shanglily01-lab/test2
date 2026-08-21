@@ -2065,7 +2065,7 @@ async def get_daily_pnl_stats(
         total_pnl = 0
         total_trades = 0
         profit_days = 0
-        max_daily_pnl = 0
+        max_daily_pnl = None
         max_daily_pnl_date = None
 
         for record in daily_records:
@@ -2106,8 +2106,8 @@ async def get_daily_pnl_stats(
             if pnl > 0:
                 profit_days += 1
 
-            # 记录最大单日盈亏
-            if abs(pnl) > abs(max_daily_pnl):
+            # 最佳单日 = 当日总盈亏最高（不是 |盈亏| 最大，否则大亏会被当成「最佳」）
+            if max_daily_pnl is None or pnl > max_daily_pnl:
                 max_daily_pnl = pnl
                 max_daily_pnl_date = trade_date.strftime('%Y-%m-%d')
 
@@ -2125,7 +2125,7 @@ async def get_daily_pnl_stats(
             'loss_days': total_days - profit_days,
             'total_days': total_days,
             'avg_daily_pnl': round(avg_daily_pnl, 2),
-            'max_daily_pnl': round(max_daily_pnl, 2),
+            'max_daily_pnl': round(max_daily_pnl, 2) if max_daily_pnl is not None else None,
             'max_daily_pnl_date': max_daily_pnl_date or '-',
             'month': f"{year}年{month_num}月"
         }
