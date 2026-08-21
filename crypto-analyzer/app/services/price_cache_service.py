@@ -38,6 +38,7 @@ class PriceCacheService:
         """
         self.db_config = _normalize_database_service_config(db_config)
         self.update_interval = update_interval
+        self._db_service = None
 
         # 价格缓存: {symbol: {"price": Decimal, "timestamp": datetime}}
         self._cache: Dict[str, Dict] = {}
@@ -78,6 +79,7 @@ class PriceCacheService:
         if self._update_thread:
             self._update_thread.join(timeout=5)
 
+        self._reset_db_service()
         logger.info("👋 价格缓存服务已停止")
 
     def _update_loop(self):
@@ -93,6 +95,22 @@ class PriceCacheService:
             # 等待下次更新
             self._stop_event.wait(self.update_interval)
 
+    def _get_db_service(self):
+        if self._db_service is None:
+            from app.database.db_service import DatabaseService
+            self._db_service = DatabaseService(self.db_config)
+        return self._db_service
+
+    def _reset_db_service(self) -> None:
+        db = self._db_service
+        self._db_service = None
+        if db is None:
+            return
+        try:
+            db.close()
+        except Exception:
+            pass
+
     def _update_prices_from_db(self):
         """从数据库更新价格（带重试机制）"""
         max_retries = 3
@@ -100,9 +118,7 @@ class PriceCacheService:
         
         for attempt in range(max_retries):
             try:
-                from app.database.db_service import DatabaseService
-
-                db_service = DatabaseService(self.db_config)
+                db_service = self._get_db_service()
 
                 # 获取所有最新价格
                 prices = db_service.get_all_latest_prices()
@@ -133,6 +149,8 @@ class PriceCacheService:
             except Exception as e:
                 error_msg = str(e)
                 is_connection_error = 'Lost connection' in error_msg or 'OperationalError' in str(type(e).__name__) or '2013' in error_msg
+                if is_connection_error:
+                    self._reset_db_service()
                 
                 if attempt < max_retries - 1 and is_connection_error:
                     logger.debug(f"从数据库更新价格失败（尝试 {attempt + 1}/{max_retries}）: {e}，{retry_delay}秒后重试...")
