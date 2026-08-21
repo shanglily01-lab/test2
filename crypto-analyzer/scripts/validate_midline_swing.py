@@ -236,6 +236,23 @@ def test_breakout_action_opportunity() -> None:
     )
     assert still_long["should_open"] is True, still_long
 
+    pause_still_long = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="B3",
+        edge=0.90,
+        confirmed=True,
+        signals={"pump_spike", "stall_at_high", "15m_stop_new_high", "near_7d_high"},
+        features={"h1_side": "LONG", "m15_side": "LONG", "stall_at_high": True},
+        future_4h={"side": "LONG", "score": 0.60},
+        big4_bias="FLAT",
+        global_name="TOKEN_DIVERGENCE",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert (
+        pause_still_long["should_open"] is False
+        and pause_still_long["reason"] == "future_4h_still_long"
+    ), pause_still_long
+
     no_stall_still_long = _breakout_action_opportunity(
         side="SHORT",
         playbook="B3",

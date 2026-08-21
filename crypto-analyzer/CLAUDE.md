@@ -163,7 +163,7 @@
 - `brain_swing`：市值前 **300** 模拟扫描；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
 - 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**强制防插针限价**（`BRAIN_USE_MARKET_ENTRY=False`），超时取消
-- **入场（v4.5.22）**：LONG 等 15m 回踩（贴着近 8 根高点不挂）；**Big4 LONG 禁 A2/B2**；**B3/C4 高点滞涨挂空**（小仓 ×0.20）；**C1 破位跟风**（×0.35）；A2 弱反抽拒绝后开空
+- **入场（v4.5.22 / v4.5.35）**：LONG 等 15m 回踩（离高 <**0.80%** 不挂）；**Big4 LONG 禁 A2/B2**；**B3/C4 须离高拒绝确认后才空**（小仓 ×0.20）；**C1 破位跟风**（×0.35）；A2 弱反抽拒绝后开空
 - **退出（v4.5.12 · 盈利 KPI）**：**A1 豁免 5m**；其它 5m（≥40U/4根）；**-80U**；硬 SL；trail；**soft 关**
 - **执行隔离（v4.5.13）**：BRAIN 排除 SmartExit；限价成交前重跑安全闸门；模拟平仓事务行锁幂等
 - 防插针：影>实体×2；频繁则平均插针限价；超时取消；**INV-BRAIN-06 已正式启用**
@@ -244,6 +244,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 ## 实盘控制
 
 - **按 source 白名单**（`trading_gates.LIVE_SYNC_SOURCES`）：DeepSeek 探索/预测 + **BRAIN** + **破位 `midline_*`** + **自选 `manual_watchlist`**；GPT/战术/反转/smart_trader/现货镜像/已下线 Gemini 只模拟
+- **合约自选**（§7.5）：`/watchlist`；页面价格浏览器直连币安合约 WS；下单/触价仍 ticker；仅 L0；打开不回填
 - **现货**（§7.4）：模拟跟 BRAIN A1 + DeepSeek LONG，仅 L0，`spot_trading_enabled`；实盘独立开关 `spot_live_enabled`（成交瞬间，不回填）
 - **实盘开仓 symbol**：须 **L0 白名单**（`rating_level=0`）；L1/L2/L3 禁止实盘
 - **限价偏移**：中线优先 **回调区**（无区才 ±1%）；其他模拟限价读 `paper_limit_long/short_offset_pct`（系统设定）

@@ -1,8 +1,8 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-08-21 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.32** 对齐  
+> 文档版本：2026-08-21 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.35** 对齐  
 > **给人看的对照**：[`BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`](./BRAIN_AND_BREAKOUT_OPERATOR_ZH.md)  
-> **合约自选 §7.5**：`/watchlist` 手动限价/市价；`manual_watchlist` 随实盘总开关仅 L0。  
+> **合约自选 §7.5**：`/watchlist` 手动限价/市价；价格浏览器直连币安合约 WS；`manual_watchlist` 随实盘总开关仅 L0。  
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
 > **破位 §7.2**：已落地模拟+实盘（`midline_long/short`，市值前 100）。  
 > **现货镜像 §7.4**：模拟跟 BRAIN A1 + DeepSeek LONG，仅 L0；实盘由 `spot_live_enabled` 控制。  

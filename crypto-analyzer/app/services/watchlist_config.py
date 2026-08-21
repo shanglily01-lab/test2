@@ -10,7 +10,9 @@ WATCHLIST_SL_PCT = 3.0
 WATCHLIST_TP_PCT = 5.0
 WATCHLIST_LIMIT_TIMEOUT_MINUTES = 8 * 60
 WATCHLIST_MAX_SYMBOLS = 50
-WATCHLIST_PRICE_REFRESH_SECONDS = 300
+# 页面最新价：浏览器直连币安 U 本位公开 WS（miniTicker ~1s）；不在 crypto-app-main 再开 WS。
+WATCHLIST_PRICE_WS_STREAM = "miniTicker"
+WATCHLIST_BOOK_REFRESH_SECONDS = 30
 
 
 def is_watchlist_source(source: str) -> bool:

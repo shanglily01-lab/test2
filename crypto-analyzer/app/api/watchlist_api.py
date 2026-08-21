@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field
 from app.services.watchlist_config import (
     WATCHLIST_DEFAULT_MARGIN_USD,
     WATCHLIST_LEVERAGE,
-    WATCHLIST_PRICE_REFRESH_SECONDS,
+    WATCHLIST_BOOK_REFRESH_SECONDS,
+    WATCHLIST_PRICE_WS_STREAM,
     WATCHLIST_SL_PCT,
     WATCHLIST_SOURCE,
     WATCHLIST_TP_PCT,
@@ -132,7 +133,9 @@ def watchlist_overview():
             "ok": True,
             "source": WATCHLIST_SOURCE,
             "live_trading_enabled": live_on,
-            "refresh_seconds": WATCHLIST_PRICE_REFRESH_SECONDS,
+            "price_transport": "binance_futures_ws",
+            "price_ws_stream": WATCHLIST_PRICE_WS_STREAM,
+            "book_refresh_seconds": WATCHLIST_BOOK_REFRESH_SECONDS,
             "defaults": {
                 "leverage": WATCHLIST_LEVERAGE,
                 "margin": WATCHLIST_DEFAULT_MARGIN_USD,

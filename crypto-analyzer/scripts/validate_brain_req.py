@@ -667,6 +667,22 @@ def test_brain_market_regime() -> None:
     )
     assert dec_b3_bull.margin_multiplier > 0 and "big4_long_allows_exhaustion_B3" in dec_b3_bull.reason
 
+    b3_pause = {
+        "side": "SHORT",
+        "playbook": "B3",
+        "confirmed": True,
+        "edge_score": 0.90,
+        "features": {"h1_side": "LONG", "m15_side": "LONG", "stall_at_high": True},
+        "signals": ["pump_spike", "stall_at_high", "15m_stop_new_high", "near_7d_high"],
+    }
+    dec_b3_pause = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "LONG", "bull_count": 3, "bear_count": 0},
+        playbook_row=b3_pause,
+        side="SHORT",
+        playbook="B3",
+    )
+    assert dec_b3_pause.margin_multiplier == 0 and "big4_long_blocks_short" in dec_b3_pause.reason
+
     dec_c1_vs_big4_long = brain_open_regime_decision(
         big4={"big4_ok": True, "bias": "LONG", "bull_count": 3, "bear_count": 0},
         playbook_row=c1,
@@ -842,6 +858,32 @@ def test_entry_timing_pullback() -> None:
     assert a1_chase.ready is False, a1_chase
     assert a1_chase.status == "wait_pullback"
 
+    shallow = list(grind)
+    peak_g = shallow[-1]["close_price"]
+    px = peak_g * 0.9955
+    shallow.append({
+        "open_price": peak_g - 0.02,
+        "high_price": peak_g + 0.01,
+        "low_price": px - 0.02,
+        "close_price": px,
+        "volume": 400,
+    })
+    a1_shallow = compute_pullback_entry(
+        "LONG", "A1", shallow,
+        playbook_row={"signals": ["ema_bull_align", "hh_hl", "15m_higher_low", "volume_shrink_pullback"]},
+        ref_price=px,
+    )
+    assert a1_shallow.ready is False, a1_shallow
+    assert a1_shallow.status in {"wait_pullback", "wait_bounce"}, a1_shallow
+
+    a1_ready = compute_pullback_entry(
+        "LONG", "A1", pull,
+        playbook_row={"signals": ["ema_bull_align", "hh_hl", "volume_shrink_pullback", "15m_higher_low"]},
+        ref_price=pull[-1]["close_price"],
+    )
+    assert a1_ready.ready is True, a1_ready
+    assert a1_ready.status == "pullback_ready"
+
     stall = compute_pullback_entry(
         "LONG", "A1", pull,
         playbook_row={
@@ -960,6 +1002,22 @@ def test_entry_timing_exhaustion_short() -> None:
     )
     assert waiting_cb.ready is False, waiting_cb
     assert waiting_cb.status in {"wait_stall", "invalidated"}, waiting_cb
+
+    pause, peak4 = _pump_bars()
+    pause.append({
+        "open_price": peak4 - 0.02,
+        "high_price": peak4 + 0.05,
+        "low_price": peak4 - 0.08,
+        "close_price": peak4 - 0.03,
+        "volume": 1100,
+    })
+    premature = compute_pullback_entry(
+        "SHORT", "B3", pause,
+        playbook_row={"signals": ["pump_spike", "stall_at_high", "15m_stop_new_high", "near_7d_high"]},
+        ref_price=pause[-1]["close_price"],
+    )
+    assert premature.ready is False, premature
+    assert premature.status in {"wait_stall", "invalidated"}, premature
     _ok("entry timing sells B3 first callback off the high, waits if still extending or no callback yet")
 
 

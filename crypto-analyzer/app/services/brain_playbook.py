@@ -320,25 +320,21 @@ def extract_features(
             feats.get("long_upper_wick")
             or "volume_diverge_bear" in signals
             or "rsi_15m_turn_down" in signals
-            or feats.get("vol_shrink_pullback")
-            or feats.get("near_7d_high")
-            or feats.get("stop_new_high")
         )
         if close_near_high and no_extension and stall_aux:
             feats["stall_at_high"] = True
             signals.append("stall_at_high")
         tagged = max(h15[-8:])
-        off_high = tagged > 0 and c15[-1] > 0 and (tagged - c15[-1]) / c15[-1] >= 0.0008
+        off_high = tagged > 0 and c15[-1] > 0 and (tagged - c15[-1]) / c15[-1] >= 0.0028
         still_near = tagged > 0 and c15[-1] > 0 and (tagged - c15[-1]) / c15[-1] <= 0.0085
-        reject_close = bool(feats.get("long_upper_wick") or upper_wick_ratio >= 0.22)
+        reject_close = bool(feats.get("long_upper_wick") or upper_wick_ratio >= 0.28)
         if (
             off_high
             and still_near
             and (
-                feats.get("stall_at_high")
-                or feats.get("exhaustion_up")
+                feats.get("exhaustion_up")
+                or feats.get("false_break_up")
                 or reject_close
-                or "15m_stop_new_high" in signals
             )
         ):
             feats["top_callback"] = True
@@ -346,11 +342,10 @@ def extract_features(
         if (
             not feats.get("exhaustion_up")
             and feats.get("long_upper_wick")
-            and (feats.get("near_7d_high") or feats.get("pump_spike") or feats.get("stall_at_high"))
+            and (feats.get("pump_spike") or feats.get("false_break_up"))
             and (
                 "volume_diverge_bear" in signals
                 or "rsi_15m_turn_down" in signals
-                or feats.get("stop_new_high")
                 or feats.get("vol_down")
             )
         ):
@@ -498,12 +493,14 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         b3 += 0.2
     if feats.get("top_callback") or "top_callback" in sig:
         b3 += 0.15
-    if b3 >= 0.55:
-        b3_confirmed = b3 >= 0.7 or bool(
-            feats.get("stall_at_high")
-            or feats.get("exhaustion_up")
+    if b3 >= 0.65:
+        b3_confirmed = bool(
+            feats.get("exhaustion_up")
             or feats.get("false_break_up")
-            or feats.get("top_callback")
+            or (
+                feats.get("top_callback")
+                and (feats.get("long_upper_wick") or "rsi_15m_turn_down" in sig)
+            )
         )
         scored.append(("B3", b3, b3_confirmed))
 

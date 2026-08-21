@@ -23,7 +23,8 @@ def test_config_and_sync() -> None:
     from app.services.watchlist_config import (
         WATCHLIST_SOURCE,
         is_watchlist_source,
-        WATCHLIST_PRICE_REFRESH_SECONDS,
+        WATCHLIST_PRICE_WS_STREAM,
+        WATCHLIST_BOOK_REFRESH_SECONDS,
     )
     from app.services.trading_gates import LIVE_SYNC_SOURCES, should_sync_live_for_source
     from inspect import signature
@@ -33,7 +34,8 @@ def test_config_and_sync() -> None:
     assert WATCHLIST_SOURCE == "manual_watchlist"
     assert is_watchlist_source("manual_watchlist")
     assert not is_watchlist_source("brain_swing")
-    assert WATCHLIST_PRICE_REFRESH_SECONDS == 300
+    assert WATCHLIST_PRICE_WS_STREAM == "miniTicker"
+    assert WATCHLIST_BOOK_REFRESH_SECONDS == 30
     assert WATCHLIST_SOURCE in LIVE_SYNC_SOURCES
     assert should_sync_live_for_source(WATCHLIST_SOURCE)
     params = signature(create_paper_limit_order).parameters
@@ -68,9 +70,14 @@ def test_ui_and_routes() -> None:
     if "watchlist_router" not in main:
         _fail("main.py 未 include watchlist router")
     js_txt = js.read_text(encoding="utf-8")
-    if "300000" not in js_txt and "refreshMs" not in js_txt:
-        _fail("前端未按 5 分钟刷新")
-    _ok("menu + page + 5min refresh")
+    if "fstream.binance.com" not in js_txt or "WebSocket" not in js_txt:
+        _fail("前端未直连币安合约 WS 刷价")
+    if "@miniTicker" not in js_txt:
+        _fail("前端未订阅 miniTicker")
+    page_txt = page.read_text(encoding="utf-8")
+    if "5 分钟刷新" in page_txt:
+        _fail("自选页仍写 5 分钟刷价")
+    _ok("menu + page + Binance futures WS prices")
 
 
 def test_syntax() -> None:

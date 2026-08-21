@@ -31,11 +31,13 @@ INVALIDATION_BUFFER = 0.0015
 STALL_HIT_MIN = 2
 NEAR_HIGH_MAX_DIST_PCT = 0.85
 MISSED_HIGH_DIST_PCT = 1.35
-TOP_CALLBACK_MIN_OFF_PCT = 0.08
+# First callback must actually leave the tagged high — 0.08% is noise, not fade.
+TOP_CALLBACK_MIN_OFF_PCT = 0.28
 REJECT_STALL_HITS = frozenset({"wick", "reject_close", "false_break", "rsi", "reject", "callback"})
-# LONG: still hugging the local 15m high → wait, never chase the one-way run.
-LONG_STILL_AT_HIGH_PCT = 0.40
-LONG_A1_NEAR_EMA_MAX_RANGE_POS = 0.68
+# LONG: still hugging the local 15m high → wait. 0.40% is a pause, not a pullback to EMA.
+LONG_STILL_AT_HIGH_PCT = 0.80
+LONG_A1_NEAR_EMA_MAX_RANGE_POS = 0.55
+LONG_A1_NEAR_EMA_MAX_DIST_PCT = 0.15
 # C3 follow: measure extension vs the high *before* the last 2h, so the break
 # level does not ratchet with the pump (Aug 20 FIL/DOGE re-chase).
 C3_PRE_BREAK_EXCLUDE_BARS = 8
@@ -217,9 +219,9 @@ def collect_stall_hits(
         hits.append("vol_diverge")
     rsi_now = _rsi(c, 14)
     rsi_prev = _rsi(c[:-3], 14) if len(c) > 20 else None
+    # RSI still extreme-high is strength, not fade. Only a turn-down counts.
     rsi_turn = bool(
         "rsi_15m_turn_down" in sig
-        or "rsi_extreme_high" in sig
         or (
             rsi_prev is not None
             and rsi_now is not None
@@ -237,29 +239,31 @@ def collect_stall_hits(
         hits.append("no_new_high")
     elif len(h) >= 8 and max(h[-3:]) <= max(h[-8:-3]) * 1.0015:
         hits.append("no_new_high")
-    if close_loc <= 0.55 and wick_ratio >= 0.22:
+    if close_loc <= 0.45 and wick_ratio >= 0.28:
         hits.append("reject_close")
-    if "near_7d_high" in sig:
-        hits.append("near_7d_high")
     if (
         "top_callback" in sig
         or (
             TOP_CALLBACK_MIN_OFF_PCT <= off_high_pct <= NEAR_HIGH_MAX_DIST_PCT
-            and close_loc <= 0.62
-            and wick_ratio >= 0.18
+            and close_loc <= 0.50
+            and wick_ratio >= 0.28
         )
     ):
         hits.append("callback")
 
-    # still printing new highs on a full-body expanding bar → not a sell yet
+    # Still printing / holding a new high → not exhausted, even if volume cooled.
     prior_hi = max(h[-8:-1]) if len(h) >= 9 else max(h[:-1])
     last_vol = v[-1] if v else 0.0
     avg_vol = (sum(v[-6:-1]) / 5.0) if len(v) >= 6 else last_vol
+    printing_high = h[-1] > prior_hi * 1.001
+    held_high = close_loc >= 0.62 and wick_ratio < 0.32
     accelerating = bool(
-        h[-1] > prior_hi * 1.001
-        and close_loc >= 0.70
-        and last_vol >= avg_vol * 1.15
-        and wick_ratio < 0.40
+        printing_high
+        and held_high
+        and (
+            last_vol >= avg_vol * 1.05
+            or close_loc >= 0.70
+        )
     )
     return list(dict.fromkeys(hits)), accelerating
 
@@ -293,13 +297,16 @@ def _exhaustion_short_entry(
         and bool(set(hits) & REJECT_STALL_HITS)
     )
     hit_label = "+".join(hits) if hits else "none"
-    last_close_loc = _close_loc_in_bar(rows_15m[-1])
-    callback_ok = TOP_CALLBACK_MIN_OFF_PCT <= dist_pct <= NEAR_HIGH_MAX_DIST_PCT and (
-        "callback" in hits
-        or "wick" in hits
-        or "reject_close" in hits
-        or "false_break" in hits
-        or last_close_loc <= 0.55
+    last = rows_15m[-1]
+    last_close_loc = _close_loc_in_bar(last)
+    last_wick = _upper_wick_ratio(last)
+    last_red = _f(last.get("close_price")) < _f(last.get("open_price"))
+    last_is_reject = last_close_loc <= 0.45 and (last_wick >= 0.28 or last_red)
+    left_the_high = TOP_CALLBACK_MIN_OFF_PCT <= dist_pct <= NEAR_HIGH_MAX_DIST_PCT
+    callback_ok = left_the_high and (
+        "false_break" in hits
+        or last_is_reject
+        or ("callback" in hits and last_close_loc <= 0.50)
     )
 
     if price > recent_high * (1.0 + INVALIDATION_BUFFER) and accelerating:
@@ -621,16 +628,16 @@ def compute_pullback_entry(
             extended = extended or range_pos >= 0.72
         in_zone = zone_low <= price <= zone_high * 1.002
         pulled_back = len(c) >= 5 and c[-1] < max(h[-5:-1]) * 0.998
-        bounce_ok = bool(
-            "volume_shrink_pullback" in sig
-            or "long_lower_wick" in sig
+        vol_shrink = "volume_shrink_pullback" in sig or (
+            len(v) >= 8 and sum(v[-3:]) < sum(v[-8:-3]) * 0.85
+        )
+        left_high = (not still_at_high) and pulled_back
+        bounce_ok = left_high and bool(
+            "long_lower_wick" in sig
             or "rsi_15m_turn_up" in sig
             or "ema_reclaim" in sig
-            or ("15m_higher_low" in sig and pulled_back and not still_at_high)
+            or vol_shrink
         )
-        if not bounce_ok and len(c) >= 5:
-            vol_shrink = len(v) >= 8 and sum(v[-3:]) < sum(v[-8:-3]) * 0.85
-            bounce_ok = pulled_back and vol_shrink and not still_at_high
         if price < invalidation:
             return EntryTiming(
                 ready=False, status="invalidated", reason="broke_pullback_invalidation",
@@ -695,8 +702,10 @@ def compute_pullback_entry(
         if (
             pb in {"A1", "B4"}
             and bounce_ok
-            and ema_dist_pct <= 0.45
+            and ema20 is not None
+            and ema_dist_pct <= LONG_A1_NEAR_EMA_MAX_DIST_PCT
             and range_pos <= LONG_A1_NEAR_EMA_MAX_RANGE_POS
+            and dist_from_high_pct >= LONG_STILL_AT_HIGH_PCT
         ):
             return EntryTiming(
                 ready=True, status="pullback_ready",

@@ -296,11 +296,18 @@ def _breakout_action_opportunity(
         stall_n = sum(
             1 for k in (
                 "exhaustion_up", "long_upper_wick", "volume_diverge_bear",
-                "false_break_up", "stall_at_high", "rsi_turn", "lower_high",
-                "stop_new_high",
+                "false_break_up", "rsi_turn",
             ) if evidence[k]
         )
-        structure_ok = stall_n >= 2 or evidence["exhaustion_up"] or evidence["false_break_up"]
+        reject_ok = (
+            evidence["exhaustion_up"]
+            or evidence["false_break_up"]
+            or (
+                evidence["long_upper_wick"]
+                and (evidence["volume_diverge_bear"] or evidence["rsi_turn"])
+            )
+        )
+        structure_ok = reject_ok and stall_n >= 2
         force_ok = (
             evidence["pump_spike"]
             or evidence["stall_at_high"]
@@ -759,7 +766,8 @@ def evaluate_symbol_multiperiod(
         and playbook in {"B3", "C4"}
         and confirmed
         and edge >= 0.75
-        and bool(signals & {"exhaustion_up", "false_break_up", "stall_at_high", "long_upper_wick"})
+        and bool(signals & {"exhaustion_up", "false_break_up"})
+        and bool(signals & {"long_upper_wick", "volume_diverge_bear", "rsi_15m_turn_down"})
     )
     if not big4_ok and not (weak_big4_long_override or weak_big4_short_override or weak_big4_exhaustion_override):
         out.update({"reason": "big4_weak", "trend": dims, "future_4h": future_4h, "playbook": pb})
