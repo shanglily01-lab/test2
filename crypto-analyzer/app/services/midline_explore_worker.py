@@ -1,7 +1,6 @@
 """中线 v2 worker — midline_long / midline_short 独立量化扫描（非 LLM）."""
 from __future__ import annotations
 
-import json
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -291,11 +290,18 @@ def _open_limit_order(
     if not allowed:
         return None
 
-    reason = "midline_v2 " + json.dumps(signal_detail, ensure_ascii=False)[:140]
+    from app.services.strategy_display_names import build_breakout_entry_reason
+    timing = signal_detail.get("entry_timing") or {}
+    reason = build_breakout_entry_reason(
+        playbook,
+        side=side,
+        timing_status=str(timing.get("status") or ""),
+        signals=list((signal_detail.get("playbook") or {}).get("signals") or signal_detail.get("signals") or []),
+    )
     paper_margin = get_paper_margin_usd(symbol, conn)
     hold_deadline = utc_now_naive() + timedelta(hours=hold_hours)
-    timing = signal_detail.get("entry_timing") or {}
     limit_offset = timing.get("limit_offset_pct")
+    sig_type = f"breakout_{playbook}" if playbook else source
     return create_paper_limit_order(
         conn,
         symbol=symbol,
@@ -306,7 +312,7 @@ def _open_limit_order(
         margin=paper_margin,
         stop_loss_pct=MIDLINE_SL_PCT,
         take_profit_pct=MIDLINE_TP_PCT,
-        entry_signal_type=source,
+        entry_signal_type=sig_type,
         entry_reason=reason[:200],
         entry_score=score,
         signal_components=signal_detail,

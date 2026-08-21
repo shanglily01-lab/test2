@@ -226,13 +226,33 @@ def parse_close_reason(notes: str) -> tuple:
     return 'other', display
 
 
-def parse_entry_reason(entry_reason: str, entry_signal_type: str, source: str = None) -> tuple:
+def parse_entry_reason(entry_reason: str, entry_signal_type: str, source: str = None, signal_components=None) -> tuple:
     """
     解析开仓原因，返回 (代码, 中文名称)
 
     优先使用 entry_signal_type 字段，如果为空则解析 entry_reason
     如果都为空或无法识别，使用 source 字段兜底
     """
+    from app.services.strategy_display_names import format_entry_signal_cn, format_entry_signal_code
+
+    specific_cn = format_entry_signal_cn(
+        source=source,
+        entry_signal_type=entry_signal_type,
+        entry_reason=entry_reason,
+        signal_components=signal_components,
+    )
+    specific_code = format_entry_signal_code(
+        source=source,
+        entry_signal_type=entry_signal_type,
+        entry_reason=entry_reason,
+        signal_components=signal_components,
+    )
+    if specific_cn and specific_cn not in ("未知",) and (
+        specific_code.startswith(("brain_", "breakout_"))
+        or specific_cn.startswith(("大脑·", "破位·", "破位做"))
+    ):
+        return specific_code, specific_cn
+
     # 优先使用 entry_signal_type (跳过 "unknown" 字符串)
     if entry_signal_type and entry_signal_type.strip().lower() != 'unknown':
         signal_type = entry_signal_type.strip()
@@ -372,6 +392,8 @@ def parse_entry_reason(entry_reason: str, entry_signal_type: str, source: str = 
         if label != source:
             return source, label
 
+    if specific_cn and specific_cn != "未知":
+        return specific_code, specific_cn
     return 'unknown', '未知'
 
 
@@ -689,7 +711,7 @@ async def get_review_trades(
                 quantity, entry_price,
                 realized_pnl, margin,
                 holding_hours, entry_reason, notes as close_reason,
-                open_time, close_time, created_at, entry_signal_type, source, status
+                open_time, close_time, created_at, entry_signal_type, source, status, signal_components
             FROM futures_positions
             WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
             {filter_condition}
@@ -710,7 +732,8 @@ async def get_review_trades(
             entry_reason_code, entry_reason_cn = parse_entry_reason(
                 pos['entry_reason'],
                 pos['entry_signal_type'],
-                pos.get('source')
+                pos.get('source'),
+                pos.get('signal_components'),
             )
 
             # 计算实际持仓时长（分钟）；兼容 open_time 曾误存 CST 的历史行
@@ -918,7 +941,7 @@ async def get_reason_analysis(
         cursor.execute("""
             SELECT
                 entry_reason, entry_signal_type, notes as close_reason,
-                realized_pnl, position_side, source
+                realized_pnl, position_side, source, signal_components
             FROM futures_positions
             WHERE account_id = %s AND status = 'CLOSED' AND close_time >= %s
         """, (account_id, time_threshold))
@@ -943,7 +966,9 @@ async def get_reason_analysis(
             is_profit = pnl > 0
 
             # 开仓原因统计（使用新的解析函数,区分多空方向）
-            entry_code, entry_cn = parse_entry_reason(pos['entry_reason'], pos['entry_signal_type'], pos.get('source'))
+            entry_code, entry_cn = parse_entry_reason(
+                pos['entry_reason'], pos['entry_signal_type'], pos.get('source'), pos.get('signal_components')
+            )
             side = pos['position_side']
             side_cn = "做多" if side == 'LONG' else "做空"
 

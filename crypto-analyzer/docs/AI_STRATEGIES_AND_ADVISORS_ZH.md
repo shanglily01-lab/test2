@@ -277,7 +277,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 | 常量 | `midline_swing_config.py` · `midline_hold_exit.py` |
 | 扫描 | `midline_swing_scanner.py` · `entry_timing.py` |
 | Worker | `midline_explore_worker.py`（可改名 `midline_worker`） |
-| API / Web | `midline_swing_api.py` · **原 Gemini 探索页整页**为中线策略/机会分析 |
+| API / Web | `midline_swing_api.py` · **原 Gemini 探索页整页**为破位策略/机会分析 |
 
 调度：`scheduler.py` **独立**每 **4h**（`midline_long` / `midline_short`）。
 

@@ -375,6 +375,38 @@ def test_ai_trail_for_midline() -> None:
     _ok("midline locks at ~1.2% peak and cuts profit-to-loss")
 
 
+def test_entry_signal_labels() -> None:
+    print("[3e] entry signal Chinese labels")
+    from app.services.strategy_display_names import (
+        format_entry_signal_cn,
+        get_strategy_display_name,
+        build_breakout_entry_reason,
+    )
+
+    assert get_strategy_display_name("midline_long") == "破位做多"
+    assert get_strategy_display_name("midline_short") == "破位做空"
+    assert "中线" not in get_strategy_display_name("midline_long")
+    c1 = format_entry_signal_cn(
+        source="midline_short",
+        entry_signal_type="breakout_C1",
+        entry_reason=build_breakout_entry_reason("C1", side="SHORT", signals=["break_support", "volume_expand_down"]),
+    )
+    assert "C1" in c1 and "破位" in c1 and "跟空" in c1
+    hist = format_entry_signal_cn(
+        source="midline_long",
+        entry_signal_type="midline_long",
+        signal_components={"playbook": {"name": "C3", "signals": ["break_resistance"]}},
+    )
+    assert "C3" in hist and "突破" in hist
+    brain = format_entry_signal_cn(
+        source="brain_swing",
+        entry_signal_type="brain_B3",
+        entry_reason="大脑·B3 顶部回调做空 | stall_at_high",
+    )
+    assert "B3" in brain and "顶部" in brain
+    _ok(f"labels c1={c1} hist={hist} brain={brain}")
+
+
 def test_hold_advisor_includes_midline() -> None:
     print("[3d] hold advisor includes midline")
     from app.services.hold_advisor_query import DEEPSEEK_HOLD_SOURCE_SQL, GEMINI_HOLD_SOURCE_SQL
@@ -442,6 +474,7 @@ def main() -> None:
     test_limit_price()
     test_live_sync_whitelist()
     test_ai_trail_for_midline()
+    test_entry_signal_labels()
     test_hold_advisor_includes_midline()
     test_run_summary_zh()
     if args.db:

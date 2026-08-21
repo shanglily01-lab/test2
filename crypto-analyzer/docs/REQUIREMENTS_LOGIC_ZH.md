@@ -1,9 +1,9 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.23
-**日期**: 2026-08-20
+**版本**: v4.5.24
+**日期**: 2026-08-21
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
-> **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。  
+> **中线 v2（REQ-MIDLINE §7.2）**：已确认并落地模拟仓（`midline_long` / `midline_short`）；**暂不实盘**。**对外文案为「破位策略」**（中线策略已废弃）。  
 > **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。  
 > **BRAIN v2 机会识别（§7.3.10–7.3.15）**：**已落地且开仓机会判定视为相对客观**；退出/风控见 §7.3.16。  
 > **C1 / A2 / B2（v4.5.17）**：C1 **破位当根跟风做空**（不等回抽）；A2 下降结构弱反抽被拒绝后开仓；B2 弱反抽失败（须先有反抽再破起点）后跟风开仓。  
@@ -236,7 +236,7 @@ BRAIN 实盘与 DeepSeek 同一套开关：`live_trading_enabled=1` 才在**成�
 | **中线 v2**（`midline_long` / `midline_short`） | 固定 **做多−1% / 做空+1%**（策略常量，不受 `paper_limit_*_offset_pct` 影响） |
 | **探索/预测/smart_trader 等** | `system_settings.paper_limit_long_offset_pct` / `paper_limit_short_offset_pct`（Web 可调，默认 **0.5%**，范围 **0.1~1%**） |
 
-### 7.2 中线策略 v2（REQ-MIDLINE）【已落地 · 仅模拟】
+### 7.2 破位策略（原中线 v2 / REQ-MIDLINE）【已落地 · 仅模拟】
 
 > **与 INV-08 关系**：INV-08 约束 AI 探索/预测的 catalyst 定方向。中线 v2 为**独立量化策略**：方向由 **30×1d + 约 1 周 1h** 趋势定调，**15m 仅作高低位企稳/缩量入场闸门**，不视为违反 INV-08。
 
@@ -307,16 +307,17 @@ BRAIN 实盘与 DeepSeek 同一套开关：`live_trading_enabled=1` 才在**成�
 - **做空 A2（弱反抽）**：下降结构中缩量反抽到 EMA/前高被拒绝，才在反抽区挂空（限价）。
 - **宏观（v4.5.22）**：Big4 已 LONG 时禁止 A2/B2（`big4_long_blocks_short`）；**允许** B3/C4 滞涨空与 C1 破位跟风（小仓）。
 
-#### 7.2.5 Web：中线策略页与机会分析
+#### 7.2.5 Web：破位策略页与机会分析
 
 | 项 | 约定 |
 |----|------|
-| 主入口 | **原 Gemini 主探索页整页改造**为「中线策略」页（路由可仍用 `/gemini-explore` 或改名，须在实现时统一导航文案） |
-| DeepSeek 探索页 | **移除**中线 Tab；中线**只**在中线策略页管理 |
+| 主入口 | **原 Gemini 主探索页整页改造**为「破位机会策略」页（路由可仍用 `/midline_strategy`；**页面文案禁止写「中线策略」**） |
+| DeepSeek 探索页 | **移除**中线 Tab；破位**只**在破位策略页管理 |
 | Gemini 主探索 LLM UI | **下线**（本页不再展示探索/预测 LLM 流程） |
 | `gemini_explore` 调度 | **本期默认仍保留**（无本页入口）；是否停调度另开确认，避免误伤实盘白名单路径 |
-| 机会分析（必做） | 每轮扫描可查：时间、标的数、通过/拒绝数、多空数；列表含 symbol、方向、三层通过标记/摘要指标、建议限价、拒绝 `reason code`；可下钻单币明细（价量 RSI 摘要；K 线图二期可选） |
+| 机会分析（必做） | 每轮扫描可查：时间、标的数、通过/拒绝数、多空数；列表含 symbol、方向、三层通过标记/摘要指标、建议入场、拒绝 `reason code`；可下钻单币明细 |
 | 页内其它 | 参数展示/编辑（周期、限价偏移、kill switch）、限价单与模拟持仓状态、手动触发一轮扫描 |
+| 交易记录 / 复盘 | 开仓信号展示 **具体 Playbook**（如 `破位·C1 放量破位跟空`、`大脑·B3 顶部回调做空`），禁止只写 `midline_long` / `brain_swing` |
 
 落库建议（实现时可微调表名）：`midline_scan_runs`（轮次）+ `midline_scan_verdicts`（每 symbol 通过/拒绝与指标快照）。
 
@@ -937,7 +938,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-SCHED | `scheduler.py`, `data_cache_service.py` |
 | REQ-KLINE | `binance_ws_kline_collector.py`, `fast_collector_service.py` |
 | REQ-RATING | `update_top_performers.py` |
-| REQ-MIDLINE | `midline_swing_config.py`, `midline_swing_scanner.py`, `entry_timing.py`, `midline_hold_exit.py`, `midline_explore_worker.py`, `midline_swing_api.py`, 中线策略页 JS/模板, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
+| REQ-MIDLINE | `midline_swing_config.py`, `midline_swing_scanner.py`, `entry_timing.py`, `midline_hold_exit.py`, `midline_explore_worker.py`, `midline_swing_api.py`, 破位策略页 JS/模板, `strategy_display_names.py`, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
 | **REQ-BRAIN** | `brain_config` / `brain_wick` / `brain_market_analyzer` / `brain_winrate` / `brain_strategy_orchestrator`；`paper_limit_entry` + executor expire；`trading_gates.LIVE_SYNC_SOURCES`；`smart_exit_optimizer` 排除；`validate_brain_req.py`；权威 §7.3 |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
 | **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **A1 豁免 5m**；其它 40U/4根；-80U；trail（Big4 LONG 多单 2.2%/0.80%）；soft 关；Big4 LONG 禁 A2/B2、放行 B3/C4/C1 小仓空；顾问 suggest-only；到期不因 D1 强平；多单贴高等待回调；**BRAIN 实盘随总开关仅 L0**；中线破位市价跟风；§7.3（**v4.5.23**） |
@@ -949,6 +950,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-21 | **v4.5.24** | **破位策略文案 + 具体开仓信号**：交易记录/复盘展示 Playbook（如 `破位·C1 放量破位跟空`）；页面「中线」改为「破位」；source 仍 `midline_*` |
 | 2026-08-21 | **v4.5.23** | **中线破位市价 + 顶部回调点**：C1/C3/B2 破位当根市价跟风；B3/C4 须第一根离开高点的拒绝才空；BRAIN 仍强制限价 |
 | 2026-08-20 | **v4.5.22** | **回调做空**：Big4 仍 LONG 时禁止 A2/B2；允许 B3/C4 高点滞涨空（×0.20）与 C1 破位跟风（×0.35）；已有滞涨时不因 4h 仍多拦截 |
 | 2026-08-20 | **v4.5.21** | **BRAIN 接入实盘**：`brain_swing` 加入 `LIVE_SYNC_SOURCES`；由实盘开/平仓总开关控制；实盘仅 L0 白名单 |

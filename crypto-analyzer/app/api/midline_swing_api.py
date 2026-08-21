@@ -28,7 +28,7 @@ from app.services.midline_swing_config import (
 from app.utils.futures_symbol import futures_symbol_rating_canonical
 
 
-router = APIRouter(prefix="/api/midline-swing", tags=["中线策略"])
+router = APIRouter(prefix="/api/midline-swing", tags=["破位策略"])
 
 
 def _connect():

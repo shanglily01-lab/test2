@@ -172,7 +172,7 @@ def get_positions(account_id: int = 2, status: str = 'open'):
                 cursor.execute("""
                     SELECT id, symbol, position_side,
                            stop_loss_price, take_profit_price,
-                           source, entry_signal_type, entry_score,
+                           source, entry_signal_type, entry_reason, entry_score, signal_components,
                            created_at, planned_close_time, margin
                     FROM futures_positions
                     WHERE account_id = %s AND status = 'open'
@@ -193,6 +193,10 @@ def get_positions(account_id: int = 2, status: str = 'open'):
                             pos['source'] = db['source']
                         if db.get('entry_signal_type') is not None:
                             pos['entry_signal_type'] = db['entry_signal_type']
+                        if db.get('entry_reason') is not None:
+                            pos['entry_reason'] = db['entry_reason']
+                        if db.get('signal_components') is not None:
+                            pos['signal_components'] = db['signal_components']
                         if db.get('entry_score') is not None:
                             pos['entry_score'] = db['entry_score']
                         if db.get('created_at') is not None:
@@ -208,6 +212,13 @@ def get_positions(account_id: int = 2, status: str = 'open'):
                     # 不映射的话前端永远 fallback 到 entry_price (开仓价), 价格"不动"
                     if pos.get('mark_price') and not pos.get('current_price'):
                         pos['current_price'] = float(pos['mark_price'])
+                    from app.services.strategy_display_names import format_entry_signal_cn
+                    pos['entry_signal_cn'] = format_entry_signal_cn(
+                        source=pos.get('source'),
+                        entry_signal_type=pos.get('entry_signal_type'),
+                        entry_reason=pos.get('entry_reason'),
+                        signal_components=pos.get('signal_components'),
+                    )
             except Exception as e:
                 logger.warning(f"补充持仓DB字段失败: {e}")
         else:
@@ -1595,6 +1606,8 @@ def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_size: i
             o.notes as close_reason,
             p.notes as entry_reason,
             p.source as entry_source,
+            p.entry_signal_type,
+            p.signal_components,
             p.stop_loss_price,
             p.take_profit_price,
             p.open_time,
@@ -1614,6 +1627,7 @@ def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_size: i
         # connection.close()  # 复用连接，不关闭
 
         # 转换 Decimal 为 float，datetime 为字符串（UTC naive，前端按 UTC+8 展示）
+        from app.services.strategy_display_names import format_entry_signal_cn
         for trade in trades:
             holding_minutes = calc_holding_minutes(
                 trade.get('open_time'),
@@ -1623,6 +1637,12 @@ def get_trades(account_id: int = 2, limit: int = 50, page: int = 1, page_size: i
             )
             if holding_minutes is not None:
                 trade['holding_minutes'] = holding_minutes
+            trade['entry_signal_cn'] = format_entry_signal_cn(
+                source=trade.get('entry_source'),
+                entry_signal_type=trade.get('entry_signal_type'),
+                entry_reason=trade.get('entry_reason'),
+                signal_components=trade.get('signal_components'),
+            )
             for key, value in trade.items():
                 if isinstance(value, Decimal):
                     trade[key] = float(value)

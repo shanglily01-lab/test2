@@ -23,7 +23,7 @@ alwaysApply: true
 - 多单限价挂在 **15m 回调区**（A1；贴着近 8 根高点不挂）；**C3/C1/B2 破位市价跟风**；B3/C4 顶部第一回调后市价空；A2 反抽拒绝仍限价 · C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h** · SL **6%** / TP **3%** · 5x · 500U
 - **Big4 已 LONG 时禁止 A2/B2**；允许 B3/C4 滞涨空与 C1 破位跟风（小仓）
 - 标的：`config.yaml`；**暂不**进 `LIVE_SYNC_SOURCES`
-- Web：原 Gemini 探索页 → 中线策略/机会分析；DeepSeek 探索去中线 Tab
+- Web：原 Gemini 探索页 → 破位策略/机会分析；DeepSeek 探索去中线 Tab
 - 非中线限价仍读 `system_settings.paper_limit_*_offset_pct`（0.1~1%）
 
 ## 生产 prompt（中文，2026-06-05）

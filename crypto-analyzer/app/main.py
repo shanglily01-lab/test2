@@ -1076,9 +1076,9 @@ except Exception as e:
 try:
     from app.api.midline_swing_api import router as midline_swing_router
     app.include_router(midline_swing_router)
-    logger.info("[中线策略] API路由已注册")
+    logger.info("[破位策略] API路由已注册")
 except Exception as e:
-    logger.warning(f"[中线策略] API路由注册失败: {e}")
+    logger.warning(f"[破位策略] API路由注册失败: {e}")
     import traceback
     traceback.print_exc()
 
@@ -1734,7 +1734,7 @@ async def futures_review_page(request: Request):
 
 @app.get("/gemini_explore")
 async def gemini_explore_page(request: Request):
-    """兼容旧入口：重定向到中线策略页。"""
+    """兼容旧入口：重定向到破位策略页。"""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/midline_strategy")
 

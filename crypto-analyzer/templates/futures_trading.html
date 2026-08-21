@@ -183,7 +183,7 @@
 </button>
 <button type="button" id="tab-btn-midline-positions" onclick="switchFuturesTab('midline-positions')"
   class="futures-tab-btn relative px-4 py-2.5 text-sm font-headline text-on-surface-variant hover:text-on-surface border-b-2 border-transparent flex items-center gap-2 transition-colors">
-  中线持仓
+  破位持仓
   <span id="tab-badge-midline-positions" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant">--</span>
 </button>
 <button type="button" id="tab-btn-limit-orders" onclick="switchFuturesTab('limit-orders')"
@@ -257,7 +257,7 @@
 <div class="flex flex-wrap justify-between items-center gap-3">
 <h4 class="font-headline font-bold flex items-center gap-2">
 <span class="w-1 h-4 bg-secondary rounded-full"></span>
-  中线持仓
+  破位持仓
   <span id="midline-pos-count-badge" class="text-[10px] font-mono text-on-surface-variant ml-1">-- 笔</span>
   <span class="text-[10px] font-mono text-primary ml-2">L <span id="midline-pos-long-count">--</span></span>
   <span class="text-[10px] font-mono text-error">S <span id="midline-pos-short-count">--</span></span>
@@ -291,7 +291,7 @@
 </div>
 </div>
 <p class="text-[10px] text-on-surface-variant/80 -mt-1">
-  Gemini/DeepSeek 中线量化策略（非 LLM）· 限价 ±3% · 持仓约 15 天 · 不受 smart_trader 对冲自动平仓
+  破位策略（量化，非 LLM）· C1/C3/B2/B3/C4 市价跟风 · 暂不实盘 · 不受 smart_trader 对冲自动平仓
 </p>
 </div>
 <div class="overflow-x-auto overflow-y-auto flex-1 min-h-0">
@@ -498,6 +498,7 @@ function showToast(msg, type) {
 var _activeFuturesTab = 'positions';
 var _allLimitOrders = [];
 var MIDLINE_SOURCES = [
+    'midline_long', 'midline_short',
     'gemini_midline_long', 'gemini_midline_short',
     'deepseek_midline_long', 'deepseek_midline_short'
 ];
@@ -692,8 +693,10 @@ async function renderLimitOrders(allOrders) {
         'BTC_MOMENTUM': 'BTC动量', 'PREDICTOR': '预测神器',
         'u_coin_style': 'U本位破位', 'manual': '手动',
         'gemini_explore': 'Gemini 探索', 'deepseek_explore': 'DeepSeek 探索',
-        'gemini_midline_long': 'Gemini 中线多', 'gemini_midline_short': 'Gemini 中线空',
-        'deepseek_midline_long': 'DeepSeek 中线多', 'deepseek_midline_short': 'DeepSeek 中线空',
+        'midline_long': '破位做多', 'midline_short': '破位做空',
+        'gemini_midline_long': '破位做多', 'gemini_midline_short': '破位做空',
+        'deepseek_midline_long': '破位做多', 'deepseek_midline_short': '破位做空',
+        'brain_swing': '超级大脑', 'brain_long': '超级大脑做多', 'brain_short': '超级大脑做空',
         'gpt_explore': 'GPT 探索',
         'gemini_predict': 'Gemini 预测', 'deepseek_predict': 'DeepSeek 预测',
         'gpt_predict': 'GPT 预测'
@@ -1105,15 +1108,16 @@ async function renderPositionsPanel(allPositions, panelKey) {
             'BTC_MOMENTUM': 'BTC动量', 'PREDICTOR': '预测神器',
             'u_coin_style': 'U本位破位', 'manual': '手动',
             'gemini_explore': 'Gemini 探索', 'deepseek_explore': 'DeepSeek 探索',
-        'gemini_midline_long': 'Gemini 中线多', 'gemini_midline_short': 'Gemini 中线空',
-        'deepseek_midline_long': 'DeepSeek 中线多', 'deepseek_midline_short': 'DeepSeek 中线空',
+        'midline_long': '破位做多', 'midline_short': '破位做空',
+        'gemini_midline_long': '破位做多', 'gemini_midline_short': '破位做空',
+        'deepseek_midline_long': '破位做多', 'deepseek_midline_short': '破位做空',
+        'brain_swing': '超级大脑', 'brain_long': '超级大脑做多', 'brain_short': '超级大脑做空',
             'gemini_predict': 'Gemini 预测', 'deepseek_predict': 'DeepSeek 预测'
         };
         var srcLabel = sourceLabels[pos.source] || pos.source || '';
-        var signalType = pos.entry_signal_type || '--';
+        var signalType = pos.entry_signal_cn || pos.entry_signal_type || '--';
         var entryScore = pos.entry_score ? (' ' + pos.entry_score + 'pt') : '';
-        // 截断过长信号名
-        var signalDisplay = signalType.length > 20 ? signalType.substring(0, 20) + '...' : signalType;
+        var signalDisplay = signalType.length > 28 ? signalType.substring(0, 28) + '...' : signalType;
         var sl = pos.stop_loss_price ? fmtPrice(pos.stop_loss_price) : '--';
         var tp = pos.take_profit_price ? fmtPrice(pos.take_profit_price) : '--';
 
@@ -1151,7 +1155,7 @@ async function renderPositionsPanel(allPositions, panelKey) {
             '</td>' +
             '<td class="px-6 py-4">' +
                 (srcLabel ? '<div class="text-[10px] font-bold text-[#49f4c8]/80 mb-0.5">' + srcLabel + '</div>' : '') +
-                '<div class="text-[11px] text-on-surface-variant font-mono max-w-[150px] truncate" title="' + (srcLabel ? '['+srcLabel+'] ' : '') + signalType + entryScore + '">' + signalDisplay + '</div>' +
+                '<div class="text-[11px] text-on-surface-variant max-w-[220px] truncate" title="' + (signalType + entryScore) + '">' + signalDisplay + '</div>' +
                 (pos.entry_score ? '<div class="text-[10px] text-on-surface-variant/60">' + pos.entry_score + ' pt</div>' : '') +
             '</td>' +
             '<td class="px-6 py-4">' +
@@ -1211,8 +1215,8 @@ async function loadPositions() {
 
 async function closeAllMidlinePositions() {
     var cnt = _lastMidlinePositions.length;
-    if (cnt === 0) { await showAlert('当前无中线持仓', 'info'); return; }
-    if (!(await showConfirm('将市价关闭所有 ' + cnt + ' 笔中线持仓，操作不可撤销！', {title: '确认一键平仓', confirmText: '确认平仓', type: 'warning'}))) return;
+    if (cnt === 0) { await showAlert('当前无破位持仓', 'info'); return; }
+    if (!(await showConfirm('将市价关闭所有 ' + cnt + ' 笔破位持仓，操作不可撤销！', {title: '确认一键平仓', confirmText: '确认平仓', type: 'warning'}))) return;
     var btn = document.getElementById('midline-close-all-btn');
     if (btn) { btn.disabled = true; btn.textContent = '平仓中...'; }
     try {

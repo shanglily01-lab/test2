@@ -226,6 +226,7 @@ def _open_brain_entry(
     from app.services.paper_open_gate import gate_simulated_open
     from app.services.paper_limit_entry import create_paper_limit_order
     from app.services.trading_gates import get_paper_margin_usd
+    from app.services.strategy_display_names import build_brain_entry_reason
 
     side_u = side.upper()
     win_for_side = win_long if side_u == "LONG" else win_short
@@ -321,8 +322,12 @@ def _open_brain_entry(
         margin=float(margin),
         stop_loss_pct=sl_pct,
         take_profit_pct=tp_pct,
-        entry_signal_type=f"brain_{playbook}",
-        entry_reason=catalyst[:200],
+        entry_signal_type=f"brain_{playbook}" if playbook else "brain_swing",
+        entry_reason=build_brain_entry_reason(
+            playbook,
+            evidence_summary=str(playbook_row.get("evidence_summary") or ""),
+            signals=list(playbook_row.get("signals") or []),
+        ),
         entry_score=float(entry_score or playbook_row.get("edge_score") or 0),
         signal_components=detail,
         max_hold_minutes=int(hold_hours * 60),

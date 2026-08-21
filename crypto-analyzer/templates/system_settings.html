@@ -414,8 +414,8 @@
 <p class="text-[10px] text-slate-600 mt-1">超时未触及限价时的处理方式</p>
 </div>
 <div class="mt-6 pt-5 border-t border-slate-800">
-<p class="cfg-l2-label mb-2">中线策略参数</p>
-<p class="text-[11px] text-slate-500 mb-4">中线 v2（midline_long/short）专用 · 独立于上方模拟盘默认限价（0.1~1%）</p>
+<p class="cfg-l2-label mb-2">破位策略参数</p>
+<p class="text-[11px] text-slate-500 mb-4">破位策略（source 仍为 midline_long/short）专用 · C1/C3/B2/B3/C4 市价跟风；A1/A2 仍可限价</p>
 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
 <div>
 <label class="block text-[10px] uppercase tracking-wider text-slate-500 mb-2">执行周期 (小时)</label>
@@ -439,7 +439,7 @@
 <p class="text-[10px] text-slate-600 mt-1">市价 +N%，0.1~5</p>
 </div>
 </div>
-<p class="text-[10px] text-slate-600 mt-2">限价单超时 = 执行周期 · 探索页「中线做多/做空」Tab 同步</p>
+<p class="text-[10px] text-slate-600 mt-2">A1/A2 限价超时 = 执行周期 · 破位策略页同步</p>
 </div>
 <div class="cfg-row mt-4">
 <div class="flex items-center gap-2 min-w-0">
@@ -832,9 +832,9 @@
             el.addEventListener('change', async function () {
                 try {
                     await saveMidlineParams();
-                    showToast('中线策略参数已保存', false);
+                    showToast('破位策略参数已保存', false);
                 } catch (err) {
-                    showToast('中线参数保存失败: ' + err.message, true);
+                    showToast('破位参数保存失败: ' + err.message, true);
                 }
             });
         });

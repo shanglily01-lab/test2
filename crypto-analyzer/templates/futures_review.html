@@ -924,7 +924,7 @@ function renderTradesTable() {
     var pnl = t.realized_pnl !== undefined ? t.realized_pnl : t.pnl;
     var dur = t.holding_minutes !== undefined ? fmtHours(t.holding_minutes) : (t.hold_minutes !== undefined ? fmtHours(t.hold_minutes) : (t.duration || '--'));
     var reason = t.close_reason_cn || fmtCloseReason(t.close_reason || t.exit_reason);
-    var entrySignal = t.entry_reason_cn || '--';
+    var entrySignal = t.entry_reason_cn || t.entry_signal_cn || '--';
     var openTs = fmtTime(t.open_time || t.created_at);
     html += '<tr class="border-b border-outline-variant/10 hover:bg-surface-container transition-colors">' +
       '<td class="px-4 py-3"><div class="font-medium text-on-surface">' + shortSym(sym) + '</div></td>' +
