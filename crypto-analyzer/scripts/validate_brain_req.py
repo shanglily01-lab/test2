@@ -1055,6 +1055,99 @@ def test_entry_timing_c1_follow() -> None:
     _ok("entry timing follows a fresh C1 breakdown instead of waiting for a bounce")
 
 
+def test_entry_timing_a2_b2_wait_for_reject() -> None:
+    from app.services.entry_timing import compute_pullback_entry
+
+    dump = []
+    px = 108.0
+    for _ in range(40):
+        px -= 0.06
+        dump.append({
+            "open_price": px + 0.03,
+            "high_price": px + 0.05,
+            "low_price": px - 0.02,
+            "close_price": px,
+            "volume": 900,
+        })
+    a2_dump = compute_pullback_entry(
+        "SHORT", "A2", dump,
+        playbook_row={"signals": ["ema_bear_align", "lh_ll", "volume_shrink_pullback", "15m_lower_high"]},
+        ref_price=dump[-1]["close_price"],
+    )
+    assert a2_dump.ready is False, a2_dump
+
+    bounce = list(dump)
+    p = bounce[-1]["close_price"]
+    for _ in range(3):
+        p += 0.10
+        bounce.append({
+            "open_price": p - 0.04,
+            "high_price": p + 0.01,
+            "low_price": p - 0.05,
+            "close_price": p,
+            "volume": 400,
+        })
+    a2_no_reject = compute_pullback_entry(
+        "SHORT", "A2", bounce,
+        playbook_row={"signals": ["ema_bear_align", "lh_ll", "volume_shrink_pullback", "15m_lower_high"]},
+        ref_price=bounce[-1]["close_price"],
+    )
+    assert a2_no_reject.ready is False, a2_no_reject
+
+    reject = list(bounce)
+    mid = reject[-1]["close_price"]
+    reject.append({
+        "open_price": mid + 0.01,
+        "high_price": mid + 0.18,
+        "low_price": mid - 0.06,
+        "close_price": mid - 0.02,
+        "volume": 500,
+    })
+    a2_ready = compute_pullback_entry(
+        "SHORT", "A2", reject,
+        playbook_row={"signals": ["ema_bear_align", "lh_ll", "ema_reject", "long_upper_wick"]},
+        ref_price=reject[-1]["close_price"],
+    )
+    assert a2_ready.ready is True, a2_ready
+    assert a2_ready.status == "pullback_ready"
+
+    b2_dump = compute_pullback_entry(
+        "SHORT", "B2", dump,
+        playbook_row={"signals": ["break_support", "volume_expand_down", "ema_bear_align"]},
+        ref_price=dump[-1]["close_price"],
+    )
+    assert b2_dump.ready is False, b2_dump
+    assert b2_dump.reason == "need_bounce_before_fail"
+
+    b2_bounce = list(dump)
+    q = b2_bounce[-1]["close_price"]
+    for _ in range(5):
+        q += 0.18
+        b2_bounce.append({
+            "open_price": q - 0.04,
+            "high_price": q + 0.02,
+            "low_price": q - 0.05,
+            "close_price": q,
+            "volume": 400,
+        })
+    fail = list(b2_bounce)
+    fail.append({
+        "open_price": b2_bounce[-1]["close_price"],
+        "high_price": b2_bounce[-1]["close_price"] + 0.04,
+        "low_price": dump[-1]["close_price"] - 0.08,
+        "close_price": dump[-1]["close_price"] - 0.05,
+        "volume": 2200,
+    })
+    b2_ready = compute_pullback_entry(
+        "SHORT", "B2", fail,
+        playbook_row={"signals": ["break_support", "ema_reject", "15m_lower_high", "long_upper_wick"]},
+        ref_price=fail[-1]["close_price"],
+    )
+    assert b2_ready.ready is True, b2_ready
+    assert b2_ready.status == "breakdown_ready"
+    _ok("A2/B2 wait for a bounce reject; do not short the first dump bar")
+
+
 def test_entry_timing_c3_midline_follow() -> None:
     from app.services.entry_timing import compute_pullback_entry
 
@@ -1155,6 +1248,7 @@ def main() -> int:
     test_entry_timing_pullback()
     test_entry_timing_exhaustion_short()
     test_entry_timing_c1_follow()
+    test_entry_timing_a2_b2_wait_for_reject()
     test_entry_timing_c3_midline_follow()
     print()
     if _fail_n:

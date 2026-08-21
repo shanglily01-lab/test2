@@ -3,8 +3,9 @@
 LONG A1: wait for the 15m pullback into EMA20 / 38–50% retrace.
 LONG C3: BRAIN waits for the pullback; midline follows a fresh breakout (market).
 SHORT exhaustion (B3/C4): sell the first callback off a tagged high — do not wait for EMA.
-SHORT follow (C1/B2): follow a fresh breakdown immediately — do not wait for a bounce.
-SHORT bounce (A2): sell the 15m bounce into EMA / prior high in a downtrend.
+SHORT follow (C1): follow a fresh breakdown immediately — do not wait for a bounce.
+SHORT failed bounce (B2): only after a bounce then the bounce origin/EMA fails.
+SHORT bounce (A2): sell the 15m bounce into EMA / prior high after a real reject.
 
 Used by BRAIN and midline/breakout. Direction can already be right; this module
 only answers "is this the buy/sell point, and where to rest the limit".
@@ -17,7 +18,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 PULLBACK_LONG_PLAYBOOKS = frozenset({"A1", "B4", "C3"})
 PULLBACK_SHORT_PLAYBOOKS = frozenset({"A2"})
 EXHAUSTION_SHORT_PLAYBOOKS = frozenset({"B3", "C4"})
-FOLLOW_BREAKDOWN_PLAYBOOKS = frozenset({"C1", "B2"})
+FOLLOW_BREAKDOWN_PLAYBOOKS = frozenset({"C1"})
+FAILED_BOUNCE_SHORT_PLAYBOOKS = frozenset({"B2"})
 
 ENTRY_OFFSET_MIN_PCT = 0.20
 ENTRY_OFFSET_MAX_PCT = 1.80
@@ -38,6 +40,9 @@ REJECT_STALL_HITS = frozenset({"wick", "reject_close", "false_break", "rsi", "re
 LONG_STILL_AT_HIGH_PCT = 0.80
 LONG_A1_NEAR_EMA_MAX_RANGE_POS = 0.55
 LONG_A1_NEAR_EMA_MAX_DIST_PCT = 0.15
+# A2: still printing the dump (no bounce yet). Keep this tighter than A1's 0.80%
+# because the A2 sell zone is only a 38–50% bounce off the local low.
+SHORT_STILL_AT_LOW_PCT = 0.25
 # C3 follow: measure extension vs the high *before* the last 2h, so the break
 # level does not ratchet with the pump (Aug 20 FIL/DOGE re-chase).
 C3_PRE_BREAK_EXCLUDE_BARS = 8
@@ -455,6 +460,87 @@ def _follow_breakdown_entry(
     )
 
 
+def _failed_bounce_short_entry(
+    rows_15m: List[Dict[str, Any]],
+    *,
+    playbook_row: Optional[Dict[str, Any]],
+    price: float,
+    ema20: Optional[float],
+    look_lo: float,
+) -> EntryTiming:
+    """B2: short only after a bounce then the bounce origin / EMA fails. Do not chase the first dump bar."""
+    c = _closes(rows_15m)
+    sig = _signals_of(playbook_row)
+    prior = rows_15m[:-1] if len(rows_15m) >= 9 else rows_15m
+    c_prior = _closes(prior)
+    l_prior = _lows(prior)
+    h_prior = _highs(prior)
+    bounce_lo = min(l_prior[-8:])
+    bounce_hi = max(h_prior[-8:])
+    bounced = bounce_hi >= bounce_lo * 1.005 and max(c_prior[-8:]) > min(c_prior[-8:]) * 1.003
+    weak = bool(
+        "volume_shrink_pullback" in sig
+        or "15m_lower_high" in sig
+        or "long_upper_wick" in sig
+        or "ema_reject" in sig
+    )
+    failed = bool(
+        "break_support" in sig
+        or (
+            ema20 is not None
+            and c[-1] < ema20 * 0.998
+            and max(c[-8:-1] or [c[-1]]) >= ema20
+        )
+        or (look_lo > 0 and c[-1] < look_lo * 0.998)
+    )
+    recovering = bool(
+        "false_break_down" in sig
+        or (look_lo > 0 and c[-1] > look_lo * 1.004 and len(c) >= 3 and c[-1] > c[-3])
+    )
+    target = price * (1.0 + ENTRY_OFFSET_MIN_PCT / 100.0)
+    offset = _clamp((target - price) / price * 100.0, ENTRY_OFFSET_MIN_PCT, FOLLOW_OFFSET_MAX_PCT)
+    zone_low = bounce_lo
+    zone_high = bounce_hi
+    if recovering:
+        return EntryTiming(
+            ready=False, status="invalidated", reason="failed_bounce_reclaimed",
+            limit_offset_pct=offset, limit_price=None,
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=look_lo, extended=False, bounce_ok=False, mode="follow",
+        )
+    if not bounced:
+        return EntryTiming(
+            ready=False, status="wait_bounce",
+            reason="need_bounce_before_fail",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=look_lo, extended=True, bounce_ok=False, mode="follow",
+        )
+    if not weak:
+        return EntryTiming(
+            ready=False, status="wait_bounce",
+            reason="bounce_not_weak",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=look_lo, extended=False, bounce_ok=False, mode="follow",
+        )
+    if not failed:
+        return EntryTiming(
+            ready=False, status="wait_follow",
+            reason="bounce_not_failed",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=look_lo, extended=False, bounce_ok=True, mode="follow",
+        )
+    return EntryTiming(
+        ready=True, status="breakdown_ready",
+        reason="failed_bounce_follow",
+        limit_offset_pct=offset, limit_price=round(target, 8),
+        zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+        break_level=look_lo if look_lo > 0 else bounce_lo, extended=False, bounce_ok=True, mode="follow",
+    )
+
+
 def _pre_impulse_high(h: List[float], exclude: int = C3_PRE_BREAK_EXCLUDE_BARS) -> float:
     """Resistance from before the current 15m impulse; does not ride the pump."""
     if not h:
@@ -727,6 +813,11 @@ def compute_pullback_entry(
         return _exhaustion_short_entry(
             rows_15m, playbook_row=playbook_row, price=price, ema20=ema20,
         )
+    if pb in FAILED_BOUNCE_SHORT_PLAYBOOKS:
+        return _failed_bounce_short_entry(
+            rows_15m, playbook_row=playbook_row, price=price, ema20=ema20,
+            look_lo=look_lo,
+        )
     if pb in FOLLOW_BREAKDOWN_PLAYBOOKS:
         return _follow_breakdown_entry(
             rows_15m, playbook_row=playbook_row, price=price, ema20=ema20,
@@ -747,27 +838,27 @@ def compute_pullback_entry(
     range_span = max(max(h[-8:]) - min(l[-8:]), 1e-12)
     range_pos = (max(h[-8:]) - price) / range_span
     ema_dist_pct = ((ema20 - price) / ema20 * 100.0) if ema20 else 0.0
+    dist_from_low_pct = ((price - min(l[-8:])) / price * 100.0) if price > 0 else 0.0
+    still_at_low = dist_from_low_pct <= SHORT_STILL_AT_LOW_PCT
     extended = (
         range_pos >= EXTENDED_RANGE_POS
         or ema_dist_pct >= EXTENDED_EMA_DIST_PCT
         or price < zone_low * 0.997
+        or still_at_low
     )
     if "impulse_down" in sig or "crash_spike" in sig or "h1_breakdown_down" in sig:
         extended = extended or range_pos >= 0.72
     in_zone = zone_low * 0.998 <= price <= zone_high
-    bounce_ok = bool(
-        "15m_lower_high" in sig
-        or "volume_shrink_pullback" in sig
-        or "long_upper_wick" in sig
-        or "rsi_15m_turn_down" in sig
+    last = rows_15m[-1]
+    reject_ok = bool(
+        "long_upper_wick" in sig
         or "ema_reject" in sig
-        or "exhaustion_up" in sig
         or "false_break_up" in sig
+        or "rsi_15m_turn_down" in sig
+        or _upper_wick_ratio(last) >= 0.28
     )
-    if not bounce_ok and len(c) >= 5:
-        bounced = c[-1] > min(l[-5:-1]) * 1.002
-        vol_shrink = len(v) >= 8 and sum(v[-3:]) < sum(v[-8:-3]) * 0.85
-        bounce_ok = bounced and vol_shrink
+    bounced_up = len(c) >= 5 and c[-1] > min(l[-5:-1]) * 1.002
+    bounce_ok = (not still_at_low) and bounced_up and reject_ok
     if price > invalidation:
         return EntryTiming(
             ready=False, status="invalidated", reason="broke_retest_invalidation",
@@ -783,6 +874,14 @@ def compute_pullback_entry(
     if target <= price:
         target = price * (1.0 + ENTRY_READY_OFFSET_PCT / 100.0)
     offset = _clamp((target - price) / price * 100.0, ENTRY_OFFSET_MIN_PCT, ENTRY_OFFSET_MAX_PCT)
+    if still_at_low:
+        return EntryTiming(
+            ready=False, status="wait_pullback",
+            reason="still_at_low_wait_bounce",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=break_level, extended=True, bounce_ok=False,
+        )
     if extended:
         return EntryTiming(
             ready=False, status="wait_pullback",

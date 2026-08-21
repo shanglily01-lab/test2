@@ -547,7 +547,7 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
 
     # C4 假突陷阱
     if feats.get("false_break_up") and (
-        feats.get("long_upper_wick") or feats.get("vol_down") or feats.get("stall_at_high")
+        feats.get("long_upper_wick") or feats.get("vol_down") or feats.get("exhaustion_up")
     ):
         scored.append(("C4", 0.75 + (0.1 if feats.get("exhaustion_up") else 0), True))
 

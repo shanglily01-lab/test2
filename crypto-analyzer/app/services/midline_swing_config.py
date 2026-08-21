@@ -90,7 +90,7 @@ def is_active_midline_source(source: str) -> bool:
 
 
 def midline_uses_market_entry(playbook: str) -> bool:
-    """C1/C3/B2 破位跟风 + B3/C4 顶部回调确认后，中线走市价，不挂限价。"""
+    """C1/C3 破位跟风 + B2 反抽失败后跟风 + B3/C4 顶部回调确认后，中线走市价，不挂限价。"""
     return str(playbook or "").strip().upper() in MIDLINE_MARKET_PLAYBOOKS
 
 

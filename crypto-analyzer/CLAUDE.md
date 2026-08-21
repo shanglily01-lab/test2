@@ -181,7 +181,7 @@
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟+实盘】
 - **量化扫描**，非 LLM；标的 **市值前 100**（`config.yaml` 序）；**15min** 轮询；旧四路 `*_midline_*` 停并移除
 - kill switch：`midline_long_enabled` / `midline_short_enabled`（系统配置「策略与模式」+ 破位策略页）
-- 限价：做多 A1 挂 **15m 回调区**；**C3/C1/B2 破位市价跟风**（C3 禁 RSI 极端+7日高追；止盈后 4h 冷却）；B3/C4 顶部第一回调后市价空；A2 挂反抽区；C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h**；SL **6%** / TP **3%** / 5x / 500U
+- 限价：做多 A1 挂 **15m 回调区**；**C3/C1 破位市价跟风**（C3 禁 RSI 极端+7日高追；止盈后 4h 冷却）；B2 须反抽失败后再市价跟；B3/C4 顶部第一回调后市价空；A2 须离低点并拒绝后挂反抽区；C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h**；SL **6%** / TP **3%** / 5x / 500U
 - **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）；**midline_hold_exit** 默认峰≥1.2% 锁利，Big4 LONG 多单 2.5%/0.80% 且关闭 no_follow；**排除** SmartExit
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
 - Web：原 Gemini 探索页整页改破位策略/机会分析

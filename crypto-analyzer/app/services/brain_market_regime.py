@@ -197,7 +197,6 @@ def _token_failed_bounce_short(playbook_row: Dict[str, Any]) -> bool:
         "ema_reject" in sig
         or "long_upper_wick" in sig
         or feats.get("long_upper_wick")
-        or "15m_lower_high" in sig
         or "break_support" in sig
         or feats.get("break_support")
     )
