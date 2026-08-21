@@ -2,7 +2,7 @@
 实盘开仓闸门 & 黑名单等级 — 统一读取 system_settings，避免各模块硬编码。
 
 按 source 控制实盘（其余策略仅模拟）:
-  - deepseek_explore, deepseek_predict, brain_swing, midline_long/short
+  - deepseek_explore, deepseek_predict, brain_swing, midline_long/short, manual_watchlist
     → 可开实盘（须 live_trading_enabled + L0 白名单）
   - 总开关: live_trading_enabled（开仓）, live_close_enabled（平仓）
 """
@@ -28,6 +28,7 @@ LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
     "brain_short",
     "midline_long",
     "midline_short",
+    "manual_watchlist",
     # gemini_explore / gemini_predict 已下线（系统配置不再提供开关）
     # 旧四路 gemini/deepseek_midline_* 不实盘 — REQUIREMENTS §7.2
     # 现货镜像 spot_* 走独立开关 spot_live_enabled — REQUIREMENTS §7.4

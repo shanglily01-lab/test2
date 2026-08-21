@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>我的自选 | Neural Obsidian</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  body { font-family: 'Manrope', sans-serif; }
+  h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .chip-on { background: rgba(73,244,200,0.15); color: #49f4c8; border: 1px solid rgba(73,244,200,0.3); }
+  .chip-off { background: rgba(168,171,178,0.1); color: #a8abb2; border: 1px solid rgba(168,171,178,0.2); }
+  .chip-warn { background: rgba(255,180,84,0.12); color: #ffb454; border: 1px solid rgba(255,180,84,0.25); }
+  .chip-long { background: rgba(73,244,200,0.12); color: #49f4c8; }
+  .chip-short { background: rgba(255,113,108,0.12); color: #ff716c; }
+</style>
+<script>
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "on-surface": "#ebeef5", "surface-container-low": "#0f1419",
+          "outline": "#72767c", "surface-container-highest": "#20262e",
+          "surface": "#0a0f14", "error": "#ff716c",
+          "on-surface-variant": "#a8abb2", "surface-container": "#151a20",
+          "outline-variant": "#44484e", "primary": "#49f4c8",
+          "background": "#0a0f14", "secondary": "#5b9eff",
+        },
+      },
+    },
+  }
+</script>
+</head>
+<body class="bg-surface text-on-surface">
+{% include "partials/desktop_sidebar.html" %}
+<main class="ml-[240px] min-h-screen">
+
+<header class="border-b border-outline-variant/10 px-8 py-5 flex items-center justify-between flex-wrap gap-4">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight">我的自选</h1>
+    <p class="text-[11px] text-on-surface-variant mt-1 tracking-wide">
+      合约交易对自选 · 价格每 5 分钟刷新 · 手动限价/市价 · 成交走实时 ticker · 实盘随总开关且仅 L0
+    </p>
+  </div>
+  <div class="flex items-center gap-3 flex-wrap">
+    <span id="live-chip" class="chip chip-off">实盘关</span>
+    <span id="refresh-chip" class="chip chip-off">价格 --</span>
+    <button id="btn-refresh" class="px-3 py-1.5 rounded-lg bg-surface-container text-xs text-on-surface-variant hover:bg-surface-container-highest">刷新价格</button>
+  </div>
+</header>
+
+<section class="px-8 py-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 space-y-4">
+    <div class="flex gap-2">
+      <input id="add-symbol" list="universe-list" placeholder="添加交易对，如 BTC/USDT" class="flex-1 bg-surface-container-low border border-outline-variant/20 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"/>
+      <datalist id="universe-list"></datalist>
+      <button id="btn-add" class="px-4 py-2 rounded-lg bg-primary text-[#002045] text-sm font-semibold">添加</button>
+    </div>
+    <div class="overflow-x-auto rounded-xl border border-outline-variant/15">
+      <table class="w-full text-sm">
+        <thead class="text-[11px] uppercase text-on-surface-variant bg-surface-container-low">
+          <tr>
+            <th class="text-left px-4 py-3">交易对</th>
+            <th class="text-right px-4 py-3">最新价</th>
+            <th class="text-right px-4 py-3">24h</th>
+            <th class="text-left px-4 py-3">评级</th>
+            <th class="text-left px-4 py-3">实盘</th>
+            <th class="px-4 py-3"></th>
+          </tr>
+        </thead>
+        <tbody id="watch-body"></tbody>
+      </table>
+    </div>
+    <p id="watch-empty" class="text-sm text-on-surface-variant hidden">还没有自选。从上面搜索添加 config.yaml 市值池内的 U 本位永续。</p>
+  </div>
+
+  <div class="bg-surface-container-low rounded-xl p-5 space-y-3">
+    <h2 class="font-semibold">手动下单</h2>
+    <p class="text-[11px] text-on-surface-variant">选中一行填入交易对。市价立刻按实时价成交；限价挂着等 ticker 触价。</p>
+    <label class="block text-[11px] text-on-surface-variant">交易对
+      <input id="ord-symbol" class="mt-1 w-full bg-surface-container border border-outline-variant/20 rounded-lg px-3 py-2 text-sm" readonly/>
+    </label>
+    <div class="grid grid-cols-2 gap-2">
+      <button type="button" data-side="LONG" class="side-btn px-3 py-2 rounded-lg text-sm font-semibold bg-primary/15 text-primary border border-primary/30">做多</button>
+      <button type="button" data-side="SHORT" class="side-btn px-3 py-2 rounded-lg text-sm font-semibold bg-surface-container text-on-surface-variant">做空</button>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <button type="button" data-kind="limit" class="kind-btn px-3 py-2 rounded-lg text-xs font-semibold bg-primary/15 text-primary">限价</button>
+      <button type="button" data-kind="market" class="kind-btn px-3 py-2 rounded-lg text-xs font-semibold bg-surface-container text-on-surface-variant">市价</button>
+    </div>
+    <label id="limit-wrap" class="block text-[11px] text-on-surface-variant">委托价
+      <input id="ord-limit" type="number" step="any" class="mt-1 w-full bg-surface-container border border-outline-variant/20 rounded-lg px-3 py-2 text-sm mono"/>
+    </label>
+    <div class="grid grid-cols-2 gap-2">
+      <label class="block text-[11px] text-on-surface-variant">杠杆
+        <input id="ord-lev" type="number" value="5" min="1" max="125" class="mt-1 w-full bg-surface-container border border-outline-variant/20 rounded-lg px-3 py-2 text-sm"/>
+      </label>
+      <label class="block text-[11px] text-on-surface-variant">保证金 U
+        <input id="ord-margin" type="number" value="500" min="10" class="mt-1 w-full bg-surface-container border border-outline-variant/20 rounded-lg px-3 py-2 text-sm"/>
+      </label>
+      <label class="block text-[11px] text-on-surface-variant">止损 %
+        <input id="ord-sl" type="number" value="3" step="0.1" class="mt-1 w-full bg-surface-container border border-outline-variant/20 rounded-lg px-3 py-2 text-sm"/>
+      </label>
+      <label class="block text-[11px] text-on-surface-variant">止盈 %
+        <input id="ord-tp" type="number" value="5" step="0.1" class="mt-1 w-full bg-surface-container border border-outline-variant/20 rounded-lg px-3 py-2 text-sm"/>
+      </label>
+    </div>
+    <button id="btn-order" class="w-full py-2.5 rounded-lg bg-primary text-[#002045] text-sm font-bold">提交订单</button>
+    <p id="ord-msg" class="text-[12px] text-on-surface-variant min-h-[1.5em]"></p>
+  </div>
+</section>
+
+<section class="px-8 pb-10 grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div>
+    <h2 class="font-semibold mb-3">自选持仓</h2>
+    <div id="pos-box" class="text-sm text-on-surface-variant">--</div>
+  </div>
+  <div>
+    <h2 class="font-semibold mb-3">自选订单</h2>
+    <div id="ord-box" class="text-sm text-on-surface-variant">--</div>
+  </div>
+</section>
+
+</main>
+<script src="/static/js/watchlist_page.js?v=1"></script>
+</body></html>

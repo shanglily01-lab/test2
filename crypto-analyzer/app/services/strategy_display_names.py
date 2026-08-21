@@ -1,4 +1,4 @@
-"""统一 source / entry_signal_type → 展示名（交易记录、复盘、持仓）。"""
+﻿"""统一 source / entry_signal_type → 展示名（交易记录、复盘、持仓）。"""
 from __future__ import annotations
 
 import json
@@ -26,6 +26,7 @@ _STATIC: dict[str, str] = {
     "spot_dca": "现货·已停用DCA",
     "midline_long": "破位做多",
     "midline_short": "破位做空",
+    "manual_watchlist": "自选手动",
     "gemini_midline_long": "破位做多",
     "gemini_midline_short": "破位做空",
     "deepseek_midline_long": "破位做多",
@@ -73,6 +74,7 @@ _STATIC_SHORT: dict[str, str] = {
     "deepseek_predict": "D预测",
     "midline_long": "破位多",
     "midline_short": "破位空",
+    "manual_watchlist": "自选",
 }
 
 _PB_RE = re.compile(

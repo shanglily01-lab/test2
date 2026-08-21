@@ -432,9 +432,18 @@ class DeepSeekPositionAdvisor:
                 try:
                     from app.services.brain_config import is_brain_source
                     from app.services.midline_swing_config import is_midline_source
-                    advise_only = is_brain_source(src) or is_midline_source(src)
+                    from app.services.watchlist_config import is_watchlist_source
+                    advise_only = (
+                        is_brain_source(src)
+                        or is_midline_source(src)
+                        or is_watchlist_source(src)
+                    )
                 except Exception:
-                    advise_only = str(src).startswith("brain_") or str(src).startswith("midline_")
+                    advise_only = (
+                        str(src).startswith("brain_")
+                        or str(src).startswith("midline_")
+                        or str(src) == "manual_watchlist"
+                    )
                 if advise_only and action == "sell":
                     reason = f"advisor_suggest_only:{reason}"[:500]
                     action = "observe"

@@ -5,7 +5,7 @@ alwaysApply: true
 
 # AI 策略与顾问记忆
 
-**权威需求**: `docs/REQUIREMENTS_LOGIC_ZH.md` · **AI 细节**: `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md`
+**权威需求**: `docs/REQUIREMENTS_LOGIC_ZH.md` · **AI 细节**: `docs/AI_STRATEGIES_AND_ADVISORS_ZH.md` · **操作对照**: `docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`
 
 ## 三教师与 source
 
@@ -71,7 +71,7 @@ alwaysApply: true
 
 ## 实盘（`trading_gates.py`）
 
-**LIVE_SYNC_SOURCES**: DeepSeek 探索/预测 + **BRAIN**（**不含**中线 v2）
+**LIVE_SYNC_SOURCES**: DeepSeek 探索/预测 + BRAIN + 破位 `midline_*` + 自选 `manual_watchlist`
 
 | 动作 | 条件 |
 |------|------|

@@ -149,7 +149,7 @@
 - 每 **max_hold_hours**（距上次 ok）+ 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
 - SL **3%** / TP **5%** / **max_hold_hours** / 5x / 500U；conf≥**0.75** + `explore_catalyst_technical_ok`（含 15m OHLC）；**DeepSeek LONG** 另≥**0.82** + RSI/7d/24h/`deepseek_long_entry_quality_ok`
 - **DeepSeek 选币**：仅 **L0+L1**（不扫未评级/全市场）
-- **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：`deepseek_explore` / `deepseek_predict` / `brain_swing` / **`midline_long/short`**（+ L0 白名单等 symbol 闸门）
+- **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：`deepseek_explore` / `deepseek_predict` / `brain_swing` / **`midline_long/short`** / **`manual_watchlist`**（+ L0 白名单等 symbol 闸门）
 - **Gemini 探索已下线**（系统配置无开关；不调度）
 
 ### 主预测 (`*_predict`)
@@ -159,7 +159,7 @@
 - **Gemini 预测已下线**（API / 页面 / worker 已移除）
 
 ### 超级大脑主权层（REQ-BRAIN）【需求 2026-07-28 · 首版已落地 · 对照期 · v2 Playbook 2026-07-30】
-- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3（v4.5.23）
+- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3；操作对照：`docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`
 - `brain_swing`：市值前 **300** 模拟扫描；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
 - 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**强制防插针限价**（`BRAIN_USE_MARKET_ENTRY=False`），超时取消
@@ -185,7 +185,7 @@
 - **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）；**midline_hold_exit** 默认峰≥1.2% 锁利，Big4 LONG 多单 2.5%/0.80% 且关闭 no_follow；**排除** SmartExit
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
 - Web：原 Gemini 探索页整页改破位策略/机会分析
-- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.2
+- 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.2；操作对照：`docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`
 
 ### 开仓 / 持仓顾问
 - 路由：统一 **DeepSeek**（Gemini 顾问已下线；历史 `gemini_*` 仓亦由 DeepSeek 监管）；中线/BRAIN 跳过开仓顾问、**纳入**持仓顾问（**sell 只建议不执行**）
@@ -243,7 +243,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 
 ## 实盘控制
 
-- **按 source 白名单**（`trading_gates.LIVE_SYNC_SOURCES`）：DeepSeek 探索/预测 + **BRAIN** + **破位 `midline_*`**；GPT/战术/反转/smart_trader/现货镜像/已下线 Gemini 只模拟
+- **按 source 白名单**（`trading_gates.LIVE_SYNC_SOURCES`）：DeepSeek 探索/预测 + **BRAIN** + **破位 `midline_*`** + **自选 `manual_watchlist`**；GPT/战术/反转/smart_trader/现货镜像/已下线 Gemini 只模拟
 - **现货**（§7.4）：模拟跟 BRAIN A1 + DeepSeek LONG，仅 L0，`spot_trading_enabled`；实盘独立开关 `spot_live_enabled`（成交瞬间，不回填）
 - **实盘开仓 symbol**：须 **L0 白名单**（`rating_level=0`）；L1/L2/L3 禁止实盘
 - **限价偏移**：中线优先 **回调区**（无区才 ±1%）；其他模拟限价读 `paper_limit_long/short_offset_pct`（系统设定）

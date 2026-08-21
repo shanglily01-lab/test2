@@ -47,6 +47,20 @@ def gate_simulated_open(
 
     from app.services.midline_swing_config import is_midline_source
     from app.services.brain_config import is_brain_source
+    from app.services.watchlist_config import is_watchlist_source
+    if is_watchlist_source(source):
+        try:
+            from app.services.trading_gates import check_symbol_trading_forbidden
+            forbidden, forbid_reason = check_symbol_trading_forbidden(symbol, conn)
+            if forbidden:
+                logger.info(
+                    f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {forbid_reason}"
+                )
+                return False, forbid_reason
+        except Exception as e:
+            logger.warning(f"[开仓闸门] {symbol} 自选闸门异常: {e}")
+            return False, "symbol_gate_error"
+        return True, "watchlist_skip_advisor"
     if is_midline_source(source):
         try:
             from app.services.trading_gates import (

@@ -964,8 +964,24 @@ class FuturesTradingEngine:
             check_simulated_symbol_allowed,
             check_source_side_performance_allowed,
             check_symbol_loss_cooldown,
+            check_symbol_trading_forbidden,
             has_open_futures_position_same_side,
         )
+        from app.services.watchlist_config import is_watchlist_source
+
+        if is_watchlist_source(source):
+            forbidden, forbid_reason = check_symbol_trading_forbidden(symbol, self.connection)
+            if forbidden:
+                return False, str(forbid_reason or "fill_gate_rejected")
+            duplicate, duplicate_reason = has_open_futures_position_same_side(
+                self.connection, symbol, position_side, account_id=account_id,
+            )
+            if duplicate:
+                return False, str(duplicate_reason or "fill_gate_rejected")
+            max_ok, max_reason = check_max_positions_allowed(self.connection, account_id)
+            if not max_ok:
+                return False, str(max_reason or "fill_gate_rejected")
+            return True, ""
 
         checks = [
             check_simulated_symbol_allowed(symbol, self.connection),

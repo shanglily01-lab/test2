@@ -1,8 +1,10 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.30
+**版本**: v4.5.32
 **日期**: 2026-08-21
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
+> **合约自选（REQ-WATCHLIST §7.5）**：侧栏「我的自选」；用户加交易对；价格每 **5 分钟**刷新；手动限价/市价；成交走实时 ticker；实盘随 `live_trading_enabled`，**仅 L0**；成交瞬间同步，打开不回填。  
+> **操作对照（给人看）**：超级大脑 vs 破位策略说明见 [`docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`](./BRAIN_AND_BREAKOUT_OPERATOR_ZH.md)（冲突仍以本文为准）。  
 > **现货镜像（REQ-SPOT §7.4）**：模拟现货跟 **BRAIN A1** 回调买 + **DeepSeek LONG**；仅 **L0**；旧 DCA 停用；实盘由 `spot_live_enabled` 控制（成交瞬间同步，打开不回填）。  
 > **破位策略（REQ-MIDLINE §7.2）**：`midline_long` / `midline_short` 已落地模拟+实盘；扫描 **市值前 100**；对外文案为「破位策略」。  
 > **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；扫描 **市值前 300**（`config.yaml` 按市值序）；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。  
@@ -188,6 +190,7 @@
 - `deepseek_predict`
 - `brain_swing`（及 `brain_long` / `brain_short`）
 - `midline_long` / `midline_short`（破位策略）
+- `manual_watchlist`（合约自选手动单）
 
 **已下线（不再实盘、不再调度）**：`gemini_explore` / `gemini_predict`（系统配置开关已移除，DB 强制关闭）。
 
@@ -197,7 +200,7 @@
 
 **其余**（GPT 探索/预测、战术、反转、smart_trader、BTC 动量、现货镜像等）**仅模拟仓**。
 
-BRAIN / 破位 / DeepSeek 实盘同一套开关：`live_trading_enabled=1` 才在**成交瞬间**排队同步；L1 模拟仓当场 `SKIPPED`。打开开关**不得**回填历史模拟仓（INV-01/02）。
+BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_trading_enabled=1` 才在**成交瞬间**排队同步；L1 模拟仓当场 `SKIPPED`。打开开关**不得**回填历史模拟仓（INV-01/02）。
 
 ### 6.3 check_live_open_allowed 检查顺序
 
@@ -805,7 +808,7 @@ BRAIN / 破位 / DeepSeek 实盘同一套开关：`live_trading_enabled=1` 才�
 |----|------|
 | 方向 | **只做多**（现货不能空） |
 | 信号 | 合约模拟仓 **FILLED 瞬间**跟单：BRAIN **A1**；DeepSeek 探索/预测 **LONG** |
-| 不跟 | BRAIN 空单 / C3 突破跟多 / A2·B2·B3·C1·C4；破位 `midline_*`；旧 DCA |
+| 不跟 | BRAIN 空单 / C3 突破跟多 / A2·B2·B3·C1·C4；破位 `midline_*`；自选 `manual_watchlist`；旧 DCA |
 | 标的 | **仅 L0**（`rating_level=0`）；L1 合约仓不镜像 |
 | 账户 | `spot_positions.account_id=3`；**500U/单**（模拟与实盘同一档）；最多 5 仓；同币已有 open 则跳过 |
 | 实盘 | `spot_live_enabled`（缺省 0）。**仅**模拟现货刚 INSERT / 刚 CLOSED 的瞬间市价买/卖；用 `client_order_id=spot_live_{id}` 映射，禁止按 symbol 模糊平手工仓。打开开关**不得**扫描历史 open 仓补买（INV-01/02）。**不**进合约 `LIVE_SYNC_SOURCES` |
@@ -815,6 +818,25 @@ BRAIN / 破位 / DeepSeek 实盘同一套开关：`live_trading_enabled=1` 才�
 旧 `spot_dca`（日 RSI<35 + MA99）**停止扫描与实盘挂单**。残留 open 仓仍走持仓监控。
 
 合约成交镜像失败 **不得**回滚合约仓（INV-01 现货侧：无成交则无实盘；本期无实盘路径）。
+
+### 7.5 合约自选（REQ-WATCHLIST）【v4.5.32】
+
+**页面**: `/watchlist`（侧栏「合约交易」下「我的自选」）  
+**实现**: `watchlist_config.py` · `watchlist_store.py` · `watchlist_orders.py` · `watchlist_api.py`  
+**回归**: `scripts/validate_watchlist.py`
+
+| 项 | 约定 |
+|----|------|
+| source | `manual_watchlist` |
+| 标的 | 用户从 `config.yaml` 市值池自选，最多 **50**；证券 / L2+ / 锁定禁止开仓 |
+| 价格 | 前端每 **5 分钟**拉一次实时 ticker（可手动刷新）；下单与限价触价用 **ticker 最新价** |
+| 市价 | 先挂 PENDING 再 `fill_paper_limit_order(at_market=True)`，走 INV-01 成交瞬间同步 |
+| 限价 | 用户填写委托价；executor 触价成交；超时 **8h 取消**（禁止转市价） |
+| 开仓顾问 | **跳过** |
+| 持仓顾问 | DeepSeek **sell 只建议不执行** |
+| SmartExit | **排除**；硬 SL/TP 由 `position_sl_tp_monitor` |
+| 实盘 | ∈ `LIVE_SYNC_SOURCES`；`live_trading_enabled` / `live_close_enabled`；**仅 L0**；打开开关不回填 |
+| 现货镜像 | **不跟** |
 
 ## 8. AI 主探索 / 主预测（REQ-AI-EP）
 
@@ -971,11 +993,12 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-KLINE | `binance_ws_kline_collector.py`, `fast_collector_service.py` |
 | REQ-RATING | `update_top_performers.py` |
 | REQ-MIDLINE | `market_cap_universe.py`, `midline_swing_config.py`, `midline_swing_scanner.py`, `entry_timing.py`, `midline_hold_exit.py`, `midline_explore_worker.py`, `midline_swing_api.py`, 破位策略页 JS/模板, `strategy_display_names.py`, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
-| **REQ-BRAIN** | `brain_config` / `brain_strategy_orchestrator`（市值前 300）/ `market_cap_universe.py`；`paper_limit_entry` + executor expire；`trading_gates.LIVE_SYNC_SOURCES`；`smart_exit_optimizer` 排除；`validate_brain_req.py`；权威 §7.3 |
+| **REQ-BRAIN** | `brain_config` / `brain_strategy_orchestrator`（市值前 300）/ `market_cap_universe.py`；`paper_limit_entry` + executor expire；`trading_gates.LIVE_SYNC_SOURCES`；`smart_exit_optimizer` 排除；`validate_brain_req.py`；权威 §7.3；操作对照 `docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md` |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
 | **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **A1 豁免 5m**；其它 40U/4根；-80U；trail（Big4 LONG 多单 2.2%/0.80%）；soft 关；Big4 LONG 禁 A2/B2、放行 B3/C4/C1 小仓空；顾问 suggest-only；到期不因 D1 强平；多单贴高等待回调；C3 禁止高潮追价；同币止盈 4h 冷却；**BRAIN 实盘随总开关仅 L0**；中线破位市价跟风；§7.3（**v4.5.25**） |
 | REQ-ST | `smart_trader_service.py` |
 | **REQ-SPOT** | `spot_paper_mirror.py`；`spot_live_sync.py`；`spot_trader_service.py`；`fill_paper_limit_order` 钩子；`validate_spot_paper.py`；权威 §7.4 |
+| **REQ-WATCHLIST** | `watchlist_config.py` · `watchlist_store.py` · `watchlist_orders.py` · `watchlist_api.py` · `/watchlist`；`LIVE_SYNC_SOURCES` 含 `manual_watchlist`；权威 §7.5 |
 
 ---
 
@@ -983,6 +1006,8 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-21 | **v4.5.32** | **合约自选**：侧栏「我的自选」；用户添加交易对；5 分钟刷新实时价；手动限价/市价；`manual_watchlist` 进 LIVE_SYNC（仅 L0，成交瞬间，打开不回填） |
+| 2026-08-21 | **v4.5.31** | **操作对照文档**：新增 `docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`（超级大脑 vs 破位）；逻辑条款未改 |
 | 2026-08-21 | **v4.5.30** | **市值扫描池**：`config.yaml` 改为市值前 300 的 Binance U 本位永续；超级大脑扫 300；破位策略扫前 100；脚本 `sync_config_market_cap_symbols.py` |
 | 2026-08-21 | **v4.5.29** | **破位策略开关上系统配置**：`midline_long/short_enabled` 出现在桌面/手机系统设置与破位策略页；关则停扫新开，已开仓仍监控 |
 | 2026-08-21 | **v4.5.28** | **破位策略接入实盘**：`midline_long/short` 加入 `LIVE_SYNC_SOURCES`；随实盘开/平仓总开关；仅 L0；旧四路中线仍不实盘 |

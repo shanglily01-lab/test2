@@ -18,11 +18,12 @@ from app.services.binance_data_hub import get_global_data_hub
 from app.utils.position_time import utc_now_naive
 from app.services.midline_swing_config import is_midline_source
 from app.services.brain_config import is_brain_source
+from app.services.watchlist_config import is_watchlist_source
 
 
 def _is_smart_exit_excluded_source(source: str) -> bool:
-    """中线/BRAIN 由各自持仓监控规则负责，禁止进入旧 SmartExit。"""
-    return is_midline_source(source) or is_brain_source(source)
+    """中线/BRAIN/自选手动仓由各自规则或用户负责，禁止进入旧 SmartExit。"""
+    return is_midline_source(source) or is_brain_source(source) or is_watchlist_source(source)
 
 
 class SmartExitOptimizer:

@@ -1082,6 +1082,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# 合约自选
+try:
+    from app.api.watchlist_api import router as watchlist_router
+    app.include_router(watchlist_router)
+    logger.info("[合约自选] API路由已注册")
+except Exception as e:
+    logger.warning(f"[合约自选] API路由注册失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 # 注册 DeepSeek 预测 API 路由
 try:
     from app.api.deepseek_predict_api import router as deepseek_predict_router
@@ -1747,6 +1757,11 @@ async def brain_strategy_page(request: Request):
 @app.get("/midline_strategy")
 async def midline_strategy_page(request: Request):
     return await _serve_desktop_template(request, "midline_strategy.html", "Midline strategy page not found")
+
+
+@app.get("/watchlist")
+async def watchlist_page(request: Request):
+    return await _serve_desktop_template(request, "watchlist.html", "Watchlist page not found")
 
 
 @app.get("/gemini_predict")

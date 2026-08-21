@@ -183,6 +183,8 @@ def create_paper_limit_order(
     skip_open_advisor: bool = False,
     failure_reason: Optional[List[str]] = None,
     force_market: bool = False,
+    explicit_limit_price: Optional[float] = None,
+    min_fill_age_sec: Optional[int] = None,
 ) -> Optional[int]:
     """
     创建模拟盘限价开仓单（不直接成交）。
@@ -200,6 +202,7 @@ def create_paper_limit_order(
 
     from app.services.midline_swing_config import is_midline_source, get_midline_limit_offset_pct
     from app.services.brain_config import is_brain_source, BRAIN_USE_MARKET_ENTRY
+    from app.services.watchlist_config import is_watchlist_source
 
     use_market = bool(force_market) or (is_brain_source(source) and BRAIN_USE_MARKET_ENTRY)
     if use_market:
@@ -232,7 +235,9 @@ def create_paper_limit_order(
             failure_reason=failure_reason,
         )
 
-    force_limit = is_brain_source(source) or is_midline_source(source)
+    force_limit = (
+        is_brain_source(source) or is_midline_source(source) or is_watchlist_source(source)
+    )
 
     if not is_paper_limit_entry_enabled() and not force_limit:
         return _open_paper_market_position(
@@ -317,12 +322,23 @@ def create_paper_limit_order(
             f"偏离>15%，以市价为准"
         )
 
-    limit_price = calc_paper_limit_price(side, market_ref, limit_offset_pct=limit_offset_pct)
-    if side == "LONG" and limit_price >= market_ref:
-        limit_price = float(Decimal(str(market_ref)) * (Decimal("1") - long_off))
-    elif side == "SHORT" and limit_price <= market_ref:
-        limit_price = float(Decimal(str(market_ref)) * (Decimal("1") + short_off))
-    if is_midline_source(source):
+    user_px = None
+    try:
+        if explicit_limit_price is not None and float(explicit_limit_price) > 0:
+            user_px = float(explicit_limit_price)
+    except (TypeError, ValueError):
+        user_px = None
+    if user_px:
+        limit_price = user_px
+    else:
+        limit_price = calc_paper_limit_price(side, market_ref, limit_offset_pct=limit_offset_pct)
+        if side == "LONG" and limit_price >= market_ref:
+            limit_price = float(Decimal(str(market_ref)) * (Decimal("1") - long_off))
+        elif side == "SHORT" and limit_price <= market_ref:
+            limit_price = float(Decimal(str(market_ref)) * (Decimal("1") + short_off))
+    if user_px:
+        off_label = "用户限价"
+    elif is_midline_source(source):
         off_label = (
             f"多−{_clamp_offset_pct(float(get_midline_limit_offset_pct('LONG')), strategy_override=True):g}%/"
             f"空+{_clamp_offset_pct(float(get_midline_limit_offset_pct('SHORT')), strategy_override=True):g}%"
@@ -356,7 +372,11 @@ def create_paper_limit_order(
     meta: Dict[str, Any] = {
         "timeout_minutes": timeout_minutes,
         "ref_price": market_ref,
-        "min_fill_age_sec": PAPER_LIMIT_MIN_FILL_AGE_SEC,
+        "min_fill_age_sec": (
+            int(min_fill_age_sec)
+            if min_fill_age_sec is not None
+            else PAPER_LIMIT_MIN_FILL_AGE_SEC
+        ),
         "margin": margin_required,
         "max_hold_minutes": max_hold_minutes,
         "entry_score": entry_score,
@@ -364,7 +384,7 @@ def create_paper_limit_order(
         "signal_components": signal_components,
     }
     # REQ-BRAIN INV-BRAIN-06：限价超时必须取消，禁止转市价
-    if is_brain_source(source):
+    if is_brain_source(source) or is_watchlist_source(source):
         meta["timeout_action"] = PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE
         meta["forbid_market"] = True
     if planned_close_time:
@@ -412,7 +432,7 @@ def create_paper_limit_order(
         logger.info(
             f"[限价开仓] 挂单 {symbol} {side} @ {limit_price:.6g} "
             f"(市价 {market_ref:.6g}, 偏移 {off_label}, "
-            f"有效期 {timeout_minutes}min, 最早成交 {PAPER_LIMIT_MIN_FILL_AGE_SEC}s 后) "
+            f"有效期 {timeout_minutes}min, 最早成交 {meta.get('min_fill_age_sec')}s 后) "
             f"SL={sl_price} TP={tp_price} qty={quantity} source={source} order_db_id={db_id}"
         )
         return db_id

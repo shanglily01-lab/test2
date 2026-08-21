@@ -56,6 +56,7 @@ alwaysApply: true
 - 成交: executor 500 笔/轮 + ticker 触价；FILLED 后 `sync_filled_order_now`
 - 中线 **不进** SmartExit；**进** LIVE_SYNC（仅 L0）；对冲平仓跳过含中线 symbol
 - BRAIN **进** LIVE_SYNC（`live_trading_enabled` + 仅 L0）；仍排除 SmartExit
+- 自选 `manual_watchlist` **进** LIVE_SYNC（仅 L0）；排除 SmartExit；顾问 sell 不执行
 
 ## 改动文件（维护时）
 
