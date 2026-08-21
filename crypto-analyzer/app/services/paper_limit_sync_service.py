@@ -340,8 +340,8 @@ class PaperLimitSyncService:
                 )
             if not allowed:
                 logger.info(
-                    "[PaperSync] order_id=%s %s source=%s 跳过实盘同步: %s",
-                    order_id, symbol, order_source, reason,
+                    f"[PaperSync] order_id={order_id} {symbol} source={order_source} "
+                    f"跳过实盘同步: {reason}"
                 )
                 self._mark(conn, order_id, "SKIPPED", None)
                 return
@@ -375,8 +375,8 @@ class PaperLimitSyncService:
                 leverage = int(api_cfg["max_leverage"])
             if margin_ratio <= 0 or margin < 5:
                 logger.info(
-                    "[PaperSync] order_id=%s %s margin_ratio=%s margin=%.2fU, 跳过实盘同步",
-                    order_id, symbol, margin_ratio, margin,
+                    f"[PaperSync] order_id={order_id} {symbol} "
+                    f"margin_ratio={margin_ratio} margin={margin:.2f}U, 跳过实盘同步"
                 )
                 self._mark(conn, order_id, "SKIPPED", None)
                 return
@@ -454,8 +454,8 @@ class PaperLimitSyncService:
             if result and result.get("success"):
                 live_pid = str(result.get("position_id") or result.get("id") or "")
                 logger.info(
-                    "[PaperSync] 同步成功 order_id=%s %s %s %s qty=%.4f lev=%dx live_pid=%s",
-                    order_id, symbol, pos_side, price, float(quantity), leverage, live_pid,
+                    f"[PaperSync] 同步成功 order_id={order_id} {symbol} {pos_side} {price} "
+                    f"qty={float(quantity):.4f} lev={leverage}x live_pid={live_pid}"
                 )
                 self._mark(conn, order_id, "SYNCED", live_pid or None)
             else:
