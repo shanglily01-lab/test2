@@ -1,7 +1,7 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.38
-**日期**: 2026-08-21
+**版本**: v4.5.40
+**日期**: 2026-08-22
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **合约自选（REQ-WATCHLIST §7.5）**：侧栏「我的自选」；用户加交易对；价格由浏览器直连币安合约 **WS** 实时刷新；手动限价/市价（限价可撤）；成交走实时 ticker；实盘随 `live_trading_enabled`，**仅 L0**；成交瞬间同步，打开不回填。  
 > **操作对照（给人看）**：超级大脑 vs 破位策略说明见 [`docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`](./BRAIN_AND_BREAKOUT_OPERATOR_ZH.md)（冲突仍以本文为准）。  
@@ -139,7 +139,7 @@
 | NULL | 成交瞬间闸门通过，在时间窗内待 PaperSync | 仅 5 分钟内 |
 | SYNCED | 已开实盘 | 否 |
 | SKIPPED | 实盘关/闸门拒/超窗/开开关清理 | **永不再同步** |
-| FAILED | 技术失败（API/引擎/无 SLTP） | 否（防重复下单） |
+| FAILED | 技术失败（API/引擎/无 SLTP） | 否（防重复下单）。原因写入 `futures_orders.notes`（`PaperSync FAILED: …`）。若币安已成交且 `live_futures_positions` 已有对应 `paper_position_id`，标 **SYNCED** 不得标 FAILED。币安开仓单已接受后，SL/TP/本地保存异常也必须保存 live 行并标 SYNCED |
 
 ### 4.5 常量
 
@@ -1007,6 +1007,8 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-22 | **v4.5.40** | **实盘开仓后处理不得翻盘**：币安已接受订单后 SL/TP/DB 异常仍保存 live 并 SYNCED；数量按 LOT_SIZE 重载精度 |
+| 2026-08-22 | **v4.5.39** | **PaperSync FAILED 落原因**：失败写入 `futures_orders.notes`；币安已成交且 live 行已在则标 SYNCED（防漏映射）。不回填历史 FAILED |
 | 2026-08-21 | **v4.5.38** | **行情识别页接真闸门**：`/market_regime` 展示 BRAIN Big4 1h + BTC 日线桶；去掉写死时间轴/假区间；`GLOBAL_UNKNOWN` 标明为日线混合 |
 | 2026-08-21 | **v4.5.34** | **B3 衰竭确认收紧**：须离高 ≥0.28% 且当根拒绝（收在下半+上影/阴线）；贴高横盘 / RSI 仍超买 / 仅 stall 不得开空；C3/C1 未改 |
 | 2026-08-21 | **v4.5.33** | **自选价格 WS**：`/watchlist` 浏览器直连币安 U 本位 `miniTicker` 实时刷价；下单/触价仍走服务端 ticker；WS 断开 REST 回退 |

@@ -349,12 +349,16 @@ class BinanceFuturesEngine:
             logger.error(f"币安API请求失败: {e}")
             return {'success': False, 'error': str(e)}
 
-    def _load_exchange_info(self):
+    def _load_exchange_info(self, force: bool = False):
         """加载交易所信息（交易对精度等）"""
         current_time = time.time()
 
         # 检查缓存是否有效
-        if self._cache_time and (current_time - self._cache_time) < self._cache_duration:
+        if (
+            not force
+            and self._cache_time
+            and (current_time - self._cache_time) < self._cache_duration
+        ):
             return
 
         try:
@@ -422,20 +426,38 @@ class BinanceFuturesEngine:
             return f"{base}/USDT"
         return symbol
 
-    def _round_quantity(self, quantity: Decimal, symbol: str) -> Decimal:
-        """根据交易对精度对数量进行四舍五入"""
+    def _symbol_filters(self, symbol: str) -> dict:
         binance_symbol = self._convert_symbol(symbol)
         info = self._symbol_info_cache.get(binance_symbol, {})
+        if not info:
+            self._load_exchange_info(force=True)
+            info = self._symbol_info_cache.get(binance_symbol, {})
+        return info or {}
+
+    @staticmethod
+    def _format_qty(quantity: Decimal) -> str:
+        """Avoid scientific notation / trailing zeros that Binance rejects on qtyP=0 pairs."""
+        s = format(quantity, "f")
+        if "." in s:
+            s = s.rstrip("0").rstrip(".")
+        return s or "0"
+
+    def _round_quantity(self, quantity: Decimal, symbol: str) -> Decimal:
+        """根据交易对精度对数量进行四舍五入"""
+        info = self._symbol_filters(symbol)
         step_size = info.get('step_size', Decimal('0.001'))
+        if not step_size or step_size <= 0:
+            step_size = Decimal('0.001')
 
         # 使用step_size进行精度控制
         return (quantity / step_size).quantize(Decimal('1'), rounding=ROUND_DOWN) * step_size
 
     def _round_price(self, price: Decimal, symbol: str) -> Decimal:
         """根据交易对精度对价格进行四舍五入"""
-        binance_symbol = self._convert_symbol(symbol)
-        info = self._symbol_info_cache.get(binance_symbol, {})
+        info = self._symbol_filters(symbol)
         tick_size = info.get('tick_size', Decimal('0.01'))
+        if not tick_size or tick_size <= 0:
+            tick_size = Decimal('0.01')
 
         return (price / tick_size).quantize(Decimal('1'), rounding=ROUND_HALF_UP) * tick_size
 
@@ -640,6 +662,14 @@ class BinanceFuturesEngine:
 
         binance_symbol = self._convert_symbol(symbol)
         position_side = position_side.upper()
+        order_id = ""
+        executed_qty = Decimal("0")
+        entry_price = Decimal("0")
+        current_price = Decimal("0")
+        sl_order_id = None
+        tp_order_id = None
+        entry_ema_diff = None
+        status = ""
 
         try:
             # 1. 设置杠杆
@@ -681,7 +711,7 @@ class BinanceFuturesEngine:
                 'side': side,
                 'positionSide': position_side,  # 双向持仓模式必须指定
                 'type': order_type,
-                'quantity': str(quantity)
+                'quantity': self._format_qty(quantity)
             }
 
             # 5.5. 添加 clientOrderId 标记策略来源（在交易所订单列表可见）
@@ -708,6 +738,9 @@ class BinanceFuturesEngine:
             if isinstance(result, dict) and result.get('success') == False:
                 logger.error(f"[实盘] 开仓失败: {result.get('error')}")
                 return result
+            if not isinstance(result, dict) or not result.get('orderId'):
+                logger.error(f"[实盘] 开仓失败: 响应异常 {result}")
+                return {'success': False, 'error': f'开仓响应异常: {result}'}
 
             # 7. 解析订单结果
             order_id = str(result.get('orderId', ''))
@@ -769,45 +802,41 @@ class BinanceFuturesEngine:
             # 市价单：如果executed_qty仍为0，使用提交的quantity
             order_qty = executed_qty if executed_qty > 0 else quantity
 
-            if stop_loss_price and order_qty > 0 and not is_limit_order:
-                # 验证止损价格
-                # 做多：止损价必须低于入场价
-                # 做空：止损价必须高于入场价
-                sl_valid = False
-                if position_side == 'LONG' and stop_loss_price < entry_price:
-                    sl_valid = True
-                elif position_side == 'SHORT' and stop_loss_price > entry_price:
-                    sl_valid = True
-
-                if sl_valid:
-                    sl_result = self._place_stop_loss(symbol, position_side, order_qty, stop_loss_price)
-                    if sl_result.get('success'):
-                        sl_order_id = sl_result.get('order_id')
-                        logger.info(f"[实盘] 止损单已设置: {stop_loss_price}")
+            try:
+                if stop_loss_price and order_qty > 0 and not is_limit_order:
+                    sl_valid = (
+                        (position_side == 'LONG' and stop_loss_price < entry_price)
+                        or (position_side == 'SHORT' and stop_loss_price > entry_price)
+                    )
+                    if sl_valid:
+                        sl_result = self._place_stop_loss(symbol, position_side, order_qty, stop_loss_price)
+                        if isinstance(sl_result, dict) and sl_result.get('success'):
+                            sl_order_id = sl_result.get('order_id')
+                            logger.info(f"[实盘] 止损单已设置: {stop_loss_price}")
+                        else:
+                            logger.warning(f"[实盘] 止损单设置失败: {(sl_result or {}).get('error')}")
                     else:
-                        logger.warning(f"[实盘] 止损单设置失败: {sl_result.get('error')}")
-                else:
-                    logger.warning(f"[实盘] 止损价 {stop_loss_price} 无效 ({position_side} 入场价 {entry_price})，跳过止损设置")
+                        logger.warning(f"[实盘] 止损价 {stop_loss_price} 无效 ({position_side} 入场价 {entry_price})，跳过止损设置")
+            except Exception as sl_err:
+                logger.warning(f"[实盘] 止损单异常 {symbol}: {sl_err}")
 
-            if take_profit_price and order_qty > 0 and not is_limit_order:
-                # 验证止盈价格
-                # 做多：止盈价必须高于入场价
-                # 做空：止盈价必须低于入场价
-                tp_valid = False
-                if position_side == 'LONG' and take_profit_price > entry_price:
-                    tp_valid = True
-                elif position_side == 'SHORT' and take_profit_price < entry_price:
-                    tp_valid = True
-
-                if tp_valid:
-                    tp_result = self._place_take_profit(symbol, position_side, order_qty, take_profit_price)
-                    if tp_result.get('success'):
-                        tp_order_id = tp_result.get('order_id')
-                        logger.info(f"[实盘] 止盈单已设置: {take_profit_price}")
+            try:
+                if take_profit_price and order_qty > 0 and not is_limit_order:
+                    tp_valid = (
+                        (position_side == 'LONG' and take_profit_price > entry_price)
+                        or (position_side == 'SHORT' and take_profit_price < entry_price)
+                    )
+                    if tp_valid:
+                        tp_result = self._place_take_profit(symbol, position_side, order_qty, take_profit_price)
+                        if isinstance(tp_result, dict) and tp_result.get('success'):
+                            tp_order_id = tp_result.get('order_id')
+                            logger.info(f"[实盘] 止盈单已设置: {take_profit_price}")
+                        else:
+                            logger.warning(f"[实盘] 止盈单设置失败: {(tp_result or {}).get('error')}")
                     else:
-                        logger.warning(f"[实盘] 止盈单设置失败: {tp_result.get('error')}")
-                else:
-                    logger.warning(f"[实盘] 止盈价 {take_profit_price} 无效 ({position_side} 入场价 {entry_price})，跳过止盈设置")
+                        logger.warning(f"[实盘] 止盈价 {take_profit_price} 无效 ({position_side} 入场价 {entry_price})，跳过止盈设置")
+            except Exception as tp_err:
+                logger.warning(f"[实盘] 止盈单异常 {symbol}: {tp_err}")
 
             # 9.5. 计算开仓时的 EMA 差值（用于趋势反转检测）
             entry_ema_diff = self.get_ema_diff(symbol, '15m')
@@ -900,6 +929,39 @@ class BinanceFuturesEngine:
             logger.error(f"[实盘] 开仓异常: {e}")
             import traceback
             traceback.print_exc()
+            # 币安已接受订单后不得把整笔标成失败，否则 PaperSync=FAILED 且漏掉平仓映射
+            if order_id:
+                try:
+                    position_id = self._save_position_to_db(
+                        account_id=account_id,
+                        symbol=symbol,
+                        position_side=position_side,
+                        quantity=executed_qty if executed_qty > 0 else quantity,
+                        entry_price=entry_price if entry_price else current_price,
+                        leverage=leverage,
+                        stop_loss_price=stop_loss_price,
+                        take_profit_price=take_profit_price,
+                        source=source,
+                        signal_id=signal_id,
+                        strategy_id=strategy_id,
+                        binance_order_id=order_id,
+                        status='OPEN' if status == 'FILLED' else 'PENDING',
+                        entry_ema_diff=entry_ema_diff,
+                        paper_position_id=paper_position_id
+                    )
+                except Exception as save_err:
+                    logger.error(f"[实盘] 开仓后补保存失败 order_id={order_id}: {save_err}")
+                    position_id = 0
+                return {
+                    'success': True,
+                    'position_id': position_id,
+                    'order_id': order_id,
+                    'binance_order_id': order_id,
+                    'symbol': symbol,
+                    'position_side': position_side,
+                    'warning': str(e),
+                    'message': f'开仓已提交但后续处理异常: {e}',
+                }
             return {'success': False, 'error': str(e)}
 
     def _submit_algo_conditional(
@@ -919,7 +981,7 @@ class BinanceFuturesEngine:
             'positionSide': position_side,
             'type': order_type,
             'triggerPrice': str(trigger_price),
-            'quantity': str(quantity),
+            'quantity': self._format_qty(quantity),
             'workingType': 'MARK_PRICE',
         })
 
@@ -937,7 +999,7 @@ class BinanceFuturesEngine:
             'positionSide': position_side,
             'type': 'STOP_MARKET',
             'stopPrice': str(stop_price),
-            'quantity': str(quantity),
+            'quantity': self._format_qty(quantity),
             'workingType': 'MARK_PRICE',
             'timeInForce': 'GTE_GTC',
         }
@@ -951,12 +1013,14 @@ class BinanceFuturesEngine:
                 binance_symbol, side, position_side, 'STOP_MARKET', stop_price, quantity,
             )
 
-        if isinstance(result, dict) and result.get('success') == False:
+        if not isinstance(result, dict):
+            return {'success': False, 'error': f'止损响应异常: {result}'}
+        if result.get('success') == False:
             return result
 
         return {
             'success': True,
-            'order_id': str(result.get('algoId') or result.get('orderId', '')),
+            'order_id': str(result.get('algoId') or result.get('orderId') or ''),
             'stop_price': float(stop_price)
         }
 
@@ -1079,7 +1143,7 @@ class BinanceFuturesEngine:
             'positionSide': position_side,
             'type': 'TAKE_PROFIT_MARKET',
             'stopPrice': str(take_profit_price),
-            'quantity': str(quantity),
+            'quantity': self._format_qty(quantity),
             'workingType': 'MARK_PRICE',
             'timeInForce': 'GTE_GTC',
         }
@@ -1094,12 +1158,14 @@ class BinanceFuturesEngine:
                 take_profit_price, quantity,
             )
 
-        if isinstance(result, dict) and result.get('success') == False:
+        if not isinstance(result, dict):
+            return {'success': False, 'error': f'止盈响应异常: {result}'}
+        if result.get('success') == False:
             return result
 
         return {
             'success': True,
-            'order_id': str(result.get('algoId') or result.get('orderId', '')),
+            'order_id': str(result.get('algoId') or result.get('orderId') or ''),
             'take_profit_price': float(take_profit_price)
         }
 

@@ -272,7 +272,7 @@ class PaperLimitSyncService:
                 self._sync_one(conn, row)
 
                 cur.execute(
-                    """SELECT live_sync_status, live_position_id
+                    """SELECT live_sync_status, live_position_id, notes
                        FROM futures_orders WHERE order_id=%s LIMIT 1""",
                     (futures_order_id,),
                 )
@@ -282,7 +282,8 @@ class PaperLimitSyncService:
                 if st.get("live_sync_status") == "SKIPPED":
                     out["reason"] = "闸门拒绝（非 L0 / 策略不在白名单 / 亏损冷却等）"
                 elif st.get("live_sync_status") == "FAILED":
-                    out["reason"] = "实盘开仓失败，见 PaperSync 日志"
+                    note = (st.get("notes") or "").strip()
+                    out["reason"] = note or "实盘开仓失败，见 PaperSync 日志"
                 elif st.get("live_sync_status") != "SYNCED":
                     out["reason"] = "未完成同步"
                 return out
@@ -348,13 +349,13 @@ class PaperLimitSyncService:
             api_cfg = self._get_api_config(user_id)
             if api_cfg is None:
                 logger.warning(f"[PaperSync] user_id={user_id} 无活跃 API key，跳过 order_id={order_id}")
-                self._mark(conn, order_id, "FAILED", None)
+                self._mark(conn, order_id, "FAILED", None, reason="无活跃 API key")
                 return
 
             live_account_id = self._get_live_account_id(user_id)
             if live_account_id is None:
                 logger.warning(f"[PaperSync] user_id={user_id} 无实盘账户，跳过 order_id={order_id}")
-                self._mark(conn, order_id, "FAILED", None)
+                self._mark(conn, order_id, "FAILED", None, reason="无实盘账户")
                 return
 
             from app.services.trading_gates import get_live_margin_ratio
@@ -383,7 +384,7 @@ class PaperLimitSyncService:
             price = self._get_price(symbol)
             if price is None or price <= 0:
                 logger.warning(f"[PaperSync] 获取 {symbol} 价格失败，跳过 order_id={order_id}")
-                self._mark(conn, order_id, "FAILED", None)
+                self._mark(conn, order_id, "FAILED", None, reason="获取价格失败")
                 return
 
             quantity = Decimal(str(round(margin * leverage / price, 6)))
@@ -392,13 +393,13 @@ class PaperLimitSyncService:
             mgr = get_engine_manager()
             if mgr is None:
                 logger.error(f"[PaperSync] engine_manager 未初始化，跳过 order_id={order_id}")
-                self._mark(conn, order_id, "FAILED", None)
+                self._mark(conn, order_id, "FAILED", None, reason="engine_manager 未初始化")
                 return
 
             engine = mgr.get_engine(user_id)
             if engine is None:
                 logger.warning(f"[PaperSync] user_id={user_id} 引擎为 None，跳过 order_id={order_id}")
-                self._mark(conn, order_id, "FAILED", None)
+                self._mark(conn, order_id, "FAILED", None, reason="交易引擎为 None")
                 return
 
             # 将纸面 SL/TP 转为百分比，基于实盘实际成交价重算绝对价格
@@ -432,7 +433,10 @@ class PaperLimitSyncService:
                         "fill=%.6f sl=%.6f tp=%.6f sl_pct=%s tp_pct=%s",
                         order_id, symbol, paper_fill, paper_sl, paper_tp, sl_pct, tp_pct,
                     )
-                    self._mark(conn, order_id, "FAILED", None)
+                    self._mark(
+                        conn, order_id, "FAILED", None,
+                        reason="无法计算SL/TP百分比",
+                    )
                     return
 
             result = engine.open_position(
@@ -460,12 +464,18 @@ class PaperLimitSyncService:
                 code = res.get("code")
                 if code is not None and str(code) not in str(err):
                     err = f"[{code}] {err}"
-                logger.error(f"[PaperSync] 实盘开仓失败 order_id={order_id} {symbol}: {err}")
-                self._mark(conn, order_id, "FAILED", None)
+                recovered = self._recover_synced_if_live_exists(conn, order_id, paper_pid, err)
+                if not recovered:
+                    logger.error(f"[PaperSync] 实盘开仓失败 order_id={order_id} {symbol}: {err}")
+                    self._mark(conn, order_id, "FAILED", None, reason=err)
 
         except Exception as e:
-            logger.error(f"[PaperSync] 同步异常 order_id={order_id} {symbol}: {e}")
-            self._mark(conn, order_id, "FAILED", None)
+            recovered = self._recover_synced_if_live_exists(
+                conn, order_id, paper_pid, f"exception: {e}",
+            )
+            if not recovered:
+                logger.error(f"[PaperSync] 同步异常 order_id={order_id} {symbol}: {e}")
+                self._mark(conn, order_id, "FAILED", None, reason=str(e))
 
     # ── 辅助 ─────────────────────────────────────────────────────
 
@@ -542,15 +552,70 @@ class PaperLimitSyncService:
             logger.warning(f"[PaperSync] REST fallback price failed {symbol}: {e}")
         return None
 
-    def _mark(self, conn, order_id: int, status: str, live_position_id: Optional[str]) -> None:
+    def _live_pid_for_paper(self, conn, paper_pid) -> Optional[str]:
+        if paper_pid is None:
+            return None
         try:
             with conn.cursor() as cur:
                 cur.execute(
-                    """UPDATE futures_orders
-                    SET live_sync_status=%s, live_synced_at=NOW(), live_position_id=%s
-                    WHERE id=%s""",
-                    (status, live_position_id, order_id),
+                    """SELECT id FROM live_futures_positions
+                    WHERE paper_position_id=%s
+                    ORDER BY id DESC LIMIT 1""",
+                    (paper_pid,),
                 )
+                row = cur.fetchone()
+                return str(row["id"]) if row else None
+        except Exception as e:
+            logger.warning(f"[PaperSync] 查询 live 仓失败 paper_pid={paper_pid}: {e}")
+            return None
+
+    def _recover_synced_if_live_exists(
+        self, conn, order_id: int, paper_pid, err: str,
+    ) -> bool:
+        """Binance/DB 已落下实盘仓但 open_position 仍返回失败时，标 SYNCED 不得标 FAILED。"""
+        live_pid = self._live_pid_for_paper(conn, paper_pid)
+        if not live_pid:
+            return False
+        logger.warning(
+            "[PaperSync] order_id=%s paper_pid=%s 已有 live_pid=%s，"
+            "open_position 失败(%s) → 标 SYNCED 避免漏平仓映射",
+            order_id, paper_pid, live_pid, err,
+        )
+        self._mark(
+            conn, order_id, "SYNCED", live_pid,
+            reason=f"recovered live_pid={live_pid} after: {err}",
+        )
+        return True
+
+    def _mark(
+        self,
+        conn,
+        order_id: int,
+        status: str,
+        live_position_id: Optional[str],
+        reason: Optional[str] = None,
+    ) -> None:
+        try:
+            with conn.cursor() as cur:
+                if reason:
+                    note = f"PaperSync {status}: {reason}"[:400]
+                    cur.execute(
+                        """UPDATE futures_orders
+                        SET live_sync_status=%s, live_synced_at=NOW(), live_position_id=%s,
+                            notes=LEFT(
+                              TRIM(BOTH ' | ' FROM CONCAT(IFNULL(notes,''), ' | ', %s)),
+                              500
+                            )
+                        WHERE id=%s""",
+                        (status, live_position_id, note, order_id),
+                    )
+                else:
+                    cur.execute(
+                        """UPDATE futures_orders
+                        SET live_sync_status=%s, live_synced_at=NOW(), live_position_id=%s
+                        WHERE id=%s""",
+                        (status, live_position_id, order_id),
+                    )
             conn.commit()
         except Exception as e:
             logger.error(f"[PaperSync] 更新同步状态失败 order_id={order_id}: {e}")
