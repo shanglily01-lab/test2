@@ -382,11 +382,25 @@ class BinanceFuturesEngine:
                 min_notional = Decimal('5')
                 step_size = Decimal('0.001')
                 tick_size = Decimal('0.01')
+                max_qty = Decimal('0')
+                market_max_qty = Decimal('0')
 
                 if 'LOT_SIZE' in filters:
                     lot_size = filters['LOT_SIZE']
                     min_qty = Decimal(str(lot_size.get('minQty', '0.001')))
                     step_size = Decimal(str(lot_size.get('stepSize', '0.001')))
+                    try:
+                        max_qty = Decimal(str(lot_size.get('maxQty') or '0'))
+                    except Exception:
+                        max_qty = Decimal('0')
+
+                if 'MARKET_LOT_SIZE' in filters:
+                    try:
+                        market_max_qty = Decimal(
+                            str((filters['MARKET_LOT_SIZE'] or {}).get('maxQty') or '0')
+                        )
+                    except Exception:
+                        market_max_qty = Decimal('0')
 
                 if 'MIN_NOTIONAL' in filters:
                     min_notional = Decimal(str(filters['MIN_NOTIONAL'].get('notional', '5')))
@@ -398,6 +412,8 @@ class BinanceFuturesEngine:
                     'price_precision': price_precision,
                     'quantity_precision': quantity_precision,
                     'min_qty': min_qty,
+                    'max_qty': max_qty,
+                    'market_max_qty': market_max_qty,
                     'min_notional': min_notional,
                     'step_size': step_size,
                     'tick_size': tick_size
@@ -630,7 +646,8 @@ class BinanceFuturesEngine:
         source: str = 'manual',
         signal_id: Optional[int] = None,
         strategy_id: Optional[int] = None,
-        paper_position_id: Optional[int] = None
+        paper_position_id: Optional[int] = None,
+        ref_price: Optional[Decimal] = None,
     ) -> Dict:
         """
         开仓（实盘）
@@ -682,18 +699,32 @@ class BinanceFuturesEngine:
             if not margin_result.get('success', True):
                 logger.warning(f"设置保证金模式失败: {margin_result.get('error')}")
 
-            # 3. 获取当前价格
+            # 3. 获取当前价格。ticker 失败时用模拟成交价，禁止因此整笔 FAILED。
             current_price = self.get_current_price(symbol)
+            if current_price == 0 and ref_price is not None and Decimal(str(ref_price)) > 0:
+                current_price = Decimal(str(ref_price))
+                logger.warning(
+                    f"[实盘] {symbol} ticker 无价，用参考价 {current_price} 继续开仓"
+                )
             if current_price == 0:
                 return {'success': False, 'error': f'无法获取 {symbol} 价格'}
 
-            # 4. 精度处理
+            # 4. 精度处理（必须走 _symbol_filters，缺缓存时强制重载）
+            info = self._symbol_filters(symbol)
             quantity = self._round_quantity(quantity, symbol)
-
-            # 检查最小数量
-            info = self._symbol_info_cache.get(binance_symbol, {})
             min_qty = info.get('min_qty', Decimal('0.001'))
             min_notional = info.get('min_notional', Decimal('5'))
+            cap = info.get('market_max_qty') if not limit_price else info.get('max_qty')
+            try:
+                cap = Decimal(str(cap or 0))
+            except Exception:
+                cap = Decimal('0')
+            if cap > 0 and quantity > cap:
+                logger.warning(
+                    f"[实盘] {symbol} qty={quantity} 超过"
+                    f"{'市价' if not limit_price else '限价'}上限 {cap}，截到上限"
+                )
+                quantity = self._round_quantity(cap, symbol)
 
             if quantity < min_qty:
                 return {'success': False, 'error': f'数量 {quantity} 小于最小值 {min_qty}'}
@@ -701,6 +732,11 @@ class BinanceFuturesEngine:
             notional = quantity * current_price
             if notional < min_notional:
                 return {'success': False, 'error': f'名义价值 {notional} 小于最小值 {min_notional}'}
+            if cap > 0 and quantity > cap:
+                return {
+                    'success': False,
+                    'error': f'数量 {quantity} 超过{"市价" if not limit_price else "限价"}上限 {cap}',
+                }
 
             # 5. 构建订单参数
             side = 'BUY' if position_side == 'LONG' else 'SELL'

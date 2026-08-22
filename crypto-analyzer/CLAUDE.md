@@ -249,6 +249,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 - **实盘开仓 symbol**：须 **L0 白名单**（`rating_level=0`）；L1/L2/L3 禁止实盘
 - **限价偏移**：中线优先 **回调区**（无区才 ±1%）；其他模拟限价读 `paper_limit_long/short_offset_pct`（系统设定）
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)
+- **PaperSync FAILED**：原因前置写入 `futures_orders.notes`；市价数量按 `MARKET_LOT_SIZE.maxQty` 截顶；FAILED 不回填
 - **平仓总开关**: `system_settings.live_close_enabled` (1=开启；模拟平仓时同步交易所；持仓顾问 sell 亦受此规则)
 - **北京时间实盘开仓时段**: 仅 10:00-16:00、22:00-次日04:00 允许同步/直接开实盘；服务器 UTC 对应 02:00-08:00、14:00-20:00。模拟开仓不受该时段限制。
 - **废弃设置**（不再参与开仓判断）：`live_top50_required`、`live_whitelist_enabled` — 开仓仅认 **L0 白名单**

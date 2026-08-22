@@ -381,11 +381,21 @@ class PaperLimitSyncService:
                 self._mark(conn, order_id, "SKIPPED", None)
                 return
 
+            # 模拟刚成交，avg_fill_price 一定有。实时价只是校准；
+            # 取价失败不得把整笔标 FAILED（8/21 日志：FAILED 单从未打出「发送开仓订单」）。
+            paper_fill = float(order["avg_fill_price"] or 0)
             price = self._get_price(symbol)
             if price is None or price <= 0:
-                logger.warning(f"[PaperSync] 获取 {symbol} 价格失败，跳过 order_id={order_id}")
-                self._mark(conn, order_id, "FAILED", None, reason="获取价格失败")
-                return
+                if paper_fill > 0:
+                    logger.warning(
+                        f"[PaperSync] {symbol} 实时价不可用，用模拟成交价 {paper_fill} "
+                        f"order_id={order_id}"
+                    )
+                    price = paper_fill
+                else:
+                    logger.warning(f"[PaperSync] 获取 {symbol} 价格失败，跳过 order_id={order_id}")
+                    self._mark(conn, order_id, "FAILED", None, reason="获取价格失败")
+                    return
 
             quantity = Decimal(str(round(margin * leverage / price, 6)))
 
@@ -404,7 +414,6 @@ class PaperLimitSyncService:
 
             # 将纸面 SL/TP 转为百分比，基于实盘实际成交价重算绝对价格
             # 避免纸面绝对价与实盘成交价偏差导致 SL/TP 验证失败
-            paper_fill = float(order["avg_fill_price"] or 0)
             paper_sl = float(order["stop_loss_price"] or 0)
             paper_tp = float(order["take_profit_price"] or 0)
 
@@ -449,6 +458,7 @@ class PaperLimitSyncService:
                 take_profit_pct=tp_pct,
                 source=order_source,
                 paper_position_id=order.get("position_id"),
+                ref_price=Decimal(str(price)),
             )
 
             if result and result.get("success"):
@@ -464,6 +474,9 @@ class PaperLimitSyncService:
                 code = res.get("code")
                 if code is not None and str(code) not in str(err):
                     err = f"[{code}] {err}"
+                err = (
+                    f"{err} qty={quantity} px={price} margin={margin:.2f}U"
+                )
                 recovered = self._recover_synced_if_live_exists(conn, order_id, paper_pid, err)
                 if not recovered:
                     logger.error(f"[PaperSync] 实盘开仓失败 order_id={order_id} {symbol}: {err}")
@@ -598,14 +611,13 @@ class PaperLimitSyncService:
         try:
             with conn.cursor() as cur:
                 if reason:
-                    note = f"PaperSync {status}: {reason}"[:400]
+                    # 必须前置原因：入场 JSON 往往已超过 500 字，
+                    # CONCAT 旧 notes 再 LEFT(500) 会把 PaperSync 原因切掉。
+                    note = f"PaperSync {status}: {reason}"[:500]
                     cur.execute(
                         """UPDATE futures_orders
                         SET live_sync_status=%s, live_synced_at=NOW(), live_position_id=%s,
-                            notes=LEFT(
-                              TRIM(BOTH ' | ' FROM CONCAT(IFNULL(notes,''), ' | ', %s)),
-                              500
-                            )
+                            notes=LEFT(CONCAT(%s, ' | ', IFNULL(notes,'')), 2000)
                         WHERE id=%s""",
                         (status, live_position_id, note, order_id),
                     )
