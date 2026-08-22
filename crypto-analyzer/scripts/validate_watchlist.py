@@ -74,6 +74,10 @@ def test_ui_and_routes() -> None:
         _fail("前端未直连币安合约 WS 刷价")
     if "@miniTicker" not in js_txt:
         _fail("前端未订阅 miniTicker")
+    if "/prices" not in js_txt or "STALE_MS" not in js_txt:
+        _fail("前端未做 WS 静默后的服务端 1s 补价")
+    if "/prices" not in api.read_text(encoding="utf-8"):
+        _fail("API 未提供 /api/watchlist/prices")
     page_txt = page.read_text(encoding="utf-8")
     if "5 分钟刷新" in page_txt:
         _fail("自选页仍写 5 分钟刷价")
@@ -94,6 +98,8 @@ def test_syntax() -> None:
         "app/services/watchlist_store.py",
         "app/services/watchlist_orders.py",
         "app/api/watchlist_api.py",
+        "app/utils/futures_price.py",
+        "app/api/technical_signals_api.py",
         "app/services/paper_limit_entry.py",
         "app/services/paper_open_gate.py",
     ]

@@ -78,7 +78,71 @@ def refresh_technical_signals_cache():
             conn.close()
 
 
+def _trend_to_direction(trend: Optional[str]) -> str:
+    t = (trend or "").strip().upper()
+    if t in ("BULLISH", "LONG", "BULL", "多", "看多"):
+        return "LONG"
+    if t in ("BEARISH", "SHORT", "BEAR", "空", "看空"):
+        return "SHORT"
+    return "NEUTRAL"
+
+
+def _stat(d: Dict, window: str, tf: str) -> Dict:
+    return (d.get(window) or {}).get(tf) or {}
+
+
+def _flatten_signal_row(symbol: str, d: Dict, price: Optional[float], updated_at: str) -> Dict:
+    """把 technical_signals_cache 窗口统计压成页面表格行。"""
+    h1 = _stat(d, "24h", "1h")
+    m15 = _stat(d, "24h", "15m")
+    m5 = _stat(d, "24h", "5m")
+    direction = _trend_to_direction(m15.get("trend") or h1.get("trend"))
+    bull15 = float(m15.get("bullish_pct") or 0)
+    bear15 = float(m15.get("bearish_pct") or 0)
+    if direction == "SHORT":
+        total_score = round(bear15)
+    elif direction == "LONG":
+        total_score = round(bull15)
+    else:
+        total_score = round((bull15 + (100 - bear15)) / 2)
+    h1_score = round(float(h1.get("bullish_pct") or 0) - float(h1.get("bearish_pct") or 0))
+    m15_score = round(bull15 - bear15)
+    return {
+        "symbol": symbol,
+        "price": price,
+        "direction": direction,
+        "total_score": total_score,
+        "h1_score": h1_score,
+        "m15_score": m15_score,
+        "h1_bullish": int(h1.get("bullish_count") or 0),
+        "h1_bearish": int(h1.get("bearish_count") or 0),
+        "m15_bullish": int(m15.get("bullish_count") or 0),
+        "m15_bearish": int(m15.get("bearish_count") or 0),
+        "m5_bullish": int(m5.get("bullish_count") or 0),
+        "m5_bearish": int(m5.get("bearish_count") or 0),
+        "updated_at": updated_at,
+    }
+
+
 # ===================== API 端点 =====================
+@router.get("/api/technical-signals/prices")
+async def get_technical_signal_prices():
+    """信号页 1s 刷价：仅 DataHub/WS，不打 REST。"""
+    try:
+        symbols = _get_config_symbols()
+        from app.utils.futures_price import build_ui_live_price_map
+        prices = build_ui_live_price_map(symbols, max_age_seconds=8)
+        items = []
+        for s in symbols:
+            px = prices.get(s)
+            if px:
+                items.append({"symbol": s, "price": px})
+        return {"ok": True, "items": items, "total": len(items)}
+    except Exception as e:
+        logger.error(f"获取技术信号价格失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/api/technical-signals")
 async def get_technical_signals(symbols: Optional[str] = None):
     """
@@ -96,7 +160,7 @@ async def get_technical_signals(symbols: Optional[str] = None):
             all_symbols = [s for s in all_symbols if s in symbol_list]
 
         if not all_symbols:
-            return {"success": True, "data": [], "total": 0, "timestamp": datetime.now().isoformat()}
+            return {"success": True, "data": [], "table": [], "total": 0, "timestamp": datetime.now().isoformat()}
 
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -119,6 +183,7 @@ async def get_technical_signals(symbols: Optional[str] = None):
 
         # 整理数据：{symbol: {window_label: {timeframe: stats}}}
         data_map: Dict[str, Dict[str, Dict]] = {}
+        updated_map: Dict[str, datetime] = {}
         for row in rows:
             s  = row['symbol']
             wl = row['window_label']
@@ -134,15 +199,26 @@ async def get_technical_signals(symbols: Optional[str] = None):
                 "total_volume":          float(row['total_volume'] or 0),
                 "trend":                 row['trend'],
             }
+            ua = row.get('updated_at')
+            if ua and (s not in updated_map or ua > updated_map[s]):
+                updated_map[s] = ua
+
+        from app.utils.futures_price import build_ui_live_price_map
+        price_map = build_ui_live_price_map(list(data_map.keys()), max_age_seconds=8)
 
         results = []
+        table = []
         ts = datetime.now().isoformat()
         for symbol in all_symbols:
             if symbol not in data_map:
                 continue
             d = data_map[symbol]
-            results.append({
+            ua = updated_map.get(symbol)
+            ua_iso = ua.isoformat() if ua else ts
+            px = price_map.get(symbol)
+            row_out = {
                 "symbol":    symbol,
+                "price":     px,
                 "stats_24h": {
                     "1h":  d.get('24h', {}).get('1h'),
                     "15m": d.get('24h', {}).get('15m'),
@@ -157,12 +233,15 @@ async def get_technical_signals(symbols: Optional[str] = None):
                     "5m": d.get('1h', {}).get('5m'),
                     "1m": d.get('1h', {}).get('1m'),
                 },
-                "updated_at": ts,
-            })
+                "updated_at": ua_iso,
+            }
+            results.append(row_out)
+            table.append(_flatten_signal_row(symbol, d, px, ua_iso))
 
         return {
             "success":   True,
             "data":      results,
+            "table":     table,
             "total":     len(results),
             "timestamp": ts,
         }

@@ -1,6 +1,10 @@
 (function () {
   const API = "/api/watchlist";
-  const FSTREAM_WS = "wss://fstream.binance.com/stream?streams=";
+  // 全市场 miniTicker 数组流：单连接、路径里带 @miniTicker，避免 query 里未编码 @ 被拦。
+  const FSTREAM_ALL = "wss://fstream.binance.com/ws/!miniTicker@arr";
+  const REST_MS = 1000;
+  const STALE_MS = 3000;
+  const WS_CONNECT_MS = 4000;
   let side = "LONG";
   let kind = "limit";
   let symbols = [];
@@ -8,9 +12,12 @@
   let ws = null;
   let wsKey = "";
   let reconnectTimer = null;
+  let connectTimer = null;
   let fallbackTimer = null;
+  let watchdogTimer = null;
   let bookTimer = null;
   let lastPrices = {};
+  let lastTickAt = 0;
 
   function $(id) { return document.getElementById(id); }
 
@@ -188,14 +195,57 @@
   function startFallback() {
     if (fallbackTimer) return;
     fallbackTimer = setInterval(function () {
-      loadSnapshotPrices().catch(function () {});
-    }, 5000);
+      loadLivePrices().catch(function () {});
+    }, REST_MS);
+    loadLivePrices().catch(function () {});
+  }
+
+  function stopWatchdog() {
+    if (watchdogTimer) {
+      clearInterval(watchdogTimer);
+      watchdogTimer = null;
+    }
+  }
+
+  function startWatchdog() {
+    if (watchdogTimer) return;
+    watchdogTimer = setInterval(function () {
+      if (!symbols.length) return;
+      if (!lastTickAt || Date.now() - lastTickAt > STALE_MS) {
+        startFallback();
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          setPriceChip("WS 静默 · 服务端补价", false);
+        } else if (ws && ws.readyState === WebSocket.CONNECTING) {
+          setPriceChip("WS 连接中 · 服务端补价", false);
+        } else {
+          setPriceChip("服务端实时价", true);
+        }
+      }
+    }, 1000);
+  }
+
+  function applyMiniTick(d) {
+    if (!d || !d.s) return;
+    const canon = cleanToCanon[String(d.s).toUpperCase()];
+    if (!canon) return;
+    const last = Number(d.c);
+    if (!Number.isFinite(last) || last <= 0) return;
+    const open = Number(d.o);
+    const chg = open > 0 ? ((last - open) / open) * 100 : null;
+    lastTickAt = Date.now();
+    stopFallback();
+    setPriceChip("WS 实时", true);
+    applyTick(canon, last, chg);
   }
 
   function closePriceWs() {
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
+    }
+    if (connectTimer) {
+      clearTimeout(connectTimer);
+      connectTimer = null;
     }
     if (ws) {
       try {
@@ -213,44 +263,54 @@
     if (!cleans.length) {
       closePriceWs();
       stopFallback();
+      stopWatchdog();
+      lastTickAt = 0;
       setPriceChip("无自选", false);
       return;
     }
+    startWatchdog();
+    startFallback();
     if (key === wsKey && ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
     closePriceWs();
     wsKey = key;
-    const streams = cleans.map(function (c) { return c + "@miniTicker"; }).join("/");
-    const socket = new WebSocket(FSTREAM_WS + streams);
+    lastTickAt = 0;
+    const socket = new WebSocket(FSTREAM_ALL);
     ws = socket;
+    connectTimer = setTimeout(function () {
+      if (socket.readyState !== WebSocket.OPEN) {
+        try { socket.close(); } catch (e) {}
+      }
+    }, WS_CONNECT_MS);
     socket.onopen = function () {
       if (ws !== socket) return;
-      stopFallback();
-      setPriceChip("WS 实时", true);
+      if (connectTimer) {
+        clearTimeout(connectTimer);
+        connectTimer = null;
+      }
+      setPriceChip("WS 已连 · 等行情", true);
     };
     socket.onmessage = function (ev) {
       if (ws !== socket) return;
       let msg;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
-      const d = msg.data || msg;
-      if (!d || !d.s) return;
-      const canon = cleanToCanon[String(d.s).toUpperCase()];
-      if (!canon) return;
-      const last = Number(d.c);
-      const open = Number(d.o);
-      const chg = open > 0 ? ((last - open) / open) * 100 : null;
-      applyTick(canon, last, chg);
+      if (Array.isArray(msg)) {
+        msg.forEach(applyMiniTick);
+        return;
+      }
+      applyMiniTick(msg.data || msg);
     };
     socket.onerror = function () {
       if (ws !== socket) return;
-      setPriceChip("WS 异常 · 回退", false);
+      setPriceChip("WS 异常 · 服务端补价", false);
+      startFallback();
     };
     socket.onclose = function () {
       if (ws !== socket) return;
       ws = null;
-      setPriceChip("WS 断开 · 回退", false);
       startFallback();
+      setPriceChip("服务端实时价", true);
       reconnectTimer = setTimeout(function () {
         wsKey = "";
         connectPriceWs(symbols);
@@ -258,8 +318,8 @@
     };
   }
 
-  async function loadSnapshotPrices() {
-    const d = await jget(API);
+  async function loadLivePrices() {
+    const d = await jget(API + "/prices");
     (d.items || []).forEach(function (it) {
       applyTick(it.symbol, Number(it.price), it.change_24h == null ? null : Number(it.change_24h));
     });
@@ -381,6 +441,7 @@
   window.addEventListener("beforeunload", function () {
     closePriceWs();
     stopFallback();
+    stopWatchdog();
     if (bookTimer) clearInterval(bookTimer);
   });
 

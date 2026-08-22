@@ -1,9 +1,9 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.44
+**版本**: v4.5.45
 **日期**: 2026-08-22
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
-> **合约自选（REQ-WATCHLIST §7.5）**：侧栏「我的自选」；用户加交易对；价格由浏览器直连币安合约 **WS** 实时刷新；手动限价/市价（限价可撤）；成交走实时 ticker；实盘随 `live_trading_enabled`，**仅 L0**；成交瞬间同步，打开不回填。  
+> **合约自选（REQ-WATCHLIST §7.5）**：侧栏「我的自选」；用户加交易对；价格优先浏览器直连币安合约 **WS**，3s 无 tick 则服务端 DataHub/WS **1s 补价**；手动限价/市价（限价可撤）；成交走实时 ticker；实盘随 `live_trading_enabled`，**仅 L0**；成交瞬间同步，打开不回填。  
 > **操作对照（给人看）**：超级大脑 vs 破位策略说明见 [`docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`](./BRAIN_AND_BREAKOUT_OPERATOR_ZH.md)（冲突仍以本文为准）。  
 > **现货镜像（REQ-SPOT §7.4）**：模拟现货跟 **BRAIN A1** 回调买 + **DeepSeek LONG**；仅 **L0**；旧 DCA 停用；实盘由 `spot_live_enabled` 控制（成交瞬间同步，打开不回填）。  
 > **破位策略（REQ-MIDLINE §7.2）**：`midline_long` / `midline_short` 已落地模拟+实盘；扫描 **市值前 100**；对外文案为「破位策略」。  
@@ -834,7 +834,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 |----|------|
 | source | `manual_watchlist` |
 | 标的 | 用户从 `config.yaml` 市值池自选，最多 **50**；证券 / L2+ / 锁定禁止开仓 |
-| 价格 | 浏览器直连 `wss://fstream.binance.com` 订阅自选 `@miniTicker`（约 1s）；**不**在 `crypto-app-main` 再开 markPrice WS。WS 断开则 REST 快照回退。下单与限价触价仍用服务端 **ticker 最新价** |
+| 价格 | 浏览器直连 `wss://fstream.binance.com/ws/!miniTicker@arr`（约 1s）；**不**在 `crypto-app-main` 再开 markPrice WS。WS 连不上 / 3s 无 tick 则轮询 `GET /api/watchlist/prices`（服务端已有 DataHub/WS，约 1s）。下单与限价触价仍用服务端 **ticker 最新价** |
 | 市价 | 先挂 PENDING 再 `fill_paper_limit_order(at_market=True)`，走 INV-01 成交瞬间同步 |
 | 限价 | 用户填写委托价；executor 触价成交；页面可**撤单**；超时 **8h 取消**（禁止转市价） |
 | 开仓顾问 | **跳过** |
@@ -842,6 +842,17 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 | SmartExit | **排除**；硬 SL/TP 由 `position_sl_tp_monitor` |
 | 实盘 | ∈ `LIVE_SYNC_SOURCES`；与 BRAIN/破位同一套 `live_trading_enabled` / `live_close_enabled`；**仅 L0**；**成交瞬间**同步，打开开关不回填 |
 | 现货镜像 | **不跟** |
+
+### 7.6 信号分析页（展示）【v4.5.45】
+
+**页面**: `/technical-signals`（侧栏「信号分析」）  
+**实现**: `technical_signals_api.py` · `technical_signals_page.js` · `technical_signals.html`
+
+| 项 | 约定 |
+|----|------|
+| 评分 | 读 `technical_signals_cache`（main 约 **15min** `CALL update_technical_signals_cache()`）；禁止页面写死 BTC/ETH 假行 |
+| 现价 | `GET /api/technical-signals/prices` 约 **1s**，走 DataHub/WS；**不**新开 markPrice WS |
+| 方向 | 优先 24h 窗口 **15m** `trend`（BULLISH→LONG / BEARISH→SHORT） |
 
 ## 8. AI 主探索 / 主预测（REQ-AI-EP）
 
@@ -1003,7 +1014,8 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **A1 豁免 5m**；其它 40U/4根；-80U；trail（Big4 LONG 多单 2.2%/0.80%）；soft 关；Big4 LONG 禁 A2/B2、放行 B3/C4/C1 小仓空；顾问 suggest-only；到期不因 D1 强平；多单贴高等待回调；C3 禁止高潮追价；同币止盈 4h 冷却；**BRAIN 实盘随总开关仅 L0**；中线破位市价跟风；§7.3（**v4.5.25**） |
 | REQ-ST | `smart_trader_service.py` |
 | **REQ-SPOT** | `spot_paper_mirror.py`；`spot_live_sync.py`；`spot_trader_service.py`；`fill_paper_limit_order` 钩子；`validate_spot_paper.py`；权威 §7.4 |
-| **REQ-WATCHLIST** | `watchlist_config.py` · `watchlist_store.py` · `watchlist_orders.py` · `watchlist_api.py` · `watchlist_page.js`（浏览器直连币安合约 WS）· `/watchlist`；`LIVE_SYNC_SOURCES` 含 `manual_watchlist`；权威 §7.5 |
+| **REQ-WATCHLIST** | `watchlist_config.py` · `watchlist_store.py` · `watchlist_orders.py` · `watchlist_api.py` · `watchlist_page.js`（浏览器直连币安合约 WS + 3s 无 tick 则 `/api/watchlist/prices` 1s 补价）· `/watchlist`；`LIVE_SYNC_SOURCES` 含 `manual_watchlist`；权威 §7.5 |
+| **信号分析页** | `technical_signals_api.py` · `technical_signals_page.js` · `/technical-signals`；缓存表 + 服务端现价；权威 §7.6 |
 
 ---
 
@@ -1011,6 +1023,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-22 | **v4.5.45** | **自选/信号页活数据**：自选 WS 3s 无 tick 则服务端 `/api/watchlist/prices` 1s 补价；信号分析去掉写死行，接 `technical_signals_cache` + 现价 1s 刷新 |
 | 2026-08-22 | **v4.5.44** | **做多/做空按钮即硬闸门**：`allow_long=0` 不得挂多限价、不得开多、已挂多单立即取消；`allow_short` 对称。BRAIN/破位跳过顾问也必须过此闸门。已有持仓不平 |
 | 2026-08-22 | **v4.5.43** | **scheduler 成交不得把实盘标 FAILED**：仅 `crypto-app-main` 有 `engine_manager`；无引擎时留 NULL，由 main PaperSync 同步。8/22 main 日志 FAILED 单在成交秒无任何 PaperSync 行。不回填历史 FAILED |
 | 2026-08-22 | **v4.5.42** | **取价失败不得拦实盘开仓**：PaperSync / `open_position` 无 ticker 时用模拟成交价；8/21 日志 FAILED 单从未打出「发送开仓订单」。不回填历史 FAILED |

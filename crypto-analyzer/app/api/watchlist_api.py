@@ -84,15 +84,13 @@ def watchlist_overview():
     )
     from app.services.watchlist_store import list_watchlist_symbols
     from app.utils.futures_symbol import futures_symbol_clean
-    from app.utils.futures_price import build_futures_limit_trigger_price_map
+    from app.utils.futures_price import build_ui_live_price_map
 
     conn = _connect()
     try:
         rows = list_watchlist_symbols(conn)
         symbols = [r["symbol"] for r in rows]
-        prices = build_futures_limit_trigger_price_map(
-            conn, symbols, max_age_seconds=60, log_tag="watchlist",
-        )
+        prices = build_ui_live_price_map(symbols, max_age_seconds=8)
         change_map = {}
         if symbols:
             keys = []
@@ -146,6 +144,60 @@ def watchlist_overview():
         }
     except Exception as e:
         logger.error(f"[自选] overview 失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+@router.get("/prices")
+def watchlist_prices():
+    """自选页 1s 补价：服务端 WS/DataHub，不经浏览器直连币安。"""
+    from app.services.watchlist_store import list_watchlist_symbols
+    from app.utils.futures_price import build_ui_live_price_map
+    from app.utils.futures_symbol import futures_symbol_clean
+
+    conn = _connect()
+    try:
+        rows = list_watchlist_symbols(conn)
+        symbols = [r["symbol"] for r in rows]
+        prices = build_ui_live_price_map(symbols, max_age_seconds=8)
+        change_map = {}
+        if symbols:
+            keys = []
+            for s in symbols:
+                keys.append(s)
+                c = futures_symbol_clean(s)
+                if c and c not in keys:
+                    keys.append(c)
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT symbol, change_24h FROM price_stats_24h "
+                    "WHERE symbol IN (" + ",".join(["%s"] * len(keys)) + ")",
+                    keys,
+                )
+                for r in cur.fetchall() or []:
+                    change_map[r["symbol"]] = r.get("change_24h")
+                    c = futures_symbol_clean(r["symbol"])
+                    if c:
+                        change_map[c] = r.get("change_24h")
+        items = []
+        for sym in symbols:
+            clean = futures_symbol_clean(sym)
+            px = prices.get(sym) or prices.get(clean)
+            ch = change_map.get(sym)
+            if ch is None and clean:
+                ch = change_map.get(clean)
+            items.append({
+                "symbol": sym,
+                "price": px,
+                "change_24h": float(ch) if ch is not None else None,
+            })
+        return {"ok": True, "items": items}
+    except Exception as e:
+        logger.error(f"[自选] prices 失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         try:

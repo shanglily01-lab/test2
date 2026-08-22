@@ -178,6 +178,62 @@ def lookup_limit_trigger_price(
     return None
 
 
+def build_ui_live_price_map(
+    symbols: List[str],
+    max_age_seconds: int = 8,
+) -> Dict[str, float]:
+    """
+    页面展示用实时价：进程内 WS mark（约 1s）→ DataHub ticker 缓存。
+    不打 REST，避免 1s 轮询打爆币安。下单/触价仍走 get_futures_limit_trigger_price。
+    """
+    if not symbols:
+        return {}
+
+    out: Dict[str, float] = {}
+    try:
+        from app.services.binance_ws_price import get_ws_price_service
+
+        ws = get_ws_price_service("futures")
+    except Exception:
+        ws = None
+
+    tmap: Dict[str, float] = {}
+    try:
+        from app.services.binance_data_hub import get_global_data_hub
+
+        hub = get_global_data_hub()
+        if hub is not None:
+            raw = hub.get_full_ticker_map(market="futures")
+            tmap = {str(k).upper(): float(v) for k, v in raw.items() if v and float(v) > 0}
+    except Exception as e:
+        logger.debug(f"[ui_price] ticker_map 失败: {e}")
+
+    for raw_sym in symbols:
+        canon = futures_symbol_rating_canonical(raw_sym)
+        px: Optional[float] = None
+        if ws is not None:
+            try:
+                p = ws.get_price(canon, max_age_seconds=max_age_seconds)
+                if p is None:
+                    p = ws.get_price(raw_sym, max_age_seconds=max_age_seconds)
+                if p is not None and float(p) > 0:
+                    px = float(p)
+            except Exception:
+                px = None
+        if not px:
+            clean = (futures_symbol_clean(canon) or "").upper()
+            if clean and clean in tmap:
+                px = tmap[clean]
+        if not px or px <= 0:
+            continue
+        out[canon] = px
+        out[raw_sym] = px
+        clean = futures_symbol_clean(canon)
+        if clean:
+            out[clean] = px
+    return out
+
+
 def _rest_futures_mark_price(symbol: str) -> Optional[float]:
     """Hub 不可达时的紧急 REST mark（scheduler 进程无 9020 时）。"""
     sym_clean = futures_symbol_clean(symbol)

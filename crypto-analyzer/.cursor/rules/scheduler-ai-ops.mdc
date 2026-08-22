@@ -57,7 +57,7 @@ alwaysApply: true
 - PaperSync FAILED 原因须**前置**写入 `futures_orders.notes`（勿接在入场 JSON 后截断）；市价数量按 `MARKET_LOT_SIZE.maxQty` 截顶；ticker 失败用模拟成交价，不得因此 FAILED；本进程无 `engine_manager`（scheduler 成交）须留 NULL，不得 FAILED；FAILED 不回填
 - 中线 **不进** SmartExit；**进** LIVE_SYNC（仅 L0）；对冲平仓跳过含中线 symbol
 - BRAIN **进** LIVE_SYNC（`live_trading_enabled` + 仅 L0）；仍排除 SmartExit
-- 自选 `manual_watchlist` **进** LIVE_SYNC（仅 L0）；排除 SmartExit；顾问 sell 不执行
+- 自选 `manual_watchlist` **进** LIVE_SYNC（仅 L0）；排除 SmartExit；顾问 sell 不执行；页面价：浏览器 WS，3s 无 tick 则 `/api/watchlist/prices` 1s 补价
 
 ## 改动文件（维护时）
 
