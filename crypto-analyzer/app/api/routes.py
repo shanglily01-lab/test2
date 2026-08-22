@@ -561,6 +561,19 @@ async def get_dashboard_snapshot():
         raise HTTPException(status_code=500, detail=err_str)
 
 
+@router.get("/api/dashboard/prices")
+async def get_dashboard_live_prices():
+    """Dashboard Big4 现价：WS / DataHub，供 1s 轮询。不打 REST。"""
+    try:
+        from app.services.dashboard_snapshot_service import _fetch_live_prices
+
+        items = _fetch_live_prices()
+        return {"success": True, "items": items}
+    except Exception as e:
+        logger.error(f"读取 Dashboard 现价失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== Hyperliquid聪明钱交易API ====================
 
 @router.get("/api/hyperliquid/cached")

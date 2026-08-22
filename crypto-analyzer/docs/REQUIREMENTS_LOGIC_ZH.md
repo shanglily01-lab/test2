@@ -1,6 +1,6 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.45
+**版本**: v4.5.46
 **日期**: 2026-08-22
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **合约自选（REQ-WATCHLIST §7.5）**：侧栏「我的自选」；用户加交易对；价格优先浏览器直连币安合约 **WS**，3s 无 tick 则服务端 DataHub/WS **1s 补价**；手动限价/市价（限价可撤）；成交走实时 ticker；实盘随 `live_trading_enabled`，**仅 L0**；成交瞬间同步，打开不回填。  
@@ -854,6 +854,17 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 | 现价 | `GET /api/technical-signals/prices` 约 **1s**，走 DataHub/WS；**不**新开 markPrice WS |
 | 方向 | 优先 24h 窗口 **15m** `trend`（BULLISH→LONG / BEARISH→SHORT） |
 
+### 7.7 Dashboard 展示页【v4.5.46】
+
+**页面**: `/dashboard`  
+**实现**: `dashboard_snapshot_service.py` · `templates/dashboard.html` · `GET /api/dashboard/snapshot` · `GET /api/dashboard/prices`
+
+| 项 | 约定 |
+|----|------|
+| 现价 | BTC/ETH/BNB/SOL 走 `GET /api/dashboard/prices` 约 **1s**（DataHub/WS）；**不**新开 markPrice WS |
+| 信号表 | 与 §7.6 同源：`technical_signals_cache`（禁止 `coin_kline_scores`，EVENT 已下线） |
+| 其它面板 | 快照约 5min 预计算；前端 30s 读快照（盈亏/OI/新闻/聪明钱） |
+
 ## 8. AI 主探索 / 主预测（REQ-AI-EP）
 
 > **与 REQ-BRAIN**：BRAIN 为主判路径；**对照期** DeepSeek 探索/预测仍可自动开仓做对比（INV-BRAIN-07 暂缓）。对照结束后应全面暂停，不得再以「DeepSeek 独自扫池开仓」为主路径。
@@ -1016,6 +1027,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | **REQ-SPOT** | `spot_paper_mirror.py`；`spot_live_sync.py`；`spot_trader_service.py`；`fill_paper_limit_order` 钩子；`validate_spot_paper.py`；权威 §7.4 |
 | **REQ-WATCHLIST** | `watchlist_config.py` · `watchlist_store.py` · `watchlist_orders.py` · `watchlist_api.py` · `watchlist_page.js`（浏览器直连币安合约 WS + 3s 无 tick 则 `/api/watchlist/prices` 1s 补价）· `/watchlist`；`LIVE_SYNC_SOURCES` 含 `manual_watchlist`；权威 §7.5 |
 | **信号分析页** | `technical_signals_api.py` · `technical_signals_page.js` · `/technical-signals`；缓存表 + 服务端现价；权威 §7.6 |
+| **Dashboard 页** | `dashboard_snapshot_service.py` · `/dashboard` · `/api/dashboard/prices` 1s；信号同源 `technical_signals_cache`；权威 §7.7 |
 
 ---
 
@@ -1023,6 +1035,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-22 | **v4.5.46** | **Dashboard 活数据**：Big4 现价 1s（`/api/dashboard/prices`）；信号表改读 `technical_signals_cache`（不再用已下线 `coin_kline_scores`） |
 | 2026-08-22 | **v4.5.45** | **自选/信号页活数据**：自选 WS 3s 无 tick 则服务端 `/api/watchlist/prices` 1s 补价；信号分析去掉写死行，接 `technical_signals_cache` + 现价 1s 刷新 |
 | 2026-08-22 | **v4.5.44** | **做多/做空按钮即硬闸门**：`allow_long=0` 不得挂多限价、不得开多、已挂多单立即取消；`allow_short` 对称。BRAIN/破位跳过顾问也必须过此闸门。已有持仓不平 |
 | 2026-08-22 | **v4.5.43** | **scheduler 成交不得把实盘标 FAILED**：仅 `crypto-app-main` 有 `engine_manager`；无引擎时留 NULL，由 main PaperSync 同步。8/22 main 日志 FAILED 单在成交秒无任何 PaperSync 行。不回填历史 FAILED |

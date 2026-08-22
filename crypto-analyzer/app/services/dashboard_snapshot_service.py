@@ -39,40 +39,47 @@ def _ensure_table(cursor):
 
 
 def _fetch_signals(cursor):
-    cursor.execute("""
-        SELECT symbol, total_score, direction,
-               h1_score, m15_score,
-               h1_bullish_count  AS h1_bullish,
-               h1_bearish_count  AS h1_bearish,
-               m15_bullish_count AS m15_bullish,
-               m15_bearish_count AS m15_bearish,
-               m5_bullish_count  AS m5_bullish,
-               m5_bearish_count  AS m5_bearish,
-               strength_level, updated_at
-        FROM coin_kline_scores
-        WHERE exchange = 'binance_futures'
-        ORDER BY ABS(total_score) DESC
-        LIMIT 20
-    """)
-    rows = cursor.fetchall()
-    result = []
-    for r in rows:
-        result.append({
-            'symbol':        r['symbol'],
-            'total_score':   float(r['total_score']) if r['total_score'] is not None else 0,
-            'direction':     r['direction'],
-            'h1_score':      float(r['h1_score'])   if r['h1_score']   is not None else None,
-            'm15_score':     float(r['m15_score'])  if r['m15_score']  is not None else None,
-            'h1_bullish':    int(r['h1_bullish'])   if r['h1_bullish'] is not None else 0,
-            'h1_bearish':    int(r['h1_bearish'])   if r['h1_bearish'] is not None else 0,
-            'm15_bullish':   int(r['m15_bullish'])  if r['m15_bullish'] is not None else 0,
-            'm15_bearish':   int(r['m15_bearish'])  if r['m15_bearish'] is not None else 0,
-            'm5_bullish':    int(r['m5_bullish'])   if r['m5_bullish'] is not None else 0,
-            'm5_bearish':    int(r['m5_bearish'])   if r['m5_bearish'] is not None else 0,
-            'strength_level': r['strength_level'],
-            'updated_at':    r['updated_at'].isoformat() if r['updated_at'] else None,
-        })
-    return result
+    """信号表走 technical_signals_cache（coin_kline_scores EVENT 已下线）。"""
+    from app.api.technical_signals_api import _flatten_signal_row
+
+    try:
+        cursor.execute("""
+            SELECT symbol, window_label, timeframe,
+                   total_klines, bullish_count, bearish_count,
+                   bullish_pct, bearish_pct, avg_bullish_strength, avg_bearish_strength,
+                   total_volume, trend, updated_at
+            FROM technical_signals_cache
+        """)
+        rows = cursor.fetchall() or []
+    except Exception as e:
+        logger.warning(f"[dashboard_snapshot] technical_signals_cache 读取失败: {e}")
+        return []
+    data_map = {}
+    updated_map = {}
+    for row in rows:
+        s = row["symbol"]
+        data_map.setdefault(s, {}).setdefault(row["window_label"], {})[row["timeframe"]] = {
+            "total_klines": int(row["total_klines"] or 0),
+            "bullish_count": int(row["bullish_count"] or 0),
+            "bearish_count": int(row["bearish_count"] or 0),
+            "bullish_pct": float(row["bullish_pct"] or 0),
+            "bearish_pct": float(row["bearish_pct"] or 0),
+            "avg_bullish_strength": float(row["avg_bullish_strength"] or 0),
+            "avg_bearish_strength": float(row["avg_bearish_strength"] or 0),
+            "total_volume": float(row["total_volume"] or 0),
+            "trend": row["trend"],
+        }
+        ua = row.get("updated_at")
+        if ua and (s not in updated_map or ua > updated_map[s]):
+            updated_map[s] = ua
+
+    table = []
+    for symbol, d in data_map.items():
+        ua = updated_map.get(symbol)
+        ua_iso = ua.isoformat() if ua else None
+        table.append(_flatten_signal_row(symbol, d, None, ua_iso or ""))
+    table.sort(key=lambda r: abs(float(r.get("total_score") or 0)), reverse=True)
+    return table[:20]
 
 
 def _fetch_stats(cursor, signal_count: int = 0):
@@ -300,43 +307,19 @@ def _fetch_hyperliquid(cursor):
     }
 
 
-def _fetch_live_prices(cursor):
-    """获取 BTC/ETH/BNB/SOL 实时价格（优先 data_cache，兜底 Hub）"""
-    symbols_map = {"BTCUSDT": "btc", "ETHUSDT": "eth", "BNBUSDT": "bnb", "SOLUSDT": "sol"}
-    try:
-        cc = _get_conn(DATA_CACHE_DB)
-        with cc.cursor() as c:
-            c.execute("SELECT btc_price, eth_price, bnb_price, sol_price FROM market_snapshot ORDER BY id DESC LIMIT 1")
-            row = c.fetchone()
-        cc.close()
-        if row:
-            result = []
-            for sym, prefix in symbols_map.items():
-                display = sym.replace("USDT", "/USDT")
-                price = float(row.get(f"{prefix}_price") or 0) if row.get(f"{prefix}_price") is not None else None
-                result.append({'symbol': display, 'price': price})
-            return result
-    except Exception as e:
-        logger.warning(f"[dashboard_snapshot] 读 market_snapshot 失败，回退 Hub: {e}")
+DASHBOARD_LIVE_SYMBOLS = ["BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT"]
 
-    # 兜底：Hub 缓存
-    try:
-        from app.services.binance_data_hub import get_global_data_hub
-        hub = get_global_data_hub()
-        ticker_map = hub.get_full_ticker_map(market="futures") if hub else {}
-    except Exception:
-        ticker_map = {}
 
-    result = []
-    for sym in symbols_map:
-        display = sym.replace("USDT", "/USDT")
-        price_decimal = ticker_map.get(sym)
-        price = float(price_decimal) if price_decimal is not None else None
-        result.append({
-            'symbol': display,
-            'price': price,
-        })
-    return result
+def _fetch_live_prices(cursor=None):
+    """BTC/ETH/BNB/SOL 展示价：进程内 WS / DataHub，不读过期 market_snapshot。"""
+    del cursor
+    from app.utils.futures_price import build_ui_live_price_map
+
+    price_map = build_ui_live_price_map(DASHBOARD_LIVE_SYMBOLS, max_age_seconds=8)
+    return [
+        {"symbol": s, "price": price_map.get(s)}
+        for s in DASHBOARD_LIVE_SYMBOLS
+    ]
 
 
 def _fetch_recent_trades(cursor):
