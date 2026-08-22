@@ -435,9 +435,15 @@ class FuturesTradingEngine:
                 PAPER_ACCOUNT_ID,
                 PAPER_LIMIT_TIMEOUT_MINUTES,
                 calc_paper_limit_price,
+                is_paper_futures_account,
                 is_paper_limit_entry_enabled,
             )
             paper_limit_mode = account_id == PAPER_ACCOUNT_ID and is_paper_limit_entry_enabled()
+            if is_paper_futures_account(account_id):
+                from app.services.trading_gates import check_paper_direction_allowed
+                dir_ok, dir_why = check_paper_direction_allowed(position_side, cursor)
+                if not dir_ok:
+                    return {'success': False, 'message': dir_why}
             if paper_limit_mode and (not limit_price or limit_price <= 0):
                 limit_price = Decimal(str(calc_paper_limit_price(position_side, float(current_price))))
 
@@ -961,6 +967,7 @@ class FuturesTradingEngine:
         """PENDING→FILLED 前重跑不可绕过的模拟盘安全闸门。"""
         from app.services.trading_gates import (
             check_max_positions_allowed,
+            check_paper_direction_allowed,
             check_simulated_symbol_allowed,
             check_source_side_performance_allowed,
             check_symbol_loss_cooldown,
@@ -968,6 +975,10 @@ class FuturesTradingEngine:
             has_open_futures_position_same_side,
         )
         from app.services.watchlist_config import is_watchlist_source
+
+        dir_ok, dir_why = check_paper_direction_allowed(position_side, self.connection)
+        if not dir_ok:
+            return False, str(dir_why or "direction_disabled")
 
         if is_watchlist_source(source):
             forbidden, forbid_reason = check_symbol_trading_forbidden(symbol, self.connection)

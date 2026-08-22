@@ -45,6 +45,18 @@ def gate_simulated_open(
         )
         return False, reason
 
+    try:
+        from app.services.trading_gates import check_paper_direction_allowed
+        dir_ok, dir_why = check_paper_direction_allowed(side, conn)
+        if not dir_ok:
+            logger.info(
+                f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {dir_why}"
+            )
+            return False, dir_why
+    except Exception as e:
+        logger.warning(f"[开仓闸门] {symbol} 方向开关读取异常: {e}")
+        return False, "direction_gate_error"
+
     from app.services.midline_swing_config import is_midline_source
     from app.services.brain_config import is_brain_source
     from app.services.watchlist_config import is_watchlist_source

@@ -20,6 +20,25 @@ def is_paper_futures_account(account_id: int) -> bool:
     """模拟合约账户：不冻结保证金，开仓不校验可用余额。"""
     return int(account_id) == PAPER_ACCOUNT_ID
 
+
+def expire_pending_paper_limits_for_side(cursor, side: str, reason: str) -> int:
+    """关掉 allow_long/allow_short 时，立刻作废该方向未成交限价（不平已有仓）。"""
+    side_u = (side or "").upper()
+    order_side = "OPEN_LONG" if "LONG" in side_u else "OPEN_SHORT"
+    cursor.execute(
+        """
+        UPDATE futures_orders
+        SET status='EXPIRED', cancellation_reason=%s,
+            canceled_at=NOW(), updated_at=NOW()
+        WHERE account_id=%s
+          AND status='PENDING'
+          AND order_type='LIMIT'
+          AND side=%s
+        """,
+        ((reason or "direction_disabled")[:500], PAPER_ACCOUNT_ID, order_side),
+    )
+    return int(cursor.rowcount or 0)
+
 # 默认限价偏移（百分比点数，0.5 = 0.5%）
 DEFAULT_PAPER_LIMIT_LONG_OFFSET_PCT = 0.5
 DEFAULT_PAPER_LIMIT_SHORT_OFFSET_PCT = 0.5
@@ -198,6 +217,20 @@ def create_paper_limit_order(
     side = side.upper()
     if side not in ("LONG", "SHORT"):
         logger.error(f"[限价开仓] 无效方向 {side}")
+        return None
+
+    try:
+        from app.services.trading_gates import check_paper_direction_allowed
+        dir_ok, dir_why = check_paper_direction_allowed(side, conn)
+        if not dir_ok:
+            logger.info(f"[限价开仓] 跳过 {symbol} {side} source={source}: {dir_why}")
+            if failure_reason is not None:
+                failure_reason.append(dir_why)
+            return None
+    except Exception as e:
+        logger.warning(f"[限价开仓] {symbol} 方向开关读取异常: {e}")
+        if failure_reason is not None:
+            failure_reason.append("direction_gate_error")
         return None
 
     from app.services.midline_swing_config import is_midline_source, get_midline_limit_offset_pct

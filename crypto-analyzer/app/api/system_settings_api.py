@@ -30,6 +30,35 @@ def _upsert_bool_setting(cursor, key: str, enabled: bool, description: str) -> N
     )
 
 
+def _refresh_settings_cache() -> None:
+    try:
+        from app.services.data_cache_service import invalidate_setting_cache, sync_settings_cache
+        invalidate_setting_cache()
+        sync_settings_cache()
+    except Exception:
+        pass
+    try:
+        from app.services.system_settings_loader import invalidate_loader_cache
+        invalidate_loader_cache()
+    except Exception:
+        pass
+
+
+def _expire_limits_after_direction_change(cursor, *, allow_long=None, allow_short=None) -> int:
+    from app.services.paper_limit_entry import expire_pending_paper_limits_for_side
+
+    n = 0
+    if allow_long is False:
+        n += expire_pending_paper_limits_for_side(
+            cursor, "LONG", "系统禁止做多 (allow_long=0)",
+        )
+    if allow_short is False:
+        n += expire_pending_paper_limits_for_side(
+            cursor, "SHORT", "系统禁止做空 (allow_short=0)",
+        )
+    return n
+
+
 def _set_open_advisor_pair(cursor, enabled: bool) -> None:
     """统一开仓顾问：仅 DeepSeek；Gemini 开仓顾问已下线。"""
     desc_deepseek = 'DeepSeek 模拟开仓顾问: 1=开仓前审核, 不通过则不开仓'
@@ -341,9 +370,16 @@ async def update_trading_direction(data: TradingDirectionUpdate):
             """, (value,))
             updates.append(f"做空: {'允许' if data.allow_short else '禁止'}")
 
+        expired = _expire_limits_after_direction_change(
+            cursor, allow_long=data.allow_long, allow_short=data.allow_short,
+        )
+        if expired:
+            updates.append(f"已取消未成交限价 {expired} 笔")
+
         conn.commit()
         cursor.close()
         conn.close()
+        _refresh_settings_cache()
 
         update_msg = ', '.join(updates)
         logger.info(f"[OK] 交易方向已更新: {update_msg}")
@@ -355,7 +391,8 @@ async def update_trading_direction(data: TradingDirectionUpdate):
                 'allow_long': data.allow_long,
                 'allow_short': data.allow_short,
                 'updates': updates,
-                'note': '配置实时生效，最长延迟5分钟（缓存刷新）'
+                'expired_pending_limits': expired,
+                'note': '立即生效：禁止方向不再挂单/开仓，已挂限价已取消',
             }
         }
 
@@ -391,6 +428,17 @@ async def update_setting(key: str, data: SystemSetting):
                 updated_at = CURRENT_TIMESTAMP
         """, (key, data.setting_value, data.description))
 
+        expired_n = 0
+        if key in ('allow_long', 'allow_short'):
+            val = str(data.setting_value or '').strip().lower()
+            enabled = val in ('1', 'true', 'yes', 'on')
+            if not enabled:
+                expired_n = _expire_limits_after_direction_change(
+                    cursor,
+                    allow_long=False if key == 'allow_long' else None,
+                    allow_short=False if key == 'allow_short' else None,
+                )
+
         conn.commit()
         cursor.close()
         conn.close()
@@ -400,14 +448,14 @@ async def update_setting(key: str, data: SystemSetting):
             'paper_limit_long_offset_pct',
             'paper_limit_short_offset_pct',
             'paper_limit_timeout_action',
+            'allow_long',
+            'allow_short',
         ):
-            try:
-                from app.services.data_cache_service import invalidate_setting_cache
-                invalidate_setting_cache()
-            except Exception:
-                pass
+            _refresh_settings_cache()
 
         logger.info(f"[OK] 配置项 {key} 已更新为: {data.setting_value}")
+        if expired_n:
+            logger.info(f"[OK] {key}=0 已取消未成交限价 {expired_n} 笔")
 
         return {
             'success': True,

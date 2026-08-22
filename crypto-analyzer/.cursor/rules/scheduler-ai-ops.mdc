@@ -53,7 +53,7 @@ alwaysApply: true
 
 - 中线 v2: 做多挂回调区；B3/C4 做空挂冲高区（无区才 ±1%）；`is_midline_source` 覆盖 `midline_long/short`
 - 非中线: `paper_limit_long/short_offset_pct` 系统设定
-- 成交: executor 500 笔/轮 + ticker 触价；FILLED 后 `sync_filled_order_now`
+- 成交: executor 500 笔/轮 + ticker 触价；FILLED 后 `sync_filled_order_now`；`allow_long=0`/`allow_short=0` 不得挂该向限价也不得成交，已挂单立即取消
 - PaperSync FAILED 原因须**前置**写入 `futures_orders.notes`（勿接在入场 JSON 后截断）；市价数量按 `MARKET_LOT_SIZE.maxQty` 截顶；ticker 失败用模拟成交价，不得因此 FAILED；本进程无 `engine_manager`（scheduler 成交）须留 NULL，不得 FAILED；FAILED 不回填
 - 中线 **不进** SmartExit；**进** LIVE_SYNC（仅 L0）；对冲平仓跳过含中线 symbol
 - BRAIN **进** LIVE_SYNC（`live_trading_enabled` + 仅 L0）；仍排除 SmartExit

@@ -167,6 +167,8 @@ class FuturesLimitOrderExecutor:
             conn = self._connect()
             self._recover_stale_filling_orders(conn)
             with conn.cursor() as cur:
+                from app.services.trading_gates import get_paper_direction_flags
+                allow_long, allow_short = get_paper_direction_flags(cur)
                 cur.execute(
                     """
                     SELECT o.*,
@@ -195,6 +197,23 @@ class FuturesLimitOrderExecutor:
             timeout_queue: List[Dict] = []
 
             for order in orders:
+                side = str(order.get('side') or '')
+                blocked = (
+                    ('LONG' in side and not allow_long)
+                    or ('SHORT' in side and not allow_short)
+                )
+                if blocked:
+                    why = (
+                        "系统禁止做多 (allow_long=0)"
+                        if 'LONG' in side
+                        else "系统禁止做空 (allow_short=0)"
+                    )
+                    self._cancel_order(conn, order['order_id'], why)
+                    stats['expired'] += 1
+                    logger.info(
+                        f"[限价执行器] 取消 {order['symbol']} {side} reason={why}"
+                    )
+                    continue
                 action, cur_px, cancel_reason = self._classify_order(order, price_map)
                 if action == 'fill' and cur_px is not None:
                     fill_queue.append((order, cur_px))

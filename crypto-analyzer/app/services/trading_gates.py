@@ -123,6 +123,35 @@ def is_spot_live_enabled(cursor=None) -> bool:
     return _bool_setting("spot_live_enabled", False, cursor)
 
 
+def _direction_side(side: str) -> str:
+    s = (side or "").upper()
+    if "LONG" in s:
+        return "LONG"
+    if "SHORT" in s:
+        return "SHORT"
+    return s
+
+
+def get_paper_direction_flags(cursor=None) -> Tuple[bool, bool]:
+    """system_settings.allow_long / allow_short（用户手动方向总开关）。"""
+    cur = _as_cursor(cursor)
+    return (
+        _bool_setting("allow_long", True, cur),
+        _bool_setting("allow_short", True, cur),
+    )
+
+
+def check_paper_direction_allowed(side: str, cursor=None) -> Tuple[bool, str]:
+    """禁止做多/做空时：不得新挂限价、不得开仓、不得成交已挂单。不平已有仓。"""
+    s = _direction_side(side)
+    allow_long, allow_short = get_paper_direction_flags(cursor)
+    if s == "LONG" and not allow_long:
+        return False, "系统禁止做多 (allow_long=0)"
+    if s == "SHORT" and not allow_short:
+        return False, "系统禁止做空 (allow_short=0)"
+    return True, ""
+
+
 def get_beijing_open_window_status(now_utc=None) -> Tuple[bool, str]:
     """实盘开仓时段闸门 — 已解除，全天允许。"""
     return True, ""

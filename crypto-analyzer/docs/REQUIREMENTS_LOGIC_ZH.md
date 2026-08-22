@@ -1,6 +1,6 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.43
+**版本**: v4.5.44
 **日期**: 2026-08-22
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **合约自选（REQ-WATCHLIST §7.5）**：侧栏「我的自选」；用户加交易对；价格由浏览器直连币安合约 **WS** 实时刷新；手动限价/市价（限价可撤）；成交走实时 ticker；实盘随 `live_trading_enabled`，**仅 L0**；成交瞬间同步，打开不回填。  
@@ -179,6 +179,8 @@
 |---------|------|------|
 | `live_trading_enabled` | 0 | 实盘**开仓**总开关 |
 | `live_close_enabled` | 0 | 模拟平仓时是否同步平交易所 |
+| `allow_long` | 1 | **用户做多总开关**。关则不得新挂多单限价、不得开多仓、已挂多单限价立即 EXPIRED；**不平**已有多仓 |
+| `allow_short` | 1 | **用户做空总开关**。关则不得新挂空单限价、不得开空仓、已挂空单限价立即 EXPIRED；**不平**已有空仓 |
 | `spot_trading_enabled` | 0 | 现货模拟镜像 |
 | `spot_live_enabled` | 0 | 现货实盘：模拟开/平仓瞬间同步 Binance 现货；**打开不回填历史仓** |
 | `midline_long_enabled` | 0 | 破位做多 kill switch；系统配置 / 破位策略页可开关 |
@@ -237,8 +239,8 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 
 | 步骤 | 说明 |
 |------|------|
-| 1 | 策略 worker / smart_trader 调用 `create_paper_limit_order`（或 engine 限价模式） |
-| 2 | PENDING 限价 → executor 每 5s 用 **ticker 最新价**触价；认领为 FILLING 后、写 FILLED 前重跑评级/锁定、亏损冷却、同向去重、仓位上限、source+side 绩效闸门；拒绝则 EXPIRED |
+| 1 | 策略 worker / smart_trader 调用 `create_paper_limit_order`（或 engine 限价模式）。**`allow_long=0` 不得挂/开多；`allow_short=0` 不得挂/开空**（BRAIN/破位跳过开仓顾问也必须过此闸门） |
+| 2 | PENDING 限价 → executor 每 5s 用 **ticker 最新价**触价；认领为 FILLING 后、写 FILLED 前重跑方向开关、评级/锁定、亏损冷却、同向去重、仓位上限、source+side 绩效闸门；拒绝则 EXPIRED。用户关掉方向开关时立刻取消该向未成交限价 |
 | 3 | 成交瞬间 §4.2 决定 live_sync_status |
 | 4 | PaperLimitSync 在 5 分钟窗内同步实盘（若 NULL） |
 
@@ -988,7 +990,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 |---------|--------|
 | REQ-LIVE-OPEN | `paper_limit_sync_service.py`, `futures_trading_engine.py`, `binance_futures_engine.py`, `system_settings_api.py`, `scheduler.py`（限价成交线程无 engine_manager） |
 | REQ-LIVE-CLOSE | `trading_gates.py`, `position_advisor_impl.py`, `binance_futures_engine.py` |
-| REQ-GATES | `trading_gates.py` |
+| REQ-GATES | `trading_gates.py`（含 `allow_long`/`allow_short` 方向总开关） |
 | REQ-PAPER-OPEN | `paper_limit_entry.py`, `paper_open_gate.py`, `futures_trading_engine.fill_paper_limit_order`（成交闸门） |
 | REQ-AI-EP | `ai_explore_prompt.py`, `ai_predict_prompt.py`, `explore_worker_impl.py`, `explore_worker_common.py`, `*_explore_worker.py`, `*_predictor.py` |
 | REQ-ADVISOR | `open_advisor_strategy_rubrics.py`, `position_advisor_impl.py`, `advisor_core.py`, `hold_advisor_query.py`, `position_sl_tp_monitor.py` |
@@ -1009,6 +1011,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-22 | **v4.5.44** | **做多/做空按钮即硬闸门**：`allow_long=0` 不得挂多限价、不得开多、已挂多单立即取消；`allow_short` 对称。BRAIN/破位跳过顾问也必须过此闸门。已有持仓不平 |
 | 2026-08-22 | **v4.5.43** | **scheduler 成交不得把实盘标 FAILED**：仅 `crypto-app-main` 有 `engine_manager`；无引擎时留 NULL，由 main PaperSync 同步。8/22 main 日志 FAILED 单在成交秒无任何 PaperSync 行。不回填历史 FAILED |
 | 2026-08-22 | **v4.5.42** | **取价失败不得拦实盘开仓**：PaperSync / `open_position` 无 ticker 时用模拟成交价；8/21 日志 FAILED 单从未打出「发送开仓订单」。不回填历史 FAILED |
 | 2026-08-22 | **v4.5.41** | **FAILED 原因不得被截掉**：`PaperSync FAILED` 前置写入 notes；市价数量按 `MARKET_LOT_SIZE.maxQty` 截顶。不回填历史 FAILED |

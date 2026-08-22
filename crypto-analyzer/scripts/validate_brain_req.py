@@ -169,6 +169,7 @@ def test_cross_service_safety_guards() -> None:
 
     fill_guards = (
         "_revalidate_paper_limit_fill",
+        "check_paper_direction_allowed",
         "check_simulated_symbol_allowed",
         "check_symbol_loss_cooldown",
         "check_max_positions_allowed",
@@ -193,6 +194,8 @@ def test_brain_skip_open_advisor() -> None:
     src = (ROOT / "app/services/paper_open_gate.py").read_text(encoding="utf-8")
     if "brain_skip_advisor" not in src or "is_brain_source" not in src:
         _fail("paper_open_gate 未跳过 BRAIN 开仓顾问")
+    elif "check_paper_direction_allowed" not in src:
+        _fail("paper_open_gate 未过 allow_long/allow_short 方向开关")
     else:
         _ok("paper_open_gate brain_skip_advisor")
     orch = (ROOT / "app/services/brain_strategy_orchestrator.py").read_text(encoding="utf-8")

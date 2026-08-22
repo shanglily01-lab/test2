@@ -332,12 +332,17 @@ class PaperLimitSyncService:
         order_source = (order.get("order_source") or "manual").strip()
 
         try:
-            from app.services.trading_gates import check_live_open_allowed
+            from app.services.trading_gates import (
+                check_live_open_allowed,
+                check_paper_direction_allowed,
+            )
 
             with conn.cursor() as gate_cur:
                 allowed, reason = check_live_open_allowed(
                     symbol, order_source, cursor=gate_cur,
                 )
+                if allowed:
+                    allowed, reason = check_paper_direction_allowed(pos_side, gate_cur)
             if not allowed:
                 logger.info(
                     f"[PaperSync] order_id={order_id} {symbol} source={order_source} "

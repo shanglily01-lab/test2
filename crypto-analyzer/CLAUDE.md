@@ -34,6 +34,7 @@
 ## 重要规则
 
 - **Big4RegimeMonitor / 熔断禁止改系统设置**: Big4 和盈亏熔断只能发通知，不允许修改 `system_settings` 的 `allow_long`/`allow_short`/`trading_enabled`。用户手动控制。
+- **`allow_long`/`allow_short` 是硬闸门**：关做多则不得挂多限价、不得开多仓，已挂多单立即取消（空对称）。BRAIN/破位跳过开仓顾问也必须过此开关。已有持仓不平。
 - **DB 配置形状禁止静默回退 (2026-06-15 事故)**: `get_db_config()` 返回裸 MySQL dict (`host/user/password/database`)，`DatabaseService` 期待完整结构 `{'type':'mysql','mysql':{...}}`。任何桥接代码必须 normalize 或 fail-fast，禁止因为缺少 `mysql` key 静默 fallback 到 `root@localhost`/空密码。已在 `PriceCacheService` 做兼容修复；后续改 DB 相关代码前必须检查调用方传入的配置形状。
 - **FastAPI systemd 日志不在 journalctl**: `crypto-app-main.service` 的 stdout/stderr 追加到 `logs/main_systemd.log`；loguru 主日志为 `logs/main_YYYY-MM-DD.log`。`journalctl -u crypto-app-main` 主要看 systemd stop/start/timeout，不一定有 Python 异常。
 - **1h K线天然滞后**: 1h 最新收盘的 K 线永远是上一小时的，延迟约 60-65 分钟属正常。`BACKFILL_LAG_THRESHOLD_S['1h']=3900` (65min)，不要改小。
