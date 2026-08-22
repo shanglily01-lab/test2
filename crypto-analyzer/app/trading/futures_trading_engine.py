@@ -1302,8 +1302,19 @@ class FuturesTradingEngine:
                     }
                 else:
                     try:
-                        from app.services.paper_limit_sync_service import sync_filled_order_now
-                        live_sync_info = sync_filled_order_now(pending_order_id)
+                        from app.services.user_trading_engine_manager import get_engine_manager
+                        if get_engine_manager() is None:
+                            logger.info(
+                                f"[模拟成交] {symbol} 本进程无实盘引擎，"
+                                f"留 NULL 待 crypto-app-main PaperSync order={pending_order_id}"
+                            )
+                            live_sync_info = {
+                                "attempted": False,
+                                "reason": "no engine_manager in this process",
+                            }
+                        else:
+                            from app.services.paper_limit_sync_service import sync_filled_order_now
+                            live_sync_info = sync_filled_order_now(pending_order_id)
                     except Exception as sync_ex:
                         logger.warning(
                             f"[模拟成交] 立即实盘同步失败 {pending_order_id}: {sync_ex}"

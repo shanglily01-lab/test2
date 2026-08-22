@@ -4,7 +4,7 @@
 
 Run on the server, from the project root:
 
-    cd /home/ec2-user/crypto-analyzer
+    cd /home/test2/crypto-analyzer
     python3 scripts/test_bsb_live_sync.py
     python3 scripts/test_bsb_live_sync.py --symbol DOGE
     python3 scripts/test_bsb_live_sync.py --order-id 115040
@@ -231,7 +231,25 @@ def main() -> int:
         tp_pct = raw_tp if raw_tp > 0 else None
     _ok("sl/tp pct", sl_pct is not None and tp_pct is not None, f"sl={sl_pct} tp={tp_pct}")
 
-    print("\n--- price paths (this is the pre-send kill) ---")
+    print("\n--- engine_manager (this is the pre-send kill when scheduler fills) ---")
+    from app.services.user_trading_engine_manager import get_engine_manager
+
+    mgr = get_engine_manager()
+    _ok(
+        "this process has engine_manager",
+        mgr is not None,
+        "None — same as crypto-scheduler. only crypto-app-main calls init_engine_manager",
+    )
+    if mgr is not None:
+        eng = mgr.get_engine(order["user_id"])
+        _ok("this process get_engine(user)", eng is not None, type(eng).__name__ if eng else "None")
+    else:
+        print(
+            "NOTE  本脚本 / scheduler 成交后若立刻 sync，旧代码会标 FAILED，"
+            "main 日志不会出现「发送开仓订单」。"
+        )
+
+    print("\n--- price / size (gates+qty are NOT why BSB/DOGE FAILED) ---")
     t0 = time.time()
     local_url = f"{args.api_base.rstrip('/')}/api/futures/price/{quote(symbol, safe='')}"
     code, body = _http_json(local_url, timeout=5)
@@ -297,12 +315,19 @@ def main() -> int:
     )
     print("\n=== verdict ===")
     if would_send:
-        print("WOULD_SEND  按当前检查会走到「发送开仓订单」。本脚本不下单。")
+        print("GATES_PRICE_QTY_OK  闸门/取价/手数都能过，不是 BSB/DOGE FAILED 的原因。")
+        print(
+            "OLD scheduler fill: get_engine_manager() is None → 标 FAILED，"
+            "币安收不到单，main 也没有「发送开仓订单」。"
+        )
         if not old_path_ok:
             print("NOTE  旧代码会在取价失败处 FAILED；新代码会用模拟成交价继续。")
     else:
         print("WOULD_NOT_SEND  发单前就会停。上面第一个 FAIL 就是原因。")
-    print("deployed code still needs: systemctl restart crypto-app-main")
+    print(
+        "deploy: systemctl restart crypto-app-main crypto-scheduler  "
+        "(无引擎时留 NULL，不再 FAILED)"
+    )
     conn.close()
     return 0 if would_send else 2
 

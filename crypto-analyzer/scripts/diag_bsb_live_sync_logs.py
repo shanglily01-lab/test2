@@ -36,7 +36,8 @@ TOPIC_RE = re.compile(
     r"PaperSync|模拟成交|发送开仓订单|实盘开仓失败|开仓失败|开仓异常|"
     r"开仓后补保存|无法获取.*价格|获取价格失败|无法计算SL/TP|"
     r"IP banned|币安API错误|engine_manager|交易引擎为 None|"
-    r"ticker 无价|实时价不可用|参考价"
+    r"ticker 无价|实时价不可用|参考价|限价执行器|限价成交|市价转单|"
+    r"本进程无"
 )
 
 
@@ -44,7 +45,11 @@ def _log_files(dates: list[str]) -> list[Path]:
     files: list[Path] = []
     seen: set[Path] = set()
     for date in dates:
-        for name in (f"main_{date}.log", "main_systemd.log"):
+        for name in (
+            f"main_{date}.log",
+            f"scheduler_{date}.log",
+            "main_systemd.log",
+        ):
             path = LOG_DIR / name
             if path.is_file() and path not in seen:
                 files.append(path)
@@ -76,6 +81,11 @@ def main() -> int:
     parser.add_argument("--date", help="UTC log date, e.g. 2026-08-22")
     parser.add_argument("--symbol", default="BSB", help="coin, default BSB; ALL = no coin filter")
     parser.add_argument("--around", help="UTC HH:MM window, e.g. 06:22 (dumps all topic lines near it)")
+    parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="print EVERY log line in --around window (no topic filter). use with --around",
+    )
     parser.add_argument("--limit", type=int, default=300)
     args = parser.parse_args()
 
@@ -88,8 +98,11 @@ def main() -> int:
 
     symbol = (args.symbol or "BSB").upper()
     want_all = symbol in {"ALL", "*", "ANY"}
+    if args.raw and not args.around:
+        print("--raw requires --around HH:MM", file=sys.stderr)
+        return 2
     print(f"logs dir: {LOG_DIR}")
-    print(f"dates={dates} symbol={symbol} around={args.around or 'known fills + symbol'}")
+    print(f"dates={dates} symbol={symbol} around={args.around or 'known fills + symbol'} raw={args.raw}")
     print()
 
     n = 0
@@ -104,23 +117,27 @@ def main() -> int:
             continue
 
         for line in lines:
-            if not TOPIC_RE.search(line):
-                continue
-            keep = False
-            if want_all:
-                keep = True
-            elif symbol in line.upper():
-                keep = True
-            elif args.around:
-                for date in dates:
-                    if _near_fill(line, date, args.around):
-                        keep = True
-                        break
+            if args.raw:
+                keep = any(_near_fill(line, date, args.around) for date in dates)
             else:
-                for date, hhmm, _sym in KNOWN_FILLS:
-                    if date in str(path.name) and _near_fill(line, date, hhmm):
+                if not TOPIC_RE.search(line):
+                    continue
+                keep = False
+                near_ok = True
+                if args.around:
+                    near_ok = any(_near_fill(line, date, args.around) for date in dates)
+                if want_all:
+                    keep = near_ok
+                elif symbol in line.upper() and near_ok:
+                    keep = True
+                elif not args.around:
+                    if symbol in line.upper():
                         keep = True
-                        break
+                    else:
+                        for date, hhmm, _sym in KNOWN_FILLS:
+                            if date in str(path.name) and _near_fill(line, date, hhmm):
+                                keep = True
+                                break
             if not keep:
                 continue
             n += 1

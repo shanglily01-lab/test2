@@ -1,6 +1,6 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.42
+**版本**: v4.5.43
 **日期**: 2026-08-22
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **合约自选（REQ-WATCHLIST §7.5）**：侧栏「我的自选」；用户加交易对；价格由浏览器直连币安合约 **WS** 实时刷新；手动限价/市价（限价可撤）；成交走实时 ticker；实盘随 `live_trading_enabled`，**仅 L0**；成交瞬间同步，打开不回填。  
@@ -125,6 +125,7 @@
        ├─ check_live_open_allowed → 不通过则 SKIPPED（不得留 NULL）
        └─ BinanceFuturesEngine.open_position → SYNCED / FAILED
           （取价失败须回退模拟成交价，不得因此 FAILED；禁止在「发送开仓订单」之前因 ticker 空而放弃）
+          （本进程无 `engine_manager` 时不得标 FAILED：scheduler 也会成交模拟限价，实盘引擎只在 crypto-app-main 初始化；须留 NULL 等 main PaperSync）
 ```
 
 ### 4.3 用户打开 `live_trading_enabled=1` 时
@@ -140,7 +141,7 @@
 | NULL | 成交瞬间闸门通过，在时间窗内待 PaperSync | 仅 5 分钟内 |
 | SYNCED | 已开实盘 | 否 |
 | SKIPPED | 实盘关/闸门拒/超窗/开开关清理 | **永不再同步** |
-| FAILED | 技术失败（API/引擎/无 SLTP） | 否（防重复下单）。原因必须**前置**写入 `futures_orders.notes`（`PaperSync FAILED: …`），不得接在入场 JSON 后面再截断。市价数量须按 `MARKET_LOT_SIZE.maxQty` 截顶后再下单。若币安已成交且 `live_futures_positions` 已有对应 `paper_position_id`，标 **SYNCED** 不得标 FAILED。币安开仓单已接受后，SL/TP/本地保存异常也必须保存 live 行并标 SYNCED |
+| FAILED | 技术失败（已向币安下单或本进程具备实盘引擎后的 API/无 SLTP 等） | 否（防重复下单）。**禁止**在本进程无 `engine_manager` 时标 FAILED（scheduler 成交不得封死 main 补同步）。原因必须**前置**写入 `futures_orders.notes`（`PaperSync FAILED: …`），不得接在入场 JSON 后面再截断。市价数量须按 `MARKET_LOT_SIZE.maxQty` 截顶后再下单。若币安已成交且 `live_futures_positions` 已有对应 `paper_position_id`，标 **SYNCED** 不得标 FAILED。币安开仓单已接受后，SL/TP/本地保存异常也必须保存 live 行并标 SYNCED |
 
 ### 4.5 常量
 
@@ -985,7 +986,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 需求 ID | 主文件 |
 |---------|--------|
-| REQ-LIVE-OPEN | `paper_limit_sync_service.py`, `futures_trading_engine.py`, `binance_futures_engine.py`, `system_settings_api.py` |
+| REQ-LIVE-OPEN | `paper_limit_sync_service.py`, `futures_trading_engine.py`, `binance_futures_engine.py`, `system_settings_api.py`, `scheduler.py`（限价成交线程无 engine_manager） |
 | REQ-LIVE-CLOSE | `trading_gates.py`, `position_advisor_impl.py`, `binance_futures_engine.py` |
 | REQ-GATES | `trading_gates.py` |
 | REQ-PAPER-OPEN | `paper_limit_entry.py`, `paper_open_gate.py`, `futures_trading_engine.fill_paper_limit_order`（成交闸门） |
@@ -1008,6 +1009,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-22 | **v4.5.43** | **scheduler 成交不得把实盘标 FAILED**：仅 `crypto-app-main` 有 `engine_manager`；无引擎时留 NULL，由 main PaperSync 同步。8/22 main 日志 FAILED 单在成交秒无任何 PaperSync 行。不回填历史 FAILED |
 | 2026-08-22 | **v4.5.42** | **取价失败不得拦实盘开仓**：PaperSync / `open_position` 无 ticker 时用模拟成交价；8/21 日志 FAILED 单从未打出「发送开仓订单」。不回填历史 FAILED |
 | 2026-08-22 | **v4.5.41** | **FAILED 原因不得被截掉**：`PaperSync FAILED` 前置写入 notes；市价数量按 `MARKET_LOT_SIZE.maxQty` 截顶。不回填历史 FAILED |
 | 2026-08-22 | **v4.5.40** | **实盘开仓后处理不得翻盘**：币安已接受订单后 SL/TP/DB 异常仍保存 live 并 SYNCED；数量按 LOT_SIZE 重载精度 |

@@ -402,14 +402,20 @@ class PaperLimitSyncService:
             from app.services.user_trading_engine_manager import get_engine_manager
             mgr = get_engine_manager()
             if mgr is None:
-                logger.error(f"[PaperSync] engine_manager 未初始化，跳过 order_id={order_id}")
-                self._mark(conn, order_id, "FAILED", None, reason="engine_manager 未初始化")
+                # scheduler 也跑限价成交，但只在 crypto-app-main 里 init_engine_manager。
+                # 这里标 FAILED 会永久封死，main 的 10s PaperSync 再也补不了。
+                logger.error(
+                    f"[PaperSync] 本进程无 engine_manager，留 NULL 待 main 同步 "
+                    f"order_id={order_id} {symbol}"
+                )
                 return
 
             engine = mgr.get_engine(user_id)
             if engine is None:
-                logger.warning(f"[PaperSync] user_id={user_id} 引擎为 None，跳过 order_id={order_id}")
-                self._mark(conn, order_id, "FAILED", None, reason="交易引擎为 None")
+                logger.warning(
+                    f"[PaperSync] user_id={user_id} 引擎为 None，留 NULL 待重试 "
+                    f"order_id={order_id} {symbol}"
+                )
                 return
 
             # 将纸面 SL/TP 转为百分比，基于实盘实际成交价重算绝对价格
