@@ -98,6 +98,8 @@ def extract_features(
         "vol_up": False,
         "vol_down": False,
         "vol_shrink_pullback": False,
+        "pullback_from_high": False,
+        "bounce_from_low": False,
         "hh_hl": False,
         "lh_ll": False,
         "stop_new_low": False,
@@ -128,6 +130,7 @@ def extract_features(
     c1 = [_f(r.get("close_price")) for r in rows_1h]
     c15 = [_f(r.get("close_price")) for r in rows_15m]
     h15 = [_f(r.get("high_price")) for r in rows_15m]
+    l15 = [_f(r.get("low_price")) for r in rows_15m]
     v15 = [_f(r.get("volume")) for r in rows_15m]
     feats["ref_price"] = c15[-1]
 
@@ -168,6 +171,7 @@ def extract_features(
             signals.append("15m_higher_low")
         if max(b) < max(a):
             signals.append("15m_lower_high")
+        _tag_pullback_or_bounce(feats, signals, c15, h15, l15)
         # stop new low: last 4 lows not below prior 8 min
         if min(c15[-4:]) >= min(c15[-12:-4]) * 0.999:
             feats["stop_new_low"] = True
@@ -385,25 +389,75 @@ def extract_features(
     return feats
 
 
+def _tag_pullback_or_bounce(
+    feats: Dict[str, Any],
+    signals: List[str],
+    c15: List[float],
+    h15: List[float],
+    l15: List[float],
+) -> None:
+    """近 16 根 15m：最后极值是高点且已离开 → 回调；最后极值是低点且已离开 → 反弹。"""
+    if len(c15) < 16 or len(h15) < 16 or len(l15) < 16:
+        return
+    win_h = h15[-16:]
+    win_l = l15[-16:]
+    win_hi = max(win_h)
+    win_lo = min(win_l)
+    hi_pos = max(i for i, x in enumerate(win_h) if abs(x - win_hi) <= 1e-12)
+    lo_pos = max(i for i, x in enumerate(win_l) if abs(x - win_lo) <= 1e-12)
+    close = c15[-1]
+    if close <= 0 or win_hi <= 0 or win_lo <= 0:
+        return
+    off_high = (win_hi - close) / win_hi * 100.0 >= 0.28
+    off_low = (close - win_lo) / win_lo * 100.0 >= 0.25
+    if hi_pos > lo_pos and off_high:
+        feats["pullback_from_high"] = True
+        signals.append("15m_pullback_from_high")
+    if lo_pos > hi_pos and off_low:
+        feats["bounce_from_low"] = True
+        signals.append("15m_bounce_from_low")
+
+
 def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     """返回 [(playbook, score, confirmed), ...] 按 score 降序。"""
     scored: List[Tuple[str, float, bool]] = []
     sig = set(feats.get("signals") or [])
 
-    # A1 多头趋势回踩
+    bounce_not_pullback = bool(
+        feats.get("bounce_from_low") and not feats.get("pullback_from_high")
+    )
+    bounce_short_story = bool(
+        bounce_not_pullback
+        or (
+            feats.get("bounce_from_low")
+            and (
+                "ema_reject" in sig
+                or feats.get("top_callback")
+                or feats.get("long_upper_wick")
+                or "15m_lower_high" in sig
+                or feats.get("lh_ll")
+                or feats.get("h1_side") == "SHORT"
+            )
+        )
+    )
+
+    # A1 多头趋势回踩：必须从高点回落。低点反弹抬高不是回调。
     a1 = 0.0
-    if feats.get("ema_bull"):
-        a1 += 0.35
-    if feats.get("hh_hl"):
-        a1 += 0.25
-    if "15m_higher_low" in sig:
-        a1 += 0.2
-    if feats.get("vol_shrink_pullback"):
+    if feats.get("pullback_from_high") and not bounce_short_story:
+        if feats.get("ema_bull"):
+            a1 += 0.35
+        if feats.get("hh_hl"):
+            a1 += 0.25
+        if "15m_higher_low" in sig:
+            a1 += 0.2
+        if feats.get("vol_shrink_pullback"):
+            a1 += 0.15
+        if "rsi_1h_healthy_long" in sig:
+            a1 += 0.1
         a1 += 0.15
-    if "rsi_1h_healthy_long" in sig:
-        a1 += 0.1
-    if a1 >= 0.5:
-        scored.append(("A1", a1, a1 >= 0.7))
+        if a1 >= 0.60 and feats.get("ema_bull"):
+            a1_conf = bool(a1 >= 0.80 and feats.get("hh_hl") and feats.get("h1_side") != "SHORT")
+            scored.append(("A1", min(1.0, a1), a1_conf))
 
     # A2 空头趋势反抽：下降结构中出现缩量反抽，并在前高/EMA 被拒绝
     a2 = 0.0
@@ -419,6 +473,8 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         a2 += 0.20
     if "rsi_1h_healthy_short" in sig:
         a2 += 0.10
+    if feats.get("bounce_from_low"):
+        a2 += 0.15
     a2_bounce_reject = bool(
         ("15m_lower_high" in sig or feats.get("vol_shrink_pullback"))
         and ("ema_reject" in sig or feats.get("long_upper_wick"))
@@ -506,14 +562,15 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
 
     # B4 暴涨回踩有力
     b4 = 0.0
-    if feats.get("pump_spike") or (feats.get("ema_bull") and feats.get("h1_side") == "LONG"):
-        b4 += 0.25
-    if feats.get("vol_shrink_pullback") and "15m_higher_low" in sig:
-        b4 += 0.35
-    if feats.get("vol_up") and "ema_reclaim" in sig:
-        b4 += 0.3
-    if b4 >= 0.55:
-        scored.append(("B4", b4, bool(feats.get("vol_up"))))
+    if not bounce_short_story and feats.get("pullback_from_high"):
+        if feats.get("pump_spike") or (feats.get("ema_bull") and feats.get("h1_side") == "LONG"):
+            b4 += 0.25
+        if feats.get("vol_shrink_pullback") and "15m_higher_low" in sig:
+            b4 += 0.35
+        if feats.get("vol_up") and "ema_reclaim" in sig:
+            b4 += 0.3
+        if b4 >= 0.55:
+            scored.append(("B4", b4, bool(feats.get("vol_up"))))
 
     # C1 向下破位：刚破位且放量/急跌 → 当根确认、跟风做空（不等回抽）
     if feats.get("break_support") and (feats.get("vol_down") or feats.get("ema_bear") or feats.get("impulse_down") or feats.get("crash_spike")):
@@ -650,6 +707,9 @@ def classify_playbook(
         if h1 in ("LONG", "SHORT") and side in ("LONG", "SHORT") and side != h1:
             continue
         filtered.append((pb, sc, conf))
+
+    if feats.get("bounce_from_low") and not feats.get("pullback_from_high"):
+        filtered = [(p, s, c) for p, s, c in filtered if p not in ("A1", "B4")]
 
     if not filtered:
         return {

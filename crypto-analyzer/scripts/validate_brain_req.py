@@ -541,6 +541,105 @@ def test_playbook_impulse_c3() -> None:
     _ok("playbook impulse C3")
 
 
+def _bar(p: float, vol: float = 500.0, hi: float = 0.08, lo: float = 0.08) -> dict:
+    return {
+        "open_price": p - 0.02,
+        "high_price": p + hi,
+        "low_price": p - lo,
+        "close_price": p,
+        "volume": vol,
+    }
+
+
+def test_playbook_bounce_is_not_a1() -> None:
+    from app.services.brain_playbook import classify_playbook
+    from app.services.entry_timing import compute_pullback_entry
+
+    rows_1h = []
+    p = 100.0
+    for i in range(180):
+        p += 0.12
+        rows_1h.append(_bar(p, vol=1000 + i, hi=0.2, lo=0.2))
+
+    rows_15m = []
+    q = 118.0
+    for _ in range(96):
+        q += 0.04
+        rows_15m.append(_bar(q, vol=800, hi=0.08, lo=0.06))
+    for _ in range(8):
+        q -= 0.35
+        rows_15m.append(_bar(q, vol=1600, hi=0.04, lo=0.18))
+    dump_low = q
+    for _ in range(8):
+        q += 0.22
+        rows_15m.append(_bar(q, vol=350, hi=0.10, lo=0.03))
+    assert q > dump_low
+
+    out = classify_playbook(
+        rows_1h,
+        rows_15m,
+        big4={"big4_ok": True, "bias": "LONG"},
+        win_prob_long=0.62,
+        win_prob_short=0.40,
+    )
+    assert "15m_bounce_from_low" in out["signals"], out["signals"]
+    assert out["playbook"] != "A1", out
+    assert out["side"] != "LONG" or out["playbook"] not in {"A1", "B4"}, out
+
+    bounce_entry = compute_pullback_entry(
+        "LONG",
+        "A1",
+        rows_15m,
+        playbook_row={
+            "signals": [
+                "ema_bull_align", "hh_hl", "15m_higher_low",
+                "volume_shrink_pullback", "15m_bounce_from_low",
+            ]
+        },
+        ref_price=rows_15m[-1]["close_price"],
+    )
+    assert bounce_entry.ready is False, bounce_entry
+    assert bounce_entry.reason == "bounce_not_pullback", bounce_entry
+    _ok("dump+bounce is not A1 LONG; entry veto bounce_not_pullback")
+
+
+def test_playbook_real_pullback_still_a1() -> None:
+    from app.services.brain_playbook import classify_playbook
+
+    rows_1h = []
+    p = 100.0
+    for i in range(180):
+        p += 0.12
+        rows_1h.append(_bar(p, vol=1000 + i, hi=0.2, lo=0.2))
+
+    rows_15m = []
+    q = 118.0
+    for _ in range(88):
+        q += 0.03
+        rows_15m.append(_bar(q, vol=800, hi=0.08, lo=0.05))
+    window_low = q
+    for _ in range(8):
+        q += 0.40
+        rows_15m.append(_bar(q, vol=900, hi=0.10, lo=0.05))
+    peak = q
+    floor = window_low * 1.01
+    for i in range(8):
+        q = peak - (peak - floor) * ((i + 1) / 8.0)
+        rows_15m.append(_bar(q, vol=260, hi=0.03, lo=0.08))
+
+    out = classify_playbook(
+        rows_1h,
+        rows_15m,
+        big4={"big4_ok": True, "bias": "LONG"},
+        win_prob_long=0.62,
+        win_prob_short=0.40,
+    )
+    assert "15m_pullback_from_high" in out["signals"], out["signals"]
+    assert out["playbook"] == "A1", out
+    assert out["side"] == "LONG", out
+    _ok("real 15m pullback from high still A1")
+
+
 def test_directional_gate() -> None:
     from app.services.brain_winrate import directional_open_allowed
 
@@ -1250,6 +1349,8 @@ def main() -> int:
     test_winrate_forward()
     test_playbook_classify()
     test_playbook_impulse_c3()
+    test_playbook_bounce_is_not_a1()
+    test_playbook_real_pullback_still_a1()
     test_directional_gate()
     test_brain_market_regime()
     test_tick_config()

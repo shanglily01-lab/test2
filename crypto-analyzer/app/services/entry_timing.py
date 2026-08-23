@@ -50,6 +50,9 @@ C3_MISSED_BREAK_PCT = 1.40
 C3_BLOWOFF_SIGNALS = frozenset({"rsi_extreme_high", "near_7d_high"})
 C3_STALL_SIGNALS = frozenset({"stall_at_high", "top_callback", "long_upper_wick"})
 A1_STALL_SIGNALS = frozenset({"15m_lower_high", "top_callback", "stall_at_high", "near_7d_high"})
+A1_BOUNCE_NOT_PULLBACK = frozenset({
+    "15m_bounce_from_low", "ema_reject", "top_callback", "long_upper_wick",
+})
 
 
 def _f(v: Any, default: float = 0.0) -> float:
@@ -169,6 +172,30 @@ def _signals_of(playbook_row: Optional[Dict[str, Any]]) -> set:
     feats = row.get("features") or {}
     raw = list(row.get("signals") or feats.get("signals") or [])
     return {str(s) for s in raw}
+
+
+def _is_bounce_from_low(rows_15m: List[Dict[str, Any]], sig: set) -> bool:
+    """反弹（从低点抬起）不是回调。有明确回踩标则不算。"""
+    if "15m_pullback_from_high" in sig:
+        return False
+    if "15m_bounce_from_low" in sig:
+        return True
+    if bool(sig & A1_BOUNCE_NOT_PULLBACK) and "15m_higher_low" in sig:
+        return True
+    if len(rows_15m) < 16:
+        return False
+    h = _highs(rows_15m)
+    lows = _lows(rows_15m)
+    c = _closes(rows_15m)
+    win_hi = max(h[-16:])
+    win_lo = min(lows[-16:])
+    hi_pos = max(i for i, x in enumerate(h[-16:]) if abs(x - win_hi) <= 1e-12)
+    lo_pos = max(i for i, x in enumerate(lows[-16:]) if abs(x - win_lo) <= 1e-12)
+    close = c[-1]
+    if close <= 0 or win_lo <= 0:
+        return False
+    off_low = (close - win_lo) / win_lo * 100.0 >= 0.25
+    return lo_pos > hi_pos and off_low
 
 
 def _upper_wick_ratio(row: Dict[str, Any]) -> float:
@@ -739,6 +766,14 @@ def compute_pullback_entry(
         if target >= price:
             target = price * (1.0 - ENTRY_READY_OFFSET_PCT / 100.0)
         offset = _clamp((price - target) / price * 100.0, ENTRY_OFFSET_MIN_PCT, ENTRY_OFFSET_MAX_PCT)
+        if pb in {"A1", "B4"} and _is_bounce_from_low(rows_15m, sig):
+            return EntryTiming(
+                ready=False, status="wait_pullback",
+                reason="bounce_not_pullback",
+                limit_offset_pct=ENTRY_READY_OFFSET_PCT, limit_price=None,
+                zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+                break_level=break_level, extended=extended, bounce_ok=False,
+            )
         if still_at_high:
             return EntryTiming(
                 ready=False, status="wait_pullback",

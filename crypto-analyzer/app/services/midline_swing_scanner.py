@@ -358,15 +358,32 @@ def _breakout_action_opportunity(
             "entry_fresh": entry_fresh,
         }
         if playbook_u == "A1":
-            structure_ok = (
-                (evidence["ema_bull"] and (evidence["hh_hl"] or evidence["higher_low"]))
-                or token_aligned
+            bounce_not_pullback = (
+                "15m_bounce_from_low" in signals
+                and "15m_pullback_from_high" not in signals
+            ) or bool(features.get("bounce_from_low") and not features.get("pullback_from_high"))
+            pullback = (
+                "15m_pullback_from_high" in signals
+                or bool(features.get("pullback_from_high"))
             )
-            force_ok = (
-                (evidence["token_aligned"] and (evidence["volume_expand_up"] or evidence["volume_shrink_pullback"]))
-                or edge >= 0.90
-                or evidence["higher_low"]
-            )
+            if bounce_not_pullback or not pullback:
+                evidence["bounce_not_pullback"] = bounce_not_pullback
+                evidence["pullback_from_high"] = pullback
+                detail["evidence"] = evidence
+                detail["reason"] = (
+                    "bounce_not_pullback" if bounce_not_pullback else "a1_needs_pullback_from_high"
+                )
+                return detail
+            else:
+                structure_ok = (
+                    evidence["ema_bull"]
+                    and (evidence["hh_hl"] or evidence["higher_low"])
+                ) or token_aligned
+                force_ok = (
+                    (evidence["token_aligned"] and (evidence["volume_expand_up"] or evidence["volume_shrink_pullback"]))
+                    or edge >= 0.90
+                    or evidence["higher_low"]
+                )
         else:
             structure_ok = evidence["break_resistance"] or evidence["h1_breakout_up"] or evidence["impulse_up"] or evidence["higher_low"]
             force_ok = evidence["volume_expand_up"] or evidence["impulse_up"] or evidence["token_aligned"]
