@@ -9,6 +9,8 @@ SHORT bounce (A2): sell the 15m bounce into EMA / prior high after a real reject
 
 Used by BRAIN and midline/breakout. Direction can already be right; this module
 only answers "is this the buy/sell point, and where to rest the limit".
+15m RSI times the entry (not the direction): skip still-hot longs and still-rising
+exhaustion shorts.
 """
 from __future__ import annotations
 
@@ -48,6 +50,11 @@ SHORT_STILL_AT_LOW_PCT = 0.25
 C3_PRE_BREAK_EXCLUDE_BARS = 8
 C3_MISSED_BREAK_PCT = 1.40
 C3_BLOWOFF_SIGNALS = frozenset({"rsi_extreme_high", "near_7d_high"})
+# 15m RSI 开仓时机（不定方向；方向仍由 15m 结构定，INV-08）
+RSI_LONG_HOT = 68.0
+RSI_SHORT_COLD = 32.0
+RSI_OVERBOUGHT = 65.0
+RSI_TURN_DELTA = 3.0
 C3_STALL_SIGNALS = frozenset({"stall_at_high", "top_callback", "long_upper_wick"})
 A1_STALL_SIGNALS = frozenset({"15m_lower_high", "top_callback", "stall_at_high", "near_7d_high"})
 A1_BOUNCE_NOT_PULLBACK = frozenset({
@@ -130,6 +137,61 @@ def _rsi(closes: List[float], period: int = 14) -> Optional[float]:
         return 100.0
     rs = avg_gain / avg_loss
     return 100.0 - (100.0 / (1.0 + rs))
+
+
+def _rsi_pair(closes: List[float]) -> Tuple[Optional[float], Optional[float]]:
+    now = _rsi(closes, 14)
+    prev = _rsi(closes[:-3], 14) if len(closes) > 20 else None
+    return now, prev
+
+
+def long_rsi_entry_ok(closes: List[float], signals: Optional[Sequence[str]] = None) -> Tuple[bool, str]:
+    """做多时机：RSI 仍超买/还在下跌的超卖区则等；不定方向。"""
+    sig = {str(s) for s in (signals or [])}
+    now, prev = _rsi_pair(closes)
+    if now is None:
+        return True, "rsi_unknown"
+    turn_up = "rsi_15m_turn_up" in sig or (
+        prev is not None and prev <= 40.0 and now >= prev + RSI_TURN_DELTA
+    )
+    still_hot = (
+        now >= RSI_LONG_HOT
+        and (prev is None or now >= prev - 1.0)
+        and not turn_up
+    )
+    still_knife = (
+        now <= RSI_SHORT_COLD
+        and (prev is None or now <= prev)
+        and not turn_up
+    )
+    if still_hot:
+        return False, f"rsi_still_hot_{now:.0f}"
+    if still_knife:
+        return False, f"rsi_still_oversold_{now:.0f}"
+    return True, f"rsi_ok_{now:.0f}"
+
+
+def short_exhaustion_rsi_ok(
+    closes: List[float], signals: Optional[Sequence[str]] = None,
+) -> Tuple[bool, str]:
+    """摸顶空时机：等 15m RSI 从超买拐头；已超卖则过晚。"""
+    sig = {str(s) for s in (signals or [])}
+    now, prev = _rsi_pair(closes)
+    if now is None:
+        return True, "rsi_unknown"
+    turn_down = "rsi_15m_turn_down" in sig or (
+        prev is not None and prev >= RSI_OVERBOUGHT and now <= prev - RSI_TURN_DELTA
+    )
+    if now <= RSI_SHORT_COLD and not turn_down:
+        return False, f"rsi_already_oversold_{now:.0f}"
+    still_rising = (
+        now >= RSI_OVERBOUGHT
+        and (prev is None or now >= prev - 0.8)
+        and not turn_down
+    )
+    if still_rising:
+        return False, f"rsi_still_rising_{now:.0f}"
+    return True, f"rsi_ok_{now:.0f}"
 
 
 @dataclass
@@ -371,6 +433,8 @@ def _exhaustion_short_entry(
         or last_is_reject
         or ("callback" in hits and last_close_loc <= 0.50)
     )
+    c = _closes(rows_15m)
+    rsi_ok, rsi_why = short_exhaustion_rsi_ok(c, sig)
 
     if price > recent_high * (1.0 + INVALIDATION_BUFFER) and accelerating:
         return EntryTiming(
@@ -396,6 +460,14 @@ def _exhaustion_short_entry(
             break_level=recent_high, extended=True, bounce_ok=False, mode="exhaustion",
         )
     if at_highs and stall_ok and callback_ok:
+        if not rsi_ok:
+            return EntryTiming(
+                ready=False, status="wait_stall",
+                reason=rsi_why,
+                limit_offset_pct=offset, limit_price=round(target, 8),
+                zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+                break_level=recent_high, extended=True, bounce_ok=False, mode="exhaustion",
+            )
         return EntryTiming(
             ready=True, status="exhaustion_ready",
             reason=f"top_callback:{hit_label}",
@@ -849,7 +921,17 @@ def compute_pullback_entry(
                 zone_low=zone_low, zone_high=zone_high, ema20=ema20,
                 break_level=break_level, extended=True, bounce_ok=bounce_ok,
             )
+        rsi_ok, rsi_why = long_rsi_entry_ok(c, sig)
         if in_zone and bounce_ok:
+            if not rsi_ok:
+                return EntryTiming(
+                    ready=False, status="wait_bounce",
+                    reason=rsi_why,
+                    limit_offset_pct=min(offset, 0.55),
+                    limit_price=round(target, 8),
+                    zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+                    break_level=break_level, extended=False, bounce_ok=bounce_ok,
+                )
             return EntryTiming(
                 ready=True, status="pullback_ready",
                 reason="pullback_zone_bounce",
@@ -875,6 +957,15 @@ def compute_pullback_entry(
             and range_pos <= LONG_A1_NEAR_EMA_MAX_RANGE_POS
             and dist_from_high_pct >= LONG_STILL_AT_HIGH_PCT
         ):
+            if not rsi_ok:
+                return EntryTiming(
+                    ready=False, status="wait_pullback",
+                    reason=rsi_why,
+                    limit_offset_pct=min(offset, 0.55),
+                    limit_price=round(target, 8),
+                    zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+                    break_level=break_level, extended=False, bounce_ok=bounce_ok,
+                )
             return EntryTiming(
                 ready=True, status="pullback_ready",
                 reason="trend_pullback_near_ema",
@@ -973,6 +1064,20 @@ def compute_pullback_entry(
             break_level=break_level, extended=True, bounce_ok=bounce_ok,
         )
     if in_zone and bounce_ok:
+        now_rsi, prev_rsi = _rsi_pair(c)
+        if (
+            now_rsi is not None
+            and now_rsi <= RSI_SHORT_COLD
+            and (prev_rsi is None or now_rsi <= prev_rsi)
+        ):
+            return EntryTiming(
+                ready=False, status="wait_bounce",
+                reason=f"rsi_still_oversold_{now_rsi:.0f}",
+                limit_offset_pct=min(offset, 0.55),
+                limit_price=round(target, 8),
+                zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+                break_level=break_level, extended=False, bounce_ok=bounce_ok,
+            )
         return EntryTiming(
             ready=True, status="pullback_ready",
             reason="retest_zone_reject",

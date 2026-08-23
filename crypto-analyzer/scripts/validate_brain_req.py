@@ -1482,6 +1482,37 @@ def test_entry_timing_c3_midline_follow() -> None:
     _ok("midline C3 follows a fresh break; blowoff/extended chase blocked; BRAIN C3 still waits")
 
 
+def test_rsi_entry_timing() -> None:
+    from app.services.entry_timing import long_rsi_entry_ok, short_exhaustion_rsi_ok
+
+    hot = [100.0 + i * 0.6 for i in range(40)]
+    ok, why = long_rsi_entry_ok(hot, [])
+    assert ok is False and "rsi_still_hot" in why, (ok, why)
+
+    cooled = list(hot)
+    last = cooled[-1]
+    for i in range(1, 10):
+        cooled.append(last - i * 0.9)
+    ok2, why2 = long_rsi_entry_ok(cooled, [])
+    assert ok2 is True, (ok2, why2)
+
+    falling = [80.0 - i * 0.8 for i in range(40)]
+    sok, swhy = short_exhaustion_rsi_ok(falling, [])
+    assert sok is False and "rsi_already_oversold" in swhy, (sok, swhy)
+
+    rising = [100.0 + i * 0.7 for i in range(40)]
+    rok, rwhy = short_exhaustion_rsi_ok(rising, [])
+    assert rok is False and "rsi_still_rising" in rwhy, (rok, rwhy)
+
+    turned = list(rising)
+    peak = turned[-1]
+    for i in range(1, 6):
+        turned.append(peak - i * 1.2)
+    tok, twhy = short_exhaustion_rsi_ok(turned, ["rsi_15m_turn_down"])
+    assert tok is True, (tok, twhy)
+    _ok("15m RSI gates long-hot / short-rising timing")
+
+
 def main() -> int:
     print("=== validate_brain_req ===\n")
     test_imports_and_config()
@@ -1511,6 +1542,7 @@ def main() -> int:
     test_entry_timing_c1_follow()
     test_entry_timing_a2_b2_wait_for_reject()
     test_entry_timing_c3_midline_follow()
+    test_rsi_entry_timing()
     print()
     if _fail_n:
         print(f"FAILED {_fail_n}")
