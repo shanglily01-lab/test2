@@ -1,6 +1,6 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-08-23 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.51** 对齐  
+> 文档版本：2026-08-23 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.52** 对齐  
 > **给人看的对照**：[`BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`](./BRAIN_AND_BREAKOUT_OPERATOR_ZH.md)  
 > **合约自选 §7.5**：`/watchlist` 手动限价/市价；限价可撤；价格优先浏览器直连币安合约 WS，3s 无 tick 则服务端 1s 补价；`manual_watchlist` 随实盘总开关仅 L0，成交瞬间同步。  
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
@@ -10,7 +10,7 @@
 
 ## 1. 总览
 
-**主路径（已落地）**：REQ-BRAIN — **盈利 KPI**；A1 只认趋势新高回踩（`15m_trend_high_pullback`，回踩后抬起仍开）；无新高的反弹/不过前高打 B3，须拒绝 K 才空；Big4 LONG **禁 A2/B2、放行 B3/C4 滞涨空与 C1 破位跟风（小仓）**；A2/B2 仅非多头宏观精准确认后开空；LONG≥0.75 / SHORT≥0.90（C1 放量破位≥0.80）；**A1 豁免 5m**，其它 5m(40U/4根) + -80U + trail（soft 关；§7.3）。  
+**主路径（已落地）**：REQ-BRAIN — **盈利 KPI**；A1 只认趋势新高回踩（`15m_trend_high_pullback`，回踩后抬起仍开）；无新高的反弹/不过前高打 B3，须拒绝 K 才空；**B3 前提 Big4 不得 LONG**；Big4 LONG **禁 A2/B2/B3、放行 C4 假突与 C1 破位跟风（小仓）**；A2/B2 仅非多头宏观精准确认后开空；LONG≥0.75 / SHORT≥0.90（C1 放量破位≥0.80）；**A1 豁免 5m**，其它 5m(40U/4根) + -80U + trail（soft 关；§7.3）。  
 **并行已落地**：中线 v2（独立量化；持仓顾问 **只建议不执行**；多单回调买、B3/C4 冲高卖）。  
 **旧路径**：Gemini 交易已下线；DeepSeek 探索/预测自动开仓 **对照期暂保留**（与 BRAIN 并行对比；INV-BRAIN-07 暂缓）。
 
@@ -270,7 +270,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 6.5.1 职责
 
-`config.yaml` 交易对 + Playbook 破位/趋势扫描，**不调用 LLM 开仓**。**跳过**开仓顾问；**纳入** DeepSeek 持仓顾问（**sell 只建议不执行**）。Big4 已 LONG 时禁止 A2/B2，允许 B3/C4 顶部回调空与 C1 破位跟风。做多 A1 须 **15m 回调进区**；**C3/C1 破位当根市价跟风**；B2 须反抽失败后再市价跟；B3/C4 摸准顶部第一回调后市价空。A2 须离低点并拒绝才挂空。退出：硬 SL/TP + `midline_hold_exit`（峰 1.2% 锁利 / 回吐平）+ 4h/6h 到期；**不参与** SmartExit。
+`config.yaml` 交易对 + Playbook 破位/趋势扫描，**不调用 LLM 开仓**。**跳过**开仓顾问；**纳入** DeepSeek 持仓顾问（**sell 只建议不执行**）。Big4 已 LONG 时禁止 A2/B2/B3，允许 C4 假突空与 C1 破位跟风。做多 A1 须 **15m 回调进区**；**C3/C1 破位当根市价跟风**；B2 须反抽失败后再市价跟；B3/C4 摸准顶部第一回调后市价空。A2 须离低点并拒绝才挂空。退出：硬 SL/TP + `midline_hold_exit`（峰 1.2% 锁利 / 回吐平）+ 4h/6h 到期；**不参与** SmartExit。
 
 旧四路 `gemini/deepseek_midline_*`：**停调度并移除**。
 

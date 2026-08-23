@@ -269,7 +269,8 @@ def test_breakout_action_opportunity() -> None:
         global_name="BULL_TREND",
         entry_15m={"fresh_breakout": False},
     )
-    assert b3_vs_big4_long["should_open"] is True, b3_vs_big4_long
+    assert b3_vs_big4_long["should_open"] is False, b3_vs_big4_long
+    assert b3_vs_big4_long["reason"] == "big4_long_blocks_short", b3_vs_big4_long
 
     b3_failed_retest_only = _breakout_action_opportunity(
         side="SHORT",
@@ -293,11 +294,26 @@ def test_breakout_action_opportunity() -> None:
         signals={"15m_failed_retest", "long_upper_wick", "rsi_15m_turn_down"},
         features={"h1_side": "LONG", "m15_side": "LONG", "failed_retest": True},
         future_4h={"side": "FLAT", "score": 0.20},
+        big4_bias="FLAT",
+        global_name="TOKEN_DIVERGENCE",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert b3_failed_retest["should_open"] is True, b3_failed_retest
+
+    b3_failed_retest_vs_big4_long = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="B3",
+        edge=0.80,
+        confirmed=True,
+        signals={"15m_failed_retest", "long_upper_wick", "rsi_15m_turn_down"},
+        features={"h1_side": "LONG", "m15_side": "LONG", "failed_retest": True},
+        future_4h={"side": "FLAT", "score": 0.20},
         big4_bias="LONG",
         global_name="BULL_TREND",
         entry_15m={"fresh_breakout": False},
     )
-    assert b3_failed_retest["should_open"] is True, b3_failed_retest
+    assert b3_failed_retest_vs_big4_long["should_open"] is False, b3_failed_retest_vs_big4_long
+    assert b3_failed_retest_vs_big4_long["reason"] == "big4_long_blocks_short", b3_failed_retest_vs_big4_long
 
     still_long = _breakout_action_opportunity(
         side="SHORT",
@@ -377,7 +393,7 @@ def test_breakout_action_opportunity() -> None:
         a2_vs_big4_long["should_open"] is False
         and a2_vs_big4_long["reason"] == "big4_long_blocks_short"
     ), a2_vs_big4_long
-    _ok("C1/B3 catch pullback vs Big4 LONG; C3 follows breakout; A2 blocked; no-stall 4h long stays closed")
+    _ok("C1 catch vs Big4 LONG; B3 blocked while Big4 LONG; C3 follows breakout; A2 blocked")
 
 
 def test_midline_market_follow() -> None:

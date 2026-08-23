@@ -256,7 +256,7 @@ def _breakout_action_opportunity(
         "entry_15m": entry_15m,
     }
 
-    if bias_u == "LONG" and side_u == "SHORT" and playbook_u not in {"B3", "C4", "C1"}:
+    if bias_u == "LONG" and side_u == "SHORT" and playbook_u not in {"C4", "C1"}:
         detail["reason"] = "big4_long_blocks_short"
         return detail
 
@@ -424,7 +424,7 @@ def _breakout_action_opportunity(
         big4_bias in {"LONG", "SHORT"}
         and big4_bias != side_u
         and not token_aligned
-        and playbook_u not in {"B3", "C4", "C1"}
+        and playbook_u not in {"C4", "C1"}
     ):
         detail["reason"] = "big4_opposes_without_token_alignment"
         return detail
@@ -766,7 +766,7 @@ def evaluate_symbol_multiperiod(
     if playbook not in allowed_playbooks:
         out.update({"reason": f"playbook_{playbook}", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
-    if big4_bias == "LONG" and side == "SHORT" and playbook not in {"B3", "C4", "C1"}:
+    if big4_bias == "LONG" and side == "SHORT" and playbook not in {"C4", "C1"}:
         out.update({"reason": "big4_long_blocks_short", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
     has_break_signal = bool(signals & {
@@ -805,7 +805,7 @@ def evaluate_symbol_multiperiod(
     weak_big4_exhaustion_override = (
         not big4_ok
         and side == "SHORT"
-        and playbook in {"B3", "C4"}
+        and playbook == "C4"
         and confirmed
         and edge >= 0.75
         and bool(signals & {"exhaustion_up", "false_break_up"})

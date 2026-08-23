@@ -285,9 +285,9 @@ def brain_open_regime_decision(
     global_name = str(global_regime.get("global_regime") or GLOBAL_UNKNOWN)
     bias_u = str(big4.get("bias") or "").upper()
 
-    # v4.5.22: Big4 仍 LONG 时禁止 A2/B2 逆势摸空；允许高点滞涨 / 破位跟风抓回调。
+    # v4.5.52: Big4 仍 LONG 时禁止 A2/B2/B3 逆势摸空；允许 C4 假突与 C1 破位跟风。
     if side_u == "SHORT" and bias_u == "LONG":
-        if pb in {"B3", "C4"} and confirmed and edge >= 0.85 and _token_exhaustion_short(playbook_row):
+        if pb == "C4" and confirmed and edge >= 0.85 and _token_exhaustion_short(playbook_row):
             return RegimeDecision(
                 regime,
                 f"big4_long_allows_exhaustion_{pb}:{why}",

@@ -55,9 +55,9 @@ def _gate_lines(big4: dict, daily: dict) -> list:
     if not ok:
         lines.append("Big4 疲软：动量低且量能低，超级大脑默认少开。")
     if bias == "LONG":
-        lines.append("Big4 偏多：禁止 A2/B2 逆势摸空。")
+        lines.append("Big4 偏多：禁止 A2/B2/B3 逆势摸空（B3 只打标）。")
         lines.append("放行 A1 回踩、C3 突破（破位可市价跟，高潮不追）。")
-        lines.append("放行小仓 B3/C4 滞涨空、C1 破位空。")
+        lines.append("放行小仓 C4 假突空、C1 破位空。")
     elif bias == "SHORT":
         lines.append("Big4 偏空：禁止 A1 追多。")
         lines.append("可试 A2 弱反抽空、C1 破位空。")

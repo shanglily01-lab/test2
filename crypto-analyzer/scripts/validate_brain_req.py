@@ -252,7 +252,7 @@ def test_brain_skip_open_advisor() -> None:
     elif "big4_long_blocks_short" not in regime_src:
         _fail("BRAIN 未在 Big4 LONG 时阻断 A2/B2 逆势空")
     else:
-        _ok("Big4 LONG allows stall/breakdown shorts, blocks A2/B2")
+        _ok("Big4 LONG allows C4/C1 shorts, blocks A2/B2/B3")
     trail_mod = (ROOT / "app/services/brain_trail_exit.py").read_text(encoding="utf-8")
     if "check_brain_trail_lock" not in trail_mod or "check_brain_soft_no_follow" not in trail_mod:
         _fail("brain_trail_exit 缺 trail/soft")
@@ -913,7 +913,15 @@ def test_brain_market_regime() -> None:
         side="SHORT",
         playbook="B3",
     )
-    assert dec_b3_bull.margin_multiplier > 0 and "big4_long_allows_exhaustion_B3" in dec_b3_bull.reason
+    assert dec_b3_bull.margin_multiplier == 0 and "big4_long_blocks_short" in dec_b3_bull.reason
+
+    dec_b3_flat = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "FLAT", "bull_count": 1, "bear_count": 1},
+        playbook_row=b3_exh,
+        side="SHORT",
+        playbook="B3",
+    )
+    assert dec_b3_flat.margin_multiplier > 0, dec_b3_flat
 
     b3_pause = {
         "side": "SHORT",
