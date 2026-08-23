@@ -369,18 +369,26 @@ def _breakout_action_opportunity(
             "entry_fresh": entry_fresh,
         }
         if playbook_u == "A1":
+            trend_pull = (
+                "15m_trend_high_pullback" in signals
+                or bool(features.get("trend_high_pullback"))
+            )
             bounce_not_pullback = (
                 "15m_failed_retest" in signals
                 or bool(features.get("failed_retest"))
                 or (
-                    "15m_bounce_from_low" in signals
-                    and "15m_pullback_from_high" not in signals
+                    not trend_pull
+                    and (
+                        (
+                            "15m_bounce_from_low" in signals
+                            and "15m_pullback_from_high" not in signals
+                        )
+                        or bool(
+                            features.get("bounce_from_low")
+                            and not features.get("pullback_from_high")
+                        )
+                    )
                 )
-                or bool(features.get("bounce_from_low") and not features.get("pullback_from_high"))
-            )
-            trend_pull = (
-                "15m_trend_high_pullback" in signals
-                or bool(features.get("trend_high_pullback"))
             )
             pullback = (
                 trend_pull

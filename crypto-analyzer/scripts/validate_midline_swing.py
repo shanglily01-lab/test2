@@ -115,6 +115,31 @@ def test_breakout_action_opportunity() -> None:
     assert bounce_as_a1["should_open"] is False, bounce_as_a1
     assert bounce_as_a1["reason"] == "bounce_not_pullback", bounce_as_a1
 
+    a1_pull_bounce = _breakout_action_opportunity(
+        side="LONG",
+        playbook="A1",
+        edge=0.90,
+        confirmed=True,
+        signals={
+            "15m_higher_low", "volume_shrink_pullback",
+            "15m_bounce_from_low", "15m_trend_high_pullback",
+        },
+        features={
+            "h1_side": "LONG",
+            "m15_side": "LONG",
+            "ema_bull": True,
+            "hh_hl": True,
+            "vol_shrink_pullback": True,
+            "bounce_from_low": True,
+            "trend_high_pullback": True,
+        },
+        future_4h={"side": "LONG", "score": 0.62},
+        big4_bias="FLAT",
+        global_name="TOKEN_DIVERGENCE",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert a1_pull_bounce["should_open"] is True, a1_pull_bounce
+
     c3_h1 = _breakout_action_opportunity(
         side="LONG",
         playbook="C3",

@@ -1,6 +1,6 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-08-23 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.50** 对齐  
+> 文档版本：2026-08-23 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.51** 对齐  
 > **给人看的对照**：[`BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`](./BRAIN_AND_BREAKOUT_OPERATOR_ZH.md)  
 > **合约自选 §7.5**：`/watchlist` 手动限价/市价；限价可撤；价格优先浏览器直连币安合约 WS，3s 无 tick 则服务端 1s 补价；`manual_watchlist` 随实盘总开关仅 L0，成交瞬间同步。  
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
@@ -10,7 +10,7 @@
 
 ## 1. 总览
 
-**主路径（已落地）**：REQ-BRAIN — **盈利 KPI**；A1 只认趋势新高回踩（`15m_trend_high_pullback`）；反弹/不过前高打 B3，须拒绝 K 才空；Big4 LONG **禁 A2/B2、放行 B3/C4 滞涨空与 C1 破位跟风（小仓）**；A2/B2 仅非多头宏观精准确认后开空；LONG≥0.75 / SHORT≥0.90（C1 放量破位≥0.80）；**A1 豁免 5m**，其它 5m(40U/4根) + -80U + trail（soft 关；§7.3）。  
+**主路径（已落地）**：REQ-BRAIN — **盈利 KPI**；A1 只认趋势新高回踩（`15m_trend_high_pullback`，回踩后抬起仍开）；无新高的反弹/不过前高打 B3，须拒绝 K 才空；Big4 LONG **禁 A2/B2、放行 B3/C4 滞涨空与 C1 破位跟风（小仓）**；A2/B2 仅非多头宏观精准确认后开空；LONG≥0.75 / SHORT≥0.90（C1 放量破位≥0.80）；**A1 豁免 5m**，其它 5m(40U/4根) + -80U + trail（soft 关；§7.3）。  
 **并行已落地**：中线 v2（独立量化；持仓顾问 **只建议不执行**；多单回调买、B3/C4 冲高卖）。  
 **旧路径**：Gemini 交易已下线；DeepSeek 探索/预测自动开仓 **对照期暂保留**（与 BRAIN 并行对比；INV-BRAIN-07 暂缓）。
 

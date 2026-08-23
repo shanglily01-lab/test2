@@ -471,7 +471,7 @@ def _tag_trend_high_pullback(
     l15: List[float],
 ) -> None:
     """对近 32 根的趋势新高回踩：离开高点 0.80%–3.50%，且未破前段低点。"""
-    if feats.get("failed_retest") or feats.get("bounce_from_low"):
+    if feats.get("failed_retest"):
         return
     if not _is_trend_high_pullback_ohlc(c15, h15, l15):
         return
@@ -512,13 +512,16 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     sig = set(feats.get("signals") or [])
 
     bounce_not_pullback = bool(
-        feats.get("bounce_from_low") and not feats.get("pullback_from_high")
+        feats.get("bounce_from_low")
+        and not feats.get("pullback_from_high")
+        and not feats.get("trend_high_pullback")
     )
     bounce_short_story = bool(
         bounce_not_pullback
         or feats.get("failed_retest")
         or (
             feats.get("bounce_from_low")
+            and not feats.get("trend_high_pullback")
             and (
                 "ema_reject" in sig
                 or feats.get("top_callback")
@@ -530,12 +533,14 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         )
     )
 
-    # A1 只认：1h 上升结构 + 对趋势新高的缩量回踩。反弹 / 不过前高 / 破位阴跌不是 A1。
+    # A1 只认：1h 上升结构 + 对趋势新高的缩量回踩。回踩后从回踩低点抬起仍是 A1。
+    # 无趋势新高的死猫跳 / 不过前高 / 破位阴跌不是 A1。
     a1_ok = bool(
         feats.get("trend_high_pullback")
         and feats.get("ema_bull")
         and feats.get("hh_hl")
-        and not bounce_short_story
+        and not feats.get("failed_retest")
+        and not bounce_not_pullback
         and not feats.get("break_support")
         and not feats.get("vol_down")
         and not (feats.get("crash_spike") and feats.get("vol_down"))
@@ -802,7 +807,11 @@ def classify_playbook(
             continue
         filtered.append((pb, sc, conf))
 
-    if feats.get("bounce_from_low") and not feats.get("pullback_from_high"):
+    if (
+        feats.get("bounce_from_low")
+        and not feats.get("pullback_from_high")
+        and not feats.get("trend_high_pullback")
+    ):
         filtered = [(p, s, c) for p, s, c in filtered if p not in ("A1", "B4")]
     if feats.get("failed_retest"):
         filtered = [(p, s, c) for p, s, c in filtered if p not in ("A1", "B4")]

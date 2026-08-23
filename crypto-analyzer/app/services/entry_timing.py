@@ -176,7 +176,7 @@ def _signals_of(playbook_row: Optional[Dict[str, Any]]) -> set:
 
 
 def _is_trend_high_pullback(rows_15m: List[Dict[str, Any]], sig: set) -> bool:
-    if "15m_failed_retest" in sig or "15m_bounce_from_low" in sig:
+    if "15m_failed_retest" in sig:
         return False
     if "15m_trend_high_pullback" in sig:
         return True
@@ -204,8 +204,8 @@ def _is_trend_high_pullback(rows_15m: List[Dict[str, Any]], sig: set) -> bool:
 
 
 def _is_bounce_from_low(rows_15m: List[Dict[str, Any]], sig: set) -> bool:
-    """反弹（从低点抬起）不是回调。有明确回踩标则不算。"""
-    if "15m_pullback_from_high" in sig:
+    """无趋势新高时，从低点抬起不是回调。趋势新高回踩后的抬起仍是 A1。"""
+    if "15m_trend_high_pullback" in sig or "15m_pullback_from_high" in sig:
         return False
     if "15m_bounce_from_low" in sig:
         return True

@@ -640,6 +640,57 @@ def test_playbook_real_pullback_still_a1() -> None:
     _ok("real 15m pullback from high still A1")
 
 
+def test_playbook_pullback_then_bounce_still_a1() -> None:
+    """回踩后从回踩低点抬起仍是 A1，不能当成死猫跳否决。"""
+    from app.services.brain_playbook import classify_playbook
+    from app.services.entry_timing import compute_pullback_entry
+
+    rows_1h = []
+    p = 100.0
+    for i in range(180):
+        p += 0.12
+        rows_1h.append(_bar(p, vol=1000 + i, hi=0.2, lo=0.2))
+
+    rows_15m = []
+    q = 118.0
+    for _ in range(88):
+        q += 0.03
+        rows_15m.append(_bar(q, vol=800, hi=0.08, lo=0.05))
+    for _ in range(8):
+        q += 0.28
+        rows_15m.append(_bar(q, vol=900, hi=0.10, lo=0.05))
+    peak = q
+    floor = peak * 0.985
+    for i in range(8):
+        q = peak - (peak - floor) * ((i + 1) / 8.0)
+        rows_15m.append(_bar(q, vol=260, hi=0.04, lo=0.05))
+    for _ in range(3):
+        q += (peak - floor) * 0.10
+        rows_15m.append(_bar(q, vol=280, hi=0.04, lo=0.06))
+
+    out = classify_playbook(
+        rows_1h,
+        rows_15m,
+        big4={"big4_ok": True, "bias": "LONG"},
+        win_prob_long=0.62,
+        win_prob_short=0.40,
+    )
+    assert "15m_trend_high_pullback" in out["signals"], out["signals"]
+    assert "15m_bounce_from_low" in out["signals"], out["signals"]
+    assert out["playbook"] == "A1", out
+    assert out["side"] == "LONG", out
+
+    ready_or_wait = compute_pullback_entry(
+        "LONG",
+        "A1",
+        rows_15m,
+        playbook_row={"signals": list(out["signals"])},
+        ref_price=rows_15m[-1]["close_price"],
+    )
+    assert ready_or_wait.reason != "bounce_not_pullback", ready_or_wait
+    _ok("trend-high pullback then bounce from pull low is still A1")
+
+
 def _failed_retest_15m() -> list:
     rows = []
     q = 100.0
@@ -1433,6 +1484,7 @@ def main() -> int:
     test_playbook_impulse_c3()
     test_playbook_bounce_is_not_a1()
     test_playbook_real_pullback_still_a1()
+    test_playbook_pullback_then_bounce_still_a1()
     test_playbook_failed_retest_is_short()
     test_directional_gate()
     test_brain_market_regime()
