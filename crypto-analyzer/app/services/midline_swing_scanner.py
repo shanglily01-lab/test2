@@ -301,23 +301,29 @@ def _breakout_action_opportunity(
             ) if evidence[k]
         )
         reject_ok = (
-            evidence["failed_retest"]
-            or evidence["exhaustion_up"]
+            evidence["exhaustion_up"]
             or evidence["false_break_up"]
             or (
                 evidence["long_upper_wick"]
                 and (evidence["volume_diverge_bear"] or evidence["rsi_turn"])
             )
+            or (
+                evidence["failed_retest"]
+                and (
+                    evidence["long_upper_wick"]
+                    or evidence["rsi_turn"]
+                    or evidence["false_break_up"]
+                    or evidence["exhaustion_up"]
+                )
+            )
         )
-        if evidence["failed_retest"]:
-            stall_n = max(stall_n, 2)
         structure_ok = reject_ok and stall_n >= 2
         force_ok = (
-            evidence["failed_retest"]
-            or evidence["pump_spike"]
+            evidence["pump_spike"]
             or evidence["stall_at_high"]
             or evidence["exhaustion_up"]
             or evidence["false_break_up"]
+            or (evidence["failed_retest"] and reject_ok)
         )
         if (
             future_side == "LONG"

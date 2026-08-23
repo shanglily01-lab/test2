@@ -395,9 +395,6 @@ def _exhaustion_short_entry(
             zone_low=zone_low, zone_high=zone_high, ema20=ema20,
             break_level=recent_high, extended=True, bounce_ok=False, mode="exhaustion",
         )
-    if "15m_failed_retest" in sig and at_highs:
-        stall_ok = True
-        callback_ok = True
     if at_highs and stall_ok and callback_ok:
         return EntryTiming(
             ready=True, status="exhaustion_ready",

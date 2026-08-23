@@ -246,12 +246,26 @@ def test_breakout_action_opportunity() -> None:
     )
     assert b3_vs_big4_long["should_open"] is True, b3_vs_big4_long
 
-    b3_failed_retest = _breakout_action_opportunity(
+    b3_failed_retest_only = _breakout_action_opportunity(
         side="SHORT",
         playbook="B3",
         edge=0.80,
         confirmed=True,
         signals={"15m_failed_retest"},
+        features={"h1_side": "LONG", "m15_side": "LONG", "failed_retest": True},
+        future_4h={"side": "FLAT", "score": 0.20},
+        big4_bias="LONG",
+        global_name="BULL_TREND",
+        entry_15m={"fresh_breakout": False},
+    )
+    assert b3_failed_retest_only["should_open"] is False, b3_failed_retest_only
+
+    b3_failed_retest = _breakout_action_opportunity(
+        side="SHORT",
+        playbook="B3",
+        edge=0.80,
+        confirmed=True,
+        signals={"15m_failed_retest", "long_upper_wick", "rsi_15m_turn_down"},
         features={"h1_side": "LONG", "m15_side": "LONG", "failed_retest": True},
         future_4h={"side": "FLAT", "score": 0.20},
         big4_bias="LONG",

@@ -691,16 +691,35 @@ def test_playbook_failed_retest_is_short() -> None:
     assert a1_block.ready is False, a1_block
     assert a1_block.reason == "failed_retest_short", a1_block
 
-    short_ready = compute_pullback_entry(
+    short_wait = compute_pullback_entry(
         "SHORT",
         "B3",
         rows_15m,
         playbook_row={"signals": ["15m_failed_retest", "15m_lower_high"]},
         ref_price=rows_15m[-1]["close_price"],
     )
+    assert short_wait.ready is False, short_wait
+    assert short_wait.status in {"wait_stall", "missed_high"}, short_wait
+
+    peak = max(float(r["high_price"]) for r in rows_15m[-8:])
+    reject_close = peak * (1.0 - 0.0035)
+    rows_reject = list(rows_15m) + [{
+        "open_price": peak * 0.999,
+        "high_price": peak * 1.0004,
+        "low_price": reject_close * 0.997,
+        "close_price": reject_close,
+        "volume": 520,
+    }]
+    short_ready = compute_pullback_entry(
+        "SHORT",
+        "B3",
+        rows_reject,
+        playbook_row={"signals": ["15m_failed_retest", "15m_lower_high", "long_upper_wick"]},
+        ref_price=reject_close,
+    )
     assert short_ready.ready is True, short_ready
     assert short_ready.status == "exhaustion_ready", short_ready
-    _ok("prior high then lower high is B3 SHORT, not A1")
+    _ok("prior high then lower high is B3 SHORT, not A1; reject K still opens")
 
 
 def test_directional_gate() -> None:
