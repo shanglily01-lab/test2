@@ -619,13 +619,13 @@ def test_playbook_real_pullback_still_a1() -> None:
         rows_15m.append(_bar(q, vol=800, hi=0.08, lo=0.05))
     window_low = q
     for _ in range(8):
-        q += 0.40
+        q += 0.28
         rows_15m.append(_bar(q, vol=900, hi=0.10, lo=0.05))
     peak = q
-    floor = window_low * 1.01
-    for i in range(8):
-        q = peak - (peak - floor) * ((i + 1) / 8.0)
-        rows_15m.append(_bar(q, vol=260, hi=0.03, lo=0.08))
+    floor = peak * 0.985
+    for i in range(10):
+        q = peak - (peak - floor) * ((i + 1) / 10.0)
+        rows_15m.append(_bar(q, vol=260, hi=0.04, lo=0.05))
 
     out = classify_playbook(
         rows_1h,
@@ -634,10 +634,73 @@ def test_playbook_real_pullback_still_a1() -> None:
         win_prob_long=0.62,
         win_prob_short=0.40,
     )
-    assert "15m_pullback_from_high" in out["signals"], out["signals"]
+    assert "15m_trend_high_pullback" in out["signals"], out["signals"]
     assert out["playbook"] == "A1", out
     assert out["side"] == "LONG", out
     _ok("real 15m pullback from high still A1")
+
+
+def _failed_retest_15m() -> list:
+    rows = []
+    q = 100.0
+    for _ in range(40):
+        q += 0.02
+        rows.append(_bar(q, vol=700, hi=0.06, lo=0.04))
+    for _ in range(8):
+        q += 0.45
+        rows.append(_bar(q, vol=1400, hi=0.12, lo=0.04))
+    for _ in range(8):
+        q -= 0.28
+        rows.append(_bar(q, vol=1100, hi=0.04, lo=0.12))
+    for i in range(6):
+        q += 0.18
+        rows.append(_bar(q, vol=380, hi=0.22 if i == 5 else 0.08, lo=0.03))
+    return rows
+
+
+def test_playbook_failed_retest_is_short() -> None:
+    from app.services.brain_playbook import classify_playbook
+    from app.services.entry_timing import compute_pullback_entry
+
+    rows_1h = []
+    p = 100.0
+    for i in range(180):
+        p += 0.08
+        rows_1h.append(_bar(p, vol=1000 + i, hi=0.2, lo=0.2))
+    rows_15m = _failed_retest_15m()
+
+    out = classify_playbook(
+        rows_1h,
+        rows_15m,
+        big4={"big4_ok": True, "bias": "LONG"},
+        win_prob_long=0.62,
+        win_prob_short=0.40,
+    )
+    assert "15m_failed_retest" in out["signals"], out["signals"]
+    assert out["playbook"] != "A1", out
+    assert out["playbook"] == "B3", out
+    assert out["side"] == "SHORT", out
+
+    a1_block = compute_pullback_entry(
+        "LONG",
+        "A1",
+        rows_15m,
+        playbook_row={"signals": ["ema_bull_align", "hh_hl", "15m_failed_retest"]},
+        ref_price=rows_15m[-1]["close_price"],
+    )
+    assert a1_block.ready is False, a1_block
+    assert a1_block.reason == "failed_retest_short", a1_block
+
+    short_ready = compute_pullback_entry(
+        "SHORT",
+        "B3",
+        rows_15m,
+        playbook_row={"signals": ["15m_failed_retest", "15m_lower_high"]},
+        ref_price=rows_15m[-1]["close_price"],
+    )
+    assert short_ready.ready is True, short_ready
+    assert short_ready.status == "exhaustion_ready", short_ready
+    _ok("prior high then lower high is B3 SHORT, not A1")
 
 
 def test_directional_gate() -> None:
@@ -993,7 +1056,7 @@ def test_entry_timing_pullback() -> None:
 
     a1_ready = compute_pullback_entry(
         "LONG", "A1", pull,
-        playbook_row={"signals": ["ema_bull_align", "hh_hl", "volume_shrink_pullback", "15m_higher_low"]},
+        playbook_row={"signals": ["ema_bull_align", "hh_hl", "volume_shrink_pullback", "15m_higher_low", "15m_trend_high_pullback"]},
         ref_price=pull[-1]["close_price"],
     )
     assert a1_ready.ready is True, a1_ready
@@ -1351,6 +1414,7 @@ def main() -> int:
     test_playbook_impulse_c3()
     test_playbook_bounce_is_not_a1()
     test_playbook_real_pullback_still_a1()
+    test_playbook_failed_retest_is_short()
     test_directional_gate()
     test_brain_market_regime()
     test_tick_config()

@@ -292,6 +292,7 @@ def _breakout_action_opportunity(
             "lower_high": "15m_lower_high" in signals,
             "pump_spike": "pump_spike" in signals,
             "stop_new_high": "15m_stop_new_high" in signals,
+            "failed_retest": "15m_failed_retest" in signals or bool(features.get("failed_retest")),
         }
         stall_n = sum(
             1 for k in (
@@ -300,16 +301,20 @@ def _breakout_action_opportunity(
             ) if evidence[k]
         )
         reject_ok = (
-            evidence["exhaustion_up"]
+            evidence["failed_retest"]
+            or evidence["exhaustion_up"]
             or evidence["false_break_up"]
             or (
                 evidence["long_upper_wick"]
                 and (evidence["volume_diverge_bear"] or evidence["rsi_turn"])
             )
         )
+        if evidence["failed_retest"]:
+            stall_n = max(stall_n, 2)
         structure_ok = reject_ok and stall_n >= 2
         force_ok = (
-            evidence["pump_spike"]
+            evidence["failed_retest"]
+            or evidence["pump_spike"]
             or evidence["stall_at_high"]
             or evidence["exhaustion_up"]
             or evidence["false_break_up"]
@@ -359,31 +364,37 @@ def _breakout_action_opportunity(
         }
         if playbook_u == "A1":
             bounce_not_pullback = (
-                "15m_bounce_from_low" in signals
-                and "15m_pullback_from_high" not in signals
-            ) or bool(features.get("bounce_from_low") and not features.get("pullback_from_high"))
+                "15m_failed_retest" in signals
+                or bool(features.get("failed_retest"))
+                or (
+                    "15m_bounce_from_low" in signals
+                    and "15m_pullback_from_high" not in signals
+                )
+                or bool(features.get("bounce_from_low") and not features.get("pullback_from_high"))
+            )
+            trend_pull = (
+                "15m_trend_high_pullback" in signals
+                or bool(features.get("trend_high_pullback"))
+            )
             pullback = (
-                "15m_pullback_from_high" in signals
+                trend_pull
+                or "15m_pullback_from_high" in signals
                 or bool(features.get("pullback_from_high"))
             )
-            if bounce_not_pullback or not pullback:
+            evidence["trend_high_pullback"] = trend_pull
+            evidence["pullback_from_high"] = pullback
+            if bounce_not_pullback or not trend_pull:
                 evidence["bounce_not_pullback"] = bounce_not_pullback
-                evidence["pullback_from_high"] = pullback
                 detail["evidence"] = evidence
                 detail["reason"] = (
-                    "bounce_not_pullback" if bounce_not_pullback else "a1_needs_pullback_from_high"
+                    "bounce_not_pullback" if bounce_not_pullback else "a1_needs_trend_high_pullback"
                 )
                 return detail
-            else:
-                structure_ok = (
-                    evidence["ema_bull"]
-                    and (evidence["hh_hl"] or evidence["higher_low"])
-                ) or token_aligned
-                force_ok = (
-                    (evidence["token_aligned"] and (evidence["volume_expand_up"] or evidence["volume_shrink_pullback"]))
-                    or edge >= 0.90
-                    or evidence["higher_low"]
-                )
+            structure_ok = bool(evidence["ema_bull"] and evidence["hh_hl"])
+            force_ok = bool(
+                evidence["volume_shrink_pullback"]
+                or "long_lower_wick" in signals
+            )
         else:
             structure_ok = evidence["break_resistance"] or evidence["h1_breakout_up"] or evidence["impulse_up"] or evidence["higher_low"]
             force_ok = evidence["volume_expand_up"] or evidence["impulse_up"] or evidence["token_aligned"]

@@ -103,6 +103,10 @@ _SIGNAL_TOKEN_CN: dict[str, str] = {
     "h1_breakdown_down": "1h向下破位",
     "15m_higher_low": "15m抬高低点",
     "15m_lower_high": "15m降低高点",
+    "15m_failed_retest": "冲高不过前高",
+    "15m_pullback_from_high": "15m从高点回落",
+    "15m_bounce_from_low": "15m从低点反弹",
+    "15m_trend_high_pullback": "趋势新高回踩",
 }
 
 

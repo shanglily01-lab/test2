@@ -52,6 +52,7 @@ C3_STALL_SIGNALS = frozenset({"stall_at_high", "top_callback", "long_upper_wick"
 A1_STALL_SIGNALS = frozenset({"15m_lower_high", "top_callback", "stall_at_high", "near_7d_high"})
 A1_BOUNCE_NOT_PULLBACK = frozenset({
     "15m_bounce_from_low", "ema_reject", "top_callback", "long_upper_wick",
+    "15m_failed_retest",
 })
 
 
@@ -174,6 +175,34 @@ def _signals_of(playbook_row: Optional[Dict[str, Any]]) -> set:
     return {str(s) for s in raw}
 
 
+def _is_trend_high_pullback(rows_15m: List[Dict[str, Any]], sig: set) -> bool:
+    if "15m_failed_retest" in sig or "15m_bounce_from_low" in sig:
+        return False
+    if "15m_trend_high_pullback" in sig:
+        return True
+    if len(rows_15m) < 32:
+        return False
+    h = _highs(rows_15m)
+    lows = _lows(rows_15m)
+    c = _closes(rows_15m)
+    recent_hi = max(h[-16:])
+    older_hi = max(h[-32:-16])
+    close = c[-1]
+    if close <= 0 or recent_hi <= 0 or recent_hi < older_hi * 0.998:
+        return False
+    hi_pos = max(i for i, x in enumerate(h[-16:]) if abs(x - recent_hi) <= 1e-12)
+    if hi_pos >= 14:
+        return False
+    off = (recent_hi - close) / recent_hi * 100.0
+    if off < 0.80 or off > 3.50:
+        return False
+    prior_lo = min(lows[-32:-8])
+    pull_lo = min(lows[-16:])
+    if prior_lo > 0 and pull_lo < prior_lo * 0.998:
+        return False
+    return True
+
+
 def _is_bounce_from_low(rows_15m: List[Dict[str, Any]], sig: set) -> bool:
     """反弹（从低点抬起）不是回调。有明确回踩标则不算。"""
     if "15m_pullback_from_high" in sig:
@@ -265,8 +294,10 @@ def collect_stall_hits(
         hits.append("rsi")
     if "false_break_up" in sig:
         hits.append("false_break")
-    if "15m_lower_high" in sig or "ema_reject" in sig:
+    if "15m_lower_high" in sig or "ema_reject" in sig or "15m_failed_retest" in sig:
         hits.append("reject")
+    if "15m_failed_retest" in sig:
+        hits.append("no_new_high")
     if "stall_at_high" in sig or "15m_stop_new_high" in sig:
         hits.append("no_new_high")
     elif len(h) >= 8 and max(h[-3:]) <= max(h[-8:-3]) * 1.0015:
@@ -364,6 +395,9 @@ def _exhaustion_short_entry(
             zone_low=zone_low, zone_high=zone_high, ema20=ema20,
             break_level=recent_high, extended=True, bounce_ok=False, mode="exhaustion",
         )
+    if "15m_failed_retest" in sig and at_highs:
+        stall_ok = True
+        callback_ok = True
     if at_highs and stall_ok and callback_ok:
         return EntryTiming(
             ready=True, status="exhaustion_ready",
@@ -766,10 +800,26 @@ def compute_pullback_entry(
         if target >= price:
             target = price * (1.0 - ENTRY_READY_OFFSET_PCT / 100.0)
         offset = _clamp((price - target) / price * 100.0, ENTRY_OFFSET_MIN_PCT, ENTRY_OFFSET_MAX_PCT)
+        if pb in {"A1", "B4"} and "15m_failed_retest" in sig:
+            return EntryTiming(
+                ready=False, status="wait_pullback",
+                reason="failed_retest_short",
+                limit_offset_pct=ENTRY_READY_OFFSET_PCT, limit_price=None,
+                zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+                break_level=break_level, extended=extended, bounce_ok=False,
+            )
         if pb in {"A1", "B4"} and _is_bounce_from_low(rows_15m, sig):
             return EntryTiming(
                 ready=False, status="wait_pullback",
                 reason="bounce_not_pullback",
+                limit_offset_pct=ENTRY_READY_OFFSET_PCT, limit_price=None,
+                zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+                break_level=break_level, extended=extended, bounce_ok=False,
+            )
+        if pb in {"A1", "B4"} and not _is_trend_high_pullback(rows_15m, sig):
+            return EntryTiming(
+                ready=False, status="wait_pullback",
+                reason="not_trend_high_pullback",
                 limit_offset_pct=ENTRY_READY_OFFSET_PCT, limit_price=None,
                 zone_low=zone_low, zone_high=zone_high, ema20=ema20,
                 break_level=break_level, extended=extended, bounce_ok=False,

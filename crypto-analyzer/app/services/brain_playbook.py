@@ -100,6 +100,8 @@ def extract_features(
         "vol_shrink_pullback": False,
         "pullback_from_high": False,
         "bounce_from_low": False,
+        "failed_retest": False,
+        "trend_high_pullback": False,
         "hh_hl": False,
         "lh_ll": False,
         "stop_new_low": False,
@@ -172,6 +174,8 @@ def extract_features(
         if max(b) < max(a):
             signals.append("15m_lower_high")
         _tag_pullback_or_bounce(feats, signals, c15, h15, l15)
+        _tag_failed_retest(feats, signals, c15, h15, l15)
+        _tag_trend_high_pullback(feats, signals, c15, h15, l15)
         # stop new low: last 4 lows not below prior 8 min
         if min(c15[-4:]) >= min(c15[-12:-4]) * 0.999:
             feats["stop_new_low"] = True
@@ -418,6 +422,90 @@ def _tag_pullback_or_bounce(
         signals.append("15m_bounce_from_low")
 
 
+def _tag_failed_retest(
+    feats: Dict[str, Any],
+    signals: List[str],
+    c15: List[float],
+    h15: List[float],
+    l15: List[float],
+) -> None:
+    """已有高顶，回落后第二次冲高不过前高 → 做空，不是 A1 回踩。"""
+    if len(h15) < 32 or len(l15) < 32 or len(c15) < 32:
+        return
+    n = 48 if len(h15) >= 48 else 32
+    hs = h15[-n:]
+    ls = l15[-n:]
+    cs = c15[-n:]
+    prior_hi = max(hs[:-8])
+    if prior_hi <= 0:
+        return
+    prior_idx = max(i for i, x in enumerate(hs[:-8]) if abs(x - prior_hi) <= 1e-12)
+    if prior_idx + 4 >= n:
+        return
+    dip_idx = min(range(prior_idx + 1, n), key=lambda i: ls[i])
+    dip = ls[dip_idx]
+    if dip <= 0 or (prior_hi - dip) / prior_hi * 100.0 < 0.40:
+        return
+    if dip_idx >= n - 4:
+        return
+    second_hi = max(hs[dip_idx:])
+    second_idx = max(i for i in range(dip_idx, n) if abs(hs[i] - second_hi) <= 1e-12)
+    if second_idx - dip_idx < 3:
+        return
+    if (second_hi - dip) / dip * 100.0 < 0.28:
+        return
+    if second_hi >= prior_hi * 0.998:
+        return
+    close = cs[-1]
+    if close <= 0 or (second_hi - close) / second_hi * 100.0 > 1.80:
+        return
+    feats["failed_retest"] = True
+    signals.append("15m_failed_retest")
+
+
+def _tag_trend_high_pullback(
+    feats: Dict[str, Any],
+    signals: List[str],
+    c15: List[float],
+    h15: List[float],
+    l15: List[float],
+) -> None:
+    """对近 32 根的趋势新高回踩：离开高点 0.80%–3.50%，且未破前段低点。"""
+    if feats.get("failed_retest") or feats.get("bounce_from_low"):
+        return
+    if not _is_trend_high_pullback_ohlc(c15, h15, l15):
+        return
+    feats["trend_high_pullback"] = True
+    signals.append("15m_trend_high_pullback")
+
+
+def _is_trend_high_pullback_ohlc(
+    c15: List[float],
+    h15: List[float],
+    l15: List[float],
+) -> bool:
+    if len(h15) < 32 or len(l15) < 32 or len(c15) < 32:
+        return False
+    recent_hi = max(h15[-16:])
+    older_hi = max(h15[-32:-16])
+    close = c15[-1]
+    if close <= 0 or recent_hi <= 0:
+        return False
+    if recent_hi < older_hi * 0.998:
+        return False
+    hi_pos = max(i for i, x in enumerate(h15[-16:]) if abs(x - recent_hi) <= 1e-12)
+    if hi_pos >= 14:
+        return False
+    off = (recent_hi - close) / recent_hi * 100.0
+    if off < 0.80 or off > 3.50:
+        return False
+    prior_lo = min(l15[-32:-8])
+    pull_lo = min(l15[-16:])
+    if prior_lo > 0 and pull_lo < prior_lo * 0.998:
+        return False
+    return True
+
+
 def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     """返回 [(playbook, score, confirmed), ...] 按 score 降序。"""
     scored: List[Tuple[str, float, bool]] = []
@@ -428,6 +516,7 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     )
     bounce_short_story = bool(
         bounce_not_pullback
+        or feats.get("failed_retest")
         or (
             feats.get("bounce_from_low")
             and (
@@ -441,23 +530,23 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         )
     )
 
-    # A1 多头趋势回踩：必须从高点回落。低点反弹抬高不是回调。
-    a1 = 0.0
-    if feats.get("pullback_from_high") and not bounce_short_story:
-        if feats.get("ema_bull"):
-            a1 += 0.35
-        if feats.get("hh_hl"):
-            a1 += 0.25
-        if "15m_higher_low" in sig:
-            a1 += 0.2
-        if feats.get("vol_shrink_pullback"):
-            a1 += 0.15
+    # A1 只认：1h 上升结构 + 对趋势新高的缩量回踩。反弹 / 不过前高 / 破位阴跌不是 A1。
+    a1_ok = bool(
+        feats.get("trend_high_pullback")
+        and feats.get("ema_bull")
+        and feats.get("hh_hl")
+        and not bounce_short_story
+        and not feats.get("break_support")
+        and not feats.get("vol_down")
+        and not (feats.get("crash_spike") and feats.get("vol_down"))
+        and feats.get("h1_side") != "SHORT"
+        and (feats.get("vol_shrink_pullback") or feats.get("long_lower_wick"))
+    )
+    if a1_ok:
+        a1 = 0.86
         if "rsi_1h_healthy_long" in sig:
-            a1 += 0.1
-        a1 += 0.15
-        if a1 >= 0.60 and feats.get("ema_bull"):
-            a1_conf = bool(a1 >= 0.80 and feats.get("hh_hl") and feats.get("h1_side") != "SHORT")
-            scored.append(("A1", min(1.0, a1), a1_conf))
+            a1 = 0.93
+        scored.append(("A1", a1, True))
 
     # A2 空头趋势反抽：下降结构中出现缩量反抽，并在前高/EMA 被拒绝
     a2 = 0.0
@@ -474,6 +563,8 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     if "rsi_1h_healthy_short" in sig:
         a2 += 0.10
     if feats.get("bounce_from_low"):
+        a2 += 0.15
+    if feats.get("failed_retest"):
         a2 += 0.15
     a2_bounce_reject = bool(
         ("15m_lower_high" in sig or feats.get("vol_shrink_pullback"))
@@ -535,7 +626,7 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     ):
         scored.append(("B2", b2, bounce_failed and weak_n >= 2))
 
-    # B3 暴涨滞涨
+    # B3 暴涨滞涨 / 冲高不过前高
     b3 = 0.0
     if feats.get("pump_spike"):
         b3 += 0.35
@@ -549,16 +640,19 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         b3 += 0.2
     if feats.get("top_callback") or "top_callback" in sig:
         b3 += 0.15
-    if b3 >= 0.65:
+    if feats.get("failed_retest"):
+        b3 += 0.45
+    if b3 >= 0.65 or (feats.get("failed_retest") and b3 >= 0.45):
         b3_confirmed = bool(
-            feats.get("exhaustion_up")
+            feats.get("failed_retest")
+            or feats.get("exhaustion_up")
             or feats.get("false_break_up")
             or (
                 feats.get("top_callback")
                 and (feats.get("long_upper_wick") or "rsi_15m_turn_down" in sig)
             )
         )
-        scored.append(("B3", b3, b3_confirmed))
+        scored.append(("B3", min(1.0, b3), b3_confirmed))
 
     # B4 暴涨回踩有力
     b4 = 0.0
@@ -709,6 +803,8 @@ def classify_playbook(
         filtered.append((pb, sc, conf))
 
     if feats.get("bounce_from_low") and not feats.get("pullback_from_high"):
+        filtered = [(p, s, c) for p, s, c in filtered if p not in ("A1", "B4")]
+    if feats.get("failed_retest"):
         filtered = [(p, s, c) for p, s, c in filtered if p not in ("A1", "B4")]
 
     if not filtered:
