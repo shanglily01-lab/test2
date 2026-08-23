@@ -234,14 +234,12 @@ def create_paper_limit_order(
         return None
 
     from app.services.midline_swing_config import is_midline_source, get_midline_limit_offset_pct
-    from app.services.brain_config import is_brain_source, BRAIN_USE_MARKET_ENTRY
-    from app.services.watchlist_config import is_watchlist_source
+    from app.services.brain_config import is_brain_source
 
-    use_market = bool(force_market) or (is_brain_source(source) and BRAIN_USE_MARKET_ENTRY)
-    if use_market:
-        tag = "BRAIN" if is_brain_source(source) else "中线"
+    # v4.5.54：仅破位跟风（C1/C3/B2）允许市价；BRAIN / 摸顶限价不得走市价旁路
+    if force_market and not is_brain_source(source):
         logger.info(
-            f"[市价开仓] {symbol} {side} source={source}: {tag}跟风/顶部确认 "
+            f"[市价开仓] {symbol} {side} source={source}: 破位跟风 "
             f"(force_market={bool(force_market)})"
         )
         return _open_paper_market_position(
@@ -267,10 +265,12 @@ def create_paper_limit_order(
             account_id=account_id,
             failure_reason=failure_reason,
         )
+    if force_market and is_brain_source(source):
+        logger.warning(
+            f"[限价开仓] 忽略 BRAIN 市价请求 {symbol} {side} source={source}"
+        )
 
-    force_limit = (
-        is_brain_source(source) or is_midline_source(source) or is_watchlist_source(source)
-    )
+    force_limit = True
 
     if not is_paper_limit_entry_enabled() and not force_limit:
         return _open_paper_market_position(
@@ -298,9 +298,8 @@ def create_paper_limit_order(
         )
 
     if force_limit and not is_paper_limit_entry_enabled():
-        tag = "BRAIN" if is_brain_source(source) else "中线"
         logger.info(
-            f"[限价开仓] {symbol} {side} source={source}: {tag}策略强制限价 "
+            f"[限价开仓] {symbol} {side} source={source}: 策略强制限价 "
             f"(忽略 paper_limit_entry_enabled=0)"
         )
 
@@ -416,10 +415,9 @@ def create_paper_limit_order(
         "entry_reason": entry_reason,
         "signal_components": signal_components,
     }
-    # REQ-BRAIN INV-BRAIN-06：限价超时必须取消，禁止转市价
-    if is_brain_source(source) or is_watchlist_source(source):
-        meta["timeout_action"] = PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE
-        meta["forbid_market"] = True
+    # v4.5.53/54：限价超时必须取消，禁止转市价
+    meta["timeout_action"] = PAPER_LIMIT_TIMEOUT_ACTION_EXPIRE
+    meta["forbid_market"] = True
     if planned_close_time:
         meta["planned_close_time"] = planned_close_time.strftime("%Y-%m-%d %H:%M:%S")
 

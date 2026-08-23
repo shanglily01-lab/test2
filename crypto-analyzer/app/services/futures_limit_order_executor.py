@@ -286,9 +286,10 @@ class FuturesLimitOrderExecutor:
                     else:
                         try:
                             from app.services.brain_config import is_brain_source
-                            force_expire = is_brain_source(src)
+                            from app.services.midline_swing_config import is_midline_source
+                            force_expire = is_brain_source(src) or is_midline_source(src)
                         except Exception:
-                            force_expire = src.startswith('brain_')
+                            force_expire = src.startswith("brain_") or src.startswith("midline_")
                     timeout_action = (
                         'expire' if force_expire else get_paper_limit_timeout_action()
                     )

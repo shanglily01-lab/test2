@@ -1,6 +1,6 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.52
+**版本**: v4.5.54
 **日期**: 2026-08-23
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **合约自选（REQ-WATCHLIST §7.5）**：侧栏「我的自选」；用户加交易对；价格优先浏览器直连币安合约 **WS**，3s 无 tick 则服务端 DataHub/WS **1s 补价**；手动限价/市价（限价可撤）；成交走实时 ticker；实盘随 `live_trading_enabled`，**仅 L0**；成交瞬间同步，打开不回填。  
@@ -10,7 +10,8 @@
 > **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；扫描 **市值前 300**（`config.yaml` 按市值序）；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。  
 > **BRAIN v2 机会识别（§7.3.10–7.3.15）**：**已落地且开仓机会判定视为相对客观**；退出/风控见 §7.3.16。  
 > **C1 / A2 / B2（v4.5.17 / v4.5.36）**：C1 **破位当根跟风做空**（不等回抽）；A2 须真正离开低点并出现拒绝（上影 / EMA 打回 / 假突）才挂空；B2 须先有反抽再破起点/EMA 才跟风，禁止把第一根阴跌当 B2。  
-> **中线破位跟风（v4.5.23 / v4.5.25 / v4.5.36）**：中线是破位策略。C1/C3 **找到破位点即市价跟风**（禁止挂限价等回抽）；B2 须反抽失败后再市价跟；B3/C4 须摸准顶部第一回调再市价空。**C3 禁止 RSI 极端+贴近 7 日高市价追**；`missed_break` 用冲高前高点（近 8 根 15m 排除）；同币同向止盈后 **4h** 不得再开。BRAIN 仍强制限价（INV-11）。  
+> **策略限价 vs 破位市价（v4.5.54）**：A1/A2/B3/C4 与 BRAIN / DeepSeek **挂限价**，超时取消不转市价。破位 **C1/C3/B2 仍市价跟风**（当根跟上，不挂限价等回抽）。自选页用户手动市价、平仓 SL/TP、现货实盘同步仍可市价。  
+> **中线破位跟风（v4.5.23 / v4.5.25 / v4.5.36 / v4.5.54）**：中线是破位策略。C1/C3 **找到破位点即市价跟风**；B2 须反抽失败后再市价跟；B3/C4 须摸准顶部第一回调再**挂限价空**。**C3 禁止 RSI 极端+贴近 7 日高市价追**；`missed_break` 用冲高前高点（近 8 根 15m 排除）；同币同向止盈后 **4h** 不得再开。BRAIN 仍强制限价（INV-11）。  
 > **回调做空（v4.5.22 / v4.5.52）**：Big4 仍 LONG 时 **禁止 A2/B2/B3** 逆势摸空；**允许** C4 假突空（×0.20）与 C1 破位跟风（×0.35）。15m 须 `exhaustion_ready` / `breakdown_ready`。计划到期与顾问规则仍按 v4.5.19。  
 > **BRAIN 实盘（v4.5.21）**：`brain_swing` 加入 `LIVE_SYNC_SOURCES`；由 `live_trading_enabled` / `live_close_enabled` 控制；实盘开仓**仅 L0 白名单**（模拟仍扫 L0+L1）。成交瞬间同步，禁止回填历史仓。  
 > **B3 前提（v4.5.52）**：B3 仍打标，但 **Big4 仍 LONG 时不开空**（`big4_long_blocks_short`）。须大盘不再偏多，再等拒绝 K。C1 破位跟风、C4 假突仍可小仓。8/23 近 24h 破位 B3 37 笔 19%/−1419U。  
@@ -289,7 +290,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 
 | 参数 | 值 |
 |------|-----|
-| 限价偏移 | **A1/A2 仍限价**：做多回调区 / 做空反抽区；无区时回退 ±1%。**C1/C3/B2/B3/C4 市价跟风**（不挂限价） |
+| 限价偏移 | **A1/A2/B3/C4 限价**：做多回调区 / 做空反抽区或冲高区；无区时回退 ±1%。**C1/C3/B2 市价跟风**（不挂限价） |
 | 限价超时 | 扫描间隔×2（现网约 **30min**）；未成交取消 |
 | SL / TP | **止损 6%** / **止盈 3%** |
 | 计划持仓 | **按 Playbook**：C3/C1/B3/C4 **4h**；A1/A2 **6h**（到期若仍顺向且未回吐可延 **2h**） |
@@ -317,14 +318,14 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 - **做多（回踩企稳）**：现价落在近 30×1d 区间 **下 40%**，**或** 贴近近 10 日低点（≤低点×1.05）；且 15m 波幅收敛（≤前段 1.20）或近 3 收盘未持续创新低  
 - **做空（反抽滞涨）**：现价落在近 30×1d 区间 **上 40%**，**或** 贴近近 10 日高点；且 15m 缩量（≤前段 1.05）或近 3 收盘未持续创新高
 
-**（4）下单（v4.5.23 中线破位市价 + 顶部回调点）**
+**（4）下单（v4.5.23 / v4.5.54 中线破位市价 + 顶部限价）**
 
 方向对仍不够。实现：`entry_timing.compute_pullback_entry`（中线 C3 传 `follow_breakout=True`）。
 
 - **做多 C3（中线破位跟风）**：放量突破阻力/1h 突破当根 **市价跟进**（`breakout_ready`）。假突破收回 → `invalidated`；已延伸 ≥1.40%（相对 **冲高前高点**，近 8 根 15m 不计入，避免突破位跟着涨）→ `missed_break`。**`rsi_extreme_high` + `near_7d_high`**，或极端 RSI 叠加滞涨（`stall_at_high` / `top_callback` / `long_upper_wick`）→ `chase_blowoff`（禁止市价追）。BRAIN 的 C3 **仍等回踩**（INV-11 限价）。
 - **做多 A1（v4.5.49 / v4.5.51）**：须同时满足：1h EMA 多头 + HH/HL；15m **对近 32 根趋势新高回踩**（`15m_trend_high_pullback`：回踩的高点 ≥ 前 16 根高点，离高 **0.80%–3.50%**，未破前段低点）；缩量或下影；回到 EMA20 / 38–50% 区才挂限价。未就绪记 `wait_pullback` / `not_trend_high_pullback`。贴高浅跌、破位阴跌、`15m_higher_low` 单独都不够。**无趋势新高的从低点抬起** → `bounce_not_pullback`。**已有趋势新高回踩后的抬起仍是 A1**。**第二次冲高不过前高** → `failed_retest_short`（走 B3）。滞涨结构 → `stall_high_not_pullback`。
 - **同币止盈冷却（v4.5.25）**：同 symbol、同方向，近 **4h** 已平仓且 `realized_pnl>0` → 破位/BRAIN 均不得再开（`recent_tp_cooldown`）。去重仍拦当前持仓；止盈后再追由本条拦。
-- **做空 B3/C4（顶部回调点）**：先贴着近 8 根高点，再等 **第一根离开高点的拒绝/回调**：离高 **≥0.28%** 且收在 K 线下半（上影或阴线）。`15m_failed_retest` **只打标**，第二次顶上不得直接市价空；须同样离高拒绝才 `exhaustion_ready`。仍放量/收在上沿**破前顶** → `wait_stall`；只在高点横盘尚未真正离开 → `at_high_wait_first_callback`；已离高 ≥1.35% → `missed_high`。中线确认后 **市价空**；BRAIN 仍限价挂在高点上方 0.20–0.55%。**已有真实拒绝时允许 4h 仍偏多**；仅 `stall_at_high` / 停新高 / 贴 7 日高 / 单独不过前高 **不得**当衰竭。
+- **做空 B3/C4（顶部回调点）**：先贴着近 8 根高点，再等 **第一根离开高点的拒绝/回调**：离高 **≥0.28%** 且收在 K 线下半（上影或阴线）。`15m_failed_retest` **只打标**，第二次顶上不得直接空；须同样离高拒绝才 `exhaustion_ready`。仍放量/收在上沿**破前顶** → `wait_stall`；只在高点横盘尚未真正离开 → `at_high_wait_first_callback`；已离高 ≥1.35% → `missed_high`。中线确认后 **挂限价空**；BRAIN 仍限价挂在高点上方 0.20–0.55%。**已有真实拒绝时允许 4h 仍偏多**；仅 `stall_at_high` / 停新高 / 贴 7 日高 / 单独不过前高 **不得**当衰竭。
 - **做空 C1（破位跟风）**：刚跌破支撑且放量/急跌 → **当根跟风**（`breakdown_ready`），不等回抽。中线 **市价**；BRAIN 仍限价贴近破位价。假跌破收回 → `invalidated`。
 - **做空 B2（弱反抽失败）**：禁止与 C1 共用「第一根阴跌即跟」。须先出现反抽（近 8 根高低差 ≥0.50%），反抽无力（缩量/上影/EMA 拒绝），再跌破反抽起点或 EMA 才 `breakdown_ready`。纯追跌无反抽 → `need_bounce_before_fail`（那是 C1 的活）。中线确认后 **市价**；BRAIN 仍限价。
 - **做空 A2（弱反抽）**：须先离开近 8 根低点 ≥**0.25%** 进入 EMA / 38–50% 反抽区，且出现真实拒绝（长上影 / `ema_reject` / 假突破 / RSI 拐头）才挂空。`volume_shrink_pullback` / `15m_lower_high` 单独不够。贴着低点阴跌 → `still_at_low_wait_bounce`。
@@ -428,7 +429,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
   → OPENED = 已挂 PENDING 限价；成交后才生成持仓
 ```
 
-**入场（v4.5.25 / v4.5.35 / v4.5.36 / v4.5.47）**：BRAIN 的 C3 confirmed 仍须回踩；**多单距近 8 根 15m 高点 ≤0.80% 不得挂**；A1 滞涨结构不得当回踩，浅缩量也不得当回踩；**从低点反弹不得当 A1 回踩**（须 `15m_pullback_from_high`）。C1 **破位当根跟风**。B2 **须先反抽再失败**。A2 须离低点并出现拒绝。B3/C4 卖顶部第一回调。C4 打标须假突 +（上影 / 缩量 / 衰竭），仅 `stall_at_high` 不够。中线 C3/C1/B3/C4 **市价跟风**（§7.2），B2 市价仅在反抽失败后；C3 **不得**在 RSI 极端+7 日高追价；突破延伸按冲高前高点计。同币同向止盈后 4h 冷却。BRAIN **等到 `entry_timing.ready`** 才下**限价**。
+**入场（v4.5.25 / v4.5.35 / v4.5.36 / v4.5.47 / v4.5.54）**：BRAIN 的 C3 confirmed 仍须回踩；**多单距近 8 根 15m 高点 ≤0.80% 不得挂**；A1 滞涨结构不得当回踩，浅缩量也不得当回踩；**从低点反弹不得当 A1 回踩**（须 `15m_pullback_from_high`）。C1 **破位当根跟风**。B2 **须先反抽再失败**。A2 须离低点并出现拒绝。B3/C4 卖顶部第一回调。C4 打标须假突 +（上影 / 缩量 / 衰竭），仅 `stall_at_high` 不够。中线 **C3/C1/B2 市价跟风**（§7.2），**B3/C4 限价**；C3 **不得**在 RSI 极端+7 日高追价；突破延伸按冲高前高点计。同币同向止盈后 4h 冷却。BRAIN **等到 `entry_timing.ready`** 才下**限价**。
 **日线 vs Big4（v4.5.18）**：`DAILY_BEAR_PROBE` 仍收缩多数多单，但 **Big4 已 LONG 时不得否决 A1**（日线滞后不得挡住已确认的多头趋势）。
 **回调做空（v4.5.22 / v4.5.52）**：`big4.bias == LONG` 时 **禁止 A2/B2/B3**（`big4_long_blocks_short`）；**允许** C4 假突空（`big4_long_allows_exhaustion_C4`，保证金 ×0.20，edge≥0.85）与 C1 放量破位（`big4_long_allows_breakdown_C1`，×0.35，edge≥0.80）。B3 只在 Big4 为 FLAT/SHORT 时开。中线扫描一致。
 
@@ -1034,7 +1035,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-MIDLINE | `market_cap_universe.py`, `midline_swing_config.py`, `midline_swing_scanner.py`, `entry_timing.py`, `midline_hold_exit.py`, `midline_explore_worker.py`, `midline_swing_api.py`, 破位策略页 JS/模板, `strategy_display_names.py`, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
 | **REQ-BRAIN** | `brain_config` / `brain_strategy_orchestrator`（市值前 300）/ `market_cap_universe.py`；`paper_limit_entry` + executor expire；`trading_gates.LIVE_SYNC_SOURCES`；`smart_exit_optimizer` 排除；`validate_brain_req.py`；权威 §7.3；操作对照 `docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md` |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
-| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **A1 豁免 5m**；其它 40U/4根；-80U；trail（Big4 LONG 多单 2.2%/0.80%）；soft 关；Big4 LONG 禁 A2/B2/**B3**、放行 C4/C1 小仓空；顾问 suggest-only；到期不因 D1 强平；多单贴高等待回调；C3 禁止高潮追价；同币止盈 4h 冷却；**BRAIN 实盘随总开关仅 L0**；中线破位市价跟风；§7.3（**v4.5.52**） |
+| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **A1 豁免 5m**；其它 40U/4根；-80U；trail（Big4 LONG 多单 2.2%/0.80%）；soft 关；Big4 LONG 禁 A2/B2/**B3**、放行 C4/C1 小仓空；顾问 suggest-only；到期不因 D1 强平；多单贴高等待回调；C3 禁止高潮追价；同币止盈 4h 冷却；**BRAIN 实盘随总开关仅 L0**；中线 C1/C3/B2 市价跟风、B3/C4 限价；§7.3（**v4.5.54**） |
 | REQ-ST | `smart_trader_service.py` |
 | **REQ-SPOT** | `spot_paper_mirror.py`；`spot_live_sync.py`；`spot_trader_service.py`；`fill_paper_limit_order` 钩子；`validate_spot_paper.py`；权威 §7.4 |
 | **REQ-WATCHLIST** | `watchlist_config.py` · `watchlist_store.py` · `watchlist_orders.py` · `watchlist_api.py` · `watchlist_page.js`（浏览器直连币安合约 WS + 3s 无 tick 则 `/api/watchlist/prices` 1s 补价）· `/watchlist`；`LIVE_SYNC_SOURCES` 含 `manual_watchlist`；权威 §7.5 |
@@ -1047,6 +1048,8 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-08-23 | **v4.5.54** | **破位跟风仍市价**：C1/C3/B2 市价跟当根；A1/A2/B3/C4 与 BRAIN 仍限价；超时取消不转市价 |
+| 2026-08-23 | **v4.5.53** | （已由 v4.5.54 收窄）曾把全部破位改限价；C3/C1 跟风被拖钝，已撤回 |
 | 2026-08-23 | **v4.5.52** | **B3 前提**：Big4 仍 LONG 时 B3 只打标不开仓；C1/C4 仍可小仓。近 24h 破位 B3 37 笔 −1419U |
 | 2026-08-23 | **v4.5.51** | **A1 回踩抬起仍开**：有趋势新高时 bounce_from_low 不再否决 A1。多空不设分向上限 |
 | 2026-08-23 | **v4.5.50** | **B3 须拒绝再空**：不过前高只打标，不得在第二次顶上直接空；8/23 破位 B3 被反弹打穿 |

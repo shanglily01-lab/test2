@@ -396,25 +396,32 @@ def test_breakout_action_opportunity() -> None:
     _ok("C1 catch vs Big4 LONG; B3 blocked while Big4 LONG; C3 follows breakout; A2 blocked")
 
 
-def test_midline_market_follow() -> None:
-    print("[2b] midline market follow")
+def test_midline_market_follow_breakouts() -> None:
+    print("[2b] midline C1/C3/B2 market; B3/C4/A1/A2 limit")
     from inspect import signature
     from app.services.midline_swing_config import midline_uses_market_entry, MIDLINE_MARKET_PLAYBOOKS
     from app.services.paper_limit_entry import create_paper_limit_order
 
-    assert MIDLINE_MARKET_PLAYBOOKS == frozenset({"C1", "B2", "C3", "B3", "C4"})
-    assert midline_uses_market_entry("C1")
-    assert midline_uses_market_entry("C3")
-    assert midline_uses_market_entry("B3")
-    assert not midline_uses_market_entry("A1")
-    assert not midline_uses_market_entry("A2")
+    assert MIDLINE_MARKET_PLAYBOOKS == frozenset({"C1", "B2", "C3"})
+    assert midline_uses_market_entry("C1") is True
+    assert midline_uses_market_entry("C3") is True
+    assert midline_uses_market_entry("B2") is True
+    assert midline_uses_market_entry("B3") is False
+    assert midline_uses_market_entry("C4") is False
+    assert midline_uses_market_entry("A1") is False
+    assert midline_uses_market_entry("A2") is False
     assert "force_market" in signature(create_paper_limit_order).parameters
     worker = (ROOT / "app/services/midline_explore_worker.py").read_text(encoding="utf-8")
     scanner = (ROOT / "app/services/midline_swing_scanner.py").read_text(encoding="utf-8")
     if "force_market=use_market" not in worker:
-        _fail("中线 worker 未对破位/顶部走市价")
+        _fail("中线 worker 未对 C1/C3/B2 走市价")
     if "follow_breakout=True" not in scanner:
         _fail("中线扫描未对 C3 启用破位跟风")
+    entry = (ROOT / "app/services/paper_limit_entry.py").read_text(encoding="utf-8")
+    if "return _open_paper_market_position" not in entry:
+        _fail("paper_limit_entry 缺少市价开仓路径")
+    if "忽略 BRAIN 市价请求" not in entry:
+        _fail("paper_limit_entry 未挡住 BRAIN 市价旁路")
     from app.services.trading_gates import check_symbol_tp_reentry_cooldown, SYMBOL_TP_REENTRY_COOLDOWN_HOURS
     from app.services.entry_timing import C3_BLOWOFF_SIGNALS, C3_PRE_BREAK_EXCLUDE_BARS
     assert SYMBOL_TP_REENTRY_COOLDOWN_HOURS == 4
@@ -423,7 +430,7 @@ def test_midline_market_follow() -> None:
     gate = (ROOT / "app/services/paper_open_gate.py").read_text(encoding="utf-8")
     if "check_symbol_tp_reentry_cooldown" not in gate:
         _fail("开仓闸门未接止盈再入冷却")
-    _ok("C1/C3/B3 midline market; A1/A2 stay limit; chase/TP cooldown wired")
+    _ok("C1/C3/B2 midline market; B3/C4/A1/A2 stay limit; chase/TP cooldown wired")
 
 
 def test_limit_price() -> None:
@@ -625,7 +632,7 @@ def main() -> None:
 
     test_imports()
     test_breakout_action_opportunity()
-    test_midline_market_follow()
+    test_midline_market_follow_breakouts()
     test_limit_price()
     test_live_sync_whitelist()
     test_kill_switch_ui()

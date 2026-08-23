@@ -54,8 +54,8 @@ LEGACY_MIDLINE_SOURCES = frozenset({
 
 ALL_MIDLINE_SOURCES = MIDLINE_SOURCES | LEGACY_MIDLINE_SOURCES
 
-# 中线破位/顶部确认后市价跟风（A1/A2 仍限价）
-MIDLINE_MARKET_PLAYBOOKS = frozenset({"C1", "B2", "C3", "B3", "C4"})
+# 破位当根市价跟风；摸顶/回踩仍限价（v4.5.54）
+MIDLINE_MARKET_PLAYBOOKS = frozenset({"C1", "B2", "C3"})
 
 # profile -> source
 MIDLINE_PROFILE_SOURCE: Dict[str, str] = {
@@ -90,7 +90,7 @@ def is_active_midline_source(source: str) -> bool:
 
 
 def midline_uses_market_entry(playbook: str) -> bool:
-    """C1/C3 破位跟风 + B2 反抽失败后跟风 + B3/C4 顶部回调确认后，中线走市价，不挂限价。"""
+    """C1/C3 破位跟风 + B2 反抽失败后跟风走市价；A1/A2/B3/C4 挂限价。"""
     return str(playbook or "").strip().upper() in MIDLINE_MARKET_PLAYBOOKS
 
 

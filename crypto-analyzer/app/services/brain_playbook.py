@@ -683,7 +683,7 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     if feats.get("false_break_down") and (feats.get("long_lower_wick") or "15m_higher_low" in sig):
         scored.append(("C2", 0.75, True))
 
-    # C3 向上突破：识别在突破当根；BRAIN 仍等回踩，中线市价跟风
+    # C3 向上突破：识别在突破当根；BRAIN 仍等回踩，破位 C3 市价跟风
     if (feats.get("break_resistance") and feats.get("vol_up")) or feats.get("impulse_up"):
         c3 = 0.7
         if feats.get("impulse_up"):
