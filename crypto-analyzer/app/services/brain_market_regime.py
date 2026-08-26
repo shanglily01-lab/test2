@@ -313,6 +313,16 @@ def brain_open_regime_decision(
             0.0,
         )
 
+    # v4.5.56: C3 须 Big4 LONG。弱宏观/个币冲击不得穿透
+    # （8/26 破位 C3 42 笔 42.9%/−1152U；8/23 多头里 C3 曾 18 笔 94%/+726U）。
+    if pb == "C3" and bias_u != "LONG":
+        return RegimeDecision(
+            regime,
+            f"big4_not_long_blocks_C3:{why}",
+            "shadow_only",
+            0.0,
+        )
+
     if global_name == GLOBAL_DAILY_BEAR_PROBE:
         if side_u == "LONG":
             # 日线滞后探底不得否决已经确认的 Big4 多头 A1（v4.5.18）
@@ -322,13 +332,6 @@ def brain_open_regime_decision(
                     f"global_daily_bear_probe_defers_to_big4_long_A1:{why}",
                     "pullback_limit",
                     1.0,
-                )
-            if pb == "C3" and confirmed and edge >= 0.75 and _token_impulse_long(playbook_row):
-                return RegimeDecision(
-                    regime,
-                    f"global_daily_bear_probe_allows_token_impulse_C3:{why}",
-                    "pullback_limit",
-                    0.25,
                 )
             return RegimeDecision(
                 regime,
@@ -464,8 +467,6 @@ def brain_open_regime_decision(
     if regime == RANGE_CHOP:
         if side_u == "LONG" and pb == "A1" and confirmed and edge >= 0.90:
             return RegimeDecision(regime, f"regime_range_allows_high_edge_{pb}", "pullback_limit", 0.35)
-        if side_u == "LONG" and pb == "C3" and confirmed and edge >= 0.75 and _token_impulse_long(playbook_row):
-            return RegimeDecision(regime, "regime_range_allows_token_impulse_C3", "pullback_limit", 0.35)
         if side_u == "SHORT" and pb in {"B3", "C4"} and confirmed and edge >= 0.80 and _token_exhaustion_short(playbook_row):
             return RegimeDecision(regime, f"regime_range_allows_exhaustion_{pb}", "breakout_confirm_limit", 0.25)
         if side_u == "SHORT" and pb == "A2" and confirmed and edge >= 0.90 and _token_failed_bounce_short(playbook_row):
@@ -475,8 +476,6 @@ def brain_open_regime_decision(
     if regime == TOKEN_DIVERGENCE:
         if side_u == "LONG" and pb == "A1" and confirmed and edge >= 0.80:
             return RegimeDecision(regime, "regime_token_divergence_allows_A1", "pullback_limit", 0.50)
-        if side_u == "LONG" and pb == "C3" and confirmed and edge >= 0.75 and _token_impulse_long(playbook_row):
-            return RegimeDecision(regime, "regime_token_divergence_allows_C3_impulse", "pullback_limit", 0.35)
         if (
             side_u == "SHORT"
             and pb == "C1"

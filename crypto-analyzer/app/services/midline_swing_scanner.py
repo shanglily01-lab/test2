@@ -259,6 +259,9 @@ def _breakout_action_opportunity(
     if bias_u == "LONG" and side_u == "SHORT" and playbook_u not in {"C4", "C1"}:
         detail["reason"] = "big4_long_blocks_short"
         return detail
+    if playbook_u == "C3" and bias_u != "LONG":
+        detail["reason"] = "big4_not_long_blocks_C3"
+        return detail
 
     if playbook_u not in {"A1", "A2", "B2", "B3", "C1", "C3", "C4"}:
         detail["reason"] = "not_breakout_playbook"
@@ -769,6 +772,9 @@ def evaluate_symbol_multiperiod(
     if big4_bias == "LONG" and side == "SHORT" and playbook not in {"C4", "C1"}:
         out.update({"reason": "big4_long_blocks_short", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
+    if playbook == "C3" and big4_bias != "LONG":
+        out.update({"reason": "big4_not_long_blocks_C3", "trend": dims, "future_4h": future_4h, "playbook": pb})
+        return out
     has_break_signal = bool(signals & {
         "break_support", "break_resistance", "ema_reject", "ema_reclaim",
         "false_break_up", "stall_at_high", "exhaustion_up",
@@ -784,12 +790,12 @@ def evaluate_symbol_multiperiod(
     weak_big4_long_override = (
         not big4_ok
         and side == "LONG"
-        and playbook in {"A1", "C3"}
+        and playbook == "A1"
         and confirmed
         and strong_token_side
         and str(future_4h.get("side") or "FLAT").upper() == "LONG"
         and float(future_4h.get("score") or 0.0) >= FUTURE_4H_OPPORTUNITY_SCORE_MIN
-        and edge >= (0.80 if playbook == "A1" else 0.85)
+        and edge >= 0.80
     )
     weak_big4_short_override = (
         not big4_ok

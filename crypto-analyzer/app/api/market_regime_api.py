@@ -59,10 +59,10 @@ def _gate_lines(big4: dict, daily: dict) -> list:
         lines.append("放行 A1 回踩、C3 突破（破位可市价跟，高潮不追）。")
         lines.append("放行小仓 C4 假突空、C1 破位空。")
     elif bias == "SHORT":
-        lines.append("Big4 偏空：禁止 A1 追多。")
+        lines.append("Big4 偏空：禁止 A1 追多、C3 突破跟多。")
         lines.append("可试 A2 弱反抽空、C1 破位空。")
     else:
-        lines.append("Big4 方向不明：两边都要更严的确认才开。")
+        lines.append("Big4 方向不明：C3 突破不开；其它两边都要更严的确认才开。")
     g = str(daily.get("global_regime") or "")
     if g == "GLOBAL_UNKNOWN":
         lines.append("日线混合不影响 15m 卖点；B3 仍看拒绝 K，不看这一列。")

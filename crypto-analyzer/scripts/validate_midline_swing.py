@@ -152,7 +152,10 @@ def test_breakout_action_opportunity() -> None:
         global_name="TOKEN_DIVERGENCE",
         entry_15m={"fresh_breakout": False},
     )
-    assert c3_h1["should_open"] is True, c3_h1
+    assert (
+        c3_h1["should_open"] is False
+        and c3_h1["reason"] == "big4_not_long_blocks_C3"
+    ), c3_h1
 
     a2 = _breakout_action_opportunity(
         side="SHORT",
@@ -227,7 +230,10 @@ def test_breakout_action_opportunity() -> None:
         global_name="TOKEN_DIVERGENCE",
         entry_15m={"fresh_breakout": True},
     )
-    assert c3_chase["should_open"] is True, c3_chase
+    assert (
+        c3_chase["should_open"] is False
+        and c3_chase["reason"] == "big4_not_long_blocks_C3"
+    ), c3_chase
 
     c3_pullback = _breakout_action_opportunity(
         side="LONG",
@@ -241,7 +247,24 @@ def test_breakout_action_opportunity() -> None:
         global_name="TOKEN_DIVERGENCE",
         entry_15m={"fresh_breakout": False},
     )
-    assert c3_pullback["should_open"] is True, c3_pullback
+    assert (
+        c3_pullback["should_open"] is False
+        and c3_pullback["reason"] == "big4_not_long_blocks_C3"
+    ), c3_pullback
+
+    c3_vs_big4_long = _breakout_action_opportunity(
+        side="LONG",
+        playbook="C3",
+        edge=0.90,
+        confirmed=True,
+        signals={"h1_breakout_up", "impulse_up", "volume_expand_up"},
+        features={"h1_side": "LONG", "m15_side": "LONG"},
+        future_4h={"side": "LONG", "score": 0.60},
+        big4_bias="LONG",
+        global_name="BULL_TREND",
+        entry_15m={"fresh_breakout": True},
+    )
+    assert c3_vs_big4_long["should_open"] is True, c3_vs_big4_long
 
     b3 = _breakout_action_opportunity(
         side="SHORT",
@@ -393,7 +416,7 @@ def test_breakout_action_opportunity() -> None:
         a2_vs_big4_long["should_open"] is False
         and a2_vs_big4_long["reason"] == "big4_long_blocks_short"
     ), a2_vs_big4_long
-    _ok("C1 catch vs Big4 LONG; B3 blocked while Big4 LONG; C3 follows breakout; A2 blocked")
+    _ok("C1 catch vs Big4 LONG; B3 blocked while Big4 LONG; C3 needs Big4 LONG; A2 blocked")
 
 
 def test_midline_market_follow_breakouts() -> None:
@@ -417,6 +440,8 @@ def test_midline_market_follow_breakouts() -> None:
         _fail("中线 worker 未对 C1/C3/B2 走市价")
     if "follow_breakout=True" not in scanner:
         _fail("中线扫描未对 C3 启用破位跟风")
+    if "big4_not_long_blocks_C3" not in scanner:
+        _fail("中线扫描未要求 C3 须 Big4 LONG")
     entry = (ROOT / "app/services/paper_limit_entry.py").read_text(encoding="utf-8")
     if "return _open_paper_market_position" not in entry:
         _fail("paper_limit_entry 缺少市价开仓路径")
