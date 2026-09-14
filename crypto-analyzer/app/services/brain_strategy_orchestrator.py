@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import threading
 import time
-from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 import pymysql
@@ -243,10 +242,6 @@ def _open_brain_entry(
     hold_hours = float(risk["hold_hours"])
     regime = str(playbook_row.get("regime") or "")
     execution_mode = str(playbook_row.get("execution_mode") or "")
-    if regime in ("CRASH_DOWN", "RANGE_CHOP", "TRANSITION"):
-        hold_hours = min(hold_hours, 2.0)
-    elif execution_mode in ("breakout_confirm_limit", "crash_probe_limit"):
-        hold_hours = min(hold_hours, 3.0)
 
     catalyst = _build_catalyst(playbook_row, win_long, win_short)
     allowed, gate_reason = gate_simulated_open(
@@ -263,7 +258,6 @@ def _open_brain_entry(
         logger.info(f"[BRAIN开仓] 闸门拒绝 {symbol} {side_u}: {gate_reason}")
         return None, str(gate_reason or "gate_reject")[:200]
 
-    hold_deadline = utc_now_naive() + timedelta(hours=hold_hours)
     margin = get_paper_margin_usd(symbol, conn) or BRAIN_MARGIN_USD
     playbook = str(playbook_row.get("playbook") or "")
     playbook_margin_mult = float(PLAYBOOK_MARGIN_MULTIPLIER.get(playbook, 1.0))
@@ -292,7 +286,8 @@ def _open_brain_entry(
         "risk": risk.get("risk_meta"),
         "sl_pct": sl_pct,
         "tp_pct": tp_pct,
-        "hold_hours": hold_hours,
+        "hold_hours": None,
+        "hold_mode": "structure_swing",
         "margin": float(margin),
         "margin_multiplier": float(margin_multiplier),
         "playbook_margin_multiplier": float(playbook_margin_mult),
@@ -304,12 +299,12 @@ def _open_brain_entry(
     if risk.get("risk_fallback"):
         logger.warning(
             f"[BRAIN风控] {symbol} {side_u} 评估失败，fallback "
-            f"SL={sl_pct}% TP={tp_pct}% hold={hold_hours}h"
+            f"SL={sl_pct}% hold=structure_swing"
         )
     else:
         logger.info(
             f"[BRAIN风控] {symbol} {side_u} pb={playbook_row.get('playbook')} "
-            f"SL={sl_pct}% TP={tp_pct}% hold={hold_hours}h "
+            f"SL={sl_pct}% hold=structure_swing "
             f"atr={((risk.get('risk_meta') or {}).get('atr_pct'))}"
         )
     order_id = create_paper_limit_order(
@@ -321,7 +316,7 @@ def _open_brain_entry(
         leverage=BRAIN_LEVERAGE,
         margin=float(margin),
         stop_loss_pct=sl_pct,
-        take_profit_pct=tp_pct,
+        take_profit_pct=None,
         entry_signal_type=f"brain_{playbook}" if playbook else "brain_swing",
         entry_reason=build_brain_entry_reason(
             playbook,
@@ -330,8 +325,8 @@ def _open_brain_entry(
         ),
         entry_score=float(entry_score or playbook_row.get("edge_score") or 0),
         signal_components=detail,
-        max_hold_minutes=int(hold_hours * 60),
-        planned_close_time=hold_deadline,
+        max_hold_minutes=None,
+        planned_close_time=None,
         account_id=BRAIN_ACCOUNT_ID,
         timeout_minutes=BRAIN_LIMIT_TIMEOUT_MINUTES,
         limit_offset_pct=offset,

@@ -99,29 +99,8 @@ class BinanceFuturesEngine:
         strategy_name: Optional[str] = None,
         open_time=None,
     ) -> None:
-        """实盘平仓成功后发送 Telegram（与开仓 notify_open_position 对称）。"""
-        try:
-            from app.services.trade_notifier import format_hold_time_from_open
-
-            notifier = self._resolve_trade_notifier()
-            if not notifier:
-                logger.debug(f"[实盘平仓] TradeNotifier 未初始化,跳过 TG {symbol}")
-                return
-            notifier.notify_close_position(
-                symbol=symbol,
-                direction=position_side,
-                quantity=float(executed_qty),
-                entry_price=float(entry_price),
-                exit_price=float(avg_price),
-                pnl=float(pnl),
-                pnl_pct=float(roi),
-                reason=reason,
-                hold_time=format_hold_time_from_open(open_time),
-                strategy_name=strategy_name,
-                is_paper=False,
-            )
-        except Exception as notify_err:
-            logger.warning(f"[实盘平仓] 发送TG通知失败 {symbol}: {notify_err}")
+        """实盘平仓不再发送 Telegram。模拟盘平仓由 FuturesTradingEngine 通知。"""
+        return
 
     def _load_api_config(self):
         """从配置文件加载API配置"""
@@ -913,32 +892,10 @@ class BinanceFuturesEngine:
                 except Exception as e:
                     logger.warning(f"[实盘] 保存止盈止损订单ID失败: {e}")
 
-            # 发送Telegram通知
-            try:
-                notifier = get_trade_notifier() if get_trade_notifier else None
-                if notifier:
-                    actual_qty = float(executed_qty if executed_qty > 0 else quantity)
-                    margin = (float(entry_price) * actual_qty) / leverage
-                    order_type_str = 'LIMIT' if limit_price else 'MARKET'
-                    logger.info(f"[实盘] 发送Telegram开仓通知: {symbol} {position_side} {actual_qty} @ {entry_price} ({order_type_str})")
-                    notifier.notify_open_position(
-                        symbol=symbol,
-                        direction=position_side,
-                        quantity=actual_qty,
-                        entry_price=float(entry_price),
-                        leverage=leverage,
-                        stop_loss_price=float(stop_loss_price) if stop_loss_price else None,
-                        take_profit_price=float(take_profit_price) if take_profit_price else None,
-                        margin=margin,
-                        strategy_name=source,
-                        order_type=order_type_str
-                    )
-                else:
-                    logger.warning(f"[实盘] Telegram通知器未初始化，跳过开仓通知")
-            except Exception as notify_err:
-                logger.warning(f"发送开仓通知失败: {notify_err}")
-                import traceback
-                traceback.print_exc()
+            # 实盘开仓不再发 Telegram；模拟盘成交由 FuturesTradingEngine 通知
+            logger.debug(
+                f"[实盘] 跳过Telegram开仓通知: {symbol} {position_side}"
+            )
 
             # 清除挂单缓存，确保下次查询获取最新数据
             self.invalidate_orders_cache()

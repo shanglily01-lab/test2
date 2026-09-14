@@ -224,8 +224,7 @@ class LiveOrderMonitor:
                     cancellation_reason=f'trend_reversal: {reason}'
                 )
 
-                # 发送Telegram通知
-                self._send_order_cancel_notification(position, reason)
+                # 实盘订单取消不再发 Telegram
             else:
                 logger.error(f"[实盘监控] ✗ 取消币安订单失败: {result.get('error', '未知错误')}")
 
@@ -650,18 +649,7 @@ class LiveOrderMonitor:
                         except Exception as db_err:
                             logger.error(f"[实盘监控] 保存止损订单ID失败: {db_err}")
 
-                        # 发送Telegram通知
-                        try:
-                            notifier = get_trade_notifier() if get_trade_notifier else None
-                            if notifier:
-                                notifier.notify_stop_loss_set(
-                                    symbol=symbol,
-                                    direction=position_side,
-                                    stop_price=float(stop_loss_price),
-                                    quantity=float(executed_qty)
-                                )
-                        except Exception as notify_err:
-                            logger.warning(f"[实盘监控] 发送止损通知失败: {notify_err}")
+                        # 实盘止损单设置不再发 Telegram
                     else:
                         logger.error(f"[实盘监控] ✗ 止损单设置失败: {sl_result.get('error')}")
                 except Exception as e:
@@ -709,18 +697,7 @@ class LiveOrderMonitor:
                         except Exception as db_err:
                             logger.error(f"[实盘监控] 保存止盈订单ID失败: {db_err}")
 
-                        # 发送Telegram通知
-                        try:
-                            notifier = get_trade_notifier() if get_trade_notifier else None
-                            if notifier:
-                                notifier.notify_take_profit_set(
-                                    symbol=symbol,
-                                    direction=position_side,
-                                    take_profit_price=float(take_profit_price),
-                                    quantity=float(executed_qty)
-                                )
-                        except Exception as notify_err:
-                            logger.warning(f"[实盘监控] 发送止盈通知失败: {notify_err}")
+                        # 实盘止盈单设置不再发 Telegram
                     else:
                         logger.error(f"[实盘监控] ✗ 止盈单设置失败: {tp_result.get('error')}")
                 except Exception as e:
@@ -729,64 +706,12 @@ class LiveOrderMonitor:
                 logger.warning(f"[实盘监控] 止盈价 {take_profit_price} 无效 ({position_side} 当前价 {current_price})，跳过止盈设置")
 
     def _send_order_cancel_notification(self, position: Dict, reason: str):
-        """发送订单取消的Telegram通知"""
-        try:
-            from app.services.trade_notifier import get_trade_notifier
-            notifier = get_trade_notifier()
-            if not notifier:
-                return
-
-            symbol = position['symbol']
-            position_side = position['position_side']
-            direction_text = "做多" if position_side == 'LONG' else "做空"
-            entry_price = position.get('entry_price', 0)
-            quantity = position.get('quantity', 0)
-
-            message = f"""
-🚫 <b>【订单取消】{symbol}</b>
-
-📌 方向: {direction_text}
-💰 价格: {entry_price}
-📊 数量: {quantity}
-💡 原因: {reason}
-
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-"""
-
-            notifier._send_telegram(message)
-            logger.info(f"[实盘监控] ✅ 订单取消通知已发送: {symbol}")
-
-        except Exception as e:
-            logger.warning(f"[实盘监控] 发送订单取消通知失败: {e}")
+        """实盘订单取消不再发 Telegram。"""
+        return
 
     def _send_timeout_cancel_notification(self, position: Dict, deviation_pct: Decimal, elapsed_minutes: float):
-        """发送限价单超时取消的Telegram通知"""
-        try:
-            from app.services.trade_notifier import get_trade_notifier
-            notifier = get_trade_notifier()
-            if not notifier:
-                return
-
-            symbol = position['symbol']
-            position_side = position['position_side']
-            direction_text = "做多" if position_side == 'LONG' else "做空"
-
-            message = f"""
-⚠️ <b>【限价单超时取消】{symbol}</b>
-
-📌 方向: {direction_text}
-⏱️ 等待时长: {elapsed_minutes:.1f} 分钟
-📊 价格偏离: {deviation_pct:.2f}% (> 0.5%)
-💡 原因: 价格偏离过大，避免追高/杀低
-
-⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-"""
-
-            notifier._send_telegram(message)
-            logger.info(f"[实盘监控] ✅ 超时取消通知已发送: {symbol}")
-
-        except Exception as e:
-            logger.warning(f"[实盘监控] 发送超时取消通知失败: {e}")
+        """实盘限价超时取消不再发 Telegram。"""
+        return
 
     # ==================== 冗余代码已移除 ====================
     # 实盘不负责策略判断，智能止盈/止损由模拟盘负责

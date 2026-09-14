@@ -1,6 +1,7 @@
 """
-实盘交易通知服务
-通过Telegram发送开仓、平仓、止损止盈等交易通知
+模拟盘交易通知服务
+通过 Telegram 发送模拟盘开仓、平仓；实盘开平仓不发。
+熔断 / IP 封禁等运维告警仍走 send_message。
 """
 
 import requests
@@ -53,17 +54,25 @@ class TradeNotifier:
         self.bot_token = telegram_config.get('bot_token', '')
         self.chat_id = str(telegram_config.get('chat_id', ''))  # 确保是字符串
 
-        # 通知事件过滤
+        # 交易通知只覆盖模拟盘开/平；live_* 仅为旧配置别名
         notify_events = telegram_config.get('notify_events', [])
-        self.notify_open = 'live_open' in notify_events or 'all' in notify_events
-        self.notify_close = 'live_close' in notify_events or 'all' in notify_events
+        self.notify_open = (
+            'paper_open' in notify_events
+            or 'live_open' in notify_events
+            or 'all' in notify_events
+        )
+        self.notify_close = (
+            'paper_close' in notify_events
+            or 'live_close' in notify_events
+            or 'all' in notify_events
+        )
         self.notify_stop_loss = 'stop_loss' in notify_events or 'all' in notify_events
         self.notify_take_profit = 'take_profit' in notify_events or 'all' in notify_events
 
         if self.enabled and self.bot_token and self.chat_id:
-            logger.info(f"✅ 实盘交易Telegram通知已启用 (chat_id: {self.chat_id[:6]}...)")
+            logger.info(f"✅ 模拟盘交易Telegram通知已启用 (chat_id: {self.chat_id[:6]}...)")
         else:
-            logger.info("ℹ️ 实盘交易Telegram通知未启用")
+            logger.info("ℹ️ 模拟盘交易Telegram通知未启用")
 
     def _send_telegram(self, message: str, parse_mode: str = 'HTML') -> bool:
         """
@@ -119,28 +128,18 @@ class TradeNotifier:
         take_profit_price: Optional[float] = None,
         margin: Optional[float] = None,
         strategy_name: Optional[str] = None,
-        order_type: str = 'MARKET'
+        order_type: str = 'MARKET',
+        is_paper: bool = False,
     ):
-        """
-        通知开仓
-
-        Args:
-            symbol: 交易对
-            direction: 方向 (long/short/LONG/SHORT)
-            quantity: 数量
-            entry_price: 入场价格
-            leverage: 杠杆
-            stop_loss_price: 止损价
-            take_profit_price: 止盈价
-            margin: 保证金
-            strategy_name: 策略名称
-            order_type: 订单类型 (MARKET/LIMIT)
-        """
+        """通知模拟盘开仓。实盘开仓不发 Telegram。"""
+        if not is_paper:
+            logger.debug(f"实盘开仓不发送 Telegram: {symbol}")
+            return
         if not self.notify_open:
             logger.debug(f"开仓通知已禁用 (notify_open={self.notify_open})")
             return
 
-        logger.info(f"准备发送开仓通知: {symbol} {direction} {quantity} @ {entry_price}")
+        logger.info(f"准备发送模拟盘开仓通知: {symbol} {direction} {quantity} @ {entry_price}")
         direction_lower = direction.lower()
         direction_emoji = "🟢" if direction_lower == 'long' else "🔴"
         direction_text = "做多" if direction_lower == 'long' else "做空"
@@ -150,7 +149,7 @@ class TradeNotifier:
         position_value = quantity * entry_price
 
         message = f"""
-{direction_emoji} <b>【实盘开仓】{symbol}</b>
+{direction_emoji} <b>【模拟盘开仓】{symbol}</b>
 
 📌 方向: {direction_text}
 💰 数量: {quantity:.6f}
@@ -177,9 +176,9 @@ class TradeNotifier:
 
         result = self._send_telegram(message)
         if result:
-            logger.info(f"✅ 开仓通知已发送: {symbol}")
+            logger.info(f"✅ 模拟盘开仓通知已发送: {symbol}")
         else:
-            logger.warning(f"⚠️ 开仓通知发送失败: {symbol}")
+            logger.warning(f"⚠️ 模拟盘开仓通知发送失败: {symbol}")
 
     def notify_close_position(
         self,
@@ -211,9 +210,8 @@ class TradeNotifier:
             strategy_name: 策略名称
             is_paper: 是否为模拟盘
         """
-        # 模拟盘不发送通知
-        if is_paper:
-            logger.debug(f"模拟盘平仓不发送通知: {symbol}")
+        if not is_paper:
+            logger.debug(f"实盘平仓不发送 Telegram: {symbol}")
             return
 
         # 根据平仓原因判断是否通知
@@ -258,8 +256,7 @@ class TradeNotifier:
         else:
             reason_text = (reason or 'manual')[:120]
 
-        # 区分模拟盘和实盘
-        trade_type = "模拟盘平仓" if is_paper else "实盘平仓"
+        trade_type = "模拟盘平仓"
 
         message = f"""
 {pnl_emoji} <b>【{trade_type}】{symbol}</b>

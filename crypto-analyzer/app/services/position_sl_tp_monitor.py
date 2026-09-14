@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 import datetime as _dt
-import json
 import os
 import time
 from typing import Any, Dict, List, Optional
@@ -109,6 +108,15 @@ def _is_midline_source(src: str) -> bool:
         return is_midline_source(s)
     except Exception:
         return False
+
+
+def _uses_structure_swing(src: str) -> bool:
+    try:
+        from app.services.structure_swing_exit import uses_structure_swing_hold
+        return uses_structure_swing_hold(src)
+    except Exception:
+        s = (src or "").strip().lower()
+        return s.startswith("brain_") or s.startswith("midline_")
 # 硬 TP 开仓保护：避免 entry 价与 monitor 市价源不一致时秒平（SL 仍立即生效）
 _AI_TP_GRACE_MIN = 5
 
@@ -357,7 +365,7 @@ class PositionSLTPMonitor:
                     liq = pos.get("liquidation_price")
                     reason_mid: Optional[str] = None
                     pct = pos.get("planned_close_time")
-                    if pct is not None:
+                    if pct is not None and not _uses_structure_swing(src):
                         if isinstance(pct, _dt.datetime):
                             if pct.tzinfo is not None:
                                 pct = pct.replace(tzinfo=None)
@@ -380,10 +388,9 @@ class PositionSLTPMonitor:
             if entry_price <= 0:
                 continue
 
-            # 计划持仓到期（AI 探索/预测等为 2h）— 与 SmartExitOptimizer 互补；
-            # 本服务随 FastAPI 常驻，避免仅 smart_trader 在跑时才到期平仓。
+            # 计划持仓到期（探索/预测仍限时）。BRAIN / 破位改为结构点出场，不因 4–6h 强平。
             pct = pos.get("planned_close_time")
-            if pct is not None:
+            if pct is not None and not _uses_structure_swing(src):
                 if isinstance(pct, _dt.datetime):
                     if pct.tzinfo is not None:
                         pct = pct.replace(tzinfo=None)
@@ -520,8 +527,11 @@ class PositionSLTPMonitor:
                         u_pnl = margin * lev * pnl_pct
                     except (TypeError, ValueError):
                         u_pnl = 0.0
-                    # 浮亏≥40U：5m 持续逆势无反转 → 早撤（A1 豁免，见 SKIP_PLAYBOOKS）
-                    if u_pnl <= -abs(float(BRAIN_ADVERSE_5M_MIN_LOSS_USD)):
+                    # 结构持仓不因 5m 噪音早撤；美元熔断与硬 SL 仍兜底
+                    if (
+                        not _uses_structure_swing(src)
+                        and u_pnl <= -abs(float(BRAIN_ADVERSE_5M_MIN_LOSS_USD))
+                    ):
                         pb_raw = pos.get("entry_signal_type") or ""
                         playbook = str(pb_raw).replace("brain_", "").replace("BRAIN_", "")
                         adv_br = self._check_brain_5m_adverse_exit(
@@ -550,7 +560,9 @@ class PositionSLTPMonitor:
                         self._do_close(pid, symbol, side, usd_br, price, now)
                         continue
 
-                trig = self._check_trigger(side, price, sl, tp)
+                # 结构持仓：硬 TP 会在合适高/低点出现前截走，只保留硬 SL
+                trig_tp = None if _uses_structure_swing(src) else tp
+                trig = self._check_trigger(side, price, sl, trig_tp)
                 if trig:
                     reason, trigger_price = trig
                     if reason == "take_profit" and in_tp_grace:
@@ -569,76 +581,20 @@ class PositionSLTPMonitor:
                     self._do_close(pid, symbol, side, reason, trigger_price, now)
                     continue
 
-                # BRAIN：硬 SL/TP 之后 → 新版锁利 / 无跟进早砍（不做旧 ai-trail/soft/trend）
-                try:
-                    from app.services.brain_config import is_brain_source as _brain_src
-                    _is_brain = _brain_src(src)
-                except Exception:
-                    _is_brain = (src or "").startswith("brain_")
-                if _is_brain:
-                    from app.services.brain_trail_exit import (
-                        check_brain_soft_no_follow,
-                        check_brain_trail_lock,
-                        trail_levels_from_sl_tp,
+                # BRAIN / 破位：低点买、高点卖（空头相反）；不再 trail / 到期
+                if _uses_structure_swing(src):
+                    struct_br = self._maybe_structure_swing_close(
+                        pos, symbol, side, price, new_peak, age_s,
                     )
-                    # 激活 = min(TP×40%, SL×25%) 夹 0.8~1.0；无 SL/TP 用 config 默认
-                    act_kw: dict = {}
-                    try:
-                        if entry_price > 0 and (sl is not None or tp is not None):
-                            sl_pct_pos = (
-                                abs(float(sl) - entry_price) / entry_price * 100.0
-                                if sl is not None else 0.0
-                            )
-                            tp_pct_pos = (
-                                abs(float(tp) - entry_price) / entry_price * 100.0
-                                if tp is not None else 0.0
-                            )
-                            bull_long = (
-                                str(side or "").upper() == "LONG"
-                                and str(market_bias or "").upper() == "LONG"
-                            )
-                            act, pull, keep = trail_levels_from_sl_tp(
-                                sl_pct_pos, tp_pct_pos, bull_long=bull_long,
-                            )
-                            act_kw = {
-                                "activate_pct": act,
-                                "pullback_pct": pull,
-                                "min_keep_pct": keep,
-                            }
-                    except Exception:
-                        act_kw = {}
-                    if (
-                        not act_kw
-                        and str(side or "").upper() == "LONG"
-                        and str(market_bias or "").upper() == "LONG"
-                    ):
-                        act_kw = {
-                            "activate_pct": 2.2,
-                            "pullback_pct": 0.80,
-                            "min_keep_pct": 0.50,
-                        }
-                    trail_br = check_brain_trail_lock(pnl_pct, new_peak, **act_kw)
-                    if trail_br:
+                    if struct_br:
                         self._sync_peak_to_db(pid, new_peak * 100)
                         logger.info(
-                            f"[BRAIN trail] pid={pid} {symbol} {side} "
-                            f"reason={trail_br} price={price:.6f}"
+                            f"[structure swing] pid={pid} {symbol} {side} "
+                            f"reason={struct_br} price={price:.6f} peak={new_peak * 100:.2f}%"
                         )
                         self._cooldown[pid] = now + self._cooldown_seconds
                         self._peak_pnl_map.pop(pid, None)
-                        self._do_close(pid, symbol, side, trail_br, price, now)
-                        continue
-                    soft_br = check_brain_soft_no_follow(pnl_pct, new_peak, age_s)
-                    if soft_br:
-                        self._sync_peak_to_db(pid, new_peak * 100)
-                        logger.info(
-                            f"[BRAIN soft] pid={pid} {symbol} {side} "
-                            f"reason={soft_br} price={price:.6f}"
-                        )
-                        self._cooldown[pid] = now + self._cooldown_seconds
-                        self._peak_pnl_map.pop(pid, None)
-                        self._do_close(pid, symbol, side, soft_br, price, now)
-                        continue
+                        self._do_close(pid, symbol, side, struct_br, price, now)
                     continue
 
                 if not _is_midline_source(src):
@@ -680,44 +636,7 @@ class PositionSLTPMonitor:
                         self._do_close(pid, symbol, side, soft_sl, price, now)
                         continue
 
-                # ai-trail-tp：探索/预测；中线改走更早的 midline_hold_exit
-                if _is_midline_source(src):
-                    from app.services.midline_hold_exit import check_midline_hold_exits
-                    midline_playbook = None
-                    midline_signals = []
-                    try:
-                        raw_components = pos.get("signal_components")
-                        components = (
-                            json.loads(raw_components)
-                            if isinstance(raw_components, str) and raw_components.strip()
-                            else raw_components
-                        ) or {}
-                        pb = components.get("playbook") or {}
-                        if isinstance(pb, dict):
-                            midline_playbook = pb.get("name") or pb.get("playbook")
-                            midline_signals = list(pb.get("signals") or [])
-                    except Exception:
-                        midline_playbook = None
-                        midline_signals = []
-                    trail_mid = check_midline_hold_exits(
-                        pnl_pct,
-                        new_peak,
-                        age_s,
-                        playbook=midline_playbook,
-                        signals=midline_signals,
-                        side=side,
-                        market_bias=market_bias,
-                    )
-                    if trail_mid:
-                        self._sync_peak_to_db(pid, new_peak * 100)
-                        logger.info(
-                            f"[midline hold-exit] pid={pid} {symbol} {side} "
-                            f"reason={trail_mid} price={price:.6f} peak={new_peak * 100:.2f}%"
-                        )
-                        self._cooldown[pid] = now + self._cooldown_seconds
-                        self._peak_pnl_map.pop(pid, None)
-                        self._do_close(pid, symbol, side, trail_mid, price, now)
-                    continue
+                # ai-trail-tp：探索/预测
                 trail_ai = _check_ai_trail_tp(
                     pnl_pct,
                     new_peak,
@@ -1039,6 +958,36 @@ class PositionSLTPMonitor:
                 f"pnl_pct={inner.get('pnl_pct')} "
                 f"exit_price={inner.get('exit_price') or inner.get('close_price')}"
             )
+
+    def _maybe_structure_swing_close(
+        self,
+        pos: Dict[str, Any],
+        symbol: str,
+        side: str,
+        price: float,
+        peak_pct: float,
+        age_s: float,
+    ) -> Optional[str]:
+        from app.services.structure_swing_exit import (
+            check_structure_swing_exit,
+            load_15m_rows,
+            playbook_row_from_position,
+        )
+        rows = load_15m_rows(symbol)
+        if len(rows) < 24:
+            return None
+        try:
+            return check_structure_swing_exit(
+                side,
+                rows,
+                peak_pct=peak_pct,
+                age_s=age_s,
+                ref_price=price,
+                playbook_row=playbook_row_from_position(pos),
+            )
+        except Exception as e:
+            logger.debug(f"[structure swing] {symbol} 判定失败: {e}")
+            return None
 
     def _extend_brain_planned_close(self, pid: int, minutes: int, reason: str) -> None:
         new_deadline = utc_now_naive() + _dt.timedelta(minutes=int(minutes))

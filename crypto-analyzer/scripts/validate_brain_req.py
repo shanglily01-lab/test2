@@ -221,22 +221,14 @@ def test_brain_skip_open_advisor() -> None:
     else:
         _ok("hold advisor includes brain")
     mon = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
-    if "check_brain_trail_lock" not in mon or "brain_trail_exit" not in mon:
-        _fail("position_sl_tp_monitor 未接入 BRAIN 新版 trail")
-    elif "_check_ai_trail_tp" in mon and "if _is_brain" not in mon and "is_brain_source as _brain_src" not in mon:
-        _fail("monitor 可能对 BRAIN 误用旧 ai-trail")
+    if "check_structure_swing_exit" not in mon or "uses_structure_swing_hold" not in mon:
+        _fail("position_sl_tp_monitor 未接入结构买卖点出场")
+    elif "_maybe_structure_swing_close" not in mon:
+        _fail("monitor 缺少 _maybe_structure_swing_close")
     else:
-        _ok("monitor brain trail (new, not old ai-trail)")
-    if "check_midline_hold_exits" not in mon:
-        _fail("monitor 未接入中线更早锁利/回吐")
-    else:
-        _ok("monitor midline hold-exit")
-    if "_brain_planned_close_recheck" not in mon or "brain_planned_recheck" not in mon:
-        _fail("monitor 未接入 BRAIN planned_close 到期复核")
-    elif "short_not_allowed" in mon or "long_not_allowed" in mon:
-        _fail("BRAIN planned_recheck 不得再因 D1/regime flip 强平")
-    else:
-        _ok("monitor brain planned_close recheck")
+        _ok("monitor structure swing exit (no 4-6h force close)")
+    if "check_brain_trail_lock" in (ROOT / "app/services/brain_trail_exit.py").read_text(encoding="utf-8"):
+        _ok("brain_trail_exit 模块仍保留（结构出场后 BRAIN 不再调用）")
     adv = (ROOT / "app/services/deepseek_position_advisor.py").read_text(encoding="utf-8")
     if "advisor_suggest_only" not in adv:
         _fail("DeepSeek 持仓顾问未对 BRAIN/中线改为仅建议")
@@ -244,6 +236,67 @@ def test_brain_skip_open_advisor() -> None:
         _fail("BRAIN 持仓顾问不得再 force-close")
     else:
         _ok("hold advisor suggest-only for BRAIN/midline")
+    from app.services.position_advisor_impl import (
+        HOLD_ADVISOR_JSON_SYSTEM_ZH,
+        HOLD_ADVISOR_STRUCTURE_JSON_SYSTEM_ZH,
+        PositionAdvisorCore,
+    )
+    if "4 小时交易窗口" not in HOLD_ADVISOR_JSON_SYSTEM_ZH:
+        _fail("探索/预测持仓顾问仍须 4h 窗口")
+    elif "不限持仓时长" not in HOLD_ADVISOR_STRUCTURE_JSON_SYSTEM_ZH:
+        _fail("结构波段持仓顾问 system 未取消时长限制")
+    elif "禁止因持仓小时数" not in HOLD_ADVISOR_STRUCTURE_JSON_SYSTEM_ZH:
+        _fail("结构波段持仓顾问未禁止时长/回吐卖")
+    else:
+        _ok("hold advisor structure rubric vs 4h explore rubric")
+    ds_adv = (ROOT / "app/services/deepseek_position_advisor.py").read_text(encoding="utf-8")
+    if "_temper_structure_swing_hold" not in ds_adv:
+        _fail("DeepSeek tick 未接入 _temper_structure_swing_hold")
+    elif "structure_hold" not in ds_adv:
+        _fail("DeepSeek tick 未按结构仓跳过浮盈/亏损 temper")
+    else:
+        _ok("hold advisor tick skips profit/loss temper for structure")
+    pos = {
+        "entry_price": 100, "leverage": 5, "position_side": "LONG",
+        "symbol": "BTC/USDT", "hold_hours": 8.0, "source": "brain_swing",
+    }
+    ctx = {
+        "klines_15m": [], "klines_5m": [], "klines_1h": [],
+        "structure_swing": True, "structure_status": "wait_stall",
+        "structure_ready": False, "structure_why": "still_at_high",
+        "structure_program_close": False, "big4_signal": "LONG",
+        "narrative_15m": "", "narrative_1h": "",
+    }
+    p = PositionAdvisorCore._build_prompt(pos, 101.0, ctx)
+    if "4 小时交易窗口" in p or "合适高点" not in p:
+        _fail("BRAIN 持仓 prompt 仍是 4h 或缺少结构卖点")
+    else:
+        _ok("BRAIN hold prompt is structure swing")
+    pos_ds = dict(pos)
+    pos_ds["source"] = "deepseek_explore"
+    ctx_ds = dict(ctx)
+    ctx_ds["structure_swing"] = False
+    p_ds = PositionAdvisorCore._build_prompt(pos_ds, 101.0, ctx_ds)
+    if "4 小时交易窗口" not in p_ds:
+        _fail("DeepSeek 探索持仓 prompt 丢掉了 4h 窗口")
+    else:
+        _ok("explore hold prompt still 4h")
+    hold_a, _ = PositionAdvisorCore._temper_structure_swing_hold(
+        "sell", "浮盈回吐该卖",
+        {"structure_swing": True, "structure_program_close": False, "structure_status": "wait_stall"},
+    )
+    if hold_a != "hold":
+        _fail("结构点未到时 sell 应打回 hold")
+    else:
+        _ok("structure temper blocks early sell")
+    obs_a, _ = PositionAdvisorCore._temper_structure_swing_hold(
+        "hold", "仍顺向",
+        {"structure_swing": True, "structure_program_close": True, "structure_status": "exhaustion_ready"},
+    )
+    if obs_a != "observe":
+        _fail("结构点已到 hold 应升为 observe")
+    else:
+        _ok("structure temper observes when program close ready")
     regime_src = (ROOT / "app/services/brain_market_regime.py").read_text(encoding="utf-8")
     if "big4_long_allows_exhaustion" not in regime_src:
         _fail("Big4 LONG 未放开 B3/C4 高点滞涨空")
@@ -1044,6 +1097,7 @@ def test_orchestrator_syntax() -> None:
         "app/services/brain_opportunity_store.py",
         "app/services/brain_strategy_orchestrator.py",
         "app/services/entry_timing.py",
+        "app/services/structure_swing_exit.py",
         "app/services/position_sl_tp_monitor.py",
         "app/services/smart_exit_optimizer.py",
         "app/trading/futures_trading_engine.py",
@@ -1523,6 +1577,74 @@ def test_rsi_entry_timing() -> None:
     _ok("15m RSI gates long-hot / short-rising timing")
 
 
+def test_structure_swing_exit() -> None:
+    from app.services.entry_timing import compute_structure_exit
+    from app.services.structure_swing_exit import (
+        check_structure_swing_exit,
+        uses_structure_swing_hold,
+    )
+
+    assert uses_structure_swing_hold("brain_swing") is True
+    assert uses_structure_swing_hold("midline_short") is True
+    assert uses_structure_swing_hold("deepseek_explore") is False
+
+    bars, peak = _pump_bars()
+    bars.append({
+        "open_price": peak - 0.02,
+        "high_price": peak + 0.45,
+        "low_price": peak - 0.15,
+        "close_price": peak - 0.08,
+        "volume": 900,
+    })
+    pb = {"signals": ["pump_spike", "exhaustion_up", "long_upper_wick", "volume_diverge_bear"]}
+    px = bars[-1]["close_price"]
+    sell = compute_structure_exit("LONG", bars, playbook_row=pb, ref_price=px)
+    assert sell.ready is True, sell
+    assert sell.status == "exhaustion_ready", sell
+    assert check_structure_swing_exit(
+        "LONG", bars, peak_pct=0.002, age_s=3600, ref_price=px, playbook_row=pb,
+    ) is None
+    assert check_structure_swing_exit(
+        "LONG", bars, peak_pct=0.012, age_s=60, ref_price=px, playbook_row=pb,
+    ) is None
+    hit = check_structure_swing_exit(
+        "LONG", bars, peak_pct=0.012, age_s=30 * 60, ref_price=px, playbook_row=pb,
+    )
+    assert hit and hit.startswith("structure_sell_high"), hit
+
+    dump = []
+    p = 100.0
+    for _ in range(36):
+        p -= 0.18
+        dump.append({
+            "open_price": p + 0.06,
+            "high_price": p + 0.08,
+            "low_price": p - 0.10,
+            "close_price": p,
+            "volume": 900,
+        })
+    tagged_low = min(b["low_price"] for b in dump[-8:])
+    bounce_px = tagged_low * 1.0045
+    dump.append({
+        "open_price": tagged_low + 0.04,
+        "high_price": bounce_px + 0.06,
+        "low_price": tagged_low,
+        "close_price": bounce_px,
+        "volume": 800,
+    })
+    cover = compute_structure_exit(
+        "SHORT", dump,
+        playbook_row={"signals": ["rsi_15m_turn_up", "long_lower_wick"]},
+        ref_price=bounce_px,
+    )
+    assert cover.ready is True, cover
+    assert cover.status == "bounce_low_ready", cover
+    orch = (ROOT / "app/services/brain_strategy_orchestrator.py").read_text(encoding="utf-8")
+    assert "planned_close_time=None" in orch
+    assert "take_profit_pct=None" in orch
+    _ok("structure swing sells the high / covers the low; no 4-6h deadline")
+
+
 def main() -> int:
     print("=== validate_brain_req ===\n")
     test_imports_and_config()
@@ -1553,6 +1675,7 @@ def main() -> int:
     test_entry_timing_a2_b2_wait_for_reject()
     test_entry_timing_c3_midline_follow()
     test_rsi_entry_timing()
+    test_structure_swing_exit()
     print()
     if _fail_n:
         print(f"FAILED {_fail_n}")

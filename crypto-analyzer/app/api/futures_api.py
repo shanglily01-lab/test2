@@ -91,7 +91,7 @@ def _get_live_engine():
         live_engine = None
     return live_engine
 
-# 初始化交易引擎（模拟盘不传入trade_notifier，不发送TG通知，传入live_engine以便平仓同步）
+# 初始化交易引擎（模拟盘开/平仓 TG 走 get_trade_notifier 单例；传入 live_engine 以便平仓同步）
 # 不在模块导入时强制连接 DB，避免 main 路由注册阶段被数据库抖动拖死。
 engine = None
 

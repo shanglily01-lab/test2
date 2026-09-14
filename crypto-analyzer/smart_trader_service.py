@@ -1257,7 +1257,7 @@ class SmartTraderService:
 
         logger.info("🔱 Big4趋势检测器已启动 (实时检测模式)")
 
-        # Telegram 通知（熔断/告警 + 实盘开/平仓；注册全局单例供顾问/引擎 get_trade_notifier）
+        # Telegram 通知（熔断/告警 + 模拟盘开/平仓单例；实盘开平仓不发）
         from app.services.trade_notifier import init_trade_notifier
         _tg_cfg = {
             'notifications': {

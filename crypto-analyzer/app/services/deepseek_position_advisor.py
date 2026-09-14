@@ -18,6 +18,7 @@ from app.services.advisor_core import (
     HOLD_5M_BARS,
     HOLD_1H_BARS,
     HOLD_ADVISOR_JSON_SYSTEM_ZH,
+    HOLD_ADVISOR_STRUCTURE_JSON_SYSTEM_ZH,
     HOLD_CHECK_INTERVAL_S,
     HOLD_MIN_HOURS,
     HOLD_MIN_MINUTES,
@@ -120,7 +121,7 @@ class DeepSeekPositionAdvisor:
         return allow_long, allow_short
 
     def _call_deepseek_json(
-        self, prompt: str, *, hold_mode: bool = False,
+        self, prompt: str, *, hold_mode: bool = False, structure_hold: bool = False,
     ) -> Optional[dict]:
         if not DEEPSEEK_API_KEY:
             logger.warning("[DeepSeek顾问] DEEPSEEK_API_KEY 未配置，无法调用开仓/持仓顾问")
@@ -132,7 +133,11 @@ class DeepSeekPositionAdvisor:
             return None
         system_msg = OPEN_ADVISOR_JSON_SYSTEM_ZH
         if hold_mode:
-            system_msg = HOLD_ADVISOR_JSON_SYSTEM_ZH
+            system_msg = (
+                HOLD_ADVISOR_STRUCTURE_JSON_SYSTEM_ZH
+                if structure_hold
+                else HOLD_ADVISOR_JSON_SYSTEM_ZH
+            )
         text = ""
         try:
             client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
@@ -391,8 +396,13 @@ class DeepSeekPositionAdvisor:
                 pos["current_price"] = current_price
 
                 ctx = helper._fetch_market_context(pos["symbol"])
+                structure_hold = helper._annotate_structure_ctx(
+                    pos, current_price, ctx, hold_h,
+                )
                 prompt = helper._build_prompt(pos, current_price, ctx)
-                decision = self._call_deepseek_json(prompt, hold_mode=True)
+                decision = self._call_deepseek_json(
+                    prompt, hold_mode=True, structure_hold=structure_hold,
+                )
                 if not decision:
                     stats["errors"] += 1
                     continue
@@ -415,18 +425,23 @@ class DeepSeekPositionAdvisor:
 
                 action = decision["action"]
                 reason = decision["reason"]
-                action, reason = helper._temper_losing_hold(
-                    roi, action, reason, pos["position_side"], s15, s1h, s5,
-                )
-                action, reason = helper._temper_profitable_hold(
-                    roi, action, reason, pos["position_side"], s15, s1h, peak_roi,
-                )
+                if not structure_hold:
+                    action, reason = helper._temper_losing_hold(
+                        roi, action, reason, pos["position_side"], s15, s1h, s5,
+                    )
+                    action, reason = helper._temper_profitable_hold(
+                        roi, action, reason, pos["position_side"], s15, s1h, peak_roi,
+                    )
                 action, reason = helper._temper_premature_sell(
                     roi, action, reason, pos["position_side"], s15, s1h, s5,
                 )
                 action, reason = helper._temper_bull_overbought_sell(
                     action, reason, pos["position_side"], s15, market_bias, roi,
                 )
+                if structure_hold:
+                    action, reason = helper._temper_structure_swing_hold(
+                        action, reason, ctx,
+                    )
                 src = pos.get("source") or ""
                 advise_only = False
                 try:

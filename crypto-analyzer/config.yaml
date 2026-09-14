@@ -231,8 +231,8 @@ notifications:
     - strong_signal
     - major_news
     - price_alert
-    - live_open
-    - live_close
+    - paper_open
+    - paper_close
     - stop_loss
     - take_profit
 scheduler:

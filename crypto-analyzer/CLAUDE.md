@@ -75,7 +75,7 @@
 | Gemini 探索 | —（已下线） | — |
 | DeepSeek 探索/预测 | 每2h + 10min/5min（**对照期保留**；INV-BRAIN-07 暂缓） | `deepseek_*_enabled` |
 | **REQ-BRAIN** `brain_swing` | 每 **15s** 一批 **5** 币轮询市值前 300 | `brain_swing_enabled`；启动 +75s；发现机会挂防插针限价 |
-| **中线 v2** `midline_long/short` | 每 **15min** 轮询；多单回调买 / B3/C4 冲高卖；C3/C1/B3/C4 4h / A1 6h |
+| **中线 v2** `midline_long/short` | 每 **15min** 轮询；多单回调买 / B3/C4 冲高卖；结构点出场（不限时） |
 | **现货镜像** `spot_*` | 合约模拟成交瞬间跟单；`crypto-app-main` 每 1min 查 TP/SL；`spot_trading_enabled` |
 | **持仓顾问** DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent；BRAIN/中线 **suggest-only**） |
 | 市场情绪分析 | **已下线**（原 Gemini 情绪） |
@@ -182,17 +182,18 @@
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟+实盘】
 - **量化扫描**，非 LLM；标的 **市值前 100**（`config.yaml` 序）；**15min** 轮询；旧四路 `*_midline_*` 停并移除
 - kill switch：`midline_long_enabled` / `midline_short_enabled`（系统配置「策略与模式」+ 破位策略页）
-- 限价：做多 A1 挂 **15m 回调区**；**C3/C1 破位市价跟风**（**C3 须 Big4 LONG**；禁 RSI 极端+7日高追；止盈后 4h 冷却）；B2 须反抽失败后再市价跟；**B3 须 Big4 非 LONG** 且顶部第一回调后挂空；A2 须离低点并拒绝后挂反抽区；**15m RSI 管时机**（不定方向）；C3/C1/B2/B3/C4 持仓 **4h** / A1/A2 **6h**；SL **6%** / TP **3%** / 5x / 500U
-- **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）；**midline_hold_exit** 默认峰≥1.2% 锁利，Big4 LONG 多单 2.5%/0.80% 且关闭 no_follow；**排除** SmartExit
+- 限价：做多 A1 挂 **15m 回调区**；**C3/C1 破位市价跟风**（**C3 须 Big4 LONG**；禁 RSI 极端+7日高追；止盈后 4h 冷却）；B2 须反抽失败后再市价跟；**B3 须 Big4 非 LONG** 且顶部第一回调后挂空；A2 须离低点并拒绝后挂反抽区；**15m RSI 管时机**（不定方向）；**持仓不限时**（低点买高点卖）；SL **6%** / 5x / 500U
+- **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）；**结构点出场**（取消 midline_hold_exit 早锁利与 4h/6h 到期）；**排除** SmartExit
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
 - Web：原 Gemini 探索页整页改破位策略/机会分析
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.2；操作对照：`docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`
 
 ### 开仓 / 持仓顾问
 - 路由：统一 **DeepSeek**（Gemini 顾问已下线；历史 `gemini_*` 仓亦由 DeepSeek 监管）；中线/BRAIN 跳过开仓顾问、**纳入**持仓顾问（**sell 只建议不执行**）
-- **BRAIN**：开仓跳过顾问；持仓进入 DeepSeek 做 thesis 复核（**sell 只建议不执行**；硬 SL/TP/trail 仍兜底）
+- **BRAIN**：开仓跳过顾问；持仓进入 DeepSeek 做 **结构点 thesis 复核**（**sell 只建议不执行**；硬 SL / −80U / 结构点兜底）
 - 持仓 tick：**15min**；每仓 15min；浮盈转亏 urgent 立即再审
 - 盈利 sell（探索仓）：ROI **≥+8%** 且 15m 明确转弱（反向≥4）；过早 sell 程序化拦截恢复严格
+- **BRAIN/破位持仓顾问**：结构点 rubric（不限时；低买高卖）；结构未到不得因时长/浮盈建议卖；sell 仍只建议不执行
 - Prompt/rubric/**reason 中文**；开关 `deepseek_*_advisor_enabled`（系统设置「开仓/持仓顾问」）
 
 ### gemini_sentiment_analyzer (情绪)

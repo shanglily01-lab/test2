@@ -520,46 +520,27 @@ def test_kill_switch_ui() -> None:
 
 
 def test_ai_trail_for_midline() -> None:
-    print("[3c] midline earlier lock / giveback")
+    print("[3c] midline structure swing hold")
     from app.services.position_sl_tp_monitor import (
         _is_ai_hard_sltp_source,
         _is_midline_source,
+        _uses_structure_swing,
     )
-    from app.services.midline_hold_exit import (
-        check_midline_giveback,
-        check_midline_hold_exits,
-        check_midline_no_follow,
-        check_midline_trail_lock,
-        midline_hold_hours,
-    )
+    from app.services.structure_swing_exit import uses_structure_swing_hold
+    from app.services.midline_hold_exit import midline_hold_hours
 
     assert _is_midline_source("midline_long")
     assert _is_ai_hard_sltp_source("midline_long")
-    assert check_midline_trail_lock(0.007, 0.013) is not None
-    assert check_midline_trail_lock(0.007, 0.013, playbook="C3") is None
-    assert check_midline_trail_lock(
-        0.021,
-        0.034,
-        playbook="C3",
-        signals=["volume_expand_up", "h1_breakout_up"],
-    ) is not None
-    assert check_midline_trail_lock(0.012, 0.013) is None
-    assert check_midline_trail_lock(0.007, 0.013, side="LONG", market_bias="LONG") is None
-    assert check_midline_trail_lock(0.018, 0.026, side="LONG", market_bias="LONG") is not None
-    assert check_midline_giveback(0.0, 0.015, 30 * 60) is not None
-    assert check_midline_giveback(0.0, 0.015, 30 * 60, playbook="C3") is None
-    assert check_midline_giveback(0.002, 0.023, 40 * 60, playbook="C3") is not None
-    assert check_midline_giveback(0.0, 0.015, 10 * 60) is None
-    assert check_midline_hold_exits(0.007, 0.013, 40 * 60) is not None
-    assert check_midline_no_follow(-0.012, 0.003, 90 * 60) is not None
-    assert check_midline_no_follow(-0.012, 0.003, 90 * 60, side="LONG") is None
-    assert check_midline_no_follow(-0.012, 0.003, 90 * 60, side="LONG", market_bias="LONG") is None
-    assert check_midline_no_follow(-0.026, 0.003, 180 * 60, side="LONG") is not None
+    assert uses_structure_swing_hold("midline_long")
+    assert _uses_structure_swing("midline_short")
     assert midline_hold_hours("C3") == 4.0
-    assert midline_hold_hours("A1") == 6.0
-    assert midline_hold_hours("B3") == 4.0
-    assert midline_hold_hours("C4") == 4.0
-    _ok("midline locks at ~1.2% peak and cuts profit-to-loss")
+    worker = (ROOT / "app/services/midline_explore_worker.py").read_text(encoding="utf-8")
+    assert "planned_close_time=None" in worker
+    assert "take_profit_pct=None" in worker
+    mon = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
+    assert "check_structure_swing_exit" in mon
+    assert "check_midline_hold_exits" not in mon
+    _ok("midline holds to opposite structure point; no 4-6h expiry")
 
 
 def test_entry_signal_labels() -> None:
@@ -612,7 +593,27 @@ def test_hold_advisor_includes_midline() -> None:
         "sell", "15m跌破前低", "LONG", {"against": 2, "for": 1}, "LONG", -8.0,
     )
     assert keep_break == "sell"
-    _ok("DeepSeek hold advisor now reviews midline profit giveback")
+    pos = {
+        "entry_price": 100, "leverage": 5, "position_side": "LONG",
+        "symbol": "ETH/USDT", "hold_hours": 9.0, "source": "midline_long",
+    }
+    ctx = {
+        "klines_15m": [], "klines_5m": [], "klines_1h": [],
+        "structure_swing": True, "structure_status": "wait_stall",
+        "structure_ready": False, "structure_why": "wait",
+        "structure_program_close": False, "big4_signal": "FLAT",
+        "narrative_15m": "", "narrative_1h": "",
+    }
+    prompt = PositionAdvisorCore._build_prompt(pos, 101.0, ctx)
+    assert "4 小时交易窗口" not in prompt
+    assert "不限持仓时长" in prompt
+    assert "优先保护已实现浮盈" not in prompt
+    blocked, _ = PositionAdvisorCore._temper_structure_swing_hold(
+        "sell", "峰ROI回吐",
+        {"structure_swing": True, "structure_program_close": False, "structure_status": "wait_stall"},
+    )
+    assert blocked == "hold"
+    _ok("DeepSeek hold advisor uses structure swing rubric for midline")
 
 
 def test_run_summary_zh() -> None:

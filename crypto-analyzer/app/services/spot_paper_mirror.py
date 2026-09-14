@@ -185,11 +185,21 @@ def maybe_mirror_spot_from_paper_fill(
         if qty <= 0:
             return None
         sl = float(stop_loss_price) if stop_loss_price else round(price * 0.97, 8)
-        tp = float(take_profit_price) if take_profit_price else round(price * 1.05, 8)
+        try:
+            from app.services.structure_swing_exit import uses_structure_swing_hold
+            structure_hold = uses_structure_swing_hold(source)
+        except Exception:
+            structure_hold = str(source or "").startswith("brain_")
+        if take_profit_price:
+            tp = float(take_profit_price)
+        elif structure_hold:
+            tp = None
+        else:
+            tp = round(price * 1.05, 8)
         sl_pct = abs(price - sl) / price * 100.0 if price else 3.0
-        tp_pct = abs(tp - price) / price * 100.0 if price else 5.0
+        tp_pct = abs(tp - price) / price * 100.0 if (tp and price) else 0.0
         close_at = planned_close_time
-        if close_at is None:
+        if close_at is None and not structure_hold:
             close_at = utc_now_naive() + timedelta(hours=24)
         spot_src = spot_source_for(source)
         reason = (

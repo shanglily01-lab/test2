@@ -299,6 +299,16 @@ def _upper_wick_ratio(row: Dict[str, Any]) -> float:
     return max(h - body_top, 0.0) / span
 
 
+def _lower_wick_ratio(row: Dict[str, Any]) -> float:
+    o = _f(row.get("open_price"))
+    h = _f(row.get("high_price"))
+    l = _f(row.get("low_price"))
+    c = _f(row.get("close_price"))
+    span = max(h - l, 1e-12)
+    body_bot = min(o, c)
+    return max(body_bot - l, 0.0) / span
+
+
 def _close_loc_in_bar(row: Dict[str, Any]) -> float:
     h = _f(row.get("high_price"))
     l = _f(row.get("low_price"))
@@ -1101,4 +1111,119 @@ def compute_pullback_entry(
         limit_offset_pct=offset, limit_price=round(target, 8),
         zone_low=zone_low, zone_high=zone_high, ema20=ema20,
         break_level=break_level, extended=extended, bounce_ok=bounce_ok,
+    )
+
+
+def _bounce_low_cover_entry(
+    rows_15m: List[Dict[str, Any]],
+    *,
+    playbook_row: Optional[Dict[str, Any]],
+    price: float,
+    ema20: Optional[float],
+) -> EntryTiming:
+    """Cover a short at a suitable 15m low: leave the tagged low with a reject bounce."""
+    h = _highs(rows_15m)
+    l = _lows(rows_15m)
+    v = _vols(rows_15m)
+    c = _closes(rows_15m)
+    recent_low = min(l[-8:])
+    impulse_hi = max(h[-8:])
+    dist_pct = (price - recent_low) / price * 100.0 if price > 0 else 99.0
+    at_lows = dist_pct <= NEAR_HIGH_MAX_DIST_PCT or (
+        ema20 is not None and price <= ema20 * 0.996 and dist_pct <= 1.10
+    )
+    missed = dist_pct >= MISSED_HIGH_DIST_PCT and not at_lows
+    zone_low = recent_low
+    zone_high = min(recent_low * (1.0 + NEAR_HIGH_MAX_DIST_PCT / 100.0), impulse_hi)
+    last = rows_15m[-1]
+    last_close_loc = _close_loc_in_bar(last)
+    last_wick = _lower_wick_ratio(last)
+    last_green = _f(last.get("close_price")) > _f(last.get("open_price"))
+    last_is_reject = last_close_loc >= 0.55 and (last_wick >= 0.28 or last_green)
+    left_the_low = TOP_CALLBACK_MIN_OFF_PCT <= dist_pct <= NEAR_HIGH_MAX_DIST_PCT
+    prior_lo = min(l[-8:-1]) if len(l) >= 9 else min(l[:-1])
+    last_vol = v[-1] if v else 0.0
+    avg_vol = (sum(v[-6:-1]) / 5.0) if len(v) >= 6 else last_vol
+    printing_low = l[-1] < prior_lo * 0.999
+    held_low = last_close_loc <= 0.38 and last_wick < 0.32
+    accelerating = bool(
+        printing_low
+        and held_low
+        and (last_vol >= avg_vol * 1.05 or last_close_loc <= 0.30)
+    )
+    rsi_ok, rsi_why = long_rsi_entry_ok(c, _signals_of(playbook_row))
+    offset = ENTRY_READY_OFFSET_PCT
+    target = max(recent_low, price * (1.0 - EXHAUSTION_OFFSET_MAX_PCT / 100.0))
+
+    if printing_low and accelerating:
+        return EntryTiming(
+            ready=False, status="wait_bounce", reason="still_dumping_wait_reject",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=recent_low, extended=True, bounce_ok=False, mode="cover_low",
+        )
+    if missed:
+        return EntryTiming(
+            ready=False, status="missed_low",
+            reason=f"already_off_low_{dist_pct:.2f}pct",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=recent_low, extended=False, bounce_ok=False, mode="cover_low",
+        )
+    if at_lows and left_the_low and last_is_reject:
+        if not rsi_ok:
+            return EntryTiming(
+                ready=False, status="wait_bounce", reason=rsi_why,
+                limit_offset_pct=offset, limit_price=round(target, 8),
+                zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+                break_level=recent_low, extended=True, bounce_ok=False, mode="cover_low",
+            )
+        return EntryTiming(
+            ready=True, status="bounce_low_ready",
+            reason="bounce_from_low_reject",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=recent_low, extended=True, bounce_ok=True, mode="cover_low",
+        )
+    if at_lows:
+        return EntryTiming(
+            ready=False, status="wait_bounce",
+            reason="at_low_wait_reject",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=recent_low, extended=True, bounce_ok=False, mode="cover_low",
+        )
+    return EntryTiming(
+        ready=False, status="wait_bounce",
+        reason=f"not_at_low_{dist_pct:.2f}pct",
+        limit_offset_pct=offset, limit_price=round(target, 8),
+        zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+        break_level=recent_low, extended=False, bounce_ok=False, mode="cover_low",
+    )
+
+
+def compute_structure_exit(
+    side: str,
+    rows_15m: List[Dict[str, Any]],
+    *,
+    playbook_row: Optional[Dict[str, Any]] = None,
+    ref_price: Optional[float] = None,
+) -> EntryTiming:
+    """LONG: sell a suitable 15m high. SHORT: cover a suitable 15m low."""
+    side_u = (side or "").upper()
+    if side_u not in ("LONG", "SHORT"):
+        return _empty("no_zone", "flat_side")
+    if len(rows_15m) < 24:
+        return _empty("no_zone", "insufficient_15m")
+    c = _closes(rows_15m)
+    price = _f(ref_price) if ref_price else (c[-1] if c else 0.0)
+    if price <= 0:
+        return _empty("no_zone", "no_price")
+    ema20 = _ema(c, 20)
+    if side_u == "LONG":
+        return _exhaustion_short_entry(
+            rows_15m, playbook_row=playbook_row, price=price, ema20=ema20,
+        )
+    return _bounce_low_cover_entry(
+        rows_15m, playbook_row=playbook_row, price=price, ema20=ema20,
     )

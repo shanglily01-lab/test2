@@ -283,7 +283,7 @@ def _open_limit_order(
         symbol, side, price, source,
         catalyst="midline_v2_pass",
         leverage=MIDLINE_LEVERAGE,
-        sl_pct=MIDLINE_SL_PCT, tp_pct=MIDLINE_TP_PCT,
+        sl_pct=MIDLINE_SL_PCT, tp_pct=None,
         hold_hours=hold_hours,
         conn=conn,
     )
@@ -299,9 +299,11 @@ def _open_limit_order(
         signals=list((signal_detail.get("playbook") or {}).get("signals") or signal_detail.get("signals") or []),
     )
     paper_margin = get_paper_margin_usd(symbol, conn)
-    hold_deadline = utc_now_naive() + timedelta(hours=hold_hours)
     limit_offset = timing.get("limit_offset_pct")
     sig_type = f"breakout_{playbook}" if playbook else source
+    if isinstance(signal_detail, dict):
+        signal_detail = dict(signal_detail)
+        signal_detail["hold_mode"] = "structure_swing"
     return create_paper_limit_order(
         conn,
         symbol=symbol,
@@ -311,13 +313,13 @@ def _open_limit_order(
         leverage=MIDLINE_LEVERAGE,
         margin=paper_margin,
         stop_loss_pct=MIDLINE_SL_PCT,
-        take_profit_pct=MIDLINE_TP_PCT,
+        take_profit_pct=None,
         entry_signal_type=sig_type,
         entry_reason=reason[:200],
         entry_score=score,
         signal_components=signal_detail,
-        max_hold_minutes=int(hold_hours * 60),
-        planned_close_time=hold_deadline,
+        max_hold_minutes=None,
+        planned_close_time=None,
         account_id=MIDLINE_ACCOUNT_ID,
         timeout_minutes=get_midline_limit_timeout_minutes(),
         limit_offset_pct=float(limit_offset) if limit_offset is not None else None,

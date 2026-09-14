@@ -9,7 +9,7 @@ alwaysApply: true
 
 - 服务: `crypto-scheduler` → `app/scheduler.py`
 - 应用日志: `logs/scheduler_$(date -u +%Y-%m-%d).log`（不是 journalctl 主输出）
-- AI SL/TP / ai-trail-tp: `crypto-app-main` → `position_sl_tp_monitor`（探索/预测 ai-trail-tp；中线 `midline_hold_exit`；BRAIN 新版 trail；中线/BRAIN 排除 SmartExit）
+- AI SL/TP / ai-trail-tp: `crypto-app-main` → `position_sl_tp_monitor`（探索/预测 ai-trail-tp；BRAIN/破位 **结构点出场**；中线/BRAIN 排除 SmartExit）
 - 部署后改 Python 必须 restart 对应 systemd（scheduler / main 分开）
 
 ## 调度节奏
@@ -24,7 +24,7 @@ alwaysApply: true
 | **中线 v2** | every(15).min | `midline_long/short` kill switch；扫描市值前100；A1 回调买 / C3·C1 破位市价跟风（C3 须 Big4 LONG）/ B3 顶部限价空（须 Big4 非 LONG）/ C4 假突空 |
 | **现货镜像** | 合约成交钩子 + main 1min | `spot_trading_enabled`；`spot_live_enabled` 成交瞬间同步 500U；仅 L0；打开不回填 |
 | 战术 15 槽位 | every(15).min | `tactical_explore_scheduler` |
-| **Gemini/DeepSeek 持仓顾问** | **every(15).min** | 每仓 15min；浮盈转亏 urgent；**含** midline_* 与 brain_*（**sell 只建议不执行**） |
+| **Gemini/DeepSeek 持仓顾问** | **every(15).min** | 每仓 15min；浮盈转亏 urgent；**含** midline_* 与 brain_*（**结构点 rubric**；**sell 只建议不执行**） |
 | Gemini 情绪 | every(8).hours | `gemini_sentiment_enabled` |
 | TOP50 + 评级 | every(1).hours + every(15).min | `rating_refresh_next_due_utc` |
 | price_stats_24h | every(1).min | `GET_LOCK('price_stats_24h_refresh')` 防重 |
@@ -61,9 +61,9 @@ alwaysApply: true
 
 ## 改动文件（维护时）
 
-- `midline_swing_config.py` · `midline_explore_worker.py` · `midline_swing_scanner.py` · `entry_timing.py` · `midline_hold_exit.py`
+- `midline_swing_config.py` · `midline_explore_worker.py` · `midline_swing_scanner.py` · `entry_timing.py` · `structure_swing_exit.py`
 - `paper_limit_entry.py` · `paper_limit_sync_service.py` · `position_sl_tp_monitor.py`
 - `futures_limit_order_executor.py` · `futures_trading_engine.py` · `binance_futures_engine.py` · `smart_exit_optimizer.py`
-- `gemini_position_advisor.py` · `hold_advisor_query.py` · `smart_exit_optimizer.py`（排除中线）
+- `gemini_position_advisor.py` · `hold_advisor_query.py` · `position_advisor_impl.py` · `smart_exit_optimizer.py`（排除中线）
 - `data_cache_service.py` · `ai_explore_prompt.py` · `*_explore_worker.py` · `*_predictor.py`
 - `app/scheduler.py` · `docs/REQUIREMENTS_LOGIC_ZH.md`

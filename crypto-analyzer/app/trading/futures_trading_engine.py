@@ -119,9 +119,79 @@ class FuturesTradingEngine:
         self._is_first_connection = True  # 标记是否是首次连接
         self._connection_created_at = None  # 连接创建时间（Unix时间戳）
         self._connection_max_age = 300  # 连接最大存活时间（秒），5分钟
-        self.trade_notifier = trade_notifier  # TG通知器
+        self.trade_notifier = trade_notifier  # TG通知器（模拟盘开/平仓）
         self.live_engine = live_engine  # 实盘引擎（用于同步平仓）
         self._connect_db()
+
+    def _resolve_trade_notifier(self):
+        if self.trade_notifier:
+            return self.trade_notifier
+        try:
+            from app.services.trade_notifier import get_trade_notifier
+            return get_trade_notifier()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _paper_strategy_name(
+        source: str = None,
+        entry_signal_type: str = None,
+        entry_reason: str = None,
+    ) -> str:
+        try:
+            from app.services.strategy_display_names import format_entry_signal_cn
+            label = format_entry_signal_cn(
+                source=source,
+                entry_signal_type=entry_signal_type,
+                entry_reason=entry_reason,
+            )
+            if label:
+                return label
+        except Exception:
+            pass
+        return source or ""
+
+    def _notify_paper_open(
+        self,
+        *,
+        account_id: int,
+        symbol: str,
+        position_side: str,
+        quantity,
+        entry_price,
+        leverage: int,
+        stop_loss_price=None,
+        take_profit_price=None,
+        margin=None,
+        source: str = None,
+        entry_signal_type: str = None,
+        entry_reason: str = None,
+        order_type: str = "MARKET",
+    ) -> None:
+        if not _is_paper_futures_account(account_id):
+            return
+        notifier = self._resolve_trade_notifier()
+        if not notifier:
+            logger.debug(f"[模拟盘开仓] TradeNotifier 未初始化,跳过 TG {symbol}")
+            return
+        try:
+            notifier.notify_open_position(
+                symbol=symbol,
+                direction=position_side,
+                quantity=float(quantity),
+                entry_price=float(entry_price),
+                leverage=int(leverage or 1),
+                stop_loss_price=float(stop_loss_price) if stop_loss_price else None,
+                take_profit_price=float(take_profit_price) if take_profit_price else None,
+                margin=float(margin) if margin else None,
+                strategy_name=self._paper_strategy_name(
+                    source, entry_signal_type, entry_reason,
+                ),
+                order_type=order_type,
+                is_paper=True,
+            )
+        except Exception as notify_err:
+            logger.warning(f"[模拟盘开仓] 发送TG通知失败 {symbol}: {notify_err}")
 
     def _connect_db(self, is_reconnect=False):
         """连接数据库"""
@@ -869,6 +939,21 @@ class FuturesTradingEngine:
                 f"{current_time_str}: 开仓成功: {symbol} {position_side} {float(quantity):.{qty_precision}f} @ {entry_price}, "
                 f"杠杆{leverage}x, 保证金{margin_required:.2f} USDT"
             )
+            self._notify_paper_open(
+                account_id=account_id,
+                symbol=symbol,
+                position_side=position_side,
+                quantity=quantity,
+                entry_price=entry_price,
+                leverage=leverage,
+                stop_loss_price=stop_loss_price,
+                take_profit_price=take_profit_price,
+                margin=margin_required,
+                source=source,
+                entry_signal_type=entry_signal_type,
+                entry_reason=entry_reason,
+                order_type=order_type,
+            )
 
             return {
                 'success': True,
@@ -1358,6 +1443,21 @@ class FuturesTradingEngine:
                 f"[{tag}] {symbol} {position_side} {float(quantity)} @ {entry_price}"
                 f"{extra} position_id={position_id} order={pending_order_id}"
             )
+            self._notify_paper_open(
+                account_id=account_id,
+                symbol=symbol,
+                position_side=position_side,
+                quantity=quantity,
+                entry_price=entry_price,
+                leverage=leverage,
+                stop_loss_price=stop_loss_price,
+                take_profit_price=take_profit_price,
+                margin=margin_required,
+                source=source,
+                entry_signal_type=entry_signal_type,
+                entry_reason=entry_reason,
+                order_type="MARKET" if at_market else "LIMIT",
+            )
             return {
                 'success': True,
                 'position_id': position_id,
@@ -1723,9 +1823,10 @@ class FuturesTradingEngine:
                 f"盈亏{realized_pnl:.2f} USDT ({pnl_pct:.2f}%), ROI {roi:.2f}%"
             )
 
-            # ========== 发送 Telegram 通知 ==========
+            # ========== 发送 Telegram 通知（仅模拟盘） ==========
             try:
-                if self.trade_notifier:
+                notifier = self._resolve_trade_notifier()
+                if notifier and paper_acct:
                     # 计算持仓时间
                     hold_time = None
                     if position.get('open_time'):
@@ -1744,7 +1845,7 @@ class FuturesTradingEngine:
                         else:
                             hold_time = f"{int(minutes)}分钟"
 
-                    self.trade_notifier.notify_close_position(
+                    notifier.notify_close_position(
                         symbol=symbol,
                         direction=position_side,
                         quantity=float(close_quantity),
@@ -1754,7 +1855,12 @@ class FuturesTradingEngine:
                         pnl_pct=float(roi),  # 使用 ROI（杠杆收益率）
                         reason=reason,
                         hold_time=hold_time,
-                        is_paper=True  # 标记为模拟盘
+                        strategy_name=self._paper_strategy_name(
+                            position.get("source"),
+                            position.get("entry_signal_type"),
+                            position.get("entry_reason"),
+                        ),
+                        is_paper=True,
                     )
             except Exception as notify_err:
                 logger.warning(f"发送模拟盘平仓通知失败: {notify_err}")

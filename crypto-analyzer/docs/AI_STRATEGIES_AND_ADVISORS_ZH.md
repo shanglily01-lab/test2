@@ -1,6 +1,6 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-08-26 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.56** 对齐  
+> 文档版本：2026-09-14 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.58** 对齐  
 > **给人看的对照**：[`BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`](./BRAIN_AND_BREAKOUT_OPERATOR_ZH.md)  
 > **合约自选 §7.5**：`/watchlist` 手动限价/市价；限价可撤；价格优先浏览器直连币安合约 WS，3s 无 tick 则服务端 1s 补价；`manual_watchlist` 随实盘总开关仅 L0，成交瞬间同步。  
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
@@ -10,7 +10,7 @@
 
 ## 1. 总览
 
-**主路径（已落地）**：REQ-BRAIN — **盈利 KPI**；A1 只认趋势新高回踩（`15m_trend_high_pullback`，回踩后抬起仍开）；无新高的反弹/不过前高打 B3，须拒绝 K 才空；**B3 前提 Big4 不得 LONG**；**C3 前提 Big4 须 LONG**；Big4 LONG **禁 A2/B2/B3、放行 C4 假突与 C1 破位跟风（小仓）**；A2/B2 仅非多头宏观精准确认后开空；LONG≥0.75 / SHORT≥0.90（C1 放量破位≥0.80）；**A1 豁免 5m**，其它 5m(40U/4根) + -80U + trail（soft 关；§7.3）；**15m RSI 管开仓时机**。  
+**主路径（已落地）**：REQ-BRAIN — **盈利 KPI**；A1 只认趋势新高回踩；**结构点出场**（低买高卖，取消 4–6h 到期）；硬 SL + −80U；**15m RSI 管开仓时机**。  
 **并行已落地**：中线 v2（独立量化；持仓顾问 **只建议不执行**；多单回调买、B3/C4 冲高卖）。  
 **旧路径**：Gemini 交易已下线；DeepSeek 探索/预测自动开仓 **对照期暂保留**（与 BRAIN 并行对比；INV-BRAIN-07 暂缓）。
 
@@ -21,14 +21,14 @@ crypto-scheduler (app/scheduler.py)
   ├─ data_cache: candidate_pool (6min) → explore_prepared (15min)
   ├─ REQ-BRAIN brain_swing（每15s×5币轮询市值前300；发现即开；启动+75s）
   ├─ DeepSeek 探索/预测自动开仓：对照期并行（INV-BRAIN-07 暂缓）
-  ├─ 中线 v2（midline_long/short）— 15min 轮询；多单回调买 / B3/C4 冲高卖；4h/6h 持仓
+  ├─ 中线 v2（midline_long/short）— 15min 轮询；多单回调买 / B3/C4 冲高卖；结构点出场（不限时）
   └─ （战术/情绪等按现网开关）
 
 crypto-scheduler (每 15min)
   └─ DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**含** midline_* 与 brain_*）
 
 crypto-app-main
-  └─ position_sl_tp_monitor (1s)：探索/预测硬 SL/TP + ai-trail；brain：评估硬 SL/TP + 5m/-80/trail/到期；中线硬 SL/TP + midline_hold_exit（中线/BRAIN 均不参与 SmartExit）
+  └─ position_sl_tp_monitor (1s)：探索/预测硬 SL/TP + ai-trail；BRAIN/破位：硬 SL + −80U + 结构点出场
 
 任意模拟开仓
   └─ paper_open_gate.gate_simulated_open()
@@ -52,7 +52,7 @@ crypto-app-main
 - Big4 疲软（动量弱 + 相对成交量很低 → 量价波动小）→ 不开  
 - 近 7 日×4h **方向对就算赢**，胜率 ≥55% 才开  
 - DeepSeek：开仓**不经**开仓顾问；BRAIN 持仓进入 DeepSeek 持仓顾问复核（**不执行平仓**）  
-- **入场/退出（v4.5.14）**：强制防插针限价；按币评估 SL 2.5~4.5% / TP 3~12%；A2/C1 仅 Big4 SHORT 顺势小仓试点；5m/-80U/trail/到期，soft 关闭；peak 落库/恢复
+- **入场/退出（v4.5.57）**：强制防插针限价；按币评估 SL 2.5~4.5%；**结构点出场**（无硬 TP、无到期）；−80U；peak 落库/恢复
 - 插针：影线>实体×2；频繁则按平均插针偏移；限价超时必须取消，禁止转市价
 - BRAIN 不经开仓顾问且全面排除 SmartExit；限价触价后、成交前重跑安全闸门  
 - **实盘**：`brain_swing` ∈ `LIVE_SYNC_SOURCES`；`live_trading_enabled` 控制开仓同步；**仅 L0**；L1 模拟成交 SKIPPED
@@ -270,7 +270,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 6.5.1 职责
 
-`config.yaml` 交易对 + Playbook 破位/趋势扫描，**不调用 LLM 开仓**。**跳过**开仓顾问；**纳入** DeepSeek 持仓顾问（**sell 只建议不执行**）。Big4 已 LONG 时禁止 A2/B2/B3，允许 C4 假突空与 C1 破位跟风。**C3 须 Big4 LONG**。做多 A1 须 **15m 回调进区**；**C3/C1 破位当根市价跟风**；B2 须反抽失败后再市价跟；B3/C4 摸准顶部第一回调后挂空。A2 须离低点并拒绝才挂空。**15m RSI 只管何时开、不管方向**（超买未拐头 / 超卖插刀则等）。退出：硬 SL/TP + `midline_hold_exit`（峰 1.2% 锁利 / 回吐平）+ 4h/6h 到期；**不参与** SmartExit。
+`config.yaml` 交易对 + Playbook 破位/趋势扫描，**不调用 LLM 开仓**。**跳过**开仓顾问；**纳入** DeepSeek 持仓顾问（**sell 只建议不执行**）。Big4 已 LONG 时禁止 A2/B2/B3，允许 C4 假突空与 C1 破位跟风。**C3 须 Big4 LONG**。做多 A1 须 **15m 回调进区**；**C3/C1 破位当根市价跟风**；B2 须反抽失败后再市价跟；B3/C4 摸准顶部第一回调后挂空。A2 须离低点并拒绝才挂空。**15m RSI 只管何时开、不管方向**（超买未拐头 / 超卖插刀则等）。退出：硬 SL + **结构高/低点**（取消 4h/6h 到期与 1.2% 早锁利）；**不参与** SmartExit。
 
 旧四路 `gemini/deepseek_midline_*`：**停调度并移除**。
 
@@ -278,7 +278,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 | 组件 | 路径 |
 |------|------|
-| 常量 | `midline_swing_config.py` · `midline_hold_exit.py` |
+| 常量 | `midline_swing_config.py` · `structure_swing_exit.py` |
 | 扫描 | `midline_swing_scanner.py` · `entry_timing.py` |
 | Worker | `midline_explore_worker.py`（可改名 `midline_worker`） |
 | API / Web | `midline_swing_api.py` · **原 Gemini 探索页整页**为破位策略/机会分析 |
@@ -292,8 +292,8 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 | source | `midline_long` / `midline_short` |
 | 保证金 | 500 U |
 | 杠杆 | 5x |
-| 计划持仓 | **8 小时** |
-| SL / TP | **止损 6% / 止盈 3%** |
+| 计划持仓 | **不限时**（结构点出场） |
+| SL / TP | **止损 6%**；无硬止盈 |
 | 限价偏移 | **做多 −1% / 做空 +1%** |
 | 限价超时 | **4h** |
 
@@ -328,7 +328,7 @@ gate_simulated_open (paper_open_gate.py)
 |-------------|--------|
 | `gemini_explore` / `gemini_predict` | 仅 Gemini |
 | `midline_long` / `midline_short`（及落地前残留旧 `*_midline_*`） | **跳过**（`skip_open_advisor=True`） |
-| `brain_swing`（及 `brain_*`） | **跳过**开仓顾问；持仓纳入 DeepSeek 顾问复核（按币 SL/TP/hold + 新版 trail/soft 仍兜底） |
+| `brain_swing`（及 `brain_*`） | **跳过**开仓顾问；持仓纳入 DeepSeek 顾问复核（硬 SL + 结构点出场） |
 | 其他 source | 仅 DeepSeek |
 
 ### 7.3 审查步骤（`open_advisor_strategy_rubrics.py`）
@@ -378,18 +378,18 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 
 ### 8.3 决策依据（中文 prompt）
 
-- **主依据**：近 **16 根 15m**（4h 窗口）K 线表 + 量价/RSI；1h 交叉验证  
-- **Big4**：仅辅证，**不得单独触发 sell**  
-- **盈利侧**：ROI≥**+8%** 且 15m **明确**转弱（反向≥4）→ 倾向 observe/sell；`_temper_premature_sell` 严格拦截过早 sell；**Big4 偏多时多单禁止仅凭 RSI 超买/高位背离 sell**（`_temper_bull_overbought_sell`）  
-- **亏损分档**（保证金 ROI%）：轻微 >-5%、中度 >-12%、严重 ≤-15%；深亏 `hold` 经 `_temper_losing_hold` 统计复核  
-- **程序化锁利**：探索/预测 `ai-trail-tp`（peak≥3% 回撤≥1%）；中线 `midline_hold_exit` 默认 1.2%/0.45%，**Big4 LONG 多单 2.5%/0.80%**，C3 3.0%/1.10%；BRAIN 默认 0.8–1.0%，**Big4 LONG 多单 2.2%/0.80%**
-- **DeepSeek soft-sl**：grace 45min；no_follow 须≥60min 且价格亏≈2.2%（匹配 15m×4h 开仓，避免早期闷杀）
+- **探索/预测**：近 **16 根 15m**（4h 窗口）K 线表 + 量价/RSI；1h 交叉验证；盈利侧 ROI≥**+8%** 且 15m **明确**转弱 → 倾向 observe/sell  
+- **BRAIN / 破位**：`HOLD_ADVISOR_STRUCTURE_JSON_SYSTEM_ZH` — **不限持仓时长**；做多等到合适高点、做空等到合适低点；禁止因小时数/小幅回吐/RSI 超买 sell；注入当前 `compute_structure_exit` 状态；`_temper_structure_swing_hold` 在结构点未到时把 sell 打回 hold  
+- **Big4**：仅辅证，**不得单独触发 sell**；**Big4 偏多时多单禁止仅凭 RSI 超买/高位背离 sell**（`_temper_bull_overbought_sell`）  
+- **亏损分档**（仅探索/预测）：轻微 >-5%、中度 >-12%、严重 ≤-15%；深亏 `hold` 经 `_temper_losing_hold` 统计复核。结构仓跳过 `_temper_profitable_hold` / `_temper_losing_hold`  
+- **程序化锁利**：探索/预测 `ai-trail-tp`（peak≥3% 回撤≥1%）；**BRAIN/破位**结构点出场（多单卖高、空单平低；取消 4–6h 到期与 1.2% trail）
+- **DeepSeek soft-sl**：grace 45min；no_follow 须≥60min 且价格亏≈2.2%（匹配 15m×4h 开仓，避免早期闷杀）— **仅探索/预测**
 - **BRAIN/中线**：顾问 **suggest-only**（`advisor_suggest_only`）；sell 不调用 `_close_live_position`
 
 ### 8.4 sell 后果
 
 - **探索/预测**：始终关闭模拟仓；`live_close_enabled=1` 且有映射时平实盘。
-- **BRAIN / 中线**：只记 observe，**不关仓**。安全网为硬 SL/TP、trail、5m、-80U、计划到期。
+- **BRAIN / 中线**：只记 observe，**不关仓**。安全网为硬 SL、结构高/低点、BRAIN −80U。
 
 ### 8.5 Kill Switch
 

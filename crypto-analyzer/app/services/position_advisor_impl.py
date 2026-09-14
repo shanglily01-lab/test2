@@ -24,7 +24,8 @@ HOLD_MIN_HOURS = HOLD_MIN_MINUTES / 60.0
 HOLD_CHECK_INTERVAL_S = 900      # scheduler 每 15min tick；同仓间隔由 DB 审核记录控制
 ADVISOR_PER_CALL_DELAY_S = 1.0  # provider rate-limit spacing
 GEMINI_PER_CALL_DELAY_S = ADVISOR_PER_CALL_DELAY_S  # legacy alias
-HOLD_15M_BARS = 16              # 持仓顾问：近 16 根 15m（4h 交易窗口，主判据）
+HOLD_15M_BARS = 16              # 持仓顾问展示：近 16 根 15m（探索/预测 4h 窗口）
+HOLD_15M_FETCH = 48             # 结构波段出场须 ≥24 根；多取供 compute_structure_exit
 HOLD_5M_BARS = 6                # 持仓顾问：近 6 根 5m（约 30min，辅证）
 HOLD_1H_BARS = 4                # 持仓顾问：近 4 根 1h（背景参考，非主判）
 HOLD_PROFIT_TEMPER_ROI = 3.0    # 程序化复核：浮盈≥3% ROI 即开始防回吐
@@ -54,6 +55,21 @@ HOLD_ADVISOR_JSON_SYSTEM_ZH = (
     "浮盈 ROI≥+3% 且 15m 转弱时至少 observe，ROI≥+5% 且 15m 明确转弱时应倾向 sell，避免盈利回吐；"
     "15m 未破方向时不得 sell；亏损越深 hold 门槛越高；禁止仅凭 ROI、Big4 或 1h 滞后信号单独 sell；"
     "Big4 偏多时，多单禁止仅凭 RSI 超买/高位背离 sell，须 15m 近4根明确破位才可卖。"
+)
+
+# BRAIN / 破位结构波段：不限持仓时长；卖点=合适高/低，不是 4h 或小幅回吐
+HOLD_ADVISOR_STRUCTURE_JSON_SYSTEM_ZH = (
+    "你是模拟仓结构波段持仓顾问。本仓不限持仓时长。"
+    "做多等到合适高点（15m 离高拒绝/上影衰竭）才倾向 sell；"
+    "做空等到合适低点（离低拒绝/下影）才倾向 sell。"
+    "禁止因持仓小时数、小幅浮盈回吐、RSI 超买而 sell。"
+    "程序化会在结构点平仓；你只复核 thesis 是否还在。"
+    "仅输出合法 JSON：action 为 hold|observe|sell；"
+    "reason 为50字以内中文，须引用 15m 结构（衰竭高/拒绝低）+ 量价要点；"
+    "结构点未到 → hold；信号混杂或接近结构点 → observe；"
+    "结构高/低点已确认 → sell（仍只建议不执行）。"
+    "硬 SL 与 BRAIN 美元熔断由程序兜底，顾问不得用小亏或时长代替结构点。"
+    "Big4 偏多时多单禁止仅凭 RSI 超买 sell。"
 )
 
 # DeepSeek/GPT 开仓顾问 system（与 build_open_advisor_prompt 中文 reason 一致）
@@ -203,7 +219,7 @@ class PositionAdvisorCore:
             return []
 
     def _fetch_market_context(self, symbol: str) -> dict:
-        """近 16 根 15m（4h 主判）+ 近 24 根 1h（背景）+ candidate_pool 叙事 + Big4 + 方向闸门."""
+        """近 48 根 15m（结构出场；展示仍取末 16）+ 近 24 根 1h + candidate_pool 叙事 + Big4."""
         symbol = _normalize_symbol_for_db(symbol)
         ctx = {
             'klines_15m': [],
@@ -221,7 +237,7 @@ class PositionAdvisorCore:
             'allow_long': True,
             'allow_short': True,
         }
-        ctx['klines_15m'] = self._fetch_klines_via_hub(symbol, '15m', 16)
+        ctx['klines_15m'] = self._fetch_klines_via_hub(symbol, '15m', HOLD_15M_FETCH)
         ctx['klines_5m'] = self._fetch_klines_via_hub(symbol, '5m', 12)
         ctx['klines_1h'] = self._fetch_klines_via_hub(symbol, '1h', 24)
         if not ctx['klines_15m'] and not ctx['klines_5m'] and not ctx['klines_1h']:
@@ -595,10 +611,211 @@ class PositionAdvisorCore:
         return "hold", reason
 
     @staticmethod
+    def _prompt_is_structure_swing(source: str, ctx: Optional[dict] = None) -> bool:
+        if ctx and ctx.get("structure_swing"):
+            return True
+        try:
+            from app.services.structure_swing_exit import uses_structure_swing_hold
+            return uses_structure_swing_hold(source)
+        except Exception:
+            s = (source or "").strip().lower()
+            return s.startswith("brain_") or s.startswith("midline_")
+
+    def _annotate_structure_ctx(
+        self,
+        position: dict,
+        current_price: float,
+        ctx: dict,
+        hold_h: float,
+    ) -> bool:
+        """Fill ctx with live 15m structure-exit status. True if this is a structure swing hold."""
+        ctx["structure_swing"] = False
+        ctx["structure_status"] = ""
+        ctx["structure_ready"] = False
+        ctx["structure_why"] = ""
+        ctx["structure_exit_reason"] = ""
+        ctx["structure_program_close"] = False
+        ctx["structure_age_ok"] = False
+        ctx["structure_peak_ok"] = False
+        src = position.get("source") or ""
+        if not self._prompt_is_structure_swing(src, None):
+            return False
+        ctx["structure_swing"] = True
+        try:
+            from app.services.structure_swing_exit import (
+                STRUCTURE_MIN_AGE_MIN,
+                STRUCTURE_MIN_PEAK_PCT,
+                check_structure_swing_exit,
+                load_15m_rows,
+                playbook_row_from_position,
+            )
+            from app.services.entry_timing import compute_structure_exit
+
+            rows = load_15m_rows(position.get("symbol") or "")
+            peak_pct = float(position.get("max_profit_pct") or 0.0) / 100.0
+            age_s = float(hold_h or 0.0) * 3600.0
+            ctx["structure_age_ok"] = age_s >= STRUCTURE_MIN_AGE_MIN * 60
+            ctx["structure_peak_ok"] = peak_pct >= STRUCTURE_MIN_PEAK_PCT / 100.0
+            pb = playbook_row_from_position(position)
+            timing = compute_structure_exit(
+                position.get("position_side") or "",
+                rows,
+                playbook_row=pb,
+                ref_price=current_price,
+            )
+            ctx["structure_status"] = timing.status or ""
+            ctx["structure_ready"] = bool(timing.ready)
+            ctx["structure_why"] = timing.reason or ""
+            ready_why = check_structure_swing_exit(
+                position.get("position_side") or "",
+                rows,
+                peak_pct=peak_pct,
+                age_s=age_s,
+                ref_price=current_price,
+                playbook_row=pb,
+            )
+            ctx["structure_exit_reason"] = ready_why or ""
+            ctx["structure_program_close"] = bool(ready_why)
+        except Exception as e:
+            logger.warning(
+                f"[顾问核心] 结构出场标注失败 {position.get('symbol')}: {e}"
+            )
+        return True
+
+    @staticmethod
+    def _temper_structure_swing_hold(
+        action: str,
+        reason: str,
+        ctx: Optional[dict] = None,
+    ) -> Tuple[str, str]:
+        """Structure swing: do not sell for time/giveback; sell only at opposite structure."""
+        ctx = ctx or {}
+        if not ctx.get("structure_swing"):
+            return action, reason
+        status = ctx.get("structure_status") or "unknown"
+        if ctx.get("structure_program_close"):
+            if action == "hold":
+                action = "observe"
+                override = f"结构点已到:{status}"
+                reason = f"{reason[:80]}|{override}"[:200]
+                logger.info(f"[顾问核心] 结构点已到 → observe ({override})")
+            return action, reason
+        if action == "sell":
+            action = "hold"
+            override = f"结构点未到({status})·禁止时长/浮盈卖"
+            reason = f"{reason[:80]}|{override}"[:200]
+            logger.info(f"[顾问核心] 结构点未到 sell → hold ({override})")
+        return action, reason
+
+    @staticmethod
     def _recent_klines(klines: list, n: int) -> list:
         if not klines or n <= 0:
             return klines or []
         return klines[-n:]
+
+    @staticmethod
+    def _format_structure_hold_prompt(
+        *,
+        side: str,
+        side_cn: str,
+        symbol: str,
+        entry: float,
+        current_price: float,
+        leverage: int,
+        hold_h: float,
+        source: str,
+        price_change_pct: float,
+        roi_pct: float,
+        loss_tier: str,
+        rsi_line: str,
+        vol_hint: str,
+        s15: dict,
+        s5: dict,
+        s1h: dict,
+        struct_line: str,
+        klines_15m_str: str,
+        klines_5m_str: str,
+        klines_1h_str: str,
+        narr_15m: str,
+        narr_1h: str,
+        big4: str,
+        big4_strength: float,
+        btc_6h: float,
+        eth_6h: float,
+        ctx: dict,
+    ) -> str:
+        status = ctx.get("structure_status") or "unknown"
+        why = ctx.get("structure_why") or "（尚未标注）"
+        program_close = bool(ctx.get("structure_program_close"))
+        age_ok = "是" if ctx.get("structure_age_ok") else "否"
+        peak_ok = "是" if ctx.get("structure_peak_ok") else "否"
+        ready_cn = "是" if ctx.get("structure_ready") else "否"
+        program_cn = "是（程序将按结构点平仓）" if program_close else "否"
+        target_cn = "合适高点（离高拒绝/上影衰竭）" if side == "LONG" else "合适低点（离低拒绝/下影）"
+        return f"""你是模拟仓**结构波段持仓**顾问。本仓**不限持仓时长**。
+
+## 本仓 thesis（必读）
+- 做多：合适低点买、**等到合适高点才卖**；做空相反。
+- **禁止**因为已经持仓几小时、小幅浮盈回吐、RSI 超买而 sell。
+- 程序化会在 15m 结构点平仓；你只复核方向 thesis 是否还在。硬 SL / BRAIN −80U 由程序兜底。
+- 当前卖点目标：{target_cn}
+
+## 当前 15m 结构判定（与程序出场同一套）
+  status: {status}
+  ready: {ready_cn}  why: {why}
+  持仓≥20min: {age_ok}  顺向峰值≥0.40%: {peak_ok}
+  程序化可平: {program_cn}
+
+## 仓位
+  Symbol:          {symbol}
+  Direction:       {side_cn}
+  Entry:           {entry}
+  Current:         {current_price}
+  Leverage:        {leverage}x
+  Hold:            {hold_h:.1f}h（仅供参考，**不得**当到期）
+  Price change:    {price_change_pct:+.2f}%
+  ROI on margin:   {roi_pct:+.2f}%  （档位: {loss_tier}，亏损不改结构点规则）
+  Source:          {source}
+  {rsi_line}
+  15m量能(近{HOLD_15M_BARS}根): {vol_hint}
+
+## 客观统计
+  15m({HOLD_15M_BARS}根): {s15['summary']}  ← 看是否接近衰竭高/拒绝低
+  1h({HOLD_1H_BARS}根):  {s1h['summary']}  ← 背景
+  5m({HOLD_5M_BARS}根):  {s5['summary']}  ← 辅证
+  结构位: {struct_line}
+
+## 综合叙事（辅助）
+### 15m 叙事
+{narr_15m[:800]}
+
+### 1h 叙事
+{narr_1h[:800]}
+
+## 近 {HOLD_15M_BARS} 根 15m K 线
+{klines_15m_str}
+
+## 近 {HOLD_1H_BARS} 根 1h K 线
+{klines_1h_str}
+
+## 近 {HOLD_5M_BARS} 根 5m K 线
+{klines_5m_str}
+
+## 宏观（辅证）
+  Big4: {big4} (strength {big4_strength:.0f}) | BTC 6h {btc_6h:+.2f}% | ETH 6h {eth_6h:+.2f}%
+
+## 决策
+- **hold**: 结构点未到，原方向 thesis 仍在
+- **observe**: 接近结构点或信号混杂；或程序化结构点已到
+- **sell**: 仅当 15m 已出现对立结构（多单衰竭高 / 空单拒绝低）。仍只建议不执行。
+- **禁止**因 Hold 小时数、ROI≥+5%、浮盈转亏、RSI 超买而 sell
+
+只输出合法 JSON:
+{{
+  "action": "hold" | "observe" | "sell",
+  "reason": "<50字中文，含15m结构点+量价要点>"
+}}
+"""
 
     @staticmethod
     def _build_prompt(position: dict, current_price: float, ctx: dict) -> str:
@@ -650,21 +867,42 @@ class PositionAdvisorCore:
             struct_line = "N/A"
 
         side_cn = "做多 LONG" if side == 'LONG' else "做空 SHORT"
+        vol_hint = PositionAdvisorCore._volume_hint_from_klines(k15)
+        if PositionAdvisorCore._prompt_is_structure_swing(source, ctx):
+            return PositionAdvisorCore._format_structure_hold_prompt(
+                side=side,
+                side_cn=side_cn,
+                symbol=symbol,
+                entry=entry,
+                current_price=current_price,
+                leverage=leverage,
+                hold_h=hold_h,
+                source=source,
+                price_change_pct=price_change_pct,
+                roi_pct=roi_pct,
+                loss_tier=loss_tier,
+                rsi_line=rsi_line,
+                vol_hint=vol_hint,
+                s15=s15,
+                s5=s5,
+                s1h=s1h,
+                struct_line=struct_line,
+                klines_15m_str=klines_15m_str,
+                klines_5m_str=klines_5m_str,
+                klines_1h_str=klines_1h_str,
+                narr_15m=narr_15m,
+                narr_1h=narr_1h,
+                big4=big4,
+                big4_strength=big4_strength,
+                btc_6h=btc_6h,
+                eth_6h=eth_6h,
+                ctx=ctx,
+            )
         midline_note = ""
-        try:
-            from app.services.midline_swing_config import is_midline_source
-            if is_midline_source(source):
-                midline_note = (
-                    "**中线/破位仓**：优先保护已实现浮盈。峰 ROI≥+5% 后转亏或 15m 明确转弱 → **sell**；"
-                    "15m 仍顺向且未回吐 → hold。不要为了凑满 8h 把盈利拿成亏损。\n"
-                )
-        except Exception:
-            midline_note = ""
         strict_note = (
             "**本仓亏损已超 1%（保证金 ROI≤-1%）**：须严格审查 **15m 结构** + 量价 + RSI 后再给结论，禁止敷衍一律 hold。\n"
             if strict_loss else ""
         )
-        vol_hint = PositionAdvisorCore._volume_hint_from_klines(k15)
         return f"""你是模拟仓**持仓监管**顾问。本笔按 **4 小时交易窗口** 复核。
 
 ## 周期（必读）
