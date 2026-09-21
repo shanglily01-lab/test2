@@ -540,7 +540,10 @@ def test_ai_trail_for_midline() -> None:
     mon = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
     assert "check_structure_swing_exit" in mon
     assert "check_midline_hold_exits" not in mon
-    _ok("midline holds to opposite structure point; no 4-6h expiry")
+    assert "check_structure_profit_lock" in (
+        (ROOT / "app/services/structure_swing_exit.py").read_text(encoding="utf-8")
+    )
+    _ok("midline holds to structure point then locks leftover profit")
 
 
 def test_entry_signal_labels() -> None:

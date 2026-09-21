@@ -75,7 +75,7 @@
 | Gemini 探索 | —（已下线） | — |
 | DeepSeek 探索/预测 | 每2h + 10min/5min（**对照期保留**；INV-BRAIN-07 暂缓） | `deepseek_*_enabled` |
 | **REQ-BRAIN** `brain_swing` | 每 **15s** 一批 **5** 币轮询市值前 300 | `brain_swing_enabled`；启动 +75s；发现机会挂防插针限价 |
-| **中线 v2** `midline_long/short` | 每 **15min** 轮询；多单回调买 / B3/C4 冲高卖；结构点出场（不限时） |
+| **中线 v2** `midline_long/short` | 每 **15min** 轮询；多单回调买 / B3/C4 冲高卖；结构点 + 错过/回吐锁利 |
 | **现货镜像** `spot_*` | 合约模拟成交瞬间跟单；`crypto-app-main` 每 1min 查 TP/SL；`spot_trading_enabled` |
 | **持仓顾问** DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent；BRAIN/中线 **suggest-only**） |
 | 市场情绪分析 | **已下线**（原 Gemini 情绪） |
@@ -183,7 +183,7 @@
 - **量化扫描**，非 LLM；标的 **市值前 100**（`config.yaml` 序）；**15min** 轮询；旧四路 `*_midline_*` 停并移除
 - kill switch：`midline_long_enabled` / `midline_short_enabled`（系统配置「策略与模式」+ 破位策略页）
 - 限价：做多 A1 挂 **15m 回调区**；**C3/C1 破位市价跟风**（**C3 须 Big4 LONG**；禁 RSI 极端+7日高追；止盈后 4h 冷却）；B2 须反抽失败后再市价跟；**B3 须 Big4 非 LONG** 且顶部第一回调后挂空；A2 须离低点并拒绝后挂反抽区；**15m RSI 管时机**（不定方向）；**持仓不限时**（低点买高点卖）；SL **6%** / 5x / 500U
-- **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）；**结构点出场**（取消 midline_hold_exit 早锁利与 4h/6h 到期）；**排除** SmartExit
+- **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）；**结构点出场 + 错过/回吐锁利**（取消 4h/6h 亏单到期）；**排除** SmartExit
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
 - Web：原 Gemini 探索页整页改破位策略/机会分析
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.2；操作对照：`docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`

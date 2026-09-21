@@ -1612,6 +1612,21 @@ def test_structure_swing_exit() -> None:
     )
     assert hit and hit.startswith("structure_sell_high"), hit
 
+    from app.services.structure_swing_exit import check_structure_profit_lock
+    assert check_structure_profit_lock(0.006, 0.012, 1800) is None
+    missed = check_structure_profit_lock(
+        0.008, 0.012, 1800, structure_status="missed_high",
+    )
+    assert missed and missed.startswith("structure_missed_take"), missed
+    gave = check_structure_profit_lock(-0.002, 0.012, 1800)
+    assert gave and gave.startswith("structure_profit_to_loss"), gave
+    trail = check_structure_profit_lock(0.008, 0.018, 1800)
+    assert trail and trail.startswith("structure_trail_"), trail
+    stale = check_structure_profit_lock(0.006, 0.006, 5 * 3600)
+    assert stale and stale.startswith("structure_stale_take"), stale
+    loser = check_structure_profit_lock(-0.012, 0.002, 5 * 3600)
+    assert loser is None, loser
+
     dump = []
     p = 100.0
     for _ in range(36):
@@ -1642,7 +1657,7 @@ def test_structure_swing_exit() -> None:
     orch = (ROOT / "app/services/brain_strategy_orchestrator.py").read_text(encoding="utf-8")
     assert "planned_close_time=None" in orch
     assert "take_profit_pct=None" in orch
-    _ok("structure swing sells the high / covers the low; no 4-6h deadline")
+    _ok("structure swing sells the high, then locks leftover profit")
 
 
 def main() -> int:

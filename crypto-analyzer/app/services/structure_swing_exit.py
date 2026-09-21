@@ -1,7 +1,8 @@
 """Structure swing hold: buy the low, sell the high (shorts reversed).
 
-BRAIN / breakout no longer force-close at 4–6h. Take-profit is the opposite
-15m structure point; hard SL and the BRAIN USD fuse still protect the account.
+BRAIN / breakout no longer force-close at 4–6h. Preferred take-profit is the
+opposite 15m structure point. If that point is missed or profit is given back,
+lock the remainder — do not ride winners to the hard SL.
 """
 from __future__ import annotations
 
@@ -12,6 +13,18 @@ from app.services.entry_timing import compute_structure_exit
 
 STRUCTURE_MIN_AGE_MIN = 20
 STRUCTURE_MIN_PEAK_PCT = 0.40
+# Price % (not ROI). Wider than the old 1.2%/0.45% early trail so runners can
+# extend, tight enough that +1–2% winners are not held to the 2.5–6% hard SL.
+STRUCTURE_TRAIL_ACTIVATE_PCT = 1.50
+STRUCTURE_TRAIL_PULLBACK_PCT = 0.55
+STRUCTURE_TRAIL_MIN_KEEP_PCT = 0.30
+STRUCTURE_BULL_TRAIL_ACTIVATE_PCT = 2.50
+STRUCTURE_BULL_TRAIL_PULLBACK_PCT = 0.80
+STRUCTURE_BULL_TRAIL_MIN_KEEP_PCT = 0.50
+STRUCTURE_GIVEBACK_PEAK_PCT = 0.80
+STRUCTURE_GIVEBACK_NOW_PCT = 0.05
+STRUCTURE_STALE_AGE_H = 4.0
+STRUCTURE_STALE_PNL_PCT = 0.40
 _KLINE_LIMIT = 48
 _KLINE_TTL_S = 20.0
 _kline_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
@@ -56,6 +69,73 @@ def playbook_row_from_position(pos: Optional[Dict[str, Any]]) -> Optional[Dict[s
     return {"playbook": name, "signals": list(signals or [])}
 
 
+def _f(v: Any, default: float = 0.0) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _trail_profile(side: str, market_bias: Optional[str]) -> Tuple[float, float, float]:
+    if str(side or "").upper() == "LONG" and str(market_bias or "").upper() == "LONG":
+        return (
+            STRUCTURE_BULL_TRAIL_ACTIVATE_PCT / 100.0,
+            STRUCTURE_BULL_TRAIL_PULLBACK_PCT / 100.0,
+            STRUCTURE_BULL_TRAIL_MIN_KEEP_PCT / 100.0,
+        )
+    return (
+        STRUCTURE_TRAIL_ACTIVATE_PCT / 100.0,
+        STRUCTURE_TRAIL_PULLBACK_PCT / 100.0,
+        STRUCTURE_TRAIL_MIN_KEEP_PCT / 100.0,
+    )
+
+
+def check_structure_profit_lock(
+    pnl_pct: float,
+    peak_pct: float,
+    age_s: float,
+    *,
+    side: str = "",
+    market_bias: Optional[str] = None,
+    structure_status: str = "",
+) -> Optional[str]:
+    """Lock a winner that never printed a clean opposite structure point.
+
+    Does not time-stop losers. Hard SL / BRAIN −80U still cover those.
+    """
+    pnl = _f(pnl_pct)
+    peak = max(_f(peak_pct), pnl)
+    age = _f(age_s)
+    if age < STRUCTURE_MIN_AGE_MIN * 60:
+        return None
+    status = (structure_status or "").strip().lower()
+    if status in ("missed_high", "missed_low") and pnl >= STRUCTURE_MIN_PEAK_PCT / 100.0:
+        return f"structure_missed_take:{status}:now={pnl * 100:.2f}%"
+    if (
+        peak >= STRUCTURE_GIVEBACK_PEAK_PCT / 100.0
+        and pnl <= STRUCTURE_GIVEBACK_NOW_PCT / 100.0
+    ):
+        return (
+            f"structure_profit_to_loss:"
+            f"peak={peak * 100:.2f}%,now={pnl * 100:.2f}%"
+        )
+    act, pull, keep = _trail_profile(side, market_bias)
+    if peak >= act:
+        drawdown = peak - pnl
+        if drawdown >= pull:
+            tag = "below_keep" if pnl < keep else "lock"
+            return (
+                f"structure_trail_{tag}:"
+                f"peak={peak * 100:.2f}%,dd={drawdown * 100:.2f}%,now={pnl * 100:.2f}%"
+            )
+    if (
+        age >= STRUCTURE_STALE_AGE_H * 3600
+        and pnl >= STRUCTURE_STALE_PNL_PCT / 100.0
+    ):
+        return f"structure_stale_take:age={age / 3600:.1f}h,now={pnl * 100:.2f}%"
+    return None
+
+
 def check_structure_swing_exit(
     side: str,
     rows_15m: List[Dict[str, Any]],
@@ -64,25 +144,38 @@ def check_structure_swing_exit(
     age_s: float,
     ref_price: Optional[float] = None,
     playbook_row: Optional[Dict[str, Any]] = None,
+    pnl_pct: Optional[float] = None,
+    market_bias: Optional[str] = None,
 ) -> Optional[str]:
-    """Close a long at a suitable high, or a short at a suitable low."""
+    """Close a long at a suitable high, or a short at a suitable low.
+
+    If the structure point never prints, lock leftover profit instead of
+    waiting for the hard SL.
+    """
     if age_s < STRUCTURE_MIN_AGE_MIN * 60:
         return None
-    try:
-        peak = float(peak_pct or 0.0)
-    except (TypeError, ValueError):
-        peak = 0.0
-    if peak < STRUCTURE_MIN_PEAK_PCT / 100.0:
-        return None
-    timing = compute_structure_exit(
-        side, rows_15m, playbook_row=playbook_row, ref_price=ref_price,
+    peak = _f(peak_pct)
+    pnl = _f(pnl_pct) if pnl_pct is not None else peak
+    peak = max(peak, pnl)
+    timing = None
+    if rows_15m and len(rows_15m) >= 24:
+        timing = compute_structure_exit(
+            side, rows_15m, playbook_row=playbook_row, ref_price=ref_price,
+        )
+        if timing.ready and peak >= STRUCTURE_MIN_PEAK_PCT / 100.0:
+            side_u = (side or "").upper()
+            if side_u == "LONG":
+                return f"structure_sell_high:{timing.status}:{timing.reason}"
+            return f"structure_cover_low:{timing.status}:{timing.reason}"
+    status = (timing.status if timing else "") or ""
+    return check_structure_profit_lock(
+        pnl,
+        peak,
+        age_s,
+        side=side,
+        market_bias=market_bias,
+        structure_status=status,
     )
-    if not timing.ready:
-        return None
-    side_u = (side or "").upper()
-    if side_u == "LONG":
-        return f"structure_sell_high:{timing.status}:{timing.reason}"
-    return f"structure_cover_low:{timing.status}:{timing.reason}"
 
 
 def load_15m_rows(symbol: str, limit: int = _KLINE_LIMIT) -> List[Dict[str, Any]]:

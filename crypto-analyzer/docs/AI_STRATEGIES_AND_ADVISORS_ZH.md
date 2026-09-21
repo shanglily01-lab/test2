@@ -1,6 +1,6 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-09-14 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.58** 对齐  
+> 文档版本：2026-09-21 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.60** 对齐  
 > **给人看的对照**：[`BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`](./BRAIN_AND_BREAKOUT_OPERATOR_ZH.md)  
 > **合约自选 §7.5**：`/watchlist` 手动限价/市价；限价可撤；价格优先浏览器直连币安合约 WS，3s 无 tick 则服务端 1s 补价；`manual_watchlist` 随实盘总开关仅 L0，成交瞬间同步。  
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
@@ -270,7 +270,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 6.5.1 职责
 
-`config.yaml` 交易对 + Playbook 破位/趋势扫描，**不调用 LLM 开仓**。**跳过**开仓顾问；**纳入** DeepSeek 持仓顾问（**sell 只建议不执行**）。Big4 已 LONG 时禁止 A2/B2/B3，允许 C4 假突空与 C1 破位跟风。**C3 须 Big4 LONG**。做多 A1 须 **15m 回调进区**；**C3/C1 破位当根市价跟风**；B2 须反抽失败后再市价跟；B3/C4 摸准顶部第一回调后挂空。A2 须离低点并拒绝才挂空。**15m RSI 只管何时开、不管方向**（超买未拐头 / 超卖插刀则等）。退出：硬 SL + **结构高/低点**（取消 4h/6h 到期与 1.2% 早锁利）；**不参与** SmartExit。
+`config.yaml` 交易对 + Playbook 破位/趋势扫描，**不调用 LLM 开仓**。**跳过**开仓顾问；**纳入** DeepSeek 持仓顾问（**sell 只建议不执行**）。Big4 已 LONG 时禁止 A2/B2/B3，允许 C4 假突空与 C1 破位跟风。**C3 须 Big4 LONG**。做多 A1 须 **15m 回调进区**；**C3/C1 破位当根市价跟风**；B2 须反抽失败后再市价跟；B3/C4 摸准顶部第一回调后挂空。A2 须离低点并拒绝才挂空。**15m RSI 只管何时开、不管方向**（超买未拐头 / 超卖插刀则等）。退出：硬 SL + **结构高/低点** + **错过结构点/浮盈回吐锁利**（取消 4h/6h 亏单到期）；**不参与** SmartExit。
 
 旧四路 `gemini/deepseek_midline_*`：**停调度并移除**。
 
@@ -382,14 +382,14 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 - **BRAIN / 破位**：`HOLD_ADVISOR_STRUCTURE_JSON_SYSTEM_ZH` — **不限持仓时长**；做多等到合适高点、做空等到合适低点；禁止因小时数/小幅回吐/RSI 超买 sell；注入当前 `compute_structure_exit` 状态；`_temper_structure_swing_hold` 在结构点未到时把 sell 打回 hold  
 - **Big4**：仅辅证，**不得单独触发 sell**；**Big4 偏多时多单禁止仅凭 RSI 超买/高位背离 sell**（`_temper_bull_overbought_sell`）  
 - **亏损分档**（仅探索/预测）：轻微 >-5%、中度 >-12%、严重 ≤-15%；深亏 `hold` 经 `_temper_losing_hold` 统计复核。结构仓跳过 `_temper_profitable_hold` / `_temper_losing_hold`  
-- **程序化锁利**：探索/预测 `ai-trail-tp`（peak≥3% 回撤≥1%）；**BRAIN/破位**结构点出场（多单卖高、空单平低；取消 4–6h 到期与 1.2% trail）
+- **程序化锁利**：探索/预测 `ai-trail-tp`（peak≥3% 回撤≥1%）；**BRAIN/破位**结构点优先，错过高低点或浮盈回吐锁利（取消 4–6h 亏单到期）
 - **DeepSeek soft-sl**：grace 45min；no_follow 须≥60min 且价格亏≈2.2%（匹配 15m×4h 开仓，避免早期闷杀）— **仅探索/预测**
 - **BRAIN/中线**：顾问 **suggest-only**（`advisor_suggest_only`）；sell 不调用 `_close_live_position`
 
 ### 8.4 sell 后果
 
 - **探索/预测**：始终关闭模拟仓；`live_close_enabled=1` 且有映射时平实盘。
-- **BRAIN / 中线**：只记 observe，**不关仓**。安全网为硬 SL、结构高/低点、BRAIN −80U。
+- **BRAIN / 中线**：只记 observe，**不关仓**。安全网为硬 SL、结构高/低点、错过/回吐锁利、BRAIN −80U。
 
 ### 8.5 Kill Switch
 

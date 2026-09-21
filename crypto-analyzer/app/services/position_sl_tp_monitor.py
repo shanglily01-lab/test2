@@ -581,10 +581,11 @@ class PositionSLTPMonitor:
                     self._do_close(pid, symbol, side, reason, trigger_price, now)
                     continue
 
-                # BRAIN / 破位：低点买、高点卖（空头相反）；不再 trail / 到期
+                # BRAIN / 破位：结构点优先；错过高低点或浮盈回吐则锁利，不扛到硬 SL
                 if _uses_structure_swing(src):
                     struct_br = self._maybe_structure_swing_close(
                         pos, symbol, side, price, new_peak, age_s,
+                        pnl_pct=pnl_pct, market_bias=market_bias,
                     )
                     if struct_br:
                         self._sync_peak_to_db(pid, new_peak * 100)
@@ -967,6 +968,8 @@ class PositionSLTPMonitor:
         price: float,
         peak_pct: float,
         age_s: float,
+        pnl_pct: float = 0.0,
+        market_bias: str = "FLAT",
     ) -> Optional[str]:
         from app.services.structure_swing_exit import (
             check_structure_swing_exit,
@@ -974,8 +977,6 @@ class PositionSLTPMonitor:
             playbook_row_from_position,
         )
         rows = load_15m_rows(symbol)
-        if len(rows) < 24:
-            return None
         try:
             return check_structure_swing_exit(
                 side,
@@ -984,6 +985,8 @@ class PositionSLTPMonitor:
                 age_s=age_s,
                 ref_price=price,
                 playbook_row=playbook_row_from_position(pos),
+                pnl_pct=pnl_pct,
+                market_bias=market_bias,
             )
         except Exception as e:
             logger.debug(f"[structure swing] {symbol} 判定失败: {e}")
