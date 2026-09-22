@@ -91,7 +91,7 @@ Init stagger: Gemini +15s, DeepSeek +90s, GPT +120s.
 
 | Field | Value |
 |-------|-------|
-| Margin | 500 USDT |
+| Margin | 1000 USDT |
 | Leverage | 5x |
 | Hold | **4h** (`AI_POSITION_HOLD_HOURS`) |
 | SL / TP | **3% / 5%** |

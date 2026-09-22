@@ -1574,7 +1574,7 @@ class SmartTraderService:
 
     def _get_margin_per_batch(self, symbol: str) -> float:
         """
-        模拟盘: 所有交易对统一 500U 保证金, 5X 杠杆.
+        模拟盘: 所有交易对统一 1000U 保证金, 5X 杠杆.
 
         Returns:
             每批保证金金额（USDT）

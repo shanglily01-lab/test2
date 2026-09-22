@@ -45,6 +45,7 @@ def test_imports_and_config() -> None:
     assert BRAIN_REQUIRE_CONFIRMED_PREFIXES == ("A", "B")
     assert TRADEABLE_PLAYBOOKS == frozenset({"A1", "A2", "B2", "B3", "C1", "C3", "C4"})
     from app.services.brain_config import (
+        BRAIN_MARGIN_USD,
         BRAIN_MIN_EDGE_SCORE_SHORT,
         PILOT_SHORT_PLAYBOOKS,
         PLAYBOOK_MARGIN_MULTIPLIER,
@@ -56,8 +57,12 @@ def test_imports_and_config() -> None:
     assert PLAYBOOK_MIN_EDGE_SCORE["A2"] == 0.80
     assert PLAYBOOK_MIN_EDGE_SCORE["B2"] == 0.80
     assert PLAYBOOK_MIN_EDGE_SCORE["C3"] == 0.70
-    assert PLAYBOOK_MARGIN_MULTIPLIER["C3"] < 1.0
-    assert PLAYBOOK_MARGIN_MULTIPLIER["B3"] < PLAYBOOK_MARGIN_MULTIPLIER["C1"]
+    assert BRAIN_MARGIN_USD == 1000.0
+    assert all(float(v) == 1.0 for v in PLAYBOOK_MARGIN_MULTIPLIER.values())
+    from app.services.trading_gates import DEFAULT_PAPER_MARGIN_USD, get_paper_margin_usd
+    assert DEFAULT_PAPER_MARGIN_USD == 1000.0
+    assert get_paper_margin_usd("BTCUSDT") == 1000.0
+    assert get_paper_margin_usd("UNKNOWN") == 1000.0
     assert BRAIN_SL_PCT >= 1.0, f"BRAIN_SL_PCT={BRAIN_SL_PCT} 疑似小数比例，应为百分点"
     assert BRAIN_TP_PCT >= 1.0, f"BRAIN_TP_PCT={BRAIN_TP_PCT} 疑似小数比例，应为百分点"
     assert is_brain_source(BRAIN_SOURCE)

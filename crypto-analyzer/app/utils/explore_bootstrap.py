@@ -104,7 +104,7 @@ def explore_bootstrap_payload(
     runs_table: str,
     leverage: int,
     confidence_threshold: float,
-    margin_usd: int = 500,
+    margin_usd: int = 1000,
     entry_grace_min: int = 30,
     runs_limit: int = 20,
 ) -> Dict[str, Any]:

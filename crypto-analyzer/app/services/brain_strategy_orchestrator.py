@@ -258,12 +258,11 @@ def _open_brain_entry(
         logger.info(f"[BRAIN开仓] 闸门拒绝 {symbol} {side_u}: {gate_reason}")
         return None, str(gate_reason or "gate_reject")[:200]
 
-    margin = get_paper_margin_usd(symbol, conn) or BRAIN_MARGIN_USD
+    margin = float(get_paper_margin_usd(symbol, conn) or BRAIN_MARGIN_USD)
     playbook = str(playbook_row.get("playbook") or "")
     playbook_margin_mult = float(PLAYBOOK_MARGIN_MULTIPLIER.get(playbook, 1.0))
     regime_margin_mult = float(playbook_row.get("regime_margin_multiplier") or 1.0)
-    margin_multiplier = min(playbook_margin_mult, regime_margin_mult)
-    margin *= margin_multiplier
+    margin_multiplier = 1.0
     wick = playbook_row.get("wick") or {}
     offset = float(playbook_row.get("limit_offset_pct") or 0.5)
     if playbook_row.get("forbid_market") and wick and not BRAIN_USE_MARKET_ENTRY:

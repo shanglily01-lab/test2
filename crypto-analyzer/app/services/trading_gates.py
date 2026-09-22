@@ -778,34 +778,16 @@ def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]
 
 
 DEFAULT_PAPER_MARGIN_USD = 1000.0
-PAPER_MARGIN_BY_RATING_LEVEL = {
-    0: 1000.0,
-    1: 400.0,
-    2: 200.0,
-    3: 100.0,
-}
 
 
 def get_paper_margin_usd(symbol: str, cursor=None) -> float:
-    """
-    Return simulated-order margin by symbol rating.
+    """All paper futures orders use a flat 1000U margin.
 
-    Rules:
-      - L0 whitelist or unrated/default: 1000U
-      - L1 blacklist: 400U
-      - L2 blacklist: 200U
-      - L3 blacklist: 100U
-
-    Live trading keeps using check_live_symbol_allowed/get_live_margin_ratio,
-    which only allow L0.
+    Rating still gates whether a symbol may open (L2+/locked blocked).
+    Live size stays on check_live_symbol_allowed / get_live_margin_ratio.
     """
-    rating_level, _, _ = get_symbol_rating_info(symbol, cursor)
-    if rating_level is None:
-        return DEFAULT_PAPER_MARGIN_USD
-    level = int(rating_level)
-    if level >= 3:
-        return PAPER_MARGIN_BY_RATING_LEVEL[3]
-    return PAPER_MARGIN_BY_RATING_LEVEL.get(level, DEFAULT_PAPER_MARGIN_USD)
+    _ = symbol, cursor
+    return DEFAULT_PAPER_MARGIN_USD
 
 
 def count_paper_open_slots(conn, account_id: int = 2) -> int:

@@ -23,11 +23,13 @@ def test_imports() -> None:
     print("[1] imports")
     import app.services.midline_swing_scanner as scanner
     from app.services.midline_swing_config import (
+        MIDLINE_MARGIN_USD,
         MIDLINE_SOURCES,
         source_for,
         is_midline_source,
         is_active_midline_source,
     )
+    assert MIDLINE_MARGIN_USD == 1000.0
     assert MIDLINE_SOURCES == frozenset({"midline_long", "midline_short"})
     assert source_for("", "long") == "midline_long"
     assert is_active_midline_source("midline_long")

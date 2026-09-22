@@ -60,7 +60,7 @@ flowchart LR
 | `BRAIN_TICK_INTERVAL_SECONDS` | 15 | 调度间隔 |
 | `BRAIN_TICK_MAX_OPENS` | 2 | 单轮最多触发 2 个开仓 |
 | `BRAIN_SYMBOL_OPEN_COOLDOWN_MINUTES` | 60 | 同币冷却 |
-| `BRAIN_MARGIN_USD` | 500 | 默认保证金，实际可被币种设置覆盖 |
+| `BRAIN_MARGIN_USD` | 1000 | 合约模拟统一 1000U，不再按评级/Playbook 缩仓 |
 | `BRAIN_USE_MARKET_ENTRY` | False | 强制限价，防插针 |
 
 ### 2.2 Big4 与日线大环境
@@ -189,7 +189,7 @@ flowchart TD
 | --- | ---: |
 | source | `midline_long` / `midline_short` |
 | 杠杆 | 5x |
-| 保证金 | 500U 或币种配置 |
+| 保证金 | 1000U（统一底仓） |
 | 限价偏移 | LONG -1%, SHORT +1% |
 | SL / TP | SL 6%, TP 3% |
 | 持仓 | 8h |

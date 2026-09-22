@@ -131,7 +131,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 | 项 | 值 |
 |----|-----|
-| 保证金 | 500 U |
+| 保证金 | 1000 U |
 | 杠杆 | 5x |
 | 计划持仓 | **4h**（`AI_POSITION_HOLD_HOURS`） |
 | SL / TP | **3% / 5%** |
@@ -290,7 +290,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 | 项 | 值 |
 |----|-----|
 | source | `midline_long` / `midline_short` |
-| 保证金 | 500 U |
+| 保证金 | 1000 U |
 | 杠杆 | 5x |
 | 计划持仓 | **不限时**（结构点出场） |
 | SL / TP | **止损 6%**；无硬止盈 |

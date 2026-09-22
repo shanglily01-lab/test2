@@ -138,17 +138,17 @@
 ## Gemini / DeepSeek / GPT AI 模块
 
 ### 顶空底多 (`*_reversal`)
-- 无 kill switch；`top_reversal`→SHORT / `bottom_reversal`→LONG；SL **3%** / TP **5%** / 4h / 5x / 500U；conf≥**0.65**
+- 无 kill switch；`top_reversal`→SHORT / `bottom_reversal`→LONG；SL **3%** / TP **5%** / 4h / 5x / 1000U；conf≥**0.65**
 - 仅模拟仓；表 `*_reversal_explore_runs`（migration 008）
 
 ### 战术四策略 + 三教师 (`*_pullback|rebound|chase|dump`)
 - **15 任务**（5 策略 × 3 教师），`tactical_explore_scheduler` 4h + **15min** 轮询；共用 `explore_prepared_snapshot`
-- 固定方向：pullback/chase→LONG，rebound/dump→SHORT；SL **3%** / TP **5%**；conf≥**0.55**
+- 固定方向：pullback/chase→LONG，rebound/dump→SHORT；SL **3%** / TP **5%** / 5x / 1000U；conf≥**0.55**
 - 仅模拟仓；migration 009 / 017
 
 ### 主探索 (`*_explore`)
 - 每 **max_hold_hours**（距上次 ok）+ 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
-- SL **3%** / TP **5%** / **max_hold_hours** / 5x / 500U；conf≥**0.75** + `explore_catalyst_technical_ok`（含 15m OHLC）；**DeepSeek LONG** 另≥**0.82** + RSI/7d/24h/`deepseek_long_entry_quality_ok`
+- SL **3%** / TP **5%** / **max_hold_hours** / 5x / 1000U；conf≥**0.75** + `explore_catalyst_technical_ok`（含 15m OHLC）；**DeepSeek LONG** 另≥**0.82** + RSI/7d/24h/`deepseek_long_entry_quality_ok`
 - **DeepSeek 选币**：仅 **L0+L1**（不扫未评级/全市场）
 - **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：`deepseek_explore` / `deepseek_predict` / `brain_swing` / **`midline_long/short`** / **`manual_watchlist`**（+ L0 白名单等 symbol 闸门）
 - **Gemini 探索已下线**（系统配置无开关；不调度）
@@ -182,7 +182,7 @@
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟+实盘】
 - **量化扫描**，非 LLM；标的 **市值前 100**（`config.yaml` 序）；**15min** 轮询；旧四路 `*_midline_*` 停并移除
 - kill switch：`midline_long_enabled` / `midline_short_enabled`（系统配置「策略与模式」+ 破位策略页）
-- 限价：做多 A1 挂 **15m 回调区**；**C3/C1 破位市价跟风**（**C3 须 Big4 LONG**；禁 RSI 极端+7日高追；止盈后 4h 冷却）；B2 须反抽失败后再市价跟；**B3 须 Big4 非 LONG** 且顶部第一回调后挂空；A2 须离低点并拒绝后挂反抽区；**15m RSI 管时机**（不定方向）；**持仓不限时**（低点买高点卖）；SL **6%** / 5x / 500U
+- 限价：做多 A1 挂 **15m 回调区**；**C3/C1 破位市价跟风**（**C3 须 Big4 LONG**；禁 RSI 极端+7日高追；止盈后 4h 冷却）；B2 须反抽失败后再市价跟；**B3 须 Big4 非 LONG** 且顶部第一回调后挂空；A2 须离低点并拒绝后挂反抽区；**15m RSI 管时机**（不定方向）；**持仓不限时**（低点买高点卖）；SL **6%** / 5x / 1000U
 - **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）；**结构点出场 + 错过/回吐锁利**（取消 4h/6h 亏单到期）；**排除** SmartExit
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
 - Web：原 Gemini 探索页整页改破位策略/机会分析
@@ -250,6 +250,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 - **现货**（§7.4）：模拟跟 BRAIN A1 + DeepSeek LONG，仅 L0，`spot_trading_enabled`；实盘独立开关 `spot_live_enabled`（成交瞬间，不回填）
 - **实盘开仓 symbol**：须 **L0 白名单**（`rating_level=0`）；L1/L2/L3 禁止实盘
 - **限价偏移**：中线优先 **回调区**（无区才 ±1%）；其他模拟限价读 `paper_limit_long/short_offset_pct`（系统设定）
+- **模拟保证金**：合约模拟开仓统一 **1000U**（`get_paper_margin_usd`）；不再按评级/Playbook 缩仓；现货镜像仍 500U
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)
 - **PaperSync FAILED**：原因前置写入 `futures_orders.notes`；市价数量按 `MARKET_LOT_SIZE.maxQty` 截顶；本进程无 `engine_manager`（scheduler 也会成交模拟限价）须留 NULL，不得 FAILED；FAILED 不回填
 - **平仓总开关**: `system_settings.live_close_enabled` (1=开启；模拟平仓时同步交易所；持仓顾问 sell 亦受此规则)

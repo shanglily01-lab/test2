@@ -6,7 +6,7 @@ BRAIN_SOURCES = frozenset({BRAIN_SOURCE, "brain_long", "brain_short"})
 
 BRAIN_ACCOUNT_ID = 2
 BRAIN_LEVERAGE = 5
-BRAIN_MARGIN_USD = 500.0
+BRAIN_MARGIN_USD = 1000.0
 
 # 持仓：过渡 fallback（评估失败时）；正常由 brain_risk_params 按币评估
 BRAIN_HOLD_HOURS = 6
@@ -94,12 +94,13 @@ PLAYBOOK_MIN_EDGE_SCORE = {
     "C4": 0.75,
 }
 PLAYBOOK_MARGIN_MULTIPLIER = {
-    "A2": 0.45,
-    "B2": 0.30,
-    "B3": 0.25,
-    "C1": 0.35,
-    "C3": 0.50,
-    "C4": 0.25,
+    "A1": 1.0,
+    "A2": 1.0,
+    "B2": 1.0,
+    "B3": 1.0,
+    "C1": 1.0,
+    "C3": 1.0,
+    "C4": 1.0,
 }
 FLAT_PLAYBOOKS = frozenset({"D1", "D2"})
 PLAYBOOK_SIDE = {
