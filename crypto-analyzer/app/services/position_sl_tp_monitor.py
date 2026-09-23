@@ -515,18 +515,19 @@ class PositionSLTPMonitor:
                     _is_brain_usd = _brain_usd_src(src)
                 except Exception:
                     _is_brain_usd = (src or "").startswith("brain_")
+                u_pnl = 0.0
+                try:
+                    lev = float(pos.get("leverage") or 5) or 5.0
+                    margin = float(pos.get("margin") or 0)
+                    if margin <= 0:
+                        qty = float(pos.get("quantity") or 0)
+                        margin = abs(qty * entry_price) / lev if lev > 0 else 0.0
+                    u_pnl = margin * lev * pnl_pct
+                except (TypeError, ValueError):
+                    u_pnl = 0.0
                 if _is_brain_usd:
                     from app.services.brain_config import BRAIN_ADVERSE_5M_MIN_LOSS_USD
                     from app.services.brain_trail_exit import check_brain_max_loss_usd
-                    try:
-                        lev = float(pos.get("leverage") or 5) or 5.0
-                        margin = float(pos.get("margin") or 0)
-                        if margin <= 0:
-                            qty = float(pos.get("quantity") or 0)
-                            margin = abs(qty * entry_price) / lev if lev > 0 else 0.0
-                        u_pnl = margin * lev * pnl_pct
-                    except (TypeError, ValueError):
-                        u_pnl = 0.0
                     # 结构持仓不因 5m 噪音早撤；美元熔断与硬 SL 仍兜底
                     if (
                         not _uses_structure_swing(src)
@@ -553,6 +554,19 @@ class PositionSLTPMonitor:
                         self._sync_peak_to_db(pid, new_peak * 100)
                         logger.info(
                             f"[BRAIN max_loss] pid={pid} {symbol} {side} "
+                            f"reason={usd_br} price={price:.6f} pnl_pct={pnl_pct * 100:.2f}%"
+                        )
+                        self._cooldown[pid] = now + self._cooldown_seconds
+                        self._peak_pnl_map.pop(pid, None)
+                        self._do_close(pid, symbol, side, usd_br, price, now)
+                        continue
+                elif _uses_structure_swing(src):
+                    from app.services.midline_swing_config import check_midline_max_loss_usd
+                    usd_br = check_midline_max_loss_usd(u_pnl)
+                    if usd_br:
+                        self._sync_peak_to_db(pid, new_peak * 100)
+                        logger.info(
+                            f"[midline max_loss] pid={pid} {symbol} {side} "
                             f"reason={usd_br} price={price:.6f} pnl_pct={pnl_pct * 100:.2f}%"
                         )
                         self._cooldown[pid] = now + self._cooldown_seconds

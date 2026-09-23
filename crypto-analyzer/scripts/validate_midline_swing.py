@@ -24,12 +24,22 @@ def test_imports() -> None:
     import app.services.midline_swing_scanner as scanner
     from app.services.midline_swing_config import (
         MIDLINE_MARGIN_USD,
+        MIDLINE_MAX_LOSS_USD,
+        MIDLINE_SL_PCT,
         MIDLINE_SOURCES,
+        check_midline_max_loss_usd,
+        get_midline_sl_pct,
         source_for,
         is_midline_source,
         is_active_midline_source,
     )
     assert MIDLINE_MARGIN_USD == 1000.0
+    assert MIDLINE_SL_PCT == 2.5
+    assert MIDLINE_MAX_LOSS_USD == 120.0
+    assert get_midline_sl_pct("C1") == 2.0
+    assert get_midline_sl_pct("A1") == 3.0
+    assert check_midline_max_loss_usd(-120.0)
+    assert check_midline_max_loss_usd(-80.0) is None
     assert MIDLINE_SOURCES == frozenset({"midline_long", "midline_short"})
     assert source_for("", "long") == "midline_long"
     assert is_active_midline_source("midline_long")
@@ -475,7 +485,7 @@ def test_limit_price() -> None:
 
     assert DEFAULT_MIDLINE_LIMIT_LONG_OFFSET_PCT == 1.0
     assert DEFAULT_MIDLINE_LIMIT_SHORT_OFFSET_PCT == 1.0
-    assert MIDLINE_SL_PCT == 6.0 and MIDLINE_TP_PCT == 3.0
+    assert MIDLINE_SL_PCT == 2.5 and MIDLINE_TP_PCT == 3.0
     assert MIDLINE_HOLD_HOURS == 8
     long_pct = get_midline_limit_offset_pct("LONG")
     short_pct = get_midline_limit_offset_pct("SHORT")
@@ -545,6 +555,8 @@ def test_ai_trail_for_midline() -> None:
     assert "check_structure_profit_lock" in (
         (ROOT / "app/services/structure_swing_exit.py").read_text(encoding="utf-8")
     )
+    assert "check_midline_max_loss_usd" in mon
+    assert "skipped_follow_cap" in worker
     _ok("midline holds to structure point then locks leftover profit")
 
 

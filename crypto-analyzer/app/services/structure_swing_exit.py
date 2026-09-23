@@ -12,19 +12,20 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.services.entry_timing import compute_structure_exit
 
 STRUCTURE_MIN_AGE_MIN = 20
-STRUCTURE_MIN_PEAK_PCT = 0.40
-# Price % (not ROI). Wider than the old 1.2%/0.45% early trail so runners can
-# extend, tight enough that +1–2% winners are not held to the 2.5–6% hard SL.
-STRUCTURE_TRAIL_ACTIVATE_PCT = 1.50
+# Do not bank 0.4–0.8% crumbs (≈20U on 1000U×5x) while losers still run to SL.
+STRUCTURE_MIN_PEAK_PCT = 1.80
+STRUCTURE_TRAIL_ACTIVATE_PCT = 1.80
 STRUCTURE_TRAIL_PULLBACK_PCT = 0.55
-STRUCTURE_TRAIL_MIN_KEEP_PCT = 0.30
+STRUCTURE_TRAIL_MIN_KEEP_PCT = 0.80
 STRUCTURE_BULL_TRAIL_ACTIVATE_PCT = 2.50
 STRUCTURE_BULL_TRAIL_PULLBACK_PCT = 0.80
-STRUCTURE_BULL_TRAIL_MIN_KEEP_PCT = 0.50
-STRUCTURE_GIVEBACK_PEAK_PCT = 0.80
-STRUCTURE_GIVEBACK_NOW_PCT = 0.05
+STRUCTURE_BULL_TRAIL_MIN_KEEP_PCT = 1.20
+STRUCTURE_GIVEBACK_PEAK_PCT = 2.20
+STRUCTURE_GIVEBACK_NOW_PCT = 0.15
 STRUCTURE_STALE_AGE_H = 4.0
-STRUCTURE_STALE_PNL_PCT = 0.40
+STRUCTURE_STALE_PNL_PCT = 1.50
+# C1/C3/B2 enter at the break; "already off the low/high" is normal noise.
+STRUCTURE_FOLLOW_PLAYBOOKS = frozenset({"C1", "C3", "B2"})
 _KLINE_LIMIT = 48
 _KLINE_TTL_S = 20.0
 _kline_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
@@ -76,6 +77,25 @@ def _f(v: Any, default: float = 0.0) -> float:
         return default
 
 
+def playbook_name(playbook_row: Optional[Dict[str, Any]] = None, raw: str = "") -> str:
+    text = raw or ""
+    if isinstance(playbook_row, dict):
+        nested = playbook_row.get("playbook")
+        if isinstance(nested, dict):
+            text = text or str(nested.get("name") or nested.get("playbook") or "")
+        else:
+            text = text or str(nested or playbook_row.get("name") or "")
+    blob = str(text or "").upper()
+    for name in ("A1", "A2", "B2", "B3", "C1", "C3", "C4"):
+        if name in blob:
+            return name
+    return blob.strip()
+
+
+def is_follow_playbook(playbook_row: Optional[Dict[str, Any]] = None, raw: str = "") -> bool:
+    return playbook_name(playbook_row, raw) in STRUCTURE_FOLLOW_PLAYBOOKS
+
+
 def _trail_profile(side: str, market_bias: Optional[str]) -> Tuple[float, float, float]:
     if str(side or "").upper() == "LONG" and str(market_bias or "").upper() == "LONG":
         return (
@@ -98,10 +118,11 @@ def check_structure_profit_lock(
     side: str = "",
     market_bias: Optional[str] = None,
     structure_status: str = "",
+    playbook_row: Optional[Dict[str, Any]] = None,
 ) -> Optional[str]:
     """Lock a winner that never printed a clean opposite structure point.
 
-    Does not time-stop losers. Hard SL / BRAIN −80U still cover those.
+    Does not time-stop losers. Hard SL / midline −120U still cover those.
     """
     pnl = _f(pnl_pct)
     peak = max(_f(peak_pct), pnl)
@@ -109,7 +130,12 @@ def check_structure_profit_lock(
     if age < STRUCTURE_MIN_AGE_MIN * 60:
         return None
     status = (structure_status or "").strip().lower()
-    if status in ("missed_high", "missed_low") and pnl >= STRUCTURE_MIN_PEAK_PCT / 100.0:
+    follow = is_follow_playbook(playbook_row)
+    if (
+        status in ("missed_high", "missed_low")
+        and pnl >= STRUCTURE_MIN_PEAK_PCT / 100.0
+        and not follow
+    ):
         return f"structure_missed_take:{status}:now={pnl * 100:.2f}%"
     if (
         peak >= STRUCTURE_GIVEBACK_PEAK_PCT / 100.0
@@ -175,6 +201,7 @@ def check_structure_swing_exit(
         side=side,
         market_bias=market_bias,
         structure_status=status,
+        playbook_row=playbook_row,
     )
 
 

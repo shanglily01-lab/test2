@@ -20,7 +20,7 @@ alwaysApply: true
 
 - 扫描: `midline_swing_scanner` · `entry_timing` · worker · **15min** 轮询
 - **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）· **结构点出场 + 错过/回吐锁利**（取消 4–6h 亏单到期）· **排除** SmartExit
-- 多单限价挂在 **15m 回调区**（A1 须 `15m_trend_high_pullback`：对趋势新高回踩 0.80%–3.50%；浅缩量/滞涨/低点反弹/不过前高不得当回踩）；**C3/C1 破位市价跟风**（**C3 须 Big4 LONG**；禁高潮追价；同币止盈 4h 冷却）；B2 须反抽失败后再市价跟；B3/C4 须离高拒绝后挂空（`15m_failed_retest` 只打标）；A2 须离低点并拒绝才挂空 · **15m RSI 管时机**（多单不追超买、摸顶空等拐头；不定方向）· **持仓不限时**（低点买、高点卖）· SL **6%** · 5x · 1000U
+- 多单限价挂在 **15m 回调区**（A1 须 `15m_trend_high_pullback`：对趋势新高回踩 0.80%–3.50%；浅缩量/滞涨/低点反弹/不过前高不得当回踩）；**C3/C1 破位市价跟风**（**C3 须 Big4 LONG**；禁高潮追价；同币止盈 4h 冷却）；B2 须反抽失败后再市价跟；B3/C4 须离高拒绝后挂空（`15m_failed_retest` 只打标）；A2 须离低点并拒绝才挂空 · **15m RSI 管时机**（多单不追超买、摸顶空等拐头；不定方向）· **持仓不限时**（低点买、高点卖）· SL **C1 2.0% / C3 2.5% / A1 3.0%** · −120U · 5x · 1000U
 - **Big4 已 LONG 时禁止 A2/B2/B3**；允许 C4 假突空与 C1 破位跟风（保证金 **1000U**）；**C3 须 Big4 LONG**
 - 标的：`config.yaml` **市值前 100**；**进** `LIVE_SYNC_SOURCES`（`live_trading_enabled` + 仅 L0；打开不回填）
 - Web：原 Gemini 探索页 → 破位策略/机会分析；DeepSeek 探索去中线 Tab
@@ -38,7 +38,7 @@ alwaysApply: true
 | 主探索/预测 | ≥0.75 + catalyst + 15m OHLC；**DeepSeek LONG** 另≥0.82+RSI/7d/24h/OHLC+2 | 系统 SL/TP | max_hold_hours |
 | 战术四策略 | ≥0.55 + tactical_catalyst | 3%/5% | 4h |
 | 顶空底多 | ≥0.65 + reversal catalyst | 3%/5% | 4h |
-| 中线 v2 | 回调买 / B3/C4 冲高卖 | SL 6%；结构点出场 | **不限时** |
+| 中线 v2 | 回调买 / B3/C4 冲高卖 | SL 2.0–3.0%；结构点出场；−120U | **不限时** |
 | **现货镜像** | BRAIN A1 或 DeepSeek LONG 合约成交 | 抄合约 SL/TP | **500U/单**；`spot_live_enabled` 成交瞬间同步；仅 L0 |
 
 **DeepSeek 选币**：仅 **L0+L1**；**DeepSeek soft-sl**：grace45 / no_follow≥60m且≈-2.2%

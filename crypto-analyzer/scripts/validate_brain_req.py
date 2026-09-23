@@ -1613,21 +1613,32 @@ def test_structure_swing_exit() -> None:
         "LONG", bars, peak_pct=0.012, age_s=60, ref_price=px, playbook_row=pb,
     ) is None
     hit = check_structure_swing_exit(
-        "LONG", bars, peak_pct=0.012, age_s=30 * 60, ref_price=px, playbook_row=pb,
+        "LONG", bars, peak_pct=0.020, age_s=30 * 60, ref_price=px, playbook_row=pb,
     )
     assert hit and hit.startswith("structure_sell_high"), hit
 
     from app.services.structure_swing_exit import check_structure_profit_lock
     assert check_structure_profit_lock(0.006, 0.012, 1800) is None
-    missed = check_structure_profit_lock(
+    crumb = check_structure_profit_lock(
         0.008, 0.012, 1800, structure_status="missed_high",
     )
+    assert crumb is None, crumb
+    missed = check_structure_profit_lock(
+        0.020, 0.022, 1800, structure_status="missed_high",
+    )
     assert missed and missed.startswith("structure_missed_take"), missed
-    gave = check_structure_profit_lock(-0.002, 0.012, 1800)
+    follow_missed = check_structure_profit_lock(
+        0.020, 0.022, 1800, structure_status="missed_low",
+        playbook_row={"playbook": "C1"},
+    )
+    assert follow_missed is None, follow_missed
+    assert check_structure_profit_lock(-0.002, 0.012, 1800) is None
+    gave = check_structure_profit_lock(-0.002, 0.025, 1800)
     assert gave and gave.startswith("structure_profit_to_loss"), gave
     trail = check_structure_profit_lock(0.008, 0.018, 1800)
     assert trail and trail.startswith("structure_trail_"), trail
-    stale = check_structure_profit_lock(0.006, 0.006, 5 * 3600)
+    assert check_structure_profit_lock(0.006, 0.006, 5 * 3600) is None
+    stale = check_structure_profit_lock(0.016, 0.016, 5 * 3600)
     assert stale and stale.startswith("structure_stale_take"), stale
     loser = check_structure_profit_lock(-0.012, 0.002, 5 * 3600)
     assert loser is None, loser

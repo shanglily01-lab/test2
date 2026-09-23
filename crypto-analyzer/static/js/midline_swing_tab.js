@@ -94,7 +94,7 @@
     var tm = p.limit_timeout_minutes != null ? p.limit_timeout_minutes : ih * 60;
     return (
       '限价 做多−' + lo + '% / 做空+' + so + '% · ' + tm + 'min 超时 · ' +
-      '每 ' + ih + 'h 扫描 · SL 6% / 结构点出场 · 5x · 1000U · 仅模拟 · 不受 smart_trader 对冲平仓'
+      '每 ' + ih + 'h 扫描 · SL 2.0–3.0% / −120U / 结构点出场 · 5x · 1000U · 仅模拟 · 不受 smart_trader 对冲平仓'
     );
   }
 

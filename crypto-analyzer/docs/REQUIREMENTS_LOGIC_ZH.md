@@ -1,6 +1,6 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.61
+**版本**: v4.5.62
 **日期**: 2026-09-23
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **合约自选（REQ-WATCHLIST §7.5）**：侧栏「我的自选」；用户加交易对；价格优先浏览器直连币安合约 **WS**，3s 无 tick 则服务端 DataHub/WS **1s 补价**；手动限价/市价（限价可撤）；成交走实时 ticker；实盘随 `live_trading_enabled`，**仅 L0**；成交瞬间同步，打开不回填。  
@@ -9,7 +9,8 @@
 > **破位策略（REQ-MIDLINE §7.2）**：`midline_long` / `midline_short` 已落地模拟+实盘；扫描 **市值前 100**；对外文案为「破位策略」。  
 > **超级大脑主权层（REQ-BRAIN §7.3）**：**首版已落地**；扫描 **市值前 300**（`config.yaml` 按市值序）；与 DeepSeek 探索/预测 **对照期并行**；对照结束后再全面暂停旧 DS 自动开仓。  
 > **模拟保证金（v4.5.61）**：合约模拟开仓统一 **1000U**（探索/预测/BRAIN/破位/自选/smart_trader）。不再按评级或 Playbook/宏观倍数缩仓。现货镜像仍 500U；实盘仍走 `max_position_value`。  
-> **结构持仓（v4.5.57 / v4.5.60）**：BRAIN / 破位 **不再 4–6h 到期强平亏损单**。做多：合适低点买、合适高点卖；做空相反。优先 15m 衰竭高 / 拒绝低；**错过结构点仍止盈、浮盈回吐锁利**，禁止把盈利单扛到硬 SL。硬 SL 与 BRAIN 美元熔断仍兜底。硬 TP、5m 早撤仍关。持仓顾问：结构点未到不得因时长建议卖；锁利由程序执行。  
+> **盈亏比（v4.5.62）**：禁止 0.4–0.8% 碎止盈对 6%/−300U 止损。锁利须先有 ≥1.80% 浮盈；浮盈回吐须峰值 ≥2.20%。破位硬 SL：C1/B2 **2.0%**、C3 **2.5%**、A1 等 **3.0%**；已开 6% 单用 **−120U** 熔断。C1/C3/B2 不因 `missed_low/high` 平。每轮跟风最多 **3** 笔。  
+> **结构持仓（v4.5.57 / v4.5.60）**：BRAIN / 破位 **不再 4–6h 到期强平亏损单**。做多：合适低点买、合适高点卖；做空相反。优先 15m 衰竭高 / 拒绝低；**错过结构点仍止盈、浮盈回吐锁利**，禁止把盈利单扛到硬 SL。硬 SL、BRAIN −60U、破位 −120U 仍兜底。硬 TP、5m 早撤仍关。持仓顾问：结构点未到不得因时长建议卖；锁利由程序执行。  
 > **BRAIN v2 机会识别（§7.3.10–7.3.15）**：**已落地且开仓机会判定视为相对客观**；退出/风控见 §7.3.16。  
 > **C1 / A2 / B2（v4.5.17 / v4.5.36）**：C1 **破位当根跟风做空**（不等回抽）；A2 须真正离开低点并出现拒绝（上影 / EMA 打回 / 假突）才挂空；B2 须先有反抽再破起点/EMA 才跟风，禁止把第一根阴跌当 B2。  
 > **C3 前提（v4.5.56）**：C3 仍打标，但 **Big4 须 LONG 才开多**（`big4_not_long_blocks_C3`）。弱宏观 / 震荡 / 个币冲击不得穿透。8/26 近窗破位 C3 42 笔 42.9%/−1152U；8/23 多头窗曾 18 笔 94%/+726U。打标保留。  
@@ -250,7 +251,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 ### 6.5 实盘保证金
 
 - **主探索/预测 / BRAIN / 破位**：`user_api_keys.max_position_value` × `get_live_margin_ratio(symbol)`；模拟可扫 L0+L1，实盘同步**仅 L0**  
-- **破位策略** 杠杆/SL/TP 与模拟一致（SL **6%** / 无硬 TP / 5x）  
+- **破位策略** 杠杆/SL/TP 与模拟一致（SL **2.0–3.0%** / 无硬 TP / 5x；已开仓另加 −120U 熔断）  
 - L0=1.0x；L1/L2/L3 禁止实盘（L2+ 同时禁止模拟）  
 
 ### 6.6 模拟保证金（v4.5.61）
@@ -315,7 +316,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 |------|-----|
 | 限价偏移 | **A1/A2/B3/C4 限价**：做多回调区 / 做空反抽区或冲高区；无区时回退 ±1%。**C1/C3/B2 市价跟风**（不挂限价） |
 | 限价超时 | 扫描间隔×2（现网约 **30min**）；未成交取消 |
-| SL / TP | **止损 6%**；**无硬止盈**（结构高/低点出场） |
+| SL / TP | **止损按 Playbook**：C1/B2 **2.0%**、C3 **2.5%**、A1/A2/B3/C4 **3.0%**；**无硬止盈**。已开 6% 单先吃 **−120U** 熔断 |
 | 计划持仓 | **不限时**（取消 4h/6h 到期）；多单合适低点买、合适高点卖，空单相反 |
 | 杠杆 | **5x** |
 | 保证金 | **1000U**（模拟，统一底仓） |
@@ -374,7 +375,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 
 | 机制 | 行为 |
 |------|------|
-| 硬 SL/TP | SL **6%**；**无硬 TP**。`position_sl_tp_monitor` |
+| 硬 SL/TP | SL **2.0–3.0%**（按 Playbook）；**无硬 TP**；**−120U** 熔断。`position_sl_tp_monitor` |
 | 到期 | **取消对亏损单按时长强平**。已有仓的 `planned_close_time` 对 BRAIN/破位忽略 |
 | 程序化卖点 | **结构点优先**；错过高低点仍止盈；峰值回吐 / 满 4h 仍绿则锁。`midline_hold_exit` **不再执行** |
 | 持仓顾问 | **启用** DeepSeek（**结构点 thesis 复核**；**sell 只建议不执行**；硬 SL / 结构点 / 锁利兜底） |
@@ -795,12 +796,12 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 | 阶段 | 条件 | 动作 |
 |------|------|------|
 | 未到点 | 持仓 &lt;20min | 只靠硬 SL / 美元熔断 |
-| 多单卖点 | 15m `exhaustion_ready`（离高拒绝，同 B3/C4）且峰值 ≥0.40% | **市价平** `structure_sell_high` |
-| 空单平点 | 15m `bounce_low_ready` 且峰值 ≥0.40% | **市价平** `structure_cover_low` |
-| 错过高低 | `missed_high` / `missed_low` **且仍浮盈** ≥0.40% | **市价平** `structure_missed_take`（不再空等下一结构点） |
-| 浮盈回吐 | 峰值 ≥0.80% 现价 ≤+0.05% | **市价平** `structure_profit_to_loss` |
-| 锁利 trail | 峰值 ≥1.50%（Big4 LONG 多单 2.50%）后回撤 ≥0.55%（多头 0.80%） | **市价平** `structure_trail_*` |
-| 过期仍绿 | 持仓 ≥4h 且仍浮盈 ≥0.40% | **市价平** `structure_stale_take`（**不**对亏损单按时长强平） |
+| 多单卖点 | 15m `exhaustion_ready`（离高拒绝，同 B3/C4）且峰值 ≥**1.80%** | **市价平** `structure_sell_high` |
+| 空单平点 | 15m `bounce_low_ready` 且峰值 ≥**1.80%** | **市价平** `structure_cover_low` |
+| 错过高低 | A1 等：`missed_high` / `missed_low` 且仍浮盈 ≥**1.80%** | **市价平** `structure_missed_take`。**C1/C3/B2 不因 missed 平**（入场就在极值附近） |
+| 浮盈回吐 | 峰值 ≥**2.20%** 现价 ≤+0.15% | **市价平** `structure_profit_to_loss` |
+| 锁利 trail | 峰值 ≥1.80%（Big4 LONG 多单 2.50%）后回撤 ≥0.55%（多头 0.80%） | **市价平** `structure_trail_*` |
+| 过期仍绿 | 持仓 ≥4h 且仍浮盈 ≥**1.50%** | **市价平** `structure_stale_take`（**不**对亏损单按时长强平） |
 | 硬 TP / 5m 早撤 / 4–6h 亏单到期 | — | **关闭** |
 
 **禁止**：BRAIN/破位走旧 `_check_ai_trail_tp` / `midline_hold_exit` / `planned_close_time_expired`。  
@@ -809,7 +810,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 ##### 7.3.16.4 决策优先级（BRAIN / 破位持仓生命周期）
 
 ```text
-1. brain_max_loss_usd（BRAIN：浮亏≤-80U）→ 平
+1. brain_max_loss_usd（BRAIN：浮亏≤-60U）/ midline_max_loss_usd（破位：≤-120U）→ 平
 2. 硬 SL → 平
 3. structure_sell_high / structure_cover_low → 平
 4. structure_missed_take / profit_to_loss / trail / stale_take → 平
@@ -1061,7 +1062,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-MIDLINE | `market_cap_universe.py`, `midline_swing_config.py`, `midline_swing_scanner.py`, `entry_timing.py`, `midline_hold_exit.py`, `midline_explore_worker.py`, `midline_swing_api.py`, 破位策略页 JS/模板, `strategy_display_names.py`, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
 | **REQ-BRAIN** | `brain_config` / `brain_strategy_orchestrator`（市值前 300）/ `market_cap_universe.py`；`paper_limit_entry` + executor expire；`trading_gates.LIVE_SYNC_SOURCES`；`smart_exit_optimizer` 排除；`validate_brain_req.py`；权威 §7.3；操作对照 `docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md` |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
-| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **结构点出场** + **错过/回吐锁利**（禁止盈利扛到硬 SL）；取消 4–6h 亏单到期；硬 SL；BRAIN −80U；顾问 suggest-only；§7.3（**v4.5.60**） |
+| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | **结构点出场** + **错过/回吐锁利**（须 ≥1.80%/2.20%，禁止碎盈）；取消 4–6h 亏单到期；破位 SL 2.0–3.0% + −120U；BRAIN −60U；顾问 suggest-only；§7.3（**v4.5.62**） |
 | REQ-ST | `smart_trader_service.py` |
 | **REQ-SPOT** | `spot_paper_mirror.py`；`spot_live_sync.py`；`spot_trader_service.py`；`fill_paper_limit_order` 钩子；`validate_spot_paper.py`；权威 §7.4 |
 | **REQ-WATCHLIST** | `watchlist_config.py` · `watchlist_store.py` · `watchlist_orders.py` · `watchlist_api.py` · `watchlist_page.js`（浏览器直连币安合约 WS + 3s 无 tick 则 `/api/watchlist/prices` 1s 补价）· `/watchlist`；`LIVE_SYNC_SOURCES` 含 `manual_watchlist`；权威 §7.5 |
@@ -1074,6 +1075,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-09-23 | **v4.5.62** | **修盈亏比**：锁利门槛抬到 1.80%/2.20%，不再收 0.5% 碎盈；破位 SL 改为 2.0–3.0%；已开 6% 单加 −120U 熔断；C1/C3/B2 不因 missed_low 平；每轮跟风最多 3 笔。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.2.3/§7.3.16.3 已同步 |
 | 2026-09-23 | **v4.5.61** | **模拟保证金统一 1000U**：合约模拟开仓不再按评级/Playbook/宏观倍数缩仓；现货镜像仍 500U；实盘仍走 `max_position_value`。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §6.6 已同步 |
 | 2026-09-21 | **v4.5.60** | **结构仓补锁利**：错过 15m 高低点仍止盈；峰值回吐 / 4h 仍绿则平；**不**对亏损单按时长强平。禁止把盈利单扛到硬 SL。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.3.16.3 已同步 |
 | 2026-09-14 | **v4.5.59** | **TG 改模拟盘开/平仓**：实盘开平仓与挂撤单不再发 Telegram；模拟盘成交与平仓发。熔断/复盘仍发。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §2.1 已同步 |

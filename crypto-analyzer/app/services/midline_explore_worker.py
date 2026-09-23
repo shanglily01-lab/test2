@@ -13,13 +13,15 @@ from app.utils.config_loader import get_db_config
 
 from app.services.midline_swing_config import (
     MIDLINE_ACCOUNT_ID,
+    MIDLINE_FOLLOW_MAX_OPENS_PER_SCAN,
     MIDLINE_KILL_SWITCH,
     MIDLINE_LEVERAGE,
+    MIDLINE_MARKET_PLAYBOOKS,
     MIDLINE_SCAN_INTERVAL_MINUTES,
-    MIDLINE_SL_PCT,
-    MIDLINE_TP_PCT,
     get_midline_limit_timeout_minutes,
+    get_midline_sl_pct,
     is_active_midline_source,
+    midline_uses_market_entry,
     profile_for_source,
     profile_side,
     source_for,
@@ -277,13 +279,13 @@ def _open_limit_order(
     from app.services.midline_hold_exit import midline_hold_hours
     playbook = str(((signal_detail.get("playbook") or {}).get("name")) or "")
     hold_hours = midline_hold_hours(playbook)
-    from app.services.midline_swing_config import midline_uses_market_entry
+    sl_pct = get_midline_sl_pct(playbook)
     use_market = midline_uses_market_entry(playbook)
     allowed, _ = gate_simulated_open(
         symbol, side, price, source,
         catalyst="midline_v2_pass",
         leverage=MIDLINE_LEVERAGE,
-        sl_pct=MIDLINE_SL_PCT, tp_pct=None,
+        sl_pct=sl_pct, tp_pct=None,
         hold_hours=hold_hours,
         conn=conn,
     )
@@ -312,7 +314,7 @@ def _open_limit_order(
         source=source,
         leverage=MIDLINE_LEVERAGE,
         margin=paper_margin,
-        stop_loss_pct=MIDLINE_SL_PCT,
+        stop_loss_pct=sl_pct,
         take_profit_pct=None,
         entry_signal_type=sig_type,
         entry_reason=reason[:200],
@@ -382,8 +384,10 @@ def run_midline_round(
             # 全量评估（含拒绝）便于机会分析页
             all_rows, universe_size = scan_universe(conn, profile, include_rejects=True)
             signals = [r for r in all_rows if r.get("passed")]
+            signals.sort(key=lambda r: float(r.get("score") or 0), reverse=True)
             rejected = len(all_rows) - len(signals)
             orders_placed = 0
+            follow_opened = 0
 
             from app.services.trading_gates import check_max_positions_allowed
 
@@ -444,11 +448,23 @@ def run_midline_round(
                     )
                     continue
 
+                playbook = str(((detail.get("playbook") or {}).get("name")) or "")
+                if (
+                    playbook.upper() in MIDLINE_MARKET_PLAYBOOKS
+                    and follow_opened >= MIDLINE_FOLLOW_MAX_OPENS_PER_SCAN
+                ):
+                    _insert_verdict(
+                        conn, run_id, source, symbol, side, score, detail,
+                        "skipped_follow_cap", None,
+                        f"本轮跟风已满 {MIDLINE_FOLLOW_MAX_OPENS_PER_SCAN}",
+                    )
+                    continue
+
                 order_id = _open_limit_order(conn, symbol, side, price, source, score, detail)
                 if order_id:
                     orders_placed += 1
-                    playbook = str(((detail.get("playbook") or {}).get("name")) or "")
-                    from app.services.midline_swing_config import midline_uses_market_entry
+                    if playbook.upper() in MIDLINE_MARKET_PLAYBOOKS:
+                        follow_opened += 1
                     action = "market_opened" if midline_uses_market_entry(playbook) else "limit_placed"
                     _insert_verdict(
                         conn, run_id, source, symbol, side, score, detail,

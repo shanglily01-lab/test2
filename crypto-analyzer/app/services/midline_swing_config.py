@@ -34,9 +34,21 @@ MIDLINE_SETTING_INTERVAL_HOURS = "midline_interval_hours"
 MIDLINE_SETTING_LIMIT_LONG_OFFSET_PCT = "midline_limit_long_offset_pct"
 MIDLINE_SETTING_LIMIT_SHORT_OFFSET_PCT = "midline_limit_short_offset_pct"
 
-MIDLINE_SL_PCT = 6.0
+MIDLINE_SL_PCT = 2.5
 MIDLINE_TP_PCT = 3.0
 MIDLINE_ACCOUNT_ID = 2
+# Existing 6% SL rows still die at −300U unless the monitor dollar cap fires first.
+MIDLINE_MAX_LOSS_USD = 120.0
+MIDLINE_SL_BY_PLAYBOOK = {
+    "C1": 2.0,
+    "B2": 2.0,
+    "C3": 2.5,
+    "A1": 3.0,
+    "A2": 3.0,
+    "B3": 3.0,
+    "C4": 3.0,
+}
+MIDLINE_FOLLOW_MAX_OPENS_PER_SCAN = 3
 
 # v2 独立量化 source（不再挂教师名）
 MIDLINE_SOURCES = frozenset({
@@ -92,6 +104,23 @@ def is_active_midline_source(source: str) -> bool:
 def midline_uses_market_entry(playbook: str) -> bool:
     """C1/C3 破位跟风 + B2 反抽失败后跟风走市价；A1/A2/B3/C4 挂限价。"""
     return str(playbook or "").strip().upper() in MIDLINE_MARKET_PLAYBOOKS
+
+
+def get_midline_sl_pct(playbook: str = "") -> float:
+    name = str(playbook or "").strip().upper()
+    return float(MIDLINE_SL_BY_PLAYBOOK.get(name, MIDLINE_SL_PCT))
+
+
+def check_midline_max_loss_usd(unrealized_usd: float):
+    """破位美元熔断：≤ −MIDLINE_MAX_LOSS_USD → 平。覆盖已写入的 6% 硬 SL。"""
+    try:
+        pnl = float(unrealized_usd)
+    except (TypeError, ValueError):
+        return None
+    lim = abs(float(MIDLINE_MAX_LOSS_USD))
+    if pnl <= -lim:
+        return f"midline_max_loss_usd:{pnl:.2f}"
+    return None
 
 
 def _clamp_midline_interval_hours(hours: float) -> int:
