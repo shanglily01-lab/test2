@@ -252,6 +252,8 @@ def test_brain_skip_open_advisor() -> None:
         _fail("结构波段持仓顾问 system 未取消时长限制")
     elif "禁止因持仓小时数" not in HOLD_ADVISOR_STRUCTURE_JSON_SYSTEM_ZH:
         _fail("结构波段持仓顾问未禁止时长/回吐卖")
+    elif "0.5%级碎盈" not in HOLD_ADVISOR_STRUCTURE_JSON_SYSTEM_ZH:
+        _fail("结构波段持仓顾问未禁止碎盈卖")
     else:
         _ok("hold advisor structure rubric vs 4h explore rubric")
     ds_adv = (ROOT / "app/services/deepseek_position_advisor.py").read_text(encoding="utf-8")
@@ -275,6 +277,10 @@ def test_brain_skip_open_advisor() -> None:
     p = PositionAdvisorCore._build_prompt(pos, 101.0, ctx)
     if "4 小时交易窗口" in p or "合适高点" not in p:
         _fail("BRAIN 持仓 prompt 仍是 4h 或缺少结构卖点")
+    elif "顺向峰值≥0.40%" in p:
+        _fail("结构持仓 prompt 仍用 0.40% 碎盈门槛")
+    elif "顺向峰值≥1.80%" not in p:
+        _fail("结构持仓 prompt 未对齐 1.80% 锁利门槛")
     else:
         _ok("BRAIN hold prompt is structure swing")
     pos_ds = dict(pos)
@@ -1635,7 +1641,7 @@ def test_structure_swing_exit() -> None:
     assert check_structure_profit_lock(-0.002, 0.012, 1800) is None
     gave = check_structure_profit_lock(-0.002, 0.025, 1800)
     assert gave and gave.startswith("structure_profit_to_loss"), gave
-    trail = check_structure_profit_lock(0.008, 0.018, 1800)
+    trail = check_structure_profit_lock(0.016, 0.026, 1800)
     assert trail and trail.startswith("structure_trail_"), trail
     assert check_structure_profit_lock(0.006, 0.006, 5 * 3600) is None
     stale = check_structure_profit_lock(0.016, 0.016, 5 * 3600)

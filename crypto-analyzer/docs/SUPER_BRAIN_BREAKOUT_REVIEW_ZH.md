@@ -191,7 +191,7 @@ flowchart TD
 | 杠杆 | 5x |
 | 保证金 | 1000U（统一底仓） |
 | 限价偏移 | LONG -1%, SHORT +1% |
-| SL / TP | SL 6%, TP 3% |
+| SL / TP | SL 2.0–3.0%（按 Playbook），无硬 TP，−120U |
 | 持仓 | 8h |
 | 开仓顾问 | 跳过 |
 | 实盘同步 | 不进入 LIVE_SYNC |

@@ -62,8 +62,8 @@ HOLD_ADVISOR_STRUCTURE_JSON_SYSTEM_ZH = (
     "你是模拟仓结构波段持仓顾问。本仓不限持仓时长。"
     "做多等到合适高点（15m 离高拒绝/上影衰竭）才倾向 sell；"
     "做空等到合适低点（离低拒绝/下影）才倾向 sell。"
-    "禁止因持仓小时数、小幅浮盈回吐、RSI 超买而 sell。"
-    "程序化会在结构点平仓；你只复核 thesis 是否还在。"
+    "禁止因持仓小时数、0.5%级碎盈、小幅浮盈回吐、RSI 超买而 sell。"
+    "程序化须先有≥1.80%浮盈才因结构点/错过高低点平仓；你只复核 thesis 是否还在。"
     "仅输出合法 JSON：action 为 hold|observe|sell；"
     "reason 为50字以内中文，须引用 15m 结构（衰竭高/拒绝低）+ 量价要点；"
     "结构点未到 → hold；信号混杂或接近结构点 → observe；"
@@ -752,18 +752,20 @@ class PositionAdvisorCore:
         ready_cn = "是" if ctx.get("structure_ready") else "否"
         program_cn = "是（程序将按结构点平仓）" if program_close else "否"
         target_cn = "合适高点（离高拒绝/上影衰竭）" if side == "LONG" else "合适低点（离低拒绝/下影）"
+        from app.services.structure_swing_exit import STRUCTURE_MIN_PEAK_PCT
+        peak_floor = f"{STRUCTURE_MIN_PEAK_PCT:.2f}"
         return f"""你是模拟仓**结构波段持仓**顾问。本仓**不限持仓时长**。
 
 ## 本仓 thesis（必读）
 - 做多：合适低点买、**等到合适高点才卖**；做空相反。
-- **禁止**因为已经持仓几小时、小幅浮盈回吐、RSI 超买而 sell。
-- 程序化会在 15m 结构点平仓；你只复核方向 thesis 是否还在。硬 SL / BRAIN −80U 由程序兜底。
+- **禁止**因为已经持仓几小时、0.5% 级碎盈、小幅浮盈回吐、RSI 超买而 sell。
+- 程序化会在 15m 结构点平仓（须先有 ≥{peak_floor}% 浮盈）；你只复核方向 thesis 是否还在。硬 SL / BRAIN −60U / 破位 −120U 由程序兜底。
 - 当前卖点目标：{target_cn}
 
 ## 当前 15m 结构判定（与程序出场同一套）
   status: {status}
   ready: {ready_cn}  why: {why}
-  持仓≥20min: {age_ok}  顺向峰值≥0.40%: {peak_ok}
+  持仓≥20min: {age_ok}  顺向峰值≥{peak_floor}%: {peak_ok}
   程序化可平: {program_cn}
 
 ## 仓位

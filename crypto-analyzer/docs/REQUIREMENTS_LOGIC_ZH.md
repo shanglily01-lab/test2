@@ -961,7 +961,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 | 持仓顾问 tick | scheduler **每 15min** | 每仓 **15min/仓**；**浮盈转亏**立即 urgent 再审 |
 | 持仓顾问决策 | 探索/预测：15m 表主审；浮盈 ROI≥**+8%** 且 15m **明确**转弱（反向≥4）→ 倾向 observe/sell；sell 须 15m 近 4 根确认反转；**sell 执行平仓**。**BRAIN/破位**：结构波段 rubric（不限时；多单卖合适高、空单平合适低）；结构点未到禁止因时长/浮盈回吐 sell；**sell 只落库 `advisor_suggest_only`** |
 
-**AI 轻量移动止盈**（`position_sl_tp_monitor.py`）：探索/预测 peak 价格收益 **≥3%** 后回撤 **≥1%**（`ai-trail-tp`）。**BRAIN / 中线 v2** 优先结构点出场；错过结构点或浮盈回吐走 `check_structure_profit_lock`（峰 1.50%/回撤 0.55%；Big4 LONG 多单 2.50%/0.80%）。`midline_hold_exit` 与 4–6h 亏单到期 **不再执行**。
+**AI 轻量移动止盈**（`position_sl_tp_monitor.py`）：探索/预测 peak 价格收益 **≥3%** 后回撤 **≥1%**（`ai-trail-tp`）。**BRAIN / 中线 v2** 优先结构点出场；错过结构点或浮盈回吐走 `check_structure_profit_lock`（须先有 ≥**1.80%** 浮盈才因 missed 平；回吐须峰值 ≥**2.20%**；C1/C3/B2 不因 missed 平；Big4 LONG 多单 trail 2.50%/0.80%）。破位硬 SL 2.0–3.0% + **−120U**。`midline_hold_exit` 与 4–6h 亏单到期 **不再执行**。
 
 **AI soft-sl**（同 monitor）：通用探索/预测 grace **15min**、no_follow 约 **-1.2%**。**DeepSeek** explore/predict 单独加宽以匹配 15m×4h 开仓 thesis：grace **45min**；no_follow 须 age≥**60min** 且价格亏≥**约 2.2%**；profit_to_loss / mature 亦更深更晚；硬 SL 仍兜底。
 
