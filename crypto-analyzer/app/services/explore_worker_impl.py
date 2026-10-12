@@ -1700,6 +1700,16 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                 ))
                 continue
 
+            from app.services.bull_swing_policy import auto_short_blocked
+            short_blocked, short_why = auto_short_blocked(EXPLORE_SOURCE, side)
+            if short_blocked:
+                verdict_rows.append((
+                    run_id, symbol, db_category, confidence,
+                    catalyst, data_signal, risk_note,
+                    'skipped_bull_long_only', None, short_why,
+                ))
+                continue
+
             tech_ok, tech_reason = explore_catalyst_technical_ok(
                 catalyst, data_signal, resolve_futures_universe_item(universe, symbol),
                 category=category,

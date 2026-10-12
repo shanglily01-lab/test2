@@ -84,6 +84,8 @@ TRADEABLE_PLAYBOOKS = frozenset({
     "C3",
     "C4",
 })
+# v4.5.63 牛市：打标仍用上表；实际开仓只做 A1 回调多
+BULL_OPEN_PLAYBOOKS = frozenset({"A1"})
 PILOT_SHORT_PLAYBOOKS = frozenset({"A2", "B2", "C1"})
 PLAYBOOK_MIN_EDGE_SCORE = {
     "A2": 0.80,

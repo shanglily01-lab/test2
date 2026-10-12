@@ -1552,6 +1552,16 @@ def run_explore_round(triggered_by: str = 'scheduler') -> Optional[int]:
                     logger.info(f"[DeepSeek探索] {symbol} LONG加严跳过: {long_reason}")
                     continue
 
+            from app.services.bull_swing_policy import auto_short_blocked
+            short_blocked, short_why = auto_short_blocked(EXPLORE_SOURCE, side)
+            if short_blocked:
+                verdict_rows.append((
+                    run_id, symbol, db_category, confidence,
+                    catalyst, data_signal, risk_note,
+                    'skipped_bull_long_only', None, short_why,
+                ))
+                continue
+
             if side == 'LONG' and not allow_long:
                 verdict_rows.append((
                     run_id, symbol, db_category, confidence,

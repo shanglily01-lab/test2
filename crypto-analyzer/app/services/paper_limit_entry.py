@@ -233,6 +233,27 @@ def create_paper_limit_order(
             failure_reason.append("direction_gate_error")
         return None
 
+    try:
+        from app.services.bull_swing_policy import auto_short_blocked, strip_fixed_exits
+        short_blocked, short_why = auto_short_blocked(source, side)
+        if short_blocked:
+            logger.info(f"[限价开仓] 跳过 {symbol} {side} source={source}: {short_why}")
+            if failure_reason is not None:
+                failure_reason.append(short_why)
+            return None
+        if strip_fixed_exits(source, side):
+            stop_loss_pct = None
+            stop_loss_price = None
+            take_profit_pct = None
+            take_profit_price = None
+            planned_close_time = None
+            max_hold_minutes = None
+    except Exception as e:
+        logger.warning(f"[限价开仓] {symbol} 牛市只做多闸门异常: {e}")
+        if failure_reason is not None:
+            failure_reason.append("bull_long_only_error")
+        return None
+
     from app.services.midline_swing_config import is_midline_source, get_midline_limit_offset_pct
     from app.services.brain_config import is_brain_source
 

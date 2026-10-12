@@ -81,7 +81,7 @@ def test_breakout_action_opportunity() -> None:
         global_name="BEAR_TREND",
         entry_15m={"fresh_breakout": False},
     )
-    assert c1["should_open"] is True, c1
+    assert c1["should_open"] is False and c1["reason"] == "bull_long_only_blocks_short", c1
 
     a1 = _breakout_action_opportunity(
         side="LONG",
@@ -166,7 +166,7 @@ def test_breakout_action_opportunity() -> None:
     )
     assert (
         c3_h1["should_open"] is False
-        and c3_h1["reason"] == "big4_not_long_blocks_C3"
+        and str(c3_h1["reason"]).startswith("bull_a1_only")
     ), c3_h1
 
     a2 = _breakout_action_opportunity(
@@ -186,7 +186,7 @@ def test_breakout_action_opportunity() -> None:
         global_name="TOKEN_DIVERGENCE",
         entry_15m={"fresh_breakout": False},
     )
-    assert a2["should_open"] is True, a2
+    assert a2["should_open"] is False and a2["reason"] == "bull_long_only_blocks_short", a2
 
     blocked = _breakout_action_opportunity(
         side="SHORT",
@@ -200,7 +200,7 @@ def test_breakout_action_opportunity() -> None:
         global_name="BEAR_TREND",
         entry_15m={"fresh_breakout": True},
     )
-    assert blocked["should_open"] is False and blocked["reason"] == "future_4h_not_actionable"
+    assert blocked["should_open"] is False and blocked["reason"] == "bull_long_only_blocks_short"
 
     chase = _breakout_action_opportunity(
         side="SHORT",
@@ -214,7 +214,7 @@ def test_breakout_action_opportunity() -> None:
         global_name="BEAR_TREND",
         entry_15m={"fresh_breakout": True},
     )
-    assert chase["should_open"] is True, chase
+    assert chase["should_open"] is False and chase["reason"] == "bull_long_only_blocks_short", chase
 
     b2 = _breakout_action_opportunity(
         side="SHORT",
@@ -228,7 +228,7 @@ def test_breakout_action_opportunity() -> None:
         global_name="BEAR_TREND",
         entry_15m={"fresh_breakout": False},
     )
-    assert b2["should_open"] is True, b2
+    assert b2["should_open"] is False and b2["reason"] == "bull_long_only_blocks_short", b2
 
     c3_chase = _breakout_action_opportunity(
         side="LONG",
@@ -244,7 +244,7 @@ def test_breakout_action_opportunity() -> None:
     )
     assert (
         c3_chase["should_open"] is False
-        and c3_chase["reason"] == "big4_not_long_blocks_C3"
+        and str(c3_chase["reason"]).startswith("bull_a1_only")
     ), c3_chase
 
     c3_pullback = _breakout_action_opportunity(
@@ -261,7 +261,7 @@ def test_breakout_action_opportunity() -> None:
     )
     assert (
         c3_pullback["should_open"] is False
-        and c3_pullback["reason"] == "big4_not_long_blocks_C3"
+        and str(c3_pullback["reason"]).startswith("bull_a1_only")
     ), c3_pullback
 
     c3_vs_big4_long = _breakout_action_opportunity(
@@ -276,7 +276,7 @@ def test_breakout_action_opportunity() -> None:
         global_name="BULL_TREND",
         entry_15m={"fresh_breakout": True},
     )
-    assert c3_vs_big4_long["should_open"] is True, c3_vs_big4_long
+    assert c3_vs_big4_long["should_open"] is False and str(c3_vs_big4_long["reason"]).startswith("bull_a1_only"), c3_vs_big4_long
 
     b3 = _breakout_action_opportunity(
         side="SHORT",
@@ -290,7 +290,7 @@ def test_breakout_action_opportunity() -> None:
         global_name="TOKEN_DIVERGENCE",
         entry_15m={"fresh_breakout": False},
     )
-    assert b3["should_open"] is True, b3
+    assert b3["should_open"] is False and b3["reason"] == "bull_long_only_blocks_short", b3
 
     b3_vs_big4_long = _breakout_action_opportunity(
         side="SHORT",
@@ -305,7 +305,7 @@ def test_breakout_action_opportunity() -> None:
         entry_15m={"fresh_breakout": False},
     )
     assert b3_vs_big4_long["should_open"] is False, b3_vs_big4_long
-    assert b3_vs_big4_long["reason"] == "big4_long_blocks_short", b3_vs_big4_long
+    assert b3_vs_big4_long["reason"] == "bull_long_only_blocks_short", b3_vs_big4_long
 
     b3_failed_retest_only = _breakout_action_opportunity(
         side="SHORT",
@@ -333,7 +333,7 @@ def test_breakout_action_opportunity() -> None:
         global_name="TOKEN_DIVERGENCE",
         entry_15m={"fresh_breakout": False},
     )
-    assert b3_failed_retest["should_open"] is True, b3_failed_retest
+    assert b3_failed_retest["should_open"] is False and b3_failed_retest["reason"] == "bull_long_only_blocks_short", b3_failed_retest
 
     b3_failed_retest_vs_big4_long = _breakout_action_opportunity(
         side="SHORT",
@@ -348,7 +348,7 @@ def test_breakout_action_opportunity() -> None:
         entry_15m={"fresh_breakout": False},
     )
     assert b3_failed_retest_vs_big4_long["should_open"] is False, b3_failed_retest_vs_big4_long
-    assert b3_failed_retest_vs_big4_long["reason"] == "big4_long_blocks_short", b3_failed_retest_vs_big4_long
+    assert b3_failed_retest_vs_big4_long["reason"] == "bull_long_only_blocks_short", b3_failed_retest_vs_big4_long
 
     still_long = _breakout_action_opportunity(
         side="SHORT",
@@ -362,7 +362,7 @@ def test_breakout_action_opportunity() -> None:
         global_name="TOKEN_DIVERGENCE",
         entry_15m={"fresh_breakout": False},
     )
-    assert still_long["should_open"] is True, still_long
+    assert still_long["should_open"] is False and still_long["reason"] == "bull_long_only_blocks_short", still_long
 
     pause_still_long = _breakout_action_opportunity(
         side="SHORT",
@@ -378,7 +378,7 @@ def test_breakout_action_opportunity() -> None:
     )
     assert (
         pause_still_long["should_open"] is False
-        and pause_still_long["reason"] == "future_4h_still_long"
+        and pause_still_long["reason"] == "bull_long_only_blocks_short"
     ), pause_still_long
 
     no_stall_still_long = _breakout_action_opportunity(
@@ -395,7 +395,7 @@ def test_breakout_action_opportunity() -> None:
     )
     assert (
         no_stall_still_long["should_open"] is False
-        and no_stall_still_long["reason"] == "future_4h_still_long"
+        and no_stall_still_long["reason"] == "bull_long_only_blocks_short"
     ), no_stall_still_long
 
     c1_vs_big4_long = _breakout_action_opportunity(
@@ -410,7 +410,7 @@ def test_breakout_action_opportunity() -> None:
         global_name="BULL_TREND",
         entry_15m={"fresh_breakout": True},
     )
-    assert c1_vs_big4_long["should_open"] is True, c1_vs_big4_long
+    assert c1_vs_big4_long["should_open"] is False and c1_vs_big4_long["reason"] == "bull_long_only_blocks_short", c1_vs_big4_long
 
     a2_vs_big4_long = _breakout_action_opportunity(
         side="SHORT",
@@ -426,9 +426,9 @@ def test_breakout_action_opportunity() -> None:
     )
     assert (
         a2_vs_big4_long["should_open"] is False
-        and a2_vs_big4_long["reason"] == "big4_long_blocks_short"
+        and a2_vs_big4_long["reason"] == "bull_long_only_blocks_short"
     ), a2_vs_big4_long
-    _ok("C1 catch vs Big4 LONG; B3 blocked while Big4 LONG; C3 needs Big4 LONG; A2 blocked")
+    _ok("bull long-only: A1 may open; shorts and C3 blocked")
 
 
 def test_midline_market_follow_breakouts() -> None:
@@ -549,6 +549,7 @@ def test_ai_trail_for_midline() -> None:
     worker = (ROOT / "app/services/midline_explore_worker.py").read_text(encoding="utf-8")
     assert "planned_close_time=None" in worker
     assert "take_profit_pct=None" in worker
+    assert "sl_pct = None" in worker
     mon = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
     assert "check_structure_swing_exit" in mon
     assert "check_midline_hold_exits" not in mon

@@ -1,8 +1,8 @@
 """Structure swing hold: buy the low, sell the high (shorts reversed).
 
 BRAIN / breakout no longer force-close at 4–6h. Preferred take-profit is the
-opposite 15m structure point. If that point is missed or profit is given back,
-lock the remainder — do not ride winners to the hard SL.
+opposite 1h pump-giveback. If that point is missed or profit is given back,
+lock the remainder. Losers have no hard SL — ride to liquidation.
 """
 from __future__ import annotations
 
@@ -122,7 +122,7 @@ def check_structure_profit_lock(
 ) -> Optional[str]:
     """Lock a winner that never printed a clean opposite structure point.
 
-    Does not time-stop losers. Hard SL / midline −120U still cover those.
+    Does not time-stop losers. Hard SL / USD fuse are off for bull auto longs.
     """
     pnl = _f(pnl_pct)
     peak = max(_f(peak_pct), pnl)
@@ -172,11 +172,12 @@ def check_structure_swing_exit(
     playbook_row: Optional[Dict[str, Any]] = None,
     pnl_pct: Optional[float] = None,
     market_bias: Optional[str] = None,
+    rows_1h: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[str]:
-    """Close a long at a suitable high, or a short at a suitable low.
+    """Close a long at a 1h pump-giveback, or a short at a suitable low.
 
     If the structure point never prints, lock leftover profit instead of
-    waiting for the hard SL.
+    riding a winner back to liquidation.
     """
     if age_s < STRUCTURE_MIN_AGE_MIN * 60:
         return None
@@ -184,9 +185,11 @@ def check_structure_swing_exit(
     pnl = _f(pnl_pct) if pnl_pct is not None else peak
     peak = max(peak, pnl)
     timing = None
-    if rows_15m and len(rows_15m) >= 24:
+    has_bars = (rows_1h and len(rows_1h) >= 24) or (rows_15m and len(rows_15m) >= 24)
+    if has_bars:
         timing = compute_structure_exit(
-            side, rows_15m, playbook_row=playbook_row, ref_price=ref_price,
+            side, rows_15m or [], playbook_row=playbook_row, ref_price=ref_price,
+            rows_1h=rows_1h,
         )
         if timing.ready and peak >= STRUCTURE_MIN_PEAK_PCT / 100.0:
             side_u = (side or "").upper()
@@ -206,19 +209,29 @@ def check_structure_swing_exit(
 
 
 def load_15m_rows(symbol: str, limit: int = _KLINE_LIMIT) -> List[Dict[str, Any]]:
+    return _load_tf_rows(symbol, "15m", limit)
+
+
+def load_1h_rows(symbol: str, limit: int = 72) -> List[Dict[str, Any]]:
+    return _load_tf_rows(symbol, "1h", limit)
+
+
+def _load_tf_rows(symbol: str, timeframe: str, limit: int) -> List[Dict[str, Any]]:
     sym = (symbol or "").strip()
     if not sym:
         return []
     now = time.time()
-    hit = _kline_cache.get(sym)
+    key = f"{sym}:{timeframe}"
+    hit = _kline_cache.get(key)
     if hit and now - hit[0] < _KLINE_TTL_S:
         return hit[1]
-    rows = _fetch_15m_rows(sym, limit)
-    _kline_cache[sym] = (now, rows)
+    rows = _fetch_tf_rows(sym, timeframe, limit)
+    _kline_cache[key] = (now, rows)
     return rows
 
 
-def _fetch_15m_rows(symbol: str, limit: int) -> List[Dict[str, Any]]:
+def _fetch_tf_rows(symbol: str, timeframe: str, limit: int) -> List[Dict[str, Any]]:
+    tf = (timeframe or "15m").strip()
     try:
         from app.utils.futures_symbol import futures_symbol_rating_canonical
         symbol = futures_symbol_rating_canonical(symbol)
@@ -231,10 +244,10 @@ def _fetch_15m_rows(symbol: str, limit: int) -> List[Dict[str, Any]]:
         rows = []
         if hub is not None:
             rows = hub.get_klines_sync(
-                symbol, interval="15m", limit=limit, allow_rest_fallback=False,
+                symbol, interval=tf, limit=limit, allow_rest_fallback=False,
             ) or []
         if not rows:
-            rows = BinanceDataHub.rest_klines_emergency(symbol, "15m", limit) or []
+            rows = BinanceDataHub.rest_klines_emergency(symbol, tf, limit) or []
         if rows:
             return list(rows)
     except Exception:
@@ -256,11 +269,11 @@ def _fetch_15m_rows(symbol: str, limit: int) -> List[Dict[str, Any]]:
                     """
                     SELECT open_time, open_price, high_price, low_price, close_price, volume
                     FROM kline_data
-                    WHERE symbol=%s AND timeframe='15m' AND exchange='binance_futures'
+                    WHERE symbol=%s AND timeframe=%s AND exchange='binance_futures'
                     ORDER BY open_time DESC
                     LIMIT %s
                     """,
-                    (symbol, int(limit)),
+                    (symbol, tf, int(limit)),
                 )
                 rows = list(reversed(cur.fetchall() or []))
             return rows

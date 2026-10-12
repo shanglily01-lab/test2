@@ -279,8 +279,8 @@ def _open_limit_order(
     from app.services.midline_hold_exit import midline_hold_hours
     playbook = str(((signal_detail.get("playbook") or {}).get("name")) or "")
     hold_hours = midline_hold_hours(playbook)
-    sl_pct = get_midline_sl_pct(playbook)
-    use_market = midline_uses_market_entry(playbook)
+    sl_pct = None
+    use_market = False
     allowed, _ = gate_simulated_open(
         symbol, side, price, source,
         catalyst="midline_v2_pass",

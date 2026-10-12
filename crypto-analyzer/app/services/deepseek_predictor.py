@@ -1106,6 +1106,17 @@ def _run_predict_round_body(triggered_by: str) -> Optional[int]:
                 predictions_made += 1
                 continue
 
+            from app.services.bull_swing_policy import auto_short_blocked
+            short_blocked, short_why = auto_short_blocked(PREDICT_SOURCE, side)
+            if short_blocked:
+                verdict_rows.append((
+                    run_id, symbol, category, confidence,
+                    catalyst, data_signal, risk_note,
+                    price_at_pred, 'skipped_bull_long_only', None, short_why,
+                ))
+                predictions_made += 1
+                continue
+
             sym_row = next(
                 (
                     sd for sd in symbols_data

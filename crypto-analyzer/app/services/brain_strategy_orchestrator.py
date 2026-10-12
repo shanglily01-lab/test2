@@ -39,6 +39,7 @@ from app.services.brain_config import (
     PLAYBOOK_MIN_EDGE_SCORE,
     TRADEABLE_PLAYBOOKS,
 )
+from app.services.bull_swing_policy import auto_open_allowed
 from app.services.brain_market_analyzer import evaluate_big4_gate, _fetch_klines
 from app.services.brain_market_regime import (
     brain_open_regime_decision,
@@ -314,7 +315,7 @@ def _open_brain_entry(
         source=BRAIN_SOURCE,
         leverage=BRAIN_LEVERAGE,
         margin=float(margin),
-        stop_loss_pct=sl_pct,
+        stop_loss_pct=None,
         take_profit_pct=None,
         entry_signal_type=f"brain_{playbook}" if playbook else "brain_swing",
         entry_reason=build_brain_entry_reason(
@@ -476,69 +477,74 @@ def _analyze_one(
         skip_reason = regime_decision.reason
     elif playbook not in TRADEABLE_PLAYBOOKS or side not in ("LONG", "SHORT"):
         skip_reason = f"playbook_{playbook}"
-    elif not price or float(price) <= 0:
-        skip_reason = "no_price"
-    elif _in_open_cooldown(sym):
-        skip_reason = "symbol_cooldown"
     else:
-        ok_wp, wp_reason = directional_open_allowed(side, wl, ws)
-        fast_wp_ok, fast_wp_reason = _fast_event_winprob_allowed(side, pb, wl, ws)
-        if not ok_wp and fast_wp_ok:
-            ok_wp, wp_reason = True, fast_wp_reason
-        if not ok_wp:
-            skip_reason = wp_reason
+        auto_ok, auto_why = auto_open_allowed(BRAIN_SOURCE, side, str(playbook))
+        if not auto_ok:
+            skip_reason = auto_why
+        elif not price or float(price) <= 0:
+            skip_reason = "no_price"
+        elif _in_open_cooldown(sym):
+            skip_reason = "symbol_cooldown"
         else:
-            default_min_edge = (
-                BRAIN_MIN_EDGE_SCORE_SHORT
-                if side == "SHORT"
-                else BRAIN_MIN_EDGE_SCORE
-            )
-            min_edge = float(PLAYBOOK_MIN_EDGE_SCORE.get(str(playbook), default_min_edge))
-            if float(pb.get("edge_score") or 0) < min_edge:
-                skip_reason = "low_edge"
-            elif (
-                not pb.get("confirmed")
-                and str(playbook).startswith(BRAIN_REQUIRE_CONFIRMED_PREFIXES)
-            ):
-                # A/B 须 confirmed，压低「不跟进」timeout 入场
-                skip_reason = "unconfirmed"
-            elif not allow_open:
-                skip_reason = "tick_open_quota"
+            ok_wp, wp_reason = directional_open_allowed(side, wl, ws)
+            fast_wp_ok, fast_wp_reason = _fast_event_winprob_allowed(side, pb, wl, ws)
+            if not ok_wp and fast_wp_ok:
+                ok_wp, wp_reason = True, fast_wp_reason
+            if not ok_wp:
+                skip_reason = wp_reason
             else:
-                from app.services.entry_timing import compute_pullback_entry
-                timing = compute_pullback_entry(
-                    side, str(playbook), rows_15m,
-                    playbook_row=pb, ref_price=float(price) if price else None,
+                default_min_edge = (
+                    BRAIN_MIN_EDGE_SCORE_SHORT
+                    if side == "SHORT"
+                    else BRAIN_MIN_EDGE_SCORE
                 )
-                pb["entry_timing"] = timing.to_dict()
-                if not timing.ready:
-                    skip_reason = f"entry_{timing.status}:{timing.reason}"
+                min_edge = float(PLAYBOOK_MIN_EDGE_SCORE.get(str(playbook), default_min_edge))
+                if float(pb.get("edge_score") or 0) < min_edge:
+                    skip_reason = "low_edge"
+                elif (
+                    not pb.get("confirmed")
+                    and str(playbook).startswith(BRAIN_REQUIRE_CONFIRMED_PREFIXES)
+                ):
+                    # A/B 须 confirmed，压低「不跟进」timeout 入场
+                    skip_reason = "unconfirmed"
+                elif not allow_open:
+                    skip_reason = "tick_open_quota"
                 else:
-                    wick_off = float(pb.get("limit_offset_pct") or 0.5)
-                    pb["limit_offset_pct"] = min(
-                        1.8,
-                        max(float(timing.limit_offset_pct), wick_off * 0.5),
+                    from app.services.entry_timing import compute_pullback_entry
+                    timing = compute_pullback_entry(
+                        side, str(playbook), rows_15m,
+                        playbook_row=pb, ref_price=float(price) if price else None,
+                        rows_1h=rows_1h,
                     )
-                    order_id, gate_reason = _open_brain_entry(
-                        conn,
-                        symbol=sym,
-                        side=side,
-                        price=float(price),
-                        playbook_row=pb,
-                        win_long=wl,
-                        win_short=ws,
-                        rows_15m=rows_15m,
-                    )
-                    if order_id:
-                        decision = "OPENED"
-                        _mark_open_cooldown(sym)
-                        logger.info(
-                            f"[BRAIN即时开仓] {sym} {side} {playbook} "
-                            f"entry={timing.status} id={order_id}"
-                        )
+                    pb["entry_timing"] = timing.to_dict()
+                    if not timing.ready:
+                        skip_reason = f"entry_{timing.status}:{timing.reason}"
                     else:
-                        skip_reason = gate_reason or "ds_or_gate_reject"
-                        _mark_open_cooldown(sym)
+                        wick_off = float(pb.get("limit_offset_pct") or 0.5)
+                        pb["limit_offset_pct"] = min(
+                            1.8,
+                            max(float(timing.limit_offset_pct), wick_off * 0.5),
+                        )
+                        order_id, gate_reason = _open_brain_entry(
+                            conn,
+                            symbol=sym,
+                            side=side,
+                            price=float(price),
+                            playbook_row=pb,
+                            win_long=wl,
+                            win_short=ws,
+                            rows_15m=rows_15m,
+                        )
+                        if order_id:
+                            decision = "OPENED"
+                            _mark_open_cooldown(sym)
+                            logger.info(
+                                f"[BRAIN即时开仓] {sym} {side} {playbook} "
+                                f"entry={timing.status} id={order_id}"
+                            )
+                        else:
+                            skip_reason = gate_reason or "ds_or_gate_reject"
+                            _mark_open_cooldown(sym)
 
     try:
         insert_opportunity(

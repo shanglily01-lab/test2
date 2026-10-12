@@ -57,6 +57,18 @@ def gate_simulated_open(
         logger.warning(f"[开仓闸门] {symbol} 方向开关读取异常: {e}")
         return False, "direction_gate_error"
 
+    try:
+        from app.services.bull_swing_policy import auto_short_blocked
+        short_blocked, short_why = auto_short_blocked(source, side)
+        if short_blocked:
+            logger.info(
+                f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {short_why}"
+            )
+            return False, short_why
+    except Exception as e:
+        logger.warning(f"[开仓闸门] {symbol} 牛市只做多闸门异常: {e}")
+        return False, "bull_long_only_error"
+
     from app.services.midline_swing_config import is_midline_source
     from app.services.brain_config import is_brain_source
     from app.services.watchlist_config import is_watchlist_source

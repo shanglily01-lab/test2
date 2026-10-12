@@ -1,6 +1,6 @@
 ﻿# AI 策略与顾问 — 完整说明（中文）
 
-> 文档版本：2026-09-21 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.60** 对齐  
+> 文档版本：2026-10-13 · 与 [`REQUIREMENTS_LOGIC_ZH.md`](./REQUIREMENTS_LOGIC_ZH.md) **v4.5.63** 对齐  
 > **给人看的对照**：[`BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`](./BRAIN_AND_BREAKOUT_OPERATOR_ZH.md)  
 > **合约自选 §7.5**：`/watchlist` 手动限价/市价；限价可撤；价格优先浏览器直连币安合约 WS，3s 无 tick 则服务端 1s 补价；`manual_watchlist` 随实盘总开关仅 L0，成交瞬间同步。  
 > **REQ-BRAIN §7.3**：超级大脑主权层（**首版已落地**；**对照期** DeepSeek 自动开仓暂保留）— 自有分析主判；DeepSeek 亦作探索/预测对照。  
@@ -10,8 +10,8 @@
 
 ## 1. 总览
 
-**主路径（已落地）**：REQ-BRAIN — **盈利 KPI**；A1 只认趋势新高回踩；**结构点出场**（低买高卖，取消 4–6h 到期）；硬 SL + −80U；**15m RSI 管开仓时机**。  
-**并行已落地**：中线 v2（独立量化；持仓顾问 **只建议不执行**；多单回调买、B3/C4 冲高卖）。  
+**主路径（v4.5.63）**：REQ-BRAIN — 牛市**只做 A1 1h 回调多**；禁止自动开空；盈利 1h 冲高回落；亏损无硬 SL，扛到强平。  
+**并行**：破位 `midline_*` 同样只开 A1 1h 回调多；DeepSeek 对照期只开多。  
 **旧路径**：Gemini 交易已下线；DeepSeek 探索/预测自动开仓 **对照期暂保留**（与 BRAIN 并行对比；INV-BRAIN-07 暂缓）。
 
 系统另保留 DeepSeek/GPT 等 LLM 模块代码供顾问确认与复盘；统一模拟仓 `account_id=2`。
@@ -28,7 +28,7 @@ crypto-scheduler (每 15min)
   └─ DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**含** midline_* 与 brain_*）
 
 crypto-app-main
-  └─ position_sl_tp_monitor (1s)：探索/预测硬 SL/TP + ai-trail；BRAIN/破位：硬 SL + −80U + 结构点出场
+  └─ position_sl_tp_monitor (1s)：自动多单无硬 SL；盈利 1h 冲高回落 / trail；亏损扛到强平
 
 任意模拟开仓
   └─ paper_open_gate.gate_simulated_open()

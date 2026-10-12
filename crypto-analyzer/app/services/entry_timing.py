@@ -61,6 +61,13 @@ A1_BOUNCE_NOT_PULLBACK = frozenset({
     "15m_bounce_from_low", "ema_reject", "top_callback", "long_upper_wick",
     "15m_failed_retest",
 })
+# v4.5.63：A1 改看 1h 趋势新高回踩（比 15m 更深、更慢）
+H1_PULLBACK_MIN_OFF_PCT = 1.20
+H1_PULLBACK_MAX_OFF_PCT = 8.00
+H1_STILL_AT_HIGH_PCT = 1.20
+H1_TREND_BARS = 24
+H1_PUMP_GIVEBACK_MIN_OFF_PCT = 0.40
+H1_PUMP_GIVEBACK_MAX_OFF_PCT = 4.00
 
 
 def _f(v: Any, default: float = 0.0) -> float:
@@ -788,6 +795,254 @@ def _follow_breakout_long_entry(
     )
 
 
+def _is_trend_high_pullback_1h(rows_1h: List[Dict[str, Any]], sig: set) -> bool:
+    if "1h_trend_high_pullback" in sig:
+        return True
+    n = H1_TREND_BARS
+    if len(rows_1h) < n * 2:
+        return False
+    h = _highs(rows_1h)
+    lows = _lows(rows_1h)
+    c = _closes(rows_1h)
+    recent_hi = max(h[-n:])
+    older_hi = max(h[-n * 2:-n])
+    close = c[-1]
+    if close <= 0 or recent_hi <= 0 or recent_hi < older_hi * 0.998:
+        return False
+    hi_pos = max(i for i, x in enumerate(h[-n:]) if abs(x - recent_hi) <= 1e-12)
+    if hi_pos >= n - 2:
+        return False
+    off = (recent_hi - close) / recent_hi * 100.0
+    if off < H1_PULLBACK_MIN_OFF_PCT or off > H1_PULLBACK_MAX_OFF_PCT:
+        return False
+    prior_lo = min(lows[-n * 2:-n // 2])
+    pull_lo = min(lows[-n:])
+    if prior_lo > 0 and pull_lo < prior_lo * 0.998:
+        return False
+    return True
+
+
+def _is_bounce_from_low_1h(rows_1h: List[Dict[str, Any]], sig: set) -> bool:
+    if "1h_trend_high_pullback" in sig or "1h_pullback_from_high" in sig:
+        return False
+    if "1h_bounce_from_low" in sig:
+        return True
+    if len(rows_1h) < 16:
+        return False
+    h = _highs(rows_1h)
+    lows = _lows(rows_1h)
+    c = _closes(rows_1h)
+    win_hi = max(h[-16:])
+    win_lo = min(lows[-16:])
+    hi_pos = max(i for i, x in enumerate(h[-16:]) if abs(x - win_hi) <= 1e-12)
+    lo_pos = max(i for i, x in enumerate(lows[-16:]) if abs(x - win_lo) <= 1e-12)
+    close = c[-1]
+    if close <= 0 or win_lo <= 0:
+        return False
+    off_low = (close - win_lo) / win_lo * 100.0 >= 0.40
+    return lo_pos > hi_pos and off_low
+
+
+def _a1_h1_pullback_entry(
+    rows_1h: List[Dict[str, Any]],
+    *,
+    playbook_row: Optional[Dict[str, Any]] = None,
+    ref_price: Optional[float] = None,
+) -> EntryTiming:
+    """A1 long: buy a 1h pullback off a trend high. Do not chase the 1h high."""
+    if len(rows_1h) < H1_TREND_BARS * 2:
+        return _empty("no_zone", "insufficient_1h")
+    c = _closes(rows_1h)
+    h = _highs(rows_1h)
+    l = _lows(rows_1h)
+    v = _vols(rows_1h)
+    price = _f(ref_price) if ref_price else c[-1]
+    if price <= 0:
+        return _empty("no_zone", "no_price")
+    ema20 = _ema(c, 20)
+    atr = _atr(rows_1h[-60:] if len(rows_1h) >= 60 else rows_1h, 14) or (price * 0.008)
+    look_hi = max(h[-48:-2]) if len(h) >= 50 else max(h[:-1])
+    impulse_hi = max(h[-8:])
+    impulse_lo = min(l[-8:])
+    impulse_range = max(impulse_hi - impulse_lo, price * 0.004)
+    sig = _signals_of(playbook_row)
+    break_level = look_hi
+    fib38 = impulse_hi - impulse_range * 0.382
+    fib50 = impulse_hi - impulse_range * 0.50
+    ema_hi = (ema20 * 1.003) if ema20 else fib38
+    ema_lo = (ema20 - atr * ZONE_ATR_PAD) if ema20 else fib50
+    zone_high = min(ema_hi, fib38)
+    zone_low = max(ema_lo, fib50)
+    if zone_low > zone_high:
+        mid = ema20 if ema20 else (fib38 + fib50) / 2.0
+        zone_low, zone_high = mid - atr * 0.25, mid + atr * 0.15
+    range_span = max(max(h[-8:]) - min(l[-8:]), 1e-12)
+    range_pos = (price - min(l[-8:])) / range_span
+    ema_dist_pct = ((price - ema20) / ema20 * 100.0) if ema20 else 0.0
+    dist_from_high_pct = ((impulse_hi - price) / price * 100.0) if price > 0 else 0.0
+    still_at_high = dist_from_high_pct <= H1_STILL_AT_HIGH_PCT
+    pulled_back = len(c) >= 5 and c[-1] < max(h[-5:-1]) * 0.997
+    vol_shrink = "volume_shrink_pullback" in sig or (
+        len(v) >= 8 and sum(v[-3:]) < sum(v[-8:-3]) * 0.90
+    )
+    last = rows_1h[-1]
+    bounce_ok = (not still_at_high) and pulled_back and bool(
+        "long_lower_wick" in sig
+        or "ema_reclaim" in sig
+        or vol_shrink
+        or _lower_wick_ratio(last) >= 0.28
+        or _close_loc_in_bar(last) >= 0.55
+    )
+    in_zone = zone_low <= price <= zone_high * 1.004
+    target = _clamp(
+        ema20 if ema20 else (zone_low + zone_high) / 2.0,
+        zone_low,
+        zone_high,
+    )
+    if target >= price:
+        target = price * (1.0 - ENTRY_READY_OFFSET_PCT / 100.0)
+    offset = _clamp((price - target) / price * 100.0, ENTRY_OFFSET_MIN_PCT, ENTRY_OFFSET_MAX_PCT)
+    if _is_bounce_from_low_1h(rows_1h, sig):
+        return EntryTiming(
+            ready=False, status="wait_pullback",
+            reason="bounce_not_pullback",
+            limit_offset_pct=ENTRY_READY_OFFSET_PCT, limit_price=None,
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=break_level, extended=False, bounce_ok=False,
+        )
+    if not _is_trend_high_pullback_1h(rows_1h, sig):
+        return EntryTiming(
+            ready=False, status="wait_pullback",
+            reason="not_1h_trend_high_pullback",
+            limit_offset_pct=ENTRY_READY_OFFSET_PCT, limit_price=None,
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=break_level, extended=False, bounce_ok=False,
+        )
+    if still_at_high:
+        return EntryTiming(
+            ready=False, status="wait_pullback",
+            reason="still_at_1h_high_wait_pullback",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=break_level, extended=True, bounce_ok=bounce_ok,
+        )
+    rsi_ok, rsi_why = long_rsi_entry_ok(c, sig)
+    if in_zone and bounce_ok:
+        if not rsi_ok:
+            return EntryTiming(
+                ready=False, status="wait_bounce",
+                reason=rsi_why,
+                limit_offset_pct=min(offset, 0.55),
+                limit_price=round(target, 8),
+                zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+                break_level=break_level, extended=False, bounce_ok=bounce_ok,
+            )
+        return EntryTiming(
+            ready=True, status="pullback_ready",
+            reason="h1_pullback_zone_bounce",
+            limit_offset_pct=min(offset, ENTRY_READY_OFFSET_PCT + 0.15),
+            limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=break_level, extended=False, bounce_ok=True,
+        )
+    if bounce_ok and ema20 is not None and ema_dist_pct <= 0.35 and dist_from_high_pct >= H1_STILL_AT_HIGH_PCT:
+        if not rsi_ok:
+            return EntryTiming(
+                ready=False, status="wait_bounce",
+                reason=rsi_why,
+                limit_offset_pct=min(offset, 0.55),
+                limit_price=round(target, 8),
+                zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+                break_level=break_level, extended=False, bounce_ok=bounce_ok,
+            )
+        return EntryTiming(
+            ready=True, status="pullback_ready",
+            reason="h1_trend_pullback_near_ema",
+            limit_offset_pct=min(offset, 0.55),
+            limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=break_level, extended=False, bounce_ok=True,
+        )
+    if in_zone:
+        return EntryTiming(
+            ready=False, status="wait_bounce",
+            reason="in_1h_zone_wait_bounce",
+            limit_offset_pct=min(offset, 0.55),
+            limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=break_level, extended=False, bounce_ok=False,
+        )
+    return EntryTiming(
+        ready=False, status="wait_pullback",
+        reason="not_in_1h_pullback_zone",
+        limit_offset_pct=offset, limit_price=round(target, 8),
+        zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+        break_level=break_level, extended=range_pos >= EXTENDED_RANGE_POS, bounce_ok=bounce_ok,
+    )
+
+
+def _h1_pump_giveback_long_exit(
+    rows_1h: List[Dict[str, Any]],
+    *,
+    ref_price: Optional[float] = None,
+) -> EntryTiming:
+    """Take profit after a 1h pump then pullback / reject. Not a short entry."""
+    if len(rows_1h) < 24:
+        return _empty("no_zone", "insufficient_1h", mode="exhaustion")
+    h = _highs(rows_1h)
+    l = _lows(rows_1h)
+    c = _closes(rows_1h)
+    price = _f(ref_price) if ref_price else c[-1]
+    if price <= 0:
+        return _empty("no_zone", "no_price", mode="exhaustion")
+    ema20 = _ema(c, 20)
+    recent_high = max(h[-12:])
+    impulse_lo = min(l[-12:])
+    dist_pct = (recent_high - price) / price * 100.0 if price > 0 else 99.0
+    last = rows_1h[-1]
+    last_close_loc = _close_loc_in_bar(last)
+    last_wick = _upper_wick_ratio(last)
+    last_red = _f(last.get("close_price")) < _f(last.get("open_price"))
+    last_is_reject = last_close_loc <= 0.45 and (last_wick >= 0.25 or last_red)
+    accelerating = len(c) >= 3 and c[-1] >= max(h[-4:-1]) * 0.999 and last_close_loc >= 0.62
+    left_the_high = H1_PUMP_GIVEBACK_MIN_OFF_PCT <= dist_pct <= H1_PUMP_GIVEBACK_MAX_OFF_PCT
+    zone_high = recent_high
+    zone_low = max(recent_high * 0.985, impulse_lo)
+    target = price
+    offset = ENTRY_READY_OFFSET_PCT
+    if accelerating:
+        return EntryTiming(
+            ready=False, status="wait_stall",
+            reason="still_extending_1h",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=recent_high, extended=True, bounce_ok=False, mode="exhaustion",
+        )
+    if dist_pct >= H1_PUMP_GIVEBACK_MAX_OFF_PCT:
+        return EntryTiming(
+            ready=False, status="missed_high",
+            reason=f"already_off_1h_high_{dist_pct:.2f}pct",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=recent_high, extended=False, bounce_ok=last_is_reject, mode="exhaustion",
+        )
+    if left_the_high and last_is_reject:
+        return EntryTiming(
+            ready=True, status="exhaustion_ready",
+            reason="h1_pump_giveback",
+            limit_offset_pct=offset, limit_price=round(target, 8),
+            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+            break_level=recent_high, extended=True, bounce_ok=True, mode="exhaustion",
+        )
+    return EntryTiming(
+        ready=False, status="wait_stall",
+        reason=f"wait_1h_giveback_{dist_pct:.2f}pct",
+        limit_offset_pct=offset, limit_price=round(target, 8),
+        zone_low=zone_low, zone_high=zone_high, ema20=ema20,
+        break_level=recent_high, extended=False, bounce_ok=last_is_reject, mode="exhaustion",
+    )
+
+
 def compute_pullback_entry(
     side: str,
     playbook: str,
@@ -796,12 +1051,17 @@ def compute_pullback_entry(
     playbook_row: Optional[Dict[str, Any]] = None,
     ref_price: Optional[float] = None,
     follow_breakout: bool = False,
+    rows_1h: Optional[List[Dict[str, Any]]] = None,
 ) -> EntryTiming:
-    """Decide whether the current 15m bar is a pullback buy, top callback sell, or break follow."""
+    """Decide whether the current bar is a pullback buy, top callback sell, or break follow."""
     side_u = (side or "").upper()
     pb = (playbook or "").strip().upper()
     if side_u not in ("LONG", "SHORT"):
         return _empty("no_zone", "flat_side")
+    if side_u == "LONG" and pb in {"A1", "B4"} and rows_1h and len(rows_1h) >= H1_TREND_BARS * 2:
+        return _a1_h1_pullback_entry(
+            rows_1h, playbook_row=playbook_row, ref_price=ref_price,
+        )
     if len(rows_15m) < 24:
         return _empty("no_zone", "insufficient_15m")
 
@@ -1208,11 +1468,14 @@ def compute_structure_exit(
     *,
     playbook_row: Optional[Dict[str, Any]] = None,
     ref_price: Optional[float] = None,
+    rows_1h: Optional[List[Dict[str, Any]]] = None,
 ) -> EntryTiming:
-    """LONG: sell a suitable 15m high. SHORT: cover a suitable 15m low."""
+    """LONG: sell a 1h pump-giveback (15m fallback). SHORT: cover a 15m low."""
     side_u = (side or "").upper()
     if side_u not in ("LONG", "SHORT"):
         return _empty("no_zone", "flat_side")
+    if side_u == "LONG" and rows_1h and len(rows_1h) >= 24:
+        return _h1_pump_giveback_long_exit(rows_1h, ref_price=ref_price)
     if len(rows_15m) < 24:
         return _empty("no_zone", "insufficient_15m")
     c = _closes(rows_15m)

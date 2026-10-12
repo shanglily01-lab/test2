@@ -32,6 +32,7 @@ def test_imports_and_config() -> None:
         BRAIN_REQUIRE_CONFIRMED_PREFIXES,
         BRAIN_STRATEGIC_CLOSE_ENABLED,
         TRADEABLE_PLAYBOOKS,
+        BULL_OPEN_PLAYBOOKS,
         WIN_PROB_MIN,
         is_brain_source,
         brain_source_sql_exclude,
@@ -44,6 +45,23 @@ def test_imports_and_config() -> None:
     assert BRAIN_MIN_EDGE_SCORE == 0.75
     assert BRAIN_REQUIRE_CONFIRMED_PREFIXES == ("A", "B")
     assert TRADEABLE_PLAYBOOKS == frozenset({"A1", "A2", "B2", "B3", "C1", "C3", "C4"})
+    assert BULL_OPEN_PLAYBOOKS == frozenset({"A1"})
+    from app.services.bull_swing_policy import (
+        auto_open_allowed,
+        auto_short_blocked,
+        skip_hard_stop,
+    )
+    assert auto_short_blocked("brain_swing", "SHORT")[0]
+    assert auto_short_blocked("midline_short", "SHORT")[0]
+    assert auto_short_blocked("deepseek_explore", "SHORT")[0]
+    assert not auto_short_blocked("manual_watchlist", "SHORT")[0]
+    assert auto_open_allowed("brain_swing", "LONG", "A1")[0]
+    assert not auto_open_allowed("brain_swing", "LONG", "C3")[0]
+    assert not auto_open_allowed("brain_swing", "SHORT", "C1")[0]
+    assert skip_hard_stop("brain_swing", "LONG")
+    assert skip_hard_stop("deepseek_predict", "LONG")
+    assert not skip_hard_stop("manual_watchlist", "LONG")
+    assert not skip_hard_stop("brain_swing", "SHORT")
     from app.services.brain_config import (
         BRAIN_MARGIN_USD,
         BRAIN_MIN_EDGE_SCORE_SHORT,
@@ -363,6 +381,10 @@ def test_brain_skip_open_advisor() -> None:
     orch2 = (ROOT / "app/services/brain_strategy_orchestrator.py").read_text(encoding="utf-8")
     if "compute_pullback_entry" not in orch2:
         _fail("orchestrator 未接入回调买入点")
+    elif "rows_1h=" not in orch2:
+        _fail("orchestrator 未接入 1h 回调入场")
+    elif "auto_open_allowed" not in orch2:
+        _fail("orchestrator 未接入牛市只做多 A1")
     else:
         _ok("orchestrator pullback entry")
 
@@ -458,6 +480,8 @@ def test_brain_risk_params() -> None:
     mon2 = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
     if "check_brain_max_loss_usd" not in mon2:
         _fail("monitor 未接入 brain_max_loss_usd")
+    if "_skip_hard_stop" not in mon2 or "load_1h_rows" not in mon2:
+        _fail("monitor 未接入牛市无硬SL / 1h 冲高回落")
     if "_check_brain_5m_adverse_exit" not in mon2 or "brain_5m_adverse" not in mon2:
         _fail("monitor 未接入 brain_5m_adverse")
     act8, pull8, _ = trail_levels_from_sl_tp(8.0, 12.0)
@@ -1679,7 +1703,77 @@ def test_structure_swing_exit() -> None:
     orch = (ROOT / "app/services/brain_strategy_orchestrator.py").read_text(encoding="utf-8")
     assert "planned_close_time=None" in orch
     assert "take_profit_pct=None" in orch
+    assert "stop_loss_pct=None" in orch
     _ok("structure swing sells the high, then locks leftover profit")
+
+
+def test_h1_bull_pullback() -> None:
+    from app.services.entry_timing import compute_pullback_entry, compute_structure_exit
+
+    rows = []
+    p = 100.0
+    for i in range(48):
+        if i < 24:
+            p += 0.20
+        elif i < 36:
+            p += 0.12
+        else:
+            p -= 0.28
+        rows.append({
+            "open_price": p - 0.04,
+            "high_price": p + 0.10,
+            "low_price": p - 0.22,
+            "close_price": p,
+            "volume": 800 if i < 36 else 400,
+        })
+    peak = max(r["high_price"] for r in rows)
+    px = rows[-1]["close_price"]
+    off = (peak - px) / peak * 100.0
+    assert 1.20 <= off <= 8.00, off
+    last = dict(rows[-1])
+    last["low_price"] = px - 0.25
+    last["close_price"] = px + 0.02
+    rows[-1] = last
+    ready = compute_pullback_entry(
+        "LONG", "A1", rows[-24:],
+        playbook_row={"signals": ["volume_shrink_pullback", "1h_trend_high_pullback", "rsi_15m_turn_up"]},
+        ref_price=rows[-1]["close_price"],
+        rows_1h=rows,
+    )
+    assert ready.ready is True, ready
+    assert ready.status == "pullback_ready", ready
+
+    hug = [dict(r) for r in rows]
+    hug[-1] = {
+        "open_price": peak - 0.02,
+        "high_price": peak + 0.01,
+        "low_price": peak - 0.05,
+        "close_price": peak - 0.01,
+        "volume": 900,
+    }
+    wait = compute_pullback_entry(
+        "LONG", "A1", hug[-24:],
+        playbook_row={"signals": ["1h_trend_high_pullback"]},
+        ref_price=hug[-1]["close_price"],
+        rows_1h=hug,
+    )
+    assert wait.ready is False, wait
+
+    pump = [dict(r) for r in rows]
+    hi = pump[-1]["high_price"] + 0.40
+    pump.append({
+        "open_price": hi - 0.30,
+        "high_price": hi,
+        "low_price": hi - 0.55,
+        "close_price": hi - 0.42,
+        "volume": 700,
+    })
+    sell = compute_structure_exit(
+        "LONG", [], ref_price=pump[-1]["close_price"], rows_1h=pump,
+    )
+    assert sell.ready is True, sell
+    assert sell.reason == "h1_pump_giveback", sell
+    _ok("1h A1 pullback + 1h pump-giveback TP")
 
 
 def main() -> int:
@@ -1713,6 +1807,7 @@ def main() -> int:
     test_entry_timing_c3_midline_follow()
     test_rsi_entry_timing()
     test_structure_swing_exit()
+    test_h1_bull_pullback()
     print()
     if _fail_n:
         print(f"FAILED {_fail_n}")

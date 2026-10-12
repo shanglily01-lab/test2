@@ -117,6 +117,28 @@ def _uses_structure_swing(src: str) -> bool:
     except Exception:
         s = (src or "").strip().lower()
         return s.startswith("brain_") or s.startswith("midline_")
+
+
+def _skip_hard_stop(src: str, side: str) -> bool:
+    try:
+        from app.services.bull_swing_policy import skip_hard_stop
+        return skip_hard_stop(src, side)
+    except Exception:
+        return False
+
+
+def _hit_liquidation(side: str, price: float, liq) -> bool:
+    if liq is None or price is None or price <= 0:
+        return False
+    try:
+        liq_f = float(liq)
+    except (TypeError, ValueError):
+        return False
+    if liq_f <= 0:
+        return False
+    if str(side or "").upper() == "LONG":
+        return price <= liq_f
+    return price >= liq_f
 # 硬 TP 开仓保护：避免 entry 价与 monitor 市价源不一致时秒平（SL 仍立即生效）
 _AI_TP_GRACE_MIN = 5
 
@@ -356,7 +378,8 @@ class PositionSLTPMonitor:
             tp = pos.get("take_profit_price")
             src = pos.get('source') or ''
 
-            if sl is None and tp is None:
+            ride_to_liq = _skip_hard_stop(src, side) or _uses_structure_swing(src)
+            if sl is None and tp is None and not ride_to_liq:
                 # 无 SL/TP 的中线旧仓：仅计划到期 + 爆仓（不走 ai-trail-tp）
                 if _is_midline_source(src):
                     price = self._get_live_price(ws, symbol)
@@ -388,9 +411,9 @@ class PositionSLTPMonitor:
             if entry_price <= 0:
                 continue
 
-            # 计划持仓到期（探索/预测仍限时）。BRAIN / 破位改为结构点出场，不因 4–6h 强平。
+            # 计划持仓到期（探索/预测仍限时）。牛市自动多单 / 结构仓不因时长强平。
             pct = pos.get("planned_close_time")
-            if pct is not None and not _uses_structure_swing(src):
+            if pct is not None and not _uses_structure_swing(src) and not _skip_hard_stop(src, side):
                 if isinstance(pct, _dt.datetime):
                     if pct.tzinfo is not None:
                         pct = pct.replace(tzinfo=None)
@@ -465,6 +488,15 @@ class PositionSLTPMonitor:
             price = self._get_live_price(ws, symbol)
             if price is None or price <= 0:
                 continue
+            if _skip_hard_stop(src, side) and _hit_liquidation(side, price, pos.get("liquidation_price")):
+                logger.warning(
+                    f"[SL/TP Monitor] 强平 pid={pid} {symbol} {side} "
+                    f"reason=liquidation price={price:.6f}"
+                )
+                self._cooldown[pid] = now + self._cooldown_seconds
+                self._peak_pnl_map.pop(pid, None)
+                self._do_close(pid, symbol, side, "liquidation", price, now)
+                continue
 
             # 计算浮盈浮亏百分比（价格维度）
             if side.upper() == "LONG":
@@ -525,10 +557,10 @@ class PositionSLTPMonitor:
                     u_pnl = margin * lev * pnl_pct
                 except (TypeError, ValueError):
                     u_pnl = 0.0
-                if _is_brain_usd:
+                if _is_brain_usd and not _skip_hard_stop(src, side):
                     from app.services.brain_config import BRAIN_ADVERSE_5M_MIN_LOSS_USD
                     from app.services.brain_trail_exit import check_brain_max_loss_usd
-                    # 结构持仓不因 5m 噪音早撤；美元熔断与硬 SL 仍兜底
+                    # 结构持仓不因 5m 噪音早撤；牛市自动多单不再走美元熔断 / 硬 SL
                     if (
                         not _uses_structure_swing(src)
                         and u_pnl <= -abs(float(BRAIN_ADVERSE_5M_MIN_LOSS_USD))
@@ -560,7 +592,7 @@ class PositionSLTPMonitor:
                         self._peak_pnl_map.pop(pid, None)
                         self._do_close(pid, symbol, side, usd_br, price, now)
                         continue
-                elif _uses_structure_swing(src):
+                elif _uses_structure_swing(src) and not _skip_hard_stop(src, side):
                     from app.services.midline_swing_config import check_midline_max_loss_usd
                     usd_br = check_midline_max_loss_usd(u_pnl)
                     if usd_br:
@@ -574,9 +606,10 @@ class PositionSLTPMonitor:
                         self._do_close(pid, symbol, side, usd_br, price, now)
                         continue
 
-                # 结构持仓：硬 TP 会在合适高/低点出现前截走，只保留硬 SL
-                trig_tp = None if _uses_structure_swing(src) else tp
-                trig = self._check_trigger(side, price, sl, trig_tp)
+                # 结构 / 牛市自动多单：不走硬 SL/TP；盈利靠 1h 冲高回落
+                trig_sl = None if _skip_hard_stop(src, side) else sl
+                trig_tp = None if (_uses_structure_swing(src) or _skip_hard_stop(src, side)) else tp
+                trig = self._check_trigger(side, price, trig_sl, trig_tp)
                 if trig:
                     reason, trigger_price = trig
                     if reason == "take_profit" and in_tp_grace:
@@ -612,7 +645,7 @@ class PositionSLTPMonitor:
                         self._do_close(pid, symbol, side, struct_br, price, now)
                     continue
 
-                if not _is_midline_source(src):
+                if not _is_midline_source(src) and not _skip_hard_stop(src, side):
                     trend_sl = self._check_ai_trend_exit(
                         pid,
                         symbol,
@@ -988,9 +1021,11 @@ class PositionSLTPMonitor:
         from app.services.structure_swing_exit import (
             check_structure_swing_exit,
             load_15m_rows,
+            load_1h_rows,
             playbook_row_from_position,
         )
         rows = load_15m_rows(symbol)
+        rows_1h = load_1h_rows(symbol)
         try:
             return check_structure_swing_exit(
                 side,
@@ -1001,6 +1036,7 @@ class PositionSLTPMonitor:
                 playbook_row=playbook_row_from_position(pos),
                 pnl_pct=pnl_pct,
                 market_bias=market_bias,
+                rows_1h=rows_1h,
             )
         except Exception as e:
             logger.debug(f"[structure swing] {symbol} 判定失败: {e}")

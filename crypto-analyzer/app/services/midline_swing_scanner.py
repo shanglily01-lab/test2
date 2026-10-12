@@ -240,6 +240,18 @@ def _breakout_action_opportunity(
     """Return the actionable 4h breakout decision; score is only evidence, not the gate."""
     side_u = (side or "").upper()
     playbook_u = (playbook or "").upper()
+    from app.services.bull_swing_policy import bull_open_playbook_ok
+    pb_ok, pb_why = bull_open_playbook_ok(playbook_u, side_u)
+    if not pb_ok:
+        return {
+            "should_open": False,
+            "reason": pb_why,
+            "mode": "shadow_only",
+            "action_score": 0.0,
+            "future_side": str(future_4h.get("side") or "FLAT").upper(),
+            "future_score": round(float(future_4h.get("score") or 0.0), 3),
+            "entry_15m": entry_15m,
+        }
     future_side = str(future_4h.get("side") or "FLAT").upper()
     future_score = float(future_4h.get("score") or 0.0)
     token_aligned = features.get("h1_side") == side_u and features.get("m15_side") == side_u
@@ -762,7 +774,7 @@ def evaluate_symbol_multiperiod(
     big4_bias = str((big4 or {}).get("bias") or "FLAT").upper()
     big4_ok = bool((big4 or {}).get("big4_ok", True))
 
-    allowed_playbooks = {"LONG": {"A1", "C3"}, "SHORT": {"A2", "B2", "B3", "C1", "C4"}}[side]
+    allowed_playbooks = {"LONG": {"A1"}, "SHORT": set()}[side]
     if pb_side != side:
         out.update({"reason": f"playbook_side_{pb_side}", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
@@ -905,6 +917,7 @@ def evaluate_symbol_multiperiod(
     timing = compute_pullback_entry(
         side, playbook, rows_15m, playbook_row=pb, ref_price=out.get("ref_price"),
         follow_breakout=True,
+        rows_1h=rows_1h,
     )
     if should_open and not timing.ready:
         should_open = False
