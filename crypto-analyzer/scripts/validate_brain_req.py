@@ -1776,6 +1776,68 @@ def test_h1_bull_pullback() -> None:
     _ok("1h A1 pullback + 1h pump-giveback TP")
 
 
+def test_h1_deep_pullback_tags_a1_without_15m_shallow() -> None:
+    """A 1h 1.20–8% pullback must open even when the 15m window is deeper than 3.50%."""
+    from app.services.brain_playbook import classify_playbook
+    from app.services.entry_timing import compute_pullback_entry
+
+    rows_1h = []
+    p = 100.0
+    for i in range(72):
+        if i < 48:
+            p += 0.05
+        elif i < 61:
+            p += 0.40
+        else:
+            p -= 0.38
+        rows_1h.append(_bar(p, vol=900 if i < 61 else 400, hi=0.12, lo=0.10))
+    peak = max(r["high_price"] for r in rows_1h[-24:])
+    px = rows_1h[-1]["close_price"]
+    off = (peak - px) / peak * 100.0
+    assert 1.20 <= off <= 8.00, off
+
+    rows_15m = []
+    q = px * 1.055
+    for _ in range(70):
+        q += 0.01
+        rows_15m.append(_bar(q, vol=700, hi=0.05, lo=0.04))
+    hi15 = q
+    floor = hi15 * 0.940
+    for i in range(12):
+        q = hi15 - (hi15 - floor) * ((i + 1) / 12.0)
+        rows_15m.append(_bar(q, vol=300, hi=0.03, lo=0.05))
+    for _ in range(3):
+        q += (hi15 - floor) * 0.06
+        rows_15m.append(_bar(q, vol=280, hi=0.04, lo=0.02))
+    off15 = (max(r["high_price"] for r in rows_15m[-16:]) - rows_15m[-1]["close_price"]) / max(
+        r["high_price"] for r in rows_15m[-16:]
+    ) * 100.0
+    assert off15 > 3.50, off15
+
+    out = classify_playbook(
+        rows_1h,
+        rows_15m,
+        big4={"big4_ok": True, "bias": "LONG"},
+        win_prob_long=0.62,
+        win_prob_short=0.40,
+    )
+    assert "1h_trend_high_pullback" in out["signals"], out["signals"]
+    assert "15m_trend_high_pullback" not in out["signals"], out["signals"]
+    assert out["playbook"] == "A1", out
+    assert out["side"] == "LONG", out
+
+    ready = compute_pullback_entry(
+        "LONG", "A1", rows_15m,
+        playbook_row=out,
+        ref_price=rows_1h[-1]["close_price"],
+        rows_1h=rows_1h,
+    )
+    assert ready.reason != "bounce_not_pullback", ready
+    assert ready.ready is True, ready
+    assert ready.status == "pullback_ready", ready
+    _ok("1h 1.20-8% pullback opens A1 without a shallow 15m tag")
+
+
 def main() -> int:
     print("=== validate_brain_req ===\n")
     test_imports_and_config()
@@ -1808,6 +1870,7 @@ def main() -> int:
     test_rsi_entry_timing()
     test_structure_swing_exit()
     test_h1_bull_pullback()
+    test_h1_deep_pullback_tags_a1_without_15m_shallow()
     print()
     if _fail_n:
         print(f"FAILED {_fail_n}")

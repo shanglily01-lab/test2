@@ -1,6 +1,6 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.63
+**版本**: v4.5.64
 **日期**: 2026-10-13
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **合约自选（REQ-WATCHLIST §7.5）**：侧栏「我的自选」；用户加交易对；价格优先浏览器直连币安合约 **WS**，3s 无 tick 则服务端 DataHub/WS **1s 补价**；手动限价/市价（限价可撤）；成交走实时 ticker；实盘随 `live_trading_enabled`，**仅 L0**；成交瞬间同步，打开不回填。  
@@ -350,7 +350,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 方向对仍不够。实现：`entry_timing.compute_pullback_entry`（中线 C3 传 `follow_breakout=True`）。
 
 - **做多 C3（中线破位跟风 · v4.5.56）**：**须 Big4 LONG**，否则只打标（`big4_not_long_blocks_C3`）。放量突破阻力/1h 突破当根 **市价跟进**（`breakout_ready`）。假突破收回 → `invalidated`；已延伸 ≥1.40%（相对 **冲高前高点**，近 8 根 15m 不计入，避免突破位跟着涨）→ `missed_break`。**`rsi_extreme_high` + `near_7d_high`**，或极端 RSI 叠加滞涨（`stall_at_high` / `top_callback` / `long_upper_wick`）→ `chase_blowoff`（禁止市价追）。BRAIN 的 C3 **仍等回踩**（INV-11 限价），且同样须 Big4 LONG。
-- **做多 A1（v4.5.49 / v4.5.51）**：须同时满足：1h EMA 多头 + HH/HL；15m **对近 32 根趋势新高回踩**（`15m_trend_high_pullback`：回踩的高点 ≥ 前 16 根高点，离高 **0.80%–3.50%**，未破前段低点）；缩量或下影；回到 EMA20 / 38–50% 区才挂限价。未就绪记 `wait_pullback` / `not_trend_high_pullback`。贴高浅跌、破位阴跌、`15m_higher_low` 单独都不够。**无趋势新高的从低点抬起** → `bounce_not_pullback`。**已有趋势新高回踩后的抬起仍是 A1**。**第二次冲高不过前高** → `failed_retest_short`（走 B3）。滞涨结构 → `stall_high_not_pullback`。
+- **做多 A1（v4.5.64）**：1h 对近 **24 根趋势新高**回踩（`1h_trend_high_pullback`：新高不低于前 24 根，高点不在最近 2 根，离高 **1.20%–8.00%**，未破前段低点）即打 A1，并在该带回撤处挂防插针限价。15m RSI 仍超买未拐头或仍在下跌的超卖区则等。**回踩后从回踩低点抬起仍是 A1**，不得记 `bounce_not_pullback`。无趋势新高的死猫跳、跌破前低、离高不足 1.20%（贴高）或深于 8% 不开。15m 的 0.80%–3.50% 浅回踩只作辅证，不能单独否决，也不能替代这条 1h 带。
 - **同币止盈冷却（v4.5.25）**：同 symbol、同方向，近 **4h** 已平仓且 `realized_pnl>0` → 破位/BRAIN 均不得再开（`recent_tp_cooldown`）。去重仍拦当前持仓；止盈后再追由本条拦。
 - **做空 B3/C4（顶部回调点）**：先贴着近 8 根高点，再等 **第一根离开高点的拒绝/回调**：离高 **≥0.28%** 且收在 K 线下半（上影或阴线）。`15m_failed_retest` **只打标**，第二次顶上不得直接空；须同样离高拒绝才 `exhaustion_ready`。仍放量/收在上沿**破前顶** → `wait_stall`；只在高点横盘尚未真正离开 → `at_high_wait_first_callback`；已离高 ≥1.35% → `missed_high`。中线确认后 **挂限价空**；BRAIN 仍限价挂在高点上方 0.20–0.55%。**已有真实拒绝时允许 4h 仍偏多**；仅 `stall_at_high` / 停新高 / 贴 7 日高 / 单独不过前高 **不得**当衰竭。
 - **做空 C1（破位跟风）**：刚跌破支撑且放量/急跌 → **当根跟风**（`breakdown_ready`），不等回抽。中线 **市价**；BRAIN 仍限价贴近破位价。假跌破收回 → `invalidated`。
@@ -457,7 +457,8 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
   → OPENED = 已挂 PENDING 限价；成交后才生成持仓
 ```
 
-**入场（v4.5.25 / v4.5.35 / v4.5.36 / v4.5.47 / v4.5.54 / v4.5.56）**：BRAIN 的 C3 confirmed 仍须回踩；**C3 须 Big4 LONG**（`big4_not_long_blocks_C3`）。**多单距近 8 根 15m 高点 ≤0.80% 不得挂**；A1 滞涨结构不得当回踩，浅缩量也不得当回踩；**从低点反弹不得当 A1 回踩**（须 `15m_pullback_from_high`）。C1 **破位当根跟风**。B2 **须先反抽再失败**。A2 须离低点并出现拒绝。B3/C4 卖顶部第一回调。C4 打标须假突 +（上影 / 缩量 / 衰竭），仅 `stall_at_high` 不够。中线 **C3/C1/B2 市价跟风**（§7.2），**B3/C4 限价**；C3 **不得**在 RSI 极端+7 日高追价；突破延伸按冲高前高点计。同币同向止盈后 4h 冷却。BRAIN **等到 `entry_timing.ready`** 才下**限价**。
+**入场（v4.5.64）**：A1 只看 **1h 趋势新高回踩带**（离高 1.20%–8.00% 挂限价）。回踩后抬起仍开。15m 浅回踩、近 8 根斐波那契窄区、以及「价格必须仍在 EMA20 上方」都不能否决这条 1h 带。15m RSI 只决定现在挂还是再等。  
+**入场（v4.5.25 / v4.5.35 / v4.5.36 / v4.5.47 / v4.5.54 / v4.5.56）**：BRAIN 的 C3 confirmed 仍须回踩；**C3 须 Big4 LONG**（`big4_not_long_blocks_C3`）。**多单距近 8 根 15m 高点 ≤0.80% 不得挂**（非 A1 的 15m 路径）；A1 滞涨结构不得当回踩，浅缩量也不得当回踩；**无趋势新高的从低点反弹不得当 A1**。C1 **破位当根跟风**。B2 **须先反抽再失败**。A2 须离低点并出现拒绝。B3/C4 卖顶部第一回调。C4 打标须假突 +（上影 / 缩量 / 衰竭），仅 `stall_at_high` 不够。中线 **C3/C1/B2 市价跟风**（§7.2），**B3/C4 限价**；C3 **不得**在 RSI 极端+7 日高追价；突破延伸按冲高前高点计。同币同向止盈后 4h 冷却。BRAIN **等到 `entry_timing.ready`** 才下**限价**。
 **日线 vs Big4（v4.5.18）**：`DAILY_BEAR_PROBE` 仍收缩多数多单，但 **Big4 已 LONG 时不得否决 A1**（日线滞后不得挡住已确认的多头趋势）。
 **回调做空（v4.5.22 / v4.5.52 / v4.5.61）**：`big4.bias == LONG` 时 **禁止 A2/B2/B3**（`big4_long_blocks_short`）；**允许** C4 假突空（`big4_long_allows_exhaustion_C4`，edge≥0.85）与 C1 放量破位（`big4_long_allows_breakdown_C1`，edge≥0.80）。保证金与其它模拟单一样 **1000U**。B3 只在 Big4 为 FLAT/SHORT 时开。中线扫描一致。
 **C3 突破（v4.5.56）**：`big4.bias != LONG` 时 C3 只打标（`big4_not_long_blocks_C3`）。震荡、弱 Big4、个币冲击不得跟突破。
@@ -570,7 +571,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 
 | ID | 名称 | 方向 | 一句话描述 |
 |----|------|------|------------|
-| **A1** | 多头趋势回踩 | LONG | **v4.5.51**：1h EMA 多头 + HH/HL + 对趋势**新高**回踩（`15m_trend_high_pullback`，离高 0.80%–3.50%，不破前低，缩量/下影）。回踩后从回踩低点抬起仍开。**禁止**无新高的死猫跳、不过前高、破位阴跌 |
+| **A1** | 多头趋势回踩 | LONG | **v4.5.64**：`1h_trend_high_pullback`，离近 24 根趋势新高 **1.20%–8.00%**，不破前低。回踩后抬起仍开。**禁止**无新高的死猫跳、贴高、跌破前低。15m 0.80%–3.50% 只是辅证 |
 | **A2** | 空头趋势反抽 | SHORT | 下降结构中离开低点进入反抽区，且出现上影/EMA 拒绝后再挂空。仅缩量或 lower_high 不够。**v4.5.36 拒绝确认后开仓** |
 
 **冲击反应类**
@@ -658,7 +659,8 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 | | `15m_pullback_from_high` | 近 16 根最后极值是高点且已离开 ≥0.28%（真回调） |
 | | `15m_bounce_from_low` | 近 16 根最后极值是低点且已离开 ≥0.25%（真反弹；禁止当 A1） |
 | | `15m_failed_retest` | 近 32–48 根已有高顶，回落后第二次冲高不过前高（做空，禁止当 A1） |
-| | `15m_trend_high_pullback` | 对近 32 根趋势新高回踩 0.80%–3.50% 且不破前低（A1 必选） |
+| | `1h_trend_high_pullback` | 对近 24 根 1h 趋势新高回踩 1.20%–8.00% 且不破前低（**A1 开仓必选**，v4.5.64） |
+| | `15m_trend_high_pullback` | 对近 32 根 15m 趋势新高回踩 0.80%–3.50%（辅证；不能替代 1h 带） |
 | | `15m_stop_new_low` | 15M 不再创新低（止跌） |
 | | `15m_stop_new_high` | 15M 不再创新高（滞涨） |
 | | `stall_at_high` | 靠近近期高点且不再延伸 + 上影/量价/RSI 辅证 |
@@ -1064,7 +1066,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-MIDLINE | `market_cap_universe.py`, `midline_swing_config.py`, `midline_swing_scanner.py`, `entry_timing.py`, `midline_hold_exit.py`, `midline_explore_worker.py`, `midline_swing_api.py`, 破位策略页 JS/模板, `strategy_display_names.py`, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
 | **REQ-BRAIN** | `brain_config` / `brain_strategy_orchestrator`（市值前 300）/ `market_cap_universe.py`；`paper_limit_entry` + executor expire；`trading_gates.LIVE_SYNC_SOURCES`；`smart_exit_optimizer` 排除；`validate_brain_req.py`；权威 §7.3；操作对照 `docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md` |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
-| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | 牛市只做 A1 **1h 回调多**；盈利 1h 冲高回落 + 锁利；亏损无硬 SL，扛到强平；顾问 suggest-only；§7.3（**v4.5.63**） |
+| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | 牛市只做 A1 **1h 回调多**（离高 1.20%–8.00% 即挂限价）；盈利 1h 冲高回落 + 锁利；亏损无硬 SL，扛到强平；顾问 suggest-only；§7.3（**v4.5.64**） |
 | REQ-ST | `smart_trader_service.py` |
 | **REQ-SPOT** | `spot_paper_mirror.py`；`spot_live_sync.py`；`spot_trader_service.py`；`fill_paper_limit_order` 钩子；`validate_spot_paper.py`；权威 §7.4 |
 | **REQ-WATCHLIST** | `watchlist_config.py` · `watchlist_store.py` · `watchlist_orders.py` · `watchlist_api.py` · `watchlist_page.js`（浏览器直连币安合约 WS + 3s 无 tick 则 `/api/watchlist/prices` 1s 补价）· `/watchlist`；`LIVE_SYNC_SOURCES` 含 `manual_watchlist`；权威 §7.5 |
@@ -1077,6 +1079,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-10-13 | **v4.5.64** | **修好 1h 回调多不开仓**：A1 认 `1h_trend_high_pullback`（离近 24 根新高 1.20%–8.00%）。回踩后抬起不再记成 `bounce_not_pullback`。15m 0.80%–3.50% 浅回踩和近 8 根斐波那契窄区不再否决。破位不再因回踩当下的 4h 转弱丢掉 A1。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.2/§7.3 已同步 |
 | 2026-10-13 | **v4.5.63** | **牛市只做多**：自动策略禁止开空；BRAIN/破位只开 A1 **1h 回调**；盈利 1h 冲高回落；亏损不设硬 SL，扛到强平。不写 allow_short。自选除外。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md INV-08/12 §7.2/§7.3 已同步 |
 | 2026-09-23 | **v4.5.62** | **修盈亏比**：锁利门槛抬到 1.80%/2.20%，不再收 0.5% 碎盈；破位 SL 改为 2.0–3.0%；已开 6% 单加 −120U 熔断；C1/C3/B2 不因 missed_low 平；每轮跟风最多 3 笔。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.2.3/§7.3.16.3 已同步 |
 | 2026-09-23 | **v4.5.61** | **模拟保证金统一 1000U**：合约模拟开仓不再按评级/Playbook/宏观倍数缩仓；现货镜像仍 500U；实盘仍走 `max_position_value`。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §6.6 已同步 |

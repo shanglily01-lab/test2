@@ -1,6 +1,6 @@
 """Entry timing — buy the pullback, sell the high, follow a fresh break.
 
-LONG A1: wait for the 15m pullback into EMA20 / 38–50% retrace.
+LONG A1: buy the 1h trend-high pullback (1.20%–8% under the high). A lift off that low is still A1.
 LONG C3: BRAIN waits for the pullback; midline follows a fresh breakout (market).
 SHORT exhaustion (B3/C4): sell the first callback off a tagged high — do not wait for EMA.
 SHORT follow (C1): follow a fresh breakdown immediately — do not wait for a bounce.
@@ -822,8 +822,18 @@ def _is_trend_high_pullback_1h(rows_1h: List[Dict[str, Any]], sig: set) -> bool:
     return True
 
 
+def is_h1_trend_high_pullback(
+    rows_1h: List[Dict[str, Any]],
+    signals: Optional[Sequence[str]] = None,
+) -> bool:
+    return _is_trend_high_pullback_1h(rows_1h, {str(s) for s in (signals or [])})
+
+
 def _is_bounce_from_low_1h(rows_1h: List[Dict[str, Any]], sig: set) -> bool:
+    """无 1h 趋势新高时，从低点抬起不是回调。趋势新高回踩后的抬起仍是 A1。"""
     if "1h_trend_high_pullback" in sig or "1h_pullback_from_high" in sig:
+        return False
+    if _is_trend_high_pullback_1h(rows_1h, sig):
         return False
     if "1h_bounce_from_low" in sig:
         return True
@@ -848,136 +858,70 @@ def _a1_h1_pullback_entry(
     *,
     playbook_row: Optional[Dict[str, Any]] = None,
     ref_price: Optional[float] = None,
+    rows_15m: Optional[List[Dict[str, Any]]] = None,
 ) -> EntryTiming:
-    """A1 long: buy a 1h pullback off a trend high. Do not chase the 1h high."""
+    """A1 long: rest a limit inside the 1.20%–8% band under the 1h trend high.
+
+    A lift off the pullback low is still this entry. Do not call it a dead-cat bounce.
+    15m RSI only times the order; it does not redefine the pullback.
+    """
     if len(rows_1h) < H1_TREND_BARS * 2:
         return _empty("no_zone", "insufficient_1h")
     c = _closes(rows_1h)
     h = _highs(rows_1h)
-    l = _lows(rows_1h)
-    v = _vols(rows_1h)
     price = _f(ref_price) if ref_price else c[-1]
     if price <= 0:
         return _empty("no_zone", "no_price")
     ema20 = _ema(c, 20)
-    atr = _atr(rows_1h[-60:] if len(rows_1h) >= 60 else rows_1h, 14) or (price * 0.008)
-    look_hi = max(h[-48:-2]) if len(h) >= 50 else max(h[:-1])
-    impulse_hi = max(h[-8:])
-    impulse_lo = min(l[-8:])
-    impulse_range = max(impulse_hi - impulse_lo, price * 0.004)
     sig = _signals_of(playbook_row)
-    break_level = look_hi
-    fib38 = impulse_hi - impulse_range * 0.382
-    fib50 = impulse_hi - impulse_range * 0.50
-    ema_hi = (ema20 * 1.003) if ema20 else fib38
-    ema_lo = (ema20 - atr * ZONE_ATR_PAD) if ema20 else fib50
-    zone_high = min(ema_hi, fib38)
-    zone_low = max(ema_lo, fib50)
+    trend_hi = max(h[-H1_TREND_BARS:]) if len(h) >= H1_TREND_BARS else max(h)
+    zone_high = trend_hi * (1.0 - H1_PULLBACK_MIN_OFF_PCT / 100.0)
+    zone_low = trend_hi * (1.0 - H1_PULLBACK_MAX_OFF_PCT / 100.0)
     if zone_low > zone_high:
-        mid = ema20 if ema20 else (fib38 + fib50) / 2.0
-        zone_low, zone_high = mid - atr * 0.25, mid + atr * 0.15
-    range_span = max(max(h[-8:]) - min(l[-8:]), 1e-12)
-    range_pos = (price - min(l[-8:])) / range_span
-    ema_dist_pct = ((price - ema20) / ema20 * 100.0) if ema20 else 0.0
-    dist_from_high_pct = ((impulse_hi - price) / price * 100.0) if price > 0 else 0.0
-    still_at_high = dist_from_high_pct <= H1_STILL_AT_HIGH_PCT
-    pulled_back = len(c) >= 5 and c[-1] < max(h[-5:-1]) * 0.997
-    vol_shrink = "volume_shrink_pullback" in sig or (
-        len(v) >= 8 and sum(v[-3:]) < sum(v[-8:-3]) * 0.90
-    )
-    last = rows_1h[-1]
-    bounce_ok = (not still_at_high) and pulled_back and bool(
-        "long_lower_wick" in sig
-        or "ema_reclaim" in sig
-        or vol_shrink
-        or _lower_wick_ratio(last) >= 0.28
-        or _close_loc_in_bar(last) >= 0.55
-    )
-    in_zone = zone_low <= price <= zone_high * 1.004
+        zone_low, zone_high = zone_high, zone_low
+    off = ((trend_hi - price) / trend_hi * 100.0) if trend_hi > 0 else 0.0
     target = _clamp(
-        ema20 if ema20 else (zone_low + zone_high) / 2.0,
+        price * (1.0 - ENTRY_READY_OFFSET_PCT / 100.0),
         zone_low,
-        zone_high,
+        min(zone_high, price),
     )
     if target >= price:
-        target = price * (1.0 - ENTRY_READY_OFFSET_PCT / 100.0)
+        target = price * (1.0 - ENTRY_OFFSET_MIN_PCT / 100.0)
     offset = _clamp((price - target) / price * 100.0, ENTRY_OFFSET_MIN_PCT, ENTRY_OFFSET_MAX_PCT)
+    common = dict(
+        limit_offset_pct=offset,
+        limit_price=round(target, 8),
+        zone_low=zone_low,
+        zone_high=zone_high,
+        ema20=ema20,
+        break_level=trend_hi,
+    )
     if _is_bounce_from_low_1h(rows_1h, sig):
         return EntryTiming(
-            ready=False, status="wait_pullback",
-            reason="bounce_not_pullback",
-            limit_offset_pct=ENTRY_READY_OFFSET_PCT, limit_price=None,
-            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-            break_level=break_level, extended=False, bounce_ok=False,
+            ready=False, status="wait_pullback", reason="bounce_not_pullback",
+            extended=False, bounce_ok=False, **common,
         )
-    if not _is_trend_high_pullback_1h(rows_1h, sig):
-        return EntryTiming(
-            ready=False, status="wait_pullback",
-            reason="not_1h_trend_high_pullback",
-            limit_offset_pct=ENTRY_READY_OFFSET_PCT, limit_price=None,
-            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-            break_level=break_level, extended=False, bounce_ok=False,
+    in_band = H1_PULLBACK_MIN_OFF_PCT <= off <= H1_PULLBACK_MAX_OFF_PCT
+    if not _is_trend_high_pullback_1h(rows_1h, sig) or not in_band:
+        reason = (
+            "still_at_1h_high_wait_pullback"
+            if 0.0 <= off < H1_PULLBACK_MIN_OFF_PCT
+            else "not_1h_trend_high_pullback"
         )
-    if still_at_high:
         return EntryTiming(
-            ready=False, status="wait_pullback",
-            reason="still_at_1h_high_wait_pullback",
-            limit_offset_pct=offset, limit_price=round(target, 8),
-            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-            break_level=break_level, extended=True, bounce_ok=bounce_ok,
+            ready=False, status="wait_pullback", reason=reason,
+            extended=off < H1_PULLBACK_MIN_OFF_PCT, bounce_ok=False, **common,
         )
-    rsi_ok, rsi_why = long_rsi_entry_ok(c, sig)
-    if in_zone and bounce_ok:
-        if not rsi_ok:
-            return EntryTiming(
-                ready=False, status="wait_bounce",
-                reason=rsi_why,
-                limit_offset_pct=min(offset, 0.55),
-                limit_price=round(target, 8),
-                zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-                break_level=break_level, extended=False, bounce_ok=bounce_ok,
-            )
+    rsi_rows = rows_15m if rows_15m and len(rows_15m) >= 20 else rows_1h
+    rsi_ok, rsi_why = long_rsi_entry_ok(_closes(rsi_rows), sig)
+    if not rsi_ok:
         return EntryTiming(
-            ready=True, status="pullback_ready",
-            reason="h1_pullback_zone_bounce",
-            limit_offset_pct=min(offset, ENTRY_READY_OFFSET_PCT + 0.15),
-            limit_price=round(target, 8),
-            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-            break_level=break_level, extended=False, bounce_ok=True,
-        )
-    if bounce_ok and ema20 is not None and ema_dist_pct <= 0.35 and dist_from_high_pct >= H1_STILL_AT_HIGH_PCT:
-        if not rsi_ok:
-            return EntryTiming(
-                ready=False, status="wait_bounce",
-                reason=rsi_why,
-                limit_offset_pct=min(offset, 0.55),
-                limit_price=round(target, 8),
-                zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-                break_level=break_level, extended=False, bounce_ok=bounce_ok,
-            )
-        return EntryTiming(
-            ready=True, status="pullback_ready",
-            reason="h1_trend_pullback_near_ema",
-            limit_offset_pct=min(offset, 0.55),
-            limit_price=round(target, 8),
-            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-            break_level=break_level, extended=False, bounce_ok=True,
-        )
-    if in_zone:
-        return EntryTiming(
-            ready=False, status="wait_bounce",
-            reason="in_1h_zone_wait_bounce",
-            limit_offset_pct=min(offset, 0.55),
-            limit_price=round(target, 8),
-            zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-            break_level=break_level, extended=False, bounce_ok=False,
+            ready=False, status="wait_bounce", reason=rsi_why,
+            extended=False, bounce_ok=True, **common,
         )
     return EntryTiming(
-        ready=False, status="wait_pullback",
-        reason="not_in_1h_pullback_zone",
-        limit_offset_pct=offset, limit_price=round(target, 8),
-        zone_low=zone_low, zone_high=zone_high, ema20=ema20,
-        break_level=break_level, extended=range_pos >= EXTENDED_RANGE_POS, bounce_ok=bounce_ok,
+        ready=True, status="pullback_ready", reason="h1_pullback_zone",
+        extended=False, bounce_ok=True, **common,
     )
 
 
@@ -1060,7 +1004,7 @@ def compute_pullback_entry(
         return _empty("no_zone", "flat_side")
     if side_u == "LONG" and pb in {"A1", "B4"} and rows_1h and len(rows_1h) >= H1_TREND_BARS * 2:
         return _a1_h1_pullback_entry(
-            rows_1h, playbook_row=playbook_row, ref_price=ref_price,
+            rows_1h, playbook_row=playbook_row, ref_price=ref_price, rows_15m=rows_15m,
         )
     if len(rows_15m) < 24:
         return _empty("no_zone", "insufficient_15m")

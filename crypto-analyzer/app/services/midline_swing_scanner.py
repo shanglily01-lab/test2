@@ -281,6 +281,14 @@ def _breakout_action_opportunity(
     if not confirmed:
         detail["reason"] = "unconfirmed_playbook"
         return detail
+    a1_h1_pullback = (
+        playbook_u == "A1"
+        and side_u == "LONG"
+        and (
+            "1h_trend_high_pullback" in signals
+            or bool(features.get("trend_high_pullback_1h"))
+        )
+    )
     exhaustion_short = playbook_u in {"B3", "C4"}
     breakdown_vs_bull = (
         playbook_u == "C1"
@@ -291,6 +299,7 @@ def _breakout_action_opportunity(
     if (
         not exhaustion_short
         and not breakdown_vs_bull
+        and not a1_h1_pullback
         and (future_side != side_u or future_score < FUTURE_4H_OPPORTUNITY_SCORE_MIN)
     ):
         detail["reason"] = "future_4h_not_actionable"
@@ -385,12 +394,16 @@ def _breakout_action_opportunity(
         }
         if playbook_u == "A1":
             trend_pull = (
-                "15m_trend_high_pullback" in signals
+                "1h_trend_high_pullback" in signals
+                or bool(features.get("trend_high_pullback_1h"))
+                or "15m_trend_high_pullback" in signals
                 or bool(features.get("trend_high_pullback"))
             )
             bounce_not_pullback = (
-                "15m_failed_retest" in signals
-                or bool(features.get("failed_retest"))
+                (
+                    ("15m_failed_retest" in signals or bool(features.get("failed_retest")))
+                    and not a1_h1_pullback
+                )
                 or (
                     not trend_pull
                     and (
@@ -419,11 +432,15 @@ def _breakout_action_opportunity(
                     "bounce_not_pullback" if bounce_not_pullback else "a1_needs_trend_high_pullback"
                 )
                 return detail
-            structure_ok = bool(evidence["ema_bull"] and evidence["hh_hl"])
-            force_ok = bool(
-                evidence["volume_shrink_pullback"]
-                or "long_lower_wick" in signals
-            )
+            if a1_h1_pullback:
+                structure_ok = True
+                force_ok = True
+            else:
+                structure_ok = bool(evidence["ema_bull"] and evidence["hh_hl"])
+                force_ok = bool(
+                    evidence["volume_shrink_pullback"]
+                    or "long_lower_wick" in signals
+                )
         else:
             structure_ok = evidence["break_resistance"] or evidence["h1_breakout_up"] or evidence["impulse_up"] or evidence["higher_low"]
             force_ok = evidence["volume_expand_up"] or evidence["impulse_up"] or evidence["token_aligned"]
@@ -842,7 +859,15 @@ def evaluate_symbol_multiperiod(
     if not confirmed:
         out.update({"reason": "unconfirmed_playbook", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
-    if not (has_break_signal or has_volume_signal or strong_token_side):
+    h1_pullback_long = (
+        side == "LONG"
+        and playbook == "A1"
+        and (
+            "1h_trend_high_pullback" in signals
+            or bool(features.get("trend_high_pullback_1h"))
+        )
+    )
+    if not (has_break_signal or has_volume_signal or strong_token_side or h1_pullback_long):
         out.update({"reason": "weak_phase_evidence", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out
 

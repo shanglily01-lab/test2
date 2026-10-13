@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.services.entry_timing import is_h1_trend_high_pullback
 from app.services.brain_config import (
     BRAIN_EXHAUSTION_UPPER_WICK_MIN,
     BRAIN_IMPULSE_1H_BREAK_PCT,
@@ -102,6 +103,7 @@ def extract_features(
         "bounce_from_low": False,
         "failed_retest": False,
         "trend_high_pullback": False,
+        "trend_high_pullback_1h": False,
         "hh_hl": False,
         "lh_ll": False,
         "stop_new_low": False,
@@ -183,6 +185,9 @@ def extract_features(
         if len(h15) >= 16 and max(h15[-4:]) <= max(h15[-12:-4]) * 1.001:
             feats["stop_new_high"] = True
             signals.append("15m_stop_new_high")
+    if is_h1_trend_high_pullback(rows_1h):
+        feats["trend_high_pullback_1h"] = True
+        signals.append("1h_trend_high_pullback")
 
     rsi1 = _rsi(c1, 14)
     rsi15 = _rsi(c15, 14)
@@ -533,9 +538,10 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         )
     )
 
-    # A1 只认：1h 上升结构 + 对趋势新高的缩量回踩。回踩后从回踩低点抬起仍是 A1。
-    # 无趋势新高的死猫跳 / 不过前高 / 破位阴跌不是 A1。
-    a1_ok = bool(
+    # A1：1h 趋势新高回踩 1.20%–8% 直接成立。15m 浅回踩仍可打标，但不能替代这条。
+    # 回踩后从回踩低点抬起仍是 A1。无趋势新高的死猫跳 / 跌破前低不是 A1。
+    h1_pull = bool(feats.get("trend_high_pullback_1h")) and feats.get("h1_side") != "SHORT"
+    legacy_a1 = bool(
         feats.get("trend_high_pullback")
         and feats.get("ema_bull")
         and feats.get("hh_hl")
@@ -547,10 +553,10 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         and feats.get("h1_side") != "SHORT"
         and (feats.get("vol_shrink_pullback") or feats.get("long_lower_wick"))
     )
-    if a1_ok:
-        a1 = 0.86
+    if h1_pull or legacy_a1:
+        a1 = 0.91 if h1_pull else 0.86
         if "rsi_1h_healthy_long" in sig:
-            a1 = 0.93
+            a1 = max(a1, 0.93)
         scored.append(("A1", a1, True))
 
     # A2 空头趋势反抽：下降结构中出现缩量反抽，并在前高/EMA 被拒绝
@@ -811,9 +817,10 @@ def classify_playbook(
         feats.get("bounce_from_low")
         and not feats.get("pullback_from_high")
         and not feats.get("trend_high_pullback")
+        and not feats.get("trend_high_pullback_1h")
     ):
         filtered = [(p, s, c) for p, s, c in filtered if p not in ("A1", "B4")]
-    if feats.get("failed_retest"):
+    if feats.get("failed_retest") and not feats.get("trend_high_pullback_1h"):
         filtered = [(p, s, c) for p, s, c in filtered if p not in ("A1", "B4")]
 
     if not filtered:
