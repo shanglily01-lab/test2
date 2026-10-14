@@ -21,6 +21,32 @@ def is_paper_futures_account(account_id: int) -> bool:
     return int(account_id) == PAPER_ACCOUNT_ID
 
 
+def expire_pending_limits_for_sources(conn, sources, reason: str) -> int:
+    """作废指定 source 的未成交限价。回调市价切换后，旧挂单不再等更深回踩。"""
+    names = tuple(str(s).strip() for s in (sources or []) if str(s or "").strip())
+    if not names:
+        return 0
+    placeholders = ",".join(["%s"] * len(names))
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            UPDATE futures_orders
+            SET status='EXPIRED', cancellation_reason=%s,
+                canceled_at=NOW(), updated_at=NOW()
+            WHERE account_id=%s
+              AND status='PENDING'
+              AND order_type='LIMIT'
+              AND order_source IN ({placeholders})
+            """,
+            ((reason or "switch_to_market")[:500], PAPER_ACCOUNT_ID, *names),
+        )
+        n = int(cur.rowcount or 0)
+    if n:
+        conn.commit()
+        logger.info(f"[限价开仓] 作废未成交限价 {n} 笔 reason={reason} sources={names}")
+    return n
+
+
 def expire_pending_paper_limits_for_side(cursor, side: str, reason: str) -> int:
     """关掉 allow_long/allow_short 时，立刻作废该方向未成交限价（不平已有仓）。"""
     side_u = (side or "").upper()
@@ -255,12 +281,15 @@ def create_paper_limit_order(
         return None
 
     from app.services.midline_swing_config import is_midline_source, get_midline_limit_offset_pct
-    from app.services.brain_config import is_brain_source
+    from app.services.brain_config import BRAIN_USE_MARKET_ENTRY, is_brain_source
 
-    # v4.5.54：仅破位跟风（C1/C3/B2）允许市价；BRAIN / 摸顶限价不得走市价旁路
-    if force_market and not is_brain_source(source):
+    # A1 回调已经过滤过入场，BRAIN 确认后直接市价。破位跟风仍由 force_market 传入。
+    if is_brain_source(source) and BRAIN_USE_MARKET_ENTRY:
+        force_market = True
+
+    if force_market and not (is_brain_source(source) and not BRAIN_USE_MARKET_ENTRY):
         logger.info(
-            f"[市价开仓] {symbol} {side} source={source}: 破位跟风 "
+            f"[市价开仓] {symbol} {side} source={source}: 回调/跟风确认后市价 "
             f"(force_market={bool(force_market)})"
         )
         return _open_paper_market_position(
@@ -554,6 +583,7 @@ def _open_paper_market_position(
             quantity=Decimal(str(quantity)),
             leverage=leverage,
             limit_price=None,
+            force_market=True,
             stop_loss_pct=Decimal(str(stop_loss_pct)) if stop_loss_pct is not None else None,
             take_profit_pct=Decimal(str(take_profit_pct)) if take_profit_pct is not None else None,
             stop_loss_price=Decimal(str(stop_loss_price)) if stop_loss_price is not None else None,

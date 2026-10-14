@@ -432,24 +432,24 @@ def test_breakout_action_opportunity() -> None:
 
 
 def test_midline_market_follow_breakouts() -> None:
-    print("[2b] midline C1/C3/B2 market; B3/C4/A1/A2 limit")
+    print("[2b] midline A1/C1/C3/B2 market; B3/C4/A2 limit")
     from inspect import signature
     from app.services.midline_swing_config import midline_uses_market_entry, MIDLINE_MARKET_PLAYBOOKS
     from app.services.paper_limit_entry import create_paper_limit_order
 
-    assert MIDLINE_MARKET_PLAYBOOKS == frozenset({"C1", "B2", "C3"})
+    assert MIDLINE_MARKET_PLAYBOOKS == frozenset({"A1", "C1", "B2", "C3"})
     assert midline_uses_market_entry("C1") is True
     assert midline_uses_market_entry("C3") is True
     assert midline_uses_market_entry("B2") is True
     assert midline_uses_market_entry("B3") is False
     assert midline_uses_market_entry("C4") is False
-    assert midline_uses_market_entry("A1") is False
+    assert midline_uses_market_entry("A1") is True
     assert midline_uses_market_entry("A2") is False
     assert "force_market" in signature(create_paper_limit_order).parameters
     worker = (ROOT / "app/services/midline_explore_worker.py").read_text(encoding="utf-8")
     scanner = (ROOT / "app/services/midline_swing_scanner.py").read_text(encoding="utf-8")
-    if "force_market=use_market" not in worker:
-        _fail("中线 worker 未对 C1/C3/B2 走市价")
+    if "force_market=use_market" not in worker or "use_market = midline_uses_market_entry" not in worker:
+        _fail("中线 worker 未对 A1/C1/C3/B2 走市价")
     if "follow_breakout=True" not in scanner:
         _fail("中线扫描未对 C3 启用破位跟风")
     if "big4_not_long_blocks_C3" not in scanner:
@@ -467,7 +467,7 @@ def test_midline_market_follow_breakouts() -> None:
     gate = (ROOT / "app/services/paper_open_gate.py").read_text(encoding="utf-8")
     if "check_symbol_tp_reentry_cooldown" not in gate:
         _fail("开仓闸门未接止盈再入冷却")
-    _ok("C1/C3/B2 midline market; B3/C4/A1/A2 stay limit; chase/TP cooldown wired")
+    _ok("A1/C1/C3/B2 midline market; B3/C4/A2 stay limit; chase/TP cooldown wired")
 
 
 def test_limit_price() -> None:

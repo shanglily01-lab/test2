@@ -448,6 +448,7 @@ class FuturesTradingEngine:
         entry_score: Optional[float] = None,
         max_hold_minutes: Optional[int] = None,
         planned_close_time: Optional[datetime] = None,
+        force_market: bool = False,
     ) -> Dict:
         """
         开仓
@@ -508,7 +509,13 @@ class FuturesTradingEngine:
                 is_paper_futures_account,
                 is_paper_limit_entry_enabled,
             )
-            paper_limit_mode = account_id == PAPER_ACCOUNT_ID and is_paper_limit_entry_enabled()
+            paper_limit_mode = (
+                account_id == PAPER_ACCOUNT_ID
+                and is_paper_limit_entry_enabled()
+                and not force_market
+            )
+            if force_market:
+                limit_price = None
             if is_paper_futures_account(account_id):
                 from app.services.trading_gates import check_paper_direction_allowed
                 dir_ok, dir_why = check_paper_direction_allowed(position_side, cursor)
@@ -910,6 +917,25 @@ class FuturesTradingEngine:
                 float(entry_price), utc_now_naive()
             ))
 
+            sync_status, sync_reason = None, ""
+            if force_market and _is_paper_futures_account(account_id):
+                from app.services.paper_limit_sync_service import decide_live_sync_at_paper_fill
+                sync_status, sync_reason = decide_live_sync_at_paper_fill(
+                    symbol, source, cursor=cursor,
+                )
+                if sync_status:
+                    cursor.execute(
+                        """
+                        UPDATE futures_orders
+                        SET live_sync_status=%s, live_synced_at=NOW()
+                        WHERE order_id=%s
+                        """,
+                        (sync_status, order_id),
+                    )
+                    logger.info(
+                        f"[市价开仓] {symbol} {position_side} 实盘不同步: {sync_reason}"
+                    )
+
             # 9. 更新账户余额（模拟盘不冻结、不扣可用）
             if paper_acct:
                 balance_after = float(current_balance)
@@ -954,6 +980,39 @@ class FuturesTradingEngine:
                 entry_reason=entry_reason,
                 order_type=order_type,
             )
+
+            if force_market and _is_paper_futures_account(account_id):
+                if not sync_status:
+                    try:
+                        from app.services.user_trading_engine_manager import get_engine_manager
+                        if get_engine_manager() is None:
+                            logger.info(
+                                f"[市价开仓] {symbol} 本进程无实盘引擎，"
+                                f"留 NULL 待 crypto-app-main PaperSync order={order_id}"
+                            )
+                        else:
+                            from app.services.paper_limit_sync_service import sync_filled_order_now
+                            sync_filled_order_now(order_id)
+                    except Exception as sync_ex:
+                        logger.warning(f"[市价开仓] 立即实盘同步失败 {order_id}: {sync_ex}")
+                if position_side == "LONG":
+                    try:
+                        from app.services.spot_paper_mirror import maybe_mirror_spot_from_paper_fill
+                        maybe_mirror_spot_from_paper_fill(
+                            account_id=account_id,
+                            symbol=symbol,
+                            side=position_side,
+                            source=source,
+                            entry_price=float(entry_price),
+                            entry_signal_type=entry_signal_type,
+                            entry_reason=entry_reason,
+                            stop_loss_price=float(stop_loss_price) if stop_loss_price else None,
+                            take_profit_price=float(take_profit_price) if take_profit_price else None,
+                            planned_close_time=planned_close_time,
+                            futures_position_id=position_id,
+                        )
+                    except Exception as spot_ex:
+                        logger.warning(f"[现货镜像] 市价成交后镜像失败 {symbol}: {spot_ex}")
 
             return {
                 'success': True,

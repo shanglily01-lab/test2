@@ -27,6 +27,7 @@ from app.services.brain_config import (
     BRAIN_REQUIRE_CONFIRMED_PREFIXES,
     BRAIN_SL_PCT,
     BRAIN_SOURCE,
+    BRAIN_SOURCES,
     BRAIN_STRATEGIC_CLOSE_ENABLED,
     BRAIN_SYMBOL_OPEN_COOLDOWN_MINUTES,
     BRAIN_TICK_BATCH_SIZE,
@@ -607,6 +608,10 @@ def run_brain_tick(triggered_by: str = "scheduler") -> Dict[str, Any]:
     round_id: Optional[int] = None
     try:
         conn = _connect()
+        from app.services.paper_limit_entry import expire_pending_limits_for_sources
+        expire_pending_limits_for_sources(
+            conn, BRAIN_SOURCES, "a1_pullback_market_entry",
+        )
         with conn.cursor() as cur:
             enabled = _setting_enabled(cur, BRAIN_ENABLED_KEY, "1")
             _live["enabled"] = enabled

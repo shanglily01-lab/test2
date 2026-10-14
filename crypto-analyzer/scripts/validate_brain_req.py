@@ -156,18 +156,19 @@ def test_ds_auto_open_available() -> None:
 def test_paper_limit_brain_force() -> None:
     from app.services.brain_config import BRAIN_USE_MARKET_ENTRY
 
-    assert BRAIN_USE_MARKET_ENTRY is False  # INV-BRAIN-06 正式启用防插针限价
+    assert BRAIN_USE_MARKET_ENTRY is True  # A1 回调确认后市价，不再挂限价
     src = (ROOT / "app/services/paper_limit_entry.py").read_text(encoding="utf-8")
-    if BRAIN_USE_MARKET_ENTRY:
-        if "BRAIN_USE_MARKET_ENTRY" not in src or "_open_paper_market_position" not in src:
-            _fail("paper_limit_entry 测试期未走 BRAIN 市价")
-        else:
-            _ok("paper_limit_entry brain market (test)")
+    engine = (ROOT / "app/trading/futures_trading_engine.py").read_text(encoding="utf-8")
+    if "BRAIN_USE_MARKET_ENTRY" not in src or "_open_paper_market_position" not in src:
+        _fail("paper_limit_entry 未走 BRAIN 市价")
+    elif "force_market=True" not in src:
+        _fail("市价路径未传 force_market，会被模拟盘限价守卫挡回挂单")
+    elif "force_market: bool = False" not in engine or "and not force_market" not in engine:
+        _fail("open_position 未绕过模拟盘限价守卫")
+    elif "decide_live_sync_at_paper_fill" not in engine.split("def fill_paper_limit_order")[0]:
+        _fail("市价开仓未在成交瞬间决定实盘同步")
     else:
-        if "is_brain_source" not in src or "timeout_action" not in src:
-            _fail("paper_limit_entry 未接入 brain force_limit/timeout expire")
-        else:
-            _ok("paper_limit_entry brain limit")
+        _ok("paper_limit_entry brain market")
 
 
 def test_executor_brain_expire() -> None:

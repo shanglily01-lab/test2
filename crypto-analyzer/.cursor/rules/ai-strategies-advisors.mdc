@@ -20,7 +20,7 @@ alwaysApply: true
 
 - 扫描: `midline_swing_scanner` · `entry_timing` · worker · **15min** 轮询
 - **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）· **结构点出场 + 错过/回吐锁利**（取消 4–6h 亏单到期）· **排除** SmartExit
-- **v4.5.64 牛市只做多**：自动策略禁止开空；只开 **A1 1h 回调多**（C3 追涨不开）。认 `1h_trend_high_pullback`（离近 24 根新高 1.20%–8.00%，不破前低）即挂限价；回踩后抬起仍开，不得记 `bounce_not_pullback`。15m 0.80%–3.50% 不能单独否决。盈利 **1h 冲高回落** 止盈；亏损 **无硬 SL**，扛到强平。不写 `allow_short`。自选除外。
+- **v4.5.65 牛市只做多**：自动策略禁止开空；只开 **A1 1h 回调多**（C3 追涨不开）。认 `1h_trend_high_pullback`（离近 24 根新高 1.20%–8.00%，不破前低）后**市价**；回踩后抬起仍开，不得记 `bounce_not_pullback`。15m 0.80%–3.50% 不能单独否决。盈利 **1h 冲高回落** 止盈；亏损 **无硬 SL**，扛到强平。不写 `allow_short`。自选除外。
 - 持仓不限时；5x · 1000U
 - 标的：`config.yaml` **市值前 100**；**进** `LIVE_SYNC_SOURCES`（`live_trading_enabled` + 仅 L0；打开不回填）
 - Web：原 Gemini 探索页 → 破位策略/机会分析；DeepSeek 探索去中线 Tab
@@ -43,7 +43,7 @@ alwaysApply: true
 
 **DeepSeek 选币**：仅 **L0+L1**；**DeepSeek soft-sl**：grace45 / no_follow≥60m且≈-2.2%
 
-**REQ-BRAIN §7.3**：盈利 KPI；**只开 A1 1h 回调多**；禁止自动开空；盈利 1h 冲高回落；亏损无硬 SL 扛到强平；顾问 suggest-only；**强制防插针限价+超时取消**；**排除 SmartExit**；`validate_brain_req.py`
+**REQ-BRAIN §7.3**：盈利 KPI；**只开 A1 1h 回调多**；禁止自动开空；盈利 1h 冲高回落；亏损无硬 SL 扛到强平；顾问 suggest-only；**A1 回调确认后市价**；**排除 SmartExit**；`validate_brain_req.py`
 
 ## 顾问路由 (`open_advisor_routing.py`)
 

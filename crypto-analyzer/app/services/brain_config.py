@@ -13,8 +13,8 @@ BRAIN_HOLD_HOURS = 6
 BRAIN_LIMIT_TIMEOUT_MINUTES = 30
 BRAIN_SL_PCT = 4.5  # fallback 百分点（与 SL 上限对齐；v4.5.7）
 BRAIN_TP_PCT = 8.0   # fallback 百分点
-# 正式防插针：BRAIN 强制限价；频繁插针按平均影线偏移，超时只取消不转市价
-BRAIN_USE_MARKET_ENTRY = False
+# A1 已经等 1h 回调才开仓，确认后直接市价，不再挂限价等更深回踩
+BRAIN_USE_MARKET_ENTRY = True
 # False=关闭 Playbook/Big4 战略平仓
 BRAIN_STRATEGIC_CLOSE_ENABLED = False
 

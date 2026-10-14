@@ -280,7 +280,7 @@ def _open_limit_order(
     playbook = str(((signal_detail.get("playbook") or {}).get("name")) or "")
     hold_hours = midline_hold_hours(playbook)
     sl_pct = None
-    use_market = False
+    use_market = midline_uses_market_entry(playbook)
     allowed, _ = gate_simulated_open(
         symbol, side, price, source,
         catalyst="midline_v2_pass",
@@ -365,6 +365,10 @@ def run_midline_round(
     try:
         conn = _connect()
         try:
+            from app.services.paper_limit_entry import expire_pending_limits_for_sources
+            expire_pending_limits_for_sources(
+                conn, (source,), "a1_pullback_market_entry",
+            )
             _ensure_kill_switches(conn)
             with conn.cursor() as cur:
                 order_enabled = _is_enabled(cur, source)

@@ -74,7 +74,7 @@
 | GPT 探索/预测 | 同节奏 + `gpt_*_next_due_utc` |
 | Gemini 探索 | —（已下线） | — |
 | DeepSeek 探索/预测 | 每2h + 10min/5min（**对照期保留**；INV-BRAIN-07 暂缓） | `deepseek_*_enabled` |
-| **REQ-BRAIN** `brain_swing` | 每 **15s** 一批 **5** 币轮询市值前 300 | `brain_swing_enabled`；启动 +75s；发现机会挂防插针限价 |
+| **REQ-BRAIN** `brain_swing` | 每 **15s** 一批 **5** 币轮询市值前 300 | `brain_swing_enabled`；启动 +75s；A1 回调确认后市价 |
 | **中线 v2** `midline_long/short` | 每 **15min** 轮询；多单回调买 / B3/C4 冲高卖；结构点 + 错过/回吐锁利 |
 | **现货镜像** `spot_*` | 合约模拟成交瞬间跟单；`crypto-app-main` 每 1min 查 TP/SL；`spot_trading_enabled` |
 | **持仓顾问** DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent；BRAIN/中线 **suggest-only**） |
@@ -163,11 +163,11 @@
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.3；操作对照：`docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`
 - `brain_swing`：市值前 **300** 模拟扫描；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
-- 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**强制防插针限价**（`BRAIN_USE_MARKET_ENTRY=False`），超时取消
-- **入场（v4.5.64）**：牛市**只开 A1 1h 回调多**；禁止自动开空与 C3 追涨。A1 认 `1h_trend_high_pullback`（离近 24 根新高 1.20%–8.00%，不破前低）即挂限价。回踩后抬起仍开。15m 浅回踩不能单独否决。不写 `allow_short`。自选除外。
+- 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**A1 回调确认后市价**（`BRAIN_USE_MARKET_ENTRY=True`）
+- **入场（v4.5.65）**：牛市**只开 A1 1h 回调多**；禁止自动开空与 C3 追涨。A1 认 `1h_trend_high_pullback`（离近 24 根新高 1.20%–8.00%，不破前低）后**市价**。回踩后抬起仍开。15m 浅回踩不能单独否决。不写 `allow_short`。自选除外。
 - **退出（v4.5.63）**：盈利 **1h 冲高回落** + 锁利；亏损 **无硬 SL / 无美元熔断**，扛到强平
 - **执行隔离（v4.5.13）**：BRAIN 排除 SmartExit；限价成交前重跑安全闸门；模拟平仓事务行锁幂等
-- 防插针：影>实体×2；频繁则平均插针限价；超时取消；**INV-BRAIN-06 已正式启用**
+- 插针仍统计（影>实体×2）；A1 不再因此改限价。**INV-BRAIN-06**：回调确认后市价
 - **对照期**：DeepSeek 探索/预测自动开仓**暂保留**并行对比；结束后再执行 INV-BRAIN-07
 - 调度：BRAIN **每15s** 一批5币；`validate_brain_req.py`；页 `/brain_strategy`
 
@@ -182,7 +182,7 @@
 ### 中线做多/做空 v2 (`midline_long` / `midline_short`)【需求 2026-07-24 · 已落地模拟+实盘】
 - **量化扫描**，非 LLM；标的 **市值前 100**（`config.yaml` 序）；**15min** 轮询；旧四路 `*_midline_*` 停并移除
 - kill switch：`midline_long_enabled` / `midline_short_enabled`（系统配置「策略与模式」+ 破位策略页）
-- 限价：做多 A1 挂 **1h 回调区**；**不开空、不开 C3**。持仓不限时；5x / 1000U；亏损无硬 SL，扛到强平
+- 入场：做多 A1 回调确认后**市价**；**不开空、不开 C3**。持仓不限时；5x / 1000U；亏损无硬 SL，扛到强平
 - **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）；**1h 冲高回落出场 + 错过/回吐锁利**；**排除** SmartExit
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
 - Web：原 Gemini 探索页整页改破位策略/机会分析
@@ -249,7 +249,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 - **合约自选**（§7.5）：`/watchlist`；价格优先浏览器直连币安合约 WS，3s 无 tick 则 `/api/watchlist/prices` 1s 补价；下单/触价仍 ticker；限价可撤；实盘随 `live_trading_enabled`，仅 L0，成交瞬间同步，打开不回填
 - **现货**（§7.4）：模拟跟 BRAIN A1 + DeepSeek LONG，仅 L0，`spot_trading_enabled`；实盘独立开关 `spot_live_enabled`（成交瞬间，不回填）
 - **实盘开仓 symbol**：须 **L0 白名单**（`rating_level=0`）；L1/L2/L3 禁止实盘
-- **限价偏移**：中线优先 **回调区**（无区才 ±1%）；其他模拟限价读 `paper_limit_long/short_offset_pct`（系统设定）
+- **入场**：BRAIN / 破位 A1 回调确认后市价；DeepSeek 与自选限价仍读各自偏移
 - **模拟保证金**：合约模拟开仓统一 **1000U**（`get_paper_margin_usd`）；不再按评级/Playbook 缩仓；现货镜像仍 500U
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)
 - **PaperSync FAILED**：原因前置写入 `futures_orders.notes`；市价数量按 `MARKET_LOT_SIZE.maxQty` 截顶；本进程无 `engine_manager`（scheduler 也会成交模拟限价）须留 NULL，不得 FAILED；FAILED 不回填
