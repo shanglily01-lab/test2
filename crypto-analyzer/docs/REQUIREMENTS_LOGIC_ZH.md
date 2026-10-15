@@ -909,6 +909,31 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 | 信号表 | 与 §7.6 同源：`technical_signals_cache`（禁止 `coin_kline_scores`，EVENT 已下线） |
 | 其它面板 | 快照约 5min 预计算；前端 30s 读快照（盈亏/OI/新闻/聪明钱） |
 
+### 7.8 情绪与利润分层（决策，不下单）【v4.5.67】
+
+**实现**: `app/services/sentiment_profit_strategy.py`  
+**回归**: `scripts/validate_sentiment_profit_strategy.py`（无 API / 无 DB）
+
+交易员自己判断两层利润（0～1）和人群情绪，模块只给动作。价格把心态带到一边；下单跟着还有利润的那一边。某一层利润低于 **0.05** 视为没了，不加仓。
+
+**按币分开**: `decide_symbols` 每个币一份 `SymbolState`（自己的情绪、这段利润、整轮利润、杠杆燃料、仓位）。比特币的账不能套用到山寨，山寨之间也不共用。同一币重复提交直接拒绝。杠杆按该币的开仓价和倍数算爆仓距离，不共用比特币的 5 倍。
+
+| 情形 | 动作 |
+|------|------|
+| 情绪热，整轮上面没了、下面还有 | 趋势空。手里有别的仓则本步只平，平完再开 |
+| 情绪差，整轮下面没了、上面还有 | 趋势多。手里有别的仓则本步只平，平完再开 |
+| 情绪热，只是这一段上面没了，杠杆多单还在 | 阶段空。整轮不翻。先平再开 |
+| 情绪差，只是这一段下面没了，整轮仍是空 | 阶段多。整轮不翻。先平再开 |
+| 这段杠杆多单已爆（`leg_long_fuel_alive=0`） | 这段空头利润按 0。有阶段空则本步只平，不再开空 |
+| 同向但换层（阶段仓 → 整轮仓） | 先平这一层，下一层单独再开 |
+| 心态和利润还在同一边，且仓已在这一层 | 拿着，不提前猜顶底 |
+
+`decide` 只给下一步。`plan` 给出「先平、再开」。`apply_decision` 在仓还在时拒绝开新仓。
+
+5 倍多单爆仓价 ≈ 开仓价 × (1 − 1/5 + 0.004)，约在开仓价下方两成。距离用开仓价归一；燃料已灭或价格已过爆仓价，剩余做空利润为 0。
+
+**边界**: 不读行情、不进 `scheduler`、不进 `LIVE_SYNC_SOURCES`、不自动开平仓。自动策略仍受 INV-08，禁止把本模块的阶段空单接进自动开仓。
+
 ## 8. AI 主探索 / 主预测（REQ-AI-EP）
 
 > **与 REQ-BRAIN**：BRAIN 为主判路径；**对照期** DeepSeek 探索/预测仍可自动开仓做对比（INV-BRAIN-07 暂缓）。对照结束后应全面暂停，不得再以「DeepSeek 独自扫池开仓」为主路径。
@@ -1073,6 +1098,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | **REQ-WATCHLIST** | `watchlist_config.py` · `watchlist_store.py` · `watchlist_orders.py` · `watchlist_api.py` · `watchlist_page.js`（浏览器直连币安合约 WS + 3s 无 tick 则 `/api/watchlist/prices` 1s 补价）· `/watchlist`；`LIVE_SYNC_SOURCES` 含 `manual_watchlist`；权威 §7.5 |
 | **信号分析页** | `technical_signals_api.py` · `technical_signals_page.js` · `/technical-signals`；缓存表 + 服务端现价；权威 §7.6 |
 | **Dashboard 页** | `dashboard_snapshot_service.py` · `/dashboard` · `/api/dashboard/prices` 1s；信号同源 `technical_signals_cache`；权威 §7.7 |
+| **情绪与利润分层** | `sentiment_profit_strategy.py`；`validate_sentiment_profit_strategy.py`；只决策、不下单、不进实盘；权威 §7.8 |
 
 ---
 
@@ -1080,6 +1106,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-10-15 | **v4.5.67** | **情绪与利润分层**：阶段单与整轮分开，按币做账。换仓时平仓是独立一步，平完才允许开新仓；同向换层也先平。不自动开平仓、不进实盘。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.8 已同步 |
 | 2026-10-15 | **v4.5.66** | **保证金亏满强平**：无硬 SL 的自动仓仍须被监控扫描。价格触及强平价，或保证金浮亏达到 100%，强制平仓。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md INV-12 §7.3.16 已同步 |
 | 2026-10-14 | **v4.5.65** | **A1 回调改市价**：BRAIN / 破位在 1h 回调确认后直接市价成交，不再挂限价等更深回踩。未成交的 BRAIN / 破位限价作废。成交瞬间仍走实盘同步与现货镜像。DeepSeek 与自选限价不变。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md INV-11/INV-BRAIN-06 §7.2/§7.3 已同步 |
 | 2026-10-13 | **v4.5.64** | **修好 1h 回调多不开仓**：A1 认 `1h_trend_high_pullback`（离近 24 根新高 1.20%–8.00%）。回踩后抬起不再记成 `bounce_not_pullback`。15m 0.80%–3.50% 浅回踩和近 8 根斐波那契窄区不再否决。破位不再因回踩当下的 4h 转弱丢掉 A1。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.2/§7.3 已同步 |
