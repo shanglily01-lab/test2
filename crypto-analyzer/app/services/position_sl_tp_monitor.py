@@ -127,6 +127,10 @@ def _skip_hard_stop(src: str, side: str) -> bool:
         return False
 
 
+# 逐仓保证金亏满即强平。强平价缺失或偏远时，仍不得把浮亏做到 -100% 以下。
+_MARGIN_WIPE_ROI = -1.0
+
+
 def _hit_liquidation(side: str, price: float, liq) -> bool:
     if liq is None or price is None or price <= 0:
         return False
@@ -139,6 +143,34 @@ def _hit_liquidation(side: str, price: float, liq) -> bool:
     if str(side or "").upper() == "LONG":
         return price <= liq_f
     return price >= liq_f
+
+
+def _position_roi(side: str, price: float, entry: float, leverage) -> Optional[float]:
+    """杠杆后的保证金收益率。-1.0 表示亏光保证金。"""
+    if price is None or entry is None or price <= 0 or entry <= 0:
+        return None
+    side_u = str(side or "").upper()
+    if side_u == "LONG":
+        pnl = (price - entry) / entry
+    elif side_u == "SHORT":
+        pnl = (entry - price) / entry
+    else:
+        return None
+    try:
+        lev = float(leverage or 1)
+    except (TypeError, ValueError):
+        lev = 1.0
+    if lev <= 0:
+        lev = 1.0
+    return pnl * lev
+
+
+def _should_force_liquidate(side: str, price: float, entry: float, leverage, liq) -> bool:
+    """价格触及强平价，或保证金浮亏达到 100%，先到先平。"""
+    if _hit_liquidation(side, price, liq):
+        return True
+    roi = _position_roi(side, price, entry, leverage)
+    return roi is not None and roi <= _MARGIN_WIPE_ROI
 # 硬 TP 开仓保护：避免 entry 价与 monitor 市价源不一致时秒平（SL 仍立即生效）
 _AI_TP_GRACE_MIN = 5
 
@@ -380,12 +412,24 @@ class PositionSLTPMonitor:
 
             ride_to_liq = _skip_hard_stop(src, side) or _uses_structure_swing(src)
             if sl is None and tp is None and not ride_to_liq:
-                # 无 SL/TP 的中线旧仓：仅计划到期 + 爆仓（不走 ai-trail-tp）
+                # 无 SL/TP 且不走结构出场：仍须在保证金亏满时强平
+                price = self._get_live_price(ws, symbol)
+                if price is None or price <= 0:
+                    continue
+                if entry_price > 0 and _should_force_liquidate(
+                    side, price, entry_price, pos.get("leverage"), pos.get("liquidation_price"),
+                ):
+                    roi = _position_roi(side, price, entry_price, pos.get("leverage"))
+                    logger.warning(
+                        f"[SL/TP Monitor] 强平 pid={pid} {symbol} {side} "
+                        f"reason=liquidation price={price:.6f} "
+                        f"roi={(roi or 0) * 100:.2f}%"
+                    )
+                    self._cooldown[pid] = now + self._cooldown_seconds
+                    self._peak_pnl_map.pop(pid, None)
+                    self._do_close(pid, symbol, side, "liquidation", price, now)
+                    continue
                 if _is_midline_source(src):
-                    price = self._get_live_price(ws, symbol)
-                    if price is None or price <= 0:
-                        continue
-                    liq = pos.get("liquidation_price")
                     reason_mid: Optional[str] = None
                     pct = pos.get("planned_close_time")
                     if pct is not None and not _uses_structure_swing(src):
@@ -394,12 +438,6 @@ class PositionSLTPMonitor:
                                 pct = pct.replace(tzinfo=None)
                             if utc_now_naive() >= pct:
                                 reason_mid = "planned_close_time_expired"
-                    if not reason_mid and liq is not None and float(liq) > 0:
-                        liq_f = float(liq)
-                        if side.upper() == "LONG" and price <= liq_f:
-                            reason_mid = "liquidation"
-                        elif side.upper() == "SHORT" and price >= liq_f:
-                            reason_mid = "liquidation"
                     if reason_mid:
                         logger.warning(
                             f"[SL/TP Monitor] 中线平仓 pid={pid} {symbol} {side} "
@@ -488,10 +526,14 @@ class PositionSLTPMonitor:
             price = self._get_live_price(ws, symbol)
             if price is None or price <= 0:
                 continue
-            if _skip_hard_stop(src, side) and _hit_liquidation(side, price, pos.get("liquidation_price")):
+            if _should_force_liquidate(
+                side, price, entry_price, pos.get("leverage"), pos.get("liquidation_price"),
+            ):
+                roi = _position_roi(side, price, entry_price, pos.get("leverage"))
                 logger.warning(
                     f"[SL/TP Monitor] 强平 pid={pid} {symbol} {side} "
-                    f"reason=liquidation price={price:.6f}"
+                    f"reason=liquidation price={price:.6f} "
+                    f"roi={(roi or 0) * 100:.2f}%"
                 )
                 self._cooldown[pid] = now + self._cooldown_seconds
                 self._peak_pnl_map.pop(pid, None)
@@ -1121,8 +1163,9 @@ class PositionSLTPMonitor:
             "  AND (source LIKE %s) "
             "  AND ("
             "    stop_loss_price IS NOT NULL OR take_profit_price IS NOT NULL "
-            "    OR source IN ('gemini_midline_long','gemini_midline_short',"
-            "                  'deepseek_midline_long','deepseek_midline_short')"
+            "    OR source LIKE 'brain%%' OR source LIKE '%%midline%%' "
+            "    OR source LIKE 'deepseek%%' OR source LIKE 'gpt%%' "
+            "    OR source LIKE 'gemini%%'"
             "  ) "
             "LIMIT 500"
         )

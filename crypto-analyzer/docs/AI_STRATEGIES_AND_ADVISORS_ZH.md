@@ -10,7 +10,7 @@
 
 ## 1. 总览
 
-**主路径（v4.5.64）**：REQ-BRAIN — 牛市**只做 A1 1h 回调多**（离近 24 根新高 1.20%–8.00% 即挂限价；回踩后抬起仍开）；禁止自动开空；盈利 1h 冲高回落；亏损无硬 SL，扛到强平。  
+**主路径（v4.5.66）**：REQ-BRAIN — 牛市**只做 A1 1h 回调多**（离近 24 根新高 1.20%–8.00% 确认后市价；回踩后抬起仍开）；禁止自动开空；盈利 1h 冲高回落；亏损无硬 SL，保证金亏满 **100%** 强平。  
 **并行**：破位 `midline_*` 同样只开 A1 1h 回调多；DeepSeek 对照期只开多。  
 **旧路径**：Gemini 交易已下线；DeepSeek 探索/预测自动开仓 **对照期暂保留**（与 BRAIN 并行对比；INV-BRAIN-07 暂缓）。
 
@@ -28,7 +28,7 @@ crypto-scheduler (每 15min)
   └─ DeepSeek 持仓顾问 tick（每仓 15min；浮盈转亏 urgent；**含** midline_* 与 brain_*）
 
 crypto-app-main
-  └─ position_sl_tp_monitor (1s)：自动多单无硬 SL；盈利 1h 冲高回落 / trail；亏损扛到强平
+  └─ position_sl_tp_monitor (1s)：自动多单无硬 SL；盈利 1h 冲高回落 / trail；亏损扛到强平（保证金亏满 100% 强制平；无 SL/TP 的仓也扫描）
 
 任意模拟开仓
   └─ paper_open_gate.gate_simulated_open()

@@ -251,6 +251,17 @@ def test_brain_skip_open_advisor() -> None:
         _fail("monitor 缺少 _maybe_structure_swing_close")
     else:
         _ok("monitor structure swing exit (no 4-6h force close)")
+    if "_should_force_liquidate" not in mon or "_MARGIN_WIPE_ROI" not in mon:
+        _fail("monitor 未在保证金亏满 100% 时强平")
+    elif "source LIKE 'brain%%'" not in mon:
+        _fail("monitor 查询仍漏掉无 SL/TP 的自动仓")
+    else:
+        from app.services.position_sl_tp_monitor import _should_force_liquidate
+        assert _should_force_liquidate("LONG", 76.2, 100.0, 5, None)
+        assert not _should_force_liquidate("LONG", 81.0, 100.0, 5, None)
+        assert _should_force_liquidate("LONG", 80.0, 100.0, 5, 80.5)
+        assert not _should_force_liquidate("LONG", 90.0, 100.0, 5, 80.5)
+        _ok("monitor liquidates at 100% margin even without SL")
     if "check_brain_trail_lock" in (ROOT / "app/services/brain_trail_exit.py").read_text(encoding="utf-8"):
         _ok("brain_trail_exit 模块仍保留（结构出场后 BRAIN 不再调用）")
     adv = (ROOT / "app/services/deepseek_position_advisor.py").read_text(encoding="utf-8")
