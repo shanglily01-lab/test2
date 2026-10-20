@@ -1011,8 +1011,9 @@ def _big4_blocks(big4_signal: str, side: str) -> bool:
 
 
 def _has_open_position(conn, symbol: str) -> bool:
-    from app.services.trading_gates import has_open_futures_position
-    return has_open_futures_position(conn, EXPLORE_SOURCE, symbol, EXPLORE_ACCOUNT_ID)
+    from app.services.trading_gates import symbol_open_cap_reached
+    reached, _ = symbol_open_cap_reached(conn, symbol, EXPLORE_ACCOUNT_ID)
+    return reached
 
 
 # ============================================================

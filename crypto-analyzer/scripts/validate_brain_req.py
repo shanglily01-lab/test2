@@ -1854,6 +1854,24 @@ def test_h1_deep_pullback_tags_a1_without_15m_shallow() -> None:
     _ok("1h 1.20-8% pullback opens A1 without a shallow 15m tag")
 
 
+def test_symbol_open_cap() -> None:
+    from app.services.trading_gates import (
+        MAX_OPEN_ORDERS_PER_SYMBOL,
+        slots_reach_open_cap,
+    )
+    if MAX_OPEN_ORDERS_PER_SYMBOL != 3:
+        _fail(f"每交易对开仓上限应为 3，实际 {MAX_OPEN_ORDERS_PER_SYMBOL}")
+    elif slots_reach_open_cap(2) or not slots_reach_open_cap(3):
+        _fail("开仓槽：2 单应放行，3 单应拒绝")
+    else:
+        _ok("同一交易对最多 3 单")
+    gate = (ROOT / "app/services/paper_open_gate.py").read_text(encoding="utf-8")
+    if "has_open_futures_position_same_side" not in gate:
+        _fail("开仓闸门未走交易对开仓槽")
+    else:
+        _ok("开仓闸门走交易对开仓槽")
+
+
 def main() -> int:
     print("=== validate_brain_req ===\n")
     test_imports_and_config()
@@ -1885,6 +1903,7 @@ def main() -> int:
     test_entry_timing_c3_midline_follow()
     test_rsi_entry_timing()
     test_structure_swing_exit()
+    test_symbol_open_cap()
     test_h1_bull_pullback()
     test_h1_deep_pullback_tags_a1_without_15m_shallow()
     print()

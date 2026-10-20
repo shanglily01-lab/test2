@@ -1,7 +1,7 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.66
-**日期**: 2026-10-15
+**版本**: v4.5.70
+**日期**: 2026-10-20
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **合约自选（REQ-WATCHLIST §7.5）**：侧栏「我的自选」；用户加交易对；价格优先浏览器直连币安合约 **WS**，3s 无 tick 则服务端 DataHub/WS **1s 补价**；手动限价/市价（限价可撤）；成交走实时 ticker；实盘随 `live_trading_enabled`，**仅 L0**；成交瞬间同步，打开不回填。  
 > **操作对照（给人看）**：超级大脑 vs 破位策略说明见 [`docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`](./BRAIN_AND_BREAKOUT_OPERATOR_ZH.md)（冲突仍以本文为准）。  
@@ -273,7 +273,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 | 步骤 | 说明 |
 |------|------|
 | 1 | 策略 worker / smart_trader 调用 `create_paper_limit_order`（或 engine 限价模式）。**`allow_long=0` 不得挂/开多；`allow_short=0` 不得挂/开空**（BRAIN/破位跳过开仓顾问也必须过此闸门） |
-| 2 | PENDING 限价 → executor 每 5s 用 **ticker 最新价**触价；认领为 FILLING 后、写 FILLED 前重跑方向开关、评级/锁定、亏损冷却、同向去重、仓位上限、source+side 绩效闸门；拒绝则 EXPIRED。用户关掉方向开关时立刻取消该向未成交限价 |
+| 2 | PENDING 限价 → executor 每 5s 用 **ticker 最新价**触价；认领为 FILLING 后、写 FILLED 前重跑方向开关、评级/锁定、亏损冷却、**同一交易对开仓槽（持仓 + 未成交开仓限价合计最多 3）**、仓位上限、source+side 绩效闸门；拒绝则 EXPIRED。用户关掉方向开关时立刻取消该向未成交限价 |
 | 3 | 成交瞬间 §4.2 决定 live_sync_status |
 | 4 | PaperLimitSync 在 5 分钟窗内同步实盘（若 NULL） |
 
@@ -352,7 +352,8 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 
 - **做多 C3（中线破位跟风 · v4.5.56）**：**须 Big4 LONG**，否则只打标（`big4_not_long_blocks_C3`）。放量突破阻力/1h 突破当根 **市价跟进**（`breakout_ready`）。假突破收回 → `invalidated`；已延伸 ≥1.40%（相对 **冲高前高点**，近 8 根 15m 不计入，避免突破位跟着涨）→ `missed_break`。**`rsi_extreme_high` + `near_7d_high`**，或极端 RSI 叠加滞涨（`stall_at_high` / `top_callback` / `long_upper_wick`）→ `chase_blowoff`（禁止市价追）。BRAIN 的 C3 **仍等回踩**（INV-11 限价），且同样须 Big4 LONG。
 - **做多 A1（v4.5.65）**：1h 对近 **24 根趋势新高**回踩（`1h_trend_high_pullback`：新高不低于前 24 根，高点不在最近 2 根，离高 **1.20%–8.00%**，未破前段低点）即打 A1，**确认后市价开仓**。15m RSI 仍超买未拐头或仍在下跌的超卖区则等。**回踩后从回踩低点抬起仍是 A1**，不得记 `bounce_not_pullback`。无趋势新高的死猫跳、跌破前低、离高不足 1.20%（贴高）或深于 8% 不开。15m 的 0.80%–3.50% 浅回踩只作辅证，不能单独否决，也不能替代这条 1h 带。
-- **同币止盈冷却（v4.5.25）**：同 symbol、同方向，近 **4h** 已平仓且 `realized_pnl>0` → 破位/BRAIN 均不得再开（`recent_tp_cooldown`）。去重仍拦当前持仓；止盈后再追由本条拦。
+- **同交易对开仓槽（v4.5.70）**：同一 symbol 的 OPEN 持仓 + PENDING 开仓限价合计最多 **3**（不区分方向、不区分 source）。未满可以再开；满了拒绝（`symbol_open_cap`）。正在成交的 FILLING 单不计入，避免第 3 单自己把自己挡住。
+- **同币止盈冷却（v4.5.25）**：同 symbol、同方向，近 **4h** 已平仓且 `realized_pnl>0` → 破位/BRAIN 均不得再开（`recent_tp_cooldown`）。止盈后再追由本条拦。
 - **做空 B3/C4（顶部回调点）**：先贴着近 8 根高点，再等 **第一根离开高点的拒绝/回调**：离高 **≥0.28%** 且收在 K 线下半（上影或阴线）。`15m_failed_retest` **只打标**，第二次顶上不得直接空；须同样离高拒绝才 `exhaustion_ready`。仍放量/收在上沿**破前顶** → `wait_stall`；只在高点横盘尚未真正离开 → `at_high_wait_first_callback`；已离高 ≥1.35% → `missed_high`。中线确认后 **挂限价空**；BRAIN 仍限价挂在高点上方 0.20–0.55%。**已有真实拒绝时允许 4h 仍偏多**；仅 `stall_at_high` / 停新高 / 贴 7 日高 / 单独不过前高 **不得**当衰竭。
 - **做空 C1（破位跟风）**：刚跌破支撑且放量/急跌 → **当根跟风**（`breakdown_ready`），不等回抽。中线 **市价**；BRAIN 仍限价贴近破位价。假跌破收回 → `invalidated`。
 - **做空 B2（弱反抽失败）**：禁止与 C1 共用「第一根阴跌即跟」。须先出现反抽（近 8 根高低差 ≥0.50%），反抽无力（缩量/上影/EMA 拒绝），再跌破反抽起点或 EMA 才 `breakdown_ready`。纯追跌无反抽 → `need_bounce_before_fail`（那是 C1 的活）。中线确认后 **市价**；BRAIN 仍限价。
@@ -448,7 +449,7 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
   → A/B Playbook 须 confirmed，否则 unconfirmed
   → playbook ∈ TRADEABLE（A1/A2 + B2/B3 + C1/C3/C4）
   → C3 且 Big4 非 LONG → `big4_not_long_blocks_C3`（打标不停）
-  → 币种闸门 / 冷却 / 同向持仓去重（gate_simulated_open → brain_skip_advisor）
+  → 币种闸门 / 冷却 / 同交易对最多 3 单（gate_simulated_open → brain_skip_advisor）
   → **入场点** `entry_timing`：
        LONG/A1/C3 冲高 → `wait_pullback`；B3/C4 高位滞涨 → `exhaustion_ready` 挂在高点上方；
        C1 刚破位 → `breakdown_ready` 跟风；B2 须反抽失败才跟；A2 弱反抽拒绝 → `pullback_ready`
@@ -1106,6 +1107,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-10-20 | **v4.5.70** | **同一交易对最多 3 单**：OPEN 持仓 + PENDING 开仓限价合计达到 3 才拒绝，不再一单一挡。BRAIN / 破位 / DeepSeek / 自选共用此槽。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7 已同步 |
 | 2026-10-20 | **v4.5.69** | **TG 文案去掉「模拟盘」**：开仓标题改为 `【开仓】`，平仓标题改为 `【平仓】`。仍只发模拟成交，实盘开平仓不发。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §2.1 已同步 |
 | 2026-10-20 | **v4.5.68** | **移动止盈后移**：BRAIN/破位 trail 须价格涨满 **5%**，5 倍下保证金至少 **25%** 才启动。未到线不锁利。1h 冲高回落仍另算。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.3.16.3 已同步 |
 | 2026-10-15 | **v4.5.67** | **情绪与利润分层**：阶段单与整轮分开，按币做账。换仓时平仓是独立一步，平完才允许开新仓；同向换层也先平。不自动开平仓、不进实盘。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.8 已同步 |

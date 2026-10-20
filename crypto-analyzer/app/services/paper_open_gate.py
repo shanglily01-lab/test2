@@ -142,7 +142,7 @@ def gate_simulated_open(
         )
         if duplicate:
             logger.info(
-                f"[开仓闸门] 拒绝重复开仓 {symbol} {side} source={source}: {duplicate_reason}"
+                f"[开仓闸门] 该交易对开仓槽已满 {symbol} {side} source={source}: {duplicate_reason}"
             )
             return False, duplicate_reason
     except Exception as e:

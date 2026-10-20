@@ -422,17 +422,14 @@ def run_midline_round(
                     )
                     continue
 
-                if _has_any_midline_position_on_symbol(conn, symbol):
+                from app.services.trading_gates import symbol_open_cap_reached
+                capped, cap_reason = symbol_open_cap_reached(
+                    conn, symbol, account_id=MIDLINE_ACCOUNT_ID,
+                )
+                if capped:
                     _insert_verdict(
                         conn, run_id, source, symbol, side, score, detail,
-                        "skipped_dedup", None, "同symbol已有中线持仓",
-                    )
-                    continue
-
-                if _has_open_or_pending(conn, symbol, side, source):
-                    _insert_verdict(
-                        conn, run_id, source, symbol, side, score, detail,
-                        "skipped_dedup", None, "已有同向持仓或挂单",
+                        "skipped_dedup", None, (cap_reason or "该交易对已有3单")[:255],
                     )
                     continue
 

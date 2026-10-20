@@ -1248,13 +1248,12 @@ def auto_open_from_signals(request: AutoOpenRequest):
                 results['details'].append(detail)
                 continue
 
-            # 检查是否已有持仓
+            # 同一交易对最多 3 笔未平仓
             existing = _get_engine().get_open_positions(account_id)
-            has_position = any(p['symbol'] == symbol for p in existing)
-
-            if has_position:
+            open_on_symbol = sum(1 for p in existing if p['symbol'] == symbol)
+            if open_on_symbol >= 3:
                 detail['status'] = 'skipped'
-                detail['reason'] = 'Position already exists'
+                detail['reason'] = 'Symbol already has 3 open positions'
                 results['skipped'] += 1
                 results['details'].append(detail)
                 continue

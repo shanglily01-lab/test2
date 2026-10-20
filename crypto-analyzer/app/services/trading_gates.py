@@ -34,6 +34,9 @@ LIVE_SYNC_SOURCES: frozenset[str] = frozenset({
     # 现货镜像 spot_* 走独立开关 spot_live_enabled — REQUIREMENTS §7.4
 })
 
+# 同一交易对：OPEN 持仓 + PENDING 开仓限价合计上限（不区分方向）
+MAX_OPEN_ORDERS_PER_SYMBOL = 3
+
 SYMBOL_STOP_LOSS_COOLDOWN_HOURS = 4
 SYMBOL_LOSS_COOLDOWN_HOURS = 12
 SYMBOL_LOSS_COOLDOWN_LIMIT_USD = 100.0
@@ -923,61 +926,83 @@ def has_open_futures_position(conn, source: str, symbol: str, account_id: Option
         return False
 
 
+def slots_reach_open_cap(count: int, cap: int = MAX_OPEN_ORDERS_PER_SYMBOL) -> bool:
+    """已占用槽位达到上限则拒绝再开。"""
+    return int(count) >= int(cap)
+
+
+def count_symbol_open_slots(
+    conn,
+    symbol: str,
+    account_id: Optional[int] = None,
+) -> int:
+    """同一交易对已占用开仓槽：OPEN 持仓 + PENDING 开仓限价（不区分方向）。"""
+    clean = futures_symbol_clean(symbol)
+    cur = conn.cursor()
+    try:
+        pos_sql = (
+            f"SELECT COUNT(*) AS n FROM futures_positions "
+            f"WHERE LOWER(status)='open' "
+            f"AND {sql_rating_symbol_clean('symbol')} = %s"
+        )
+        pos_params: list = [clean]
+        if account_id is not None:
+            pos_sql += " AND account_id=%s"
+            pos_params.append(account_id)
+        cur.execute(pos_sql, pos_params)
+        pos_row = cur.fetchone()
+        pos_n = pos_row.get("n") if isinstance(pos_row, dict) else (pos_row[0] if pos_row else 0)
+
+        pending_sql = (
+            f"SELECT COUNT(*) AS n FROM futures_orders "
+            f"WHERE status='PENDING' AND order_type='LIMIT' "
+            f"AND side IN ('OPEN_LONG','OPEN_SHORT') "
+            f"AND {sql_rating_symbol_clean('symbol')} = %s"
+        )
+        pending_params: list = [clean]
+        if account_id is not None:
+            pending_sql += " AND account_id=%s"
+            pending_params.append(account_id)
+        cur.execute(pending_sql, pending_params)
+        pend_row = cur.fetchone()
+        pend_n = pend_row.get("n") if isinstance(pend_row, dict) else (pend_row[0] if pend_row else 0)
+        return int(pos_n or 0) + int(pend_n or 0)
+    finally:
+        cur.close()
+
+
+def symbol_open_cap_reached(
+    conn,
+    symbol: str,
+    account_id: Optional[int] = None,
+) -> tuple[bool, str]:
+    """同一交易对开仓槽达到 MAX_OPEN_ORDERS_PER_SYMBOL 则拒绝。"""
+    clean = futures_symbol_clean(symbol)
+    try:
+        n = count_symbol_open_slots(conn, symbol, account_id=account_id)
+    except Exception as e:
+        logger.warning(f"[trading_gates] 交易对开仓槽计数失败 {symbol}: {e}")
+        raise
+    cap = int(MAX_OPEN_ORDERS_PER_SYMBOL)
+    if slots_reach_open_cap(n, cap):
+        return True, f"symbol_open_cap:{clean} {n}/{cap}"
+    return False, ""
+
+
 def has_open_futures_position_same_side(
     conn,
     symbol: str,
     side: str,
     account_id: Optional[int] = None,
 ) -> tuple[bool, str]:
-    """跨 source 检查同币同方向是否已有 OPEN 仓或 PENDING 开仓单。"""
-    clean = futures_symbol_clean(symbol)
+    """同一交易对开仓槽已满（持仓+未成交开仓限价，最多 3，不区分方向）。
+
+    保留原函数名：开仓闸门与成交闸门都走这里。`side` 仅校验方向合法。
+    """
     s = (side or "").strip().upper()
     if s not in ("LONG", "SHORT"):
         return False, ""
-    order_side = "OPEN_LONG" if s == "LONG" else "OPEN_SHORT"
-    try:
-        cur = conn.cursor()
-        sql = (
-            f"SELECT id, source FROM futures_positions "
-            f"WHERE LOWER(status)='open' "
-            f"AND position_side=%s "
-            f"AND {sql_rating_symbol_clean('symbol')} = %s"
-        )
-        params: list = [s, clean]
-        if account_id is not None:
-            sql += " AND account_id=%s"
-            params.append(account_id)
-        sql += " ORDER BY id DESC LIMIT 1"
-        cur.execute(sql, params)
-        row = cur.fetchone()
-        if row is not None:
-            pid = row.get("id") if isinstance(row, dict) else row[0]
-            src = row.get("source") if isinstance(row, dict) else row[1]
-            cur.close()
-            return True, f"same_symbol_side_open:{clean} {s} existing_position_id={pid} source={src}"
-
-        pending_sql = (
-            f"SELECT id, order_source FROM futures_orders "
-            f"WHERE status='PENDING' AND order_type='LIMIT' "
-            f"AND side=%s "
-            f"AND {sql_rating_symbol_clean('symbol')} = %s"
-        )
-        pending_params: list = [order_side, clean]
-        if account_id is not None:
-            pending_sql += " AND account_id=%s"
-            pending_params.append(account_id)
-        pending_sql += " ORDER BY id DESC LIMIT 1"
-        cur.execute(pending_sql, pending_params)
-        row = cur.fetchone()
-        cur.close()
-        if row is not None:
-            oid = row.get("id") if isinstance(row, dict) else row[0]
-            src = row.get("order_source") if isinstance(row, dict) else row[1]
-            return True, f"same_symbol_side_pending:{clean} {s} existing_order_id={oid} source={src}"
-        return False, ""
-    except Exception as e:
-        logger.warning(f"[trading_gates] 同币同方向去重检查失败 {symbol} {side}: {e}")
-        raise
+    return symbol_open_cap_reached(conn, symbol, account_id=account_id)
 
 
 def sql_exclude_forbidden_symbols_filter(column: str = "symbol") -> str:
