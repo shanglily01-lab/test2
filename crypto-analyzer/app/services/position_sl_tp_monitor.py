@@ -675,6 +675,7 @@ class PositionSLTPMonitor:
                     struct_br = self._maybe_structure_swing_close(
                         pos, symbol, side, price, new_peak, age_s,
                         pnl_pct=pnl_pct, market_bias=market_bias,
+                        leverage=pos.get("leverage"),
                     )
                     if struct_br:
                         self._sync_peak_to_db(pid, new_peak * 100)
@@ -1059,6 +1060,7 @@ class PositionSLTPMonitor:
         age_s: float,
         pnl_pct: float = 0.0,
         market_bias: str = "FLAT",
+        leverage: Optional[float] = None,
     ) -> Optional[str]:
         from app.services.structure_swing_exit import (
             check_structure_swing_exit,
@@ -1079,6 +1081,7 @@ class PositionSLTPMonitor:
                 pnl_pct=pnl_pct,
                 market_bias=market_bias,
                 rows_1h=rows_1h,
+                leverage=leverage,
             )
         except Exception as e:
             logger.debug(f"[structure swing] {symbol} 判定失败: {e}")

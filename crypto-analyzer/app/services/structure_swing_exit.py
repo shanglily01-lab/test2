@@ -14,10 +14,13 @@ from app.services.entry_timing import compute_structure_exit
 STRUCTURE_MIN_AGE_MIN = 20
 # Do not bank 0.4–0.8% crumbs (≈20U on 1000U×5x) while losers still run to SL.
 STRUCTURE_MIN_PEAK_PCT = 1.80
-STRUCTURE_TRAIL_ACTIVATE_PCT = 1.80
+# 移动止盈：价格至少走出 5 个点才启动。5 倍杠杆下这是保证金 25%。
+STRUCTURE_TRAIL_ACTIVATE_PCT = 5.00
+STRUCTURE_TRAIL_ACTIVATE_ROI_PCT = 25.0
+STRUCTURE_TRAIL_LEVERAGE = 5.0
 STRUCTURE_TRAIL_PULLBACK_PCT = 0.55
 STRUCTURE_TRAIL_MIN_KEEP_PCT = 0.80
-STRUCTURE_BULL_TRAIL_ACTIVATE_PCT = 2.50
+STRUCTURE_BULL_TRAIL_ACTIVATE_PCT = 5.00
 STRUCTURE_BULL_TRAIL_PULLBACK_PCT = 0.80
 STRUCTURE_BULL_TRAIL_MIN_KEEP_PCT = 1.20
 STRUCTURE_GIVEBACK_PEAK_PCT = 2.20
@@ -96,18 +99,37 @@ def is_follow_playbook(playbook_row: Optional[Dict[str, Any]] = None, raw: str =
     return playbook_name(playbook_row, raw) in STRUCTURE_FOLLOW_PLAYBOOKS
 
 
-def _trail_profile(side: str, market_bias: Optional[str]) -> Tuple[float, float, float]:
+def trail_activate_price_pct(leverage: Optional[float] = None) -> float:
+    """移动止盈启动所需的价格涨幅（小数）。
+
+    价格至少 5%，并且按杠杆换成保证金收益率后至少 25%。
+    5 倍时两条是同一个门槛：5% × 5 = 25%。
+    """
+    try:
+        lev = float(leverage if leverage is not None else STRUCTURE_TRAIL_LEVERAGE)
+    except (TypeError, ValueError):
+        lev = STRUCTURE_TRAIL_LEVERAGE
+    if lev <= 0:
+        lev = STRUCTURE_TRAIL_LEVERAGE
+    by_roi = STRUCTURE_TRAIL_ACTIVATE_ROI_PCT / lev
+    return max(STRUCTURE_TRAIL_ACTIVATE_PCT, by_roi) / 100.0
+
+
+def _trail_profile(
+    side: str,
+    market_bias: Optional[str],
+    leverage: Optional[float] = None,
+) -> Tuple[float, float, float]:
     if str(side or "").upper() == "LONG" and str(market_bias or "").upper() == "LONG":
-        return (
-            STRUCTURE_BULL_TRAIL_ACTIVATE_PCT / 100.0,
-            STRUCTURE_BULL_TRAIL_PULLBACK_PCT / 100.0,
-            STRUCTURE_BULL_TRAIL_MIN_KEEP_PCT / 100.0,
-        )
-    return (
-        STRUCTURE_TRAIL_ACTIVATE_PCT / 100.0,
-        STRUCTURE_TRAIL_PULLBACK_PCT / 100.0,
-        STRUCTURE_TRAIL_MIN_KEEP_PCT / 100.0,
-    )
+        act = STRUCTURE_BULL_TRAIL_ACTIVATE_PCT
+        pull = STRUCTURE_BULL_TRAIL_PULLBACK_PCT
+        keep = STRUCTURE_BULL_TRAIL_MIN_KEEP_PCT
+    else:
+        act = STRUCTURE_TRAIL_ACTIVATE_PCT
+        pull = STRUCTURE_TRAIL_PULLBACK_PCT
+        keep = STRUCTURE_TRAIL_MIN_KEEP_PCT
+    act = max(act, trail_activate_price_pct(leverage) * 100.0)
+    return act / 100.0, pull / 100.0, keep / 100.0
 
 
 def check_structure_profit_lock(
@@ -119,6 +141,7 @@ def check_structure_profit_lock(
     market_bias: Optional[str] = None,
     structure_status: str = "",
     playbook_row: Optional[Dict[str, Any]] = None,
+    leverage: Optional[float] = None,
 ) -> Optional[str]:
     """Lock a winner that never printed a clean opposite structure point.
 
@@ -145,7 +168,7 @@ def check_structure_profit_lock(
             f"structure_profit_to_loss:"
             f"peak={peak * 100:.2f}%,now={pnl * 100:.2f}%"
         )
-    act, pull, keep = _trail_profile(side, market_bias)
+    act, pull, keep = _trail_profile(side, market_bias, leverage)
     if peak >= act:
         drawdown = peak - pnl
         if drawdown >= pull:
@@ -173,6 +196,7 @@ def check_structure_swing_exit(
     pnl_pct: Optional[float] = None,
     market_bias: Optional[str] = None,
     rows_1h: Optional[List[Dict[str, Any]]] = None,
+    leverage: Optional[float] = None,
 ) -> Optional[str]:
     """Close a long at a 1h pump-giveback, or a short at a suitable low.
 
@@ -205,6 +229,7 @@ def check_structure_swing_exit(
         market_bias=market_bias,
         structure_status=status,
         playbook_row=playbook_row,
+        leverage=leverage,
     )
 
 

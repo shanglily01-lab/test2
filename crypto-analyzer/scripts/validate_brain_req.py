@@ -1677,8 +1677,12 @@ def test_structure_swing_exit() -> None:
     assert check_structure_profit_lock(-0.002, 0.012, 1800) is None
     gave = check_structure_profit_lock(-0.002, 0.025, 1800)
     assert gave and gave.startswith("structure_profit_to_loss"), gave
-    trail = check_structure_profit_lock(0.016, 0.026, 1800)
+    early_trail = check_structure_profit_lock(0.016, 0.026, 1800, leverage=5)
+    assert early_trail is None, early_trail
+    trail = check_structure_profit_lock(0.042, 0.052, 1800, leverage=5)
     assert trail and trail.startswith("structure_trail_"), trail
+    low_lev = check_structure_profit_lock(0.042, 0.052, 1800, leverage=2)
+    assert low_lev is None, low_lev
     assert check_structure_profit_lock(0.006, 0.006, 5 * 3600) is None
     stale = check_structure_profit_lock(0.016, 0.016, 5 * 3600)
     assert stale and stale.startswith("structure_stale_take"), stale

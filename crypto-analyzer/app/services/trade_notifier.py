@@ -149,7 +149,7 @@ class TradeNotifier:
         position_value = quantity * entry_price
 
         message = f"""
-{direction_emoji} <b>【模拟盘开仓】{symbol}</b>
+{direction_emoji} <b>【开仓】{symbol}</b>
 
 📌 方向: {direction_text}
 💰 数量: {quantity:.6f}
@@ -256,7 +256,7 @@ class TradeNotifier:
         else:
             reason_text = (reason or 'manual')[:120]
 
-        trade_type = "模拟盘平仓"
+        trade_type = "平仓"
 
         message = f"""
 {pnl_emoji} <b>【{trade_type}】{symbol}</b>
