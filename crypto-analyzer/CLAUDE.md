@@ -75,7 +75,7 @@
 | Gemini 探索 | —（已下线） | — |
 | DeepSeek 探索/预测 | 每2h + 10min/5min（**对照期保留**；INV-BRAIN-07 暂缓） | `deepseek_*_enabled` |
 | **REQ-BRAIN** `brain_swing` | 每 **15s** 一批 **5** 币轮询市值前 300 | `brain_swing_enabled`；启动 +75s；A1 回调确认后市价 |
-| **中线 v2** `midline_long/short` | 每 **15min** 轮询；多单回调买 / B3/C4 冲高卖；结构点 + 错过/回吐锁利 |
+| **中线 v2** `midline_long/short` | 每 **15min** 轮询；多单回调买 / B3/C4 冲高卖；结构点 + 中段回撤锁利 + 错过/回吐兜底 |
 | **现货镜像** `spot_*` | 合约模拟成交瞬间跟单；`crypto-app-main` 每 1min 查 TP/SL；`spot_trading_enabled` |
 | **持仓顾问** DeepSeek | 每 **15min** tick（每仓 15min；浮盈转亏 urgent；BRAIN/中线 **suggest-only**） |
 | 市场情绪分析 | **已下线**（原 Gemini 情绪） |
@@ -165,7 +165,7 @@
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
 - 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**A1 回调确认后市价**（`BRAIN_USE_MARKET_ENTRY=True`）
 - **入场（v4.5.65）**：牛市**只开 A1 1h 回调多**；禁止自动开空与 C3 追涨。A1 认 `1h_trend_high_pullback`（离近 24 根新高 1.20%–8.00%，不破前低）后**市价**。回踩后抬起仍开。15m 浅回踩不能单独否决。不写 `allow_short`。自选除外。
-- **退出（v4.5.66）**：盈利 **1h 冲高回落** + 锁利；亏损 **无硬 SL / 无美元熔断**，保证金亏满 **100%** 强平
+- **退出（v4.5.71）**：盈利 **1h 冲高回落** + 锁利；峰值 ≥2.20% 且未到 5% 时，从峰值回撤 **1.20** 个点即锁。亏损 **无硬 SL / 无美元熔断**，保证金亏满 **100%** 强平
 - **执行隔离（v4.5.13）**：BRAIN 排除 SmartExit；限价成交前重跑安全闸门；模拟平仓事务行锁幂等
 - 插针仍统计（影>实体×2）；A1 不再因此改限价。**INV-BRAIN-06**：回调确认后市价
 - **对照期**：DeepSeek 探索/预测自动开仓**暂保留**并行对比；结束后再执行 INV-BRAIN-07
@@ -183,7 +183,7 @@
 - **量化扫描**，非 LLM；标的 **市值前 100**（`config.yaml` 序）；**15min** 轮询；旧四路 `*_midline_*` 停并移除
 - kill switch：`midline_long_enabled` / `midline_short_enabled`（系统配置「策略与模式」+ 破位策略页）
 - 入场：做多 A1 回调确认后**市价**；**不开空、不开 C3**。持仓不限时；5x / 1000U；亏损无硬 SL，扛到强平
-- **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）；**1h 冲高回落出场 + 错过/回吐锁利**；**排除** SmartExit
+- **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）；**1h 冲高回落出场 + 中段回撤 1.20 个点锁利 + 错过/回吐兜底**；**排除** SmartExit
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
 - Web：原 Gemini 探索页整页改破位策略/机会分析
 - 权威：`docs/REQUIREMENTS_LOGIC_ZH.md` §7.2；操作对照：`docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`

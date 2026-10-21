@@ -1679,6 +1679,13 @@ def test_structure_swing_exit() -> None:
     assert gave and gave.startswith("structure_profit_to_loss"), gave
     early_trail = check_structure_profit_lock(0.016, 0.026, 1800, leverage=5)
     assert early_trail is None, early_trail
+    # GRVT 2026-10-21: a 3.01% peak must lock after a 1.20pp giveback.
+    kept = check_structure_profit_lock(0.0180, 0.0301, 2 * 3600 + 8 * 60, leverage=5)
+    assert kept and kept.startswith("structure_profit_keep"), kept
+    still_on = check_structure_profit_lock(0.0200, 0.0301, 1800, leverage=5)
+    assert still_on is None, still_on
+    bled = check_structure_profit_lock(0.008, 0.0301, 1800, leverage=5)
+    assert bled and bled.startswith("structure_profit_keep"), bled
     trail = check_structure_profit_lock(0.042, 0.052, 1800, leverage=5)
     assert trail and trail.startswith("structure_trail_"), trail
     low_lev = check_structure_profit_lock(0.042, 0.052, 1800, leverage=2)

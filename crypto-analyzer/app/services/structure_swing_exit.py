@@ -25,6 +25,9 @@ STRUCTURE_BULL_TRAIL_PULLBACK_PCT = 0.80
 STRUCTURE_BULL_TRAIL_MIN_KEEP_PCT = 1.20
 STRUCTURE_GIVEBACK_PEAK_PCT = 2.20
 STRUCTURE_GIVEBACK_NOW_PCT = 0.15
+# 2.20%–5%：从峰值回撤 1.20 个点就锁。禁止 3% 赢家一路吐到 +0.15%。
+# 已走出 5% 的仍走 trail，不走这条。
+STRUCTURE_KEEP_PULLBACK_PCT = 1.20
 STRUCTURE_STALE_AGE_H = 4.0
 STRUCTURE_STALE_PNL_PCT = 1.50
 # C1/C3/B2 enter at the break; "already off the low/high" is normal noise.
@@ -160,6 +163,26 @@ def check_structure_profit_lock(
         and not follow
     ):
         return f"structure_missed_take:{status}:now={pnl * 100:.2f}%"
+    act, pull, keep = _trail_profile(side, market_bias, leverage)
+    drawdown = peak - pnl
+    if peak >= act and drawdown >= pull:
+        tag = "below_keep" if pnl < keep else "lock"
+        return (
+            f"structure_trail_{tag}:"
+            f"peak={peak * 100:.2f}%,dd={drawdown * 100:.2f}%,now={pnl * 100:.2f}%"
+        )
+    # Qualified winner that has not reached the 5% trail: lock after a
+    # 1.20pp giveback while price is still above the flat emergency floor.
+    if (
+        peak < act
+        and peak >= STRUCTURE_GIVEBACK_PEAK_PCT / 100.0
+        and drawdown + 1e-12 >= STRUCTURE_KEEP_PULLBACK_PCT / 100.0
+        and pnl > STRUCTURE_GIVEBACK_NOW_PCT / 100.0
+    ):
+        return (
+            f"structure_profit_keep:"
+            f"peak={peak * 100:.2f}%,dd={drawdown * 100:.2f}%,now={pnl * 100:.2f}%"
+        )
     if (
         peak >= STRUCTURE_GIVEBACK_PEAK_PCT / 100.0
         and pnl <= STRUCTURE_GIVEBACK_NOW_PCT / 100.0
@@ -168,15 +191,6 @@ def check_structure_profit_lock(
             f"structure_profit_to_loss:"
             f"peak={peak * 100:.2f}%,now={pnl * 100:.2f}%"
         )
-    act, pull, keep = _trail_profile(side, market_bias, leverage)
-    if peak >= act:
-        drawdown = peak - pnl
-        if drawdown >= pull:
-            tag = "below_keep" if pnl < keep else "lock"
-            return (
-                f"structure_trail_{tag}:"
-                f"peak={peak * 100:.2f}%,dd={drawdown * 100:.2f}%,now={pnl * 100:.2f}%"
-            )
     if (
         age >= STRUCTURE_STALE_AGE_H * 3600
         and pnl >= STRUCTURE_STALE_PNL_PCT / 100.0

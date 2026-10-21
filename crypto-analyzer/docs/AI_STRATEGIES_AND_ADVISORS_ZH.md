@@ -270,7 +270,7 @@ A/B 对照仍可用 `*_en()` 与 `scripts/benchmark_*_prompt_lang.py`。
 
 ### 6.5.1 职责
 
-`config.yaml` 交易对 + Playbook 破位/趋势扫描，**不调用 LLM 开仓**。**跳过**开仓顾问；**纳入** DeepSeek 持仓顾问（**sell 只建议不执行**）。Big4 已 LONG 时禁止 A2/B2/B3，允许 C4 假突空与 C1 破位跟风。**C3 须 Big4 LONG**。做多 A1 须 **15m 回调进区**；**C3/C1 破位当根市价跟风**；B2 须反抽失败后再市价跟；B3/C4 摸准顶部第一回调后挂空。A2 须离低点并拒绝才挂空。**15m RSI 只管何时开、不管方向**（超买未拐头 / 超卖插刀则等）。退出：硬 SL **2.0–3.0%** + **−120U** + **结构高/低点**（须 ≥1.80% 才因错过高低点平；回吐须峰值 ≥2.20%；C1/C3/B2 不因 missed 平）；取消 4h/6h 亏单到期；**不参与** SmartExit。
+`config.yaml` 交易对 + Playbook 破位/趋势扫描，**不调用 LLM 开仓**。**跳过**开仓顾问；**纳入** DeepSeek 持仓顾问（**sell 只建议不执行**）。Big4 已 LONG 时禁止 A2/B2/B3，允许 C4 假突空与 C1 破位跟风。**C3 须 Big4 LONG**。做多 A1 须 **15m 回调进区**；**C3/C1 破位当根市价跟风**；B2 须反抽失败后再市价跟；B3/C4 摸准顶部第一回调后挂空。A2 须离低点并拒绝才挂空。**15m RSI 只管何时开、不管方向**（超买未拐头 / 超卖插刀则等）。退出：硬 SL **2.0–3.0%** + **−120U** + **结构高/低点**（须 ≥1.80% 才因错过高低点平；峰值 ≥2.20% 且未到 5% 时回撤 1.20 个点锁利，≤+0.15% 才兜底；C1/C3/B2 不因 missed 平）；取消 4h/6h 亏单到期；**不参与** SmartExit。
 
 旧四路 `gemini/deepseek_midline_*`：**停调度并移除**。
 
@@ -382,7 +382,7 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 - **BRAIN / 破位**：`HOLD_ADVISOR_STRUCTURE_JSON_SYSTEM_ZH` — **不限持仓时长**；做多等到合适高点、做空等到合适低点；禁止因小时数/小幅回吐/RSI 超买 sell；注入当前 `compute_structure_exit` 状态；`_temper_structure_swing_hold` 在结构点未到时把 sell 打回 hold  
 - **Big4**：仅辅证，**不得单独触发 sell**；**Big4 偏多时多单禁止仅凭 RSI 超买/高位背离 sell**（`_temper_bull_overbought_sell`）  
 - **亏损分档**（仅探索/预测）：轻微 >-5%、中度 >-12%、严重 ≤-15%；深亏 `hold` 经 `_temper_losing_hold` 统计复核。结构仓跳过 `_temper_profitable_hold` / `_temper_losing_hold`  
-- **程序化锁利**：探索/预测 `ai-trail-tp`（peak≥3% 回撤≥1%）；**BRAIN/破位**结构点优先，错过高低点或浮盈回吐锁利（取消 4–6h 亏单到期）
+- **程序化锁利**：探索/预测 `ai-trail-tp`（peak≥3% 回撤≥1%）；**BRAIN/破位**结构点优先。峰值 ≥2.20% 且未到 5% 时，回撤 1.20 个点走 `structure_profit_keep`；落到 ≤+0.15% 才走回吐兜底（取消 4–6h 亏单到期）
 - **DeepSeek soft-sl**：grace 45min；no_follow 须≥60min 且价格亏≈2.2%（匹配 15m×4h 开仓，避免早期闷杀）— **仅探索/预测**
 - **BRAIN/中线**：顾问 **suggest-only**（`advisor_suggest_only`）；sell 不调用 `_close_live_position`
 
