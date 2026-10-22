@@ -1757,14 +1757,43 @@ def test_h1_bull_pullback() -> None:
     last["low_price"] = px - 0.25
     last["close_price"] = px + 0.02
     rows[-1] = last
-    ready = compute_pullback_entry(
+    falling = compute_pullback_entry(
         "LONG", "A1", rows[-24:],
         playbook_row={"signals": ["volume_shrink_pullback", "1h_trend_high_pullback", "rsi_15m_turn_up"]},
         ref_price=rows[-1]["close_price"],
         rows_1h=rows,
     )
+    assert falling.ready is False, falling
+    assert falling.reason == "1h_slope_still_falling", falling
+
+    flat = [dict(r) for r in rows]
+    bottom = flat[-1]["close_price"]
+    for bar in flat[-9:]:
+        bar["close_price"] = bottom
+        bar["open_price"] = bottom
+    ready = compute_pullback_entry(
+        "LONG", "A1", flat[-24:],
+        playbook_row={"signals": ["volume_shrink_pullback", "1h_trend_high_pullback", "rsi_15m_turn_up"]},
+        ref_price=bottom,
+        rows_1h=flat,
+    )
     assert ready.ready is True, ready
     assert ready.status == "pullback_ready", ready
+
+    still_3h = [dict(r) for r in flat]
+    for bar in still_3h[-9:-4]:
+        bar["close_price"] = bottom * 0.985
+        bar["open_price"] = bottom * 0.985
+    still_3h[-4]["close_price"] = bottom * 1.012
+    still_3h[-4]["open_price"] = bottom * 1.012
+    late_fall = compute_pullback_entry(
+        "LONG", "A1", still_3h[-24:],
+        playbook_row={"signals": ["volume_shrink_pullback", "1h_trend_high_pullback", "rsi_15m_turn_up"]},
+        ref_price=bottom,
+        rows_1h=still_3h,
+    )
+    assert late_fall.ready is False, late_fall
+    assert late_fall.reason == "1h_slope_still_falling", late_fall
 
     hug = [dict(r) for r in rows]
     hug[-1] = {
@@ -1796,7 +1825,47 @@ def test_h1_bull_pullback() -> None:
     )
     assert sell.ready is True, sell
     assert sell.reason == "h1_pump_giveback", sell
-    _ok("1h A1 pullback + 1h pump-giveback TP")
+
+    chase_rows = []
+    px = 100.0
+    for i in range(56):
+        px += 0.15
+        chase_rows.append({
+            "open_price": px - 0.05,
+            "high_price": px + 0.08,
+            "low_price": px - 0.10,
+            "close_price": px,
+            "volume": 800,
+        })
+    peak_px = px
+    for _ in range(4):
+        px -= 0.55
+        chase_rows.append({
+            "open_price": px + 0.20,
+            "high_price": px + 0.25,
+            "low_price": px - 0.08,
+            "close_price": px,
+            "volume": 500,
+        })
+    dip = px
+    for _ in range(3):
+        px += (peak_px - dip) * 0.28
+        chase_rows.append({
+            "open_price": px - 0.15,
+            "high_price": px + 0.10,
+            "low_price": px - 0.20,
+            "close_price": px,
+            "volume": 900,
+        })
+    chased = compute_pullback_entry(
+        "LONG", "A1", chase_rows[-24:],
+        playbook_row={"signals": ["1h_trend_high_pullback", "ema_bull_align"]},
+        ref_price=chase_rows[-1]["close_price"],
+        rows_1h=chase_rows,
+    )
+    assert chased.ready is False, chased
+    assert chased.reason == "1h_chase_not_pullback", chased
+    _ok("1h A1 pullback + 1h pump-giveback TP; rally back to the high is not a pullback")
 
 
 def test_h1_deep_pullback_tags_a1_without_15m_shallow() -> None:
@@ -1818,6 +1887,16 @@ def test_h1_deep_pullback_tags_a1_without_15m_shallow() -> None:
     px = rows_1h[-1]["close_price"]
     off = (peak - px) / peak * 100.0
     assert 1.20 <= off <= 8.00, off
+    still_falling = compute_pullback_entry(
+        "LONG", "A1", rows_1h[-24:],
+        playbook_row={"signals": ["1h_trend_high_pullback"]},
+        ref_price=px,
+        rows_1h=rows_1h,
+    )
+    assert still_falling.ready is False, still_falling
+    assert still_falling.reason == "1h_slope_still_falling", still_falling
+    for _ in range(9):
+        rows_1h.append(_bar(px, vol=400, hi=0.08, lo=0.06))
 
     rows_15m = []
     q = px * 1.055

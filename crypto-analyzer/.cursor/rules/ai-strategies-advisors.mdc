@@ -16,11 +16,11 @@ alwaysApply: true
 | GPT | `gpt_explore` | `gpt_predict` | `gpt_reversal` | `gpt_*` | — |
 | （独立量化） | — | — | — | — | `midline_long` / `midline_short` |
 
-## 中线 v2（量化，非 LLM）【§7.2 待落地】
+## 中线 v2（量化，非 LLM）【§7.0 / §7.2 已落地】
 
 - 扫描: `midline_swing_scanner` · `entry_timing` · worker · **15min** 轮询
 - **跳过**开仓顾问；**纳入**持仓顾问（**sell 只建议不执行**）· **结构点出场 + 中段回撤 1.20 个点锁利 + 错过/回吐兜底**（取消 4–6h 亏单到期）· **排除** SmartExit
-- **v4.5.66 牛市只做多**：自动策略禁止开空；只开 **A1 1h 回调多**（C3 追涨不开）。认 `1h_trend_high_pullback`（离近 24 根新高 1.20%–8.00%，不破前低）后**市价**；回踩后抬起仍开，不得记 `bounce_not_pullback`。15m 0.80%–3.50% 不能单独否决。盈利 **1h 冲高回落** 止盈；亏损 **无硬 SL**，保证金亏满 **100%** 强平（无 SL/TP 的仓也必须被 monitor 扫到）。不写 `allow_short`。自选除外。
+- **v4.5.74 牛市只做多**：自动策略禁止开空；只开 **A1 1h 回调多**（C3 追涨不开）。离开最近 1h 波段高点 1.20%–8.00% 后，最近 8 根斜率在 0%–5% 才市价。最近 3 根低于 -0.50% 还在跌，不买。盈利 **1h 冲高回落** 止盈；亏损 **无硬 SL**，保证金亏满 **100%** 强平（无 SL/TP 的仓也必须被 monitor 扫到）。不写 `allow_short`。自选除外。
 - 持仓不限时；5x · 1000U
 - 标的：`config.yaml` **市值前 100**；**进** `LIVE_SYNC_SOURCES`（`live_trading_enabled` + 仅 L0；打开不回填）
 - Web：原 Gemini 探索页 → 破位策略/机会分析；DeepSeek 探索去中线 Tab

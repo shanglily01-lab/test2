@@ -538,8 +538,8 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         )
     )
 
-    # A1：1h 趋势新高回踩 1.20%–8% 直接成立。15m 浅回踩仍可打标，但不能替代这条。
-    # 回踩后从回踩低点抬起仍是 A1。无趋势新高的死猫跳 / 跌破前低不是 A1。
+    # A1：1h 回踩离开波段高点，且最近 8 根斜率在 0%～5% 才成立。
+    # 最近 3 根低于 -0.50% 还在跌。15m 浅回踩只能辅证。
     h1_pull = bool(feats.get("trend_high_pullback_1h")) and feats.get("h1_side") != "SHORT"
     legacy_a1 = bool(
         feats.get("trend_high_pullback")

@@ -1,6 +1,8 @@
 """Entry timing — buy the pullback, sell the high, follow a fresh break.
 
-LONG A1: buy the 1h trend-high pullback (1.20%–8% under the high). A lift off that low is still A1.
+LONG A1: buy a 1h pullback 1.20%–8% under the trend high only after the
+1h slope flattens. A negative slope is still falling. Near 0, or a rise
+under 5%, is the bottom. A steeper rise is a chase.
 LONG C3: BRAIN waits for the pullback; midline follows a fresh breakout (market).
 SHORT exhaustion (B3/C4): sell the first callback off a tagged high — do not wait for EMA.
 SHORT follow (C1): follow a fresh breakdown immediately — do not wait for a bounce.
@@ -66,6 +68,16 @@ H1_PULLBACK_MIN_OFF_PCT = 1.20
 H1_PULLBACK_MAX_OFF_PCT = 8.00
 H1_STILL_AT_HIGH_PCT = 1.20
 H1_TREND_BARS = 24
+# Price that has already retraced this much of the 1h dip is chasing the high.
+H1_PULLBACK_MAX_RECOVERY = 0.35
+H1_CHASE_GREEN_RECOVERY = 0.20
+# Bottom of the pullback: 8 one-hour closes, slope in [0, 5).
+# The last 3 hours still veto a hard drop (below -0.50%).
+H1_SLOPE_BARS = 8
+H1_SLOPE_MIN_PCT = 0.0
+H1_SLOPE_MAX_PCT = 5.0
+H1_SLOPE_FALL_BARS = 3
+H1_SLOPE_FALL_MIN_PCT = -0.50
 H1_PUMP_GIVEBACK_MIN_OFF_PCT = 0.40
 H1_PUMP_GIVEBACK_MAX_OFF_PCT = 4.00
 
@@ -795,31 +807,134 @@ def _follow_breakout_long_entry(
     )
 
 
-def _is_trend_high_pullback_1h(rows_1h: List[Dict[str, Any]], sig: set) -> bool:
-    if "1h_trend_high_pullback" in sig:
-        return True
+def _h1_pullback_view(rows_1h: List[Dict[str, Any]], price: float) -> Dict[str, Any]:
+    """Read the pullback off the 1h candles, not off a 15m bounce.
+
+    The 24-bar high must be a trend high versus the prior 24 bars, and it cannot
+    be printing on the latest two candles. The pullback is measured from the
+    latest 1h swing high under that trend high. After it, 1h closes must fall
+    1.20%–8% without breaking the prior swing low. The price we would pay has
+    to still sit in that band.
+    Buy when the last 8 one-hour closes slope from 0% up to just under 5%.
+    A last-3-hour slope below -0.50% is still falling, so wait. Climbing
+    back through 20% of the dip, or leaving the pullback low two bars behind
+    after buying back 35%, is a chase.
+    """
     n = H1_TREND_BARS
+    wait = {
+        "kind": "wait",
+        "reason": "insufficient_1h",
+        "trend_hi": 0.0,
+        "pull_lo": 0.0,
+        "off": 0.0,
+        "recovery": 0.0,
+    }
     if len(rows_1h) < n * 2:
-        return False
+        return wait
     h = _highs(rows_1h)
     lows = _lows(rows_1h)
     c = _closes(rows_1h)
     recent_hi = max(h[-n:])
     older_hi = max(h[-n * 2:-n])
-    close = c[-1]
-    if close <= 0 or recent_hi <= 0 or recent_hi < older_hi * 0.998:
-        return False
-    hi_pos = max(i for i, x in enumerate(h[-n:]) if abs(x - recent_hi) <= 1e-12)
+    if recent_hi <= 0 or recent_hi < older_hi * 0.998:
+        return {**wait, "reason": "not_1h_trend_high_pullback", "trend_hi": recent_hi}
+    tol = max(recent_hi * 1e-8, 1e-12)
+    window_h = h[-n:]
+    abs_pos = max(i for i, x in enumerate(window_h) if abs(x - recent_hi) <= tol)
+    if abs_pos >= n - 2:
+        return {**wait, "reason": "still_at_1h_high_wait_pullback", "trend_hi": recent_hi}
+    peaks = []
+    for i in range(1, n - 2):
+        left = window_h[i] + tol >= window_h[i - 1]
+        right = window_h[i] + tol >= window_h[i + 1]
+        near_trend_high = window_h[i] >= recent_hi * 0.980
+        if left and right and near_trend_high:
+            peaks.append(i)
+    hi_pos = peaks[-1] if peaks else abs_pos
     if hi_pos >= n - 2:
-        return False
-    off = (recent_hi - close) / recent_hi * 100.0
-    if off < H1_PULLBACK_MIN_OFF_PCT or off > H1_PULLBACK_MAX_OFF_PCT:
-        return False
-    prior_lo = min(lows[-n * 2:-n // 2])
-    pull_lo = min(lows[-n:])
+        return {**wait, "reason": "still_at_1h_high_wait_pullback", "trend_hi": recent_hi}
+    peak_hi = window_h[hi_pos]
+    post_l = lows[-n:][hi_pos + 1:]
+    post_c = c[-n:][hi_pos + 1:]
+    if len(post_c) < 2:
+        return {**wait, "reason": "still_at_1h_high_wait_pullback", "trend_hi": recent_hi}
+    pull_lo = min(post_l)
+    close_off = (peak_hi - min(post_c)) / peak_hi * 100.0
+    if close_off < H1_PULLBACK_MIN_OFF_PCT:
+        return {
+            **wait,
+            "reason": "1h_close_not_pulled_back",
+            "trend_hi": peak_hi,
+            "pull_lo": pull_lo,
+        }
+    prior_end = -n + hi_pos
+    prior_lows = lows[-n * 2:prior_end] if prior_end < 0 else lows[-n * 2:-n]
+    prior_lo = min(prior_lows) if prior_lows else 0.0
     if prior_lo > 0 and pull_lo < prior_lo * 0.998:
+        return {
+            **wait,
+            "reason": "broke_prior_low",
+            "trend_hi": peak_hi,
+            "pull_lo": pull_lo,
+        }
+    px = price if price and price > 0 else c[-1]
+    off = (peak_hi - px) / peak_hi * 100.0 if peak_hi > 0 else 0.0
+    drop = peak_hi - pull_lo
+    recovery = (px - pull_lo) / drop if drop > 0 else 1.0
+    base = {
+        "trend_hi": peak_hi,
+        "pull_lo": pull_lo,
+        "off": off,
+        "recovery": recovery,
+    }
+    pull_close = min(post_c)
+    pull_close_pos = max(
+        i for i, x in enumerate(post_c) if abs(x - pull_close) <= max(pull_close * 1e-8, 1e-12)
+    )
+    bars_since_low = len(post_c) - 1 - pull_close_pos
+    rising = post_c[-1] > post_c[-2]
+    # The 1h low is already two bars behind and price has bought back the dip.
+    left_the_low = bars_since_low >= 2 and recovery > H1_PULLBACK_MAX_RECOVERY
+    # Latest 1h candle is climbing back toward the high.
+    rising_chase = rising and recovery > H1_CHASE_GREEN_RECOVERY
+    # Fill is above the 1h close and already back up the dip (intrabar chase).
+    paying_the_bounce = px > c[-1] * 1.002 and recovery > H1_PULLBACK_MAX_RECOVERY
+    if left_the_low or rising_chase or paying_the_bounce:
+        return {**base, "kind": "chase", "reason": "1h_chase_not_pullback"}
+    if off < H1_PULLBACK_MIN_OFF_PCT:
+        return {**base, "kind": "wait", "reason": "still_at_1h_high_wait_pullback"}
+    if off > H1_PULLBACK_MAX_OFF_PCT:
+        return {**base, "kind": "wait", "reason": "not_1h_trend_high_pullback"}
+    slope = _h1_slope_pct(c, px, H1_SLOPE_BARS)
+    fall = _h1_slope_pct(c, px, H1_SLOPE_FALL_BARS)
+    base["slope"] = slope
+    base["slope_3h"] = fall
+    if slope is None or fall is None:
+        return {**base, "kind": "wait", "reason": "insufficient_1h"}
+    if slope < H1_SLOPE_MIN_PCT or fall < H1_SLOPE_FALL_MIN_PCT:
+        return {**base, "kind": "wait", "reason": "1h_slope_still_falling"}
+    if slope >= H1_SLOPE_MAX_PCT:
+        return {**base, "kind": "wait", "reason": "1h_slope_too_steep"}
+    return {**base, "kind": "pullback", "reason": "h1_pullback_zone"}
+
+
+def _h1_slope_pct(closes: List[float], price: float, bars: int = H1_SLOPE_BARS) -> Optional[float]:
+    """Percent change of the last `bars` one-hour steps, ending at `price`."""
+    if len(closes) < bars + 1:
+        return None
+    start = closes[-(bars + 1)]
+    end = price if price > 0 else closes[-1]
+    if start <= 0:
+        return None
+    return (end - start) / start * 100.0
+
+
+def _is_trend_high_pullback_1h(rows_1h: List[Dict[str, Any]], sig: set) -> bool:
+    del sig
+    if not rows_1h:
         return False
-    return True
+    view = _h1_pullback_view(rows_1h, _closes(rows_1h)[-1])
+    return view.get("kind") == "pullback"
 
 
 def is_h1_trend_high_pullback(
@@ -860,10 +975,10 @@ def _a1_h1_pullback_entry(
     ref_price: Optional[float] = None,
     rows_15m: Optional[List[Dict[str, Any]]] = None,
 ) -> EntryTiming:
-    """A1 long: rest a limit inside the 1.20%–8% band under the 1h trend high.
+    """A1 long: buy the 1h pullback after its slope has flattened.
 
-    A lift off the pullback low is still this entry. Do not call it a dead-cat bounce.
-    15m RSI only times the order; it does not redefine the pullback.
+    Still-falling 1h slope waits. Near 0, or a rise under 5%, is the bottom.
+    15m RSI only times the order.
     """
     if len(rows_1h) < H1_TREND_BARS * 2:
         return _empty("no_zone", "insufficient_1h")
@@ -896,18 +1011,21 @@ def _a1_h1_pullback_entry(
         ema20=ema20,
         break_level=trend_hi,
     )
-    if _is_bounce_from_low_1h(rows_1h, sig):
+    view = _h1_pullback_view(rows_1h, price)
+    if view.get("kind") == "chase":
         return EntryTiming(
-            ready=False, status="wait_pullback", reason="bounce_not_pullback",
-            extended=False, bounce_ok=False, **common,
+            ready=False, status="wait_pullback", reason="1h_chase_not_pullback",
+            extended=True, bounce_ok=False, **common,
         )
-    in_band = H1_PULLBACK_MIN_OFF_PCT <= off <= H1_PULLBACK_MAX_OFF_PCT
-    if not _is_trend_high_pullback_1h(rows_1h, sig) or not in_band:
-        reason = (
-            "still_at_1h_high_wait_pullback"
-            if 0.0 <= off < H1_PULLBACK_MIN_OFF_PCT
-            else "not_1h_trend_high_pullback"
-        )
+    if view.get("kind") != "pullback":
+        if _is_bounce_from_low_1h(rows_1h, sig):
+            return EntryTiming(
+                ready=False, status="wait_pullback", reason="bounce_not_pullback",
+                extended=False, bounce_ok=False, **common,
+            )
+        reason = str(view.get("reason") or "not_1h_trend_high_pullback")
+        if reason == "insufficient_1h" and 0.0 <= off < H1_PULLBACK_MIN_OFF_PCT:
+            reason = "still_at_1h_high_wait_pullback"
         return EntryTiming(
             ready=False, status="wait_pullback", reason=reason,
             extended=off < H1_PULLBACK_MIN_OFF_PCT, bounce_ok=False, **common,

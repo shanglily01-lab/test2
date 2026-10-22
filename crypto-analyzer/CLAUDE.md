@@ -164,7 +164,7 @@
 - `brain_swing`：市值前 **300** 模拟扫描；Playbook(A/B/C/D) 全量打标落库 `brain_opportunities`
 - **实盘**：随 `live_trading_enabled` / `live_close_enabled`；**仅 L0 白名单**；成交瞬间同步，不回填历史仓
 - 分向胜率 ≥55% 且比反方向高≥5pp；**跳过开仓顾问**；**A1 回调确认后市价**（`BRAIN_USE_MARKET_ENTRY=True`）
-- **入场（v4.5.65）**：牛市**只开 A1 1h 回调多**；禁止自动开空与 C3 追涨。A1 认 `1h_trend_high_pullback`（离近 24 根新高 1.20%–8.00%，不破前低）后**市价**。回踩后抬起仍开。15m 浅回踩不能单独否决。不写 `allow_short`。自选除外。
+- **入场（v4.5.74）**：牛市**只开 A1 1h 回调多**；禁止自动开空与 C3 追涨。回踩看 **1h K 线**：离开最近波段高点 1.20%–8.00% 后，最近 8 根斜率在 0%–5% 才市价。最近 3 根低于 -0.50% 还在跌，不买。不写 `allow_short`。自选除外。
 - **退出（v4.5.71）**：盈利 **1h 冲高回落** + 锁利；峰值 ≥2.20% 且未到 5% 时，从峰值回撤 **1.20** 个点即锁。亏损 **无硬 SL / 无美元熔断**，保证金亏满 **100%** 强平
 - **执行隔离（v4.5.13）**：BRAIN 排除 SmartExit；限价成交前重跑安全闸门；模拟平仓事务行锁幂等
 - 插针仍统计（影>实体×2）；A1 不再因此改限价。**INV-BRAIN-06**：回调确认后市价
@@ -254,7 +254,7 @@ TOP50 盈利前50交易对由 `update_top_performers.py` 单独维护 `top_perfo
 - **开仓总开关**: `system_settings.live_trading_enabled` (1=开启)
 - **PaperSync FAILED**：原因前置写入 `futures_orders.notes`；市价数量按 `MARKET_LOT_SIZE.maxQty` 截顶；本进程无 `engine_manager`（scheduler 也会成交模拟限价）须留 NULL，不得 FAILED；FAILED 不回填
 - **平仓总开关**: `system_settings.live_close_enabled` (1=开启；模拟平仓时同步交易所；持仓顾问 sell 亦受此规则)
-- **北京时间实盘开仓时段**: 仅 10:00-16:00、22:00-次日04:00 允许同步/直接开实盘；服务器 UTC 对应 02:00-08:00、14:00-20:00。模拟开仓不受该时段限制。
+- **北京时间实盘开仓时段**: 已解除，全天允许。模拟开仓同样不受时段限制。
 - **废弃设置**（不再参与开仓判断）：`live_top50_required`、`live_whitelist_enabled` — 开仓仅认 **L0 白名单**
 - **黑名单限制**: L1 禁止实盘；**L2/L3 与 `rating_locked` 手动锁定禁止模拟+实盘**（`check_symbol_trading_forbidden`，阈值 `rating_level>=2`）
 - 各闸门由 `trading_gates.check_live_open_allowed` / `should_sync_live_for_source` 统一读取，**不在 config.yaml**
