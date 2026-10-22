@@ -1,8 +1,9 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.75
+**版本**: v4.5.76
 **日期**: 2026-10-22
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
+> **Telegram（§2.1）**：所有 TG 文案英文。  
 > **现行开单（§7.0）**：自动策略只开 **A1 的 1h 回调多**，确认后**市价**。A2/B/C 与空单只打标，不下单。DeepSeek 对照期另开多单（限价 + 开仓顾问）。自选按用户方向，可多可空。历史版本叠在 §16，不要用文首旧条覆盖 §7.0。  
 > **操作对照**：[`docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md`](./BRAIN_AND_BREAKOUT_OPERATOR_ZH.md)。冲突以本文为准。  
 > **现货镜像（§7.4）**：跟 **BRAIN A1** + **DeepSeek LONG**；仅 **L0**；500U；`spot_live_enabled` 成交瞬间同步，打开不回填。  
@@ -74,16 +75,18 @@
 
 **日志**：scheduler → `logs/scheduler_YYYY-MM-DD.log`；main → `logs/main_YYYY-MM-DD.log` + `logs/main_systemd.log`（非 journalctl 主输出）。
 
-### 2.1 Telegram 交易通知（v4.5.59）
+### 2.1 Telegram 交易通知（v4.5.76）
 
-**实现**: `trade_notifier.py` · `futures_trading_engine.py`（`_notify_paper_open` / 平仓 `notify_close_position`）
+**实现**: `trade_notifier.py` · `futures_trading_engine.py`（`_notify_paper_open` / 平仓 `notify_close_position`）· `daily_review_report.py` · `binance_news_monitor.py`
+
+**语言**：所有发到 Telegram 的文案一律 **英文**（标题、字段、策略名、持仓时长、复盘、公告、IP 封禁告警）。Web/DB 中文展示名不受影响。
 
 | 事件 | 是否发 TG |
 |------|-----------|
-| 模拟盘合约**开仓成交**（市价开仓或限价成交） | **发** `【开仓】`（文案不写「模拟盘」） |
-| 模拟盘合约**平仓** | **发** `【平仓】`（文案不写「模拟盘」） |
+| 模拟盘合约**开仓成交**（市价开仓或限价成交） | **发** `[OPEN]` |
+| 模拟盘合约**平仓** | **发** `[CLOSE]` |
 | 实盘开仓 / 平仓 / 挂撤单 / 交易所 SL·TP 设置 | **不发** |
-| 熔断、IP 封禁、每日复盘、币安公告 | **仍发**（运维告警，不是交易单） |
+| 熔断、IP 封禁、每日复盘、币安公告 | **仍发**（英文运维告警） |
 
 限价挂单未成交不发。`config.yaml` `notify_events` 用 `paper_open` / `paper_close`（旧 `live_open` / `live_close` 仅作别名，仍只触发模拟盘）。
 
@@ -1103,6 +1106,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-10-22 | **v4.5.76** | **Telegram 全文英文**：开/平仓、策略名、持仓时长、每日复盘、币安公告、IP 封禁告警一律英文。Web 中文展示不变。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §2.1 已同步 |
 | 2026-10-22 | **v4.5.75** | **开单口径收成 §7.0**：自动策略只开 A1 的 1h 回调多，确认后市价。A2/B/C 与空单只打标。破位扫描改为 15 分钟，不再写 4h 三层 AND 或 C1/C3 下单。DeepSeek 对照期仍限价开多。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.0/§7.2/§7.3.4 已同步 |
 | 2026-10-22 | **v4.5.74** | **A1 买点改 8 小时斜率**：最近 8 根 1h 收盘斜率在 0%–5% 才买。最近 3 根低于 -0.50% 仍是在跌（`1h_slope_still_falling`），不买。卖出仍用 1h 冲高回落，不用斜率由正变 0。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.2/§7.3 已同步 |
 | 2026-10-22 | **v4.5.73** | **A1 底部看 1h 斜率**：最近 3 根 1h 收盘斜率接近 0，或小于 5%，才买。斜率为负是还在跌（`1h_slope_still_falling`），不买。斜率 ≥5% 记 `1h_slope_too_steep`。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.2/§7.3 已同步 |

@@ -1,14 +1,13 @@
 """
-模拟盘交易通知服务
-通过 Telegram 发送模拟盘开仓、平仓；实盘开平仓不发。
-熔断 / IP 封禁等运维告警仍走 send_message。
+Paper trade notifications via Telegram.
+Live open/close are not sent. Ops alerts still use send_message.
+All Telegram copy is English.
 """
 
 import requests
 import logging
 from typing import Dict, Optional
 from datetime import datetime
-from decimal import Decimal
 
 from app.utils.position_time import utc_now_naive
 
@@ -16,106 +15,86 @@ logger = logging.getLogger(__name__)
 
 
 def format_hold_time_from_open(open_time) -> Optional[str]:
-    """从 open_time 生成持仓时长文案。"""
+    """Build an English hold-duration string from open_time."""
     if not open_time:
         return None
     try:
         if isinstance(open_time, str):
-            open_time = datetime.strptime(open_time[:19], '%Y-%m-%d %H:%M:%S')
+            open_time = datetime.strptime(open_time[:19], "%Y-%m-%d %H:%M:%S")
         hold_duration = utc_now_naive() - open_time
         hours, remainder = divmod(hold_duration.total_seconds(), 3600)
         minutes = int(remainder // 60)
         if hours >= 24:
             days = int(hours // 24)
             hours = int(hours % 24)
-            return f"{days}天{hours}小时{minutes}分钟"
+            return f"{days}d {hours}h {minutes}m"
         if hours >= 1:
-            return f"{int(hours)}小时{minutes}分钟"
-        return f"{minutes}分钟"
+            return f"{int(hours)}h {minutes}m"
+        return f"{minutes}m"
     except Exception:
         return None
 
 
 class TradeNotifier:
-    """实盘交易通知器"""
+    """Telegram notifier for paper trades and ops alerts."""
 
     def __init__(self, config: Dict):
-        """
-        初始化通知器
-
-        Args:
-            config: 配置字典，需要包含 notifications.telegram 配置
-        """
         self.config = config
-        notifications_config = config.get('notifications', {})
-        telegram_config = notifications_config.get('telegram', {})
+        notifications_config = config.get("notifications", {})
+        telegram_config = notifications_config.get("telegram", {})
 
-        self.enabled = telegram_config.get('enabled', False)
-        self.bot_token = telegram_config.get('bot_token', '')
-        self.chat_id = str(telegram_config.get('chat_id', ''))  # 确保是字符串
+        self.enabled = telegram_config.get("enabled", False)
+        self.bot_token = telegram_config.get("bot_token", "")
+        self.chat_id = str(telegram_config.get("chat_id", ""))
 
-        # 交易通知只覆盖模拟盘开/平；live_* 仅为旧配置别名
-        notify_events = telegram_config.get('notify_events', [])
+        notify_events = telegram_config.get("notify_events", [])
         self.notify_open = (
-            'paper_open' in notify_events
-            or 'live_open' in notify_events
-            or 'all' in notify_events
+            "paper_open" in notify_events
+            or "live_open" in notify_events
+            or "all" in notify_events
         )
         self.notify_close = (
-            'paper_close' in notify_events
-            or 'live_close' in notify_events
-            or 'all' in notify_events
+            "paper_close" in notify_events
+            or "live_close" in notify_events
+            or "all" in notify_events
         )
-        self.notify_stop_loss = 'stop_loss' in notify_events or 'all' in notify_events
-        self.notify_take_profit = 'take_profit' in notify_events or 'all' in notify_events
+        self.notify_stop_loss = "stop_loss" in notify_events or "all" in notify_events
+        self.notify_take_profit = "take_profit" in notify_events or "all" in notify_events
 
         if self.enabled and self.bot_token and self.chat_id:
-            logger.info(f"✅ 模拟盘交易Telegram通知已启用 (chat_id: {self.chat_id[:6]}...)")
+            logger.info(f"Paper-trade Telegram enabled (chat_id: {self.chat_id[:6]}...)")
         else:
-            logger.info("ℹ️ 模拟盘交易Telegram通知未启用")
+            logger.info("Paper-trade Telegram disabled")
 
-    def _send_telegram(self, message: str, parse_mode: str = 'HTML') -> bool:
-        """
-        发送Telegram消息
-
-        Args:
-            message: 消息内容
-            parse_mode: 解析模式 (HTML/Markdown)
-
-        Returns:
-            是否发送成功
-        """
+    def _send_telegram(self, message: str, parse_mode: str = "HTML") -> bool:
         if not self.enabled:
-            logger.debug(f"Telegram通知未启用 (enabled={self.enabled})")
+            logger.debug(f"Telegram disabled (enabled={self.enabled})")
             return False
         if not self.bot_token:
-            logger.warning(f"Telegram bot_token未配置")
+            logger.warning("Telegram bot_token not configured")
             return False
         if not self.chat_id:
-            logger.warning(f"Telegram chat_id未配置")
+            logger.warning("Telegram chat_id not configured")
             return False
 
         try:
             url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
             data = {
-                'chat_id': self.chat_id,
-                'text': message,
-                'parse_mode': parse_mode
+                "chat_id": self.chat_id,
+                "text": message,
+                "parse_mode": parse_mode,
             }
-
             response = requests.post(url, data=data, timeout=10)
             response.raise_for_status()
-
-            logger.debug(f"Telegram通知发送成功")
+            logger.debug("Telegram message sent")
             return True
-
         except Exception as e:
-            logger.warning(f"Telegram通知发送失败: {e}")
+            logger.warning(f"Telegram send failed: {e}")
             return False
 
     def send_message(self, text: str) -> bool:
-        """发送纯文本消息（熔断/告警等场景直接调用）"""
-        return self._send_telegram(text, parse_mode='HTML')
+        """Send a free-form message (circuit breakers / ops alerts)."""
+        return self._send_telegram(text, parse_mode="HTML")
 
     def notify_open_position(
         self,
@@ -128,57 +107,55 @@ class TradeNotifier:
         take_profit_price: Optional[float] = None,
         margin: Optional[float] = None,
         strategy_name: Optional[str] = None,
-        order_type: str = 'MARKET',
+        order_type: str = "MARKET",
         is_paper: bool = False,
     ):
-        """通知模拟盘开仓。实盘开仓不发 Telegram。"""
+        """Notify a paper open. Live opens are not sent."""
         if not is_paper:
-            logger.debug(f"实盘开仓不发送 Telegram: {symbol}")
+            logger.debug(f"Skip Telegram for live open: {symbol}")
             return
         if not self.notify_open:
-            logger.debug(f"开仓通知已禁用 (notify_open={self.notify_open})")
+            logger.debug(f"Open notify disabled (notify_open={self.notify_open})")
             return
 
-        logger.info(f"准备发送模拟盘开仓通知: {symbol} {direction} {quantity} @ {entry_price}")
+        logger.info(f"Sending paper open notify: {symbol} {direction} {quantity} @ {entry_price}")
         direction_lower = direction.lower()
-        direction_emoji = "🟢" if direction_lower == 'long' else "🔴"
-        direction_text = "做多" if direction_lower == 'long' else "做空"
-        order_type_text = "市价" if order_type == 'MARKET' else "限价"
-
-        # 计算持仓价值
+        direction_emoji = "🟢" if direction_lower == "long" else "🔴"
+        direction_text = "LONG" if direction_lower == "long" else "SHORT"
+        order_type_text = "Market" if order_type == "MARKET" else "Limit"
         position_value = quantity * entry_price
 
         message = f"""
-{direction_emoji} <b>【开仓】{symbol}</b>
+{direction_emoji} <b>[OPEN] {symbol}</b>
 
-📌 方向: {direction_text}
-💰 数量: {quantity:.6f}
-💵 价格: ${entry_price:,.4f} ({order_type_text})
-📊 杠杆: {leverage}x
-💎 持仓价值: ${position_value:,.2f}
+📌 Side: {direction_text}
+💰 Qty: {quantity:.6f}
+💵 Price: ${entry_price:,.4f} ({order_type_text})
+📊 Leverage: {leverage}x
+💎 Notional: ${position_value:,.2f}
 """
 
         if margin:
-            message += f"🔐 保证金: ${margin:,.2f}\n"
+            message += f"🔐 Margin: ${margin:,.2f}\n"
 
         if stop_loss_price:
             sl_pct = abs((stop_loss_price - entry_price) / entry_price * 100)
-            message += f"🛡️ 止损: ${stop_loss_price:,.4f} ({sl_pct:.2f}%)\n"
+            message += f"🛡️ Stop loss: ${stop_loss_price:,.4f} ({sl_pct:.2f}%)\n"
 
         if take_profit_price:
             tp_pct = abs((take_profit_price - entry_price) / entry_price * 100)
-            message += f"🎯 止盈: ${take_profit_price:,.4f} ({tp_pct:.2f}%)\n"
+            message += f"🎯 Take profit: ${take_profit_price:,.4f} ({tp_pct:.2f}%)\n"
 
         if strategy_name:
-            message += f"📋 策略: {strategy_name}\n"
+            message += f"📋 Strategy: {strategy_name}\n"
 
         message += f"\n⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
         result = self._send_telegram(message)
         if result:
-            logger.info(f"✅ 模拟盘开仓通知已发送: {symbol}")
+            logger.info(f"Paper open notify sent: {symbol}")
         else:
-            logger.warning(f"⚠️ 模拟盘开仓通知发送失败: {symbol}")
+            logger.warning(f"Paper open notify failed: {symbol}")
 
     def notify_close_position(
         self,
@@ -189,100 +166,81 @@ class TradeNotifier:
         exit_price: float,
         pnl: float,
         pnl_pct: float,
-        reason: str = 'manual',
+        reason: str = "manual",
         hold_time: Optional[str] = None,
         strategy_name: Optional[str] = None,
-        is_paper: bool = False
+        is_paper: bool = False,
     ):
-        """
-        通知平仓
-
-        Args:
-            symbol: 交易对
-            direction: 方向
-            quantity: 数量
-            entry_price: 入场价格
-            exit_price: 出场价格
-            pnl: 盈亏金额
-            pnl_pct: 盈亏百分比
-            reason: 平仓原因 (manual/stop_loss/take_profit/signal_reverse/liquidation)
-            hold_time: 持仓时间
-            strategy_name: 策略名称
-            is_paper: 是否为模拟盘
-        """
+        """Notify a paper close. Live closes are not sent."""
         if not is_paper:
-            logger.debug(f"实盘平仓不发送 Telegram: {symbol}")
+            logger.debug(f"Skip Telegram for live close: {symbol}")
             return
 
-        # 根据平仓原因判断是否通知
-        if reason == 'stop_loss' and not self.notify_stop_loss:
+        if reason == "stop_loss" and not self.notify_stop_loss:
             return
-        if reason == 'take_profit' and not self.notify_take_profit:
+        if reason == "take_profit" and not self.notify_take_profit:
             return
-        if reason not in ['stop_loss', 'take_profit'] and not self.notify_close:
+        if reason not in ["stop_loss", "take_profit"] and not self.notify_close:
             return
 
         direction_lower = direction.lower()
-        direction_text = "多单" if direction_lower == 'long' else "空单"
+        direction_text = "LONG" if direction_lower == "long" else "SHORT"
 
-        # 盈亏emoji
         if pnl > 0:
             pnl_emoji = "💰"
-            result_text = "盈利"
+            result_text = "Profit"
         elif pnl < 0:
             pnl_emoji = "💸"
-            result_text = "亏损"
+            result_text = "Loss"
         else:
             pnl_emoji = "➖"
-            result_text = "平本"
+            result_text = "Breakeven"
 
-        # 平仓原因文本
         reason_map = {
-            'manual': '手动平仓',
-            'stop_loss': '🛡️ 止损触发',
-            'take_profit': '🎯 止盈触发',
-            'signal_reverse': '📊 信号反转',
-            'liquidation': '⚠️ 强制平仓',
-            'backtest_end': '回测结束',
-            'paper_sync': '🔄 模拟仓同步平实盘',
+            "manual": "Manual close",
+            "stop_loss": "🛡️ Stop loss",
+            "take_profit": "🎯 Take profit",
+            "signal_reverse": "📊 Signal reverse",
+            "liquidation": "⚠️ Liquidation",
+            "backtest_end": "Backtest end",
+            "paper_sync": "🔄 Paper sync close on live",
+            "manual_clear_open": "Manual clear",
         }
-        reason_lower = (reason or '').lower()
+        reason_lower = (reason or "").lower()
         if reason in reason_map:
             reason_text = reason_map[reason]
-        elif reason_lower.startswith('paper_sync'):
-            reason_text = reason_map['paper_sync']
-        elif 'advisor' in reason_lower or reason_lower.startswith('gemini_advisor'):
-            reason_text = '🤖 持仓顾问 SELL'
+        elif reason_lower.startswith("paper_sync"):
+            reason_text = reason_map["paper_sync"]
+        elif "advisor" in reason_lower or reason_lower.startswith("gemini_advisor"):
+            reason_text = "🤖 Hold advisor SELL"
         else:
-            reason_text = (reason or 'manual')[:120]
-
-        trade_type = "平仓"
+            reason_text = (reason or "manual")[:120]
 
         message = f"""
-{pnl_emoji} <b>【{trade_type}】{symbol}</b>
+{pnl_emoji} <b>[CLOSE] {symbol}</b>
 
-📌 类型: {direction_text}
-📍 原因: {reason_text}
-💵 入场价: ${entry_price:,.4f}
-💵 出场价: ${exit_price:,.4f}
-📊 数量: {quantity:.6f}
+📌 Side: {direction_text}
+📍 Reason: {reason_text}
+💵 Entry: ${entry_price:,.4f}
+💵 Exit: ${exit_price:,.4f}
+📊 Qty: {quantity:.6f}
 
 <b>{result_text}: {'+' if pnl > 0 else ''}{pnl:.2f} USDT ({pnl_pct:+.2f}%)</b>
 """
 
         if hold_time:
-            message += f"⏱️ 持仓时间: {hold_time}\n"
+            message += f"⏱️ Hold: {hold_time}\n"
 
         if strategy_name:
-            message += f"📋 策略: {strategy_name}\n"
+            message += f"📋 Strategy: {strategy_name}\n"
 
         message += f"\n⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
         result = self._send_telegram(message)
         if result:
-            logger.info(f"✅ 平仓通知已发送: {symbol}")
+            logger.info(f"Close notify sent: {symbol}")
         else:
-            logger.warning(f"⚠️ 平仓通知发送失败: {symbol}")
+            logger.warning(f"Close notify failed: {symbol}")
         return result
 
     def notify_order_placed(
@@ -291,35 +249,22 @@ class TradeNotifier:
         side: str,
         quantity: float,
         price: float,
-        order_type: str = 'LIMIT'
+        order_type: str = "LIMIT",
     ):
-        """
-        通知限价单挂单
-
-        Args:
-            symbol: 交易对
-            side: 买卖方向 (BUY/SELL)
-            quantity: 数量
-            price: 限价
-            order_type: 订单类型
-        """
         if not self.notify_open:
             return
 
-        side_emoji = "🟢" if side == 'BUY' else "🔴"
-        side_text = "买入" if side == 'BUY' else "卖出"
-
+        side_text = "BUY" if side == "BUY" else "SELL"
         message = f"""
-📝 <b>【限价单挂单】{symbol}</b>
+📝 <b>[LIMIT ORDER] {symbol}</b>
 
-📌 方向: {side_text}
-💰 数量: {quantity:.6f}
-💵 限价: ${price:,.4f}
-📋 类型: {order_type}
+📌 Side: {side_text}
+💰 Qty: {quantity:.6f}
+💵 Limit: ${price:,.4f}
+📋 Type: {order_type}
 
 ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
-
         self._send_telegram(message)
 
     def notify_order_filled(
@@ -328,35 +273,23 @@ class TradeNotifier:
         side: str,
         quantity: float,
         price: float,
-        order_type: str = 'LIMIT'
+        order_type: str = "LIMIT",
     ):
-        """
-        通知订单成交（限价单成交时）
-
-        Args:
-            symbol: 交易对
-            side: 买卖方向 (BUY/SELL)
-            quantity: 成交数量
-            price: 成交价格
-            order_type: 订单类型
-        """
         if not self.notify_open:
             return
 
-        side_emoji = "🟢" if side == 'BUY' else "🔴"
-        side_text = "买入" if side == 'BUY' else "卖出"
-
+        side_emoji = "🟢" if side == "BUY" else "🔴"
+        side_text = "BUY" if side == "BUY" else "SELL"
         message = f"""
-{side_emoji} <b>【订单成交】{symbol}</b>
+{side_emoji} <b>[FILLED] {symbol}</b>
 
-📌 方向: {side_text}
-💰 数量: {quantity:.6f}
-💵 价格: ${price:,.4f}
-📋 类型: {order_type}
+📌 Side: {side_text}
+💰 Qty: {quantity:.6f}
+💵 Price: ${price:,.4f}
+📋 Type: {order_type}
 
 ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
-
         self._send_telegram(message)
 
     def notify_stop_loss_set(
@@ -364,134 +297,91 @@ class TradeNotifier:
         symbol: str,
         direction: str,
         stop_price: float,
-        quantity: float
+        quantity: float,
     ):
-        """
-        通知止损单设置成功
-
-        Args:
-            symbol: 交易对
-            direction: 方向 (long/short/LONG/SHORT)
-            stop_price: 止损价格
-            quantity: 数量
-        """
         if not self.notify_stop_loss:
-            logger.debug(f"止损通知已禁用 (notify_stop_loss={self.notify_stop_loss})")
+            logger.debug(f"Stop-loss notify disabled (notify_stop_loss={self.notify_stop_loss})")
             return
 
         direction_lower = direction.lower()
-        direction_text = "多单" if direction_lower == 'long' else "空单"
-
+        direction_text = "LONG" if direction_lower == "long" else "SHORT"
         message = f"""
-🛡️ <b>【止损单已设置】{symbol}</b>
+🛡️ <b>[STOP LOSS SET] {symbol}</b>
 
-📌 类型: {direction_text}
-💰 数量: {quantity:.6f}
-💵 止损价: ${stop_price:,.4f}
+📌 Side: {direction_text}
+💰 Qty: {quantity:.6f}
+💵 Stop: ${stop_price:,.4f}
 
 ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
-
         result = self._send_telegram(message)
         if result:
-            logger.info(f"✅ 止损通知已发送: {symbol}")
+            logger.info(f"Stop-loss notify sent: {symbol}")
         else:
-            logger.warning(f"⚠️ 止损通知发送失败: {symbol}")
+            logger.warning(f"Stop-loss notify failed: {symbol}")
 
     def notify_take_profit_set(
         self,
         symbol: str,
         direction: str,
         take_profit_price: float,
-        quantity: float
+        quantity: float,
     ):
-        """
-        通知止盈单设置成功
-
-        Args:
-            symbol: 交易对
-            direction: 方向 (long/short/LONG/SHORT)
-            take_profit_price: 止盈价格
-            quantity: 数量
-        """
         if not self.notify_take_profit:
-            logger.debug(f"止盈通知已禁用 (notify_take_profit={self.notify_take_profit})")
+            logger.debug(f"Take-profit notify disabled (notify_take_profit={self.notify_take_profit})")
             return
 
         direction_lower = direction.lower()
-        direction_text = "多单" if direction_lower == 'long' else "空单"
-
+        direction_text = "LONG" if direction_lower == "long" else "SHORT"
         message = f"""
-🎯 <b>【止盈单已设置】{symbol}</b>
+🎯 <b>[TAKE PROFIT SET] {symbol}</b>
 
-📌 类型: {direction_text}
-💰 数量: {quantity:.6f}
-💵 止盈价: ${take_profit_price:,.4f}
+📌 Side: {direction_text}
+💰 Qty: {quantity:.6f}
+💵 TP: ${take_profit_price:,.4f}
 
 ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
-
         result = self._send_telegram(message)
         if result:
-            logger.info(f"✅ 止盈通知已发送: {symbol}")
+            logger.info(f"Take-profit notify sent: {symbol}")
         else:
-            logger.warning(f"⚠️ 止盈通知发送失败: {symbol}")
+            logger.warning(f"Take-profit notify failed: {symbol}")
 
     def notify_error(self, symbol: str, error_type: str, error_message: str):
-        """
-        通知交易错误
-
-        Args:
-            symbol: 交易对
-            error_type: 错误类型
-            error_message: 错误信息
-        """
         message = f"""
-⚠️ <b>【交易错误】{symbol}</b>
+⚠️ <b>[TRADE ERROR] {symbol}</b>
 
-❌ 类型: {error_type}
-📝 信息: {error_message}
+❌ Type: {error_type}
+📝 Detail: {error_message}
 
 ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
-
         self._send_telegram(message)
 
     def notify_balance_update(
         self,
         total_equity: float,
         available_balance: float,
-        unrealized_pnl: float
+        unrealized_pnl: float,
     ):
-        """
-        通知余额更新（可选，用于定期汇报）
-
-        Args:
-            total_equity: 账户权益
-            available_balance: 可用余额
-            unrealized_pnl: 未实现盈亏
-        """
         pnl_emoji = "📈" if unrealized_pnl >= 0 else "📉"
-
         message = f"""
-💼 <b>【账户状态】</b>
+💼 <b>[ACCOUNT]</b>
 
-💰 总权益: ${total_equity:,.2f}
-💵 可用余额: ${available_balance:,.2f}
-{pnl_emoji} 未实现盈亏: {'+' if unrealized_pnl >= 0 else ''}{unrealized_pnl:,.2f}
+💰 Equity: ${total_equity:,.2f}
+💵 Available: ${available_balance:,.2f}
+{pnl_emoji} Unrealized PnL: {'+' if unrealized_pnl >= 0 else ''}{unrealized_pnl:,.2f}
 
 ⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 """
-
         self._send_telegram(message)
 
 
-# 全局通知器实例（延迟初始化）
 _trade_notifier: Optional[TradeNotifier] = None
 
 
 def _load_project_notifier_config() -> Optional[Dict]:
-    """从 config.yaml + .env 加载 notifications 配置（供懒初始化）。"""
     try:
         from pathlib import Path
         from app.utils.config_loader import load_config
@@ -499,20 +389,11 @@ def _load_project_notifier_config() -> Optional[Dict]:
         root = Path(__file__).resolve().parent.parent.parent
         return load_config(root / "config.yaml")
     except Exception as e:
-        logger.warning(f"加载 TradeNotifier 配置失败: {e}")
+        logger.warning(f"Failed to load TradeNotifier config: {e}")
         return None
 
 
 def get_trade_notifier(config: Dict = None) -> Optional[TradeNotifier]:
-    """
-    获取交易通知器单例
-
-    Args:
-        config: 配置字典（首次调用时需要）
-
-    Returns:
-        TradeNotifier 实例
-    """
     global _trade_notifier
 
     if _trade_notifier is None:
@@ -527,15 +408,6 @@ def get_trade_notifier(config: Dict = None) -> Optional[TradeNotifier]:
 
 
 def init_trade_notifier(config: Dict) -> TradeNotifier:
-    """
-    初始化交易通知器
-
-    Args:
-        config: 配置字典
-
-    Returns:
-        TradeNotifier 实例
-    """
     global _trade_notifier
     _trade_notifier = TradeNotifier(config)
     return _trade_notifier

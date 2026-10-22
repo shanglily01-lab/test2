@@ -45,6 +45,80 @@ PLAYBOOK_SIGNAL_CN: dict[str, str] = {
     "C4": "C4 假突破陷阱做空",
 }
 
+PLAYBOOK_SIGNAL_EN: dict[str, str] = {
+    "A1": "A1 1h pullback long",
+    "A2": "A2 failed rebound short",
+    "B2": "B2 bounce-fail short",
+    "B3": "B3 top exhaustion short",
+    "B4": "B4 pump pullback long",
+    "C1": "C1 breakdown short",
+    "C2": "C2 false breakdown",
+    "C3": "C3 breakout long",
+    "C4": "C4 false breakout short",
+}
+
+_STATIC_EN: dict[str, str] = {
+    "smart_trader": "Smart Trader",
+    "smart_trader_sync": "Smart Trader sync",
+    "brain_swing": "Brain",
+    "brain_long": "Brain long",
+    "brain_short": "Brain short",
+    "PREDICTOR": "Predictor",
+    "BTC_MOMENTUM": "BTC momentum",
+    "gemini_explore": "Gemini explore",
+    "gemini_predict": "Gemini predict",
+    "deepseek_explore": "DeepSeek explore",
+    "deepseek_predict": "DeepSeek predict",
+    "binance_sync": "Binance sync",
+    "auto_signal": "Auto signal",
+    "signal": "Manual signal",
+    "spot_brain": "Spot - Brain A1",
+    "spot_deepseek_explore": "Spot - DeepSeek explore",
+    "spot_deepseek_predict": "Spot - DeepSeek predict",
+    "spot_dca": "Spot - retired DCA",
+    "midline_long": "Breakout long",
+    "midline_short": "Breakout short",
+    "manual_watchlist": "Watchlist",
+    "gemini_midline_long": "Breakout long",
+    "gemini_midline_short": "Breakout short",
+    "deepseek_midline_long": "Breakout long",
+    "deepseek_midline_short": "Breakout short",
+}
+
+_TACTICAL_TITLE_EN: dict[str, str] = {
+    "pullback": "pullback long",
+    "rebound": "rebound short",
+    "chase": "chase long",
+    "dump": "dump short",
+}
+
+_SIGNAL_TOKEN_EN: dict[str, str] = {
+    "break_support": "break support",
+    "break_resistance": "break resistance",
+    "volume_expand_down": "volume expand down",
+    "volume_expand_up": "volume expand up",
+    "crash_spike": "crash spike",
+    "pump_spike": "pump spike",
+    "exhaustion_up": "exhaustion up",
+    "stall_at_high": "stall at high",
+    "top_callback": "first top callback",
+    "long_upper_wick": "long upper wick",
+    "volume_diverge_bear": "bearish divergence",
+    "false_break_up": "false break up",
+    "false_break_down": "false break down",
+    "impulse_up": "impulse up",
+    "impulse_down": "impulse down",
+    "h1_breakout_up": "1h breakout up",
+    "h1_breakdown_down": "1h breakdown",
+    "15m_higher_low": "15m higher low",
+    "15m_lower_high": "15m lower high",
+    "15m_failed_retest": "failed retest",
+    "15m_pullback_from_high": "15m pullback from high",
+    "15m_bounce_from_low": "15m bounce from low",
+    "15m_trend_high_pullback": "trend-high pullback",
+    "1h_trend_high_pullback": "1h trend-high pullback",
+}
+
 _BREAKOUT_SOURCES = {
     "midline_long",
     "midline_short",
@@ -241,6 +315,71 @@ def format_entry_signal_cn(
     if reason:
         return reason[:40]
     return named or "未知"
+
+
+def _signal_hits_en(entry_reason: str | None) -> str:
+    text = str(entry_reason or "")
+    hits: list[str] = []
+    for token, en in _SIGNAL_TOKEN_EN.items():
+        if token in text and en not in hits:
+            hits.append(en)
+        if len(hits) >= 3:
+            break
+    return ", ".join(hits)
+
+
+def get_strategy_display_name_en(source: str | None) -> str:
+    if not source:
+        return "unknown"
+    if source in _STATIC_EN:
+        return _STATIC_EN[source]
+    parts = _tactical_parts(source)
+    if parts:
+        teacher, key = parts
+        title = _TACTICAL_TITLE_EN.get(key)
+        if title:
+            return f"{teacher} {title}"
+    return source
+
+
+def format_entry_signal_en(
+    *,
+    source: str | None = None,
+    entry_signal_type: str | None = None,
+    entry_reason: str | None = None,
+    signal_components: Any = None,
+) -> str:
+    """English entry-signal label for Telegram."""
+    extra = _blob_text(signal_components)
+    pb = extract_playbook_code(entry_signal_type, entry_reason, extra)
+    family = _family(source, entry_signal_type, entry_reason)
+    pb_en = PLAYBOOK_SIGNAL_EN.get(pb or "")
+    hits = _signal_hits_en(_blob_text(entry_reason, extra))
+    if pb_en:
+        prefix = "Brain - " if family == "brain" else "Breakout - " if family == "breakout" else ""
+        label = f"{prefix}{pb_en}"
+        if hits:
+            return f"{label} ({hits})"
+        return label
+    if family == "breakout":
+        src = str(source or "").lower()
+        if "short" in src:
+            return "Breakout short"
+        if "long" in src:
+            return "Breakout long"
+        return "Breakout"
+    if family == "brain":
+        return "Brain"
+    named = get_strategy_display_name_en(source)
+    if named and named != source:
+        return named
+    sig = str(entry_signal_type or "").strip()
+    if sig and sig.lower() not in {"unknown", "none", source or ""}:
+        return sig
+    reason = str(entry_reason or "").strip()
+    if reason:
+        return reason[:40]
+    return named or "unknown"
 
 
 def format_entry_signal_code(

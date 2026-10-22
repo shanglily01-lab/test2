@@ -387,23 +387,22 @@ class DailyReviewReport:
             wr = comp_wins.get(comp, 0) / cnt * 100
             comp_stats[comp] = (cnt, wr)
 
-        # 生成建议文字
         tips = []
         if short_win_rate < 40 and len(shorts) >= 5:
-            tips.append(f"SHORT胜率偏低({short_win_rate:.0f}%)，建议提高SHORT阈值5-10分")
+            tips.append(f"SHORT win rate is low ({short_win_rate:.0f}%); raise SHORT threshold 5-10 pts")
         if long_win_rate < 40 and len(longs) >= 5:
-            tips.append(f"LONG胜率偏低({long_win_rate:.0f}%)，建议检查开多条件或降低阈值")
+            tips.append(f"LONG win rate is low ({long_win_rate:.0f}%); review long filters or raise threshold")
         if stop_loss_pct > 45:
-            tips.append(f"止损占比{stop_loss_pct:.0f}%偏高，建议检查入场时机或适当放宽止损距离")
+            tips.append(f"Stop-loss share is high ({stop_loss_pct:.0f}%); review entries or widen stops")
         if avg_hold_h < 2 and total >= 5:
-            tips.append(f"平均持仓{avg_hold_h:.1f}h过短，可能入场位置不佳或止损过紧")
+            tips.append(f"Avg hold {avg_hold_h:.1f}h is short; entries may be late or stops too tight")
         for comp, (cnt, wr) in comp_stats.items():
             if cnt >= 5 and wr < 30:
-                tips.append(f"{comp} 信号胜率仅{wr:.0f}%({cnt}次)，建议降低权重")
+                tips.append(f"{comp} win rate only {wr:.0f}% ({cnt} trades); lower its weight")
         if missed_count >= 5:
-            tips.append(f"昨天错过{missed_count}个大行情，市场活跃，可检查入场阈值是否偏高")
+            tips.append(f"Missed {missed_count} big moves yesterday; entry threshold may be too high")
         if not tips:
-            tips.append("近期策略参数表现正常，无明显异常")
+            tips.append("Recent strategy params look fine; no clear issues")
 
         return {
             'total':           total,
@@ -424,34 +423,34 @@ class DailyReviewReport:
         dn = movers['down_count']
         total = movers['total']
         if total == 0:
-            return "<b>市场数据暂不可用</b>"
+            return "<b>Market data unavailable</b>"
 
         if up > dn * 2:
-            sentiment = "强势多头"
+            sentiment = "Strong bullish"
         elif up > dn:
-            sentiment = "多头"
+            sentiment = "Bullish"
         elif dn > up * 2:
-            sentiment = "强势空头"
+            sentiment = "Strong bearish"
         elif dn > up:
-            sentiment = "空头"
+            sentiment = "Bearish"
         else:
-            sentiment = "多空分歧"
+            sentiment = "Mixed"
 
         lines = []
-        lines.append(f"<b>📊 每日复盘 {self.date_label}</b>")
-        lines.append(f"区间: {self.period_start.strftime('%m/%d %H:%M')} ~ {self.period_end.strftime('%m/%d %H:%M')} UTC\n")
-        lines.append(f"<b>🌐 市场格局:</b> {sentiment}  |  上涨{up}家 / 下跌{dn}家 / 共{total}家\n")
+        lines.append(f"<b>📊 Daily Review {self.date_label}</b>")
+        lines.append(f"Window: {self.period_start.strftime('%m/%d %H:%M')} ~ {self.period_end.strftime('%m/%d %H:%M')} UTC\n")
+        lines.append(f"<b>🌐 Market:</b> {sentiment}  |  up {up} / down {dn} / total {total}\n")
 
-        lines.append("<b>📈 涨幅 TOP8:</b>")
+        lines.append("<b>📈 Top 8 gainers:</b>")
         for c in movers['top_gainers']:
-            tag  = "  [有仓✓]" if c['has_trade'] else ""
+            tag  = "  [traded✓]" if c['has_trade'] else ""
             sym  = c['symbol'].replace('/USDT', '').replace('/USD', '')
             lines.append(f"  {sym:<10} <b>+{c['change_pct']:.1f}%</b>{tag}")
 
         lines.append("")
-        lines.append("<b>📉 跌幅 TOP8:</b>")
+        lines.append("<b>📉 Top 8 losers:</b>")
         for c in movers['top_losers']:
-            tag  = "  [有仓✓]" if c['has_trade'] else ""
+            tag  = "  [traded✓]" if c['has_trade'] else ""
             sym  = c['symbol'].replace('/USDT', '').replace('/USD', '')
             lines.append(f"  {sym:<10} <b>{c['change_pct']:.1f}%</b>{tag}")
 
@@ -459,19 +458,18 @@ class DailyReviewReport:
 
     def _build_msg2_trades(self, trades: dict) -> str:
         lines = []
-        lines.append(f"<b>💼 开单复盘 ({self.period_start.strftime('%m/%d')})</b>")
+        lines.append(f"<b>💼 Trade Review ({self.period_start.strftime('%m/%d')})</b>")
 
         if trades['total'] == 0:
-            lines.append("昨日无开仓记录")
+            lines.append("No opens yesterday")
             return "\n".join(lines)
 
         pnl_str = f"+{trades['total_pnl']:.1f}U" if trades['total_pnl'] >= 0 else f"{trades['total_pnl']:.1f}U"
         wr_str  = f"{trades['win_rate']:.0f}%" if trades['closed'] > 0 else "—"
-        lines.append(f"共 {trades['total']}笔  |  胜率 {wr_str}  |  总盈亏 <b>{pnl_str}</b>")
+        lines.append(f"{trades['total']} trades  |  win {wr_str}  |  PnL <b>{pnl_str}</b>")
         if trades['open'] > 0:
-            lines.append(f"(已平{trades['closed']}笔，持仓中{trades['open']}笔)")
+            lines.append(f"(closed {trades['closed']}, still open {trades['open']})")
 
-        # LONG / SHORT 分拆
         if trades['long_total'] > 0 or trades['short_total'] > 0:
             lines.append("")
             if trades['long_total'] > 0:
@@ -483,17 +481,16 @@ class DailyReviewReport:
 
         if trades['best_trade']:
             b = trades['best_trade']
-            lines.append(f"\n最佳: {b['symbol']} {b['side']} <b>+{b['pnl']:.1f}U</b>")
+            lines.append(f"\nBest: {b['symbol']} {b['side']} <b>+{b['pnl']:.1f}U</b>")
         if trades['worst_trade'] and trades['worst_trade']['pnl'] < 0:
             w = trades['worst_trade']
-            lines.append(f"最差: {w['symbol']} {w['side']} <b>{w['pnl']:.1f}U</b>")
+            lines.append(f"Worst: {w['symbol']} {w['side']} <b>{w['pnl']:.1f}U</b>")
 
         if trades['avg_hold_h'] > 0:
-            lines.append(f"平均持仓: {trades['avg_hold_h']:.1f}h")
+            lines.append(f"Avg hold: {trades['avg_hold_h']:.1f}h")
 
-        # 亏损单诊断
         if trades['loss_list']:
-            lines.append(f"\n<b>亏损单诊断 ({trades['losses']}笔):</b>")
+            lines.append(f"\n<b>Losing trades ({trades['losses']}):</b>")
             for t in trades['loss_list'][:8]:
                 sym   = t['symbol'].replace('/USDT', '').replace('/USD', '')
                 score  = f"score={t['score']}" if t['score'] else ""
@@ -507,40 +504,36 @@ class DailyReviewReport:
     def _build_msg3_missed_strategy(self, missed: list, diag: dict) -> str:
         lines = []
 
-        # 错过的机会
-        lines.append(f"<b>🚨 错过的机会 (涨跌>5%未开仓)</b>")
+        lines.append(f"<b>🚨 Missed Moves (&gt;5% with no open)</b>")
         if not missed:
-            lines.append("  无——昨日大波动品种已全部覆盖")
+            lines.append("  None — large movers were covered")
         else:
-            lines.append(f"共 {len(missed)} 个:\n")
+            lines.append(f"{len(missed)} symbols:\n")
             for c in missed[:10]:
                 sym = c['symbol'].replace('/USDT', '').replace('/USD', '')
                 sign = "+" if c['change_pct'] > 0 else ""
                 lines.append(f"  {sym:<10} {sign}{c['change_pct']:.1f}%")
             if len(missed) > 10:
-                lines.append(f"  ...还有 {len(missed)-10} 个")
+                lines.append(f"  ...and {len(missed)-10} more")
 
-        # 策略诊断
         lines.append("")
-        lines.append(f"<b>🔧 策略诊断 (近7日，共{diag['total']}笔)</b>")
+        lines.append(f"<b>🔧 Strategy Diagnosis (7d, {diag['total']} trades)</b>")
         if diag['total'] == 0:
-            lines.append("  暂无数据")
+            lines.append("  No data yet")
         else:
-            lines.append(f"整体胜率: {diag['win_rate']:.0f}%  |  LONG: {diag['long_win_rate']:.0f}%  |  SHORT: {diag['short_win_rate']:.0f}%")
-            lines.append(f"平均持仓: {diag['avg_hold_h']:.1f}h  |  止损占比: {diag['stop_loss_pct']:.0f}%")
+            lines.append(f"Win rate: {diag['win_rate']:.0f}%  |  LONG: {diag['long_win_rate']:.0f}%  |  SHORT: {diag['short_win_rate']:.0f}%")
+            lines.append(f"Avg hold: {diag['avg_hold_h']:.1f}h  |  Stop-loss share: {diag['stop_loss_pct']:.0f}%")
 
-            # 信号组件胜率（只展示出现≥5次的）
             notable = [(c, cnt, wr) for c, (cnt, wr) in diag['comp_stats'].items() if cnt >= 5]
             notable.sort(key=lambda x: x[1], reverse=True)
             if notable:
-                lines.append("\n信号组件表现:")
+                lines.append("\nSignal components:")
                 for comp, cnt, wr in notable[:6]:
                     bar = "✅" if wr >= 50 else ("⚠️" if wr >= 35 else "❌")
-                    lines.append(f"  {bar} {comp:<25} {wr:.0f}% ({cnt}次)")
+                    lines.append(f"  {bar} {comp:<25} {wr:.0f}% ({cnt}x)")
 
-        # 建议
         if diag['tips']:
-            lines.append("\n<b>建议:</b>")
+            lines.append("\n<b>Tips:</b>")
             for tip in diag['tips']:
                 lines.append(f"  → {tip}")
 
@@ -668,20 +661,20 @@ class DailyReviewReport:
 
     def _build_msg4_optimization(self, opt_result: dict) -> str:
         import html as _html
-        lines = ["<b>信号权重自动优化</b>"]
+        lines = ["<b>Signal Weight Auto-Tune</b>"]
         adjusted = opt_result.get('adjusted', [])
         skipped  = opt_result.get('skipped', [])
         error    = opt_result.get('error')
 
         if error:
-            lines.append(f"优化失败: {_html.escape(str(error)[:200])}")
+            lines.append(f"Optimization failed: {_html.escape(str(error)[:200])}")
             return "\n".join(lines)
 
         n_analyzed = len(adjusted) + len(skipped)
-        lines.append(f"分析了 {n_analyzed} 个信号组件（近7日数据）\n")
+        lines.append(f"Analyzed {n_analyzed} signal components (7d)\n")
 
         if adjusted:
-            lines.append(f"<b>调整 {len(adjusted)} 个组件权重:</b>")
+            lines.append(f"<b>Adjusted {len(adjusted)} weights:</b>")
             for item in adjusted[:12]:
                 comp  = _html.escape(str(item.get('component', '')))
                 side  = item.get('side', '')
@@ -696,10 +689,10 @@ class DailyReviewReport:
                     f"win={wr*100:.0f}% score={perf:.0f}"
                 )
         else:
-            lines.append("本次无权重变动（数据不足或各组件表现正常）")
+            lines.append("No weight changes (not enough data or components look fine)")
 
         if skipped:
-            lines.append(f"\n跳过 {len(skipped)} 个组件（近7日样本不足5笔）")
+            lines.append(f"\nSkipped {len(skipped)} components (&lt;5 trades in 7d)")
 
         return "\n".join(lines)
 

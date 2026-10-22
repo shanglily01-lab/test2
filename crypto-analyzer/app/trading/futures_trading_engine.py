@@ -138,9 +138,10 @@ class FuturesTradingEngine:
         entry_signal_type: str = None,
         entry_reason: str = None,
     ) -> str:
+        """English strategy label for Telegram only."""
         try:
-            from app.services.strategy_display_names import format_entry_signal_cn
-            label = format_entry_signal_cn(
+            from app.services.strategy_display_names import format_entry_signal_en
+            label = format_entry_signal_en(
                 source=source,
                 entry_signal_type=entry_signal_type,
                 entry_reason=entry_reason,
@@ -1887,22 +1888,8 @@ class FuturesTradingEngine:
                 notifier = self._resolve_trade_notifier()
                 if notifier and paper_acct:
                     # 计算持仓时间
-                    hold_time = None
-                    if position.get('open_time'):
-                        open_time = position['open_time']
-                        if isinstance(open_time, str):
-                            open_time = datetime.strptime(open_time, '%Y-%m-%d %H:%M:%S')
-                        hold_duration = utc_now_naive() - open_time
-                        hours, remainder = divmod(hold_duration.total_seconds(), 3600)
-                        minutes = remainder // 60
-                        if hours >= 24:
-                            days = int(hours // 24)
-                            hours = int(hours % 24)
-                            hold_time = f"{days}天{int(hours)}小时{int(minutes)}分钟"
-                        elif hours >= 1:
-                            hold_time = f"{int(hours)}小时{int(minutes)}分钟"
-                        else:
-                            hold_time = f"{int(minutes)}分钟"
+                    from app.services.trade_notifier import format_hold_time_from_open
+                    hold_time = format_hold_time_from_open(position.get('open_time'))
 
                     notifier.notify_close_position(
                         symbol=symbol,

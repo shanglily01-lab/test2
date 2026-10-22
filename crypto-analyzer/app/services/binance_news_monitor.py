@@ -357,14 +357,14 @@ class BinanceNewsMonitor:
             except Exception as e:
                 logger.error("新币写入 trading_symbols 失败 [%s]: %s", symbol, e)
 
-        symbols_str = ', '.join(symbols) if symbols else '(未识别)'
-        added_str = ', '.join(added) if added else '无新增'
+        symbols_str = ', '.join(symbols) if symbols else '(unrecognized)'
+        added_str = ', '.join(added) if added else 'none new'
         msg = (
-            "[新币上线]\n"
+            "[NEW LISTING]\n"
             f"{title}\n\n"
-            f"识别交易对: {symbols_str}\n"
-            f"已加入 trading_symbols(disabled): {added_str}\n"
-            "需手动在管理页面启用后生效"
+            f"Symbols: {symbols_str}\n"
+            f"Added to trading_symbols (disabled): {added_str}\n"
+            "Enable them manually in the admin UI"
         )
         logger.info("新币上线公告: %s | 新增: %s", symbols_str, added_str)
         self._notify(msg)
@@ -382,7 +382,7 @@ class BinanceNewsMonitor:
                 opt.update_symbol_rating(
                     symbol=canon,
                     new_level=3,
-                    reason=f"下架公告: {title[:120]}",
+                    reason=f"Delisting announcement: {title[:120]}",
                     force=True,
                 )
                 blocked.append(canon)
@@ -390,37 +390,37 @@ class BinanceNewsMonitor:
             except Exception as e:
                 logger.error("下架处理失败 [%s]: %s", symbol, e)
 
-        symbols_str = ', '.join(symbols) if symbols else '(未识别)'
-        blocked_str = ', '.join(blocked) if blocked else '无'
+        symbols_str = ', '.join(symbols) if symbols else '(unrecognized)'
+        blocked_str = ', '.join(blocked) if blocked else 'none'
         msg = (
-            "[WARNING] [下架公告]\n"
+            "[WARNING] [DELISTING]\n"
             f"{title}\n\n"
-            f"识别交易对: {symbols_str}\n"
-            f"已设为 Level3（永久禁止）: {blocked_str}"
+            f"Symbols: {symbols_str}\n"
+            f"Set to Level3 (permanently blocked): {blocked_str}"
         )
         logger.warning("下架公告: %s | 已封禁: %s", symbols_str, blocked_str)
         self._notify(msg)
 
     def _handle_maintenance(self, title: str, symbols: List[str]):
         """维护公告：仅发 Telegram 通知，不自动改 DB"""
-        symbols_str = ', '.join(symbols) if symbols else '不涉及特定交易对'
+        symbols_str = ', '.join(symbols) if symbols else 'no specific symbols'
         msg = (
-            "[WARNING] [维护公告]\n"
+            "[WARNING] [MAINTENANCE]\n"
             f"{title}\n\n"
-            f"涉及交易对: {symbols_str}\n"
-            "维护期间建议暂停相关交易对"
+            f"Symbols: {symbols_str}\n"
+            "Consider pausing these symbols during maintenance"
         )
         logger.warning("维护公告: %s", title[:80])
         self._notify(msg)
 
     def _handle_launchpool(self, title: str, symbols: List[str]):
         """Launchpool 公告：仅发 Telegram 通知"""
-        symbols_str = ', '.join(symbols) if symbols else '(未识别)'
+        symbols_str = ', '.join(symbols) if symbols else '(unrecognized)'
         msg = (
-            "[Launchpool/活动公告]\n"
+            "[LAUNCHPOOL / EVENT]\n"
             f"{title}\n\n"
-            f"相关币种: {symbols_str}\n"
-            "Launchpool 可能带来相关币种大量流入，注意做空风险"
+            f"Related symbols: {symbols_str}\n"
+            "Launchpool can bring heavy inflows; be careful shorting these"
         )
         logger.info("Launchpool 公告: %s", title[:80])
         self._notify(msg)

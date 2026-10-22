@@ -307,9 +307,9 @@ class BinanceFuturesEngine:
                                 if notifier:
                                     sec = (until_ms - int(time.time() * 1000)) / 1000
                                     notifier.send_message(
-                                        f"[告警] Binance IP 被封禁约 {sec:.0f}s\n"
-                                        f"已启用熔断, 所有 API 请求暂停直到解封\n"
-                                        f"消息: {error_msg[:200]}"
+                                        f"[ALERT] Binance IP banned for ~{sec:.0f}s\n"
+                                        f"Circuit breaker on; all API calls paused until unban\n"
+                                        f"Message: {error_msg[:200]}"
                                     )
                         except Exception as notify_err:
                             logger.error(f"IP ban TG 告警失败: {notify_err}")

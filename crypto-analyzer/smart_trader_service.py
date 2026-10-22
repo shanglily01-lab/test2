@@ -2886,10 +2886,10 @@ class SmartTraderService:
             if hasattr(self, 'telegram_notifier') and self.telegram_notifier:
                 try:
                     self.telegram_notifier.send_message(
-                        f"❌ SmartExitOptimizer重启失败\n\n"
-                        f"错误: {str(e)}\n"
-                        f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                        f"请手动检查服务状态"
+                        f"❌ SmartExitOptimizer restart failed\n\n"
+                        f"Error: {str(e)}\n"
+                        f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                        f"Please check the service manually"
                     )
                 except Exception as e:
                     logger.warning(f"发送Telegram失败告警失败: {e}")
