@@ -1850,25 +1850,49 @@ def test_h1_bull_pullback() -> None:
     assert ready.ready is True, ready
     assert ready.status == "pullback_ready", ready
 
-    # Mild negative 8h slope (~-0.8%) ending at the low is still a buy (not a chase).
-    mild = [dict(r) for r in flat]
-    end_px = mild[-1]["close_price"]
-    start_px = end_px / (1.0 - 0.008)
-    for i in range(8):
-        bar = mild[-(8 - i)]
-        frac = i / 7.0
-        px_i = start_px + (end_px - start_px) * frac
-        bar["close_price"] = px_i
-        bar["open_price"] = px_i
-        bar["high_price"] = px_i * 1.001
-        bar["low_price"] = px_i * 0.999
-    mild_ready = compute_pullback_entry(
-        "LONG", "A1", mild[-24:],
-        playbook_row={"signals": ["volume_shrink_pullback", "1h_trend_high_pullback", "rsi_15m_turn_up"]},
-        ref_price=end_px,
-        rows_1h=mild,
+    from app.services.entry_timing import H1_SLOPE_MIN_PCT, H1_SLOPE_MAX_PCT
+    assert H1_SLOPE_MIN_PCT == 0.0 and H1_SLOPE_MAX_PCT == 15.0, (
+        H1_SLOPE_MIN_PCT, H1_SLOPE_MAX_PCT,
     )
-    assert mild_ready.ready is True, mild_ready
+
+    # Lower highs vs the prior 24 bars must not hard-reject (old HH gate).
+    from app.services.entry_timing import _h1_pullback_view
+    lh = []
+    for i in range(24):
+        p = 100.0 + i * 1.0
+        lh.append({
+            "open_price": p, "high_price": p + 1.0, "low_price": p - 0.4,
+            "close_price": p, "volume": 800,
+        })
+    peak_lh = 110.0
+    px_lh = peak_lh * 0.97
+    # Peak early in the recent window, then hold flat under it (slope ~0).
+    lh.append({
+        "open_price": peak_lh - 1.0, "high_price": peak_lh, "low_price": peak_lh - 2.0,
+        "close_price": peak_lh - 0.5, "volume": 900,
+    })
+    lh.append({
+        "open_price": peak_lh - 0.8, "high_price": peak_lh - 0.2, "low_price": px_lh,
+        "close_price": px_lh, "volume": 700,
+    })
+    for _ in range(22):
+        lh.append({
+            "open_price": px_lh, "high_price": px_lh * 1.001, "low_price": px_lh * 0.999,
+            "close_price": px_lh, "volume": 500,
+        })
+    older_hi = max(r["high_price"] for r in lh[:24])
+    recent_hi = max(r["high_price"] for r in lh[-24:])
+    assert recent_hi < older_hi * 0.998, (recent_hi, older_hi)
+    lh_view = _h1_pullback_view(lh, px_lh)
+    assert lh_view.get("reason") != "not_1h_trend_high_pullback", lh_view
+    assert lh_view.get("kind") == "pullback", lh_view
+    lh_ready = compute_pullback_entry(
+        "LONG", "A1", lh[-24:],
+        playbook_row={"signals": ["1h_trend_high_pullback", "volume_shrink_pullback", "rsi_15m_turn_up"]},
+        ref_price=px_lh,
+        rows_1h=lh,
+    )
+    assert lh_ready.ready is True, lh_ready
 
     still_3h = [dict(r) for r in flat]
     for bar in still_3h[-9:-4]:

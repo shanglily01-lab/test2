@@ -71,12 +71,11 @@ H1_TREND_BARS = 24
 # Price that has already retraced this much of the 1h dip is chasing the high.
 H1_PULLBACK_MAX_RECOVERY = 0.35
 H1_CHASE_GREEN_RECOVERY = 0.20
-# Bottom of the pullback: 8 one-hour closes, slope in [-1.20%, 5).
-# Mild negative 8h slope is still a pullback; only a free-fall is blocked.
-# The last 3 hours still veto a hard drop (below -0.50%).
+# Bottom of the pullback: 8 one-hour closes, slope in [0%, 15%).
+# Negative 8h slope waits. The last 3 hours still veto a hard drop (below -0.50%).
 H1_SLOPE_BARS = 8
-H1_SLOPE_MIN_PCT = -1.20
-H1_SLOPE_MAX_PCT = 5.0
+H1_SLOPE_MIN_PCT = 0.0
+H1_SLOPE_MAX_PCT = 15.0
 H1_SLOPE_FALL_BARS = 3
 H1_SLOPE_FALL_MIN_PCT = -0.50
 H1_PUMP_GIVEBACK_MIN_OFF_PCT = 0.40
@@ -811,12 +810,12 @@ def _follow_breakout_long_entry(
 def _h1_pullback_view(rows_1h: List[Dict[str, Any]], price: float) -> Dict[str, Any]:
     """Read the pullback off the 1h candles, not off a 15m bounce.
 
-    The 24-bar high must be a trend high versus the prior 24 bars, and it cannot
-    be printing on the latest two candles. The pullback is measured from the
-    latest 1h swing high under that trend high. After it, 1h closes must fall
-    1.20%–8% without breaking the prior swing low. The price we would pay has
-    to still sit in that band.
-    Buy when the last 8 one-hour closes slope from 0% up to just under 5%.
+    Measure from the latest swing high inside the last 24 one-hour bars.
+    That high must not be printing on the latest two candles. After it, 1h
+    closes must sit 1.20%–8% under the high. Do **not** require the recent
+    24-bar high to beat the prior 24-bar high — that HH gate blocked almost
+    every open when the book only made equal/lower highs.
+    Buy when the last 8 one-hour closes slope from 0% up to just under 15%.
     A last-3-hour slope below -0.50% is still falling, so wait. Climbing
     back through 20% of the dip, or leaving the pullback low two bars behind
     after buying back 35%, is a chase.
@@ -830,14 +829,13 @@ def _h1_pullback_view(rows_1h: List[Dict[str, Any]], price: float) -> Dict[str, 
         "off": 0.0,
         "recovery": 0.0,
     }
-    if len(rows_1h) < n * 2:
+    if len(rows_1h) < n:
         return wait
     h = _highs(rows_1h)
     lows = _lows(rows_1h)
     c = _closes(rows_1h)
     recent_hi = max(h[-n:])
-    older_hi = max(h[-n * 2:-n])
-    if recent_hi <= 0 or recent_hi < older_hi * 0.998:
+    if recent_hi <= 0:
         return {**wait, "reason": "not_1h_trend_high_pullback", "trend_hi": recent_hi}
     tol = max(recent_hi * 1e-8, 1e-12)
     window_h = h[-n:]
@@ -865,16 +863,6 @@ def _h1_pullback_view(rows_1h: List[Dict[str, Any]], price: float) -> Dict[str, 
         return {
             **wait,
             "reason": "1h_close_not_pulled_back",
-            "trend_hi": peak_hi,
-            "pull_lo": pull_lo,
-        }
-    prior_end = -n + hi_pos
-    prior_lows = lows[-n * 2:prior_end] if prior_end < 0 else lows[-n * 2:-n]
-    prior_lo = min(prior_lows) if prior_lows else 0.0
-    if prior_lo > 0 and pull_lo < prior_lo * 0.998:
-        return {
-            **wait,
-            "reason": "broke_prior_low",
             "trend_hi": peak_hi,
             "pull_lo": pull_lo,
         }
@@ -976,12 +964,12 @@ def _a1_h1_pullback_entry(
     ref_price: Optional[float] = None,
     rows_15m: Optional[List[Dict[str, Any]]] = None,
 ) -> EntryTiming:
-    """A1 long: buy the 1h pullback after the free-fall has slowed.
+    """A1 long: buy the 1h pullback when 8h slope is in [0%, 15%).
 
-    8h slope may be mildly negative. A hard drop over the last 3h still waits.
-    A rise under 5% is fine. 15m RSI only times the order.
+    Negative 8h slope waits. A hard drop over the last 3h still waits.
+    15m RSI only times the order.
     """
-    if len(rows_1h) < H1_TREND_BARS * 2:
+    if len(rows_1h) < H1_TREND_BARS:
         return _empty("no_zone", "insufficient_1h")
     c = _closes(rows_1h)
     h = _highs(rows_1h)
@@ -1121,7 +1109,7 @@ def compute_pullback_entry(
     pb = (playbook or "").strip().upper()
     if side_u not in ("LONG", "SHORT"):
         return _empty("no_zone", "flat_side")
-    if side_u == "LONG" and pb in {"A1", "B4"} and rows_1h and len(rows_1h) >= H1_TREND_BARS * 2:
+    if side_u == "LONG" and pb in {"A1", "B4"} and rows_1h and len(rows_1h) >= H1_TREND_BARS:
         return _a1_h1_pullback_entry(
             rows_1h, playbook_row=playbook_row, ref_price=ref_price, rows_15m=rows_15m,
         )
