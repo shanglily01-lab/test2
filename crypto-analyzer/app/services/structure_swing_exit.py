@@ -1,8 +1,9 @@
 """Structure swing hold: buy the low, sell the high (shorts reversed).
 
-BRAIN / breakout no longer force-close at 4–6h. Preferred take-profit is the
-opposite 1h pump-giveback. If that point is missed or profit is given back,
-lock the remainder. Losers have no hard SL — ride to liquidation.
+Preferred take-profit is a 1h pump-giveback of a high this position actually
+reached. A swing high from before the pullback entry is not a sell, and time
+alone never banks a small green. If a qualified peak is given back, lock the
+remainder. Losers have no hard SL — ride to liquidation.
 """
 from __future__ import annotations
 
@@ -28,8 +29,9 @@ STRUCTURE_GIVEBACK_NOW_PCT = 0.15
 # 2.20%–5%：从峰值回撤 1.20 个点就锁。禁止 3% 赢家一路吐到 +0.15%。
 # 已走出 5% 的仍走 trail，不走这条。
 STRUCTURE_KEEP_PULLBACK_PCT = 1.20
-STRUCTURE_STALE_AGE_H = 4.0
-STRUCTURE_STALE_PNL_PCT = 1.50
+# The 1h extreme only counts if this position's best price got this close to it.
+# A1 buys 1.20%–8% under the prior high; that old high is not a missed sell.
+STRUCTURE_OWN_EXTREME_SLACK_PCT = 1.50
 # C1/C3/B2 enter at the break; "already off the low/high" is normal noise.
 STRUCTURE_FOLLOW_PLAYBOOKS = frozenset({"C1", "C3", "B2"})
 _KLINE_LIMIT = 48
@@ -100,6 +102,39 @@ def playbook_name(playbook_row: Optional[Dict[str, Any]] = None, raw: str = "") 
 
 def is_follow_playbook(playbook_row: Optional[Dict[str, Any]] = None, raw: str = "") -> bool:
     return playbook_name(playbook_row, raw) in STRUCTURE_FOLLOW_PLAYBOOKS
+
+
+def position_reached_structure_extreme(
+    side: str,
+    ref_price: Optional[float],
+    peak_pct: float,
+    pnl_pct: float,
+    extreme: Optional[float],
+) -> bool:
+    """True when this position's best price traded the 1h high or low.
+
+    A pullback entry sits under a high that printed before the fill. Leaving
+    that old high is the buy, not a missed take-profit.
+    """
+    price = _f(ref_price)
+    level = _f(extreme)
+    if price <= 0 or level <= 0:
+        return False
+    peak = max(_f(peak_pct), _f(pnl_pct))
+    pnl = _f(pnl_pct)
+    slack = STRUCTURE_OWN_EXTREME_SLACK_PCT / 100.0
+    side_u = (side or "").upper()
+    if side_u == "LONG":
+        if pnl <= -0.99:
+            return False
+        entry = price / (1.0 + pnl)
+        best = entry * (1.0 + peak)
+        return best + 1e-12 >= level * (1.0 - slack)
+    if pnl >= 0.99:
+        return False
+    entry = price / (1.0 - pnl)
+    best = entry * (1.0 - peak)
+    return best <= level * (1.0 + slack) + 1e-12
 
 
 def trail_activate_price_pct(leverage: Optional[float] = None) -> float:
@@ -191,11 +226,6 @@ def check_structure_profit_lock(
             f"structure_profit_to_loss:"
             f"peak={peak * 100:.2f}%,now={pnl * 100:.2f}%"
         )
-    if (
-        age >= STRUCTURE_STALE_AGE_H * 3600
-        and pnl >= STRUCTURE_STALE_PNL_PCT / 100.0
-    ):
-        return f"structure_stale_take:age={age / 3600:.1f}h,now={pnl * 100:.2f}%"
     return None
 
 
@@ -214,8 +244,8 @@ def check_structure_swing_exit(
 ) -> Optional[str]:
     """Close a long at a 1h pump-giveback, or a short at a suitable low.
 
-    If the structure point never prints, lock leftover profit instead of
-    riding a winner back to liquidation.
+    If a qualified peak is given back, lock the remainder. Do not sell a
+    pre-entry swing, and do not sell just because the position is old.
     """
     if age_s < STRUCTURE_MIN_AGE_MIN * 60:
         return None
@@ -229,12 +259,19 @@ def check_structure_swing_exit(
             side, rows_15m or [], playbook_row=playbook_row, ref_price=ref_price,
             rows_1h=rows_1h,
         )
-        if timing.ready and peak >= STRUCTURE_MIN_PEAK_PCT / 100.0:
-            side_u = (side or "").upper()
-            if side_u == "LONG":
-                return f"structure_sell_high:{timing.status}:{timing.reason}"
-            return f"structure_cover_low:{timing.status}:{timing.reason}"
+    reached = False
+    if timing is not None:
+        reached = position_reached_structure_extreme(
+            side, ref_price, peak, pnl, timing.break_level,
+        )
+    if timing and timing.ready and peak >= STRUCTURE_MIN_PEAK_PCT / 100.0 and reached:
+        side_u = (side or "").upper()
+        if side_u == "LONG":
+            return f"structure_sell_high:{timing.status}:{timing.reason}"
+        return f"structure_cover_low:{timing.status}:{timing.reason}"
     status = (timing.status if timing else "") or ""
+    if status in ("missed_high", "missed_low") and not reached:
+        status = ""
     return check_structure_profit_lock(
         pnl,
         peak,

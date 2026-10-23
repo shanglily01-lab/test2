@@ -71,10 +71,11 @@ H1_TREND_BARS = 24
 # Price that has already retraced this much of the 1h dip is chasing the high.
 H1_PULLBACK_MAX_RECOVERY = 0.35
 H1_CHASE_GREEN_RECOVERY = 0.20
-# Bottom of the pullback: 8 one-hour closes, slope in [0, 5).
+# Bottom of the pullback: 8 one-hour closes, slope in [-1.20%, 5).
+# Mild negative 8h slope is still a pullback; only a free-fall is blocked.
 # The last 3 hours still veto a hard drop (below -0.50%).
 H1_SLOPE_BARS = 8
-H1_SLOPE_MIN_PCT = 0.0
+H1_SLOPE_MIN_PCT = -1.20
 H1_SLOPE_MAX_PCT = 5.0
 H1_SLOPE_FALL_BARS = 3
 H1_SLOPE_FALL_MIN_PCT = -0.50
@@ -975,10 +976,10 @@ def _a1_h1_pullback_entry(
     ref_price: Optional[float] = None,
     rows_15m: Optional[List[Dict[str, Any]]] = None,
 ) -> EntryTiming:
-    """A1 long: buy the 1h pullback after its slope has flattened.
+    """A1 long: buy the 1h pullback after the free-fall has slowed.
 
-    Still-falling 1h slope waits. Near 0, or a rise under 5%, is the bottom.
-    15m RSI only times the order.
+    8h slope may be mildly negative. A hard drop over the last 3h still waits.
+    A rise under 5% is fine. 15m RSI only times the order.
     """
     if len(rows_1h) < H1_TREND_BARS * 2:
         return _empty("no_zone", "insufficient_1h")

@@ -162,6 +162,35 @@ def _strong_token_side(playbook_row: Dict[str, Any], side: str) -> bool:
     return feat.get("h1_side") == side_u and feat.get("m15_side") == side_u
 
 
+def _a1_token_pullback_ok(
+    playbook_row: Dict[str, Any],
+    *,
+    side: str,
+    playbook: str,
+    edge: float,
+    confirmed: bool,
+    min_edge: float = 0.80,
+) -> bool:
+    """A1 that already printed a 1h pullback on the token itself.
+
+    Global bear/transition must not veto a token that is still in a 1h uptrend
+    and sitting 1.20%–8% under its swing high. Auto policy is A1-only; blocking
+    these leaves the book with nothing to open.
+    """
+    if (side or "").upper() != "LONG" or str(playbook or "").upper() != "A1":
+        return False
+    if not confirmed or float(edge) < float(min_edge):
+        return False
+    feat = _features(playbook_row)
+    sig = _signals(playbook_row)
+    if feat.get("h1_side") == "SHORT":
+        return False
+    return bool(
+        "1h_trend_high_pullback" in sig
+        or feat.get("trend_high_pullback_1h")
+    )
+
+
 def _token_crash(playbook_row: Dict[str, Any]) -> bool:
     sig = _signals(playbook_row)
     return bool("crash_spike" in sig and ("volume_expand_down" in sig or "break_support" in sig))
@@ -333,6 +362,16 @@ def brain_open_regime_decision(
                     "pullback_limit",
                     1.0,
                 )
+            # 代币本身仍是 1h 回踩多：日线探底只缩仓，不禁开（v4.5.78）
+            if _a1_token_pullback_ok(
+                playbook_row, side=side_u, playbook=pb, edge=edge, confirmed=confirmed,
+            ):
+                return RegimeDecision(
+                    regime,
+                    f"global_daily_bear_probe_allows_token_A1:{why}",
+                    "pullback_limit",
+                    0.50,
+                )
             return RegimeDecision(
                 regime,
                 f"global_daily_bear_probe_blocks_long:{regime}:{pb}",
@@ -402,12 +441,15 @@ def brain_open_regime_decision(
                 "shadow_only",
                 0.0,
             )
-        if side_u == "LONG" and pb == "A1" and confirmed and edge >= 0.95 and _strong_token_side(playbook_row, "LONG"):
+        if _a1_token_pullback_ok(
+            playbook_row, side=side_u, playbook=pb, edge=edge, confirmed=confirmed,
+            min_edge=0.80,
+        ):
             return RegimeDecision(
                 regime,
-                "global_relief_bounce_allows_only_strong_A1",
+                "global_relief_bounce_allows_token_A1",
                 "pullback_limit",
-                0.25,
+                0.35,
             )
 
     if regime == LOW_VOL_NO_TRADE:
@@ -431,6 +473,10 @@ def brain_open_regime_decision(
         return RegimeDecision(regime, f"regime_bull_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 
     if regime == BEAR_TREND:
+        if _a1_token_pullback_ok(
+            playbook_row, side=side_u, playbook=pb, edge=edge, confirmed=confirmed,
+        ):
+            return RegimeDecision(regime, "regime_bear_allows_token_A1", "pullback_limit", 0.50)
         if side_u == "SHORT" and pb == "C1":
             return RegimeDecision(regime, "regime_bear_allows_C1_follow", "crash_probe_limit", 0.35)
         if side_u == "SHORT" and pb == "A2" and confirmed and _token_failed_bounce_short(playbook_row):
@@ -442,6 +488,11 @@ def brain_open_regime_decision(
         return RegimeDecision(regime, f"regime_bear_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 
     if regime == CRASH_DOWN:
+        if _a1_token_pullback_ok(
+            playbook_row, side=side_u, playbook=pb, edge=edge, confirmed=confirmed,
+            min_edge=0.85,
+        ):
+            return RegimeDecision(regime, "regime_crash_allows_token_A1", "pullback_limit", 0.35)
         if (
             side_u == "SHORT"
             and pb == "C1"
@@ -462,6 +513,10 @@ def brain_open_regime_decision(
         return RegimeDecision(regime, f"regime_crash_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 
     if regime == PANIC_REBOUND:
+        if _a1_token_pullback_ok(
+            playbook_row, side=side_u, playbook=pb, edge=edge, confirmed=confirmed,
+        ):
+            return RegimeDecision(regime, "regime_panic_rebound_allows_token_A1", "pullback_limit", 0.35)
         return RegimeDecision(regime, f"regime_panic_rebound_shadow_{side_u}_{pb}", "shadow_only", 0.0)
 
     if regime == RANGE_CHOP:
@@ -505,9 +560,11 @@ def brain_open_regime_decision(
         return RegimeDecision(regime, f"regime_token_divergence_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 
     if regime == TRANSITION:
-        # Transition forbids old-direction inertia. Only strong A1 may pass.
-        if side_u == "LONG" and pb == "A1" and confirmed and edge >= 0.95 and _strong_token_side(playbook_row, side_u):
-            return RegimeDecision(regime, f"regime_transition_allows_strong_{side_u}_{pb}", "pullback_limit", 0.25)
+        # Transition forbids old-direction inertia. Token 1h A1 pullback may pass.
+        if _a1_token_pullback_ok(
+            playbook_row, side=side_u, playbook=pb, edge=edge, confirmed=confirmed,
+        ):
+            return RegimeDecision(regime, "regime_transition_allows_token_A1", "pullback_limit", 0.40)
         return RegimeDecision(regime, f"regime_transition_blocks_{side_u}_{pb}", "shadow_only", 0.0)
 
     return RegimeDecision(regime, f"regime_unknown_blocks_{side_u}_{pb}", "shadow_only", 0.0)

@@ -538,7 +538,7 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         )
     )
 
-    # A1：1h 回踩离开波段高点，且最近 8 根斜率在 0%～5% 才成立。
+    # A1：1h 回踩离开波段高点，且最近 8 根斜率在 -1.20%～5% 才成立。
     # 最近 3 根低于 -0.50% 还在跌。15m 浅回踩只能辅证。
     h1_pull = bool(feats.get("trend_high_pullback_1h")) and feats.get("h1_side") != "SHORT"
     legacy_a1 = bool(

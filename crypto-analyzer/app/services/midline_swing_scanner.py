@@ -876,6 +876,7 @@ def evaluate_symbol_multiperiod(
         and side == "LONG"
         and big4_bias != "LONG"
         and not weak_big4_long_override
+        and not h1_pullback_long
     ):
         out.update({"reason": "daily_bear_blocks_long", "trend": dims, "future_4h": future_4h, "playbook": pb})
         return out

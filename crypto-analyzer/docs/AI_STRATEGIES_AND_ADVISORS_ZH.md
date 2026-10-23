@@ -382,14 +382,14 @@ Web：`/gemini-advisor-reviews`（展示三教师记录）
 - **BRAIN / 破位**：`HOLD_ADVISOR_STRUCTURE_JSON_SYSTEM_ZH` — **不限持仓时长**；做多等到合适高点、做空等到合适低点；禁止因小时数/小幅回吐/RSI 超买 sell；注入当前 `compute_structure_exit` 状态；`_temper_structure_swing_hold` 在结构点未到时把 sell 打回 hold  
 - **Big4**：仅辅证，**不得单独触发 sell**；**Big4 偏多时多单禁止仅凭 RSI 超买/高位背离 sell**（`_temper_bull_overbought_sell`）  
 - **亏损分档**（仅探索/预测）：轻微 >-5%、中度 >-12%、严重 ≤-15%；深亏 `hold` 经 `_temper_losing_hold` 统计复核。结构仓跳过 `_temper_profitable_hold` / `_temper_losing_hold`  
-- **程序化锁利**：探索/预测 `ai-trail-tp`（peak≥3% 回撤≥1%）；**BRAIN/破位**结构点优先。峰值 ≥2.20% 且未到 5% 时，回撤 1.20 个点走 `structure_profit_keep`；落到 ≤+0.15% 才走回吐兜底（取消 4–6h 亏单到期）
+- **程序化锁利**：探索/预测 `ai-trail-tp`（peak≥3% 回撤≥1%）；**BRAIN/破位**结构点优先。1h 冲高回落和错过高低都要求本仓最好价到过该极值 1.50% 以内，入场前的旧高不算卖点。峰值 ≥2.20% 且未到 5% 时，回撤 1.20 个点走 `structure_profit_keep`；落到 ≤+0.15% 才走回吐兜底。持仓时长不再把 +1.50% 小浮盈平掉（取消 `structure_stale_take`）
 - **DeepSeek soft-sl**：grace 45min；no_follow 须≥60min 且价格亏≈2.2%（匹配 15m×4h 开仓，避免早期闷杀）— **仅探索/预测**
 - **BRAIN/中线**：顾问 **suggest-only**（`advisor_suggest_only`）；sell 不调用 `_close_live_position`
 
 ### 8.4 sell 后果
 
 - **探索/预测**：始终关闭模拟仓；`live_close_enabled=1` 且有映射时平实盘。
-- **BRAIN / 中线**：只记 observe，**不关仓**。安全网为硬 SL、结构高/低点、错过/回吐锁利、BRAIN −80U。
+- **BRAIN / 中线**：只记 observe，**不关仓**。安全网为结构高/低点（须是本仓到过的极值）、错过/回吐锁利、5% trail。持仓时长不单独止盈。
 
 ### 8.5 Kill Switch
 

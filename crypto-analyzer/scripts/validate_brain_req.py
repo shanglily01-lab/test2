@@ -388,6 +388,19 @@ def test_brain_skip_open_advisor() -> None:
     }
     ok_b3, _ = _fast_event_winprob_allowed("SHORT", b3, 0.52, 0.47)
     assert ok_b3
+    a1_wp = {
+        "playbook": "A1",
+        "confirmed": True,
+        "edge_score": 0.93,
+        "signals": ["1h_trend_high_pullback", "ema_bull_align"],
+        "features": {"trend_high_pullback_1h": True, "h1_side": "LONG"},
+    }
+    # EDGE-like: long pool 0.41 vs short 0.50 → soft pass (gap < 10pp)
+    ok_a1, reason_a1 = _fast_event_winprob_allowed("LONG", a1_wp, 0.4146, 0.50)
+    assert ok_a1 and "a1_structure_winprob_relaxed" in reason_a1, (ok_a1, reason_a1)
+    # IRYS-like: long 0.43 vs short 0.71 → opposite clearly better, still block
+    bad_a1, bad_why = _fast_event_winprob_allowed("LONG", a1_wp, 0.4286, 0.7143)
+    assert not bad_a1 and "too_bad" in bad_why, (bad_a1, bad_why)
     _ok("fast-event winprob")
 
     orch2 = (ROOT / "app/services/brain_strategy_orchestrator.py").read_text(encoding="utf-8")
@@ -922,7 +935,22 @@ def test_brain_market_regime() -> None:
         side="LONG",
         playbook="A1",
     )
+    # No 1h pullback tag → still blocked in bear.
     assert dec2.regime == BEAR_TREND and dec2.margin_multiplier == 0
+
+    a1_pull = {
+        **a1,
+        "signals": list(a1["signals"]) + ["1h_trend_high_pullback"],
+        "features": {**a1["features"], "trend_high_pullback_1h": True},
+    }
+    dec2_ok = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "SHORT", "bull_count": 0, "bear_count": 3},
+        playbook_row=a1_pull,
+        side="LONG",
+        playbook="A1",
+    )
+    assert dec2_ok.regime == BEAR_TREND and dec2_ok.margin_multiplier > 0
+    assert "token_A1" in dec2_ok.reason
 
     c1 = {
         "side": "SHORT",
@@ -1000,6 +1028,15 @@ def test_brain_market_regime() -> None:
         global_regime=global_bear,
     )
     assert dec6_flat.margin_multiplier == 0 and "global_daily_bear_probe_blocks_long" in dec6_flat.reason
+
+    dec6_token = brain_open_regime_decision(
+        big4={"big4_ok": True, "bias": "FLAT", "bull_count": 1, "bear_count": 1},
+        playbook_row=a1_pull,
+        side="LONG",
+        playbook="A1",
+        global_regime=global_bear,
+    )
+    assert dec6_token.margin_multiplier > 0 and "allows_token_A1" in dec6_token.reason
 
     b3_exh = {
         "side": "SHORT",
@@ -1691,10 +1728,43 @@ def test_structure_swing_exit() -> None:
     low_lev = check_structure_profit_lock(0.042, 0.052, 1800, leverage=2)
     assert low_lev is None, low_lev
     assert check_structure_profit_lock(0.006, 0.006, 5 * 3600) is None
-    stale = check_structure_profit_lock(0.016, 0.016, 5 * 3600)
-    assert stale and stale.startswith("structure_stale_take"), stale
+    # BSB 2026-10-23: first print of +1.5% after 7h is still the position high.
+    # The clock must not sell it before a 1h giveback or a 2.20% pullback.
+    at_high = check_structure_profit_lock(0.0152, 0.0152, 7.2 * 3600)
+    assert at_high is None, at_high
+    still_green = check_structure_profit_lock(0.0175, 0.0175, 7.6 * 3600)
+    assert still_green is None, still_green
     loser = check_structure_profit_lock(-0.012, 0.002, 5 * 3600)
     assert loser is None, loser
+
+    old_high = []
+    for i in range(28):
+        old_high.append({
+            "open_price": 108.0,
+            "high_price": 110.0,
+            "low_price": 107.0,
+            "close_price": 109.0,
+            "volume": 800,
+        })
+    old_high.append({
+        "open_price": 104.0,
+        "high_price": 105.0,
+        "low_price": 99.0,
+        "close_price": 100.0,
+        "volume": 700,
+    })
+    # +2% from entry, still ~8% under the pre-entry high. That high is the buy, not a sell.
+    held = check_structure_swing_exit(
+        "LONG", [], peak_pct=0.020, age_s=3 * 3600, ref_price=100.0,
+        pnl_pct=0.020, rows_1h=old_high,
+    )
+    assert held is None, held
+    # Same old high, but this position's own peak traded it, then left it while still green.
+    missed_own = check_structure_swing_exit(
+        "LONG", [], peak_pct=0.110, age_s=3 * 3600, ref_price=100.0,
+        pnl_pct=0.020, rows_1h=old_high,
+    )
+    assert missed_own and missed_own.startswith("structure_missed_take"), missed_own
 
     dump = []
     p = 100.0
@@ -1779,6 +1849,26 @@ def test_h1_bull_pullback() -> None:
     )
     assert ready.ready is True, ready
     assert ready.status == "pullback_ready", ready
+
+    # Mild negative 8h slope (~-0.8%) ending at the low is still a buy (not a chase).
+    mild = [dict(r) for r in flat]
+    end_px = mild[-1]["close_price"]
+    start_px = end_px / (1.0 - 0.008)
+    for i in range(8):
+        bar = mild[-(8 - i)]
+        frac = i / 7.0
+        px_i = start_px + (end_px - start_px) * frac
+        bar["close_price"] = px_i
+        bar["open_price"] = px_i
+        bar["high_price"] = px_i * 1.001
+        bar["low_price"] = px_i * 0.999
+    mild_ready = compute_pullback_entry(
+        "LONG", "A1", mild[-24:],
+        playbook_row={"signals": ["volume_shrink_pullback", "1h_trend_high_pullback", "rsi_15m_turn_up"]},
+        ref_price=end_px,
+        rows_1h=mild,
+    )
+    assert mild_ready.ready is True, mild_ready
 
     still_3h = [dict(r) for r in flat]
     for bar in still_3h[-9:-4]:

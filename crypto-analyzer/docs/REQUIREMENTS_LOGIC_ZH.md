@@ -1,6 +1,6 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.76
+**版本**: v4.5.78
 **日期**: 2026-10-22
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **Telegram（§2.1）**：所有 TG 文案英文。  
@@ -262,8 +262,8 @@ GPT、战术、反转、smart_trader 若仍产出自动单，空单同样被 INV
 
 1. 1h 上升结构：近 24 根高点不低于前 24 根，且高点不在最近 2 根。
 2. 现价离开最近一根 1h 波段高点 **1.20%–8.00%**，不破前低。
-3. 最近 **8** 根 1h 收盘斜率在 **0%–5%**（不含 5%）才买。
-4. 8 小时斜率为负，或最近 **3** 根斜率 **低于 -0.50%** → `1h_slope_still_falling`，不买。
+3. 最近 **8** 根 1h 收盘斜率在 **-1.20%–5%**（不含 5%）才买。允许轻微下斜的回踩；只有自由落体才等。
+4. 最近 **3** 根斜率 **低于 -0.50%** → `1h_slope_still_falling`，不买。
 5. 8 小时斜率 **≥5%** → `1h_slope_too_steep`，不开。买回高点 → `1h_chase_not_pullback`，不开。
 6. 15m RSI 只决定现在买还是再等（仍 ≥68 且未拐头，或仍 ≤32 向下，则等）。
 7. 确认后按当前价市价成交。不再为 A1 挂限价。
@@ -280,8 +280,8 @@ GPT、战术、反转、smart_trader 若仍产出自动单，空单同样被 INV
 
 **大脑在 A1 买点之前还要过**（破位不走第 2 条胜率门）
 
-1. Big4 可交易（INV-10）。疲软不开。
-2. 近 7 日该方向胜率 ≥55%，且比反方向高 ≥5 个百分点（INV-09）。
+1. Big4 可交易（INV-10）。疲软不开。宏观偏空 / 过渡 / 日线探底时，**代币本身**已打出 `1h_trend_high_pullback` 的 A1 仍可开（缩仓），不得整段禁开。
+2. 近 7 日该方向胜率默认 ≥55%，且比反方向高 ≥5 个百分点（INV-09）。**A1 结构例外**：已确认且带 1h 回踩时，软底 **45%**；仅当反方向高出 ≥10 个百分点才硬拒（避免连亏后池子锁死整本账）。
 3. A1 `edge≥0.75`，且结构 `confirmed`。
 4. 本批开仓配额未满。
 
@@ -395,7 +395,7 @@ GPT、战术、反转、smart_trader 若仍产出自动单，空单同样被 INV
 | ID | 规则 |
 |----|------|
 | **INV-BRAIN-01** | 无自有分析 `side∈{LONG,SHORT}` 不得开仓 |
-| **INV-BRAIN-02** | 近 **7 日**、同规则、信号后 **4h**「方向对就算赢」的实现胜率 `win_prob` **&lt; 55%** → 不得开仓 |
+| **INV-BRAIN-02** | 近 **7 日**、同规则、信号后 **4h**「方向对就算赢」的实现胜率 `win_prob` 默认 **&lt; 55%** → 不得开仓。**A1 例外（v4.5.78）**：已确认且带 `1h_trend_high_pullback` 时软底 **45%**；仅当反方向高出 ≥10pp 才硬拒 |
 | **INV-BRAIN-03** | Big4 **疲软**（动量弱，且相对成交量很低 → 量价波动很小）→ 不得开仓；须有足够量价波动（门槛用近 7 日数据标定） |
 | **INV-BRAIN-04** | **开仓**：自有 Playbook 主判通过后直接开仓（**跳过开仓顾问**）；v4.5.63 仅 A1 多。**平仓**：DeepSeek 持仓顾问复核并落库（**sell 不执行**）；盈利 1h 冲高回落；亏损扛到强平（§7.3.16） |
 | **INV-BRAIN-05** | **平仓**：不以大脑战略翻转为主路径；持仓顾问只复核不执行；亏损安全网为**强平**；盈利为 **1h 结构高点 / 锁利**（不因 D1/翻转/4–6h 到期强平） |
@@ -571,7 +571,7 @@ Big4 已 LONG 时，日线 `DAILY_BEAR_PROBE` 不得否决已确认的 A1。无 
 
 | ID | 名称 | 方向 | 一句话描述 |
 |----|------|------|------------|
-| **A1** | 多头趋势回踩 | LONG | **v4.5.74**：1h 从最近波段高点回落 **1.20%–8.00%**。最近 8 根 1h 斜率在 0%–5% 才买。8 小时斜率为负，或最近 3 根低于 -0.50%，不买。≥5% 或买回高点不开 |
+| **A1** | 多头趋势回踩 | LONG | **v4.5.78**：1h 从最近波段高点回落 **1.20%–8.00%**。最近 8 根 1h 斜率在 **-1.20%–5%** 才买。最近 3 根低于 -0.50% 不买。≥5% 或买回高点不开 |
 | **A2** | 空头趋势反抽 | SHORT | 下降结构中离开低点进入反抽区，且出现上影/EMA 拒绝后再挂空。仅缩量或 lower_high 不够。**v4.5.36 拒绝确认后开仓** |
 
 **冲击反应类**
@@ -659,7 +659,7 @@ Big4 已 LONG 时，日线 `DAILY_BEAR_PROBE` 不得否决已确认的 A1。无 
 | | `15m_pullback_from_high` | 近 16 根最后极值是高点且已离开 ≥0.28%（真回调） |
 | | `15m_bounce_from_low` | 近 16 根最后极值是低点且已离开 ≥0.25%（真反弹；禁止当 A1） |
 | | `15m_failed_retest` | 近 32–48 根已有高顶，回落后第二次冲高不过前高（做空，禁止当 A1） |
-| | `1h_trend_high_pullback` | 1h 从最近波段高点回落 1.20%–8.00%，且最近 8 根斜率在 0%–5%，最近 3 根不低于 -0.50%（**A1 开仓必选**，v4.5.74） |
+| | `1h_trend_high_pullback` | 1h 从最近波段高点回落 1.20%–8.00%，且最近 8 根斜率在 -1.20%–5%，最近 3 根不低于 -0.50%（**A1 开仓必选**，v4.5.78） |
 | | `15m_trend_high_pullback` | 对近 32 根 15m 趋势新高回踩 0.80%–3.50%（辅证；不能替代 1h 带） |
 | | `15m_stop_new_low` | 15M 不再创新低（止跌） |
 | | `15m_stop_new_high` | 15M 不再创新高（滞涨） |
@@ -799,13 +799,13 @@ Big4 已 LONG 时，日线 `DAILY_BEAR_PROBE` 不得否决已确认的 A1。无 
 | 阶段 | 条件 | 动作 |
 |------|------|------|
 | 未到点 | 持仓 &lt;20min | 不砍；亏损扛到强平 |
-| 多单卖点 | **1h** 冲高回落 `exhaustion_ready`（`h1_pump_giveback`）且峰值 ≥**1.80%** | **市价平** `structure_sell_high` |
+| 多单卖点 | **1h** 冲高回落 `exhaustion_ready`（`h1_pump_giveback`），峰值 ≥**1.80%**，且本仓最高价到过该 1h 高点 **1.50%** 以内 | **市价平** `structure_sell_high`。回调买点下方的旧高点不算本仓冲高 |
 | 空单平点 | 15m `bounce_low_ready` 且峰值 ≥**1.80%** | **市价平** `structure_cover_low` |
-| 错过高低 | A1 等：`missed_high` / `missed_low` 且仍浮盈 ≥**1.80%** | **市价平** `structure_missed_take`。**C1/C3/B2 不因 missed 平**（入场就在极值附近） |
+| 错过高低 | A1 等：`missed_high` / `missed_low`，仍浮盈 ≥**1.80%**，且本仓最好价到过该 1h 极值 **1.50%** 以内 | **市价平** `structure_missed_take`。入场前的旧高/旧低不算错过。**C1/C3/B2 不因 missed 平** |
 | 中段锁利 | 峰值 ≥**2.20%** 且未到 5% trail；从峰值回撤 ≥**1.20** 个点，现价仍 > +0.15% | **市价平** `structure_profit_keep`。回撤不到 1.20 个点继续拿 |
 | 浮盈回吐 | 峰值 ≥**2.20%** 现价 ≤+0.15% | **市价平** `structure_profit_to_loss`（中段锁利被跳空穿过时的兜底） |
 | 锁利 trail | 价格峰值 ≥**5%**，且按杠杆折成保证金收益 ≥**25%**（5 倍时两条同为 5 个点）后，回撤 ≥0.55%（Big4 LONG 多单 0.80%） | **市价平** `structure_trail_*`。未到 5% 不启动移动止盈 |
-| 过期仍绿 | 持仓 ≥4h 且仍浮盈 ≥**1.50%** | **市价平** `structure_stale_take`（**不**对亏损单按时长强平） |
+| 持仓时长 | 浮盈停在本仓高点，或尚未走出 1h 结构卖点 | **不平**。取消 `structure_stale_take`（旧规则：≥4h 且浮盈 ≥1.50% 就卖）。亏损单仍不按时长强平 |
 | 硬 TP / 5m 早撤 / 4–6h 亏单到期 | — | **关闭** |
 
 **禁止**：BRAIN/破位走旧 `_check_ai_trail_tp` / `midline_hold_exit` / `planned_close_time_expired`。  
@@ -816,7 +816,7 @@ Big4 已 LONG 时，日线 `DAILY_BEAR_PROBE` 不得否决已确认的 A1。无 
 ```text
 1. 强平（liquidation：触及强平价，或保证金浮亏 ≥100%）→ 平
 2. structure_sell_high（1h 冲高回落）→ 平
-3. structure_missed_take / trail / profit_keep / profit_to_loss / stale_take → 平
+3. structure_missed_take / trail / profit_keep / profit_to_loss → 平。本仓没到过的旧极值、以及仅因持仓时长出现的小浮盈，不平
 4. 硬 SL / 美元熔断 / 5m 早撤 / 亏单到期 — 关闭
 5. 战略翻转 — 仍关；DeepSeek 持仓顾问 — 仅复核落库，sell 不执行
 ```
@@ -991,7 +991,7 @@ Big4 已 LONG 时，日线 `DAILY_BEAR_PROBE` 不得否决已确认的 A1。无 
 | 持仓顾问 tick | scheduler **每 15min** | 每仓 **15min/仓**；**浮盈转亏**立即 urgent 再审 |
 | 持仓顾问决策 | 探索/预测：15m 表主审；浮盈 ROI≥**+8%** 且 15m **明确**转弱（反向≥4）→ 倾向 observe/sell；sell 须 15m 近 4 根确认反转；**sell 执行平仓**。**BRAIN/破位**：结构波段 rubric（不限时；多单卖合适高、空单平合适低）；结构点未到禁止因时长/浮盈回吐 sell；**sell 只落库 `advisor_suggest_only`** |
 
-**AI 轻量移动止盈**（`position_sl_tp_monitor.py`）：探索/预测 peak 价格收益 **≥3%** 后回撤 **≥1%**（`ai-trail-tp`）。**BRAIN / 中线 v2** 优先结构点出场；错过结构点或浮盈回吐走 `check_structure_profit_lock`（须先有 ≥**1.80%** 浮盈才因 missed 平；峰值 ≥**2.20%** 且未到 5% 时，回撤 **1.20** 个点走 `structure_profit_keep`；落到 ≤+0.15% 才走 `structure_profit_to_loss`；C1/C3/B2 不因 missed 平）。移动止盈须价格峰值 ≥**5%** 且保证金收益 ≥**25%**（5 倍下同为 5 个点），之后 Big4 LONG 多单回撤 0.80% 才平。破位硬 SL 2.0–3.0% + **−120U**。`midline_hold_exit` 与 4–6h 亏单到期 **不再执行**。
+**AI 轻量移动止盈**（`position_sl_tp_monitor.py`）：探索/预测 peak 价格收益 **≥3%** 后回撤 **≥1%**（`ai-trail-tp`）。**BRAIN / 中线 v2** 优先结构点出场；错过结构点或浮盈回吐走 `check_structure_profit_lock`（须先有 ≥**1.80%** 浮盈，且本仓最好价到过该 1h 极值 **1.50%** 以内，才因 missed 平；入场前的旧高不算错过；峰值 ≥**2.20%** 且未到 5% 时，回撤 **1.20** 个点走 `structure_profit_keep`；落到 ≤+0.15% 才走 `structure_profit_to_loss`；C1/C3/B2 不因 missed 平；持仓时长不再单独止盈）。移动止盈须价格峰值 ≥**5%** 且保证金收益 ≥**25%**（5 倍下同为 5 个点），之后 Big4 LONG 多单回撤 0.80% 才平。破位硬 SL 2.0–3.0% + **−120U**。`midline_hold_exit` 与 4–6h 亏单到期 **不再执行**。
 
 **AI soft-sl**（同 monitor）：通用探索/预测 grace **15min**、no_follow 约 **-1.2%**。**DeepSeek** explore/predict 单独加宽以匹配 15m×4h 开仓 thesis：grace **45min**；no_follow 须 age≥**60min** 且价格亏≥**约 2.2%**；profit_to_loss / mature 亦更深更晚；硬 SL 仍兜底。
 
@@ -1092,7 +1092,7 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 | REQ-MIDLINE | `market_cap_universe.py`, `midline_swing_config.py`, `midline_swing_scanner.py`, `entry_timing.py`, `midline_hold_exit.py`, `midline_explore_worker.py`, `midline_swing_api.py`, 破位策略页 JS/模板, `strategy_display_names.py`, `scheduler.py`, `position_sl_tp_monitor.py`, `trading_gates.py`, 开仓/持仓顾问路由 |
 | **REQ-BRAIN** | `brain_config` / `brain_strategy_orchestrator`（市值前 300）/ `market_cap_universe.py`；`paper_limit_entry` + executor expire；`trading_gates.LIVE_SYNC_SOURCES`；`smart_exit_optimizer` 排除；`validate_brain_req.py`；权威 §7.3；操作对照 `docs/BRAIN_AND_BREAKOUT_OPERATOR_ZH.md` |
 | **REQ-BRAIN-v2** | Playbook 识别 + 信号打标 + `brain_opportunities` 落库 + 分向胜率 + 评估报表；§7.3.10–7.3.15（**首版已落地**） |
-| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | 牛市只做 A1 **1h 回调多**（离高 1.20%–8.00%，最近 8 根斜率 0%–5% 后市价；最近 3 根低于 -0.50% 不买）；盈利 1h 冲高回落 + 中段回撤 1.20 个点锁利；亏损无硬 SL，保证金亏满 **100%** 强平；顾问 suggest-only；§7.3（**v4.5.74**） |
+| **REQ-BRAIN-HOLD / REQ-BRAIN-RISK** | 牛市只做 A1 **1h 回调多**（离高 1.20%–8.00%，最近 8 根斜率 -1.20%–5% 后市价；最近 3 根低于 -0.50% 不买）；宏观偏空时代币 1h 回踩仍可缩仓开；A1 胜率软底 45%；盈利 1h 冲高回落（高点须是本仓到过的）+ 中段回撤 1.20 个点锁利；不因持仓时长把 +1.50% 小浮盈平掉；亏损无硬 SL，保证金亏满 **100%** 强平；顾问 suggest-only；§7.3（**v4.5.78**） |
 | REQ-ST | `smart_trader_service.py` |
 | **REQ-SPOT** | `spot_paper_mirror.py`；`spot_live_sync.py`；`spot_trader_service.py`；`fill_paper_limit_order` 钩子；`validate_spot_paper.py`；权威 §7.4 |
 | **REQ-WATCHLIST** | `watchlist_config.py` · `watchlist_store.py` · `watchlist_orders.py` · `watchlist_api.py` · `watchlist_page.js`（浏览器直连币安合约 WS + 3s 无 tick 则 `/api/watchlist/prices` 1s 补价）· `/watchlist`；`LIVE_SYNC_SOURCES` 含 `manual_watchlist`；权威 §7.5 |
@@ -1106,6 +1106,8 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-10-23 | **v4.5.78** | **修好开不出单**：A1 的 8h 斜率下限改为 **-1.20%**（仍用近 3 根 -0.50% 拦自由落体）。宏观熊/过渡/崩盘/恐慌反弹/日线探底时，代币已打出 `1h_trend_high_pullback` 的 A1 可缩仓开，不再整段禁开。A1 胜率软底 **45%**，反方向高出 ≥10pp 才硬拒（避免连亏后 55% 池子锁死）。近 36h 主拦因：`regime_bear/transition_blocks_LONG_A1` + `winprob_below_0.55`；破位连续多轮 0 信号。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.0/§7.3 已同步 |
+| 2026-10-23 | **v4.5.77** | **止盈不再按时长落袋**：取消 `structure_stale_take`（≥4h 且浮盈 ≥1.50% 就市价平）。1h 冲高回落和错过高低都要求本仓最好价到过该极值 1.50% 以内；A1 入场前的旧高点不算卖点。中段 1.20 个点锁利和 5% trail 不变。BSB 10/23 三笔在本仓高点 +1.50%～+1.75% 被提前平掉。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.3.16.3 已同步 |
 | 2026-10-22 | **v4.5.76** | **Telegram 全文英文**：开/平仓、策略名、持仓时长、每日复盘、币安公告、IP 封禁告警一律英文。Web 中文展示不变。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §2.1 已同步 |
 | 2026-10-22 | **v4.5.75** | **开单口径收成 §7.0**：自动策略只开 A1 的 1h 回调多，确认后市价。A2/B/C 与空单只打标。破位扫描改为 15 分钟，不再写 4h 三层 AND 或 C1/C3 下单。DeepSeek 对照期仍限价开多。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.0/§7.2/§7.3.4 已同步 |
 | 2026-10-22 | **v4.5.74** | **A1 买点改 8 小时斜率**：最近 8 根 1h 收盘斜率在 0%–5% 才买。最近 3 根低于 -0.50% 仍是在跌（`1h_slope_still_falling`），不买。卖出仍用 1h 冲高回落，不用斜率由正变 0。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.2/§7.3 已同步 |

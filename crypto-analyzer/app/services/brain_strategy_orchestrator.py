@@ -171,10 +171,27 @@ def _fast_event_winprob_allowed(
     win_long: Optional[float],
     win_short: Optional[float],
 ) -> tuple[bool, str]:
-    """Fast breakout/exhaustion events should not be muted by stale pool win-rate."""
+    """Structure A1 / fast events should not be muted by a stale directional pool.
+
+    Auto policy only opens A1 longs. A 7d pool under 55% would otherwise lock
+    the book forever after a losing streak, even when the token just printed a
+    fresh 1h pullback. Soft floor 45%; only hard-veto when the opposite side is
+    clearly better by ≥10pp.
+    """
     side_u = (side or "").upper()
     playbook = str(playbook_row.get("playbook") or "")
     signals = set(playbook_row.get("signals") or [])
+    feats = playbook_row.get("features") or {}
+    is_a1_long = (
+        side_u == "LONG"
+        and playbook == "A1"
+        and bool(playbook_row.get("confirmed"))
+        and float(playbook_row.get("edge_score") or 0) >= 0.80
+        and (
+            "1h_trend_high_pullback" in signals
+            or bool(feats.get("trend_high_pullback_1h"))
+        )
+    )
     is_fast_long = side_u == "LONG" and playbook == "C3" and bool(signals & {"impulse_up", "h1_breakout_up"})
     is_fast_short = side_u == "SHORT" and (
         (
@@ -189,14 +206,15 @@ def _fast_event_winprob_allowed(
             and bool(signals & {"break_support", "impulse_down", "h1_breakdown_down", "crash_spike", "volume_expand_down"})
         )
     )
-    if not (is_fast_long or is_fast_short):
+    if not (is_a1_long or is_fast_long or is_fast_short):
         return False, "not_fast_event"
 
     me = win_long if side_u == "LONG" else win_short
     other = win_short if side_u == "LONG" else win_long
+    tag = "a1_structure" if is_a1_long else "fast_event"
     if me is not None and me < 0.45 and (other is None or other >= me + 0.10):
-        return False, "fast_event_winprob_too_bad"
-    return True, "fast_event_winprob_relaxed"
+        return False, f"{tag}_winprob_too_bad"
+    return True, f"{tag}_winprob_relaxed"
 
 
 def _build_catalyst(playbook_row: Dict[str, Any], win_long: Optional[float], win_short: Optional[float]) -> str:
