@@ -1851,7 +1851,7 @@ def test_h1_bull_pullback() -> None:
     assert ready.status == "pullback_ready", ready
 
     from app.services.entry_timing import H1_SLOPE_MIN_PCT, H1_SLOPE_MAX_PCT
-    assert H1_SLOPE_MIN_PCT == 0.0 and H1_SLOPE_MAX_PCT == 15.0, (
+    assert H1_SLOPE_MIN_PCT == -1.20 and H1_SLOPE_MAX_PCT == 15.0, (
         H1_SLOPE_MIN_PCT, H1_SLOPE_MAX_PCT,
     )
 
@@ -1893,6 +1893,48 @@ def test_h1_bull_pullback() -> None:
         rows_1h=lh,
     )
     assert lh_ready.ready is True, lh_ready
+
+    # 48h coarse h1_side=SHORT must not strip a confirmed 1h pullback A1.
+    from app.services.brain_playbook import classify_playbook
+    from app.services.entry_timing import _h1_pullback_view as _hv
+    shortish = []
+    for i in range(40):
+        p = 130.0 - i * 0.5
+        shortish.append({
+            "open_price": p, "high_price": p + 0.6, "low_price": p - 0.5,
+            "close_price": p, "volume": 800,
+        })
+    peak_s = 112.0
+    shortish.append({
+        "open_price": peak_s - 1.0, "high_price": peak_s, "low_price": peak_s - 2.0,
+        "close_price": peak_s - 0.5, "volume": 900,
+    })
+    px_s = peak_s * 0.97
+    shortish.append({
+        "open_price": peak_s - 0.8, "high_price": peak_s - 0.2, "low_price": px_s,
+        "close_price": px_s, "volume": 700,
+    })
+    for _ in range(22):
+        shortish.append({
+            "open_price": px_s, "high_price": px_s * 1.001, "low_price": px_s * 0.999,
+            "close_price": px_s, "volume": 500,
+        })
+    rows_15_s = []
+    for _ in range(64):
+        rows_15_s.append({
+            "open_price": px_s, "high_price": px_s * 1.002, "low_price": px_s * 0.998,
+            "close_price": px_s, "volume": 300,
+        })
+    assert len(shortish) >= 48
+    c0 = shortish[-48]["close_price"]
+    assert (px_s - c0) / c0 * 100.0 <= -1.2, (px_s, c0)
+    hv = _hv(shortish, px_s)
+    assert hv.get("kind") == "pullback", hv
+    pb_s = classify_playbook(
+        shortish, rows_15m=rows_15_s, big4={"bias": "FLAT", "big4_ok": True},
+    )
+    assert (pb_s.get("features") or {}).get("h1_side") == "SHORT", pb_s.get("features")
+    assert pb_s.get("playbook") == "A1" and pb_s.get("side") == "LONG", pb_s
 
     still_3h = [dict(r) for r in flat]
     for bar in still_3h[-9:-4]:

@@ -538,9 +538,10 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         )
     )
 
-    # A1：近 24 根波段高点回踩 + 最近 8 根斜率 0%～15%（不强制高于前 24 根）。
+    # A1：近 24 根波段高点回踩 + 最近 8 根斜率 -1.20%～15%（不强制高于前 24 根）。
+    # 48h 粗方向 h1_side=SHORT 不得否决已确认的 1h 回踩（弱市里回踩常伴随 48h 净跌）。
     # 最近 3 根低于 -0.50% 还在跌。15m 浅回踩只能辅证。
-    h1_pull = bool(feats.get("trend_high_pullback_1h")) and feats.get("h1_side") != "SHORT"
+    h1_pull = bool(feats.get("trend_high_pullback_1h"))
     legacy_a1 = bool(
         feats.get("trend_high_pullback")
         and feats.get("ema_bull")
@@ -810,7 +811,9 @@ def classify_playbook(
             filtered.append((pb, sc, conf))
             continue
         if h1 in ("LONG", "SHORT") and side in ("LONG", "SHORT") and side != h1:
-            continue
+            # Bull A1: keep the 1h pullback long even when coarse 48h side is SHORT.
+            if not (pb == "A1" and feats.get("trend_high_pullback_1h")):
+                continue
         filtered.append((pb, sc, conf))
 
     if (
@@ -861,6 +864,12 @@ def classify_playbook(
 
     filtered.sort(key=_key, reverse=True)
     best_pb, best_sc, best_conf = filtered[0]
+    # Bull A1 pullback must own the label. Otherwise A2/B2 can outscore it,
+    # get blocked by long-only, and the real 1h pullback never opens.
+    if feats.get("trend_high_pullback_1h"):
+        a1_hits = [x for x in filtered if x[0] == "A1"]
+        if a1_hits:
+            best_pb, best_sc, best_conf = max(a1_hits, key=_key)
     side = PLAYBOOK_SIDE.get(best_pb, "FLAT")
 
     # edge_score = playbook score（0~1）
