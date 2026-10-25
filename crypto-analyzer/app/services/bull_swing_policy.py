@@ -10,6 +10,10 @@ from typing import Optional, Tuple
 BULL_OPEN_PLAYBOOKS = frozenset({"A1"})
 BULL_LONG_ONLY_REASON = "bull_long_only_blocks_short"
 BULL_A1_ONLY_PREFIX = "bull_a1_only"
+# 大脑 + 破位合计。同一币只留 1 槽，全书最多 12 笔，浮亏到 -200U 就平。
+STRUCTURE_BOOK_CAP = 12
+STRUCTURE_SYMBOL_CAP = 1
+STRUCTURE_MAX_LOSS_USD = 200.0
 
 _AUTO_EXACT = frozenset({
     "brain_swing",
@@ -108,8 +112,20 @@ def auto_open_allowed(
 
 
 def skip_hard_stop(source: str, side: str) -> bool:
-    """Auto longs: no fixed SL / USD fuse / time stop. Ride losers to liquidation."""
+    """Auto longs skip the tight price SL. Structure books still cut at STRUCTURE_MAX_LOSS_USD."""
     return is_auto_strategy_source(source) and str(side or "").upper() == "LONG"
+
+
+def structure_loss_cap_reason(unrealized_usd: float) -> Optional[str]:
+    """Brain/breakout longs: cut once the margin loss reaches the cap."""
+    try:
+        pnl = float(unrealized_usd)
+    except (TypeError, ValueError):
+        return None
+    cap = abs(float(STRUCTURE_MAX_LOSS_USD))
+    if pnl <= -cap:
+        return f"structure_loss_cap:{pnl:.0f}"
+    return None
 
 
 def strip_fixed_exits(source: str, side: str) -> bool:

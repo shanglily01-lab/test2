@@ -1,8 +1,7 @@
 """Entry timing — buy the pullback, sell the high, follow a fresh break.
 
 LONG A1: buy a 1h pullback 1.20%–8% under the trend high only after the
-1h slope flattens. A negative slope is still falling. Near 0, or a rise
-under 5%, is the bottom. A steeper rise is a chase.
+8h slope is in [0%, 15%). A negative slope is still falling.
 LONG C3: BRAIN waits for the pullback; midline follows a fresh breakout (market).
 SHORT exhaustion (B3/C4): sell the first callback off a tagged high — do not wait for EMA.
 SHORT follow (C1): follow a fresh breakdown immediately — do not wait for a bounce.
@@ -73,11 +72,10 @@ H1_PULLBACK_MAX_RECOVERY = 0.35
 # Rising off the pullback low only counts as chase after buying back this much
 # of the dip (same band as left_the_low). A shallow green bounce is still A1.
 H1_CHASE_GREEN_RECOVERY = 0.35
-# Bottom of the pullback: 8 one-hour closes, slope in [-1.20%, 15%).
-# Mild negative 8h slope is still a pullback; only a free-fall is blocked.
-# The last 3 hours still veto a hard drop (below -0.50%).
+# Bottom of the pullback: 8 one-hour closes, slope in [0%, 15%).
+# A still-falling 8h tape is not a buy. The last 3 hours also veto a hard drop.
 H1_SLOPE_BARS = 8
-H1_SLOPE_MIN_PCT = -1.20
+H1_SLOPE_MIN_PCT = 0.0
 H1_SLOPE_MAX_PCT = 15.0
 H1_SLOPE_FALL_BARS = 3
 H1_SLOPE_FALL_MIN_PCT = -0.50
@@ -818,7 +816,7 @@ def _h1_pullback_view(rows_1h: List[Dict[str, Any]], price: float) -> Dict[str, 
     closes must sit 1.20%–8% under the high. Do **not** require the recent
     24-bar high to beat the prior 24-bar high — that HH gate blocked almost
     every open when the book only made equal/lower highs.
-    Buy when the last 8 one-hour closes slope from -1.20% up to just under 15%.
+    Buy when the last 8 one-hour closes slope from 0% up to just under 15%.
     A last-3-hour slope below -0.50% is still falling, so wait. Climbing
     back through 35% of the dip, or leaving the pullback low two bars behind
     after buying back 35%, is a chase.
@@ -967,9 +965,9 @@ def _a1_h1_pullback_entry(
     ref_price: Optional[float] = None,
     rows_15m: Optional[List[Dict[str, Any]]] = None,
 ) -> EntryTiming:
-    """A1 long: buy the 1h pullback when 8h slope is in [-1.20%, 15%).
+    """A1 long: buy the 1h pullback when 8h slope is in [0%, 15%).
 
-    Mildly negative 8h slope is fine. A hard drop over the last 3h still waits.
+    A negative 8h slope is still falling. A hard drop over the last 3h also waits.
     15m RSI only times the order.
     """
     if len(rows_1h) < H1_TREND_BARS:

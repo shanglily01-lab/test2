@@ -72,6 +72,18 @@ def gate_simulated_open(
     from app.services.midline_swing_config import is_midline_source
     from app.services.brain_config import is_brain_source
     from app.services.watchlist_config import is_watchlist_source
+    if is_brain_source(source) or is_midline_source(source):
+        try:
+            from app.services.trading_gates import structure_capacity_allowed
+            cap_ok, cap_why = structure_capacity_allowed(conn, symbol, account_id)
+            if not cap_ok:
+                logger.info(
+                    f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {cap_why}"
+                )
+                return False, cap_why
+        except Exception as e:
+            logger.warning(f"[开仓闸门] {symbol} 结构仓额度异常: {e}")
+            return False, "structure_capacity_error"
     if is_watchlist_source(source):
         try:
             from app.services.trading_gates import check_symbol_trading_forbidden

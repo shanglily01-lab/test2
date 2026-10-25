@@ -931,6 +931,77 @@ def slots_reach_open_cap(count: int, cap: int = MAX_OPEN_ORDERS_PER_SYMBOL) -> b
     return int(count) >= int(cap)
 
 
+_STRUCTURE_SOURCES = (
+    "brain_swing",
+    "brain_long",
+    "brain_short",
+    "midline_long",
+    "midline_short",
+)
+
+
+def structure_capacity_allowed(
+    conn,
+    symbol: str,
+    account_id: Optional[int] = 2,
+) -> tuple[bool, str]:
+    """大脑和破位共用额度：全书上限，且同一币只留 1 个开仓槽。"""
+    from app.services.bull_swing_policy import STRUCTURE_BOOK_CAP, STRUCTURE_SYMBOL_CAP
+
+    clean = futures_symbol_clean(symbol)
+    if not clean:
+        return False, "structure_capacity_no_symbol"
+    own = conn is None
+    cur = None
+    try:
+        if own:
+            conn = pymysql.connect(
+                **get_db_config(),
+                charset="utf8mb4",
+                cursorclass=pymysql.cursors.DictCursor,
+                autocommit=True,
+            )
+        cur = conn.cursor()
+        placeholders = ",".join(["%s"] * len(_STRUCTURE_SOURCES))
+        sql = (
+            f"SELECT COUNT(*) AS book_n, "
+            f"SUM(CASE WHEN {sql_rating_symbol_clean('symbol')} = %s THEN 1 ELSE 0 END) AS sym_n "
+            f"FROM futures_positions "
+            f"WHERE LOWER(status)='open' AND source IN ({placeholders})"
+        )
+        params: list = [clean, *_STRUCTURE_SOURCES]
+        if account_id is not None:
+            sql += " AND account_id=%s"
+            params.append(account_id)
+        cur.execute(sql, params)
+        row = cur.fetchone() or {}
+        if isinstance(row, dict):
+            book_n = int(row.get("book_n") or 0)
+            sym_n = int(row.get("sym_n") or 0)
+        else:
+            book_n = int(row[0] or 0)
+            sym_n = int(row[1] or 0)
+        if sym_n >= int(STRUCTURE_SYMBOL_CAP):
+            return False, f"structure_symbol_cap:{clean} {sym_n}/{STRUCTURE_SYMBOL_CAP}"
+        if book_n >= int(STRUCTURE_BOOK_CAP):
+            return False, f"structure_book_cap:{book_n}/{STRUCTURE_BOOK_CAP}"
+        return True, f"structure_book:{book_n}/{STRUCTURE_BOOK_CAP}"
+    except Exception as e:
+        logger.warning(f"[trading_gates] 结构仓额度检查失败 {symbol}: {e}")
+        return False, "structure_capacity_error"
+    finally:
+        if cur is not None:
+            try:
+                cur.close()
+            except Exception:
+                pass
+        if own and conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def count_symbol_open_slots(
     conn,
     symbol: str,

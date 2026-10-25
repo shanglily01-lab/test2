@@ -48,7 +48,7 @@ MIDLINE_SL_BY_PLAYBOOK = {
     "B3": 3.0,
     "C4": 3.0,
 }
-MIDLINE_FOLLOW_MAX_OPENS_PER_SCAN = 3
+MIDLINE_FOLLOW_MAX_OPENS_PER_SCAN = 1
 
 # v2 独立量化 source（不再挂教师名）
 MIDLINE_SOURCES = frozenset({

@@ -538,8 +538,8 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         )
     )
 
-    # A1：近 24 根波段高点回踩 + 最近 8 根斜率 -1.20%～15%（不强制高于前 24 根）。
-    # 48h 粗方向 h1_side=SHORT 不得否决已确认的 1h 回踩（弱市里回踩常伴随 48h 净跌）。
+    # A1：近 24 根波段高点回踩 + 最近 8 根斜率 0%～15%（不强制高于前 24 根）。
+    # 48h 粗方向 h1_side=SHORT 时不把这段回踩开成多单（弱市接飞刀）。
     # 最近 3 根低于 -0.50% 还在跌。15m 浅回踩只能辅证。
     h1_pull = bool(feats.get("trend_high_pullback_1h"))
     legacy_a1 = bool(
@@ -811,9 +811,8 @@ def classify_playbook(
             filtered.append((pb, sc, conf))
             continue
         if h1 in ("LONG", "SHORT") and side in ("LONG", "SHORT") and side != h1:
-            # Bull A1: keep the 1h pullback long even when coarse 48h side is SHORT.
-            if not (pb == "A1" and feats.get("trend_high_pullback_1h")):
-                continue
+            # 48h 偏空时丢掉 A1 多。10/23 起这类单占了浮亏的主体。
+            continue
         filtered.append((pb, sc, conf))
 
     if (

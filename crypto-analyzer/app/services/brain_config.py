@@ -138,8 +138,8 @@ BRAIN_ENABLED_KEY = "brain_swing_enabled"
 # 轮询扫描（市值前 300）：每批 5 个、间隔 15 秒，发现机会立即下单
 BRAIN_TICK_BATCH_SIZE = 5
 BRAIN_TICK_INTERVAL_SECONDS = 15
-BRAIN_SYMBOL_OPEN_COOLDOWN_MINUTES = 60
-BRAIN_TICK_MAX_OPENS = 2  # 单批最多触发几次 DS 开仓
+BRAIN_SYMBOL_OPEN_COOLDOWN_MINUTES = 240
+BRAIN_TICK_MAX_OPENS = 1  # 单批最多开 1 笔
 BRAIN_CLOSE_CHECK_EVERY_TICKS = 20  # ~5min 做一次 thesis 平仓检查
 BRAIN_POOL_REFRESH_EVERY_TICKS = 40  # ~10min 刷新市值前 300 池
 # 开仓后最短持仓：期间不做 thesis/Big4 战略平（硬 SL/TP 仍生效）

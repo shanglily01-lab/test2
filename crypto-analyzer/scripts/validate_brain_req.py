@@ -47,9 +47,13 @@ def test_imports_and_config() -> None:
     assert TRADEABLE_PLAYBOOKS == frozenset({"A1", "A2", "B2", "B3", "C1", "C3", "C4"})
     assert BULL_OPEN_PLAYBOOKS == frozenset({"A1"})
     from app.services.bull_swing_policy import (
+        STRUCTURE_BOOK_CAP,
+        STRUCTURE_MAX_LOSS_USD,
+        STRUCTURE_SYMBOL_CAP,
         auto_open_allowed,
         auto_short_blocked,
         skip_hard_stop,
+        structure_loss_cap_reason,
     )
     assert auto_short_blocked("brain_swing", "SHORT")[0]
     assert auto_short_blocked("midline_short", "SHORT")[0]
@@ -58,6 +62,10 @@ def test_imports_and_config() -> None:
     assert auto_open_allowed("brain_swing", "LONG", "A1")[0]
     assert not auto_open_allowed("brain_swing", "LONG", "C3")[0]
     assert not auto_open_allowed("brain_swing", "SHORT", "C1")[0]
+    assert STRUCTURE_BOOK_CAP == 12 and STRUCTURE_SYMBOL_CAP == 1
+    assert STRUCTURE_MAX_LOSS_USD == 200.0
+    assert structure_loss_cap_reason(-199.9) is None
+    assert structure_loss_cap_reason(-200.0)
     assert skip_hard_stop("brain_swing", "LONG")
     assert skip_hard_stop("deepseek_predict", "LONG")
     assert not skip_hard_stop("manual_watchlist", "LONG")
@@ -505,6 +513,8 @@ def test_brain_risk_params() -> None:
     mon2 = (ROOT / "app/services/position_sl_tp_monitor.py").read_text(encoding="utf-8")
     if "check_brain_max_loss_usd" not in mon2:
         _fail("monitor 未接入 brain_max_loss_usd")
+    if "structure_loss_cap_reason" not in mon2:
+        _fail("monitor 未接入结构仓亏损上限")
     if "_skip_hard_stop" not in mon2 or "load_1h_rows" not in mon2:
         _fail("monitor 未接入牛市无硬SL / 1h 冲高回落")
     if "_check_brain_5m_adverse_exit" not in mon2 or "brain_5m_adverse" not in mon2:
@@ -1851,7 +1861,7 @@ def test_h1_bull_pullback() -> None:
     assert ready.status == "pullback_ready", ready
 
     from app.services.entry_timing import H1_SLOPE_MIN_PCT, H1_SLOPE_MAX_PCT
-    assert H1_SLOPE_MIN_PCT == -1.20 and H1_SLOPE_MAX_PCT == 15.0, (
+    assert H1_SLOPE_MIN_PCT == 0.0 and H1_SLOPE_MAX_PCT == 15.0, (
         H1_SLOPE_MIN_PCT, H1_SLOPE_MAX_PCT,
     )
 
@@ -1894,7 +1904,7 @@ def test_h1_bull_pullback() -> None:
     )
     assert lh_ready.ready is True, lh_ready
 
-    # 48h coarse h1_side=SHORT must not strip a confirmed 1h pullback A1.
+    # 48h coarse h1_side=SHORT must strip the A1 long. Those opens were the loss book.
     from app.services.brain_playbook import classify_playbook
     from app.services.entry_timing import _h1_pullback_view as _hv
     shortish = []
@@ -1934,7 +1944,7 @@ def test_h1_bull_pullback() -> None:
         shortish, rows_15m=rows_15_s, big4={"bias": "FLAT", "big4_ok": True},
     )
     assert (pb_s.get("features") or {}).get("h1_side") == "SHORT", pb_s.get("features")
-    assert pb_s.get("playbook") == "A1" and pb_s.get("side") == "LONG", pb_s
+    assert pb_s.get("playbook") != "A1", pb_s
 
     still_3h = [dict(r) for r in flat]
     for bar in still_3h[-9:-4]:

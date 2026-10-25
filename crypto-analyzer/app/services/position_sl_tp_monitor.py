@@ -599,6 +599,20 @@ class PositionSLTPMonitor:
                     u_pnl = margin * lev * pnl_pct
                 except (TypeError, ValueError):
                     u_pnl = 0.0
+                if _uses_structure_swing(src):
+                    from app.services.bull_swing_policy import structure_loss_cap_reason
+                    cap_reason = structure_loss_cap_reason(u_pnl)
+                    if cap_reason:
+                        self._sync_peak_to_db(pid, new_peak * 100)
+                        logger.info(
+                            f"[structure loss cap] pid={pid} {symbol} {side} "
+                            f"reason={cap_reason} price={price:.6f} "
+                            f"pnl_pct={pnl_pct * 100:.2f}%"
+                        )
+                        self._cooldown[pid] = now + self._cooldown_seconds
+                        self._peak_pnl_map.pop(pid, None)
+                        self._do_close(pid, symbol, side, cap_reason, price, now)
+                        continue
                 if _is_brain_usd and not _skip_hard_stop(src, side):
                     from app.services.brain_config import BRAIN_ADVERSE_5M_MIN_LOSS_USD
                     from app.services.brain_trail_exit import check_brain_max_loss_usd
