@@ -1,6 +1,7 @@
 """市值前 100 的规则行情：情绪、当前走势、后续推演。不调用 LLM，不负责开仓。"""
 from __future__ import annotations
 
+import threading
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -13,8 +14,10 @@ from app.utils.config_loader import get_db_config
 from app.utils.futures_symbol import futures_symbol_rating_canonical
 
 PULSE_LIMIT = 100
-_CACHE_TTL_S = 45.0
+PULSE_REFRESH_S = 15 * 60
+_CACHE_TTL_S = float(PULSE_REFRESH_S)
 _cache: Dict[str, Any] = {"ts": 0.0, "payload": None}
+_compute_lock = threading.Lock()
 
 
 def _f(value: Any) -> Optional[float]:
@@ -189,7 +192,13 @@ def _top_symbols() -> List[str]:
     return out
 
 
-def _fetch_tf(cur, symbols: Sequence[str], timeframe: str, keep: int) -> Dict[str, List[Dict[str, Any]]]:
+def _fetch_tf(
+    cur,
+    symbols: Sequence[str],
+    timeframe: str,
+    keep: int,
+    since_ms: float,
+) -> Dict[str, List[Dict[str, Any]]]:
     if not symbols:
         return {}
     placeholders = ",".join(["%s"] * len(symbols))
@@ -203,10 +212,11 @@ def _fetch_tf(cur, symbols: Sequence[str], timeframe: str, keep: int) -> Dict[st
             WHERE timeframe=%s
               AND exchange='binance_futures'
               AND symbol IN ({placeholders})
+              AND open_time >= %s
         ) t
         WHERE rn <= %s
         """,
-        (timeframe, *symbols, int(keep)),
+        (timeframe, *symbols, int(since_ms), int(keep)),
     )
     grouped: Dict[str, List[Dict[str, Any]]] = {}
     for row in cur.fetchall() or []:
@@ -219,7 +229,18 @@ def build_market_pulse(force: bool = False) -> Dict[str, Any]:
     cached = _cache.get("payload")
     if not force and cached and now - float(_cache.get("ts") or 0) < _CACHE_TTL_S:
         return cached
+    if not _compute_lock.acquire(blocking=False):
+        if cached:
+            return cached
+        with _compute_lock:
+            return _cache.get("payload") or cached
+    try:
+        return _build_market_pulse_locked(now)
+    finally:
+        _compute_lock.release()
 
+
+def _build_market_pulse_locked(now: float) -> Dict[str, Any]:
     symbols = _top_symbols()
     now_ms = now * 1000.0
     rows_1h: Dict[str, List[Dict[str, Any]]] = {}
@@ -232,9 +253,9 @@ def build_market_pulse(force: bool = False) -> Dict[str, Any]:
     conn = pymysql.connect(**cfg, charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor)
     try:
         cur = conn.cursor()
-        rows_1h = _fetch_tf(cur, symbols, "1h", 30)
-        rows_4h = _fetch_tf(cur, symbols, "4h", 16)
-        rows_15 = _fetch_tf(cur, symbols, "15m", 20)
+        rows_1h = _fetch_tf(cur, symbols, "1h", 30, now_ms - 48 * 3_600_000)
+        rows_4h = _fetch_tf(cur, symbols, "4h", 16, now_ms - 8 * 86_400_000)
+        rows_15 = _fetch_tf(cur, symbols, "15m", 20, now_ms - 12 * 3_600_000)
         if symbols:
             placeholders = ",".join(["%s"] * len(symbols))
             cur.execute(
@@ -298,7 +319,8 @@ def build_market_pulse(force: bool = False) -> Dict[str, Any]:
         "universe": "市值前100",
         "count": len(items),
         "updated_at": int(now),
-        "note": "情绪看 24h 涨跌、1h RSI 和资金费率。当前走势看 4h 与 1h。后续方向是这些指标的规则推演，不是预测保证。",
+        "refresh_seconds": int(PULSE_REFRESH_S),
+        "note": "每 15 分钟更新一次。情绪看 24h 涨跌、1h RSI 和资金费率。当前走势看 4h 与 1h。后续方向是规则推演，不是预测保证。",
         "summary": {
             "trend_up": _count("trend", "上升"),
             "trend_down": _count("trend", "下跌"),

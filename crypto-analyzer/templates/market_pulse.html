@@ -32,7 +32,7 @@
 <header class="border-b border-outline-variant/20 px-8 py-5 flex items-start justify-between gap-4 flex-wrap">
   <div>
     <h1 class="text-2xl font-bold">动态行情实时分析</h1>
-    <p id="note" class="text-[12px] text-on-surface-variant mt-1 max-w-3xl">市值前 100。情绪、当前走势、后续方向都由 K 线规则计算。</p>
+    <p id="note" class="text-[12px] text-on-surface-variant mt-1 max-w-3xl">市值前 100。每 15 分钟更新一次，不跟每一笔行情。</p>
   </div>
   <div class="flex items-center gap-3">
     <input id="q" placeholder="搜币" class="bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-1.5 text-sm w-36"/>
@@ -116,7 +116,7 @@ function load() {
     if (data.note) document.getElementById('note').textContent = data.note;
     renderSummary(data.summary || {});
     var ts = data.updated_at ? new Date(data.updated_at * 1000) : new Date();
-    document.getElementById('clock').textContent = ts.toLocaleTimeString();
+    document.getElementById('clock').textContent = '更新于 ' + ts.toLocaleTimeString() + ' · 每 15 分钟';
     render();
   }).catch(function() {
     document.getElementById('rows').innerHTML = '<tr><td class="py-6 text-[#ff716c]" colspan="9">行情读取失败</td></tr>';
@@ -125,6 +125,6 @@ function load() {
 document.getElementById('q').addEventListener('input', render);
 document.getElementById('reload').addEventListener('click', load);
 load();
-setInterval(load, 60000);
+setInterval(load, 15 * 60 * 1000);
 </script>
 </body></html>
