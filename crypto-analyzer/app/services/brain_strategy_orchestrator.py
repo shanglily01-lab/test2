@@ -135,7 +135,14 @@ def get_brain_live_status() -> Dict[str, Any]:
 
 def _refresh_pool(conn) -> List[str]:
     from app.services.market_cap_universe import load_brain_universe
-    symbols = list(load_brain_universe(conn))
+    from app.services.trading_gates import load_l0_l1_scan_symbols
+    from app.utils.futures_symbol import futures_symbol_clean
+
+    allow = load_l0_l1_scan_symbols(conn)
+    symbols = [
+        s for s in load_brain_universe(conn)
+        if futures_symbol_clean(s) in allow
+    ]
     _live["pool"] = symbols
     _live["pool_size"] = len(symbols)
     if _live["cursor"] >= len(symbols):

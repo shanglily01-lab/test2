@@ -41,7 +41,7 @@ alwaysApply: true
 | 中线 v2 | 回调买 / B3/C4 冲高卖 | SL 2.0–3.0%；结构点出场；−120U | **不限时** |
 | **现货镜像** | BRAIN A1 或 DeepSeek LONG 合约成交 | 抄合约 SL/TP | **500U/单**；`spot_live_enabled` 成交瞬间同步；仅 L0 |
 
-**DeepSeek 选币**：仅 **L0+L1**；**DeepSeek soft-sl**：grace45 / no_follow≥60m且≈-2.2%
+**DeepSeek 选币**：仅 **L0+L1**（实盘只同步 L0）；**DeepSeek soft-sl**：grace45 / no_follow≥60m且≈-2.2%
 
 **REQ-BRAIN §7.3**：盈利 KPI；**只开 A1 1h 回调多**（近 24 根离高回踩，不强制 HH；8h 斜率 **0%–15%**；48h 偏空否决 A1；同一币 1 槽、全书最多 12 笔；胜率软底 45%）；禁止自动开空；盈利 1h 冲高回落（高点须是本仓到过的）；峰值 ≥2.20% 且未到 5% 时回撤 **1.20** 个点锁利；不因持仓时长把 +1.50% 小浮盈平掉；浮亏 **-200U** 平仓；顾问 suggest-only；**A1 回调确认后市价**；**排除 SmartExit**；`validate_brain_req.py`
 

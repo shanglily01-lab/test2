@@ -58,10 +58,10 @@ def test_gate_logic() -> None:
         tg, "get_symbol_rating_info", return_value=(1, False, False)
     ):
         if tg.is_symbol_blocked_level3("L1COIN/USDT"):
-            _fail("L1 should still be allowed for paper (not in forbidden set)")
-        ok, _ = tg.check_simulated_symbol_allowed("L1COIN/USDT")
+            _fail("L1 is not in the L2+ hard-forbidden set")
+        ok, reason = tg.check_simulated_symbol_allowed("L1COIN/USDT")
         if not ok:
-            _fail("L1 simulated open must still be allowed")
+            _fail(f"L1 simulated open must be allowed, got {reason!r}")
 
     with patch.object(
         tg, "get_symbol_rating_info", return_value=(1, False, True)

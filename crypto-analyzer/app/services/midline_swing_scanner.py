@@ -492,7 +492,7 @@ def _fetch_window(cur, symbol: str, key: str) -> Tuple[List[float], List[float],
 
 
 def load_midline_universe(conn) -> List[str]:
-    """市值前 100（config.yaml 按市值序）；证券 / L2+ / 锁定剔除。"""
+    """市值序里的 L0+L1，最多 100。证券 / L2+ / 未评级剔除。"""
     from app.services.market_cap_universe import (
         MIDLINE_MARKET_CAP_LIMIT,
         load_midline_universe_from_cap,
@@ -500,9 +500,14 @@ def load_midline_universe(conn) -> List[str]:
 
     symbols = load_midline_universe_from_cap(conn)
     if symbols:
-        return symbols[:MIDLINE_MARKET_CAP_LIMIT]
+        from app.services.trading_gates import load_l0_l1_scan_symbols
+        allow = load_l0_l1_scan_symbols(conn)
+        kept = [s for s in symbols if futures_symbol_clean(s) in allow]
+        return kept[:MIDLINE_MARKET_CAP_LIMIT]
 
     logger.warning("[breakout scanner] ranked cap pool empty, fallback to config yaml")
+    from app.services.trading_gates import load_l0_l1_scan_symbols
+    allow = load_l0_l1_scan_symbols(conn)
     ranked = load_config_yaml_symbols()
     try:
         from app.services.trading_gates import load_trading_forbidden_symbols
@@ -519,6 +524,7 @@ def load_midline_universe(conn) -> List[str]:
             not clean
             or clean in seen
             or clean in banned_clean
+            or clean not in allow
             or not _is_plain_usdt_symbol(sym)
             or is_security(sym)
         ):

@@ -86,8 +86,9 @@ def gate_simulated_open(
             return False, "structure_capacity_error"
     if is_watchlist_source(source):
         try:
-            from app.services.trading_gates import check_symbol_trading_forbidden
-            forbidden, forbid_reason = check_symbol_trading_forbidden(symbol, conn)
+            from app.services.trading_gates import check_simulated_symbol_allowed
+            forbidden_ok, forbid_reason = check_simulated_symbol_allowed(symbol, conn)
+            forbidden = not forbidden_ok
             if forbidden:
                 logger.info(
                     f"[开仓闸门] 拒绝开仓 {symbol} {side} source={source}: {forbid_reason}"

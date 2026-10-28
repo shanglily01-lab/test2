@@ -511,9 +511,9 @@ def load_trading_forbidden_symbols(conn=None) -> Set[str]:
 
 
 def load_l0_l1_scan_symbols(conn=None) -> Set[str]:
-    """DeepSeek 扫描池：白名单 L0 + 黑名单 1 级（未锁定）。
+    """扫描池：白名单 L0 + L1（未锁定）。
 
-    返回 clean symbol 集合（无斜杠）。未评级 / L2+ / rating_locked 均不入池，节省 LLM token。
+    返回 clean symbol 集合（无斜杠）。未评级 / L2+ / rating_locked 不入池。
     """
     own_conn = conn is None
     try:
@@ -755,13 +755,8 @@ def check_live_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
 
 
 def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]:
-    """
-    模拟盘开仓基础币种闸门。
-
-    拒绝: L2+ / rating_locked=1。
-    允许: TOP50 / 已有评级且非禁止 / candidate_pool_snapshot 候选池内币种。
-    """
-    rating_level, in_top50, rating_locked = get_symbol_rating_info(symbol, cursor)
+    """模拟盘开 L0 白名单和 L1。未评级、L2+、锁定都不开。实盘仍只开 L0。"""
+    rating_level, _, rating_locked = get_symbol_rating_info(symbol, cursor)
     forbidden, forbid_reason = check_symbol_trading_forbidden(
         symbol,
         cursor,
@@ -770,14 +765,11 @@ def check_simulated_symbol_allowed(symbol: str, cursor=None) -> Tuple[bool, str]
     )
     if forbidden:
         return False, forbid_reason
-
-    if in_top50 or rating_level is not None:
+    if rating_level in (0, 1):
         return True, ''
-
-    if _symbol_in_candidate_pool(symbol):
-        return True, ''
-
-    return False, '不在TOP名单且未在黑白名单评级表中，禁止模拟盘'
+    if rating_level is None:
+        return False, '非白名单或L1，禁止模拟盘'
+    return False, f'黑名单{int(rating_level)}级禁止模拟盘'
 
 
 DEFAULT_PAPER_MARGIN_USD = 1000.0

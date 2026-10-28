@@ -191,6 +191,8 @@ def _clean_stale_ratings(cursor, active_symbols: set):
                 continue
             if int(r.get("rating_locked") or 0) == 1:
                 continue
+            if int(r.get("rating_level") or -1) in (0, 1):
+                continue
             reason = (r.get("level_change_reason") or "")
             total_trades = int(r.get("total_trades") or 0)
             if total_trades == 0 or "交易不足" in reason:

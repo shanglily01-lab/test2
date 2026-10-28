@@ -149,13 +149,13 @@
 ### 主探索 (`*_explore`)
 - 每 **max_hold_hours**（距上次 ok）+ 10min 轮询；kill switch `*_explore_enabled`（多默认 0）
 - SL **3%** / TP **5%** / **max_hold_hours** / 5x / 1000U；conf≥**0.75** + `explore_catalyst_technical_ok`（含 15m OHLC）；**DeepSeek LONG** 另≥**0.82** + RSI/7d/24h/`deepseek_long_entry_quality_ok`
-- **DeepSeek 选币**：仅 **L0+L1**（不扫未评级/全市场）
+- **DeepSeek 选币**：仅 **L0+L1**（不扫未评级/全市场）；实盘仍只同步 L0
 - **实盘同步**（`trading_gates.LIVE_SYNC_SOURCES`）：`deepseek_explore` / `deepseek_predict` / `brain_swing` / **`midline_long/short`** / **`manual_watchlist`**（+ L0 白名单等 symbol 闸门）
 - **Gemini 探索已下线**（系统配置无开关；不调度）
 
 ### 主预测 (`*_predict`)
 - 每 **max_hold_hours**（距上次 ok）+ 5min 轮询 + `*_predict_next_due_utc`；kill switch
-- 同主探索持仓/SL/TP/门槛；**DeepSeek 仅扫 L0+L1**；**实盘**：仅 `deepseek_predict`（+ L0）
+- 同主探索持仓/SL/TP/门槛；**DeepSeek 仅扫 L0+L1**；**实盘**：仅 `deepseek_predict`（须 L0）
 - **DeepSeek soft-sl**（`position_sl_tp_monitor`）：grace 45min；no_follow≥60min 且亏≈2.2%（匹配开仓 thesis）
 - **Gemini 预测已下线**（API / 页面 / worker 已移除）
 

@@ -1,6 +1,6 @@
 # 超级大脑量化交易系统 — 业务逻辑需求文档（权威版）
 
-**版本**: v4.5.82
+**版本**: v4.5.84
 **日期**: 2026-10-22
 **状态**: **生产逻辑唯一权威来源**（代码与本文冲突时，以本文为准改代码；改代码必须同步本文）  
 > **Telegram（§2.1）**：所有 TG 文案英文。  
@@ -222,16 +222,16 @@ BRAIN / 破位 / DeepSeek / **自选手动** 实盘同一套开关：`live_tradi
 
 ### 6.4 模拟盘开仓闸门 check_simulated_symbol_allowed
 
-- **拒绝**：L2+（`rating_level>=2`）、**手动锁定**（`rating_locked=1`）  
-- **允许**：TOP50 / 有评级且非禁止 / candidate_pool 内  
+- **允许**：L0 白名单、L1  
+- **拒绝**：未评级、L2+、**手动锁定**。TOP50 与 candidate_pool 不再单独放行  
 - L2+ 与手动锁定：**模拟盘与实盘均禁止开仓**（`check_symbol_trading_forbidden`）  
 - `blacklist_level3_enabled` 设置项**已废弃**（行为恒为启用，保留仅为兼容旧 UI）
 
 ### 6.5 实盘保证金
 
-- **主探索/预测 / BRAIN / 破位**：`user_api_keys.max_position_value` × `get_live_margin_ratio(symbol)`；模拟可扫 L0+L1，实盘同步**仅 L0**  
+- **主探索/预测 / BRAIN / 破位**：`user_api_keys.max_position_value` × `get_live_margin_ratio(symbol)`；模拟开 **L0+L1**，实盘同步**仅 L0**  
 - **破位策略** 杠杆与模拟一致（**无硬 SL / 无硬 TP** / 5x；浮亏 -200U 平仓，INV-12）  
-- L0=1.0x；L1/L2/L3 禁止实盘（L2+ 同时禁止模拟）  
+- L0=1.0x；L1 只模拟；L2/L3 禁止模拟与实盘  
 
 ### 6.6 模拟保证金（v4.5.61）
 
@@ -976,7 +976,7 @@ Big4 已 LONG 时，日线 `DAILY_BEAR_PROBE` 不得否决已确认的 A1。无 
 - 探索读 `load_candidate_pool_for_explore()`（**禁止** pool 全表 DELETE）  
 - 主预测（Gemini）：`candidate_pool_snapshot` 技术面 **TOP50**；**禁止**对 `price_stats_24h` 全市场逐 symbol 回退扫 `kline_data`  
 - DeepSeek 预测：**仅 L0 白名单 + L1**（`load_l0_l1_scan_symbols` ∩ `candidate_pool`），**不扫未评级/全市场**；建数**仅读**缓存（禁 kline 回退）；建数成功后再 claim；软锁 **25min** 过期可抢占；DB `read_timeout=45`；LLM 按批 50  
-- DeepSeek 探索：同样 **仅 L0/L1** 建 universe（`_build_l0_l1_universe_from_cache`），禁止扩成全市场  
+- DeepSeek 探索：只建 **L0+L1** universe（`_build_l0_l1_universe_from_cache`），禁止扩成全市场  
 - 主探索/预测开仓：`explore_catalyst_technical_ok` 在文案门槛后，用真实 15m K 线做 OHLC 方向闸门（缺 K 线则拒）  
 - K 线叙事：1h = 24 根趋势 + 近 6 明细；15m = 16 根（4h）  
 
@@ -1058,7 +1058,7 @@ IP 封禁：`binance_rate_guard` + `logs/binance_ban_state.json`；封禁时 RES
 | 等级 | 条件概要 | 模拟 | 实盘 |
 |------|----------|------|------|
 | L0 白名单 | 盈利≥300U 且 胜率≥40%，**或** 盈利≥100U 且 胜率≥45% | 可 | 可（须 L0） |
-| L1 | 盈利>50U 或 胜率>46%（非 L0） | 可 | 禁止 |
+| L1 | 盈利>50U 或 胜率>46%（非 L0）；市值前 120 非白名单也记入 L1 | 可 | 禁止 |
 | L2 | -100<盈利<0 或 胜率>44% | **禁止** | 禁止 |
 | L3 | 盈利<-100U 且 胜率<44% | **禁止** | 禁止 |
 
@@ -1108,6 +1108,8 @@ TOP50：`top_performing_symbols` 表；模拟开仓参考，**非**实盘开仓�
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-10-28 | **v4.5.84** | **模拟 L0+L1，实盘只 L0**：删掉当时 L2/L3 的持仓、订单、成交和评级。市值前 120（不含证券/大宗）里不是白名单的记为 L1，可开模拟盘。未评级不再放行。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §6.4/§6.5/§13 已同步 |
+| 2026-10-28 | **v4.5.83** | **只交易 L0 白名单**：当轮曾把模拟也收成只开 L0；同日 v4.5.84 改回模拟 L0+L1。 |
 | 2026-10-25 | **v4.5.82** | **收紧开仓、给亏损封顶**：① 8h 斜率改回 **0%–15%**；② 48h `h1_side=SHORT` 否决 A1 多；③ 大脑+破位同一币 **1** 槽、合计最多 **12** 笔；④ 每批/每轮最多开 1 笔，大脑同币冷却 4h；⑤ 浮亏 **-200U** 平仓（`structure_loss_cap`），不再扛到强平。10/25 账本：已平仓仍小赚，持仓浮亏大脑约 -10020U（64 笔）、破位约 -3441U（10 笔），同一币最多叠 3 仓，最差单 `h1=SHORT`。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.0/§7.3 已同步 |
 | 2026-10-23 | **v4.5.81** | **修好弱市仍开不出 A1**：① 8h 斜率改回 **-1.20%–15%**；② 追涨阈值回补 **35%**；③ 已确认 1h 回踩时 48h `h1_side=SHORT` 不得滤掉 A1；④ **有 `1h_trend_high_pullback` 时强制选 A1 标签**（否则 A2 分更高抢走标签，再被只做多挡掉，真实回踩永远开不了；COMP/AERO）。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.0 已同步 |
 | 2026-10-23 | **v4.5.80** | **修好一直不开单**：去掉 A1「近 24 根必须高于前 24 根」和 `broke_prior_low`。旧 HH 闸门把 top100 约 96 个币打成 `not_1h_trend_high_pullback`；峰前低点闸门又误伤正常回踩。现行只认近 24 根离高 1.20%–8.00% + 斜率 0%–15% + 近 3 根非自由落体。需求文档: docs/REQUIREMENTS_LOGIC_ZH.md §7.0 已同步 |
