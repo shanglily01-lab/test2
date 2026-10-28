@@ -53,6 +53,7 @@ def test_imports_and_config() -> None:
         auto_open_allowed,
         auto_short_blocked,
         skip_hard_stop,
+        losing_long_candle_stop_reason,
         structure_loss_cap_reason,
     )
     assert auto_short_blocked("brain_swing", "SHORT")[0]
@@ -66,6 +67,41 @@ def test_imports_and_config() -> None:
     assert STRUCTURE_MAX_LOSS_USD == 200.0
     assert structure_loss_cap_reason(-199.9) is None
     assert structure_loss_cap_reason(-200.0)
+    from datetime import datetime, timedelta
+    clock = datetime(2026, 10, 28, 12, 0, 0)
+
+    def _yin(n, minutes, end_open, close_px=9.0):
+        start = end_open - timedelta(minutes=minutes * (n - 1))
+        return [
+            {
+                "open": 10.0,
+                "close": close_px,
+                "open_time": start + timedelta(minutes=minutes * i),
+            }
+            for i in range(n)
+        ]
+
+    end_15 = clock - timedelta(minutes=15)
+    end_5 = clock - timedelta(minutes=5)
+    yin15 = _yin(3, 15, end_15)
+    yin5 = _yin(3, 5, end_5)
+    assert losing_long_candle_stop_reason("LONG", -10, 7.9 * 3600, yin15, yin5, clock) is None
+    assert losing_long_candle_stop_reason("LONG", 1, 9 * 3600, yin15, yin5, clock) is None
+    assert losing_long_candle_stop_reason("SHORT", -10, 9 * 3600, yin15, yin5, clock) is None
+    assert losing_long_candle_stop_reason("LONG", -10, 8 * 3600, yin15, [], clock) == "loss_15m_yin:3"
+    assert losing_long_candle_stop_reason(
+        "LONG", -10, 8 * 3600, _yin(4, 15, end_15), [], clock,
+    ) == "loss_15m_yin:4"
+    assert losing_long_candle_stop_reason(
+        "LONG", -10, 8 * 3600, _yin(2, 15, end_15), yin5, clock,
+    ) is None
+    doji = _yin(3, 15, end_15)
+    doji[-1]["close"] = 10.0
+    assert losing_long_candle_stop_reason("LONG", -10, 9 * 3600, doji, [], clock) is None
+    forming = _yin(3, 15, clock)
+    assert losing_long_candle_stop_reason("LONG", -10, 9 * 3600, forming, [], clock) is None
+    assert losing_long_candle_stop_reason("LONG", -10, 11 * 3600, [], yin5, clock) is None
+    assert losing_long_candle_stop_reason("LONG", -10, 12 * 3600, [], yin5, clock) == "loss_5m_yin:3"
     assert skip_hard_stop("brain_swing", "LONG")
     assert skip_hard_stop("deepseek_predict", "LONG")
     assert not skip_hard_stop("manual_watchlist", "LONG")
@@ -515,6 +551,8 @@ def test_brain_risk_params() -> None:
         _fail("monitor 未接入 brain_max_loss_usd")
     if "structure_loss_cap_reason" not in mon2:
         _fail("monitor 未接入结构仓亏损上限")
+    if "losing_long_candle_stop_reason" not in mon2:
+        _fail("monitor 未接入亏损阴线止损")
     if "_skip_hard_stop" not in mon2 or "load_1h_rows" not in mon2:
         _fail("monitor 未接入牛市无硬SL / 1h 冲高回落")
     if "_check_brain_5m_adverse_exit" not in mon2 or "brain_5m_adverse" not in mon2:

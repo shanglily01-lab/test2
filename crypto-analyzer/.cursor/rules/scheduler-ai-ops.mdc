@@ -9,7 +9,7 @@ alwaysApply: true
 
 - 服务: `crypto-scheduler` → `app/scheduler.py`
 - 应用日志: `logs/scheduler_$(date -u +%Y-%m-%d).log`（不是 journalctl 主输出）
-- AI 出场: `crypto-app-main` → `position_sl_tp_monitor`（大脑/破位无紧止损；盈利 1h 冲高回落，高点须是本仓到过的 / 峰值≥2.20% 回撤 1.20 个点锁利 / 5% trail；不因持仓时长把 +1.50% 小浮盈平掉；浮亏 -200U 平仓；保证金亏满 100% 仍强平；无 SL/TP 的自动仓也扫描；排除 SmartExit）
+- AI 出场: `crypto-app-main` → `position_sl_tp_monitor`（大脑/破位无紧止损；盈利 1h 冲高回落，高点须是本仓到过的 / 峰值≥2.20% 回撤 1.20 个点锁利 / 5% trail；不因持仓时长把 +1.50% 小浮盈平掉；浮亏 -200U 平仓；亏损做多满 8h 连续 3 根已收盘 15m 阴线、或满 12h 连续 3 根已收盘 5m 阴线也平；保证金亏满 100% 仍强平；无 SL/TP 的自动仓也扫描；排除 SmartExit）
 - 部署后改 Python 必须 restart 对应 systemd（scheduler / main 分开）
 
 ## 调度节奏

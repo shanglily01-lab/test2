@@ -341,6 +341,7 @@ class PositionSLTPMonitor:
         # peak_pnl_pct 内存映射：进程重启会丢，但一般持仓 <= 24h 影响可控
         self._peak_pnl_map: Dict[int, float] = {}
         self._trend_exit_cache: Dict[int, tuple[float, Optional[str]]] = {}
+        self._yin_stop_cache: Dict[int, tuple[float, Optional[str]]] = {}
         # disable_sl_tp_hold 开关缓存，避免每秒查 DB
         self._disable_cache: tuple[float, bool] = (0.0, False)
         self._disable_cache_ttl = 10.0
@@ -396,6 +397,7 @@ class PositionSLTPMonitor:
         alive_pids = {int(p["id"]) for p in positions}
         self._peak_pnl_map = {k: v for k, v in self._peak_pnl_map.items() if k in alive_pids}
         self._trend_exit_cache = {k: v for k, v in self._trend_exit_cache.items() if k in alive_pids}
+        self._yin_stop_cache = {k: v for k, v in self._yin_stop_cache.items() if k in alive_pids}
 
         now = time.time()
         for pos in positions:
@@ -613,6 +615,22 @@ class PositionSLTPMonitor:
                         self._peak_pnl_map.pop(pid, None)
                         self._do_close(pid, symbol, side, cap_reason, price, now)
                         continue
+                    if u_pnl < 0 and age_s >= 8 * 3600:
+                        yin_reason = self._check_losing_yin_stop(
+                            pid, symbol, side, u_pnl, age_s, now,
+                        )
+                        if yin_reason:
+                            self._sync_peak_to_db(pid, new_peak * 100)
+                            logger.info(
+                                f"[loss yin stop] pid={pid} {symbol} {side} "
+                                f"reason={yin_reason} price={price:.6f} "
+                                f"pnl_usd={u_pnl:.1f} age_h={age_s / 3600:.2f}"
+                            )
+                            self._cooldown[pid] = now + self._cooldown_seconds
+                            self._peak_pnl_map.pop(pid, None)
+                            self._yin_stop_cache.pop(pid, None)
+                            self._do_close(pid, symbol, side, yin_reason, price, now)
+                            continue
                 if _is_brain_usd and not _skip_hard_stop(src, side):
                     from app.services.brain_config import BRAIN_ADVERSE_5M_MIN_LOSS_USD
                     from app.services.brain_trail_exit import check_brain_max_loss_usd
@@ -885,6 +903,33 @@ class PositionSLTPMonitor:
         except Exception as e:
             logger.debug(f"[BRAIN 5m] DB kline fail {symbol}: {e}")
             return []
+
+    def _check_losing_yin_stop(
+        self,
+        pid: int,
+        symbol: str,
+        side: str,
+        unrealized_usd: float,
+        age_s: float,
+        now: float,
+    ) -> Optional[str]:
+        cached = self._yin_stop_cache.get(pid)
+        if cached and (now - cached[0]) < 20.0:
+            return cached[1]
+        try:
+            from app.services.bull_swing_policy import losing_long_candle_stop_reason
+            from app.services.structure_swing_exit import load_15m_rows, load_5m_rows
+
+            rows_15m = load_15m_rows(symbol) if age_s >= 8 * 3600 else []
+            rows_5m = load_5m_rows(symbol) if age_s >= 12 * 3600 else []
+            reason = losing_long_candle_stop_reason(
+                side, unrealized_usd, age_s, rows_15m, rows_5m,
+            )
+        except Exception as e:
+            logger.debug(f"[loss yin stop] {symbol} 判定失败: {e}")
+            reason = None
+        self._yin_stop_cache[pid] = (now, reason)
+        return reason
 
     def _check_ai_trend_exit(
         self,

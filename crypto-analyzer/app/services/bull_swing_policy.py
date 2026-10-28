@@ -5,7 +5,8 @@ Existing shorts are not force-closed.
 """
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from datetime import datetime, timedelta, timezone
+from typing import Any, Optional, Sequence, Tuple
 
 BULL_OPEN_PLAYBOOKS = frozenset({"A1"})
 BULL_LONG_ONLY_REASON = "bull_long_only_blocks_short"
@@ -14,6 +15,10 @@ BULL_A1_ONLY_PREFIX = "bull_a1_only"
 STRUCTURE_BOOK_CAP = 12
 STRUCTURE_SYMBOL_CAP = 1
 STRUCTURE_MAX_LOSS_USD = 200.0
+# 亏损单：满 8h 看已收盘 15m 连续阴线；满 12h 再看已收盘 5m 连续阴线。
+LOSS_YIN_15M_MIN_HOURS = 8.0
+LOSS_YIN_5M_MIN_HOURS = 12.0
+LOSS_YIN_STREAK = 3
 
 _AUTO_EXACT = frozenset({
     "brain_swing",
@@ -125,6 +130,87 @@ def structure_loss_cap_reason(unrealized_usd: float) -> Optional[str]:
     cap = abs(float(STRUCTURE_MAX_LOSS_USD))
     if pnl <= -cap:
         return f"structure_loss_cap:{pnl:.0f}"
+    return None
+
+
+def _as_utc_naive(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            return value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value
+    if isinstance(value, (int, float)):
+        raw = float(value)
+        if raw > 1e12:
+            raw = raw / 1000.0
+        return datetime.utcfromtimestamp(raw)
+    return None
+
+
+def _closed_yin_flags(rows: Optional[Sequence[Any]], interval_s: int, now: datetime) -> list:
+    """已收盘 K 线里，做多阴线（收盘 < 开盘）为 True。未收盘的一根不算。"""
+    flags = []
+    step = timedelta(seconds=int(interval_s))
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        try:
+            open_px = row.get("open")
+            if open_px is None:
+                open_px = row.get("open_price")
+            close_px = row.get("close")
+            if close_px is None:
+                close_px = row.get("close_price")
+            open_px = float(open_px)
+            close_px = float(close_px)
+        except (TypeError, ValueError):
+            continue
+        if open_px <= 0 or close_px <= 0:
+            continue
+        opened = _as_utc_naive(row.get("open_time"))
+        if opened is None or opened + step > now:
+            continue
+        flags.append(close_px < open_px)
+    return flags
+
+
+def _trailing_true(flags: Sequence[bool]) -> int:
+    streak = 0
+    for flag in reversed(list(flags)):
+        if not flag:
+            break
+        streak += 1
+    return streak
+
+
+def losing_long_candle_stop_reason(
+    side: str,
+    unrealized_usd: float,
+    age_s: float,
+    rows_15m: Optional[Sequence[Any]] = None,
+    rows_5m: Optional[Sequence[Any]] = None,
+    now: Optional[datetime] = None,
+) -> Optional[str]:
+    """亏损的做多单：8h 后连续 3 根已收盘 15m 阴线，或 12h 后连续 3 根已收盘 5m 阴线。"""
+    if str(side or "").upper() != "LONG":
+        return None
+    try:
+        pnl = float(unrealized_usd)
+        age_h = float(age_s) / 3600.0
+    except (TypeError, ValueError):
+        return None
+    if pnl >= 0 or age_h < LOSS_YIN_15M_MIN_HOURS:
+        return None
+    clock = now or datetime.utcnow()
+    if clock.tzinfo is not None:
+        clock = clock.astimezone(timezone.utc).replace(tzinfo=None)
+    n15 = _trailing_true(_closed_yin_flags(rows_15m, 15 * 60, clock))
+    if n15 >= LOSS_YIN_STREAK:
+        return f"loss_15m_yin:{n15}"
+    if age_h < LOSS_YIN_5M_MIN_HOURS:
+        return None
+    n5 = _trailing_true(_closed_yin_flags(rows_5m, 5 * 60, clock))
+    if n5 >= LOSS_YIN_STREAK:
+        return f"loss_5m_yin:{n5}"
     return None
 
 

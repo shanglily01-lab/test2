@@ -288,6 +288,10 @@ def load_15m_rows(symbol: str, limit: int = _KLINE_LIMIT) -> List[Dict[str, Any]
     return _load_tf_rows(symbol, "15m", limit)
 
 
+def load_5m_rows(symbol: str, limit: int = 12) -> List[Dict[str, Any]]:
+    return _load_tf_rows(symbol, "5m", limit)
+
+
 def load_1h_rows(symbol: str, limit: int = 72) -> List[Dict[str, Any]]:
     return _load_tf_rows(symbol, "1h", limit)
 
