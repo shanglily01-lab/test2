@@ -1362,33 +1362,7 @@ class UnifiedDataScheduler:
         schedule.every(15).seconds.do(_run_brain_swing_tick)
         logger.info("  ✓ brain_swing (REQ-BRAIN) - 每15s轮询一批5币，发现即开")
 
-        # DeepSeek 探索 — 对照期保留自动开仓（INV-BRAIN-07 暂缓）
-        def _run_deepseek_explore():
-            def wrapper():
-                try:
-                    from app.services.deepseek_explore_worker import run_explore_round
-                    run_explore_round(triggered_by='scheduler')
-                except Exception as e:
-                    logger.error(f"[DeepSeek探索] 调度异常: {e}", exc_info=True)
-            threading.Thread(target=wrapper, daemon=True, name="DeepSeekExplore").start()
-
-        schedule.every(2).hours.do(_run_deepseek_explore)
-        schedule.every(10).minutes.do(_run_deepseek_explore)
-        logger.info("  ✓ deepseek_explore - 距上次ok+max_hold_hours, 每2h + 10min轮询 (对照期)")
-
-        # DeepSeek 预测
-        def _run_deepseek_predict():
-            def wrapper():
-                try:
-                    from app.services.deepseek_predictor import run_predict_round
-                    run_predict_round(triggered_by='scheduler')
-                except Exception as e:
-                    logger.error(f"[DeepSeek预测] 调度异常: {e}", exc_info=True)
-            threading.Thread(target=wrapper, daemon=True, name="DeepSeekPredict").start()
-
-        schedule.every(2).hours.do(_run_deepseek_predict)
-        schedule.every(5).minutes.do(_run_deepseek_predict)
-        logger.info("  ✓ deepseek_predict - 距上次ok+max_hold_hours, 每2h + 5min轮询 (对照期)")
+        logger.info("  ✓ deepseek explore/predict 已下线，不再调度开仓")
 
         # 中线做多/做空 v2（量化扫描，非 LLM）
         def _run_midline_swing():
@@ -1669,9 +1643,7 @@ class UnifiedDataScheduler:
 
         _launch_ai_init_task("DeepSeekBig4", "app.services.big4_comprehensive_analyzer", "run_big4_analysis_round_deepseek", 95)
         _launch_ai_init_task("BrainSwing", "app.services.brain_strategy_orchestrator", "run_brain_tick", 75)
-        _launch_ai_init_task("DeepSeek探索", "app.services.deepseek_explore_worker", "run_explore_round", 90)
-        _launch_predict_catchup("DeepSeek预测", "app.services.deepseek_predictor", "run_predict_round", 50)
-        logger.info("  ✓ scheduler_init: BrainSwing tick +75s / DeepSeek探索 +90s / 预测补跑 +50s (对照期并行)")
+        logger.info("  ✓ scheduler_init: BrainSwing tick +75s；DeepSeek 探索/预测已下线")
 
         def _launch_rating_catchup(delay_s: int = 60):
             def _run():

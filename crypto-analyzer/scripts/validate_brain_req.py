@@ -183,18 +183,15 @@ def test_winrate_forward() -> None:
 
 
 def test_ds_auto_open_available() -> None:
-    """对照期：DeepSeek 开仓函数应可真正下单（非 brain_paused stub）。"""
+    """DeepSeek 探索/预测模块已下线，不再自动开仓。"""
     for rel in (
         "app/services/deepseek_explore_worker.py",
         "app/services/deepseek_predictor.py",
     ):
-        src = (ROOT / rel).read_text(encoding="utf-8")
-        if "brain_paused_ds_auto_open" in src:
-            _fail(f"{rel} 仍硬暂停自动开仓（对照期应恢复）")
-        elif "create_paper_limit_order" not in src:
-            _fail(f"{rel} 缺少 create_paper_limit_order")
+        if (ROOT / rel).exists():
+            _fail(f"{rel} 仍在，探索/预测模块应删除")
         else:
-            _ok(f"{rel} open restored (对照期)")
+            _ok(f"{rel} removed")
 
 
 def test_paper_limit_brain_force() -> None:
@@ -593,14 +590,10 @@ def test_scheduler_brain() -> None:
             _ok("scheduler 15s")
     else:
         _ok("scheduler 15s")
-    if "run_explore_round" not in src or "DeepSeekExplore" not in src:
-        _fail("scheduler 对照期应保留 DeepSeek 探索调度")
+    if "run_explore_round" in src or "run_predict_round" in src:
+        _fail("scheduler 仍在调度已下线的 DeepSeek 探索/预测")
     else:
-        _ok("scheduler DeepSeek explore (对照期)")
-    if "run_predict_round" not in src:
-        _fail("scheduler 对照期应保留 DeepSeek 预测调度")
-    else:
-        _ok("scheduler DeepSeek predict (对照期)")
+        _ok("scheduler DeepSeek explore/predict offline")
 
 
 def test_tick_config() -> None:

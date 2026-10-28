@@ -1052,13 +1052,13 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
-# 注册 DeepSeek 探索 API 路由
+# 动态行情实时分析
 try:
-    from app.api.deepseek_explore_api import router as deepseek_explore_router
-    app.include_router(deepseek_explore_router)
-    logger.info("[DeepSeek探索] API路由已注册")
+    from app.api.market_pulse_api import router as market_pulse_router
+    app.include_router(market_pulse_router)
+    logger.info("[动态行情] API路由已注册")
 except Exception as e:
-    logger.warning(f"[DeepSeek探索] API路由注册失败: {e}")
+    logger.warning(f"[动态行情] API路由注册失败: {e}")
     import traceback
     traceback.print_exc()
 
@@ -1089,16 +1089,6 @@ try:
     logger.info("[合约自选] API路由已注册")
 except Exception as e:
     logger.warning(f"[合约自选] API路由注册失败: {e}")
-    import traceback
-    traceback.print_exc()
-
-# 注册 DeepSeek 预测 API 路由
-try:
-    from app.api.deepseek_predict_api import router as deepseek_predict_router
-    app.include_router(deepseek_predict_router)
-    logger.info("[DeepSeek预测] API路由已注册")
-except Exception as e:
-    logger.warning(f"[DeepSeek预测] API路由注册失败: {e}")
     import traceback
     traceback.print_exc()
 
@@ -1766,17 +1756,19 @@ async def watchlist_page(request: Request):
 
 @app.get("/gemini_predict")
 async def gemini_predict_page():
-    """兼容旧入口：Gemini 预测已下线，导向 DeepSeek 预测 Tab."""
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/deepseek_explore?tab=predict")
+    return RedirectResponse(url="/market_pulse")
 
 
 @app.get("/deepseek_explore")
-async def deepseek_explore_page(request: Request):
-    """
-    DeepSeek 探索页面 (短时方向异动 + 模拟单)
-    """
-    return await _serve_desktop_template(request, "deepseek_explore.html", "DeepSeek explore page not found")
+async def deepseek_explore_page():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/market_pulse")
+
+
+@app.get("/market_pulse")
+async def market_pulse_page(request: Request):
+    return await _serve_desktop_template(request, "market_pulse.html", "Market pulse page not found")
 
 
 @app.get("/ai_shadow_compare")
@@ -1800,9 +1792,8 @@ async def gemini_advisor_reviews_page():
 
 @app.get("/deepseek_predict")
 async def deepseek_predict_page():
-    """DeepSeek 预测页面 (与 deepseek_explore 同模板, 默认打开预测 Tab)."""
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/deepseek_explore?tab=predict")
+    return RedirectResponse(url="/market_pulse")
 
 
 @app.get("/market_regime")

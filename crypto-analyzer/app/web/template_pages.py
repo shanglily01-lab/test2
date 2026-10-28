@@ -20,7 +20,7 @@ DESKTOP_SIDEBAR_TEMPLATES = frozenset({
     "corporate_treasury.html",
     "dashboard.html",
     "data_management.html",
-    "deepseek_explore.html",
+    "market_pulse.html",
     "etf_data.html",
     "futures_review.html",
     "futures_trading.html",

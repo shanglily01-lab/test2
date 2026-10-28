@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>动态行情实时分析 | Neural Obsidian</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Manrope:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  body { font-family: 'Manrope', sans-serif; }
+  h1, h2 { font-family: 'Space Grotesk', sans-serif; }
+  .chip { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .up { background: rgba(73,244,200,0.15); color: #49f4c8; }
+  .down { background: rgba(255,113,108,0.15); color: #ff716c; }
+  .flat { background: rgba(168,171,178,0.12); color: #a8abb2; }
+  .hot { background: rgba(255,176,0,0.14); color: #ffb454; }
+  .cold { background: rgba(91,158,255,0.14); color: #8eb6ff; }
+</style>
+<script>
+  tailwind.config = { darkMode: "class", theme: { extend: { colors: {
+    "on-surface": "#ebeef5", "surface": "#0a0f14", "primary": "#49f4c8",
+    "on-surface-variant": "#a8abb2", "surface-container": "#151a20",
+    "surface-container-low": "#0f1419", "outline-variant": "#44484e"
+  } } } }
+</script>
+</head>
+<body class="bg-surface text-on-surface">
+{% include "partials/desktop_sidebar.html" %}
+<main class="ml-[240px] min-h-screen">
+<header class="border-b border-outline-variant/20 px-8 py-5 flex items-start justify-between gap-4 flex-wrap">
+  <div>
+    <h1 class="text-2xl font-bold">动态行情实时分析</h1>
+    <p id="note" class="text-[12px] text-on-surface-variant mt-1 max-w-3xl">市值前 100。情绪、当前走势、后续方向都由 K 线规则计算。</p>
+  </div>
+  <div class="flex items-center gap-3">
+    <input id="q" placeholder="搜币" class="bg-surface-container border border-outline-variant/30 rounded-lg px-3 py-1.5 text-sm w-36"/>
+    <span id="clock" class="text-[11px] text-on-surface-variant mono"></span>
+    <button id="reload" class="px-3 py-1.5 rounded-lg bg-surface-container text-xs">刷新</button>
+  </div>
+</header>
+<section id="summary" class="px-8 py-4 flex flex-wrap gap-2 text-xs"></section>
+<section class="px-8 pb-10 overflow-x-auto">
+  <table class="w-full text-sm">
+    <thead class="text-[11px] uppercase text-on-surface-variant">
+      <tr>
+        <th class="text-left py-2 pr-3">#</th>
+        <th class="text-left py-2 pr-3">币</th>
+        <th class="text-right py-2 pr-3">24h</th>
+        <th class="text-left py-2 pr-3">情绪</th>
+        <th class="text-left py-2 pr-3">当前走势</th>
+        <th class="text-left py-2 pr-3">后续推演</th>
+        <th class="text-right py-2 pr-3">1h RSI</th>
+        <th class="text-right py-2 pr-3">8h</th>
+        <th class="text-left py-2">依据</th>
+      </tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+</section>
+</main>
+<script>
+var DATA = [];
+function chip(text, kind) {
+  return '<span class="chip ' + kind + '">' + text + '</span>';
+}
+function kindOf(text) {
+  if (text === '上升' || text === '趋势延续' || text === '短线转强') return 'up';
+  if (text === '下跌' || text === '延续下行' || text === '短线转弱') return 'down';
+  if (text === '偏热' || text === '冲高回落') return 'hot';
+  if (text === '偏冷' || text === '跌后反抽') return 'cold';
+  return 'flat';
+}
+function fmt(n, d) {
+  if (n === null || n === undefined || n === '') return '--';
+  var x = Number(n);
+  if (!isFinite(x)) return '--';
+  var s = x.toFixed(d);
+  return (x > 0 ? '+' : '') + s;
+}
+function render() {
+  var q = (document.getElementById('q').value || '').trim().toUpperCase();
+  var html = '';
+  DATA.filter(function(it){ return !q || it.base.indexOf(q) >= 0 || it.symbol.indexOf(q) >= 0; }).forEach(function(it) {
+    html += '<tr class="border-t border-outline-variant/15">'
+      + '<td class="py-2 pr-3 text-on-surface-variant mono">' + it.rank + '</td>'
+      + '<td class="py-2 pr-3 font-semibold">' + it.base + '</td>'
+      + '<td class="py-2 pr-3 text-right mono ' + ((it.change_24h || 0) >= 0 ? 'text-[#49f4c8]' : 'text-[#ff716c]') + '">' + fmt(it.change_24h, 2) + '%</td>'
+      + '<td class="py-2 pr-3">' + chip(it.sentiment, kindOf(it.sentiment)) + '</td>'
+      + '<td class="py-2 pr-3">' + chip(it.trend, kindOf(it.trend)) + '</td>'
+      + '<td class="py-2 pr-3">' + chip(it.outlook, kindOf(it.outlook)) + '</td>'
+      + '<td class="py-2 pr-3 text-right mono">' + (it.rsi_1h == null ? '--' : it.rsi_1h) + '</td>'
+      + '<td class="py-2 pr-3 text-right mono">' + fmt(it.ret_1h_8, 2) + '%</td>'
+      + '<td class="py-2 text-[12px] text-on-surface-variant">' + (it.outlook_note || '') + ' · ' + (it.sentiment_note || '') + '</td>'
+      + '</tr>';
+  });
+  document.getElementById('rows').innerHTML = html || '<tr><td class="py-6 text-on-surface-variant" colspan="9">没有匹配的币</td></tr>';
+}
+function renderSummary(s) {
+  if (!s) return;
+  document.getElementById('summary').innerHTML = [
+    chip('上升 ' + s.trend_up, 'up'),
+    chip('下跌 ' + s.trend_down, 'down'),
+    chip('震荡 ' + s.trend_range, 'flat'),
+    chip('偏热 ' + s.hot, 'hot'),
+    chip('偏冷 ' + s.cold, 'cold'),
+    chip('趋势延续 ' + s.continue_up, 'up'),
+    chip('冲高回落 ' + s.pullback, 'hot'),
+    chip('延续下行 ' + s.continue_down, 'down')
+  ].join('');
+}
+function load() {
+  fetch('/api/market-pulse').then(function(r){ return r.json(); }).then(function(data) {
+    DATA = data.items || [];
+    if (data.note) document.getElementById('note').textContent = data.note;
+    renderSummary(data.summary || {});
+    var ts = data.updated_at ? new Date(data.updated_at * 1000) : new Date();
+    document.getElementById('clock').textContent = ts.toLocaleTimeString();
+    render();
+  }).catch(function() {
+    document.getElementById('rows').innerHTML = '<tr><td class="py-6 text-[#ff716c]" colspan="9">行情读取失败</td></tr>';
+  });
+}
+document.getElementById('q').addEventListener('input', render);
+document.getElementById('reload').addEventListener('click', load);
+load();
+setInterval(load, 60000);
+</script>
+</body></html>

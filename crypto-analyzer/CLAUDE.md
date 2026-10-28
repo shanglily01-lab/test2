@@ -69,11 +69,11 @@
 | data_cache.candidate_pool_snapshot | 每 **6 分钟** (行情+K线叙事) |
 | data_cache.explore_prepared_snapshot | 每 **15 分钟** (共用 universe，策略只读) |
 | data_cache.settings_cache | 每 1 分钟 |
-| DeepSeek 探索 | 每 **2h** + **10min 轮询**；worker 距上次 ok ≥ **max_hold_hours** |
-| DeepSeek 预测 | 同 DeepSeek 探索节奏 + `deepseek_predict_next_due_utc` |
+| DeepSeek 探索 | **已下线** |
+| DeepSeek 预测 | **已下线** |
 | GPT 探索/预测 | 同节奏 + `gpt_*_next_due_utc` |
 | Gemini 探索 | —（已下线） | — |
-| DeepSeek 探索/预测 | 每2h + 10min/5min（**对照期保留**；INV-BRAIN-07 暂缓） | `deepseek_*_enabled` |
+| DeepSeek 探索/预测 | **已下线**（菜单和调度已删；持仓顾问保留） | — |
 | **REQ-BRAIN** `brain_swing` | 每 **15s** 一批 **5** 币轮询市值前 300 | `brain_swing_enabled`；启动 +75s；A1 回调确认后市价 |
 | **中线 v2** `midline_long/short` | 每 **15min** 轮询；多单回调买 / B3/C4 冲高卖；结构点 + 中段回撤锁利 + 错过/回吐兜底 |
 | **现货镜像** `spot_*` | 合约模拟成交瞬间跟单；`crypto-app-main` 每 1min 查 TP/SL；`spot_trading_enabled` |
@@ -168,7 +168,7 @@
 - **退出（v4.5.85）**：盈利 **1h 冲高回落**（高点须是本仓到过的）+ 锁利；峰值 ≥2.20% 且未到 5% 时，从峰值回撤 **1.20** 个点即锁。不因持仓时长把 +1.50% 小浮盈平掉。浮亏 **-200U** 平仓。亏损做多满 8h 连续 3 根已收盘 15m 阴线，或满 12h 连续 3 根已收盘 5m 阴线，也平；其余才强平
 - **执行隔离（v4.5.13）**：BRAIN 排除 SmartExit；限价成交前重跑安全闸门；模拟平仓事务行锁幂等
 - 插针仍统计（影>实体×2）；A1 不再因此改限价。**INV-BRAIN-06**：回调确认后市价
-- **对照期**：DeepSeek 探索/预测自动开仓**暂保留**并行对比；结束后再执行 INV-BRAIN-07
+- **DeepSeek 探索/预测已下线**（菜单、调度、开仓模块已删）。持仓顾问仍保留。历史仓仍可按原 source 平仓
 - 调度：BRAIN **每15s** 一批5币；`validate_brain_req.py`；页 `/brain_strategy`
 
 ### 现货镜像（REQ-SPOT）【v4.5.26 · 仅模拟】

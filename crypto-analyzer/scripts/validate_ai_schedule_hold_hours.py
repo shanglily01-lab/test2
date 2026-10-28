@@ -232,17 +232,11 @@ def test_templates_hold_hours_2_to_8() -> None:
 
 
 def test_worker_imports_dynamic_interval() -> None:
-    files_imports = {
-        "app/services/deepseek_predictor.py": "get_ai_round_interval_hours",
-    }
-    for rel, sym in files_imports.items():
-        text = (ROOT / rel).read_text(encoding="utf-8")
-        if sym not in text:
-            _fail(f"{rel} 未导入 {sym}")
-        elif "EXPLORE_MIN_INTERVAL_HOURS" in text or "PREDICT_ROUND_INTERVAL_HOURS" in text:
-            _fail(f"{rel} 仍引用旧常量")
-        else:
-            _ok(f"{rel} 使用 {sym}")
+    src = (ROOT / "app" / "scheduler.py").read_text(encoding="utf-8")
+    if "run_predict_round" in src or "run_explore_round" in src:
+        _fail("scheduler 仍引用已删除的 DeepSeek 探索/预测")
+    else:
+        _ok("DeepSeek explore/predict 不再调度")
 
 
 def test_syntax_parse() -> None:
