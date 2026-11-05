@@ -45,7 +45,7 @@ def test_imports_and_config() -> None:
     assert BRAIN_MIN_EDGE_SCORE == 0.75
     assert BRAIN_REQUIRE_CONFIRMED_PREFIXES == ("A", "B")
     assert TRADEABLE_PLAYBOOKS == frozenset({"A1", "A2", "B2", "B3", "C1", "C3", "C4"})
-    assert BULL_OPEN_PLAYBOOKS == frozenset({"A1"})
+    assert BULL_OPEN_PLAYBOOKS == TRADEABLE_PLAYBOOKS
     from app.services.bull_swing_policy import (
         STRUCTURE_BOOK_CAP,
         STRUCTURE_MAX_LOSS_USD,
@@ -56,13 +56,16 @@ def test_imports_and_config() -> None:
         losing_long_candle_stop_reason,
         structure_loss_cap_reason,
     )
-    assert auto_short_blocked("brain_swing", "SHORT")[0]
-    assert auto_short_blocked("midline_short", "SHORT")[0]
-    assert auto_short_blocked("deepseek_explore", "SHORT")[0]
+    assert not auto_short_blocked("brain_swing", "SHORT")[0]
+    assert not auto_short_blocked("midline_short", "SHORT")[0]
+    assert not auto_short_blocked("deepseek_explore", "SHORT")[0]
     assert not auto_short_blocked("manual_watchlist", "SHORT")[0]
     assert auto_open_allowed("brain_swing", "LONG", "A1")[0]
-    assert not auto_open_allowed("brain_swing", "LONG", "C3")[0]
-    assert not auto_open_allowed("brain_swing", "SHORT", "C1")[0]
+    assert auto_open_allowed("brain_swing", "LONG", "C3")[0]
+    assert auto_open_allowed("brain_swing", "SHORT", "C1")[0]
+    assert auto_open_allowed("midline_short", "SHORT", "A2")[0]
+    assert not auto_open_allowed("brain_swing", "LONG", "B1")[0]
+    assert not auto_open_allowed("brain_swing", "FLAT", "A1")[0]
     assert STRUCTURE_BOOK_CAP == 12 and STRUCTURE_SYMBOL_CAP == 1
     assert STRUCTURE_MAX_LOSS_USD == 200.0
     assert structure_loss_cap_reason(-199.9) is None
@@ -104,8 +107,8 @@ def test_imports_and_config() -> None:
     assert losing_long_candle_stop_reason("LONG", -10, 12 * 3600, [], yin5, clock) == "loss_5m_yin:3"
     assert skip_hard_stop("brain_swing", "LONG")
     assert skip_hard_stop("deepseek_predict", "LONG")
+    assert skip_hard_stop("brain_swing", "SHORT")
     assert not skip_hard_stop("manual_watchlist", "LONG")
-    assert not skip_hard_stop("brain_swing", "SHORT")
     from app.services.brain_config import (
         BRAIN_MARGIN_USD,
         BRAIN_MIN_EDGE_SCORE_SHORT,
@@ -380,16 +383,12 @@ def test_brain_skip_open_advisor() -> None:
     else:
         _ok("structure temper observes when program close ready")
     regime_src = (ROOT / "app/services/brain_market_regime.py").read_text(encoding="utf-8")
-    if "big4_long_allows_exhaustion" not in regime_src:
-        _fail("Big4 LONG 未放开 B3/C4 高点滞涨空")
-    elif "big4_long_allows_breakdown_C1" not in regime_src:
-        _fail("Big4 LONG 未放开 C1 破位跟风")
-    elif "big4_long_blocks_short" not in regime_src:
-        _fail("BRAIN 未在 Big4 LONG 时阻断 A2/B2 逆势空")
-    elif "big4_not_long_blocks_C3" not in regime_src:
-        _fail("BRAIN 未要求 C3 须 Big4 LONG")
+    if "direction_open" not in regime_src:
+        _fail("市场多空不再否决开仓")
+    elif "regime_low_vol_no_trade" not in regime_src:
+        _fail("Big4 疲软仍应影子、不开仓")
     else:
-        _ok("Big4 LONG allows C4/C1 shorts, blocks A2/B2/B3; C3 needs Big4 LONG")
+        _ok("market direction does not veto; low vol still shadows")
     trail_mod = (ROOT / "app/services/brain_trail_exit.py").read_text(encoding="utf-8")
     if "check_brain_trail_lock" not in trail_mod or "check_brain_soft_no_follow" not in trail_mod:
         _fail("brain_trail_exit 缺 trail/soft")
@@ -450,7 +449,7 @@ def test_brain_skip_open_advisor() -> None:
     elif "rows_1h=" not in orch2:
         _fail("orchestrator 未接入 1h 回调入场")
     elif "auto_open_allowed" not in orch2:
-        _fail("orchestrator 未接入牛市只做多 A1")
+        _fail("orchestrator 未接入多空剧本门")
     else:
         _ok("orchestrator pullback entry")
 
@@ -976,8 +975,9 @@ def test_brain_market_regime() -> None:
         side="LONG",
         playbook="A1",
     )
-    # No 1h pullback tag → still blocked in bear.
-    assert dec2.regime == BEAR_TREND and dec2.margin_multiplier == 0
+    # Bear tape no longer vetoes a long playbook.
+    assert dec2.regime == BEAR_TREND and dec2.margin_multiplier > 0
+    assert "direction_open" in dec2.reason
 
     a1_pull = {
         **a1,
@@ -991,7 +991,7 @@ def test_brain_market_regime() -> None:
         playbook="A1",
     )
     assert dec2_ok.regime == BEAR_TREND and dec2_ok.margin_multiplier > 0
-    assert "token_A1" in dec2_ok.reason
+    assert "direction_open" in dec2_ok.reason
 
     c1 = {
         "side": "SHORT",
@@ -1031,7 +1031,8 @@ def test_brain_market_regime() -> None:
         side="SHORT",
         playbook="C1",
     )
-    assert dec5.regime == PANIC_REBOUND and dec5.margin_multiplier == 0
+    assert dec5.regime == PANIC_REBOUND and dec5.margin_multiplier > 0
+    assert "direction_open" in dec5.reason
 
     def _daily_rows(closes):
         return [
@@ -1059,7 +1060,7 @@ def test_brain_market_regime() -> None:
         playbook="A1",
         global_regime=global_bear,
     )
-    assert dec6.margin_multiplier > 0 and "defers_to_big4_long_A1" in dec6.reason
+    assert dec6.margin_multiplier > 0 and "direction_open" in dec6.reason
 
     dec6_flat = brain_open_regime_decision(
         big4={"big4_ok": True, "bias": "FLAT", "bull_count": 1, "bear_count": 1},
@@ -1068,7 +1069,7 @@ def test_brain_market_regime() -> None:
         playbook="A1",
         global_regime=global_bear,
     )
-    assert dec6_flat.margin_multiplier == 0 and "global_daily_bear_probe_blocks_long" in dec6_flat.reason
+    assert dec6_flat.margin_multiplier > 0 and "direction_open" in dec6_flat.reason
 
     dec6_token = brain_open_regime_decision(
         big4={"big4_ok": True, "bias": "FLAT", "bull_count": 1, "bear_count": 1},
@@ -1077,7 +1078,7 @@ def test_brain_market_regime() -> None:
         playbook="A1",
         global_regime=global_bear,
     )
-    assert dec6_token.margin_multiplier > 0 and "allows_token_A1" in dec6_token.reason
+    assert dec6_token.margin_multiplier > 0 and "direction_open" in dec6_token.reason
 
     b3_exh = {
         "side": "SHORT",
@@ -1093,7 +1094,7 @@ def test_brain_market_regime() -> None:
         side="SHORT",
         playbook="B3",
     )
-    assert dec_b3_bull.margin_multiplier == 0 and "big4_long_blocks_short" in dec_b3_bull.reason
+    assert dec_b3_bull.margin_multiplier > 0 and "direction_open" in dec_b3_bull.reason
 
     dec_b3_flat = brain_open_regime_decision(
         big4={"big4_ok": True, "bias": "FLAT", "bull_count": 1, "bear_count": 1},
@@ -1117,7 +1118,7 @@ def test_brain_market_regime() -> None:
         side="SHORT",
         playbook="B3",
     )
-    assert dec_b3_pause.margin_multiplier == 0 and "big4_long_blocks_short" in dec_b3_pause.reason
+    assert dec_b3_pause.margin_multiplier > 0 and "direction_open" in dec_b3_pause.reason
 
     dec_c1_vs_big4_long = brain_open_regime_decision(
         big4={"big4_ok": True, "bias": "LONG", "bull_count": 3, "bear_count": 0},
@@ -1128,7 +1129,7 @@ def test_brain_market_regime() -> None:
     )
     assert (
         dec_c1_vs_big4_long.margin_multiplier > 0
-        and "big4_long_allows_breakdown_C1" in dec_c1_vs_big4_long.reason
+        and "direction_open" in dec_c1_vs_big4_long.reason
     )
 
     a2_vs_bull = {
@@ -1145,7 +1146,7 @@ def test_brain_market_regime() -> None:
         side="SHORT",
         playbook="A2",
     )
-    assert dec_a2_bull.margin_multiplier == 0 and "big4_long_blocks_short" in dec_a2_bull.reason
+    assert dec_a2_bull.margin_multiplier > 0 and "direction_open" in dec_a2_bull.reason
 
     a2 = {
         "side": "SHORT",
@@ -1162,7 +1163,7 @@ def test_brain_market_regime() -> None:
         playbook="A2",
         global_regime=global_bear,
     )
-    assert dec7.margin_multiplier > 0 and "A2" in dec7.reason
+    assert dec7.margin_multiplier > 0 and "direction_open" in dec7.reason
 
     c3_impulse = {
         "side": "LONG",
@@ -1179,7 +1180,7 @@ def test_brain_market_regime() -> None:
         playbook="C3",
         global_regime=global_bear,
     )
-    assert dec8.margin_multiplier == 0 and "big4_not_long_blocks_C3" in dec8.reason
+    assert dec8.margin_multiplier > 0 and "direction_open" in dec8.reason
 
     dec8b = brain_open_regime_decision(
         big4={"big4_ok": True, "bias": "LONG", "bull_count": 3, "bear_count": 0},
@@ -1187,7 +1188,7 @@ def test_brain_market_regime() -> None:
         side="LONG",
         playbook="C3",
     )
-    assert dec8b.margin_multiplier > 0 and "C3" in dec8b.reason
+    assert dec8b.margin_multiplier > 0 and "direction_open" in dec8b.reason
 
     b3_exhaustion = {
         "side": "SHORT",
@@ -1204,7 +1205,7 @@ def test_brain_market_regime() -> None:
         playbook="B3",
         global_regime=global_bear,
     )
-    assert dec9.margin_multiplier > 0 and "exhaustion_B3" in dec9.reason
+    assert dec9.margin_multiplier > 0 and "direction_open" in dec9.reason
 
     _ok("brain_market_regime")
 
@@ -1935,7 +1936,7 @@ def test_h1_bull_pullback() -> None:
     )
     assert lh_ready.ready is True, lh_ready
 
-    # 48h coarse h1_side=SHORT must strip the A1 long. Those opens were the loss book.
+    # 48h coarse h1_side=SHORT must not strip a valid A1 pullback.
     from app.services.brain_playbook import classify_playbook
     from app.services.entry_timing import _h1_pullback_view as _hv
     shortish = []
@@ -1975,7 +1976,9 @@ def test_h1_bull_pullback() -> None:
         shortish, rows_15m=rows_15_s, big4={"bias": "FLAT", "big4_ok": True},
     )
     assert (pb_s.get("features") or {}).get("h1_side") == "SHORT", pb_s.get("features")
-    assert pb_s.get("playbook") != "A1", pb_s
+    assert pb_s.get("evidence_summary") != "场景与1H方向冲突", pb_s
+    if (pb_s.get("features") or {}).get("trend_high_pullback_1h"):
+        assert pb_s.get("playbook") == "A1", pb_s
 
     still_3h = [dict(r) for r in flat]
     for bar in still_3h[-9:-4]:

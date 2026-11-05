@@ -1,7 +1,8 @@
-"""BRAIN market regime classifier and scenario gates.
+"""BRAIN market regime labels.
 
-The regime layer is intentionally conservative. It decides which playbooks are
-eligible before win-rate, edge, cooldown, and account gates run.
+Bull or bear bias is recorded for the log. It does not veto a tradeable
+playbook. Low-volume / fatigued Big4 still shadows (INV-10). Win-rate, edge,
+confirmation, and entry timing stay in the orchestrator.
 """
 from __future__ import annotations
 
@@ -162,35 +163,6 @@ def _strong_token_side(playbook_row: Dict[str, Any], side: str) -> bool:
     return feat.get("h1_side") == side_u and feat.get("m15_side") == side_u
 
 
-def _a1_token_pullback_ok(
-    playbook_row: Dict[str, Any],
-    *,
-    side: str,
-    playbook: str,
-    edge: float,
-    confirmed: bool,
-    min_edge: float = 0.80,
-) -> bool:
-    """A1 that already printed a 1h pullback on the token itself.
-
-    Global bear/transition must not veto a token that is still in a 1h uptrend
-    and sitting 1.20%–8% under its swing high. Auto policy is A1-only; blocking
-    these leaves the book with nothing to open.
-    """
-    if (side or "").upper() != "LONG" or str(playbook or "").upper() != "A1":
-        return False
-    if not confirmed or float(edge) < float(min_edge):
-        return False
-    feat = _features(playbook_row)
-    sig = _signals(playbook_row)
-    if feat.get("h1_side") == "SHORT":
-        return False
-    return bool(
-        "1h_trend_high_pullback" in sig
-        or feat.get("trend_high_pullback_1h")
-    )
-
-
 def _token_crash(playbook_row: Dict[str, Any]) -> bool:
     sig = _signals(playbook_row)
     return bool("crash_spike" in sig and ("volume_expand_down" in sig or "break_support" in sig))
@@ -203,33 +175,6 @@ def _token_impulse_long(playbook_row: Dict[str, Any]) -> bool:
         or ("h1_breakout_up" in sig and ("volume_expand_up" in sig or "break_resistance" in sig))
         or ("break_resistance" in sig and "volume_expand_up" in sig)
     )
-
-
-def _token_failed_bounce_short(playbook_row: Dict[str, Any]) -> bool:
-    sig = _signals(playbook_row)
-    feats = playbook_row.get("features") or {}
-    downtrend = bool(
-        feats.get("ema_bear")
-        or "ema_bear_align" in sig
-        or "lh_ll" in sig
-        or feats.get("lh_ll")
-        or feats.get("h1_side") == "SHORT"
-    )
-    bounce = bool(
-        "15m_lower_high" in sig
-        or feats.get("vol_shrink_pullback")
-        or "volume_shrink_pullback" in sig
-        or feats.get("long_upper_wick")
-        or "long_upper_wick" in sig
-    )
-    reject = bool(
-        "ema_reject" in sig
-        or "long_upper_wick" in sig
-        or feats.get("long_upper_wick")
-        or "break_support" in sig
-        or feats.get("break_support")
-    )
-    return bool(downtrend and bounce and reject and not (feats.get("hh_hl") and feats.get("vol_up")))
 
 
 def _token_exhaustion_short(playbook_row: Dict[str, Any]) -> bool:
@@ -295,6 +240,15 @@ def classify_brain_regime(
     return RANGE_CHOP, "big4_flat_range"
 
 
+def _execution_mode(playbook: str) -> str:
+    pb = str(playbook or "").upper()
+    if pb in {"B3", "C4"}:
+        return "breakout_confirm_limit"
+    if pb in {"C1", "B2"}:
+        return "crash_probe_limit"
+    return "pullback_limit"
+
+
 def brain_open_regime_decision(
     *,
     big4: Dict[str, Any],
@@ -303,268 +257,26 @@ def brain_open_regime_decision(
     playbook: str,
     global_regime: Optional[Dict[str, Any]] = None,
 ) -> RegimeDecision:
-    """Apply approved scenario allow-list for BRAIN openings."""
+    """Allow every tradeable long or short. Market direction is not a veto.
+
+    global_regime is kept on the signature so callers can still pass the daily
+    label; it is stored by the orchestrator and does not block here.
+    """
+    del global_regime
+    from app.services.brain_config import TRADEABLE_PLAYBOOKS
+
     side_u = (side or "").upper()
-    pb = str(playbook or "")
-    sig = _signals(playbook_row)
-    edge = float(playbook_row.get("edge_score") or 0)
-    confirmed = bool(playbook_row.get("confirmed"))
+    pb = str(playbook or "").upper()
     regime, why = classify_brain_regime(big4, playbook_row)
-    global_regime = global_regime or {}
-    global_name = str(global_regime.get("global_regime") or GLOBAL_UNKNOWN)
-    bias_u = str(big4.get("bias") or "").upper()
-
-    # v4.5.52: Big4 仍 LONG 时禁止 A2/B2/B3 逆势摸空；允许 C4 假突与 C1 破位跟风。
-    if side_u == "SHORT" and bias_u == "LONG":
-        if pb == "C4" and confirmed and edge >= 0.85 and _token_exhaustion_short(playbook_row):
-            return RegimeDecision(
-                regime,
-                f"big4_long_allows_exhaustion_{pb}:{why}",
-                "breakout_confirm_limit",
-                0.20,
-            )
-        if (
-            pb == "C1"
-            and confirmed
-            and edge >= 0.80
-            and bool(sig & {"break_support", "volume_expand_down", "crash_spike"})
-        ):
-            return RegimeDecision(
-                regime,
-                f"big4_long_allows_breakdown_C1:{why}",
-                "crash_probe_limit",
-                0.35,
-            )
-        return RegimeDecision(
-            regime,
-            f"big4_long_blocks_short:{why}:{pb}",
-            "shadow_only",
-            0.0,
-        )
-
-    # v4.5.56: C3 须 Big4 LONG。弱宏观/个币冲击不得穿透
-    # （8/26 破位 C3 42 笔 42.9%/−1152U；8/23 多头里 C3 曾 18 笔 94%/+726U）。
-    if pb == "C3" and bias_u != "LONG":
-        return RegimeDecision(
-            regime,
-            f"big4_not_long_blocks_C3:{why}",
-            "shadow_only",
-            0.0,
-        )
-
-    if global_name == GLOBAL_DAILY_BEAR_PROBE:
-        if side_u == "LONG":
-            # 日线滞后探底不得否决已经确认的 Big4 多头 A1（v4.5.18）
-            if pb == "A1" and regime == BULL_TREND:
-                return RegimeDecision(
-                    regime,
-                    f"global_daily_bear_probe_defers_to_big4_long_A1:{why}",
-                    "pullback_limit",
-                    1.0,
-                )
-            # 代币本身仍是 1h 回踩多：日线探底只缩仓，不禁开（v4.5.78）
-            if _a1_token_pullback_ok(
-                playbook_row, side=side_u, playbook=pb, edge=edge, confirmed=confirmed,
-            ):
-                return RegimeDecision(
-                    regime,
-                    f"global_daily_bear_probe_allows_token_A1:{why}",
-                    "pullback_limit",
-                    0.50,
-                )
-            return RegimeDecision(
-                regime,
-                f"global_daily_bear_probe_blocks_long:{regime}:{pb}",
-                "shadow_only",
-                0.0,
-            )
-        if (
-            side_u == "SHORT"
-            and pb == "C1"
-            and confirmed
-            and edge >= 0.80
-            and bool(sig & {"break_support", "volume_expand_down", "crash_spike"})
-        ):
-            return RegimeDecision(
-                regime,
-                f"global_daily_bear_probe_allows_breakdown_C1:{why}",
-                "crash_probe_limit",
-                0.50,
-            )
-        if side_u == "SHORT" and pb == "A2" and confirmed and edge >= 0.80 and _token_failed_bounce_short(playbook_row):
-            return RegimeDecision(
-                regime,
-                f"global_daily_bear_probe_allows_A2:{why}",
-                "pullback_limit",
-                0.45,
-            )
-        if side_u == "SHORT" and pb == "B2" and confirmed and edge >= 0.80 and _token_failed_bounce_short(playbook_row):
-            return RegimeDecision(
-                regime,
-                f"global_daily_bear_probe_allows_B2:{why}",
-                "crash_probe_limit",
-                0.30,
-            )
-        if side_u == "SHORT" and pb in {"B3", "C4"} and confirmed and edge >= 0.75 and _token_exhaustion_short(playbook_row):
-            return RegimeDecision(
-                regime,
-                f"global_daily_bear_probe_allows_exhaustion_{pb}:{why}",
-                "breakout_confirm_limit",
-                0.25,
-            )
-        return RegimeDecision(
-            regime,
-            f"global_daily_bear_probe_blocks_{side_u}_{pb}",
-            "shadow_only",
-            0.0,
-        )
-
-    if global_name == GLOBAL_RELIEF_BOUNCE:
-        if side_u == "SHORT" and pb == "A2" and confirmed and edge >= 0.80 and _token_failed_bounce_short(playbook_row):
-            return RegimeDecision(
-                regime,
-                "global_relief_bounce_allows_A2_reject",
-                "pullback_limit",
-                0.45,
-            )
-        if side_u == "SHORT" and pb == "B2" and confirmed and "break_support" in sig and _token_failed_bounce_short(playbook_row):
-            return RegimeDecision(
-                regime,
-                "global_relief_bounce_allows_B2_fail",
-                "crash_probe_limit",
-                0.30,
-            )
-        if side_u == "SHORT" and pb in {"C1"}:
-            return RegimeDecision(
-                regime,
-                f"global_relief_bounce_blocks_fresh_short:{regime}:{pb}",
-                "shadow_only",
-                0.0,
-            )
-        if _a1_token_pullback_ok(
-            playbook_row, side=side_u, playbook=pb, edge=edge, confirmed=confirmed,
-            min_edge=0.80,
-        ):
-            return RegimeDecision(
-                regime,
-                "global_relief_bounce_allows_token_A1",
-                "pullback_limit",
-                0.35,
-            )
-
     if regime == LOW_VOL_NO_TRADE:
         return RegimeDecision(regime, f"regime_low_vol_no_trade:{why}", "shadow_only", 0.0)
-
-    if regime == BULL_TREND:
-        if side_u == "LONG" and pb == "A1":
-            return RegimeDecision(regime, "regime_bull_allows_A1", "pullback_limit", 1.0)
-        if side_u == "LONG" and pb == "C3" and confirmed and _token_impulse_long(playbook_row):
-            return RegimeDecision(regime, "regime_bull_allows_C3_impulse", "pullback_limit", 0.50)
-        if side_u == "SHORT" and pb in {"B3", "C4"} and confirmed and edge >= 0.85 and _token_exhaustion_short(playbook_row):
-            return RegimeDecision(regime, f"regime_bull_allows_exhaustion_{pb}", "breakout_confirm_limit", 0.20)
-        if (
-            side_u == "SHORT"
-            and pb == "C1"
-            and confirmed
-            and edge >= 0.80
-            and bool(sig & {"break_support", "volume_expand_down", "crash_spike"})
-        ):
-            return RegimeDecision(regime, "regime_bull_allows_breakdown_C1", "crash_probe_limit", 0.35)
-        return RegimeDecision(regime, f"regime_bull_blocks_{side_u}_{pb}", "shadow_only", 0.0)
-
-    if regime == BEAR_TREND:
-        if _a1_token_pullback_ok(
-            playbook_row, side=side_u, playbook=pb, edge=edge, confirmed=confirmed,
-        ):
-            return RegimeDecision(regime, "regime_bear_allows_token_A1", "pullback_limit", 0.50)
-        if side_u == "SHORT" and pb == "C1":
-            return RegimeDecision(regime, "regime_bear_allows_C1_follow", "crash_probe_limit", 0.35)
-        if side_u == "SHORT" and pb == "A2" and confirmed and _token_failed_bounce_short(playbook_row):
-            return RegimeDecision(regime, "regime_bear_allows_A2", "pullback_limit", 0.45)
-        if side_u == "SHORT" and pb == "B2" and confirmed and _token_failed_bounce_short(playbook_row):
-            return RegimeDecision(regime, "regime_bear_allows_B2", "crash_probe_limit", 0.30)
-        if side_u == "SHORT" and pb in {"B3", "C4"} and confirmed and _token_exhaustion_short(playbook_row):
-            return RegimeDecision(regime, f"regime_bear_allows_exhaustion_{pb}", "breakout_confirm_limit", 0.35)
-        return RegimeDecision(regime, f"regime_bear_blocks_{side_u}_{pb}", "shadow_only", 0.0)
-
-    if regime == CRASH_DOWN:
-        if _a1_token_pullback_ok(
-            playbook_row, side=side_u, playbook=pb, edge=edge, confirmed=confirmed,
-            min_edge=0.85,
-        ):
-            return RegimeDecision(regime, "regime_crash_allows_token_A1", "pullback_limit", 0.35)
-        if (
-            side_u == "SHORT"
-            and pb == "C1"
-            and confirmed
-            and edge >= 0.80
-            and _strong_token_side(playbook_row, "SHORT")
-            and bool(sig & {"crash_spike", "break_support", "volume_expand_down"})
-        ):
-            return RegimeDecision(regime, "regime_crash_allows_C1_follow", "crash_probe_limit", 0.25)
-        if (
-            side_u == "SHORT"
-            and pb == "B2"
-            and confirmed
-            and edge >= 0.80
-            and _token_failed_bounce_short(playbook_row)
-        ):
-            return RegimeDecision(regime, "regime_crash_allows_B2_fail", "crash_probe_limit", 0.25)
-        return RegimeDecision(regime, f"regime_crash_blocks_{side_u}_{pb}", "shadow_only", 0.0)
-
-    if regime == PANIC_REBOUND:
-        if _a1_token_pullback_ok(
-            playbook_row, side=side_u, playbook=pb, edge=edge, confirmed=confirmed,
-        ):
-            return RegimeDecision(regime, "regime_panic_rebound_allows_token_A1", "pullback_limit", 0.35)
-        return RegimeDecision(regime, f"regime_panic_rebound_shadow_{side_u}_{pb}", "shadow_only", 0.0)
-
-    if regime == RANGE_CHOP:
-        if side_u == "LONG" and pb == "A1" and confirmed and edge >= 0.90:
-            return RegimeDecision(regime, f"regime_range_allows_high_edge_{pb}", "pullback_limit", 0.35)
-        if side_u == "SHORT" and pb in {"B3", "C4"} and confirmed and edge >= 0.80 and _token_exhaustion_short(playbook_row):
-            return RegimeDecision(regime, f"regime_range_allows_exhaustion_{pb}", "breakout_confirm_limit", 0.25)
-        if side_u == "SHORT" and pb == "A2" and confirmed and edge >= 0.90 and _token_failed_bounce_short(playbook_row):
-            return RegimeDecision(regime, "regime_range_allows_high_edge_A2", "pullback_limit", 0.30)
-        return RegimeDecision(regime, f"regime_range_blocks_{side_u}_{pb}", "shadow_only", 0.0)
-
-    if regime == TOKEN_DIVERGENCE:
-        if side_u == "LONG" and pb == "A1" and confirmed and edge >= 0.80:
-            return RegimeDecision(regime, "regime_token_divergence_allows_A1", "pullback_limit", 0.50)
-        if (
-            side_u == "SHORT"
-            and pb == "C1"
-            and confirmed
-            and edge >= 0.80
-            and bool(sig & {"crash_spike", "break_support", "volume_expand_down"})
-        ):
-            return RegimeDecision(regime, "regime_token_divergence_allows_C1_follow", "crash_probe_limit", 0.35)
-        if (
-            side_u == "SHORT"
-            and pb == "A2"
-            and confirmed
-            and edge >= 0.80
-            and _token_failed_bounce_short(playbook_row)
-        ):
-            return RegimeDecision(regime, "regime_token_divergence_allows_A2", "pullback_limit", 0.40)
-        if (
-            side_u == "SHORT"
-            and pb == "B2"
-            and confirmed
-            and edge >= 0.80
-            and _token_failed_bounce_short(playbook_row)
-        ):
-            return RegimeDecision(regime, "regime_token_divergence_allows_B2", "crash_probe_limit", 0.30)
-        if side_u == "SHORT" and pb in {"B3", "C4"} and confirmed and edge >= 0.75 and _token_exhaustion_short(playbook_row):
-            return RegimeDecision(regime, f"regime_token_divergence_allows_exhaustion_{pb}", "breakout_confirm_limit", 0.25)
-        return RegimeDecision(regime, f"regime_token_divergence_blocks_{side_u}_{pb}", "shadow_only", 0.0)
-
-    if regime == TRANSITION:
-        # Transition forbids old-direction inertia. Token 1h A1 pullback may pass.
-        if _a1_token_pullback_ok(
-            playbook_row, side=side_u, playbook=pb, edge=edge, confirmed=confirmed,
-        ):
-            return RegimeDecision(regime, "regime_transition_allows_token_A1", "pullback_limit", 0.40)
-        return RegimeDecision(regime, f"regime_transition_blocks_{side_u}_{pb}", "shadow_only", 0.0)
-
-    return RegimeDecision(regime, f"regime_unknown_blocks_{side_u}_{pb}", "shadow_only", 0.0)
+    if side_u not in ("LONG", "SHORT") or pb not in TRADEABLE_PLAYBOOKS:
+        return RegimeDecision(
+            regime, f"regime_not_tradeable:{side_u}:{pb}", "shadow_only", 0.0,
+        )
+    return RegimeDecision(
+        regime,
+        f"direction_open:{side_u}:{pb}:{why}",
+        _execution_mode(pb),
+        1.0,
+    )

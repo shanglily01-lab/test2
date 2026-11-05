@@ -539,8 +539,7 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
     )
 
     # A1：近 24 根波段高点回踩 + 最近 8 根斜率 0%～15%（不强制高于前 24 根）。
-    # 48h 粗方向 h1_side=SHORT 时不把这段回踩开成多单（弱市接飞刀）。
-    # 最近 3 根低于 -0.50% 还在跌。15m 浅回踩只能辅证。
+    # 48h 粗方向不再否决这段回踩。最近 3 根低于 -0.50% 还在跌。15m 浅回踩只能辅证。
     h1_pull = bool(feats.get("trend_high_pullback_1h"))
     legacy_a1 = bool(
         feats.get("trend_high_pullback")
@@ -551,7 +550,6 @@ def _score_playbooks(feats: Dict[str, Any]) -> List[Tuple[str, float, bool]]:
         and not feats.get("break_support")
         and not feats.get("vol_down")
         and not (feats.get("crash_spike") and feats.get("vol_down"))
-        and feats.get("h1_side") != "SHORT"
         and (feats.get("vol_shrink_pullback") or feats.get("long_lower_wick"))
     )
     if h1_pull or legacy_a1:
@@ -802,18 +800,8 @@ def classify_playbook(
             "ref_price": feats.get("ref_price"),
         }
 
-    h1 = feats.get("h1_side") or "FLAT"
-    # 过滤与 1H 严重冲突的（冲击反弹 B1/B3 允许逆势短线）
-    filtered = []
-    for pb, sc, conf in scored:
-        side = PLAYBOOK_SIDE.get(pb, "FLAT")
-        if pb in ("B1", "B3", "C2", "C4"):
-            filtered.append((pb, sc, conf))
-            continue
-        if h1 in ("LONG", "SHORT") and side in ("LONG", "SHORT") and side != h1:
-            # 48h 偏空时丢掉 A1 多。10/23 起这类单占了浮亏的主体。
-            continue
-        filtered.append((pb, sc, conf))
+    # 市场或 48h 粗方向不再丢掉反向剧本。每个剧本仍要自己的结构分。
+    filtered = list(scored)
 
     if (
         feats.get("bounce_from_low")
@@ -863,13 +851,8 @@ def classify_playbook(
 
     filtered.sort(key=_key, reverse=True)
     best_pb, best_sc, best_conf = filtered[0]
-    # Bull A1 pullback must own the label. Otherwise A2/B2 can outscore it,
-    # get blocked by long-only, and the real 1h pullback never opens.
-    if feats.get("trend_high_pullback_1h"):
-        a1_hits = [x for x in filtered if x[0] == "A1"]
-        if a1_hits:
-            best_pb, best_sc, best_conf = max(a1_hits, key=_key)
     side = PLAYBOOK_SIDE.get(best_pb, "FLAT")
+    h1 = feats.get("h1_side") or "FLAT"
 
     # edge_score = playbook score（0~1）
     evidence = (

@@ -1,14 +1,14 @@
-"""Bull-market auto policy — long-only 1h pullbacks, no hard stop.
+"""Auto-open policy — long and short playbooks both trade.
 
-Does not write allow_long / allow_short (INV-04). Watchlist stays user-manual.
-Existing shorts are not force-closed.
+Market bull/bear bias does not veto a playbook. Does not write allow_long /
+allow_short (INV-04). The user direction switches still apply. Watchlist stays
+user-manual. Existing positions are not force-closed.
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional, Sequence, Tuple
 
-BULL_OPEN_PLAYBOOKS = frozenset({"A1"})
 BULL_LONG_ONLY_REASON = "bull_long_only_blocks_short"
 BULL_A1_ONLY_PREFIX = "bull_a1_only"
 # 大脑 + 破位合计。同一币只留 1 槽，全书最多 12 笔，浮亏到 -200U 就平。
@@ -84,22 +84,25 @@ def is_structure_auto_source(source: str) -> bool:
 
 
 def auto_short_blocked(source: str, side: str) -> Tuple[bool, str]:
-    if str(side or "").upper() != "SHORT":
-        return False, ""
-    if not is_auto_strategy_source(source):
-        return False, ""
-    return True, BULL_LONG_ONLY_REASON
+    """Market direction no longer blocks auto shorts. User allow_short still does."""
+    return False, ""
 
 
 def bull_open_playbook_ok(playbook: str, side: str) -> Tuple[bool, str]:
+    """Tradeable long and short playbooks may open. Flat and unknown labels do not."""
+    from app.services.brain_config import PLAYBOOK_SIDE, TRADEABLE_PLAYBOOKS
+
     side_u = str(side or "").upper()
     pb = str(playbook or "").strip().upper()
-    if side_u == "SHORT":
-        return False, BULL_LONG_ONLY_REASON
-    if side_u != "LONG":
-        return False, "bull_long_only_flat"
-    if pb and pb not in BULL_OPEN_PLAYBOOKS:
-        return False, f"{BULL_A1_ONLY_PREFIX}:{pb}"
+    if side_u not in ("LONG", "SHORT"):
+        return False, "direction_flat"
+    if not pb:
+        return True, ""
+    if pb not in TRADEABLE_PLAYBOOKS:
+        return False, f"playbook_not_open:{pb}"
+    expected = PLAYBOOK_SIDE.get(pb)
+    if expected and expected != side_u:
+        return False, f"playbook_side_mismatch:{pb}"
     return True, ""
 
 
@@ -108,17 +111,17 @@ def auto_open_allowed(
     side: str,
     playbook: str = "",
 ) -> Tuple[bool, str]:
-    blocked, why = auto_short_blocked(source, side)
-    if blocked:
-        return False, why
+    side_u = str(side or "").upper()
+    if side_u not in ("LONG", "SHORT"):
+        return False, "direction_flat"
     if is_structure_auto_source(source):
         return bull_open_playbook_ok(playbook, side)
     return True, ""
 
 
 def skip_hard_stop(source: str, side: str) -> bool:
-    """Auto longs skip the tight price SL. Structure books still cut at STRUCTURE_MAX_LOSS_USD."""
-    return is_auto_strategy_source(source) and str(side or "").upper() == "LONG"
+    """Auto longs and shorts skip the tight price SL. Structure books still cut at STRUCTURE_MAX_LOSS_USD."""
+    return is_auto_strategy_source(source) and str(side or "").upper() in ("LONG", "SHORT")
 
 
 def structure_loss_cap_reason(unrealized_usd: float) -> Optional[str]:
